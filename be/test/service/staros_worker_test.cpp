@@ -15,6 +15,7 @@
 #ifdef USE_STAROS
 #include "service/staros_worker.h"
 
+#include <aws/core/Aws.h>
 #include <fslib/configuration.h>
 #include <fslib/fslib_all_initializer.h>
 #include <gtest/gtest.h>
@@ -23,6 +24,7 @@
 #include <functional>
 
 #include "common/config.h"
+#include "common/shutdown_hook.h"
 
 namespace starrocks {
 
@@ -31,7 +33,19 @@ static void add_shard_listener(std::vector<StarOSWorker::ShardId>* shardIds, int
     ++*counter;
 }
 
-TEST(StarOSWorkerTest, test_add_listener) {
+static Aws::SDKOptions _s_options;
+
+class StarOSWorkerTest : public ::testing::Test {
+public:
+    static void SetUpTestCase() { Aws::InitAPI(_s_options); }
+
+    static void TearDownTestCase() {
+        staros::starlet::common::ShutdownHook::shutdown();
+        Aws::ShutdownAPI(_s_options);
+    }
+};
+
+TEST_F(StarOSWorkerTest, test_add_listener) {
     int counter = 0;
     std::vector<StarOSWorker::ShardId> ids;
 
@@ -68,7 +82,7 @@ TEST(StarOSWorkerTest, test_add_listener) {
     EXPECT_EQ(2, ids[0]);
 }
 
-TEST(StarOSWorkerTest, test_fs_cache) {
+TEST_F(StarOSWorkerTest, test_fs_cache) {
     staros::starlet::fslib::register_builtin_filesystems();
     staros::starlet::ShardInfo shard_info;
     shard_info.id = 1;
@@ -115,7 +129,7 @@ TEST(StarOSWorkerTest, test_fs_cache) {
     EXPECT_FALSE(worker->lookup_fs_cache(cache_key));
 }
 
-TEST(StarOSWorkerTest, test_build_scheme_from_shard_info) {
+TEST_F(StarOSWorkerTest, test_build_scheme_from_shard_info) {
     staros::starlet::ShardInfo shard_info;
     shard_info.id = 1;
 
@@ -129,7 +143,7 @@ TEST(StarOSWorkerTest, test_build_scheme_from_shard_info) {
     EXPECT_EQ("gs://", scheme_or.value());
 }
 
-TEST(StarOSWorkerTest, test_fs_cache_concurrent) {
+TEST_F(StarOSWorkerTest, test_fs_cache_concurrent) {
     staros::starlet::fslib::register_builtin_filesystems();
     staros::starlet::ShardInfo shard_info;
     shard_info.id = 1;
