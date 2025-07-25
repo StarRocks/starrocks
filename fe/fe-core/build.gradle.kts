@@ -47,15 +47,12 @@ java {
 }
 
 
-//configurations.configureEach {
-//    if (name != "thriftGenClasspath") {
-//        // thrfit gen plugin uses antlr 4.13, which conflict with current antlr version
-//        resolutionStrategy.force("org.antlr:antlr4-runtime:4.9.3")
-//    }
-//}
+configurations.configureEach {
+    resolutionStrategy.force("org.antlr:antlr4-runtime:${project.ext["antlr.version"]}")
+}
 
 dependencies {
-    antlr("org.antlr:antlr4:4.9.3")
+    antlr("org.antlr:antlr4:${project.ext["antlr.version"]}")
 
     // Internal project dependencies
     implementation(project(":fe-common"))
@@ -157,9 +154,7 @@ dependencies {
     implementation("javax.annotation:javax.annotation-api")
     implementation("javax.validation:validation-api")
     implementation("net.openhft:zero-allocation-hashing:0.16")
-    implementation("org.antlr:antlr4") {
-        exclude(group = "commons-lang", module = "commons-lang")
-    }
+    implementation("org.antlr:antlr4-runtime")
     implementation("org.apache.arrow:arrow-jdbc")
     implementation("org.apache.arrow:arrow-memory-netty")
     implementation("org.apache.arrow:arrow-vector")
@@ -291,7 +286,6 @@ dependencies {
     implementation("com.starrocks:jprotobuf-starrocks:${project.ext["jprotobuf-starrocks.version"]}")
     implementation("org.apache.groovy:groovy:4.0.9")
     testImplementation("org.apache.spark:spark-sql_2.12")
-    implementation("org.antlr:antlr4-runtime:4.9.3")
     implementation("software.amazon.awssdk:s3-transfer-manager")
     implementation("net.openhft:zero-allocation-hashing:0.16")
 }
