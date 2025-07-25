@@ -552,6 +552,7 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         boolean isChanged = false;
         boolean changedToShutdown = false;
         boolean becomeDead = false;
+        int oldHeartbeatRetryTimes = this.heartbeatRetryTimes;
         if (hbResponse.getStatus() == HeartbeatResponse.HbStatus.OK) {
             if (this.version == null) {
                 return false;
@@ -703,7 +704,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
                 CoordinatorMonitor.getInstance().addDeadBackend(id);
             }
         }
-        return isChanged;
+        // If heartbeatRetryTimes is changed, replicate this HbResponse to followers as well.
+        return isChanged || oldHeartbeatRetryTimes != this.heartbeatRetryTimes;
     }
 
     public Optional<DataCacheMetrics> getDataCacheMetrics() {
