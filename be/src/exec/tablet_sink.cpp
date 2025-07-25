@@ -1008,7 +1008,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                         }
 #endif
                         // If enable_log_rejected_record is true, we need to log the rejected record.
-                        if (nullable->is_null(j) && state->enable_log_rejected_record()) {
+                        if (state->enable_log_rejected_record()) {
                             state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(), "");
                         }
                     }
