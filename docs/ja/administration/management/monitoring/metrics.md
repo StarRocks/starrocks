@@ -1677,3 +1677,157 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count
 - 説明: ブラックリストに登録された SQL がインターセプトされた回数。
+
+### hit_bytes
+
+- 単位: Byte
+- 説明: キャッシュから読み取られたバイト数。
+
+### miss_bytes
+
+- 単位: Byte
+- 説明: リモートストレージから読み取られたバイト数。
+
+### hit_rate
+
+- 説明: キャッシュヒット率、`(hit_bytes / (hit_bytes + miss_bytes))` として計算されます。
+
+### hit_bytes_last_minute
+
+- 単位: Byte
+- 説明: 最後の 1 分間にキャッシュから読み取られたバイト数。
+
+### miss_bytes_last_minute
+
+- 単位: Byte
+- 説明: 最後の 1 分間にリモートストレージから読み取られたバイト数。
+
+### hit_rate_last_minute
+
+- 説明: 最後の 1 分間のキャッシュヒット率。
+
+### status
+
+- Description: Data Cache インスタンスのステータス。`NORMAL`: インスタンスは正常に動作しています。`ABNORMAL`: データをキャッシュに読み書きできません。問題はログを使用して特定する必要があります。`UPDATING`: インスタンスが更新中です。オンラインスケーリング中の更新状態など。
+
+### mem_quota_bytes
+
+- Unit: Byte
+- Description: ユーザーが設定したメモリキャッシュ容量（バイト単位）。
+
+### mem_used_bytes
+
+- Unit: Byte
+- Description: 使用されたメモリキャッシュスペース（バイト単位）。
+
+### mem_used_rate         
+
+- Description: 実際のメモリキャッシュ使用率（パーセンテージ）。
+
+### disk_quota_bytes
+
+- Unit: Byte
+- Description: ユーザーが設定したディスクキャッシュ容量（バイト単位）。
+
+### disk_used_bytes
+
+- Unit: Byte
+- Description: 使用されたディスクキャッシュスペース（バイト単位）。
+
+### disk_used_rate
+
+- Description: 実際のディスクキャッシュ使用率（パーセンテージ）。
+
+### disk_spaces
+
+- Description: ユーザーが設定したディスクキャッシュ情報。各キャッシュパスとキャッシュサイズを含みます。 |
+
+### meta_used_bytes
+
+- Unit: Byte
+- Description: システムメタデータをキャッシュするために使用されたスペース（バイト単位）。
+
+### hit_count
+
+- Unit: Count
+- Description: キャッシュヒットの数。
+
+### miss_count
+
+- Unit: Count
+- Description: キャッシュミスの数。
+
+### hit_count_last_minute
+
+- Unit: Count
+- Description: 最後の 1 分間のキャッシュヒット数。
+
+### miss_count_last_minute
+
+- Unit: Count
+- Description: 最後の 1 分間のキャッシュミス数。
+
+### buffer_item_count
+
+- Unit: Count
+- Description: キャッシュ内の現在の Buffer インスタンスの数。Buffer インスタンスは、リモートファイルからの生データの一部を読み取り、データを直接メモリまたはディスクにキャッシュする一般的なデータキャッシュを指します。
+
+### buffer_item_bytes
+
+- Unit: Byte
+- Description: Buffer インスタンスをキャッシュするために使用されたバイト数。
+
+### read_mem_bytes
+
+- Unit: Byte
+- Description: メモリキャッシュから読み取られたバイト数。
+
+### read_disk_bytes
+
+- Unit: Byte
+- Description: ディスクキャッシュから読み取られたバイト数。
+
+### write_bytes
+
+- Unit: Byte
+- Description: キャッシュに書き込まれたバイト数。
+
+### write_success_count
+
+- Unit: Count
+- Description: キャッシュ書き込みの成功数。
+
+### write_fail_count
+
+- Unit: Count
+- Description: キャッシュ書き込みの失敗数。
+
+### remove_bytes
+
+- Unit: Byte
+- Description: 削除されたバイト数。
+
+### remove_success_count
+
+- Unit: Count
+- Description: 削除の成功数。
+
+### remove_fail_count
+
+- Unit: Count
+- Description: 削除の失敗数。
+
+### current_reading_count
+
+- Unit: Count
+- Description: 現在進行中のキャッシュ読み取りの数。
+
+### current_writing_count
+
+- Unit: Count
+- Description: 現在進行中のキャッシュ書き込みの数。
+
+### current_removing_count
+
+- Unit: Count
+- Description: 現在進行中のキャッシュ削除の数。

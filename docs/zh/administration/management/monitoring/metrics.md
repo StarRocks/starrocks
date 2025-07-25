@@ -1677,3 +1677,157 @@ displayed_sidebar: docs
 
 - 单位：个
 - 描述: 黑名单 SQL 被拦截的次数。
+
+### hit_bytes
+
+- 单位：Byte
+- 描述：从缓存中读取的字节数。
+
+### miss_bytes
+
+- 单位：Byte
+- 描述：从远端读取的字节数。
+
+### hit_rate
+
+- 描述：缓存命中率 `(hit_bytes / (hit_bytes + miss_bytes))`。
+
+### hit_bytes_last_minute
+
+- 单位：Byte
+- 描述：最近一分钟内从缓存中读取的字节数。
+
+### miss_bytes_last_minute
+
+- 单位：Byte
+- 描述：最近一分钟内从远端读取的字节数。
+
+### hit_rate_last_minute  
+
+- 描述：最近一分钟内缓存命中率。
+
+### status
+
+- 描述：Data Cache 实例状态，当前主要有这几种：`NORMAL`: 正常。`ABNORMAL`:  实例运行不正常，无法进行正常缓存读写，需要查看日志定位。`UPDATING`:  更新中，比如在线扩缩容过程中会出现短暂的 updating 状态。
+
+### mem_quota_bytes
+
+- 单位：Byte
+- 描述：用户配置的内存缓存容量。
+
+### mem_used_bytes
+
+- 单位：Byte
+- 描述：当前实际使用的内存缓存空间。
+
+### mem_used_rate
+
+- 描述：内存缓存使用率。
+
+### disk_quota_bytes
+
+- 单位：Byte
+- 描述：用户配置的总磁盘缓存容量。
+
+### disk_used_bytes
+
+- 单位：Byte
+- 描述：当前实际使用的磁盘缓存空间。
+
+### disk_used_rate
+
+- 描述：磁盘缓存使用率。
+
+### disk_spaces
+
+- 描述：用户配置的具体的磁盘缓存信息，包括各个缓存路径和大小。
+
+### meta_used_bytes
+
+- 单位：Byte
+- 描述：缓存系统元数据占用的内存空间。
+
+### hit_count
+
+- 单位：Count
+- 描述：缓存命中次数。
+
+### miss_count
+
+- 单位：Count
+- 描述：缓存未命中次数。
+
+### hit_count_last_minute
+
+- 单位：Count
+- 描述：最近一分钟内缓存命中次数。
+
+### miss_count_last_minute
+
+- 单位：Count
+- 描述：最近一分钟内缓存未命中次数。
+
+### buffer_item_count
+
+- 单位：Count
+- 描述：当前缓存的 Buffer 实例的数量。Buffer 实例指常见的数据缓存，例如我们从远端读取某个文件的部分原始数据，将其直接缓存到内存或者磁盘。
+
+### buffer_item_bytes
+
+- 单位：byte
+- 描述：当前缓存的 Buffer 实例所占字节数。
+
+### read_mem_bytes
+
+- 单位：Byte
+- 描述：从内存缓存中读取的字节数。
+
+### read_disk_bytes
+
+- 单位：Byte
+- 描述：从磁盘缓存中读取的字节数。
+
+### write_bytes
+
+- 单位：Byte
+- 描述：总共写入缓存的字节数。
+
+### write_success_count
+
+- 单位：Count
+- 描述：写入成功的次数。
+
+### write_fail_count
+
+- 单位：Count
+- 描述：写入失败的次数。
+
+### remove_bytes
+
+- 单位：Byte
+- 描述：删除的字节数。
+
+### remove_success_count
+
+- 单位：Count
+- 描述：删除成功的次数。
+
+### remove_fail_count     
+
+- 单位：Count
+- 描述：删除失败的次数。
+
+### current_reading_count
+
+- 单位：Count
+- 描述：当前正在执行的读缓存操作数量。
+
+### current_writing_count
+
+- 单位：Count
+- 描述：当前正在执行的写缓存操作数量。
+
+### current_removing_count
+
+- 单位：Count
+- 描述：当前正在执行的删除缓存操作数量。

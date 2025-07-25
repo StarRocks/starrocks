@@ -1678,3 +1678,157 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: The number of times blacklisted sql have been intercepted.
+
+### hit_bytes
+
+- Unit: Byte
+- Description: Number of bytes read from the cache.                
+
+### miss_bytes
+
+- Unit: Byte
+- Description: Number of bytes read from remote storage.           
+
+### hit_rate
+
+- Description: Cache hit rate, calculated as `(hit_bytes / (hit_bytes + miss_bytes))`.
+
+### hit_bytes_last_minute
+
+- Unit: Byte
+- Description: Number of bytes read from the cache in the last minute.
+
+### miss_bytes_last_minute
+
+- Unit: Byte
+- Description: Number of bytes read from the remote storage in the last minute.
+
+### hit_rate_last_minute
+
+- Description: Cache hit rate in the last minute.                  
+
+### status                
+
+- Description: The status of the Data Cache instance, including:`NORMAL`: The instance runs normally.`ABNORMAL`: Data cannot be read or written into the cache. The issue must be located using logs.`UPDATING`: The instance is being updated, such as the updating state during online scaling.
+
+### mem_quota_bytes
+
+- Unit: Byte
+- Description: The memory cache capacity configured by users, in bytes.
+
+### mem_used_bytes
+
+- Unit: Byte
+- Description: The memory cache space that has been used, in bytes.
+
+### mem_used_rate         
+
+- Description: The actual memory cache usage, in percentages.
+
+### disk_quota_bytes
+
+- Unit: Byte
+- Description: The disk cache capacity configured by users, in bytes.
+
+### disk_used_bytes
+
+- Unit: Byte
+- Description: The disk cache space that has been used, in bytes.
+
+### disk_used_rate
+
+- Description: The actual disk cache usage, in percentages.
+
+### disk_spaces
+
+- Description: The disk cache information configured by users, including each cache path and the cache size.
+
+### meta_used_bytes
+
+- Unit: Byte
+- Description: The space used to cache system metadata, in bytes.
+
+### hit_count
+
+- Unit: Count
+- Description: The number of cache hits.
+
+### miss_count
+
+- Unit: Count
+- Description: The number of cache misses.
+
+### hit_count_last_minute
+
+- Unit: Count
+- Description: The number of cache hits in the last minute.
+
+### miss_count_last_minute
+
+- Unit: Count
+- Description: The number of cache misses in the last minute.
+
+### buffer_item_count
+
+- Unit: Count
+- Description: The current number of Buffer instances in the cache. Buffer instances refer to common data caches, such as when reading part of the raw data from a remote file and caching the data directly in memory or on disks.
+
+### buffer_item_bytes
+
+- Unit: Byte
+- Description: The number of types used to cache the Buffer instance.
+
+### read_mem_bytes
+
+- Unit: Byte
+- Description: The number of bytes read from the memory cache.
+
+### read_disk_bytes
+
+- Unit: Byte
+- Description: The number of bytes read from the disk cache.
+
+### write_bytes
+
+- Unit: Byte
+- Description: The number of bytes written to the cache.
+
+### write_success_count
+
+- Unit: Count
+- Description: The number of successful cache writes.
+
+### write_fail_count
+
+- Unit: Count
+- Description: The number of failed cache writes.
+
+### remove_bytes
+
+- Unit: Byte
+- Description: The number of deleted bytes.
+
+### remove_success_count
+
+- Unit: Count
+- Description: The number of successful deletes.
+
+### remove_fail_count
+
+- Unit: Count
+- Description: The number of failed deletes.
+
+### current_reading_count
+
+- Unit: Count
+- Description: The number of ongoing cache reads.
+
+### current_writing_count
+
+- Unit: Count
+- Description: The number of ongoing cache writes.
+
+### current_removing_count
+
+- Unit: Count
+- Description: The number of ongoing cache deletes.
