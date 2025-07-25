@@ -30,7 +30,6 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -151,10 +150,19 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
         }
 
         @Override
+        public OptExpression visitPhysicalMetaScan(OptExpression optExpr, Void v) {
+            return rewritePhysicalScan(optExpr, v);
+        }
+
+        @Override
         public OptExpression visitPhysicalScan(OptExpression optExpr, Void v) {
+            return rewritePhysicalScan(optExpr, v);
+        }
+
+        private OptExpression rewritePhysicalScan(OptExpression optExpr, Void v) {
             PhysicalScanOperator scanOperator = (PhysicalScanOperator) optExpr.getOp();
-            PhysicalOlapScanOperator.Builder builder =
-                    (PhysicalOlapScanOperator.Builder) OperatorBuilderFactory.build(scanOperator)
+            PhysicalScanOperator.Builder builder =
+                    (PhysicalScanOperator.Builder) OperatorBuilderFactory.build(scanOperator)
                             .withOperator(scanOperator);
 
             JsonPathRewriteContext context = new JsonPathRewriteContext(columnRefFactory);

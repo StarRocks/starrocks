@@ -219,6 +219,11 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
             return (B) this;
         }
 
+        public B setColumnAccessPath(List<ColumnAccessPath> accessPaths) {
+            builder.setColumnAccessPaths(accessPaths);
+            return (B) this;
+        }
+
         @Override
         public O build() {
             O op = super.build();
