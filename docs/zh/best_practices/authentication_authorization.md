@@ -239,7 +239,7 @@ ADMIN SET FRONTEND CONFIG (
    ALTER SECURITY INTEGRATION <security_integration_name> SET
    (
        "group_provider" = "",
-       "authenticated_group_list" = ""
+       "permitted_groups" = ""
    )
    ```
 

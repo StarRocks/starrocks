@@ -239,7 +239,7 @@ The following example is based on LDAP.
    ALTER SECURITY INTEGRATION <security_integration_name> SET
    (
        "group_provider" = "",
-       "authenticated_group_list" = ""
+       "permitted_groups" = ""
    )
    ```
 
