@@ -113,7 +113,7 @@ public class InsertStmt extends DmlStmt {
 
     private boolean isRewrite = false;
 
-    private long rewriteThreshold = 512L * 1024 * 1024;
+    private boolean rewriteAll = false;
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite, Map<String, String> insertProperties,
@@ -193,14 +193,14 @@ public class InsertStmt extends DmlStmt {
         isRewrite = rewrite;
     }
 
-    public long getRewriteThreshold() {
-        return rewriteThreshold;
+    public boolean rewriteAll() {
+        return rewriteAll;
     }
 
-    public void setRewriteThreshold(long threshold) {
-        rewriteThreshold = threshold;
+    public void setRewriteAll(boolean rewriteAll) {
+        this.rewriteAll = rewriteAll;
     }
-
+    
     public void setOverwriteJobId(long overwriteJobId) {
         this.overwriteJobId = overwriteJobId;
     }

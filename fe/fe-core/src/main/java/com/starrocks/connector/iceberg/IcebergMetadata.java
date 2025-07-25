@@ -1235,6 +1235,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (isRewrite && extra != null) {
             ((IcebergSinkExtra) extra).getScannedDataFiles().forEach(batchWrite::deleteFile);
             ((IcebergSinkExtra) extra).getAppliedDeleteFiles().forEach(batchWrite::deleteFile);
+            ((RewriteData) batchWrite).setSnapshotId(nativeTbl.currentSnapshot().snapshotId());
         }
 
         try {
@@ -1565,6 +1566,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         @Override
         public void toBranch(String targetBranch) {
             rewriteFiles = rewriteFiles.toBranch(targetBranch);
+        }
+
+        public void setSnapshotId(long snapshotId) {
+            rewriteFiles.validateFromSnapshot(snapshotId);
         }
     }
 

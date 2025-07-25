@@ -378,8 +378,7 @@ public class IcebergTable extends Table {
 
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
-        if (!comment.equals(EQUALITY_DELETE_TABLE_COMMENT)) {
-            //this is for insert, should not influence read.
+        if (comment == null || !comment.equals(EQUALITY_DELETE_TABLE_COMMENT)) {
             List<String> exprStr = IcebergApiConverter.toPartitionFields(nativeTable.spec(), true);
             List<Expr> partitionExprs = exprStr.stream()
                     .map(expr -> {

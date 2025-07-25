@@ -122,7 +122,9 @@ public class IcebergScanNode extends ScanNode {
                     icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), icebergJobPlanningPredicate);
             return;
         }
-
+        if (getSourceRange() != null) {
+            getSourceRange().clearScannedFiles();
+        }
         RemoteFileInfoSource remoteFileInfoSource;
         remoteFileInfoSource = new RemoteFileInfoDefaultSource(splits);
         if (morParams != IcebergMORParams.EMPTY) {
@@ -134,7 +136,7 @@ public class IcebergScanNode extends ScanNode {
         }
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, 
-                remoteFileInfoSource, morParams, desc, true);
+                remoteFileInfoSource, morParams, desc, bucketProperties, true);
     }
 
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
@@ -174,7 +176,7 @@ public class IcebergScanNode extends ScanNode {
         }
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, 
-                remoteFileInfoSource, morParams, desc, bucketProperties, false);
+                remoteFileInfoSource, morParams, desc, bucketProperties);
     }
 
     private void setupCloudCredential() {
@@ -380,7 +382,11 @@ public class IcebergScanNode extends ScanNode {
         return scanRangeSource.getScannedDataFiles();
     }
 
-    public Set<DeleteFile> getAppliedDeleteFiles() {
+    public Set<DeleteFile> getPosAppliedDeleteFiles() {
         return scanRangeSource.getPosAppliedDeleteFiles();
+    }
+
+    public Set<DeleteFile> getEqualAppliedDeleteFiles() {
+        return scanRangeSource.getEqualAppliedDeleteFiles();
     }
 }

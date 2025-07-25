@@ -26,14 +26,14 @@ public class AlterTableOperationClause extends AlterTableClause {
     public class RewriteDataOptions {
         private Expr where;
         private boolean rewriteAll;
-        private int minFileSizeBytes;
-        private double batchSize; //GB
+        private long minFileSizeBytes;
+        private long batchSize;
         private ScalarOperator partitionFilter;
     
         public RewriteDataOptions(Expr where,
                                 boolean rewriteAll,
-                                int minFileSizeBytes,
-                                double batchSize) {
+                                long minFileSizeBytes,
+                                long batchSize) {
             this.where           = where;
             this.rewriteAll      = rewriteAll;
             this.minFileSizeBytes = minFileSizeBytes;
@@ -50,12 +50,7 @@ public class AlterTableOperationClause extends AlterTableClause {
         super(AlterOpType.ALTER_TABLE_OPERATION, pos);
         this.tableOperationName = tableOperationName;
         this.exprs = exprs;
-        //for the rewrite_data_files related fields
-        // this.rewriteDataOptions.where = where;
-        // this.rewriteDataOptions.rewriteAll = false;
-        // this.rewriteDataOptions.minFileSizeBytes = 256 * 1024 * 1024; // 256MB
-        // this.rewriteDataOptions.batchSize = 10; // 10GB
-        rewriteDataOptions = new RewriteDataOptions(where, false, 256 * 1024 * 1024, 10.0);
+        rewriteDataOptions = new RewriteDataOptions(where, false, 256L * 1024 * 1024, 10L * 1024 * 1024 * 1024);
     }
 
 
@@ -91,23 +86,19 @@ public class AlterTableOperationClause extends AlterTableClause {
         return this.rewriteDataOptions.rewriteAll;
     }
 
-    public void setMinFileSizeBytes(int minFileSizeBytes) {
+    public void setMinFileSizeBytes(long minFileSizeBytes) {
         this.rewriteDataOptions.minFileSizeBytes = minFileSizeBytes;
     }
 
-    public void setMinFileSizeBytes(long minFileSizeBytes) {
-        this.rewriteDataOptions.minFileSizeBytes = (int) minFileSizeBytes;
-    }
-
-    public int getMinFileSizeBytes() {
+    public long getMinFileSizeBytes() {
         return this.rewriteDataOptions.minFileSizeBytes;
     }
 
-    public void setBatchSize(double batchSize) {
+    public void setBatchSize(long batchSize) {
         this.rewriteDataOptions.batchSize = batchSize;
     }
 
-    public double getBatchSize() {
+    public long getBatchSize() {
         return this.rewriteDataOptions.batchSize;
     }
 
