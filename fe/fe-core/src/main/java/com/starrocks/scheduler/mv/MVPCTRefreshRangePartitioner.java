@@ -74,7 +74,6 @@ import static com.starrocks.sql.common.SyncPartitionUtils.createRange;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getStr2DateExpr;
 
 public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner {
-    private static final int CREATE_PARTITION_BATCH_SIZE = 64;
     private final Logger logger;
 
     public MVPCTRefreshRangePartitioner(MvTaskRunContext mvContext,
