@@ -27,6 +27,7 @@ import mockit.Expectations;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -123,13 +124,8 @@ public class ComputeNodeTest {
         hbResponse.setRebootTime(1000L);
         ComputeNode node = new ComputeNode();
         boolean needSync = node.handleHbResponse(hbResponse, false);
-<<<<<<< HEAD
-        Assert.assertTrue(node.getLastStartTime() == 1000000L);
+        Assert.assertEquals(1000000L, node.getLastStartTime());
         Assert.assertTrue(needSync);
-=======
-        Assertions.assertEquals(1000000L, node.getLastStartTime());
-        Assertions.assertTrue(needSync);
->>>>>>> 72488b08c9 ([BugFix] sync OK hbResponse if the heartbeatRetryTimes counter get reset (#61249))
     }
 
     @Test
