@@ -231,7 +231,7 @@ public abstract class StarRocksHttpTestCase {
         // index
         MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta =
-                new TabletMeta(testDbId, testTableId, testPartitionId, testIndexId, testSchemaHash, TStorageMedium.HDD);
+                new TabletMeta(testDbId, testTableId, testPartitionId, testIndexId, TStorageMedium.HDD);
         baseIndex.addTablet(tablet, tabletMeta);
 
         tablet.addReplica(replica1);

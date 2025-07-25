@@ -440,7 +440,7 @@ public class TabletSchedulerTest {
                 .setTabletSchema(tabletSchema)
                 .build();
 
-        TabletMeta tabletMeta = new TabletMeta(dbId, tblId, partitionId, indexId, -1, TStorageMedium.HDD);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tblId, partitionId, indexId, TStorageMedium.HDD);
 
         Replica replica = new Replica(replicaId, beId, -1, Replica.ReplicaState.RECOVER);
 

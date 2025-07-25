@@ -67,6 +67,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     public List<Integer> sortKeyUniqueIds;
     @SerializedName(value = "schemaVersion")
     private int schemaVersion = 0;
+    /**
+     * Historically, after a schema change, a new schemaHash would be added under the tablet directory
+     * instead of creating a new tablet. Currently, schema change creates a new set of tablets,
+     * and only one schema hash may exist under the tablet directory.
+     * For compatibility with historical data, schemaHash is now only used to construct the path
+     * of data files on disk. It is only meaningful in the storage-compute integrated mode,
+     * and has no significance in the shared-nothing mode.
+     */
     @SerializedName(value = "schemaHash")
     private int schemaHash;
     @SerializedName(value = "schemaId")
