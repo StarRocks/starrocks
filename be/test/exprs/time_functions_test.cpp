@@ -4512,38 +4512,200 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeNtzAdditionalCases) {
     }
 }
 
-TEST_F(TimeFunctionsTest, hourFromUnixtimeTest) {
-    Int64Column::Ptr tc = Int64Column::create();
-    // 1970-01-01 00:00:00 UTC
-    tc->append(0); // hour = 0
-    // 1970-01-01 01:00:00 UTC
-    tc->append(3600); // hour = 1
-    // 1970-01-01 12:34:56 UTC
-    tc->append(45296); // hour = 12
-    // 1970-01-01 23:59:59 UTC
-    tc->append(86399); // hour = 23
-    // 1970-01-02 00:00:00 UTC
-    tc->append(86400); // hour = 0
-    // 2000-01-01 08:00:00 UTC (946713600)
-    tc->append(946713600); // hour = 8
-
-    int expected[] = {0, 1, 12, 23, 0, 8};
-
-    // Change timezone to UTC
+TEST_F(TimeFunctionsTest, hourFromUnixTime) {
+    // Change timezone to UTC for consistent testing
     RuntimeState* state = _utils->get_fn_ctx()->state();
     std::string prev_timezone = state->timezone();
     ASSERT_TRUE(state->set_timezone("UTC"));
     DeferOp defer([&]() { state->set_timezone(prev_timezone); });
 
-    Columns columns;
-    columns.emplace_back(tc);
-    ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
-    ASSERT_TRUE(result->is_numeric());
-    ASSERT_FALSE(result->is_nullable());
+    // Test 1: Basic positive unixtime values
+    {
+        Int64Column::Ptr tc = Int64Column::create();
+        // 1970-01-01 00:00:00 UTC
+        tc->append(0); // hour = 0
+        // 1970-01-01 01:00:00 UTC
+        tc->append(3600); // hour = 1
+        // 1970-01-01 12:34:56 UTC
+        tc->append(45296); // hour = 12
+        // 1970-01-01 23:59:59 UTC
+        tc->append(86399); // hour = 23
+        // 1970-01-02 00:00:00 UTC
+        tc->append(86400); // hour = 0
+        // 2000-01-01 08:00:00 UTC (946713600)
+        tc->append(946713600); // hour = 8
 
-    auto hours = ColumnHelper::cast_to<TYPE_INT>(result);
-    for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i) {
-        EXPECT_EQ(expected[i], hours->get_data()[i]);
+        int expected[] = {0, 1, 12, 23, 0, 8};
+
+        Columns columns;
+        columns.emplace_back(tc);
+        ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
+
+        auto hours = ColumnHelper::cast_to<TYPE_INT>(result);
+        for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i) {
+            EXPECT_EQ(expected[i], hours->get_data()[i]) << "Failed for basic positive at index " << i;
+        }
+    }
+
+    // Test 2: Timezone offset to simulate "negative" hour results
+    {
+        // Set timezone to UTC-1 to simulate "negative" hour results for small positive unixtime values
+        RuntimeState* state = _utils->get_fn_ctx()->state();
+        std::string prev_timezone = state->timezone();
+        ASSERT_TRUE(state->set_timezone("Etc/GMT+1")); // UTC-1
+
+        DeferOp defer([&]() { state->set_timezone(prev_timezone); });
+
+        Int64Column::Ptr tc = Int64Column::create();
+        // 1970-01-01 00:00:00 UTC, in UTC-1, it's 1969-12-31 23:00:00, so hour = 23
+        tc->append(0);
+        // 1970-01-01 01:00:00 UTC, in UTC-1, it's 00:00:00, so hour = 0
+        tc->append(3600);
+        // 1970-01-01 23:00:00 UTC, in UTC-1, it's 22:00:00, so hour = 22
+        tc->append(23 * 3600);
+        // 1970-01-01 23:59:59 UTC, in UTC-1, it's 22:59:59, so hour = 22
+        tc->append(23 * 3600 + 3599);
+        // 1970-01-02 00:00:00 UTC, in UTC-1, it's 23:00:00, so hour = 23
+        tc->append(24 * 3600);
+
+        int expected_negative[] = {23, 0, 22, 22, 23};
+
+        Columns columns;
+        columns.emplace_back(tc);
+        ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
+
+        auto hours = ColumnHelper::cast_to<TYPE_INT>(result);
+        for (size_t i = 0; i < sizeof(expected_negative) / sizeof(expected_negative[0]); ++i) {
+            EXPECT_EQ(expected_negative[i], hours->get_data()[i])
+                    << "Failed for timezone offset at index " << i << " with value " << tc->get_data()[i];
+        }
+    }
+
+    // Test 3: Mixed positive and boundary values with timezone offset
+    {
+        // Set timezone to UTC+2 to simulate hour shifting
+        RuntimeState* state = _utils->get_fn_ctx()->state();
+        std::string prev_timezone = state->timezone();
+        ASSERT_TRUE(state->set_timezone("Etc/GMT-2")); // UTC+2
+
+        DeferOp defer([&]() { state->set_timezone(prev_timezone); });
+
+        Int64Column::Ptr tc = Int64Column::create();
+
+        // 1970-01-01 00:00:00 UTC, in UTC+2, it's 02:00:00, so hour = 2
+        tc->append(0);
+        // 1970-01-01 01:00:00 UTC, in UTC+2, it's 03:00:00, so hour = 3
+        tc->append(3600);
+        // 1970-01-01 22:00:00 UTC, in UTC+2, it's 00:00:00 next day, so hour = 0
+        tc->append(22 * 3600);
+        // 1970-01-01 23:59:59 UTC, in UTC+2, it's 01:59:59 next day, so hour = 1
+        tc->append(23 * 3600 + 3599);
+        // 1970-01-02 00:00:00 UTC, in UTC+2, it's 02:00:00, so hour = 2
+        tc->append(24 * 3600);
+
+        int expected_mixed[] = {2, 3, 0, 1, 2};
+
+        Columns columns;
+        columns.emplace_back(tc);
+        ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
+
+        auto hours = ColumnHelper::cast_to<TYPE_INT>(result);
+        for (size_t i = 0; i < sizeof(expected_mixed) / sizeof(expected_mixed[0]); ++i) {
+            EXPECT_EQ(expected_mixed[i], hours->get_data()[i])
+                    << "Failed for mixed timezone offset at index " << i << " with value " << tc->get_data()[i];
+        }
+    }
+
+    // Test 4: Null value handling to ensure correct order (with timezone offset)
+    {
+        // Set timezone to UTC+3
+        RuntimeState* state = _utils->get_fn_ctx()->state();
+        std::string prev_timezone = state->timezone();
+        ASSERT_TRUE(state->set_timezone("Etc/GMT-3")); // UTC+3
+
+        DeferOp defer([&]() { state->set_timezone(prev_timezone); });
+
+        // Create a nullable column with nulls interspersed
+        auto tc = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+
+        tc->append_datum((int64_t)0);     // hour 3
+        tc->append_nulls(1);              // null
+        tc->append_datum((int64_t)3600);  // hour 4
+        tc->append_nulls(1);              // null
+        tc->append_datum((int64_t)7200);  // hour 5
+        tc->append_datum((int64_t)82800); // 23:00:00 UTC, hour 2 (next day)
+        tc->append_nulls(1);              // null
+        tc->append_datum((int64_t)10800); // hour 6
+
+        Columns columns;
+        columns.emplace_back(tc);
+        ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
+        ASSERT_TRUE(result->is_nullable());
+
+        auto nullable_result = ColumnHelper::as_column<NullableColumn>(result);
+        ASSERT_EQ(8, nullable_result->size());
+
+        // Check that results are in correct order
+        EXPECT_EQ(3, nullable_result->get(0).get_int32()); // 0 -> hour 3
+        EXPECT_TRUE(nullable_result->is_null(1));          // null
+        EXPECT_EQ(4, nullable_result->get(2).get_int32()); // 3600 -> hour 4
+        EXPECT_TRUE(nullable_result->is_null(3));          // null
+        EXPECT_EQ(5, nullable_result->get(4).get_int32()); // 7200 -> hour 5
+        EXPECT_EQ(2, nullable_result->get(5).get_int32()); // 82800 -> hour 2 (next day)
+        EXPECT_TRUE(nullable_result->is_null(6));          // null
+        EXPECT_EQ(6, nullable_result->get(7).get_int32()); // 10800 -> hour 6
+    }
+
+    // Test 5: Edge cases for hour wrapping with timezone offset and negative input (should return null)
+    {
+        // Set timezone to UTC-2 to test hour wrapping
+        RuntimeState* state = _utils->get_fn_ctx()->state();
+        std::string prev_timezone = state->timezone();
+        ASSERT_TRUE(state->set_timezone("Etc/GMT+2")); // UTC-2
+
+        DeferOp defer([&]() { state->set_timezone(prev_timezone); });
+
+        // Use a nullable column to allow negative input
+        auto tc = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+
+        // 1970-01-01 00:00:00 UTC, in UTC-2, it's 22:00:00 previous day, so hour = 22
+        tc->append_datum((int64_t)0);
+        // 1970-01-01 01:00:00 UTC, in UTC-2, it's 23:00:00 previous day, so hour = 23
+        tc->append_datum((int64_t)3600);
+        // 1970-01-01 02:00:00 UTC, in UTC-2, it's 00:00:00, so hour = 0
+        tc->append_datum((int64_t)7200);
+        // 1970-01-01 03:00:00 UTC, in UTC-2, it's 01:00:00, so hour = 1
+        tc->append_datum((int64_t)10800);
+
+        // Negative input cases (should return null)
+        tc->append_datum((int64_t)-1);
+        tc->append_datum((int64_t)-10000);
+        tc->append_datum((int64_t)-3600);
+
+        // Expected: 22, 23, 0, 1, [null, null, null]
+        int expected_edge[] = {22, 23, 0, 1};
+
+        Columns columns;
+        columns.emplace_back(tc);
+        ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
+
+        ASSERT_TRUE(result->is_nullable());
+        auto nullable_result = ColumnHelper::as_column<NullableColumn>(result);
+        ASSERT_EQ(7, nullable_result->size());
+
+        // Check non-negative cases
+        for (size_t i = 0; i < 4; ++i) {
+            EXPECT_FALSE(nullable_result->is_null(i)) << "Unexpected null at index " << i;
+            EXPECT_EQ(expected_edge[i], nullable_result->get(i).get_int32())
+                    << "Failed for edge case with timezone offset at index " << i << " with value "
+                    << tc->get(i).get_int64();
+        }
+        // Check negative input returns null
+        for (size_t i = 4; i < 7; ++i) {
+            EXPECT_TRUE(nullable_result->is_null(i))
+                    << "Expected null for negative input at index " << i << " with value " << tc->get(i).get_int64();
+        }
     }
 }
+
 } // namespace starrocks
