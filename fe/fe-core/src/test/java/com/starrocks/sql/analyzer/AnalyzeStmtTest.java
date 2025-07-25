@@ -28,6 +28,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -84,6 +85,7 @@ import java.util.Set;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.connectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 import static com.starrocks.statistic.AnalyzeMgr.IS_MULTI_COLUMN_STATS;
@@ -796,4 +798,41 @@ public class AnalyzeStmtTest {
                 "[[db, tbl, [kk1, kk2, kk3], FULL, MCDISTINCT, 2020-01-01 01:01:00, {is_multi_column_stats=true}]]",
                 res.toString());
     }
+
+    @Test
+    public void testKillAllPendingTasks() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus,
+                                        Database db, Table table) throws InterruptedException {
+                Thread.sleep(100000);
+            }
+        };
+
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public static boolean isEmptyTable(Table table) {
+                return false;
+            }
+        };
+
+        String sql = "analyze table db.tbl with async mode";
+        AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
+        StmtExecutor.newInternalExecutor(connectContext, stmt).execute();
+        StmtExecutor.newInternalExecutor(connectContext, stmt).execute();
+        StmtExecutor.newInternalExecutor(connectContext, stmt).execute();
+        StmtExecutor.newInternalExecutor(connectContext, stmt).execute();
+        StmtExecutor.newInternalExecutor(connectContext, stmt).execute();
+        StmtExecutor.newInternalExecutor(connectContext, stmt).execute();
+        String killSql = "kill all pending analyze";
+        KillAnalyzeStmt killStmt = (KillAnalyzeStmt) analyzeSuccess(killSql);
+        StmtExecutor.newInternalExecutor(connectContext, killStmt).execute();
+        var types = connectContext.getGlobalStateMgr().getAnalyzeMgr().getAnalyzeStatusMap().values().stream()
+                .map(AnalyzeStatus::getStatus).toList();
+        int pendingSize = types.stream().filter(x -> x == StatsConstants.ScheduleStatus.PENDING).toList().size();
+        int failedSize = types.stream().filter(x -> x == StatsConstants.ScheduleStatus.FAILED).toList().size();
+        Assertions.assertEquals(3, pendingSize);
+        Assertions.assertEquals(3, failedSize);
+    }
+
 }
