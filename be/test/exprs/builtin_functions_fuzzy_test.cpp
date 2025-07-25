@@ -485,4 +485,133 @@ TEST_F(BuiltinFunctionsFuzzyTest, TestNullAndEmptyInputs) {
     }
 }
 
+TEST_F(BuiltinFunctionsFuzzyTest, TestMixedConstAndNonConstInputs) {
+    const auto& fn_tables = BuiltinFunctions::get_all_functions();
+    
+    // Test functions with mixed const and non-const inputs
+    for (const auto& [function_id, descriptor] : fn_tables) {
+        if (!descriptor.scalar_function || descriptor.args_nums < 2) continue;
+        
+        auto ctx = FunctionContext::create_test_context();
+        auto types = get_all_logical_types();
+        
+        // Generate mixed const/non-const combinations
+        for (int round = 0; round < 3; ++round) {
+            Columns mixed_columns;
+            
+            for (uint8_t i = 0; i < descriptor.args_nums; ++i) {
+                std::uniform_int_distribution<size_t> type_dist(0, types.size() - 1);
+                LogicalType random_type = types[type_dist(_rng)];
+                
+                auto base_column = create_random_column(random_type, 10);
+                if (!base_column || base_column->empty()) continue;
+                
+                // Randomly decide if this column should be const
+                std::uniform_int_distribution<int> const_dist(0, 1);
+                if (const_dist(_rng) == 0) {
+                    mixed_columns.push_back(make_const(base_column));
+                } else {
+                    mixed_columns.push_back(base_column);
+                }
+            }
+            
+            if (mixed_columns.size() == descriptor.args_nums) {
+                try {
+                    auto result = descriptor.scalar_function(ctx.get(), mixed_columns);
+                    if (result.ok()) {
+                        ASSERT_TRUE(result.value() != nullptr);
+                    }
+                } catch (...) {
+                    // Expected for type mismatches
+                }
+            }
+        }
+    }
+}
+
+TEST_F(BuiltinFunctionsFuzzyTest, TestLargeDataInputs) {
+    const auto& fn_tables = BuiltinFunctions::get_all_functions();
+    
+    // Test with larger data sizes to catch potential memory issues
+    for (const auto& [function_id, descriptor] : fn_tables) {
+        if (!descriptor.scalar_function) continue;
+        
+        // Only test a subset of functions with large data to avoid long test times
+        if (function_id % 10 != 0) continue;
+        
+        auto ctx = FunctionContext::create_test_context();
+        auto types = get_all_logical_types();
+        
+        Columns large_columns;
+        for (uint8_t i = 0; i < descriptor.args_nums; ++i) {
+            std::uniform_int_distribution<size_t> type_dist(0, types.size() - 1);
+            LogicalType random_type = types[type_dist(_rng)];
+            
+            // Create larger columns (1000 rows instead of 10)
+            auto column = create_random_column(random_type, 1000);
+            if (column && !column->empty()) {
+                large_columns.push_back(column);
+            }
+        }
+        
+        if (large_columns.size() == descriptor.args_nums) {
+            try {
+                auto result = descriptor.scalar_function(ctx.get(), large_columns);
+                if (result.ok()) {
+                    ASSERT_TRUE(result.value() != nullptr);
+                    ASSERT_EQ(result.value()->size(), 1000);
+                }
+            } catch (...) {
+                // Expected for type mismatches
+            }
+        }
+    }
+}
+
+TEST_F(BuiltinFunctionsFuzzyTest, TestVariadicFunctions) {
+    const auto& fn_tables = BuiltinFunctions::get_all_functions();
+    
+    // Test functions that accept variable number of arguments
+    for (const auto& [function_id, descriptor] : fn_tables) {
+        if (!descriptor.scalar_function) continue;
+        
+        // Look for variadic functions by checking function names that typically accept variable args
+        bool is_variadic = (descriptor.name.find("concat") != std::string::npos ||
+                           descriptor.name.find("coalesce") != std::string::npos ||
+                           descriptor.name.find("greatest") != std::string::npos ||
+                           descriptor.name.find("least") != std::string::npos);
+        
+        if (!is_variadic) continue;
+        
+        auto ctx = FunctionContext::create_test_context();
+        auto types = get_all_logical_types();
+        
+        // Test with different numbers of arguments
+        for (size_t arg_count = descriptor.args_nums; arg_count <= descriptor.args_nums + 3; ++arg_count) {
+            Columns variadic_columns;
+            
+            for (size_t i = 0; i < arg_count; ++i) {
+                std::uniform_int_distribution<size_t> type_dist(0, types.size() - 1);
+                LogicalType random_type = types[type_dist(_rng)];
+                
+                auto column = create_random_column(random_type, 10);
+                if (column && !column->empty()) {
+                    variadic_columns.push_back(column);
+                }
+            }
+            
+            if (variadic_columns.size() == arg_count) {
+                try {
+                    auto result = descriptor.scalar_function(ctx.get(), variadic_columns);
+                    if (result.ok()) {
+                        ASSERT_TRUE(result.value() != nullptr);
+                    }
+                } catch (...) {
+                    // Expected for type mismatches
+                }
+            }
+        }
+    }
+}
+
 } // namespace starrocks
