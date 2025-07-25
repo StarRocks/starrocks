@@ -37,6 +37,8 @@ package com.starrocks.http.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.UserIdentity;
@@ -50,13 +52,17 @@ import com.starrocks.http.BaseAction;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
+import com.starrocks.http.HttpUtils;
 import com.starrocks.http.WebUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -65,6 +71,7 @@ import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class RestBaseAction extends BaseAction {
 
@@ -290,6 +297,65 @@ public class RestBaseAction extends BaseAction {
             int ps = NumberUtils.toInt(value, DEFAULT_PAGE_SIZE);
             return ps <= 0 ? DEFAULT_PAGE_SIZE : ps;
         });
+    }
+
+    protected List<String> queryAllFrontendNodes(String relativeUrl, String authorization,
+                                                 HttpMethod method) {
+        List<Pair<String, Integer>> frontends = getAllAliveFe();
+        ImmutableMap<String, String> header = ImmutableMap.<String, String>builder()
+                .put(HttpHeaders.AUTHORIZATION, authorization).build();
+        List<String> result = Lists.newArrayList();
+        for (Pair<String, Integer> front : frontends) {
+            String url = String.format("http://%s/%s", front, relativeUrl);
+            try {
+                String data = null;
+                if (method == HttpMethod.GET) {
+                    data = HttpUtils.get(url, header);
+                } else if (method == HttpMethod.POST) {
+                    data = HttpUtils.post(url, null, header);
+                }
+                if (StringUtils.isNotBlank(data)) {
+                    result.add(data);
+                }
+            } catch (Exception e) {
+                LOG.error("request url {} error", url, e);
+            }
+        }
+        return result;
+    }
+
+    public static List<Pair<String, Integer>> getAllAliveFe() {
+
+        return GlobalStateMgr.getCurrentState()
+                .getNodeMgr()
+                .getAllFrontends()
+                .stream()
+                .filter(Frontend::isAlive)
+                .map(fe -> new Pair<>(fe.getHost(), Config.http_port))
+                .collect(Collectors.toList());
+    }
+
+    public static Pair<String, Integer> getCurrentFe() {
+
+        return GlobalStateMgr.getCurrentState()
+                .getNodeMgr()
+                .getSelfNode();
+    }
+
+    public static List<Pair<String, Integer>> getOtherAliveFe() {
+        List<Pair<String, Integer>> allAliveFe = getAllAliveFe();
+        if (allAliveFe.isEmpty()) {
+            return null;
+        }
+        Pair<String, Integer> currentFe = getCurrentFe();
+        if (currentFe == null) {
+            return null;
+        }
+        String ip = currentFe.first;
+        return allAliveFe.stream()
+                .filter(fe -> !fe.first.equals(ip))
+                .collect(Collectors.toList());
+
     }
 
 }

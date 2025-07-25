@@ -98,6 +98,7 @@ import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
+import com.starrocks.http.rest.v2.ProfileActionV2;
 import com.starrocks.http.rest.v2.TablePartitionAction;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
@@ -223,6 +224,7 @@ public class HttpServer {
         ColocateMetaService.UpdateGroupAction.registerAction(controller);
         GlobalDictMetaService.ForbitTableAction.registerAction(controller);
         ProfileAction.registerAction(controller);
+        ProfileActionV2.registerAction(controller);
         QueryProgressAction.registerAction(controller);
         QueryDetailAction.registerAction(controller);
         ConnectionAction.registerAction(controller);
