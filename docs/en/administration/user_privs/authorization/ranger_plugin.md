@@ -18,6 +18,7 @@ In addition to the native RBAC privilege system, StarRocks v3.1.9 also supports 
 - Creates access policies, masking policies, and row-level filter policies through Apache Ranger.
 - Ranger audit logs.
 - **Ranger Servers that use Kerberos for authentication are not supported.**
+- You can register multiple StarRocks Services in the same Apache Ranger service to manage privileges in different StarRocks clusters.
 
 This topic describes the permission control methods and integration process of StarRocks and Apache Ranger. For information on how to create security policies on Ranger to manage data security, see the [Apache Ranger official website](https://ranger.apache.org/).
 

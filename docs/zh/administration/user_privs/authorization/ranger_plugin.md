@@ -18,6 +18,7 @@ Apache Ranger 提供以下核心模块：
 - 通过 Ranger 创建 Access policy、Masking policy、Row-level filter policy。
 - 支持 Ranger 审计日志。
 - 暂不支持 Kerberos 认证的 Ranger Server。
+- 同一个 Apache Ranger 中可以注册多个 StarRocks Service 管理不同 StarRocks 集群的权限。
 
 本文介绍 StarRocks 与 Apache Ranger 集成后的权限控制方式以及集成过程。关于如何在 Ranger 上创建权限策略来管理数据安全，参见 [Apache Ranger 官网](https://ranger.apache.org/)。
 
