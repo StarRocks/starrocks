@@ -170,6 +170,10 @@ import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.lake.backup.LakeTableSnapshotInfo;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
+import com.starrocks.lake.snapshot.ClusterSnapshot;
+import com.starrocks.lake.snapshot.ClusterSnapshotJob;
+import com.starrocks.lake.snapshot.ManualClusterSnapshot;
+import com.starrocks.lake.snapshot.ManualClusterSnapshotJob;
 import com.starrocks.load.loadv2.BrokerLoadJob;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
@@ -474,6 +478,16 @@ public class GsonUtils {
                     .registerSubtype(SplittingTablets.class, "SplittingTablets")
                     .registerSubtype(MergingTablets.class, "MergingTablets");
 
+    public static final RuntimeTypeAdapterFactory<ClusterSnapshot> CLUSTER_SNAPSHOT_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(ClusterSnapshot.class, "clazz")
+                    .registerSubtype(ClusterSnapshot.class, "ClusterSnapshot")
+                    .registerSubtype(ManualClusterSnapshot.class, "ManualClusterSnapshot");
+
+    public static final RuntimeTypeAdapterFactory<ClusterSnapshotJob> CLUSTER_SNAPSHOT_JOB_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(ClusterSnapshotJob.class, "clazz")
+                    .registerSubtype(ClusterSnapshotJob.class, "ClusterSnapshotJob")
+                    .registerSubtype(ManualClusterSnapshotJob.class, "ManualClusterSnapshotJob");
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -542,6 +556,8 @@ public class GsonUtils {
             .registerTypeAdapterFactory(DYNAMIC_TABLET_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(DYNAMIC_TABLETS_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(CLUSTER_SNAPSHOT_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(CLUSTER_SNAPSHOT_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

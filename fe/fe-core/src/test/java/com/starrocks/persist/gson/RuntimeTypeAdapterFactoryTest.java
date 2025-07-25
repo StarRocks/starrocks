@@ -17,6 +17,9 @@ package com.starrocks.persist.gson;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.lake.snapshot.ClusterSnapshotJob;
+import com.starrocks.lake.snapshot.ManualClusterSnapshot;
+import com.starrocks.lake.snapshot.ManualClusterSnapshotJob;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -64,6 +67,44 @@ public class RuntimeTypeAdapterFactoryTest {
 
         public void setB(int b) {
             this.b = b;
+        }
+    }
+
+    public static class WrapperClass {
+        @SerializedName(value = "ClusterSnapshotJob")
+        public ClusterSnapshotJob job;
+
+        public WrapperClass() {
+        }
+
+        public void setJob(ClusterSnapshotJob job) {
+            this.job = job;
+        }
+
+        public ClusterSnapshotJob getJob() {
+            return job;
+        }
+    }
+
+    @Test
+    public void testClusterSnapshotRelativeClass() {
+        // test Cluster Snapshot
+        {
+            WrapperClass wrapper = new WrapperClass();
+            wrapper.setJob(new ManualClusterSnapshotJob(2, "test3", "test4", 20));
+            String str1 = GsonUtils.GSON.toJson(wrapper);
+            WrapperClass deserializedWrapper = GsonUtils.GSON.fromJson(str1, WrapperClass.class);
+            Assertions.assertTrue(deserializedWrapper.getJob() instanceof ManualClusterSnapshotJob);
+            Assertions.assertTrue(deserializedWrapper.getJob().getSnapshot() instanceof ManualClusterSnapshot);
+        }
+
+        {
+            WrapperClass wrapper = new WrapperClass();
+            wrapper.setJob(new ClusterSnapshotJob(1, "test1", "test2", 10));
+            String str1 = GsonUtils.GSON.toJson(wrapper);
+            WrapperClass deserializedWrapper = GsonUtils.GSON.fromJson(str1, WrapperClass.class);
+            Assertions.assertTrue(!(deserializedWrapper.getJob() instanceof ManualClusterSnapshotJob));
+            Assertions.assertTrue(!(deserializedWrapper.getJob().getSnapshot() instanceof ManualClusterSnapshot));
         }
     }
 }
