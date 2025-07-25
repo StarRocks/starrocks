@@ -34,6 +34,7 @@
 
 package com.starrocks.http.rest.v2;
 
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -46,7 +47,7 @@ import java.util.List;
 
 // This class is a RESTFUL interface to get query profile from all frontend nodes.
 // Usage:
-//   wget http://fe_host:fe_http_port/api/v2/profile?query_id=123456
+//   wget http://fe_host:fe_http_port/api/v2/profile?query_id=123456&is_request_all_frontend=true;
 public class ProfileActionV2 extends RestBaseAction {
 
     private static final String QUERY_PLAN_URI = "api/profile?query_id=%s";
@@ -60,24 +61,44 @@ public class ProfileActionV2 extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         String authorization = request.getAuthorizationHeader();
         String queryId = request.getSingleParameter("query_id");
-        if (queryId == null) {
-            response.getContent().append("not valid parameter");
-            sendResult(request, response, HttpResponseStatus.BAD_REQUEST);
+        String isRequestAllStr = request.getSingleParameter("is_request_all_frontend", "false");
+        boolean isRequestAll = Boolean.parseBoolean(isRequestAllStr);;
+
+        if (queryId == null || queryId.isEmpty()) {
+            sendErrorResponse(response,
+                    "Invalid parameter: query_id",
+                    HttpResponseStatus.BAD_REQUEST,
+                    request);
             return;
         }
-        String relativeUrl = String.format(QUERY_PLAN_URI, queryId);
-        List<String> dataList = queryAllFrontendNodes(relativeUrl, authorization, HttpMethod.GET);
-        for (String data : dataList) {
-            if (data != null) {
-                response.getContent().append(data);
-                sendResult(request, response);
-                return;
+
+        String queryProfileStr = ProfileManager.getInstance().getProfile(queryId);
+
+        if (queryProfileStr != null) {
+            sendSuccessResponse(response, queryProfileStr, request);
+            return;
+        }
+
+        if (isRequestAll) {
+            // If the query profile is not found in the local node,
+            // we will query other frontend nodes to get the query profile.
+            String queryPlainUrl = String.format(QUERY_PLAN_URI, queryId);
+            List<String> profileList = queryOtherFrontendNodes(queryPlainUrl, authorization, HttpMethod.GET);
+            for (String profile : profileList) {
+                if (profile != null) {
+                    sendSuccessResponse(response, profile, request);
+                    return;
+                }
             }
         }
-        response.getContent().append("query id " + queryId + " not found.");
-        sendResult(request, response, HttpResponseStatus.NOT_FOUND);
+
+        sendErrorResponse(response,
+                String.format("Query id %s not found.", queryId),
+                HttpResponseStatus.NOT_FOUND,
+                request);
+
     }
 }

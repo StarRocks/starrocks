@@ -299,14 +299,14 @@ public class RestBaseAction extends BaseAction {
         });
     }
 
-    protected List<String> queryAllFrontendNodes(String relativeUrl, String authorization,
+    protected List<String> queryOtherFrontendNodes(String queryPlainUrl, String authorization,
                                                  HttpMethod method) {
-        List<Pair<String, Integer>> frontends = getAllAliveFe();
+        List<Pair<String, Integer>> frontends = getOtherAliveFe();
         ImmutableMap<String, String> header = ImmutableMap.<String, String>builder()
                 .put(HttpHeaders.AUTHORIZATION, authorization).build();
         List<String> result = Lists.newArrayList();
         for (Pair<String, Integer> front : frontends) {
-            String url = String.format("http://%s/%s", front, relativeUrl);
+            String url = String.format("http://%s%s", front, queryPlainUrl);
             try {
                 String data = null;
                 if (method == HttpMethod.GET) {
@@ -356,6 +356,16 @@ public class RestBaseAction extends BaseAction {
                 .filter(fe -> !fe.first.equals(ip))
                 .collect(Collectors.toList());
 
+    }
+
+    protected void sendSuccessResponse(BaseResponse response, String content, BaseRequest request) {
+        response.getContent().append(content);
+        sendResult(request, response);
+    }
+
+    protected void sendErrorResponse(BaseResponse response, String message, HttpResponseStatus status, BaseRequest request) {
+        response.getContent().append(message);
+        sendResult(request, response, status);
     }
 
 }

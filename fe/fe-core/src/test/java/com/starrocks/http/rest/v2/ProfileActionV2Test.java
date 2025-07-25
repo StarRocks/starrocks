@@ -33,7 +33,7 @@ public class ProfileActionV2Test extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();
-        Assertions.assertTrue(respStr.contains("query id 123456 not found."));
+        Assertions.assertTrue(respStr.contains("Query id 123456 not found."));
     }
 
     @Test
