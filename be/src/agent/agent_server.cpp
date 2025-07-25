@@ -98,7 +98,7 @@ public:
 
     ~Impl();
 
-    void init_or_die();
+    Status init();
 
     void stop();
 
@@ -160,7 +160,7 @@ private:
     const bool _is_compute_node;
 };
 
-void AgentServer::Impl::init_or_die() {
+Status AgentServer::Impl::init() {
     if (!_is_compute_node) {
         for (auto& path : _exec_env->store_paths()) {
             try {
@@ -174,26 +174,18 @@ void AgentServer::Impl::init_or_die() {
             }
         }
 
-#define BUILD_DYNAMIC_TASK_THREAD_POOL(name, min_threads, max_threads, queue_size, pool) \
-    do {                                                                                 \
-        auto st = ThreadPoolBuilder(#name)                                               \
-                          .set_min_threads(min_threads)                                  \
-                          .set_max_threads(max_threads)                                  \
-                          .set_max_queue_size(queue_size)                                \
-                          .build(&(pool));                                               \
-        CHECK(st.ok()) << st;                                                            \
-        REGISTER_THREAD_POOL_METRICS(name, pool);                                        \
-    } while (false)
+#define BUILD_DYNAMIC_TASK_THREAD_POOL(name, min_threads, max_threads, queue_size, pool)                              \
+    BUILD_DYNAMIC_TASK_THREAD_POOL_WITH_IDLE(name, min_threads, max_threads, queue_size, 500 /*default value 500ms*/, \
+                                             pool)
 
 #define BUILD_DYNAMIC_TASK_THREAD_POOL_WITH_IDLE(name, min_threads, max_threads, queue_size, idle_timeout, pool) \
     do {                                                                                                         \
-        auto st = ThreadPoolBuilder(#name)                                                                       \
-                          .set_min_threads(min_threads)                                                          \
-                          .set_max_threads(max_threads)                                                          \
-                          .set_max_queue_size(queue_size)                                                        \
-                          .set_idle_timeout(MonoDelta::FromMilliseconds(idle_timeout))                           \
-                          .build(&(pool));                                                                       \
-        CHECK(st.ok()) << st;                                                                                    \
+        RETURN_IF_ERROR(ThreadPoolBuilder(#name)                                                                 \
+                                .set_min_threads(min_threads)                                                    \
+                                .set_max_threads(max_threads)                                                    \
+                                .set_max_queue_size(queue_size)                                                  \
+                                .set_idle_timeout(MonoDelta::FromMilliseconds(idle_timeout))                     \
+                                .build(&(pool)));                                                                \
         REGISTER_THREAD_POOL_METRICS(name, pool);                                                                \
     } while (false)
 
@@ -315,6 +307,8 @@ void AgentServer::Impl::init_or_die() {
                           REPORT_DATACACHE_METRICS_WORKER_COUNT)
     CREATE_AND_START_POOL(_report_task_workers, ReportTaskWorkerPool, REPORT_TASK_WORKER_COUNT)
 #undef CREATE_AND_START_POOL
+
+    return Status::OK();
 }
 
 void AgentServer::Impl::stop() {
@@ -812,8 +806,8 @@ void AgentServer::stop_task_worker_pool(TaskWorkerType type) const {
     return _impl->stop_task_worker_pool(type);
 }
 
-void AgentServer::init_or_die() {
-    return _impl->init_or_die();
+Status AgentServer::init() {
+    return _impl->init();
 }
 
 void AgentServer::stop() {
