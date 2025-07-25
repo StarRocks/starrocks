@@ -61,11 +61,13 @@ import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class SerializableTable implements Table, Serializable, HasTableOperations {
 
     private final String name;
     private final String location;
+    private final UUID uuid;
     private final String metadataFileLocation;
     private final Map<String, String> properties;
     private final String schemaAsJson;
@@ -85,6 +87,7 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
     public SerializableTable(Table table, FileIO fileIO) {
         this.name = table.name();
         this.location = table.location();
+        this.uuid = table.uuid();
         this.metadataFileLocation = metadataFileLocation(table);
         this.properties = SerializableMap.copyOf(table.properties());
         this.schemaAsJson = SchemaParser.toJson(table.schema());
@@ -152,6 +155,11 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
     @Override
     public Map<String, String> properties() {
         return properties;
+    }
+
+    @Override
+    public UUID uuid() {
+        return uuid;
     }
 
     @Override

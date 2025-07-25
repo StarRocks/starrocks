@@ -94,13 +94,13 @@ public class IcebergFilesTableScanner extends AbstractIcebergMetadataScanner {
         List<String> scanColumns;
         if (manifestFile.content() == ManifestContent.DATA) {
             scanColumns = loadColumnStats ? SCAN_WITH_STATS_COLUMNS : SCAN_COLUMNS;
-            reader = ManifestFiles.read(manifestFile, table.io(), specs)
+            reader = ManifestFiles.read(manifestFile, fileIO, specs)
                     .select(scanColumns)
                     .caseSensitive(false)
                     .iterator();
         } else {
             scanColumns = loadColumnStats ? DELETE_SCAN_WITH_STATS_COLUMNS : DELETE_SCAN_COLUMNS;
-            reader = ManifestFiles.readDeleteManifest(manifestFile, table.io(), specs)
+            reader = ManifestFiles.readDeleteManifest(manifestFile, fileIO, specs)
                     .select(scanColumns)
                     .caseSensitive(false)
                     .iterator();

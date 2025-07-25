@@ -102,12 +102,12 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
     protected void initReader() {
         Map<Integer, PartitionSpec> specs = table.specs();
         if (manifestFile.content() == ManifestContent.DATA) {
-            reader = ManifestFiles.read(manifestFile, table.io(), specs)
+            reader = ManifestFiles.read(manifestFile, fileIO, specs)
                     .select(SCAN_COLUMNS)
                     .caseSensitive(false)
                     .iterator();
         } else {
-            reader = ManifestFiles.readDeleteManifest(manifestFile, table.io(), specs)
+            reader = ManifestFiles.readDeleteManifest(manifestFile, fileIO, specs)
                     .select(SCAN_COLUMNS)
                     .caseSensitive(false)
                     .iterator();
