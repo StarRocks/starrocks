@@ -77,6 +77,9 @@ public:
         fn_tables().emplace(id, FunctionDescriptor(std::forward<Args>(args)...));
     }
 
+    // For testing purposes - get all function tables
+    static const FunctionTables& get_all_functions() { return fn_tables(); }
+
 private:
     static FunctionTables& fn_tables() {
         static FunctionTables fn_tables;
