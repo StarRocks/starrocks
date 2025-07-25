@@ -237,6 +237,7 @@ public class WarehouseManager implements Writable {
         }
     }
 
+<<<<<<< HEAD
     public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
         Warehouse warehouse = getWarehouse(warehouseName);
         return getComputeNodeAssignedToTablet(warehouse.getId(), tablet);
@@ -244,6 +245,53 @@ public class WarehouseManager implements Writable {
 
     public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
         Long computeNodeId = getComputeNodeId(warehouseId, tablet);
+=======
+    public Long getAliveComputeNodeId(ComputeResource computeResource, long tabletId) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+        try {
+            List<Long> nodeIds = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShard(tabletId, computeResource.getWorkerGroupId());
+            Long nodeId = nodeIds
+                    .stream()
+                    .filter(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkBackendAlive(id) ||
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkComputeNodeAlive(id))
+                    .findFirst()
+                    .orElse(null);
+            return nodeId;
+        } catch (StarRocksException e) {
+            LOG.warn("get alive compute node id to tablet {} fail {}.", tabletId, e.getMessage());
+            return null;
+        }
+    }
+
+    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, long tabletId) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+        try {
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShard(tabletId, computeResource.getWorkerGroupId());
+        } catch (StarRocksException e) {
+            LOG.warn("get all compute node ids assign to tablet {} fail {}.", tabletId, e.getMessage());
+            return null;
+        }
+    }
+
+    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId)
+            throws ErrorReportException {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+        Long computeNodeId = getAliveComputeNodeId(computeResource, tabletId);
+>>>>>>> 4509446f2e ([Enhancement] Improve error handling in TabletStatMgr and WarehouseManager (#61083))
         if (computeNodeId == null) {
             Warehouse warehouse = idToWh.get(warehouseId);
             throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE,

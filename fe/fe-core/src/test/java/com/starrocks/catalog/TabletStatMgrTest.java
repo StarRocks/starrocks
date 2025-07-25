@@ -16,6 +16,8 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -26,6 +28,7 @@ import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -35,6 +38,7 @@ import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -473,5 +477,137 @@ public class TabletStatMgrTest {
         assertDoesNotThrow(() -> {
             Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
         });
+    }
+
+
+    @Test
+    public void testExceptionAliveNode(@Mocked WarehouseManager warehouseManager, @Mocked LakeService lakeService,
+                                       @Mocked GlobalStateMgr globalStateMgr) {
+        LakeTable table = createLakeTableForTest();
+
+        // db
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return globalStateMgr;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+
+        new MockUp<Utils>() {
+            @Mock
+            public Long chooseNodeId(LakeTablet tablet) {
+                return 1000L;
+            }
+
+            @Mock
+            public ComputeNode chooseNode(LakeTablet tablet) {
+                return null;
+            }
+        };
+
+        new Expectations() {
+            {
+                warehouseManager.getComputeNodeAssignedToTablet((ComputeResource) any, anyLong);
+                result = new Delegate() {
+                    ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                        throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, tabletId);
+                    }
+                };
+            }
+        };
+
+        new Expectations() {
+            {
+                lakeService.getTabletStats((TabletStatRequest) any);
+                times = 0;
+            }
+        };
+
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
+
+    }
+
+    @Test
+    public void testNullAliveNode(@Mocked WarehouseManager warehouseManager, @Mocked LakeService lakeService,
+                                  @Mocked GlobalStateMgr globalStateMgr) {
+        LakeTable table = createLakeTableForTest();
+
+        // db
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return globalStateMgr;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(TNetworkAddress addr) {
+                return lakeService;
+            }
+
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
+            }
+        };
+        new MockUp<Utils>() {
+            @Mock
+            public Long chooseNodeId(LakeTablet tablet) {
+                return 1000L;
+            }
+
+            @Mock
+            public ComputeNode chooseNode(LakeTablet tablet) {
+                return null;
+            }
+        };
+
+        new Expectations() {
+            {
+                warehouseManager.getComputeNodeAssignedToTablet((ComputeResource) any, anyLong);
+                result = new Delegate() {
+                    ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                        if (tabletId == 10L) {
+                            return null;
+                        }
+                        return new ComputeNode(1000L, "127.0.0.1", 9030);
+                    }
+                };
+            }
+        };
+
+        new Expectations() {
+            {
+                lakeService.getTabletStats((TabletStatRequest) any);
+                times = 1;
+            }
+        };
+
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
+
     }
 }
