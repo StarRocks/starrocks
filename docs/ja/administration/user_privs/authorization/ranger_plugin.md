@@ -18,6 +18,7 @@ StarRocks v3.1.9 では、ネイティブの RBAC 特権システムに加えて
 - Apache Ranger を通じてアクセス ポリシー、マスキング ポリシー、および行レベル フィルタ ポリシーを作成します。
 - Ranger の監査ログ。
 - **Kerberos を使用して認証する Ranger サーバーはサポートされていません。**
+- 同じ Apache Ranger サービスに複数の StarRocks サービスを登録することで、異なる StarRocks クラスタでの権限管理を行うことができます。
 
 このトピックでは、StarRocks と Apache Ranger の権限制御方法と統合プロセスについて説明します。Ranger でセキュリティ ポリシーを作成してデータ セキュリティを管理する方法については、[Apache Ranger 公式ウェブサイト](https://ranger.apache.org/) を参照してください。
 
