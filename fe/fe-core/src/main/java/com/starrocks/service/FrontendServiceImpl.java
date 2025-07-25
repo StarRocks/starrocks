@@ -49,9 +49,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
-import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
@@ -72,12 +70,13 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
+import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
+import com.starrocks.catalog.system.information.ViewsSystemTable;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.catalog.system.sys.RoleEdges;
 import com.starrocks.catalog.system.sys.SysFeLocks;
@@ -344,8 +343,6 @@ import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableReplicationRequest;
 import com.starrocks.thrift.TTableReplicationResponse;
-import com.starrocks.thrift.TTableStatus;
-import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
@@ -536,99 +533,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TListTableStatusResult listTableStatus(TGetTablesParams params) throws TException {
-        LOG.debug("get list table request: {}", params);
-        TListTableStatusResult result = new TListTableStatusResult();
-        List<TTableStatus> tablesResult = Lists.newArrayList();
-        result.setTables(tablesResult);
-        PatternMatcher matcher = null;
-        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
-        if (params.isSetPattern()) {
-            try {
-                matcher = PatternMatcher.createMysqlPattern(params.getPattern(), caseSensitive);
-            } catch (SemanticException e) {
-                throw new TException("Pattern is in bad format " + params.getPattern());
-            }
-        }
-
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(params.db);
-        long limit = params.isSetLimit() ? params.getLimit() : -1;
-        UserIdentity currentUser;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-        }
-        if (db != null) {
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
-            try {
-                boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
-                List<Table> tables = listingViews ? db.getViews() :
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
-                OUTER:
-                for (Table table : tables) {
-                    try {
-                        ConnectContext context = new ConnectContext();
-                        context.setCurrentUserIdentity(currentUser);
-                        context.setCurrentRoleIds(currentUser);
-                        Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
-                    } catch (AccessDeniedException e) {
-                        continue;
-                    }
-
-                    if (!PatternMatcher.matchPattern(params.getPattern(), table.getName(), matcher, caseSensitive)) {
-                        continue;
-                    }
-
-                    TTableStatus status = new TTableStatus();
-                    status.setName(table.getName());
-                    status.setType(table.getMysqlType());
-                    status.setEngine(table.getEngine());
-                    status.setComment(table.getComment());
-                    status.setCreate_time(table.getCreateTime());
-                    status.setLast_check_time(table.getLastCheckTime());
-                    if (listingViews) {
-                        View view = (View) table;
-                        String ddlSql = view.getInlineViewDef();
-
-                        ConnectContext connectContext = ConnectContext.buildInner();
-                        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
-                        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
-                        connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-
-                        try {
-                            List<TableName> allTables = view.getTableRefs();
-                            for (TableName tableName : allTables) {
-                                Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                        .getTable(db.getFullName(), tableName.getTbl());
-                                if (tbl != null) {
-                                    try {
-                                        ConnectContext context = new ConnectContext();
-                                        context.setCurrentUserIdentity(currentUser);
-                                        context.setCurrentRoleIds(currentUser);
-                                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), tbl);
-                                    } catch (AccessDeniedException e) {
-                                        continue OUTER;
-                                    }
-                                }
-                            }
-                        } catch (SemanticException e) {
-                            // ignore semantic exception because view maybe invalid
-                        }
-                        status.setDdl_sql(ddlSql);
-                    }
-
-                    tablesResult.add(status);
-                    // if user set limit, then only return limit size result
-                    if (limit > 0 && tablesResult.size() >= limit) {
-                        break;
-                    }
-                }
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
-            }
-        }
-        return result;
+        ConnectContext context = new ConnectContext();
+        return ViewsSystemTable.query(params, context);
     }
 
     @Override
@@ -2563,7 +2469,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TGetTablesInfoResponse getTablesInfo(TGetTablesInfoRequest request) throws TException {
-        return InformationSchemaDataSource.generateTablesInfoResponse(request);
+        return TablesSystemTable.query(request);
     }
 
     /**
