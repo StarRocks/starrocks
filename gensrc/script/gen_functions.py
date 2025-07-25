@@ -158,7 +158,7 @@ def generate_cpp(path):
     def gen_be_fn(fnm):
         res = ""
         if "prepare" in fnm:
-            res = '{%d, {"%s", %d, %s, %s, %s, %s, %s' % (
+            res = '{%d, {"%s", %d, %s, %s, %s, %s, %s, "%s", {%s} }}' % (
                 fnm["id"],
                 fnm["name"],
                 fnm["args_nums"],
@@ -167,18 +167,22 @@ def generate_cpp(path):
                 fnm["close"],
                 fnm["exception_safe"],
                 fnm["check_overflow"],
+                fnm['ret'], 
+                ", ".join(['"%s"' % arg for arg in fnm['args']]),
             )
         else:
-            res = '{%d, {"%s", %d, %s, %s, %s' % (
+            res = '{%d, {"%s", %d, %s, %s, %s, "%s", {%s} }}' % (
                 fnm["id"],
                 fnm["name"],
                 fnm["args_nums"],
                 fnm["fn"],
                 fnm["exception_safe"],
                 fnm["check_overflow"],
+                fnm['ret'], 
+                ", ".join(['"%s"' % arg for arg in fnm['args']]),
             )
 
-        return res + "}}"
+        return res
 
     value = dict()
     value["license"] = license_string

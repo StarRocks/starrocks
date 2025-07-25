@@ -126,7 +126,6 @@ set(EXEC_FILES
         ./exprs/binary_functions_test.cpp
         ./exprs/binary_predicate_test.cpp
         ./exprs/bitmap_functions_test.cpp
-        ./exprs/builtin_functions_fuzzy_test.cpp
         ./exprs/case_expr_test.cpp
         ./exprs/cast_expr_test.cpp
         ./exprs/decimal_cast_expr_decimal_test.cpp
@@ -599,3 +598,6 @@ ADD_BE_TEST(storage/lake/compaction_task_test)
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/sorting_test)
+
+# Standalone executable for builtin_functions_fuzzy_test
+ADD_BE_TEST(fuzzy/builtin_functions_fuzzy_test)
