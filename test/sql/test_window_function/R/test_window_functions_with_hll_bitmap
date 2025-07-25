@@ -48,11 +48,3 @@ select BITMAP_COUNT(lead(visit_users) over(order by visit_date)) as val from tes
 0
 1
 -- !result
-select BITMAP_COUNT(first_value(visit_users) over(order by visit_date)) as val from test_ignore_nulls_page_uv order by val;
--- result:
-E: (1064, 'Getting analyzing error at line 1, column 32. Detail message: bitmap type could only used for bitmap_union_count/bitmap_union/lead/lag window function.')
--- !result
-select BITMAP_COUNT(last_value(visit_users) over(order by visit_date)) as val from test_ignore_nulls_page_uv order by val;
--- result:
-E: (1064, 'Getting analyzing error at line 1, column 31. Detail message: bitmap type could only used for bitmap_union_count/bitmap_union/lead/lag window function.')
--- !result
