@@ -153,7 +153,30 @@ INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT id, idx FR
 INSERT INTO t1 (id) SELECT id FROM t2;
 -- result:
 -- !result
-SELECT * FROM t1;
+SELECT * FROM t1 ORDER BY id;
+-- result:
+1	5
+2	6
+10	1
+20	2
+-- !result
+DROP TABLE t1;
+-- result:
+-- !result
+CREATE TABLE t1 ( id BIGINT NOT NULL, idx BIGINT AUTO_INCREMENT )
+Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT * FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT id, idx FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id) SELECT id FROM t2;
+-- result:
+-- !result
+SELECT * FROM t1 ORDER BY id;
 -- result:
 1	5
 2	6

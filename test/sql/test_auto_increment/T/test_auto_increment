@@ -199,7 +199,15 @@ Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" 
 INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT * FROM t2;
 INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT id, idx FROM t2;
 INSERT INTO t1 (id) SELECT id FROM t2;
-SELECT * FROM t1;
+SELECT * FROM t1 ORDER BY id;
+
+DROP TABLE t1;
+CREATE TABLE t1 ( id BIGINT NOT NULL, idx BIGINT AUTO_INCREMENT )
+Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT * FROM t2;
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT id, idx FROM t2;
+INSERT INTO t1 (id) SELECT id FROM t2;
+SELECT * FROM t1 ORDER BY id;
 
 DROP TABLE t1;
 DROP TABLE t2;
