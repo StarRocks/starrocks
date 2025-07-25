@@ -51,7 +51,7 @@ public class IcebergColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable 
 
     private static final Logger LOG = LogManager.getLogger(IcebergColumnMinMaxMgr.class);
 
-    private static final SimpleExecutor stmtExecutor =
+    private static final SimpleExecutor SIMPLE_EXECUTOR =
             new SimpleExecutor("LakeColumnMinMaxMgr", TResultSinkType.HTTP_PROTOCAL);
 
     private static final IcebergColumnMinMaxMgr INSTANCE = new IcebergColumnMinMaxMgr();
@@ -115,9 +115,9 @@ public class IcebergColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable 
                     String sql = "select min(" + columnName + ") as min, max(" + columnName + ") as max " +
                             " from " + tableName + " VERSION AS OF " + key.version.getVersion();
 
-                    ConnectContext context = stmtExecutor.createConnectContext();
+                    ConnectContext context = SIMPLE_EXECUTOR.createConnectContext();
                     context.getSessionVariable().setPipelineDop(1);
-                    List<TResultBatch> result = stmtExecutor.executeDQL(sql, context);
+                    List<TResultBatch> result = SIMPLE_EXECUTOR.executeDQL(sql, context);
                     if (result.isEmpty()) {
                         return Optional.empty();
                     }

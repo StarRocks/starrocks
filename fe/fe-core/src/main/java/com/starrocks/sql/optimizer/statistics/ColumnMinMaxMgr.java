@@ -58,7 +58,7 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(ColumnMinMaxMgr.class);
 
-    private static final SimpleExecutor stmtExecutor =
+    private static final SimpleExecutor STMT_EXECUTOR =
             new SimpleExecutor("ColumnMinMaxMgr", TResultSinkType.HTTP_PROTOCAL);
 
     private static final ColumnMinMaxMgr INSTANCE = new ColumnMinMaxMgr();
@@ -141,9 +141,9 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
                             + " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), olapTable.getName())
                             + "[_META_];";
 
-                    ConnectContext context = stmtExecutor.createConnectContext();
+                    ConnectContext context = STMT_EXECUTOR.createConnectContext();
                     context.getSessionVariable().setPipelineDop(1);
-                    List<TResultBatch> result = stmtExecutor.executeDQL(sql, context);
+                    List<TResultBatch> result = STMT_EXECUTOR.executeDQL(sql, context);
                     if (result.isEmpty()) {
                         return Optional.empty();
                     }
