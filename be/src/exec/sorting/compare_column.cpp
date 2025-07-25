@@ -157,11 +157,8 @@ public:
 
     Status do_visit(const ArrayColumn& column) {
         // Convert the datum to a array column
-        auto rhs_column = column.elements().clone_empty();
-        auto& datum_array = _rhs_value.get_array();
-        for (auto& x : datum_array) {
-            rhs_column->append_datum(x);
-        }
+        auto rhs_column = column.clone_empty();
+        rhs_column->append_datum(_rhs_value);
         auto cmp = [&](int lhs_index) {
             return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
         };

@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "column/column.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/merge.h"
@@ -33,6 +34,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "testutil/assert.h"
+#include "types/logical_type.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -578,6 +580,28 @@ TEST(MergePathTest, test1) {
                 }
             }
         }
+    }
+}
+
+TEST(SortingTest, compare) {
+    // any type
+    std::vector<TypeDescriptor> type_lists;
+    for (auto type : {TYPE_INT, TYPE_JSON, TYPE_VARCHAR}) {
+        type_lists.emplace_back(type);
+    }
+    for (auto type : {TYPE_INT, TYPE_JSON, TYPE_VARCHAR}) {
+        TypeDescriptor desc(TYPE_ARRAY);
+        desc.children.emplace_back(type);
+        type_lists.emplace_back(desc);
+    }
+
+    for (size_t i = 0; i < type_lists.size(); ++i) {
+        auto column = ColumnHelper::create_column(type_lists[i], false);
+        column->append_default();
+        auto rhs_col = column->clone();
+        Datum rhs_value = rhs_col->get(0);
+        CompareVector vector(1);
+        EXPECT_EQ(1, compare_column(column, vector, rhs_value, SortDesc(1, 1)));
     }
 }
 
