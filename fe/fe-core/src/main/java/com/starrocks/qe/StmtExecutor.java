@@ -2201,8 +2201,8 @@ public class StmtExecutor {
                 AlterTableOperationClause c = (AlterTableOperationClause) clauses.get(0);
                 if (c.getTableOperationName().equalsIgnoreCase("REWRITE_DATA_FILES")) {
                     handleIcebergRewrite(c.isRewriteAll(), c.getMinFileSizeBytes(), c.getBatchSize(), c.getWhere());
+                    return true;
                 }
-                return true;
             }
         }
         return false;
