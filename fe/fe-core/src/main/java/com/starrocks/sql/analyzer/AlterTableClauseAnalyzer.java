@@ -23,9 +23,7 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
@@ -1531,17 +1529,10 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                             }
                             break;
                         case BATCH_SIZE:
-                            if (valExpr instanceof DecimalLiteral) {
-                                clause.setBatchSize(((DecimalLiteral) valExpr).getValue().doubleValue());
-                            } else if (valExpr instanceof FloatLiteral) {
-                                clause.setBatchSize(((FloatLiteral) valExpr).getValue());
-                            } else if (valExpr instanceof IntLiteral) {
-                                clause.setBatchSize((double) ((IntLiteral) valExpr).getValue());
+                            if (valExpr instanceof IntLiteral) {
+                                clause.setBatchSize(((IntLiteral) valExpr).getValue());
                             } else {
-                                throw new SemanticException("batch size arg should be decimal or double value");
-                            }
-                            if (clause.getBatchSize() < 1) {
-                                throw new SemanticException("batch size should larger than 1GB");
+                                throw new SemanticException("min file size arg should be integer value");
                             }
                             break;
                         default:

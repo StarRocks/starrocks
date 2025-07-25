@@ -2151,13 +2151,26 @@ public class StmtExecutor {
     // }
 
     private void handleIcebergRewrite(
-            boolean rewriteAll, long minFileSizeBytes, double batchSize, Expr partitionFilter) {
+            boolean rewriteAll, long minFileSizeBytes, long batchSize, Expr partitionFilter) {
         AlterTableStmt stmt = (AlterTableStmt) parsedStmt;
         String catalogName = stmt.getCatalogName();
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
-        String insertSelect = String.format("INSERT INTO %s.%s.%s SELECT * from %s.%s.%s where %s;",
-                catalogName, dbName, tableName, catalogName, dbName, tableName, partitionFilter.toSql());
+        StringBuilder sqlBuilder = new StringBuilder();
+
+        sqlBuilder.append("INSERT INTO ")
+                .append(catalogName).append(".")
+                .append(dbName).append(".")
+                .append(tableName)
+                .append(" SELECT * FROM ")
+                .append(catalogName).append(".")
+                .append(dbName).append(".")
+                .append(tableName);
+        if (partitionFilter != null) {
+            sqlBuilder.append(" WHERE ").append(partitionFilter.toSql());
+        }
+        String insertSelect = sqlBuilder.toString();
+
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(insertSelect, context.getSessionVariable()).get(0);
         ((InsertStmt) statementBase).setRewrite(true);
@@ -2171,7 +2184,7 @@ public class StmtExecutor {
         for (IcebergScanNode scanNode : scanNodes) {
             IcebergRewriteData rewriteData = new IcebergRewriteData();
             rewriteData.setSource(scanNode.getSourceRange());
-            rewriteData.setBatchSize((long) (batchSize * 1024 * 1024 * 1024));
+            rewriteData.setBatchSize(batchSize);
             rewriteData.buildNewScanNodeRange();
             try {
                 while (rewriteData.hasMoreTaskGroup()) {
@@ -2180,7 +2193,7 @@ public class StmtExecutor {
                     scanNode.rebuildScanRange(res);
                     // context.setQueryId(UUIDUtil.genUUID());
                     // context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
-                    // If we use the same execution id, we can not handle it with async profile. 
+                    // If we use the same execution id, we can not handle it with async. 
                     // the info may be unregisterQuery by the previous execution, and update may be stuck.
                     handleDMLStmt(execPlan, (DmlStmt) statementBase);
                 }
@@ -2201,8 +2214,8 @@ public class StmtExecutor {
                 AlterTableOperationClause c = (AlterTableOperationClause) clauses.get(0);
                 if (c.getTableOperationName().equalsIgnoreCase("REWRITE_DATA_FILES")) {
                     handleIcebergRewrite(c.isRewriteAll(), c.getMinFileSizeBytes(), c.getBatchSize(), c.getWhere());
+                    return true;
                 }
-                return true;
             }
         }
         return false;

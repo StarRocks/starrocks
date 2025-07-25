@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.ColumnPosition;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
@@ -147,6 +148,7 @@ import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static com.starrocks.connector.iceberg.IcebergTableOperation.REMOVE_ORPHAN_FILES;
+import static com.starrocks.connector.iceberg.IcebergTableOperation.ROLLBACK_TO_SNAPSHOT;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class IcebergMetadataTest extends TableTestBase {
@@ -1889,6 +1891,65 @@ public class IcebergMetadataTest extends TableTestBase {
                 tableName,
                 List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()), icebergHiveCatalog,
+                HDFS_ENVIRONMENT);
+        executor.execute();
+    }
+
+    @Test
+    public void testRollbackToSnapshot(@Mocked IcebergHiveCatalog icebergHiveCatalog,
+                                   @Mocked org.apache.iceberg.BaseTable table,
+                                   @Mocked Snapshot snapshot) throws Exception {
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public Database getDb(ConnectContext context, String dbName) {
+                return new Database(1, "db");
+            }
+        };
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return table;
+            }
+
+            @Mock
+            boolean tableExists(ConnectContext context, String dbName, String tableName) {
+                return true;
+            }
+        };
+
+        new Expectations() {{
+                snapshot.snapshotId(); 
+                result = 1L;
+                minTimes = 0;
+                snapshot.parentId(); 
+                result = null;
+                minTimes = 0;
+                snapshot.timestampMillis(); 
+                result = System.currentTimeMillis();
+                minTimes = 0;
+
+                table.currentSnapshot(); 
+                result = snapshot;
+                minTimes = 0;
+                table.snapshot(1L); 
+                result = snapshot;
+                minTimes = 0;
+                table.snapshots(); 
+                result = List.of(snapshot);
+                minTimes = 0;
+            }};
+
+        TableName tableName = new TableName(CATALOG_NAME, "db", "table");
+        AlterTableOperationClause clause = new AlterTableOperationClause(
+                NodePosition.ZERO, ROLLBACK_TO_SNAPSHOT.toString(),
+                List.of(new IntLiteral(1, NodePosition.ZERO)), null);
+        clause.setArgs(List.of(ConstantOperator.createBigint(1))); // 建议改用 bigint
+        IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(
+                new AlterTableStmt(tableName, List.of(clause)),
+                icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()),
+                icebergHiveCatalog,
                 HDFS_ENVIRONMENT);
         executor.execute();
     }
