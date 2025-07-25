@@ -4145,6 +4145,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePlanSerializeConcurrently;
     }
 
+    public void setEnablePlanSerializeConcurrently(boolean enablePlanSerializeConcurrently) {
+        this.enablePlanSerializeConcurrently = enablePlanSerializeConcurrently;
+    }
+
     public long getCrossJoinCostPenalty() {
         return crossJoinCostPenalty;
     }
