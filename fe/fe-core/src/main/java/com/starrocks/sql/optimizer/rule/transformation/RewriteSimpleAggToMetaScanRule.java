@@ -64,6 +64,9 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
     }
 
     private OptExpression buildAggMetaScanOperator(OptExpression input, OptimizerContext context) {
+        if (input.getOp().getOpType() != OperatorType.LOGICAL_AGGR) {
+            return input;
+        }
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         LogicalOlapScanOperator scanOperator =
                 (LogicalOlapScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
@@ -255,7 +258,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                     continue;
                 }
                 ColumnRefOperator ref = minMaxRefs.get(0);
-                if (!ref.getType().isExactNumericType() || !ref.getType().isDate()) {
+                if (!ref.getType().isExactNumericType() && !ref.getType().isDate()) {
                     continue;
                 }
 
