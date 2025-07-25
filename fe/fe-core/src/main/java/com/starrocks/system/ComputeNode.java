@@ -501,7 +501,11 @@ public class ComputeNode implements IComputable, Writable {
      */
     public boolean handleHbResponse(BackendHbResponse hbResponse, boolean isReplay) {
         boolean becomeDead = false;
+<<<<<<< HEAD
         boolean isChanged = false;
+=======
+        int oldHeartbeatRetryTimes = this.heartbeatRetryTimes;
+>>>>>>> 72488b08c9 ([BugFix] sync OK hbResponse if the heartbeatRetryTimes counter get reset (#61249))
         if (hbResponse.getStatus() == HeartbeatResponse.HbStatus.OK) {
             if (this.version == null) {
                 return false;
@@ -619,8 +623,13 @@ public class ComputeNode implements IComputable, Writable {
             CoordinatorMonitor.getInstance().addDeadBackend(id);
             GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyBackendDead();
         }
+<<<<<<< HEAD
 
         return isChanged;
+=======
+        // If heartbeatRetryTimes is changed, replicate this HbResponse to followers as well.
+        return isChanged || oldHeartbeatRetryTimes != this.heartbeatRetryTimes;
+>>>>>>> 72488b08c9 ([BugFix] sync OK hbResponse if the heartbeatRetryTimes counter get reset (#61249))
     }
 
     public Optional<DataCacheMetrics> getDataCacheMetrics() {
