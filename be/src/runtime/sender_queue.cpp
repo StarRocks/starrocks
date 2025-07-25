@@ -629,7 +629,7 @@ Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTran
     // We only need to build chunk meta on first chunk and not use_pass_through
     // By using pass through, chunks are transmitted in shared memory without ser/deser
     // So there is no need to build chunk meta.
-    if (request.use_pass_through()) {
+    if (request.has_use_pass_through() && request.use_pass_through()) {
         return Status::OK();
     }
     if (_is_chunk_meta_built) {

@@ -163,7 +163,7 @@ Status DataStreamMgr::transmit_chunk(const TUniqueId& fragment_instance_id, cons
             recvr->remove_sender(request.sender_id(), request.be_number());
         }
     });
-    if (request.chunks_size() > 0 || request.use_pass_through()) {
+    if (request.chunks_size() > 0 || (request.has_use_pass_through() && request.use_pass_through())) {
         RETURN_IF_ERROR(recvr->add_chunks(request, std::move(chunks), eos ? nullptr : done));
     }
 

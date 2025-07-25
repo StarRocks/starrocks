@@ -111,7 +111,7 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
         auto& instance_id = request.fragment_instance_id;
         auto& context = sink_ctx(instance_id.lo);
 
-        if (request.params->use_pass_through()) {
+        if (request.params->has_use_pass_through() && request.params->use_pass_through()) {
             RETURN_IF_ERROR(_try_to_send_local(instance_id, [&]() {
                 // Release allocated bytes in current MemTracker, since it would not be released at current MemTracker
                 CurrentThread::current().mem_release(request.physical_bytes);
@@ -344,6 +344,7 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
         GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(request.physical_bytes);
 
         ::google::protobuf::Closure* done = closure;
+        DCHECK_EQ(request.params->use_pass_through(), true);
         Status st = request.stream_mgr->transmit_chunk(instance_id, *request.params,
                                                        std::move(request.pass_through_chunks), &done);
         if (st.ok() && done != nullptr) {

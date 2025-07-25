@@ -292,6 +292,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
     chunk_request->set_sender_id(_parent->_sender_id);
     chunk_request->set_be_number(_parent->_be_number);
     chunk_request->set_eos(false);
+    chunk_request->set_use_pass_through(_use_pass_through);
     TransmitChunkInfo info = {this->_fragment_instance_id,     _brpc_stub, std::move(chunk_request),  nullptr,
                               state->exec_env()->stream_mgr(), attachment, attachment_physical_bytes, _brpc_dest_addr};
     RETURN_IF_ERROR(_parent->_buffer->add_request(info));
@@ -647,10 +648,13 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
 
     if (_chunk_request != nullptr) {
         butil::IOBuf attachment;
-        int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
+        DCHECK_EQ(_chunk_request->chunks_size(), 0);
+        const int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& [_, channel] : _instance_id2channel) {
-            PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-            RETURN_IF_ERROR(channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes));
+            if (!channel->use_pass_through()) {
+                PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
+                RETURN_IF_ERROR(channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes));
+            }
         }
         _current_request_bytes = 0;
         _chunk_request.reset();
