@@ -654,8 +654,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.commitTime = finishedTimeMs / 1000;
             txnInfo.gtid = watershedGtid;
-<<<<<<< HEAD
-=======
 
             // txnId is -1 means that BE do nothing, just upgrade the tablet_meta version
             TxnInfoPB originTxnInfo = new TxnInfoPB();
@@ -665,22 +663,12 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
             originTxnInfo.gtid = watershedGtid;
 
->>>>>>> 98ef513c99 ([BugFix] Fix do schema change with partial MaterializedIndex (#60746))
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
-<<<<<<< HEAD
                     Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, warehouseId);
-=======
-                    if (!isFileBundling) {
-                        Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, computeResource,
-                                isFileBundling);
-                    } else {
-                        Utils.createSubRequestForAggregatePublish(shadowIndex.getTablets(),
-                                Lists.newArrayList(txnInfo), 1, commitVersion, null, computeResource, request);
-                    }
                 }
 
                 // For indexes whose schema have not changed, we still need to upgrade the version
@@ -696,18 +684,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     allOtherPartitionTablets.addAll(index.getTablets());
                 }
 
-                if (!isFileBundling) {
-                    Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, 1, commitVersion, computeResource,
-                            isFileBundling);
-                } else {
-                    Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo),
-                            commitVersion - 1, commitVersion, null, computeResource, request);
-                }
-
-                if (isFileBundling) {
-                    Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null);
->>>>>>> 98ef513c99 ([BugFix] Fix do schema change with partial MaterializedIndex (#60746))
-                }
+                Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, 1, commitVersion, warehouseId);
             }
             return true;
         } catch (Exception e) {
