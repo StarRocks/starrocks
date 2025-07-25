@@ -1,4 +1,4 @@
--- name: test_array_stats
+-- name: test_array_stats @sequential
 DROP DATABASE IF EXISTS test_array_stats;
 -- result:
 -- !result
