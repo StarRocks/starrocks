@@ -39,6 +39,7 @@ subprojects {
     ext {
         set("starrocks.home", "${rootDir}/../")
         // var sync start
+        set("antlr.version", "4.9.3")
         set("arrow.version", "18.0.0")
         set("async-profiler.version", "4.0")
         set("avro.version", "1.12.0")
@@ -154,7 +155,7 @@ subprojects {
             implementation("javax.validation:validation-api:1.1.0.Final")
             implementation("javax.xml.ws:jaxws-api:2.3.0")
             implementation("net.sourceforge.czt.dev:java-cup:0.11-a-czt02-cdh")
-            implementation("org.antlr:antlr4:4.9.2")
+            implementation("org.antlr:antlr4-runtime:${project.ext["antlr.version"]}")
             implementation("org.apache.arrow:arrow-jdbc:${project.ext["arrow.version"]}")
             implementation("org.apache.arrow:arrow-memory-netty:${project.ext["arrow.version"]}")
             implementation("org.apache.arrow:arrow-vector:${project.ext["arrow.version"]}")
