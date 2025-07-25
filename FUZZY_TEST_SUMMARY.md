@@ -1,87 +1,87 @@
-# StarRocks Built-in Functions Fuzzy Test 实现总结
+# StarRocks Built-in Functions Fuzzy Test Implementation Summary
 
-## 完成的工作
+## Completed Work
 
-### 1. 核心 Fuzzy Test 实现
-创建了 `/workspace/be/test/exprs/builtin_functions_fuzzy_test.cpp`，这是一个全面的模糊测试框架，具有以下特性：
+### 1. Core Fuzzy Test Implementation
+Created `/workspace/be/test/exprs/builtin_functions_fuzzy_test.cpp`, a comprehensive fuzzy testing framework with the following features:
 
-#### 自动函数发现
-- 通过 `BuiltinFunctions::get_all_functions()` 自动获取所有已注册的 built-in function
-- 无需手动维护函数列表，新增函数会自动被测试覆盖
+#### Automatic Function Discovery
+- Automatically retrieve all registered built-in functions through `BuiltinFunctions::get_all_functions()`
+- No need to manually maintain function lists; new functions will be automatically covered by tests
 
-#### 全面的类型覆盖
-- **基础类型**：BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, VARBINARY, DATE, DATETIME, DECIMAL32/64/128, JSON
-- **复合类型**：Array 类型（各种元素类型的数组）
-- **包装器类型**：Nullable, Const, 以及它们的组合（Nullable+Const）
+#### Comprehensive Type Coverage
+- **Basic Types**: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, VARBINARY, DATE, DATETIME, DECIMAL32/64/128, JSON
+- **Composite Types**: Array types (arrays with various element types)
+- **Wrapper Types**: Nullable, Const, and their combinations (Nullable+Const)
 
-#### 智能随机数据生成
-- 为每种类型生成合理范围内的随机数据
-- 字符串类型生成随机长度和内容
-- 数值类型在有效范围内生成随机值
-- 日期时间类型生成有效的时间戳
-- Array 类型生成随机长度的数组
+#### Intelligent Random Data Generation
+- Generate random data within reasonable ranges for each type
+- Generate random length and content for string types
+- Generate random values within valid ranges for numeric types
+- Generate valid timestamps for date/time types
+- Generate random length arrays for Array types
 
-### 2. 测试策略设计
+### 2. Testing Strategy Design
 
-#### 类型不匹配测试
-- 随机组合不同的输入类型
-- 测试参数数量不匹配的情况
-- 验证函数在类型错误时的健壮性
+#### Type Mismatch Testing
+- Randomly combine different input types
+- Test parameter count mismatch scenarios
+- Verify function robustness when type errors occur
 
-#### 边界条件测试
-- 空 Column 输入测试
-- 全 NULL Column 输入测试
-- 混合 NULL 和非 NULL 数据测试
+#### Boundary Condition Testing
+- Empty Column input testing
+- All-NULL Column input testing
+- Mixed NULL and non-NULL data testing
 
-#### 特殊场景测试
-- **混合 Const/非 Const 输入**：测试常量和变量列的混合使用
-- **大数据量测试**：使用 1000 行数据测试内存处理能力
-- **可变参数函数测试**：专门测试 concat, coalesce 等可变参数函数
+#### Special Scenario Testing
+- **Mixed Const/Non-Const Input**: Test mixed usage of constant and variable columns
+- **Large Data Testing**: Use 1000 rows of data to test memory handling capabilities
+- **Variadic Function Testing**: Specifically test variadic functions like concat, coalesce
 
-### 3. 异常处理和安全性
+### 3. Exception Handling and Safety
 
-#### 预期行为定义
-- 函数在类型不匹配时应返回错误而不是 crash
-- 允许抛出 `std::exception` 类型的异常（这是预期的）
-- 禁止未处理的异常或 segfault
+#### Expected Behavior Definition
+- Functions should return errors instead of crashing when type mismatches occur
+- Allow throwing `std::exception` type exceptions (this is expected)
+- Prohibit unhandled exceptions or segfaults
 
-#### 测试分类
-- **正常情况**：验证正确输入的正常执行
-- **类型不匹配**：验证错误类型的优雅处理
-- **参数数量错误**：验证参数数量不匹配的处理
+#### Test Classification
+- **Normal Cases**: Verify normal execution with correct inputs
+- **Type Mismatches**: Verify graceful handling of incorrect types
+- **Parameter Count Errors**: Verify handling of parameter count mismatches
 
-### 4. 测试用例组织
+### 4. Test Case Organization
 
 #### TestAllBuiltinFunctions
-- 遍历所有 built-in function 进行基础测试
-- 每个函数测试多种随机输入组合
-- 统计测试和跳过的函数数量
+- Iterate through all built-in functions for basic testing
+- Test multiple random input combinations for each function
+- Count tested and skipped functions
 
 #### TestSpecificFunctionTypes  
-- 按功能分类测试（array, map, json, time, string, other）
-- 对每类函数进行更深入的测试
-- 提供详细的分类统计
+- Test by functional categories (array, map, json, time, string, other)
+- Perform more in-depth testing for each function category
+- Provide detailed category statistics
 
 #### TestNullAndEmptyInputs
-- 专门测试边界条件
-- 空列和全 NULL 列的处理验证
+- Specifically test boundary conditions
+- Verify handling of empty columns and all-NULL columns
 
 #### TestMixedConstAndNonConstInputs
-- 测试常量列和普通列的混合使用
-- 验证 Const 包装器的正确处理
+- Test mixed usage of constant and regular columns
+- Verify correct handling of Const wrappers
 
 #### TestLargeDataInputs
-- 使用大数据量（1000 行）测试内存处理
-- 选择性测试以控制运行时间
+- Test memory handling with large data volumes (1000 rows)
+- Selective testing to control runtime
 
 #### TestVariadicFunctions
-- 专门测试可变参数函数
-- 测试不同参数数量的组合
+- Specifically test variadic functions
+- Test combinations with different parameter counts
 
-### 5. 基础设施改进
+### 5. Infrastructure Improvements
 
-#### BuiltinFunctions 类扩展
-在 `/workspace/be/src/exprs/builtin_functions.h` 中添加了：
+#### BuiltinFunctions Class Extension
+Added to `/workspace/be/src/exprs/builtin_functions.h`:
 ```cpp
 // For testing purposes - get all function tables
 static const FunctionTables& get_all_functions() {
@@ -89,71 +89,71 @@ static const FunctionTables& get_all_functions() {
 }
 ```
 
-#### 构建系统集成
-在 `/workspace/be/test/CMakeLists.txt` 中添加了：
+#### Build System Integration
+Added to `/workspace/be/test/CMakeLists.txt`:
 ```cmake
 ./exprs/builtin_functions_fuzzy_test.cpp
 ```
 
-### 6. 文档和说明
+### 6. Documentation and Instructions
 
-#### 详细 README
-创建了 `/workspace/be/test/exprs/builtin_functions_fuzzy_test_README.md`，包含：
-- 设计目标和测试策略
-- 使用方法和 CI 集成指南
-- 扩展性说明和贡献指南
-- 故障排查和注意事项
+#### Detailed README
+Created `/workspace/be/test/exprs/builtin_functions_fuzzy_test_README.md`, containing:
+- Design goals and testing strategies
+- Usage methods and CI integration guidelines
+- Extensibility instructions and contribution guidelines
+- Troubleshooting and considerations
 
-## 技术特性
+## Technical Features
 
-### 可重现性
-- 使用固定随机种子（42）确保测试结果可重现
-- 便于调试和问题定位
+### Reproducibility
+- Use fixed random seed (42) to ensure reproducible test results
+- Facilitate debugging and problem identification
 
-### 内存安全
-- 所有 Column 使用智能指针管理
-- 避免内存泄漏和悬挂指针
+### Memory Safety
+- All Columns managed with smart pointers
+- Avoid memory leaks and dangling pointers
 
-### 性能考虑
-- 大数据测试只对部分函数执行，避免过长运行时间
-- 可配置的测试强度和数据大小
+### Performance Considerations
+- Large data testing only performed on subset of functions to avoid excessive runtime
+- Configurable test intensity and data sizes
 
-### 扩展性设计
-- 易于添加新的 Column 类型
-- 易于添加新的测试策略
-- 自动适应新增的 built-in function
+### Extensibility Design
+- Easy to add new Column types
+- Easy to add new testing strategies
+- Automatically adapt to new built-in functions
 
-## 预期效果
+## Expected Benefits
 
-### 问题发现
-- 发现函数在类型不匹配时的 crash 问题
-- 发现内存访问越界或空指针解引用
-- 发现参数验证不充分的问题
+### Problem Discovery
+- Discover crash issues when functions encounter type mismatches
+- Discover memory access violations or null pointer dereferences
+- Discover insufficient parameter validation issues
 
-### 质量提升
-- 驱动开发者为函数添加适当的输入验证
-- 提高系统整体稳定性
-- 减少生产环境的 crash 风险
+### Quality Improvement
+- Drive developers to add appropriate input validation to functions
+- Improve overall system stability
+- Reduce crash risks in production environments
 
-### 回归测试
-- 作为 CI 的一部分，防止新代码引入稳定性问题
-- 确保函数修改不会破坏现有的健壮性
+### Regression Testing
+- As part of CI, prevent new code from introducing stability issues
+- Ensure function modifications don't break existing robustness
 
-## 使用建议
+## Usage Recommendations
 
-### 开发阶段
-1. 添加新 built-in function 后运行 fuzzy test
-2. 如果发现 crash，添加输入类型检查
-3. 确保函数能优雅处理所有输入情况
+### Development Phase
+1. Run fuzzy tests after adding new built-in functions
+2. If crashes are discovered, add input type checking
+3. Ensure functions can gracefully handle all input scenarios
 
-### CI 集成
-1. 将测试加入每日构建或重要分支的测试
-2. 设置合理的超时时间
-3. 监控测试结果，及时处理发现的问题
+### CI Integration
+1. Add tests to daily builds or important branch testing
+2. Set reasonable timeout limits
+3. Monitor test results and promptly address discovered issues
 
-### 问题排查
-1. 查看测试输出的详细日志
-2. 定位具体的函数和输入组合
-3. 检查相关函数的实现逻辑
+### Problem Troubleshooting
+1. Review detailed test output logs
+2. Identify specific functions and input combinations
+3. Check implementation logic of relevant functions
 
-这个 fuzzy test 框架为 StarRocks BE 的 built-in function 提供了全面的健壮性测试，能够有效发现和预防 crash 问题，提高系统的整体稳定性。
+This fuzzy test framework provides comprehensive robustness testing for StarRocks BE built-in functions, effectively discovering and preventing crash issues while improving overall system stability.
