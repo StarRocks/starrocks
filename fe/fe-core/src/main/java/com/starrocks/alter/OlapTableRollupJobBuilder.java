@@ -71,7 +71,7 @@ public class OlapTableRollupJobBuilder extends AlterJobV2Builder {
                 MaterializedIndex mvIndex = new MaterializedIndex(rollupIndexId, MaterializedIndex.IndexState.SHADOW);
                 MaterializedIndex baseIndex = physicalPartition.getIndex(baseIndexId);
                 TabletMeta mvTabletMeta = new TabletMeta(dbId, olapTable.getId(),
-                        physicalPartitionId, rollupIndexId, mvSchemaHash, medium);
+                        physicalPartitionId, rollupIndexId, medium);
                 Map<Long, Long> tabletIdMap = new HashMap<>();
                 for (Tablet baseTablet : baseIndex.getTablets()) {
                     long baseTabletId = baseTablet.getId();

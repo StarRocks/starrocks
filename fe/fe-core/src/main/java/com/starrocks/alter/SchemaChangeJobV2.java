@@ -889,7 +889,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     // log may be replayed to the image, and the image will not persist the TabletInvertedIndex. So we
                     // should add the tablet to TabletInvertedIndex again on finish state.
                     TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, physicalPartition.getId(), shadowIdxId,
-                            indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash, medium);
+                            medium);
                     for (Tablet tablet : shadowIdx.getTablets()) {
                         invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
                         for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -1058,7 +1058,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                 TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
                 TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId,
-                        indexSchemaVersionAndHashMap.get(shadowIndexId).schemaHash, medium);
+                        medium);
 
                 for (Tablet shadownTablet : shadowIndex.getTablets()) {
                     invertedIndex.addTablet(shadownTablet.getId(), shadowTabletMeta);

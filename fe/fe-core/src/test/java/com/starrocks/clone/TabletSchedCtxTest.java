@@ -111,7 +111,7 @@ public class TabletSchedCtxTest {
 
         // tablet with single replica
         LocalTablet tablet = new LocalTablet(TABLET_ID_1);
-        TabletMeta tabletMeta = new TabletMeta(DB_ID, TB_ID, PART_ID, INDEX_ID, SCHEMA_HASH, TStorageMedium.HDD);
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TB_ID, PART_ID, INDEX_ID, TStorageMedium.HDD);
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(TABLET_ID_1, tabletMeta);
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().
                 addReplica(TABLET_ID_1, new Replica(50001, be1.getId(), 0, Replica.ReplicaState.NORMAL));
@@ -235,7 +235,7 @@ public class TabletSchedCtxTest {
 
     @Test
     public void testChooseDestReplicaForVersionIncomplete() {
-        TabletMeta tabletMeta = new TabletMeta(DB_ID, TB_ID, PART_ID, INDEX_ID, SCHEMA_HASH, TStorageMedium.HDD);
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TB_ID, PART_ID, INDEX_ID, TStorageMedium.HDD);
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(TABLET_ID_2, tabletMeta);
         Replica replica1 = new Replica(50011, be1.getId(), 0, Replica.ReplicaState.NORMAL);
         Replica replica2 = new Replica(50012, be2.getId(), 0, Replica.ReplicaState.NORMAL);

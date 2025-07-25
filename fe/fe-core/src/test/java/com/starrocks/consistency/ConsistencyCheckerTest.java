@@ -53,7 +53,7 @@ public class ConsistencyCheckerTest {
         Replica replica = new Replica(replicaId, backendId, 2L, 1111,
                 10, 1000, Replica.ReplicaState.NORMAL, -1, 2);
 
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 1111, medium);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, medium);
         LocalTablet tablet = new LocalTablet(tabletId, Lists.newArrayList(replica));
         materializedIndex.addTablet(tablet, tabletMeta, false);
         PartitionInfo partitionInfo = new PartitionInfo();
@@ -98,7 +98,7 @@ public class ConsistencyCheckerTest {
     @Test
     public void testResetToBeCleanedTime() {
         TabletMeta tabletMeta = new TabletMeta(1, 2, 3,
-                4, 5, TStorageMedium.HDD);
+                4, TStorageMedium.HDD);
         tabletMeta.setToBeCleanedTime(123L);
         tabletMeta.resetToBeCleanedTime();
         Assertions.assertNull(tabletMeta.getToBeCleanedTime());

@@ -95,7 +95,7 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
                 MaterializedIndex shadowIndex = new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW);
                 MaterializedIndex originIndex = partition.getIndex(originIndexId);
                 TabletMeta shadowTabletMeta = new TabletMeta(
-                        dbId, tableId, physicalPartitionId, shadowIndexId, newSchemaHash, medium);
+                        dbId, tableId, physicalPartitionId, shadowIndexId, medium);
                 Map<Long, Long> tabletIdMap = new HashMap<>();
                 for (Tablet originTablet : originIndex.getTablets()) {
                     long originTabletId = originTablet.getId();

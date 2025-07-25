@@ -619,7 +619,7 @@ public class DiskAndTabletLoadReBalancerTest {
                            TStorageMedium medium,
                            long dbId, long tableId, long physicalPartitionId, long indexId, long tabletId, long replicaId,
                            long beId, long dataSize, long pathHash) {
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, 1111, medium);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, medium);
         Replica replica = new Replica(replicaId, beId, 1L, 1111,
                 dataSize, 1000, ReplicaState.NORMAL, -1, 1);
         invertedIndex.addTablet(tabletId, tabletMeta);
@@ -809,13 +809,13 @@ public class DiskAndTabletLoadReBalancerTest {
 
         // add tablet to invertedIndex
         invertedIndex.addTablet(tabletId1,
-                new TabletMeta(1, 2, 3, 4, -1, TStorageMedium.HDD));
+                new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
         Replica replica = new Replica(replicaId1, 1, -1, ReplicaState.NORMAL);
         replica.setPathHash(pathHash10);
         invertedIndex.addReplica(tabletId1, replica);
 
         invertedIndex.addTablet(tabletId2,
-                new TabletMeta(1, 2, 3, 4, -1, TStorageMedium.HDD));
+                new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
         replica = new Replica(replicaId2, 1, -1, ReplicaState.NORMAL);
         replica.setPathHash(pathHash13);
         invertedIndex.addReplica(tabletId2, replica);

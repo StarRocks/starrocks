@@ -605,7 +605,6 @@ public class LeaderImpl {
                 }
                 for (int i = 0; i < tabletMetaList.size(); i++) {
                     TabletMeta tabletMeta = tabletMetaList.get(i);
-                    checkReplica(finishTabletInfos.get(i), tabletMeta);
                     long tabletId = tabletIds.get(i);
                     Replica replica =
                             findRelatedReplica(olapTable, physicalPartition, backendId, tabletId, tabletMeta.getIndexId());
@@ -623,32 +622,6 @@ public class LeaderImpl {
             LOG.warn("finish push replica error", e);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
-        }
-    }
-
-    private void checkReplica(TTabletInfo tTabletInfo, TabletMeta tabletMeta)
-            throws MetaNotFoundException {
-        long tabletId = tTabletInfo.getTablet_id();
-        int schemaHash = tTabletInfo.getSchema_hash();
-        // during finishing stage, index's schema hash switched, when old schema hash finished
-        // current index hash != old schema hash and alter job's new schema hash != old schema hash
-        // the check replica will fail
-        // should use tabletid not pushTabletid because in rollup state, the push tabletid != tabletid
-        // and tablet meta will not contain rollup index's schema hash
-        if (tabletMeta == null || tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
-            // rollup may be dropped
-            throw new MetaNotFoundException("tablet " + tabletId + " does not exist");
-        }
-
-        // lake tablet not need to compare schemaHash
-        if (tabletMeta.isLakeTablet()) {
-            return;
-        }
-
-        if (!tabletMeta.containsSchemaHash(schemaHash)) {
-            throw new MetaNotFoundException("tablet[" + tabletId
-                    + "] schemaHash is not equal to index's switchSchemaHash. "
-                    + tabletMeta + " vs. " + schemaHash);
         }
     }
 
@@ -1153,8 +1126,6 @@ public class LeaderImpl {
         tTabletMeta.setPartition_id(tabletMeta.getPhysicalPartitionId());
         tTabletMeta.setIndex_id(tabletMeta.getIndexId());
         tTabletMeta.setStorage_medium(tabletMeta.getStorageMedium());
-        tTabletMeta.setOld_schema_hash(tabletMeta.getOldSchemaHash());
-        tTabletMeta.setNew_schema_hash(tabletMeta.getNewSchemaHash());
     }
 
     @NotNull
