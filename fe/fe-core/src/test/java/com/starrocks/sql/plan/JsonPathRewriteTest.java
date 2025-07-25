@@ -142,6 +142,12 @@ public class JsonPathRewriteTest extends PlanTestBase {
                         "select abs(get_json_int(c2, 'f12')) from extend_predicate",
                         " <slot 3> : abs(4: c2.f12)",
                         "ExtendedColumnAccessPath: [/c2(bigint(20))/f12(bigint(20))]"
+                ),
+                // MetaScan
+                Arguments.of(
+                        "select dict_merge(get_json_string(c2, 'f1'), 255) from extend_predicate [_META_]",
+                        "<slot 3> : c2.f1",
+                        "ExtendedColumnAccessPath: [/c2(varchar)/f1(varchar)]"
                 )
         );
     }

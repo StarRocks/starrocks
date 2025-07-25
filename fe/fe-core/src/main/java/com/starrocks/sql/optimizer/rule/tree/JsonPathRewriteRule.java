@@ -157,6 +157,11 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
         //        }
 
         @Override
+        public OptExpression visitPhysicalMetaScan(OptExpression optExpr, Void v) {
+            return rewritePhysicalScan(optExpr, v);
+        }
+
+        @Override
         public OptExpression visitPhysicalOlapScan(OptExpression optExpr, Void v) {
             return rewritePhysicalScan(optExpr, v);
         }
