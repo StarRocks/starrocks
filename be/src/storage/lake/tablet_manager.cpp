@@ -379,8 +379,8 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     close_ts += t4 - t3;
     _metacache->cache_aggregation_partition(partition_location, true);
 
-    LOG(INFO) << "put bundle tablet metadata: " << t4-start_ts << "us, prepare: " << prepare_ts << "us, serialize: " 
-              << serialize_ts << "us, append: " << append_ts << "us, close: " << close_ts << "us";
+    LOG(INFO) << "put bundle tablet metadata: " << t4 - start_ts << "us, prepare: " << prepare_ts
+              << "us, serialize: " << serialize_ts << "us, append: " << append_ts << "us, close: " << close_ts << "us";
 
     return Status::OK();
 }
