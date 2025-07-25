@@ -13,7 +13,7 @@ set pipeline_dop=96;
 insert into t1 select * from TABLE(generate_series(0, 10));
 select count(*) from t1;
 
-admin enable failpoint 'report_exec_state_failed_status';
+[UC]admin enable failpoint 'report_exec_state_failed_status';
 
 insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
 insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;

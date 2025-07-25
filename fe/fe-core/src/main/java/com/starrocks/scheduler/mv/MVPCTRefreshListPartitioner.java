@@ -18,6 +18,7 @@ package com.starrocks.scheduler.mv;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IsNullPredicate;
@@ -41,7 +42,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ListPartitionDiff;
@@ -51,6 +54,7 @@ import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
@@ -58,6 +62,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
@@ -364,7 +369,8 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             return;
         }
 
-        // TODO: support to add partitions by batch
+        // support to add partitions by batch
+        List<PartitionDesc> partitionDescs = Lists.newArrayList();
         for (Map.Entry<String, PListCell> addEntry : adds.entrySet()) {
             String mvPartitionName = addEntry.getKey();
             PListCell partitionCell = addEntry.getValue();
@@ -372,8 +378,13 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             // the order is not guaranteed
             MultiItemListPartitionDesc multiItemListPartitionDesc =
                     new MultiItemListPartitionDesc(false, mvPartitionName, partitionItems, partitionProperties);
+            partitionDescs.add(multiItemListPartitionDesc);
+        }
+
+        for (List<PartitionDesc> batch : ListUtils.partition(partitionDescs, CREATE_PARTITION_BATCH_SIZE)) {
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(mv.getPartitionColumnNames(), batch);
             AddPartitionClause addPartitionClause =
-                    new AddPartitionClause(multiItemListPartitionDesc, distributionDesc, partitionProperties, false);
+                    new AddPartitionClause(listPartitionDesc, distributionDesc, partitionProperties, false);
             AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(mv);
             analyzer.analyze(mvContext.getCtx(), addPartitionClause);
             try {
@@ -383,6 +394,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                 throw new DmlException("add list partition failed: %s, db: %s, table: %s", e, e.getMessage(),
                         database.getFullName(), mv.getName());
             }
+            Uninterruptibles.sleepUninterruptibly(Config.mv_create_partition_batch_interval_ms, TimeUnit.MILLISECONDS);
         }
     }
 }
