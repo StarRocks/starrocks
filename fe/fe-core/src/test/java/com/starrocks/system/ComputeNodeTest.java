@@ -16,6 +16,7 @@ package com.starrocks.system;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
@@ -70,7 +71,8 @@ public class ComputeNodeTest {
         List<TestCase> testCases = ImmutableList.of(
                 new TestCase(false, HbStatus.BAD, null, true, true, true, false),
                 new TestCase(false, HbStatus.BAD, null, false, true, false, false),
-                new TestCase(false, HbStatus.OK, null, true, false, false, true),
+                // need sync to reset the node's heartbeatRetryTimes
+                new TestCase(false, HbStatus.OK, null, true, true, false, true),
                 new TestCase(false, HbStatus.OK, null, false, true, false, true),
 
                 new TestCase(true, HbStatus.BAD, null, true, false, true, false),
@@ -116,13 +118,12 @@ public class ComputeNodeTest {
 
     @Test
     public void testUpdateStartTime() {
-
         BackendHbResponse hbResponse = new BackendHbResponse();
         hbResponse.status = HbStatus.OK;
         hbResponse.setRebootTime(1000L);
         ComputeNode node = new ComputeNode();
         boolean needSync = node.handleHbResponse(hbResponse, false);
-        Assertions.assertTrue(node.getLastStartTime() == 1000000L);
+        Assertions.assertEquals(1000000L, node.getLastStartTime());
         Assertions.assertTrue(needSync);
     }
 
@@ -609,5 +610,71 @@ public class ComputeNodeTest {
                 Assertions.assertTrue(reloadNode.isAvailable());
             }
         }
+    }
+
+    @Test
+    public void testIsChangedWhenHeartbeatRetryTimeChanged() {
+        int oldHeartbeatRetry = Config.heartbeat_retry_times;
+        Config.heartbeat_retry_times = 3;
+        long nodeId = 1020250724;
+        ComputeNode cnNodeInLeader = new ComputeNode(nodeId, "127.0.0.1", 9050);
+        ComputeNode cnNodeInFollower = new ComputeNode(nodeId, "127.0.0.1", 9050);
+
+        Assertions.assertFalse(cnNodeInLeader.isAlive());
+        Assertions.assertFalse(cnNodeInFollower.isAlive());
+
+        // Generate a series of hbResponses in the following order
+        // Leader:   OK | OK | ERR | OK | ERR | ERR | OK | ERR | ERR | ERR | OK
+        // Follower:  N |  N |  Y  |  Y |  Y  |  Y  |  Y |  Y  |  Y  |   Y | Y
+        List<BackendHbResponse> hbResponses = new ArrayList<>();
+        List<TStatusCode> statusCodes = List.of(
+                TStatusCode.OK,
+                TStatusCode.OK,
+                TStatusCode.INTERNAL_ERROR,
+                TStatusCode.OK,
+                TStatusCode.INTERNAL_ERROR,
+                TStatusCode.INTERNAL_ERROR,
+                TStatusCode.OK,
+                TStatusCode.OK,
+                TStatusCode.INTERNAL_ERROR,
+                TStatusCode.INTERNAL_ERROR,
+                TStatusCode.INTERNAL_ERROR,
+                TStatusCode.INTERNAL_ERROR,
+                TStatusCode.OK);
+        List<Boolean> expectedIsChanged = List.of(
+                true, // the first OK response, turn alive from false to true
+                false, // OK
+                true,  // ERR
+                true,  // OK
+                true,  // ERR
+                true,  // ERR
+                true,  // OK
+                false, // OK, consecutive OKs should not change the state
+                true,  // ERR
+                true,  // ERR
+                true,  // ERR
+                true,  // ERR
+                true   // OK
+        );
+
+        int i = 0;
+        for (TStatusCode statusCode : statusCodes) {
+            String identifier = String.format("i=%d, statusCode=%s", i, statusCode);
+            BackendHbResponse hbResponse = generateHbResponse(cnNodeInLeader, statusCode, 0);
+            boolean expectedChange = expectedIsChanged.get(i++);
+            boolean isChanged = cnNodeInLeader.handleHbResponse(hbResponse, false);
+            Assertions.assertEquals(expectedChange, isChanged, identifier);
+            if (isChanged) {
+                cnNodeInFollower.handleHbResponse(hbResponse, true);
+            }
+            Assertions.assertEquals(cnNodeInLeader.isAlive(), cnNodeInFollower.isAlive(), identifier);
+            Assertions.assertEquals(getRetryHeartbeatTimes(cnNodeInLeader), getRetryHeartbeatTimes(cnNodeInFollower),
+                    identifier);
+        }
+        Config.heartbeat_retry_times = oldHeartbeatRetry;
+    }
+
+    static int getRetryHeartbeatTimes(ComputeNode node) {
+        return Deencapsulation.getField(node, "heartbeatRetryTimes");
     }
 }
