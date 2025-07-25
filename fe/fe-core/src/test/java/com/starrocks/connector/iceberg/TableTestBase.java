@@ -66,7 +66,18 @@ public class TableTestBase {
                     required(4, "k4", Types.StringType.get()),
                     required(5, "k5", Types.StringType.get()));
 
+    public static final Schema SCHEMA_I =
+            new Schema(required(1, "id", Types.IntegerType.get()),
+                    required(2, "k1", Types.IntegerType.get()),
+                    required(3, "k2", Types.StringType.get()),
+                    required(4, "ts1", Types.TimestampType.withZone()),
+                    required(5, "ts2", Types.TimestampType.withZone()),
+                    required(6, "ts3", Types.TimestampType.withZone()),
+                    required(7, "ts4", Types.TimestampType.withZone()),
+                    required(8, "data", Types.StringType.get()));
+
     protected static final int BUCKETS_NUMBER = 16;
+    protected static final int BUCKETS_NUMBER2 = 64;
 
     // Partition spec used to create tables
     protected static final PartitionSpec SPEC_A =
@@ -102,6 +113,13 @@ public class TableTestBase {
 
     protected static final PartitionSpec SPEC_F_1 =
             PartitionSpec.builderFor(SCHEMA_F).identity("dt").build();
+
+    protected static final PartitionSpec SPEC_I =
+            PartitionSpec.builderFor(SCHEMA_I).bucket("id", BUCKETS_NUMBER)
+                    .bucket("k1", BUCKETS_NUMBER2)
+                    .truncate("k2", 10)
+                    .year("ts1").month("ts2").day("ts3").hour("ts4")
+                    .build();
 
     public static final DataFile FILE_A =
             DataFiles.builder(SPEC_A)
@@ -225,6 +243,7 @@ public class TableTestBase {
     public TestTables.TestTable mockedNativeTableI = null;
     public TestTables.TestTable mockedNativeTableJ = null;
     public TestTables.TestTable mockedNativeTableK = null;
+    public TestTables.TestTable mockedNativeTableMultiPartition = null;
 
     protected final int formatVersion = 1;
 
@@ -245,6 +264,7 @@ public class TableTestBase {
         this.mockedNativeTableI = create(SCHEMA_F, SPEC_F_1, "ti", 1);
         this.mockedNativeTableJ = create(SCHEMA_E, SPEC_E_3, "tj", 1);
         this.mockedNativeTableK = create(SCHEMA_E, SPEC_E_2, "tk", 1);
+        this.mockedNativeTableMultiPartition = create(SCHEMA_I, SPEC_I, "tmp", 1);
     }
 
     @AfterEach
