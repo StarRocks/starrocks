@@ -54,7 +54,6 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
@@ -664,7 +663,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             originTxnInfo.gtid = watershedGtid;
 
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
-                AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
