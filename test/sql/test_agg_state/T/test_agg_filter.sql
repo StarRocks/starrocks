@@ -63,6 +63,22 @@ order by id;
 
 set sql_dialect='StarRocks';
 
+SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */
+AVG(amount) FILTER (WHERE product = 'A') AS avg_amount_a,
+COUNT(*) FILTER (WHERE quantity > 15) AS count_large_quantity,
+MAX(amount) FILTER (WHERE product = 'B') AS max_amount_b,
+MIN(amount) FILTER (WHERE amount > 100) AS min_amount_large,
+SUM(amount) FILTER (WHERE product = 'C') AS sum_amount_c,
+ARRAY_AGG(product) FILTER (WHERE quantity < 20) AS products,
+ARRAY_AGG(DISTINCT product) FILTER (WHERE quantity < 20) AS distinct_products1,
+ARRAY_AGG_DISTINCT(product) FILTER (WHERE quantity < 20) AS distinct_products2,
+COUNT(amount) AS count_amount,
+COUNT(*) FILTER (WHERE amount > (SELECT AVG(amount) FROM sales)) AS count_above_avg,
+SUM(amount) FILTER (WHERE product IN (SELECT product FROM products WHERE category = 'Electronics')) AS sum_electronics
+FROM sales
+group by id
+order by id;
+
 drop table sales;
 drop table products;
 
