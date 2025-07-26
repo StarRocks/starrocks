@@ -27,6 +27,7 @@
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "exec/aggregator.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
@@ -38,8 +39,10 @@
 #include "runtime/mem_pool.h"
 #include "runtime/memory/counting_allocator.h"
 #include "thrift/protocol/TJSONProtocol.h"
+#include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
 
@@ -383,24 +386,80 @@ public:
 
         struct CacheEntry {
             size_t hash_value;
+            int32_t index;
+            int32_t bucket;
         };
 
         std::vector<CacheEntry> cache(chunk_size);
         const auto& container_data = column->get_data();
         for (size_t i = 0; i < chunk_size; ++i) {
             size_t hash_value = agg_state.set.hash_function()(container_data[i]);
-            cache[i] = CacheEntry{hash_value};
+            cache[i] = CacheEntry{hash_value, (int)i};
+        }
+
+        if (config::enable_opt_count_distinct) {
+            MonotonicStopWatch watch;
+            watch.start();
+
+            // sort
+            if (config::enable_opt_count_distinct == 1) {
+                std::sort(cache.begin(), cache.end(),
+                          [](auto& lhs, auto& rhs) { return lhs.hash_value < rhs.hash_value; });
+            }
+
+            // hash bucketing
+            if (config::enable_opt_count_distinct == 2) {
+                std::unordered_multimap<size_t, int> buckets;
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    buckets.emplace(cache[i].hash_value, cache[i].index);
+                }
+                cache.clear();
+                for (auto [hash, index] : buckets) {
+                    cache.push_back({hash, index});
+                }
+            }
+
+            // radix sorting
+            if (config::enable_opt_count_distinct == 3) {
+                for (auto& entry : cache) {
+                    entry.bucket = (entry.hash_value >> 8) % 16;
+                }
+                std::sort(cache.begin(), cache.end(), [](auto& lhs, auto& rhs) { return lhs.bucket < rhs.bucket; });
+            }
+
+            // radix bucketing
+            if (config::enable_opt_count_distinct == 4) {
+                std::vector<std::vector<CacheEntry>> buckets(16);
+                for (auto& entry : cache) {
+                    entry.bucket = (entry.hash_value >> 8) % 16;
+                    buckets[entry.bucket].push_back(entry);
+                }
+                cache.clear();
+                for (auto& bucket : buckets) {
+                    std::sort(bucket.begin(), bucket.end(),
+                              [](auto& lhs, auto& rhs) { return lhs.hash_value < rhs.hash_value; });
+                    for (auto& entry : bucket) {
+                        cache.push_back(entry);
+                    }
+                }
+            }
+
+            watch.stop();
+            uint64_t elapsed = watch.elapsed_time() / 1000;
+
+            LOG(INFO) << "sort takes " << elapsed << "us";
         }
         // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
         size_t prefetch_index = 16;
 
         MemPool* mem_pool = ctx->mem_pool();
         for (size_t i = 0; i < chunk_size; ++i) {
+            auto& cache_entry = cache[i];
             if (prefetch_index < chunk_size) {
                 agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
                 prefetch_index++;
             }
-            agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            agg_state.update_with_hash(mem_pool, container_data[cache_entry.index], cache_entry.hash_value);
         }
     }
 
