@@ -51,6 +51,7 @@ public:
 
     bool is_nullable() const override { return _data->is_nullable(); }
     bool is_json() const override { return _data->is_json(); }
+    bool is_variant() const override { return _data->is_variant(); }
     bool is_array() const override { return _data->is_array(); }
 
     bool is_null(size_t index) const override { return _data->is_null(0); }

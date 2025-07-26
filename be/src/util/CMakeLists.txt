@@ -114,6 +114,8 @@ set(UTIL_FILES
   internal_service_recoverable_stub.cpp
   lake_service_recoverable_stub.cpp
   byte_buffer.cpp
+  variant_value.cpp
+  variant_util.cpp
 )
 
 add_library(Util STATIC

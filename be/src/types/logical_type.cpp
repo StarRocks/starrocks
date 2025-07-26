@@ -59,6 +59,7 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "INT256") return TYPE_INT256;
     if (upper_type_str == "JSON") return TYPE_JSON;
     if (upper_type_str == "VARBINARY") return TYPE_VARBINARY;
+    if (upper_type_str == "VARIANT") return TYPE_VARIANT;
     LOG(WARNING) << "invalid type string. [type='" << type_str << "']";
     return TYPE_UNKNOWN;
 }
@@ -147,6 +148,8 @@ const char* logical_type_to_string(LogicalType type) {
         return "MAX_VALUE";
     case TYPE_VARBINARY:
         return "VARBINARY";
+    case TYPE_VARIANT:
+        return "VARIANT";
     }
     return "";
 }
@@ -280,6 +283,7 @@ public:
         _data[TYPE_VARBINARY] = TYPE_VARBINARY;
         _data[TYPE_DECIMAL256] = TYPE_DECIMAL256;
         _data[TYPE_INT256] = TYPE_INT256;
+        _data[TYPE_VARIANT] = TYPE_VARIANT;
     }
     LogicalType get_logical_type(LogicalType field_type) { return _data[field_type]; }
 
