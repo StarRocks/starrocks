@@ -92,7 +92,12 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
         if (detail.min_or_null_value() == detail.max_value()) {
-            if (_values.contains(detail.max_value().get<ValueType>())) return false;
+            const auto type_info = this->type_info();
+            for (const ValueType& v : _values) {
+                if (type_info->cmp(Datum(v), detail.max_value()) == 0) {
+                    return false;
+                }
+            }
         }
         return true;
     }
