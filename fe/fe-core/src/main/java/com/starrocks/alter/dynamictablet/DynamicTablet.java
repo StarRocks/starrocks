@@ -16,7 +16,7 @@ package com.starrocks.alter.dynamictablet;
 
 /*
  * DynamicTablet saves the old and new tablets info during tablet splitting or merging
- * DynamicTablet is the base class of DynamicTablet and MergingTablet.
+ * DynamicTablet is the base class of SplittingTablet and MergingTablet.
  */
 public interface DynamicTablet {
 
