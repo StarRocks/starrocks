@@ -1517,7 +1517,7 @@ struct TPartitionMetaInfo {
     26: optional i64 data_version
     27: optional i64 version_epoch
     28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
-    29: optional i64 storage_size
+    29: optional string storage_size
     30: optional i64 metadata_switch_version
 }
 

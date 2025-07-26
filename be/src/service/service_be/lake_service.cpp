@@ -433,6 +433,8 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
     ctx.response = response;
     ctx.latch = std::make_unique<BThreadCountDownLatch>(request->publish_reqs_size());
 
+    auto start_ts = butil::gettimeofday_us();
+
     for (int i = 0; i < request->publish_reqs_size(); ++i) {
         if (ctx.has_failure) {
             ctx.count_down();
@@ -462,13 +464,25 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
         (*res)->publish_version(cntl_ptr, &single_req, resp_ptr,
                                 brpc::NewCallback(aggregate_publish_cb, cntl_ptr, resp_ptr, &ctx));
     }
+    auto send_publish_ts = butil::gettimeofday_us();
 
     // wait for publish task finish
     ctx.wait();
+
+    auto wait_publish_ts = butil::gettimeofday_us();
     // write aggregate metadata
     ctx.put_aggregate_metadata(_env);
 
+    auto put_tablet_metadata_ts = butil::gettimeofday_us();
+
     ctx.publish_status.to_protobuf(response->mutable_status());
+
+    auto to_pb_ts = butil::gettimeofday_us();
+    LOG(INFO) << "aggregate_publish version cost: " << to_pb_ts - start_ts
+              << "us, send_publish: " << send_publish_ts - start_ts
+              << "us, wait_publish: " << wait_publish_ts - send_publish_ts
+              << "us, put_metadata: " << put_tablet_metadata_ts - wait_publish_ts
+              << "us, to_pb: " << to_pb_ts - put_tablet_metadata_ts << "us";
 }
 
 void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size,
