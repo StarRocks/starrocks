@@ -19,6 +19,9 @@
 
 namespace starrocks {
 
+using FileConverterFunc =
+        std::function<StatusOr<std::unique_ptr<FileStreamConverter>>(const std::string& file_name, uint64_t file_size)>;
+
 class TabletSchemaPB;
 class ReplicationUtils {
 public:
@@ -33,9 +36,7 @@ public:
 
     static Status download_remote_snapshot(const std::string& host, int32_t http_port, const std::string& remote_token,
                                            const std::string& remote_snapshot_path, TTabletId remote_tablet_id,
-                                           TSchemaHash remote_schema_hash,
-                                           const std::function<StatusOr<std::unique_ptr<FileStreamConverter>>(
-                                                   const std::string& file_name, uint64_t file_size)>& file_converters,
+                                           TSchemaHash remote_schema_hash, const FileConverterFunc& file_converters,
                                            DataDir* data_dir = nullptr);
 
     static StatusOr<std::string> download_remote_snapshot_file(const std::string& host, int32_t http_port,
@@ -44,6 +45,10 @@ public:
                                                                TTabletId remote_tablet_id,
                                                                TSchemaHash remote_schema_hash,
                                                                const std::string& file_name, uint64_t timeout_sec);
+
+    static Status download_lake_segment_file(const std::string& src_file_path, const std::string& src_file_name,
+                                             size_t src_file_size, std::shared_ptr<FileSystem> src_fs,
+                                             const FileConverterFunc& file_converters);
 
     static constexpr uint32_t kFakeColumnUniqueId = INT_MAX;
 
