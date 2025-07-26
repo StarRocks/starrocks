@@ -72,6 +72,11 @@ public:
         return nullptr;
     };
 
+    // For testing purposes - get all function tables
+    static const FunctionTables& get_all_functions() {
+        return _fn_tables;
+    }
+
 private:
     static FunctionTables _fn_tables;
 };
