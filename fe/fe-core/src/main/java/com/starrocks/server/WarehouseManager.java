@@ -201,6 +201,7 @@ public class WarehouseManager implements Writable {
                     .orElse(null);
             return nodeId;
         } catch (StarRocksException e) {
+            LOG.warn("get alive compute node id to tablet {} fail {}.", tablet.getId(), e.getMessage());
             return null;
         }
     }
@@ -211,6 +212,7 @@ public class WarehouseManager implements Writable {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(tablet.getShardId(), workerGroupId);
         } catch (StarRocksException e) {
+            LOG.warn("get all compute node ids assign to tablet {} fail {}.", tablet.getId(), e.getMessage());
             return null;
         }
     }
