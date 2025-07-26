@@ -89,6 +89,8 @@ import java.nio.channels.FileLock;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import static com.starrocks.common.Config.enable_http_server_v2;
+
 public class StarRocksFE {
     private static final Logger LOG = LogManager.getLogger(StarRocksFE.class);
 
@@ -183,15 +185,21 @@ public class StarRocksFE {
             // 4. ArrowFlightSqlService for Arrow Flight SQL Server
             QeService qeService = new QeService(Config.query_port, ExecuteEnv.getInstance().getScheduler());
             FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
-            HttpServer httpServer = new HttpServer(Config.http_port);
+
             ArrowFlightSqlService arrowFlightSqlService = new ArrowFlightSqlService(Config.arrow_flight_port);
-
-            httpServer.setup();
-
             frontendThriftServer.start();
-            httpServer.start();
             qeService.start();
             arrowFlightSqlService.start();
+
+            if (enable_http_server_v2) {
+                com.starrocks.httpv2.HttpServer httpServer = new com.starrocks.httpv2.HttpServer();
+                httpServer.setPort(Config.http_port);
+                httpServer.start();
+            } else {
+                HttpServer httpServer = new HttpServer(Config.http_port);
+                httpServer.setup();
+                httpServer.start();
+            }
 
             if (Config.enable_groovy_debug_server) {
                 GroovyUDSServer.getInstance().start();
