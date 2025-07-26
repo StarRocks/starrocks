@@ -271,9 +271,9 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
     // switch to process tracker
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     auto& context = sink_ctx(instance_id.lo);
-
+    auto notify = this->finishing_defer();
     std::lock_guard guard(context.mutex);
-    DeferOp sending_defer([this, &context]() {
+    DeferOp decrease_defer([this, &context]() {
         --_num_sending;
         context.owner_id = {};
     });
@@ -304,7 +304,6 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
         if (request.params->eos()) {
             DeferOp eos_defer([this, &instance_id]() {
                 if (--_num_remaining_eos == 0) {
-                    auto notify = this->defer_notify();
                     _is_finishing = true;
                 }
                 sink_ctx(instance_id.lo).num_sinker--;
@@ -359,6 +358,7 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
 
 Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
     auto& context = sink_ctx(instance_id.lo);
+    auto notify = this->finishing_defer();
     std::lock_guard guard(context.mutex);
     pre_works();
 
@@ -414,7 +414,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     return;
                 }
                 if (--_num_remaining_eos == 0) {
-                    auto notify = this->defer_notify();
                     _is_finishing = true;
                 }
                 sink_ctx(instance_id.lo).num_sinker--;
