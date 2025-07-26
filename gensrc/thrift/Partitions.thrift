@@ -67,6 +67,16 @@ enum TDistributionType {
   GATHER
 }
 
+enum TBucketFunction {
+  NATIVE,
+  MURMUR3_X86_32
+}
+
+struct TBucketProperty {
+  1: optional TBucketFunction bucket_func;
+  2: optional i32 bucket_num;
+}
+
 // TODO(zc): Refine
 // Move the following to Partitions
 struct TPartitionKey {

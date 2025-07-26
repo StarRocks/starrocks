@@ -28,7 +28,9 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
@@ -38,6 +40,7 @@ import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TCompressedPartitionMap;
 import com.starrocks.thrift.THdfsPartition;
@@ -49,6 +52,7 @@ import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.types.Types;
@@ -62,9 +66,11 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.iceberg.IcebergApiConverter.getBucketSourceIdWithBucketNum;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
@@ -90,7 +96,7 @@ public class IcebergTable extends Table {
 
     private org.apache.iceberg.Table nativeTable; // actual iceberg table
     private List<Column> partitionColumns;
-
+    private Optional<Boolean> hasBucketProperties = Optional.empty();
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     public IcebergTable() {
@@ -303,6 +309,35 @@ public class IcebergTable extends Table {
                 .filter(field -> nativeTable.schema().findColumnName(field.sourceId()).equalsIgnoreCase(colName))
                 .findFirst()
                 .orElse(null);
+    }
+
+    public boolean hasBucketProperties() {
+        if (hasBucketProperties.isEmpty()) {
+            if (getNativeTable().specs().size() != 1) {
+                hasBucketProperties = Optional.of(false);
+            } else {
+                PartitionSpec spec = getNativeTable().spec();
+                hasBucketProperties = Optional.of(spec.isPartitioned() && Partitioning.hasBucketField(spec));
+            }
+        }
+
+        return hasBucketProperties.get();
+    }
+
+    public List<BucketProperty> getBucketProperties() {
+        if (!hasBucketProperties()) {
+            return Lists.newArrayList();
+        }
+
+        List<BucketProperty> bucketProperties = new ArrayList<>();
+        List<Pair<Integer, Integer>> bucketSourceIdWithBucketNums = getBucketSourceIdWithBucketNum(getNativeTable().spec());
+
+        for (Pair<Integer, Integer> bucket : bucketSourceIdWithBucketNums) {
+            Column column = getColumn(nativeTable.schema().findColumnName(bucket.first));
+            bucketProperties.add(new BucketProperty(TBucketFunction.MURMUR3_X86_32, bucket.second, column));
+        }
+
+        return bucketProperties;
     }
 
     public org.apache.iceberg.Table getNativeTable() {
