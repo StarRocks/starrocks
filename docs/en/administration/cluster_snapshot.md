@@ -6,12 +6,15 @@ keywords: ['backup','restore','shared data','snapshot']
 <head><meta name="docsearch:pagerank" content="100"/></head>
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'
+import ClusterSnapshotTerm from '../_assets/commonMarkdown/cluster_snapshot_term.mdx'
+import ManualCreateDropClusterSnapshot from '../_assets/commonMarkdown/manual_cluster_snapshot.mdx'
+import ClusterSnapshotWarning from '../_assets/commonMarkdown/cluster_snapshot_warning.mdx'
 
-# Automated Cluster Snapshot
+# Cluster Snapshot
 
 <Beta />
 
-This topic describes how to automate the cluster snapshot for disaster recovery on shared-data clusters.
+This topic describes how to use Cluster Snapshot for disaster recovery on shared-data clusters.
 
 This feature is supported from v3.4.2 onwards and only available on shared-data clusters.
 
@@ -19,7 +22,7 @@ This feature is supported from v3.4.2 onwards and only available on shared-data 
 
 The fundamental idea of disaster recovery for shared-data clusters is to ensure that the full cluster state (including data and metadata) is stored in object storage. This way, if the cluster encounters a failure, it can be restored from the object storage as long as the data and metadata remain intact. Additionally, features like backups and cross-region replication offered by cloud providers can be used to achieve remote recovery and cross-region disaster recovery.
 
-In shared-data clusters, the CN state (data) is stored in object storage, but the FE state (metadata) remains local. To ensure that object storage has all the cluster state for restoration, StarRocks now supports the Automated Cluster Snapshot for both data and metadata in object storage.
+In shared-data clusters, the CN state (data) is stored in object storage, but the FE state (metadata) remains local. To ensure that object storage has all the cluster state for restoration, StarRocks now supports Cluster Snapshot for both data and metadata in object storage.
 
 ### Workflow
 
@@ -31,18 +34,17 @@ In shared-data clusters, the CN state (data) is stored in object storage, but th
 
   A cluster snapshot refers to a snapshot of the cluster state at a certain moment. It contains all the objects in the cluster, such as catalogs, databases, tables, users & privileges, loading tasks, and more. It does not include all external dependent objects, such as configuration files of external catalogs, and local UDF JAR packages.
 
-- **Automating cluster snapshot**
+- **Generating cluster snapshot**
 
-  The system automatically maintains a snapshot closely following the latest cluster state. Historical snapshots will be dropped right after the latest one is created, keeping only one snapshot available all the time. Currently, tasks for automating the cluster snapshot are triggered only by the system. Manually creating a snapshot is not supported.
+  The system automatically maintains a snapshot closely following the latest cluster state. Historical snapshots will be dropped right after the latest one is created, keeping only one snapshot available all the time.
+
+  <ClusterSnapshotTerm />
 
 - **Cluster Restore**
 
   Restore the cluster from a snapshot.
 
-
-## Usage
-
-### Enable Automated Cluster Snapshot
+## Automated cluster snapshot
 
 Automated Cluster Snapshot is disabled by default.
 
@@ -65,9 +67,9 @@ Metadata snapshots are stored under `/{storage_volume_locations}/{service_id}/me
 
 FE configuration item `automated_cluster_snapshot_interval_seconds` controls the snapshot automation cycle. The default value is 600 seconds (10 minutes).
 
-### Disable Automated Cluster Snapshot
+### Disable automated cluster snapshot
 
-Use the following statement to disable Automated Cluster Snapshot:
+Use the following statement to disable automated cluster snapshot:
 
 ```SQL
 ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
@@ -75,7 +77,9 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
 
 Once Automated Cluster Snapshot is disabled, the system will automatically purge the historical snapshot.
 
-### View cluster snapshots
+<ManualCreateDropClusterSnapshot />
+
+## View cluster snapshot
 
 You can query the view `information_schema.cluster_snapshots` to view the latest cluster snapshot and the snapshots yet to be dropped.
 
@@ -88,7 +92,7 @@ Return:
 | Field              | Description                                                  |
 | ------------------ | ------------------------------------------------------------ |
 | snapshot_name      | The name of the snapshot.                                    |
-| snapshot_type      | The type of the snapshot. Currently, only `automated` is available. |
+| snapshot_type      | The type of the snapshot. Valid values: `automated` and `manual`. |
 | created_time       | The time at which the snapshot was created.                  |
 | fe_journal_id      | The ID of the FE journal.                                    |
 | starmgr_journal_id | The ID of the StarManager journal.                           |
@@ -96,7 +100,7 @@ Return:
 | storage_volume     | The storage volume where the snapshot is stored.             |
 | storage_path       | The storage path under which the snapshot is stored.         |
 
-### View cluster snapshot jobs
+## View cluster snapshot job
 
 You can query the view `information_schema.cluster_snapshot_jobs` to view the job information of cluster snapshots.
 
@@ -116,7 +120,9 @@ Return:
 | detail_info        | The specific progress information of the current execution stage. |
 | error_message      | The error message (if any) of the job.                       |
 
-### Restore the cluster
+## Restore the cluster
+
+<ClusterSnapshotWarning />
 
 Follow these steps to restore the cluster with the cluster snapshot.
 
