@@ -146,15 +146,25 @@ private:
 
         Status read_columns(Chunk* chunk, const SparseRange<>& range) {
             bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
+            std::vector<size_t> pruned_cols;
+            size_t pruned_col_size = 0;
             for (size_t i = 0; i < _column_iterators.size(); i++) {
                 ColumnPtr& col = chunk->get_column_by_index(i);
                 if (_prune_column_after_index_filter && _prune_cols.count(i)) {
-                    // make sure each pruned column has the same size as the unpruneable one.
-                    col->resize(range.span_size());
+                    pruned_cols.push_back(i);
                     continue;
                 }
                 RETURN_IF_ERROR(_column_iterators[i]->next_batch(range, col.get()));
+                if (pruned_col_size == 0) {
+                    pruned_col_size = col->size();
+                }
+                DCHECK_EQ(pruned_col_size, col->size());
                 may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
+            }
+            for (size_t i : pruned_cols) {
+                ColumnPtr& col = chunk->get_column_by_index(i);
+                // make sure each pruned column has the same size as the unpruneable one.
+                col->resize(pruned_col_size);
             }
             chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
             return Status::OK();
@@ -1324,7 +1334,6 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
 
     _range_iter.next_range(n, &range);
     read_num += range.span_size();
-
     {
         _opts.stats->blocks_load += 1;
         SCOPED_RAW_TIMER(&_opts.stats->block_fetch_ns);
