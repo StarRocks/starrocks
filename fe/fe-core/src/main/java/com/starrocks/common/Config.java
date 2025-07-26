@@ -1979,6 +1979,14 @@ public class Config extends ConfigBase {
     public static boolean recover_with_empty_tablet = false;
 
     /**
+     * When this variable is set to true, the system can still execute queries 
+     * even if some BE nodes fail, but completeness of returned results is not guaranteed, 
+     * and this configuration only applies to query operations
+     */
+    @ConfField(mutable = true)
+    public static boolean skip_unavailable_node = false;
+
+    /**
      * Limit on the number of expr children of an expr tree.
      */
     @ConfField(mutable = true)
