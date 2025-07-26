@@ -44,7 +44,7 @@ public class SSLContextLoader {
     }
 
     private static SSLContext createSSLContext() throws Exception {
-        KeyStore keyStore = KeyStore.getInstance("JKS");
+        KeyStore keyStore = KeyStore.getInstance(Config.ssl_keystore_type);
         try (InputStream keyStoreIS = new FileInputStream(Config.ssl_keystore_location)) {
             keyStore.load(keyStoreIS, Config.ssl_keystore_password.toCharArray());
         }
@@ -62,7 +62,7 @@ public class SSLContextLoader {
     }
 
     private static TrustManager[] createTrustManagers(String filepath, String keystorePassword) throws Exception {
-        KeyStore trustStore = KeyStore.getInstance("JKS");
+        KeyStore trustStore = KeyStore.getInstance(Config.ssl_truststore_type);
         try (InputStream trustStoreIS = new FileInputStream(filepath)) {
             trustStore.load(trustStoreIS, keystorePassword.toCharArray());
         }
