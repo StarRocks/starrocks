@@ -110,6 +110,19 @@ public class ObjectType {
                     .put(20003, new Pair<>("WAREHOUSE", "WAREHOUSES"))
                     .build();
 
+    public static final Set<String> CASE_INSENSITIVE_NAMES = new ImmutableSet.Builder<String>().add(
+            "TABLE",
+            "TABLES",
+            "DATABASE",
+            "DATABASES",
+            "VIEW",
+            "VIEWS",
+            "CATALOG",
+            "CATALOGS",
+            "MATERIALIZED VIEW",
+            "MATERIALIZED VIEWS"
+    ).build();
+
     public static final Map<String, ObjectType> NAME_TO_OBJECT = VALID_OBJECT_TYPE.stream().collect(Collectors.toMap(
             ObjectType::name, Function.identity()));
 

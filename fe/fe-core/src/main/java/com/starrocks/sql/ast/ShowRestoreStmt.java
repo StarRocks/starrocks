@@ -23,6 +23,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class ShowRestoreStmt extends ShowStmt {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("JobId").add("Label").add("Timestamp").add("DbName").add("State")
@@ -42,7 +44,7 @@ public class ShowRestoreStmt extends ShowStmt {
 
     public ShowRestoreStmt(String dbName, Expr where, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.where = where;
     }
 
@@ -55,7 +57,7 @@ public class ShowRestoreStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     @Override

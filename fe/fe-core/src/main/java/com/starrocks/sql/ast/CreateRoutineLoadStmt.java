@@ -49,6 +49,8 @@ import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 /*
  Create routine Load statement,  continually load data from a streaming app
 
@@ -267,7 +269,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                                  NodePosition pos) {
         super(pos);
         this.labelName = labelName;
-        this.tableName = tableName;
+        this.tableName = normalizeName(tableName);
         this.loadPropertyList = loadPropertyList;
         this.jobProperties = jobProperties == null ? Maps.newHashMap() : jobProperties;
         this.typeName = typeName.toUpperCase();
@@ -323,7 +325,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     }
 
     public void setDBName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public String getTableName() {

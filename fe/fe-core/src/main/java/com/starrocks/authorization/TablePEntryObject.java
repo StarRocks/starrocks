@@ -22,6 +22,7 @@ import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaNotFoundException;
@@ -181,7 +182,7 @@ public class TablePEntryObject implements PEntryObject {
     }
 
     private boolean matchTableUUID(TablePEntryObject other) {
-        if (isExternalCatalog(this.catalogId)) {
+        if (isExternalCatalog(this.catalogId) || GlobalVariable.enableTableNameCaseInsensitive) {
             return Catalog.getCompatibleTableUUID(this.tableUUID)
                     .equalsIgnoreCase(Catalog.getCompatibleTableUUID(other.tableUUID));
         }

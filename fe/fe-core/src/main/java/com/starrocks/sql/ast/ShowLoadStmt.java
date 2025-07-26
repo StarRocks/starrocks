@@ -33,6 +33,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // SHOW LOAD STATUS statement used to get status of load job.
 //
 // syntax:
@@ -58,7 +60,7 @@ public class ShowLoadStmt extends ShowStmt {
     public ShowLoadStmt(String db, Expr labelExpr, List<OrderByElement> orderByElements,
                         LimitElement limitElement, NodePosition pos) {
         super(pos);
-        this.dbName = db;
+        this.dbName = normalizeName(db);
         this.whereClause = labelExpr;
         this.orderByElements = orderByElements;
         this.limitElement = limitElement;
@@ -69,7 +71,7 @@ public class ShowLoadStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public Expr getWhereClause() {

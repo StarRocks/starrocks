@@ -32,6 +32,8 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.Arrays;
 import java.util.List;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 /*
     show all of task belong to job
     SHOW ROUTINE LOAD TASK FROM DB where expr;
@@ -72,7 +74,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
 
     public ShowRoutineLoadTaskStmt(String dbName, Expr jobNameExpr, NodePosition pos) {
         super(pos);
-        this.dbFullName = dbName;
+        this.dbFullName = normalizeName(dbName);
         this.jobNameExpr = jobNameExpr;
     }
 
@@ -85,7 +87,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
     }
 
     public void setDbFullName(String dbFullName) {
-        this.dbFullName = dbFullName;
+        this.dbFullName = normalizeName(dbFullName);
     }
 
     public void checkJobNameExpr() throws AnalysisException {

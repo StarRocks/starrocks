@@ -25,6 +25,8 @@ import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // Show database statement.
 public class ShowDbStmt extends ShowStmt {
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "schemata");
@@ -58,7 +60,7 @@ public class ShowDbStmt extends ShowStmt {
         super(pos);
         this.pattern = pattern;
         this.where = where;
-        this.catalogName = catalogName;
+        this.catalogName = normalizeName(catalogName);
     }
 
     public String getPattern() {
@@ -67,10 +69,6 @@ public class ShowDbStmt extends ShowStmt {
 
     public String getCatalogName() {
         return catalogName;
-    }
-
-    public void setCatalogName(String catalogName) {
-        this.catalogName = catalogName;
     }
 
     @Override

@@ -18,6 +18,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class CancelLoadStmt extends DdlStmt {
 
     private String dbName;
@@ -30,7 +32,7 @@ public class CancelLoadStmt extends DdlStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public Expr getWhereClause() {
@@ -51,7 +53,7 @@ public class CancelLoadStmt extends DdlStmt {
 
     public CancelLoadStmt(String dbName, Expr whereClause, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.whereClause = whereClause;
     }
 

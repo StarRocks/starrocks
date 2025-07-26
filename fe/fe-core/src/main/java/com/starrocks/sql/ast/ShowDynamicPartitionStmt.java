@@ -22,6 +22,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class ShowDynamicPartitionStmt extends ShowStmt {
     private String db;
     private static final ShowResultSetMetaData SHOW_DYNAMIC_PARTITION_META_DATA =
@@ -49,7 +51,7 @@ public class ShowDynamicPartitionStmt extends ShowStmt {
 
     public ShowDynamicPartitionStmt(String db, NodePosition pos) {
         super(pos);
-        this.db = db;
+        this.db = normalizeName(db);
     }
 
     public String getDb() {
@@ -57,7 +59,7 @@ public class ShowDynamicPartitionStmt extends ShowStmt {
     }
 
     public void setDb(String db) {
-        this.db = db;
+        this.db = normalizeName(db);
     }
 
     @Override

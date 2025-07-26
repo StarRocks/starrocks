@@ -31,6 +31,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // SHOW COLUMNS
 public class ShowColumnStmt extends ShowStmt {
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "COLUMNS");
@@ -76,7 +78,7 @@ public class ShowColumnStmt extends ShowStmt {
                           Expr where, NodePosition pos) {
         super(pos);
         this.tableName = tableName;
-        this.db = db;
+        this.db = normalizeName(db);
         this.pattern = pattern;
         this.isVerbose = isVerbose;
         this.where = where;

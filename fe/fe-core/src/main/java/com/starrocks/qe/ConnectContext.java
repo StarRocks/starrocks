@@ -113,6 +113,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // When one client connect in, we create a connection context for it.
 // We store session information here. Meanwhile, ConnectScheduler all
 // connect with its connection id.
@@ -1344,6 +1346,7 @@ public class ConnectContext {
     // We can support "use 'catalog <catalog_name>'" from mysql client or "use catalog <catalog_name>" from jdbc.
     public void changeCatalog(String newCatalogName) throws DdlException {
         CatalogMgr catalogMgr = globalStateMgr.getCatalogMgr();
+        newCatalogName = normalizeName(newCatalogName);
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
@@ -1377,7 +1380,7 @@ public class ConnectContext {
         if (parts.length == 1) { // use database
             dbName = identifier;
         } else { // use catalog.database
-            String newCatalogName = parts[0];
+            String newCatalogName = normalizeName(parts[0]);
             if (!catalogMgr.catalogExists(newCatalogName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
             }
@@ -1393,6 +1396,8 @@ public class ConnectContext {
             this.setCurrentCatalog(newCatalogName);
             dbName = parts[1];
         }
+
+        dbName = normalizeName(dbName);
 
         if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
             LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
