@@ -113,6 +113,9 @@ public class NormalBackendSelector implements BackendSelector {
 
             // fail eventually if it can't find any location.
             if (minLocation == null) {
+                if (Config.skip_unavailable_node) {
+                    continue;
+                }
                 workerProvider.reportDataNodeNotFoundException();
             }
             Preconditions.checkNotNull(minLocation);
