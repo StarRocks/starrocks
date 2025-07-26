@@ -1,0 +1,27 @@
+-- name: testExternalMysqlJson
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Test JSON type in MySQL external table
+CREATE EXTERNAL TABLE mysql_json_test
+(
+  `id` int,
+  `json_data` json
+)
+ENGINE=mysql
+PROPERTIES
+(
+    "host" = "${mysql_host}",
+    "port" = "${mysql_port}",
+    "user" = "${mysql_user}",
+    "password" = "${mysql_password}",
+    "database" = "${mysql_database}",
+    "table" = "json_test_table"
+);
+
+-- This should not fail with "mysql row data parse error, column_data_type=27"
+DESC mysql_json_test;
+
+drop table mysql_json_test;
+drop database db_${uuid0};
