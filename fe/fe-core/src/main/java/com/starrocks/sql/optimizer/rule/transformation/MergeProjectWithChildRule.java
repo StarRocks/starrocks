@@ -46,15 +46,15 @@ public class MergeProjectWithChildRule extends TransformationRule {
         this.eliminateUselessProject = eliminateUselessProject;
     }
 
-    @Override
-    public boolean check(OptExpression input, OptimizerContext context) {
-        if (!input.getInputs().isEmpty() &&
-                input.getInputs().get(0).getOp().getOpType() == OperatorType.LOGICAL_META_SCAN) {
-            return false;
-        } else {
-            return true;
-        }
-    }
+    //    @Override
+    //    public boolean check(OptExpression input, OptimizerContext context) {
+    //        if (!input.getInputs().isEmpty() &&
+    //                input.getInputs().get(0).getOp().getOpType() == OperatorType.LOGICAL_META_SCAN) {
+    //            return false;
+    //        } else {
+    //            return true;
+    //        }
+    //    }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {

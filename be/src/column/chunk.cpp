@@ -371,7 +371,9 @@ void Chunk::check_or_die() {
         CHECK(_slot_id_to_index.empty());
     } else {
         for (const ColumnPtr& c : _columns) {
-            CHECK_EQ(num_rows(), c->size());
+            if (!c->is_constant()) {
+                CHECK_EQ(num_rows(), c->size());
+            }
             c->check_or_die();
         }
     }

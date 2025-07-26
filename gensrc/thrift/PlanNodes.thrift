@@ -569,6 +569,7 @@ struct TColumnAccessPath {
     3: optional list<TColumnAccessPath> children
     4: optional bool from_predicate
     5: optional Types.TTypeDesc type_desc
+    6: optional bool extended
 }
 
 struct TVectorSearchOptions {
@@ -1244,6 +1245,8 @@ struct TMetaScanNode {
     1: optional map<i32, string> id_to_names
     2: optional list<Descriptors.TColumn> columns
     3: optional i32 low_cardinality_threshold;
+
+    4: optional list<TColumnAccessPath> column_access_paths
 }
 
 struct TDecodeNode {
