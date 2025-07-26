@@ -65,6 +65,7 @@
       "d_year":"[1900.0, 2100.0, 0.0, 4.0, 202.0] ESTIMATE"
     }
   },
+  "histogram_statistics": {},
   "be_number":4,
   "exception":[
 

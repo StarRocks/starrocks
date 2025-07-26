@@ -51,6 +51,7 @@
       "ws_ext_ship_cost":"[0.0, 14950.0, 2.501165360502534E-4, 8.0, 568470.0] ESTIMATE"
     }
   },
+  "histogram_statistics": {},
   "be_number":4,
   "exception":[
 
