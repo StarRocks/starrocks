@@ -56,8 +56,12 @@ void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, std::strin
     send_reply(request, status, content, std::nullopt);
 }
 
+void HttpChannel::send_reply_json(HttpRequest* request, HttpStatus status, std::string_view content) {
+    send_reply(request, status, content, HttpHeaders::JsonType);
+}
+
 void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, std::string_view content,
-                             std::optional<std::string_view> content_type) {
+                             const std::optional<std::string_view>& content_type) {
 #ifdef BE_TEST
     if (s_injected_send_reply != nullptr) {
         s_injected_send_reply(request, status, content);
@@ -68,7 +72,7 @@ void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, std::strin
     evbuffer_add(evb, content.data(), content.size());
     if (content_type.has_value()) {
         auto headers = evhttp_request_get_output_headers(request->get_evhttp_request());
-        evhttp_add_header(headers, HttpHeaders::CONTENT_TYPE, content_type->data());
+        evhttp_add_header(headers, HttpHeaders::CONTENT_TYPE, std::string(*content_type).c_str());
     }
     evhttp_send_reply(request->get_evhttp_request(), status, defalut_reason(status).c_str(), evb);
     evbuffer_free(evb);
