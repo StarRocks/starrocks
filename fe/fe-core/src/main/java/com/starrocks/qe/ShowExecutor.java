@@ -962,8 +962,7 @@ public class ShowExecutor {
             rowSet.add(Lists.newArrayList("HIVE", "YES", "HIVE database which data is in it", "NO", "NO", "NO"));
             rowSet.add(Lists.newArrayList("ICEBERG", "YES", "ICEBERG data lake which data is in it", "NO", "NO", "NO"));
 
-            // Only success
-            return new ShowResultSet(statement.getMetaData(), rowSet);
+            return ShowResultProcessor.processShowResult(statement, statement.getMetaData(), rowSet);
         }
 
         @Override
@@ -1987,20 +1986,20 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowBackendsStatement(ShowBackendsStmt statement, ConnectContext context) {
             List<List<String>> backendInfos = BackendsProcDir.getClusterBackendInfos();
-            return new ShowResultSet(statement.getMetaData(), backendInfos);
+            return ShowResultProcessor.processShowResult(statement, statement.getMetaData(), backendInfos);
         }
 
         @Override
         public ShowResultSet visitShowFrontendsStatement(ShowFrontendsStmt statement, ConnectContext context) {
             List<List<String>> infos = Lists.newArrayList();
             FrontendsProcNode.getFrontendsInfo(GlobalStateMgr.getCurrentState(), infos);
-            return new ShowResultSet(statement.getMetaData(), infos);
+            return ShowResultProcessor.processShowResult(statement, statement.getMetaData(), infos);
         }
 
         @Override
         public ShowResultSet visitShowRepositoriesStatement(ShowRepositoriesStmt statement, ConnectContext context) {
             List<List<String>> repoInfos = GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().getReposInfo();
-            return new ShowResultSet(statement.getMetaData(), repoInfos);
+            return ShowResultProcessor.processShowResult(statement, statement.getMetaData(), repoInfos);
         }
 
         @Override
@@ -2630,7 +2629,7 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowComputeNodes(ShowComputeNodesStmt statement, ConnectContext context) {
             List<List<String>> computeNodesInfos = ComputeNodeProcDir.getClusterComputeNodesInfos();
-            return new ShowResultSet(statement.getMetaData(), computeNodesInfos);
+            return ShowResultProcessor.processShowResult(statement, statement.getMetaData(), computeNodesInfos);
         }
 
         @Override

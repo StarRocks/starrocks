@@ -15,10 +15,15 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.List;
 
 public class ShowPluginsStmt extends ShowStmt {
 
@@ -37,11 +42,20 @@ public class ShowPluginsStmt extends ShowStmt {
                     .build();
 
     public ShowPluginsStmt() {
-        this(NodePosition.ZERO);
+        this(null, null, null, null, NodePosition.ZERO);
     }
 
     public ShowPluginsStmt(NodePosition pos) {
+        this(null, null, null, null, pos);
+    }
+
+    public ShowPluginsStmt(String pattern, Expr where, List<OrderByElement> orderByElements,
+                          LimitElement limitElement, NodePosition pos) {
         super(pos);
+        this.pattern = pattern;
+        this.predicate = where;
+        this.orderByElements = orderByElements;
+        this.limitElement = limitElement;
     }
 
     @Override

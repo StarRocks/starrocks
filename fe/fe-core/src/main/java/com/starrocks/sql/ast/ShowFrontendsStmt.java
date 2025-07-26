@@ -15,6 +15,9 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -22,14 +25,30 @@ import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.List;
+
 public class ShowFrontendsStmt extends ShowStmt {
+    private final String pattern;
 
     public ShowFrontendsStmt() {
-        this(NodePosition.ZERO);
+        this(null, null, null, null, NodePosition.ZERO);
     }
 
     public ShowFrontendsStmt(NodePosition pos) {
+        this(null, null, null, null, pos);
+    }
+
+    public ShowFrontendsStmt(String pattern, Expr where, List<OrderByElement> orderByElements,
+                            LimitElement limitElement, NodePosition pos) {
         super(pos);
+        this.pattern = pattern;
+        this.predicate = where;
+        this.orderByElements = orderByElements;
+        this.limitElement = limitElement;
+    }
+
+    public String getPattern() {
+        return pattern;
     }
 
     @Override

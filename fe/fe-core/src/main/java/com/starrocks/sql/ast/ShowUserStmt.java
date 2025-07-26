@@ -15,10 +15,15 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.List;
 
 public class ShowUserStmt extends ShowStmt {
     private final boolean isAll;
@@ -29,12 +34,21 @@ public class ShowUserStmt extends ShowStmt {
                     .build();
 
     public ShowUserStmt(boolean isAll) {
-        this(isAll, NodePosition.ZERO);
+        this(isAll, null, null, null, null, NodePosition.ZERO);
     }
 
     public ShowUserStmt(boolean isAll, NodePosition pos) {
+        this(isAll, null, null, null, null, pos);
+    }
+
+    public ShowUserStmt(boolean isAll, String pattern, Expr where, List<OrderByElement> orderByElements,
+                       LimitElement limitElement, NodePosition pos) {
         super(pos);
         this.isAll = isAll;
+        this.pattern = pattern;
+        this.predicate = where;
+        this.orderByElements = orderByElements;
+        this.limitElement = limitElement;
     }
 
     public boolean isAll() {

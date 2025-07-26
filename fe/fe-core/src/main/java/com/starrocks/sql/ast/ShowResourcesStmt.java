@@ -15,6 +15,9 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ResourceMgr;
@@ -23,14 +26,25 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.List;
+
 public class ShowResourcesStmt extends ShowStmt {
 
     public ShowResourcesStmt() {
-        this(NodePosition.ZERO);
+        this(null, null, null, null, NodePosition.ZERO);
     }
 
     public ShowResourcesStmt(NodePosition pos) {
+        this(null, null, null, null, pos);
+    }
+
+    public ShowResourcesStmt(String pattern, Expr where, List<OrderByElement> orderByElements,
+                            LimitElement limitElement, NodePosition pos) {
         super(pos);
+        this.pattern = pattern;
+        this.predicate = where;
+        this.orderByElements = orderByElements;
+        this.limitElement = limitElement;
     }
 
     @Override
