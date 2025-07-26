@@ -41,6 +41,7 @@ under the License.
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.8</jacoco.version>
+        <jprotobuf-precompile-plugin.version>2.2.12</jprotobuf-precompile-plugin.version>
         <python>python</python>
     </properties>
 
@@ -889,6 +890,7 @@ under the License.
             <plugin>
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf-precompile-plugin</artifactId>
+                <version>${jprotobuf-precompile-plugin.version}</version>
                 <configuration>
                     <filterClassPackage>com.starrocks.proto;com.starrocks.rpc;com.starrocks.server</filterClassPackage>
                     <generateProtoFile>true</generateProtoFile>
