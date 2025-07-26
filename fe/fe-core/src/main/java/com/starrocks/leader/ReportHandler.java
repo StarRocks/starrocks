@@ -75,7 +75,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.NetUtils;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
@@ -86,7 +85,6 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
-import com.starrocks.system.Backend.BackendStatus;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -538,8 +536,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         Backend reportBackend = currentSystemInfo.getBackend(backendId);
         if (reportBackend != null) {
-            BackendStatus backendStatus = reportBackend.getBackendStatus();
-            backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(start);
+            reportBackend.setLastSuccessReportTabletsTime(start);
         }
 
         long cost = System.currentTimeMillis() - start;
@@ -1428,7 +1425,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         long maxLastSuccessReportTabletsTime = -1L;
 
         for (Backend be : backends) {
-            long lastSuccessReportTabletsTime = TimeUtils.timeStringToLong(be.getBackendStatus().lastSuccessReportTabletsTime);
+            long lastSuccessReportTabletsTime = be.getLastSuccessReportTabletsTime();
             maxLastSuccessReportTabletsTime = Math.max(maxLastSuccessReportTabletsTime, lastSuccessReportTabletsTime);
         }
 
