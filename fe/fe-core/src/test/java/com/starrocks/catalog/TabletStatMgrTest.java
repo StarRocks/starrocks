@@ -38,7 +38,6 @@ import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -517,10 +516,10 @@ public class TabletStatMgrTest {
 
         new Expectations() {
             {
-                warehouseManager.getComputeNodeAssignedToTablet((ComputeResource) any, anyLong);
+                warehouseManager.getComputeNodeAssignedToTablet(anyString, (LakeTablet) any);
                 result = new Delegate() {
-                    ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
-                        throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, tabletId);
+                    ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
+                        throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, tablet.getId());
                     }
                 };
             }
@@ -587,10 +586,10 @@ public class TabletStatMgrTest {
 
         new Expectations() {
             {
-                warehouseManager.getComputeNodeAssignedToTablet((ComputeResource) any, anyLong);
+                warehouseManager.getComputeNodeAssignedToTablet(anyString, (LakeTablet) any);
                 result = new Delegate() {
-                    ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
-                        if (tabletId == 10L) {
+                    ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
+                        if (tablet.getId() == 10L) {
                             return null;
                         }
                         return new ComputeNode(1000L, "127.0.0.1", 9030);
