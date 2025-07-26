@@ -653,12 +653,36 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.commitTime = finishedTimeMs / 1000;
             txnInfo.gtid = watershedGtid;
+
+            // txnId is -1 means that BE do nothing, just upgrade the tablet_meta version
+            TxnInfoPB originTxnInfo = new TxnInfoPB();
+            originTxnInfo.txnId = -1L;
+            originTxnInfo.combinedTxnLog = false;
+            originTxnInfo.commitTime = finishedTimeMs / 1000;
+            originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
+            originTxnInfo.gtid = watershedGtid;
+
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, warehouseId);
                 }
+
+                // For indexes whose schema have not changed, we still need to upgrade the version
+                List<MaterializedIndex> originMaterializedIndex;
+                List<Tablet> allOtherPartitionTablets = new ArrayList<>();
+                try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+                    OlapTable table = getTableOrThrow(db, tableId);
+                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                    originMaterializedIndex = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                }
+
+                for (MaterializedIndex index : originMaterializedIndex) {
+                    allOtherPartitionTablets.addAll(index.getTablets());
+                }
+
+                Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, 1, commitVersion, warehouseId);
             }
             return true;
         } catch (Exception e) {
