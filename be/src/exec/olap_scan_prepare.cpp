@@ -1113,8 +1113,8 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
                                                               ColumnPredicatePtrs& col_preds_owner) {
     auto process_filter_conditions = [&]<typename ConditionType>(const std::vector<ConditionType>& filters) {
         for (const auto& filter : filters) {
-            std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(filter));
-            RETURN_IF(!p, Status::RuntimeError("invalid filter"));
+            ASSIGN_OR_RETURN(auto raw_p, parser->parse_thrift_cond(filter));
+            std::unique_ptr<ColumnPredicate> p(raw_p);
             p->set_index_filter_only(filter.is_index_filter_only);
             col_preds_owner.emplace_back(std::move(p));
         }
@@ -1127,8 +1127,8 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
     }
 
     for (auto& f : is_null_vector) {
-        std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
-        RETURN_IF(!p, Status::RuntimeError("invalid filter"));
+        ASSIGN_OR_RETURN(auto raw_p, parser->parse_thrift_cond(f));
+        std::unique_ptr<ColumnPredicate> p(raw_p);
         col_preds_owner.emplace_back(std::move(p));
     }
 

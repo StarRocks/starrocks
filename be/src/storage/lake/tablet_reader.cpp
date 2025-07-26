@@ -446,7 +446,7 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
 
         ConjunctivePredicates conjunctions;
         for (const auto& cond : conds) {
-            ColumnPredicate* pred = pred_parser.parse_thrift_cond(cond);
+            ASSIGN_OR_RETURN(ColumnPredicate * pred, pred_parser.parse_thrift_cond(cond));
             if (pred == nullptr) {
                 LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
                              << "], condition_op[" << cond.condition_op << "], condition_values["
