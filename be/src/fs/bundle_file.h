@@ -35,6 +35,8 @@ public:
     // Append slices to the shared file, and return the first offset of the slices.
     StatusOr<int64_t> appendv(const std::vector<Slice>& slices, const FileEncryptionInfo& info);
 
+    WritableFile* get_writable_file() { return _bundle_file.get(); }
+
 private:
     Status _close();
 
@@ -71,6 +73,10 @@ public:
     const std::string& filename() const override { return _context->filename(); }
 
     int64_t bundle_file_offset() const override { return _bundle_file_offset; }
+
+    StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
+        return _context->get_writable_file()->get_numeric_statistics();
+    }
 
 protected:
     // It will be shared with lots of threads.
