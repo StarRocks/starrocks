@@ -115,6 +115,15 @@ public:
         });
     }
 
+    // Similar to defer_notify, but only attempts to notify all observers when sink buffer is finished
+    auto finishing_defer() {
+        return DeferOp([this]() {
+            if (is_finished()) {
+                this->defer_notify();
+            }
+        });
+    }
+
     int64_t get_sent_bytes() const { return _bytes_sent; }
 
 private:
