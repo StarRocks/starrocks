@@ -160,14 +160,14 @@ public:
                 dst_data[i] = src_data[cnt];
                 cnt += !nulls[i];
             }
-            CHECK_EQ(cnt, num_non_nulls) << "count:" << count << " null_cnt:" << count - num_non_nulls;
+            DCHECK_EQ(cnt, num_non_nulls) << "count:" << count << " null_cnt:" << count - num_non_nulls;
         } else {
             size_t cnt = 0;
             for (size_t i = 0; i < count; ++i) {
                 dst_data[i] = src_data[cnt];
                 cnt += !nulls[i];
             }
-            CHECK_EQ(cnt, num_non_nulls) << "count:" << count << " null_cnt:" << count - num_non_nulls;
+            DCHECK_EQ(cnt, num_non_nulls) << "count:" << count << " null_cnt:" << count - num_non_nulls;
         }
     }
 
@@ -570,7 +570,7 @@ private:
                 return Status::OK();
             }
             binary_column->append_bytes_overflow(datas, lengths, read_count, _max_value_length);
-            CHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
+            DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
         }
 
         return Status::OK();

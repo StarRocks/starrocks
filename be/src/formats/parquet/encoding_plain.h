@@ -129,7 +129,7 @@ public:
                     "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, count, _data.size));
         }
         auto n = dst->append_numbers(_data.data + _offset, max_fetch);
-        CHECK_EQ(count, n);
+        DCHECK_EQ(count, n);
         _offset += max_fetch;
         return Status::OK();
     }
@@ -198,8 +198,8 @@ public:
 
         size_t max_size = 0;
         size_t read_count = count - null_cnt;
-        uint32_t lengths[read_count * sizeof(uint32_t)];
-        char* datas[read_count * sizeof(uint32_t)];
+        uint32_t lengths[read_count + 1];
+        char* datas[read_count + 1];
         size_t i = 0;
         size_t cursor = _offset;
         //
@@ -241,10 +241,10 @@ public:
         max_size = std::max(BitUtil::next_power_of_two(max_size), 8L);
         if (datas[read_count - 1] - _data.data + max_size <= _data.size) {
             binary_column->append_bytes_overflow(datas, lengths, read_count, max_size);
-            CHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
+            DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
         } else {
             binary_column->append_bytes(datas, lengths, read_count);
-            CHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
+            DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
         }
 
         return Status::OK();
@@ -543,7 +543,7 @@ public:
                 offsets[prev_offsets + i] = offset;
             }
         }
-        CHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
+        DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
 
         return Status::OK();
     }
