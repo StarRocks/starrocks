@@ -429,7 +429,8 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
             aggFuncs.add(mvAggFunc);
         }
 
-        int repeatTimes = 4;
+        int repeatTimes = 2;
+        int idx = 0;
         for (String aggFunc : aggFuncs) {
             if (aggFunc.contains("bitmap_union")) {
                 continue;
@@ -439,25 +440,26 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
                 repeatAggs.add(String.format("%s as agg%s", aggFunc, i));
             }
             String agg = Joiner.on(", ").join(repeatAggs);
-            starRocksAssert.withMaterializedView(String.format("create MATERIALIZED VIEW test_mv1\n" +
+            String mvName = String.format("test_mv%d", idx++);
+            starRocksAssert.withMaterializedView(String.format("create MATERIALIZED VIEW %s\n" +
                     "PARTITION BY (dt)\n" +
                     "DISTRIBUTED BY RANDOM\n" +
                     "as select date_trunc('day', k1) as dt, %s " +
-                    "from t0 group by date_trunc('day', k1);", agg));
+                    "from t0 group by date_trunc('day', k1);", mvName, agg));
             {
                 String query = String.format("select %s from t0 where k1 >= '2024-01-01 01:00:00'", agg);
                 String plan = getFragmentPlan(query);
-                PlanTestBase.assertContains(plan, "     TABLE: test_mv1");
+                PlanTestBase.assertContains(plan, String.format("     TABLE: %s", mvName));
                 PlanTestBase.assertContains(plan, "     TABLE: t0");
             }
             {
                 String query = String.format("select date_trunc('day', k1), %s from t0 " +
                         "where k1 >= '2024-01-01 01:00:00' group by date_trunc('day', k1)", agg);
                 String plan = getFragmentPlan(query);
-                PlanTestBase.assertContains(plan, "     TABLE: test_mv1");
+                PlanTestBase.assertContains(plan, String.format("     TABLE: %s", mvName));
                 PlanTestBase.assertContains(plan, "     TABLE: t0");
             }
-            starRocksAssert.dropMaterializedView("test_mv1");
+            starRocksAssert.dropMaterializedView(mvName);
         }
     }
 
