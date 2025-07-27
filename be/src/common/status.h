@@ -6,12 +6,10 @@
 
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "gen_cpp/StatusCode_types.h" // for TStatus
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -514,3 +512,28 @@ struct StatusInstance {
             return Status::InternalError(e.what()); \
         }                                           \
     } while (0)
+
+#ifdef NDEBUG
+#define RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, condition)                                    \
+    do {                                                                                                  \
+        if (UNLIKELY(!((val1)condition(val2)))) {                                                         \
+            return Status::InternalError(                                                                 \
+                    fmt::format("assert {}({}) " #condition " {}({}) failed", #val1, val1, #val2, val2)); \
+        }                                                                                                 \
+    } while (0)
+
+#define RETURN_IF_DCHECK_EQ_FAILED(val1, val2) RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, ==)
+#define RETURN_IF_DCHECK_LE_FAILED(val1, val2) RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, <=)
+#define RETURN_IF_DCHECK_LT_FAILED(val1, val2) RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, <)
+#define RETURN_IF_DCHECK_GE_FAILED(val1, val2) RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, >=)
+#define RETURN_IF_DCHECK_GT_FAILED(val1, val2) RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, >)
+
+#elif
+
+#define RETURN_IF_DCHECK_EQ_FAILED(val1, val2) DCHECK_EQ(val1, val2)
+#define RETURN_IF_DCHECK_LE_FAILED(val1, val2) DCHECK_LE(val1, val2)
+#define RETURN_IF_DCHECK_LT_FAILED(val1, val2) DCHECK_LT(val1, val2)
+#define RETURN_IF_DCHECK_GE_FAILED(val1, val2) DCHECK_GE(val1, val2)
+#define RETURN_IF_DCHECK_GT_FAILED(val1, val2) DCHECK_GT(val1, val2)
+
+#endif
