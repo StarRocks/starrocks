@@ -334,10 +334,13 @@ tasks.register<Task>("generateProtoSources") {
     doFirst {
         mkdir(outputDir)
 
+        // Get ExecOperations service properly
+        val execOps = project.objects.newInstance(ExecOperations::class.java)
+        
         // Process each proto file individually
         protoFiles.forEach { protoFile ->
             logger.info("Processing proto file: $protoFile")
-            project.javaexec {
+            execOps.javaexec {
                 classpath = protoGenClasspath
                 mainClass.set("com.baidu.bjf.remoting.protobuf.command.Main")
                 args = listOf(
@@ -377,8 +380,12 @@ tasks.register<Task>("generateThriftSources") {
 
     doFirst {
         mkdir(outputDir)
+        
+        // Get ExecOperations service properly
+        val execOps = project.objects.newInstance(ExecOperations::class.java)
+        
         // Process each proto file individually
-        project.javaexec {
+        execOps.javaexec {
             classpath = thriftGenClasspath
             mainClass.set("io.github.decster.ThriftCompiler")
             // Build arguments list with the output directory and all thrift files
@@ -403,8 +410,11 @@ tasks.register<Task>("generateByScripts") {
     doFirst {
         mkdir(outputDir)
 
+        // Get ExecOperations service properly
+        val execOps = project.objects.newInstance(ExecOperations::class.java)
+
         // First Python script - build version generation
-        project.exec {
+        execOps.exec {
             commandLine(
                 "python3",
                 "${project.rootProject.projectDir}/../build-support/gen_build_version.py",
@@ -414,7 +424,7 @@ tasks.register<Task>("generateByScripts") {
         }
 
         // Second Python script - function generation
-        project.exec {
+        execOps.exec {
             commandLine(
                 "python3",
                 "${project.rootProject.projectDir}/../gensrc/script/gen_functions.py",
