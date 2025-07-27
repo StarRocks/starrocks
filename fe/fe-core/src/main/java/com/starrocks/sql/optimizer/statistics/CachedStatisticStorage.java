@@ -413,6 +413,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> resultFuture =
                     partitionStatistics.getAll(cacheKeys);
+            if (Config.enable_sync_statistics_load) {
+                resultFuture.get();
+            }
 
             if (resultFuture.isDone()) {
                 Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = resultFuture.get();
