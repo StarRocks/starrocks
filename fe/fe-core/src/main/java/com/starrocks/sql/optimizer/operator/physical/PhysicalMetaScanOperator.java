@@ -80,12 +80,12 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
         return Objects.hash(super.hashCode(), aggColumnIdToNames, selectPartitionNames);
     }
 
-    public static PhysicalMetaScanOperator.Builder builder() {
-        return new PhysicalMetaScanOperator.Builder();
+    public static Builder builder() {
+        return new Builder();
     }
 
     public static class Builder
-            extends PhysicalScanOperator.Builder<PhysicalMetaScanOperator, PhysicalMetaScanOperator.Builder> {
+            extends PhysicalScanOperator.Builder<PhysicalMetaScanOperator, PhysicalScanOperator.Builder> {
 
         @Override
         protected PhysicalMetaScanOperator newInstance() {

@@ -34,7 +34,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -58,11 +57,12 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
         if (CollectionUtils.isNotEmpty(agg.getGroupingKeys())) {
             return false;
         }
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOperator.getColumnRefMap().entrySet()) {
-            if (!entry.getKey().equals(entry.getValue())) {
-                return false;
-            }
-        }
+        //        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOperator.getColumnRefMap()
+        //        .entrySet()) {
+        //            if (!entry.getKey().equals(entry.getValue())) {
+        //                return false;
+        //            }
+        //        }
 
         for (CallOperator aggCall : agg.getAggregations().values()) {
             String aggFuncName = aggCall.getFnName();
@@ -81,6 +81,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        LogicalProjectOperator project = (LogicalProjectOperator) input.inputAt(0).getOp();
         LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) input.inputAt(0).inputAt(0).getOp();
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
 
@@ -103,7 +104,8 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             } else {
                 ColumnRefSet usedColumns = aggCall.getUsedColumns();
                 Preconditions.checkArgument(usedColumns.cardinality() == 1);
-                usedColumn = columnRefFactory.getColumnRef(usedColumns.getFirstId());
+                List<ColumnRefOperator> columnRefOperators = usedColumns.getColumnRefOperators(columnRefFactory);
+                usedColumn = (ColumnRefOperator) project.getColumnRefMap().get(columnRefOperators.get(0));
                 metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
             }
 

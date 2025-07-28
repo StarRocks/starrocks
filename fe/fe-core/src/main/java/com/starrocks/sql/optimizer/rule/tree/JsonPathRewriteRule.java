@@ -151,16 +151,6 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
             return OptExpression.builder().with(optExpr).setInputs(newInputs).build();
         }
 
-        //        @Override
-        //        public OptExpression visitPhysicalMetaScan(OptExpression optExpr, Void v) {
-        //            return rewritePhysicalScan(optExpr, v);
-        //        }
-
-        @Override
-        public OptExpression visitPhysicalMetaScan(OptExpression optExpr, Void v) {
-            return rewritePhysicalScan(optExpr, v);
-        }
-
         @Override
         public OptExpression visitPhysicalOlapScan(OptExpression optExpr, Void v) {
             return rewritePhysicalScan(optExpr, v);

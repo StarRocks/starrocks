@@ -146,8 +146,10 @@ public class JsonPathRewriteTest extends PlanTestBase {
                 // MetaScan
                 Arguments.of(
                         "select dict_merge(get_json_string(c2, 'f1'), 255) from extend_predicate [_META_]",
-                        "<slot 3> : c2.f1",
-                        "ExtendedColumnAccessPath: [/c2(varchar)/f1(varchar)]"
+                        "0:MetaScan\n" +
+                                "     Table: extend_predicate\n" +
+                                "     <id 6> : dict_merge_c2.f1\n",
+                        "     ExtendedColumnAccessPath: [/c2(varchar)/f1(varchar)]\n"
                 )
         );
     }
