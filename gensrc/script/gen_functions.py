@@ -48,7 +48,8 @@ license_string = """
 // common/function-registry/starrocks_builtins_functions.py.
 """
 
-java_template = Template("""
+java_template = Template(
+    """
 ${license}
 
 package com.starrocks.builtins;
@@ -62,42 +63,17 @@ public class VectorizedBuiltinFunctions {
   }
 }
 
-""")
+"""
+)
 
-cpp_template = Template("""
-${license}
-
-#include "exprs/array_functions.h"
+cpp_template = """
 #include "exprs/builtin_functions.h"
-#include "exprs/map_functions.h"
-#include "exprs/struct_functions.h"
-#include "exprs/math_functions.h"
-#include "exprs/bit_functions.h"
-#include "exprs/binary_functions.h"
-#include "exprs/string_functions.h"
-#include "exprs/time_functions.h"
-#include "exprs/like_predicate.h"
-#include "exprs/is_null_predicate.h"
-#include "exprs/hyperloglog_functions.h"
-#include "exprs/bitmap_functions.h"
-#include "exprs/json_functions.h"
-#include "exprs/hash_functions.h"
-#include "exprs/encryption_functions.h"
-#include "exprs/geo_functions.h"
-#include "exprs/percentile_functions.h"
-#include "exprs/grouping_sets_functions.h"
-#include "exprs/es_functions.h"
-#include "exprs/utility_functions.h"
-#include "exprs/gin_functions.h"
-
-namespace starrocks {
-
-BuiltinFunctions::FunctionTables BuiltinFunctions::_fn_tables = {
-        ${functions}
-};
-
-}
-""")
+namespace starrocks {{
+void __attribute__((constructor)) {module}_initialize() {{
+{content}
+}}
+}}
+"""
 
 function_list = list()
 function_set = set()
@@ -120,7 +96,11 @@ def add_function(fn_data):
     entry["ret"] = fn_data[4]
     entry["args"] = fn_data[5]
 
-    function_signature = "%s#%s#(%s)" % (entry["ret"], entry["name"], ", ".join(entry["args"]))
+    function_signature = "%s#%s#(%s)" % (
+        entry["ret"],
+        entry["name"],
+        ", ".join(entry["args"]),
+    )
 
     if function_signature in function_signature_set:
         print("=================================================================")
@@ -130,8 +110,12 @@ def add_function(fn_data):
     function_signature_set.add(function_signature)
 
     if "..." in fn_data[5]:
-        assert 2 <= len(fn_data[5]), "Invalid arguments in functions.py:\n\t" + repr(fn_data)
-        assert "..." == fn_data[5][-1], "variadic parameter must at the end:\n\t" + repr(fn_data)
+        assert 2 <= len(fn_data[5]), "Invalid arguments in functions.py:\n\t" + repr(
+            fn_data
+        )
+        assert (
+            "..." == fn_data[5][-1]
+        ), "variadic parameter must at the end:\n\t" + repr(fn_data)
 
         entry["args_nums"] = len(fn_data[5]) - 1
     else:
@@ -148,11 +132,14 @@ def add_function(fn_data):
 
 def generate_fe(path):
     fn_template = Template(
-        'functionSet.addVectorizedScalarBuiltin(${id}, "${name}", ${has_vargs}, Type.${ret}${args_types});')
+        'functionSet.addVectorizedScalarBuiltin(${id}, "${name}", ${has_vargs}, Type.${ret}${args_types});'
+    )
 
     def gen_fe_fn(fnm):
         fnm["args_types"] = ", " if len(fnm["args"]) > 0 else ""
-        fnm["args_types"] = fnm["args_types"] + ", ".join(["Type." + i for i in fnm["args"] if i != "..."])
+        fnm["args_types"] = fnm["args_types"] + ", ".join(
+            ["Type." + i for i in fnm["args"] if i != "..."]
+        )
         fnm["has_vargs"] = "true" if "..." in fnm["args"] else "false"
 
         return fn_template.substitute(fnm)
@@ -172,12 +159,24 @@ def generate_cpp(path):
         res = ""
         if "prepare" in fnm:
             res = '{%d, {"%s", %d, %s, %s, %s, %s, %s' % (
-                fnm["id"], fnm["name"], fnm["args_nums"], fnm["fn"], fnm["prepare"], fnm["close"],
-                fnm["exception_safe"], fnm["check_overflow"])
+                fnm["id"],
+                fnm["name"],
+                fnm["args_nums"],
+                fnm["fn"],
+                fnm["prepare"],
+                fnm["close"],
+                fnm["exception_safe"],
+                fnm["check_overflow"],
+            )
         else:
             res = '{%d, {"%s", %d, %s, %s, %s' % (
-                fnm["id"], fnm["name"], fnm["args_nums"], fnm["fn"], fnm["exception_safe"],
-                fnm["check_overflow"])
+                fnm["id"],
+                fnm["name"],
+                fnm["args_nums"],
+                fnm["fn"],
+                fnm["exception_safe"],
+                fnm["check_overflow"],
+            )
 
         return res + "}}"
 
@@ -185,24 +184,98 @@ def generate_cpp(path):
     value["license"] = license_string
     value["functions"] = ", \n        ".join([gen_be_fn(i) for i in function_list])
 
-    content = cpp_template.substitute(value)
+    modules = [
+        "MathFunctions",
+        "StringFunctions",
+        "LikePredicate",
+        "BinaryFunctions",
+        "BitFunctions",
+        "TimeFunctions",
+        "ConditionFunctions",
+        "HyperloglogFunctions",
+        "BitmapFunctions",
+        "HashFunctions",
+        "GroupingSetsFunctions",
+        "StructFunctions",
+        "UtilityFunctions",
+        "JsonFunctions",
+        "EncryptionFunctions",
+        "ESFunctions",
+        "GeoFunctions",
+        "PercentileFunctions",
+        "ArrayFunctions",
+        "MapFunctions",
+        "GinFunctions",
+    ]
 
-    with open(path, mode="w+") as f:
-        f.write(content)
+    modules_contents = dict()
+    for module in modules:
+        modules_contents[module] = ""
+
+    for fnm in function_list:
+        target = "Unknown"
+        if fnm["fn"] == "nullptr":
+            continue
+        for module in modules:
+            if module in fnm["fn"]:
+                target = module
+                break
+        if target == "Unknown":
+            print("fnm:" + fnm["fn"] + str(fnm))
+
+        if "prepare" in fnm:
+            modules_contents[target] = modules_contents[
+                target
+            ] + '\tBuiltinFunctions::emplace_builtin_function(static_cast<uint64_t>(%d), "%s", %d, %s, %s, %s, %s, %s);\n' % (
+                fnm["id"],
+                fnm["name"],
+                fnm["args_nums"],
+                fnm["fn"],
+                fnm["prepare"],
+                fnm["close"],
+                fnm["exception_safe"],
+                fnm["check_overflow"],
+            )
+        else:
+            modules_contents[target] = modules_contents[
+                target
+            ] + '\tBuiltinFunctions::emplace_builtin_function(static_cast<uint64_t>(%d), "%s", %d, %s, %s, %s);\n' % (
+                fnm["id"],
+                fnm["name"],
+                fnm["args_nums"],
+                fnm["fn"],
+                fnm["exception_safe"],
+                fnm["check_overflow"],
+            )
+
+    for module in modules:
+        with open(path + module + ".inc", mode="w+") as f:
+            content = cpp_template.format(
+                module=module, content=modules_contents[module]
+            )
+            f.write(content)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     FE_PATH = "../../fe/fe-core/target/generated-sources/build"
     BE_PATH = "../build/gen_cpp"
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cpp", dest='cpp_path', default=BE_PATH, help="Path of generated cpp file", type=str)
-    parser.add_argument("--java", dest='java_path', default=FE_PATH, help="Path of generated java file", type=str)
+    parser.add_argument(
+        "--cpp",
+        dest="cpp_path",
+        default=BE_PATH,
+        help="Path of generated cpp file",
+        type=str,
+    )
+    parser.add_argument(
+        "--java",
+        dest="java_path",
+        default=FE_PATH,
+        help="Path of generated java file",
+        type=str,
+    )
     args = parser.parse_args()
-
-    # Read the function metadata inputs
-    for function in functions.vectorized_functions:
-        add_function(function)
 
     be_functions_dir = args.cpp_path + "/opcode"
     if not os.path.exists(be_functions_dir):
@@ -212,5 +285,9 @@ if __name__ == '__main__':
     if not os.path.exists(fe_functions_dir):
         os.makedirs(fe_functions_dir)
 
+    # Read the function metadata inputs
+    for function in functions.vectorized_functions:
+        add_function(function)
+
     generate_fe(fe_functions_dir + "/VectorizedBuiltinFunctions.java")
-    generate_cpp(be_functions_dir + "/builtin_functions.cpp")
+    generate_cpp(be_functions_dir + "/")
