@@ -85,7 +85,7 @@ public class FloatLiteral extends LiteralExpr {
         super(pos);
         Double floatValue = null;
         try {
-            floatValue = new Double(value);
+            floatValue = Double.valueOf(value);
             checkValue(floatValue);
         } catch (NumberFormatException e) {
             throw new AnalysisException("Invalid floating-point literal: " + value, e);
@@ -246,4 +246,3 @@ public class FloatLiteral extends LiteralExpr {
         }
     }
 }
-
