@@ -310,15 +310,11 @@ public class SubfieldAccessPathNormalizer {
         }
     }
 
+    public static boolean parseSimpleJsonPath(String path, List<String> result) {
+        final int jsonFlattenDepth = 20; // default json flatten depth
+        return parseSimpleJsonPath(jsonFlattenDepth, path, result);
+    }
 
-
-    // eg.
-    //  $.a.b -> [a, b]
-    //  $.a[0].b -> [a[0], b] -- don't support array index
-    //  $."a.b".c -> ["a.b", c]
-    //  $.a#b.c -> [a#b, c]
-    //  $.a.b.c.d.e.f -> [a, b] -- don't support overflown JSON_FLATTEN_DEPTH
-    //  a.b.c -> [a, b, c]
     public static boolean parseSimpleJsonPath(int jsonFlattenDepth, String path, List<String> result) {
         path = StringUtils.trimToEmpty(path);
         if (StringUtils.isBlank(path) || StringUtils.contains(path, "..") || StringUtils.equals("$", path) ||

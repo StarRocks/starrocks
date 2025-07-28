@@ -29,6 +29,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TStatisticData;
@@ -60,7 +61,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
     private static final CacheDictManager INSTANCE = new CacheDictManager();
 
-    protected static CacheDictManager getInstance() {
+    public static CacheDictManager getInstance() {
         return INSTANCE;
     }
 
@@ -293,6 +294,25 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
             } catch (Exception e) {
                 LOG.warn(String.format("get dict cache for %d: %s failed", tableId, columnName), e);
             }
+        }
+        return Optional.empty();
+    }
+
+    public Optional<ColumnDict> getGlobalDictSync(long tableId, ColumnId columnName) {
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+
+        // NOTE: it's used to patch the dbId, because asyncLoad requires the dbId
+        long dbId = MetaUtils.lookupDbIdByTableId(tableId);
+        if (dbId == -1) {
+            throw new RuntimeException("table not found " + tableId);
+        }
+        columnIdentifier.setDbId(dbId);
+
+        CompletableFuture<Optional<ColumnDict>> columnFuture = dictStatistics.get(columnIdentifier);
+        try {
+            return columnFuture.get();
+        } catch (Exception e) {
+            LOG.warn(String.format("get dict cache for %d: %s failed", tableId, columnName), e);
         }
         return Optional.empty();
     }
