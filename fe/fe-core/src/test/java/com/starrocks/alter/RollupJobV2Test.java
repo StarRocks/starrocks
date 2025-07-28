@@ -257,10 +257,9 @@ public class RollupJobV2Test extends DDLTestBase {
     public void testSerializeOfRollupJob() throws IOException,
                 AnalysisException {
         Config.enable_materialized_view = true;
-        // prepare file
-        String fileName = "./RollupJobV2Test";
-        File file = new File(fileName);
-        file.createNewFile();
+        // prepare temporary file
+        File file = File.createTempFile("RollupJobV2Test", ".tmp");
+        file.deleteOnExit();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
 
         short keysCount = 1;
@@ -281,17 +280,22 @@ public class RollupJobV2Test extends DDLTestBase {
         out.close();
 
         // read objects from file
-
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        RollupJobV2 result = (RollupJobV2) AlterJobV2.read(in);
-        List<Column> resultColumns = Deencapsulation.getField(result, "rollupSchema");
-        assertEquals(1, resultColumns.size());
-        Column resultColumn1 = resultColumns.get(0);
-        assertEquals(mvColumnName,
-                    resultColumn1.getName());
-        Assertions.assertTrue(resultColumn1.getDefineExpr() instanceof FunctionCallExpr);
-        FunctionCallExpr resultFunctionCall = (FunctionCallExpr) resultColumn1.getDefineExpr();
-        assertEquals("to_bitmap", resultFunctionCall.getFnName().getFunction());
+        try (DataInputStream in = new DataInputStream(new FileInputStream(file))) {
+            RollupJobV2 result = (RollupJobV2) AlterJobV2.read(in);
+            List<Column> resultColumns = Deencapsulation.getField(result, "rollupSchema");
+            assertEquals(1, resultColumns.size());
+            Column resultColumn1 = resultColumns.get(0);
+            assertEquals(mvColumnName,
+                        resultColumn1.getName());
+            Assertions.assertTrue(resultColumn1.getDefineExpr() instanceof FunctionCallExpr);
+            FunctionCallExpr resultFunctionCall = (FunctionCallExpr) resultColumn1.getDefineExpr();
+            assertEquals("to_bitmap", resultFunctionCall.getFnName().getFunction());
+        } finally {
+            // Clean up the temporary file
+            if (file.exists()) {
+                file.delete();
+            }
+        }
     }
 
     @Test
