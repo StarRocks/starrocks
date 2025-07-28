@@ -40,6 +40,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TUniqueId;
@@ -282,6 +283,10 @@ public class MetaUtils {
             throw new SemanticException(String.format("can not find column by column id: %s", columnId));
         }
         return column.getName();
+    }
+
+    public static Column getColumnByColumnId(ColumnIdentifier identifier) {
+        return getColumnByColumnId(identifier.getDbId(), identifier.getTableId(), identifier.getColumnName());
     }
 
     public static Column getColumnByColumnId(long dbId, long tableId, ColumnId columnId) {

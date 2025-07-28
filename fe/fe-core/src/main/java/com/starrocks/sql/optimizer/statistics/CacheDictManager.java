@@ -20,6 +20,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
@@ -31,6 +32,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
+import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.logging.log4j.LogManager;
@@ -263,6 +265,21 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
         LOG.info("remove dict for table:{} column:{}", tableId, columnName);
         dictStatistics.synchronous().invalidate(columnIdentifier);
+
+        // Remove all subfields' dicts if the column is a JSON type
+        try {
+            List<String> parts = Lists.newArrayList();
+            SubfieldAccessPathNormalizer.parseSimpleJsonPath(columnName.getId(), parts);
+            if (parts.size() > 1) {
+                String rootColumn = parts.get(0);
+                columnIdentifier = new ColumnIdentifier(tableId, ColumnId.create(rootColumn));
+                Column column = MetaUtils.getColumnByColumnId(columnIdentifier);
+                if (column.getType().isJsonType()) {
+                    removeGlobalDictForJson(tableId, column.getColumnId());
+                }
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
@@ -344,6 +361,67 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
         }
         return Optional.empty();
     }
+
+    // TODO(murphy) support an efficient dict cache for JSON subfields
+    @Override
+    public boolean hasGlobalDictForJson(long tableId, ColumnId columnName) {
+        // TODO(murphy) optimizer performance
+        return dictStatistics.asMap().keySet().stream().anyMatch(column -> {
+            if (column.getTableId() != tableId) {
+                return false;
+            }
+            List<String> parts = Lists.newArrayList();
+            SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnName().getId(), parts);
+            if (parts.size() > 1 && parts.get(0).equalsIgnoreCase(columnName.getId())) {
+                return true;
+            }
+            return false;
+        });
+    }
+
+    // TODO(murphy) support an efficient dict cache for JSON subfields
+    @Override
+    public List<ColumnDict> getGlobalDictForJson(long tableId, ColumnId columnName) {
+        // TODO(murphy) optimizer performance
+        return dictStatistics.synchronous().asMap().entrySet().stream().filter(kv -> {
+            ColumnIdentifier column = kv.getKey();
+            if (column.getTableId() != tableId) {
+                return false;
+            }
+            List<String> parts = Lists.newArrayList();
+            SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnName().getId(), parts);
+            if (parts.size() > 1 && parts.get(0).equalsIgnoreCase(columnName.getId())) {
+                return true;
+            }
+            return false;
+        }).flatMap(x -> x.getValue().stream()).toList();
+    }
+
+    // TODO(murphy) support an efficient dict cache for JSON subfields
+    @Override
+    public void removeGlobalDictForJson(long tableId, ColumnId columnName) {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return;
+        }
+        // TODO(murphy) optimizer performance
+        // Remove all global dict entries for JSON subfields of the given column in the given table.
+        // This is used to invalidate all dicts for subfields of a JSON column (e.g., c2.f1, c2.f2, etc.)
+        List<ColumnIdentifier> toRemove = new ArrayList<>();
+        for (ColumnIdentifier column : dictStatistics.asMap().keySet()) {
+            if (column.getTableId() != tableId) {
+                continue;
+            }
+            List<String> parts = Lists.newArrayList();
+            SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnName().getId(), parts);
+            if (parts.size() > 1 && parts.get(0).equalsIgnoreCase(columnName.getId())) {
+                toRemove.add(column);
+            }
+        }
+        for (ColumnIdentifier column : toRemove) {
+            dictStatistics.synchronous().invalidate(column);
+        }
+    }
+
 
     @Override
     public Map<String, Long> estimateCount() {
