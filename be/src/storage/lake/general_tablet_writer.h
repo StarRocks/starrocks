@@ -147,4 +147,6 @@ protected:
     std::vector<std::future<Status>> _futures;
 };
 
+void collect_writer_stats(OlapWriterStatistics& writer_stats, SegmentWriter* segment_writer);
+
 } // namespace starrocks::lake

@@ -2542,7 +2542,7 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
             _opts.stats->io_ns_read_local_disk += value;
         } else if (name == kIONsWriteLocalDisk) {
             _opts.stats->io_ns_write_local_disk += value;
-        } else if (name == kIONsRemote) {
+        } else if (name == kIONsReadRemote) {
             _opts.stats->io_ns_remote += value;
         } else if (name == kPrefetchHitCount) {
             _opts.stats->prefetch_hit_count += value;
