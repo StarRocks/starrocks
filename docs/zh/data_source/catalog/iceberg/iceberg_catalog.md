@@ -1302,10 +1302,11 @@ PARTITION BY (partition_expr[, partition_expr...])
 ```
 
 每个 `partition_expr` 可以是以下形式之一：
+
 ```SQL
-  column_name
-  | transform_expr(column_name)
-  | transform_expr(column_name, parameter)
+column_name
+| transform_expr(column_name)
+| transform_expr(column_name, parameter)
 ```
 
 当前，StarRocks 支持 Apache Iceberg 规范 [transform expr](https://iceberg.apache.org/spec/#partitioning) 中定义的分区转换表达式。这使得 StarRocks 能够基于转换后的列值创建具有隐藏分区的 Iceberg 表。
@@ -1371,17 +1372,16 @@ PARTITION BY (partition_expr[, partition_expr...])
    AS SELECT * from employee;
    ```
 
-4. 创建一个名为 partition_tbl_3 的表，使用隐藏分区。该表包含三个列：action、id 和 dt。其中，id 和 dt 用作分区键，
-但分区是通过转换表达式定义的，因此这些分区是隐藏的。
+4. 创建一个名为 `partition_tbl_3` 的表，使用隐藏分区。该表包含三个列：`action`、`id` 和 `dt`。其中，`id` 和 `dt` 用作分区键，但分区是通过转换表达式定义的，因此这些分区是隐藏的。
 
-  ```SQL
-  CREATE TABLE partition_tbl_3 (
-    action VARCHAR(20),
-    id INT,
-    dt DATE
-  )
-  PARTITION BY bucket(id, 10), year(dt);
-  ```
+   ```SQL
+   CREATE TABLE partition_tbl_3 (
+     action VARCHAR(20),
+     id INT,
+     dt DATE
+   )
+   PARTITION BY bucket(id, 10), year(dt);
+   ```
 ---
 
 ### 将数据下沉到 Iceberg 表
