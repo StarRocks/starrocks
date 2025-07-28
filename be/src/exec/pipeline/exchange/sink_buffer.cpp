@@ -19,9 +19,11 @@
 #include <chrono>
 #include <mutex>
 #include <string_view>
+#include <thread>
 
 #include "exec/pipeline/schedule/utils.h"
 #include "fmt/core.h"
+#include "runtime/data_stream_mgr.h"
 #include "util/defer_op.h"
 #include "util/time.h"
 #include "util/uid_util.h"
@@ -53,6 +55,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             ctx.num_finished_rpcs = 0;
             ctx.num_in_flight_rpcs = 0;
             ctx.dest_addrs = dest.brpc_server;
+            ctx.pass_through_blocked = false;
 
             PUniqueId finst_id;
             finst_id.set_hi(instance_id.hi);
@@ -108,7 +111,16 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
         auto& instance_id = request.fragment_instance_id;
         auto& context = sink_ctx(instance_id.lo);
 
-        RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { context.buffer.push(request); }));
+        if (request.params->has_use_pass_through() && request.params->use_pass_through()) {
+            RETURN_IF_ERROR(_try_to_send_local(instance_id, [&]() {
+                // Release allocated bytes in current MemTracker, since it would not be released at current MemTracker
+                CurrentThread::current().mem_release(request.physical_bytes);
+                GlobalEnv::GetInstance()->passthrough_mem_tracker()->consume(request.physical_bytes);
+                context.buffer.push(std::move(request));
+            }));
+        } else {
+            RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { context.buffer.push(std::move(request)); }));
+        }
     }
 
     return Status::OK();
@@ -150,7 +162,7 @@ bool SinkBuffer::is_finished() const {
         return false;
     }
 
-    return _num_sending_rpc == 0 && _total_in_flight_rpc == 0;
+    return _num_sending == 0 && _total_in_flight_rpc == 0;
 }
 
 void SinkBuffer::update_profile(RuntimeProfile* profile) {
@@ -220,9 +232,9 @@ void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
         // check how many cancel operations are issued, and show the state of that time.
         VLOG_OPERATOR << fmt::format(
                 "fragment_instance_id {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}, "
-                "_num_sending_rpc {}, chunk is full {}",
+                "_num_sending {}, chunk is full {}",
                 print_id(_fragment_ctx->fragment_instance_id()), _num_uncancelled_sinkers, _is_finishing,
-                _num_remaining_eos, _num_sending_rpc, is_full());
+                _num_remaining_eos, _num_sending, is_full());
     }
 }
 
@@ -255,13 +267,103 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
     }
 }
 
+Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
+    // switch to process tracker
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+    auto& context = sink_ctx(instance_id.lo);
+    auto notify = this->finishing_defer();
+    std::lock_guard guard(context.mutex);
+    DeferOp decrease_defer([this, &context]() {
+        --_num_sending;
+        context.owner_id = {};
+    });
+    ++_num_sending;
+    context.owner_id = std::this_thread::get_id();
+
+    pre_works();
+
+    for (;;) {
+        if (_is_finishing) {
+            return Status::OK();
+        }
+
+        auto& buffer = context.buffer;
+        if (buffer.empty() || context.pass_through_blocked) {
+            return Status::OK();
+        }
+
+        TransmitChunkInfo& request = buffer.front();
+        DeferOp pop_defer([&buffer, mem_tracker = _mem_tracker]() {
+            // The request memory is acquired by ExchangeSinkOperator,
+            // so use the instance_mem_tracker passed from ExchangeSinkOperator to release memory.
+            // This must be invoked before decrease_defer desctructed to avoid sink_buffer and fragment_ctx released.
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+            buffer.pop();
+        });
+
+        if (request.params->eos()) {
+            DeferOp eos_defer([this, &instance_id]() {
+                if (--_num_remaining_eos == 0) {
+                    _is_finishing = true;
+                }
+                sink_ctx(instance_id.lo).num_sinker--;
+            });
+            // Only the last eos is sent to ExchangeSourceOperator.
+            if (context.num_sinker > 1) {
+                if (request.pass_through_chunks->size() == 0) {
+                    continue;
+                }
+                request.params->set_eos(false);
+            } else {
+                // this is the last eos query, set query stats
+                if (auto final_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic(
+                            _delta_bytes_sent.exchange(0))) {
+                    final_stats->to_pb(request.params->mutable_query_statistics());
+                }
+            }
+        }
+
+        auto* closure = new DisposablePassThroughClosure([this, instance_id]() noexcept {
+            auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
+            auto query_ctx_guard = query_ctx->shared_from_this();
+            auto notify = this->defer_notify();
+
+            auto& context = sink_ctx(instance_id.lo);
+            context.pass_through_blocked = false;
+            if (context.owner_id == std::this_thread::get_id()) return;
+            static_cast<void>(_try_to_send_local(instance_id, []() {}));
+        });
+
+        context.pass_through_blocked = true;
+        if (_first_send_time == -1) {
+            _first_send_time = MonotonicNanos();
+        }
+
+        // Decrease memory from pass through before moving chunks to the reciever fragment.
+        GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(request.physical_bytes);
+
+        ::google::protobuf::Closure* done = closure;
+        DCHECK_EQ(request.params->use_pass_through(), true);
+        Status st = request.stream_mgr->transmit_chunk(instance_id, *request.params,
+                                                       std::move(request.pass_through_chunks), &done);
+        if (st.ok() && done != nullptr) {
+            // if the closure was not removed delete it and continue transmitting chunks.
+            done->Run();
+            continue;
+        }
+        return st;
+    }
+    return Status::OK();
+}
+
 Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
     auto& context = sink_ctx(instance_id.lo);
+    auto notify = this->finishing_defer();
     std::lock_guard guard(context.mutex);
     pre_works();
 
-    DeferOp decrease_defer([this]() { --_num_sending_rpc; });
-    ++_num_sending_rpc;
+    DeferOp decrease_defer([this]() { --_num_sending; });
+    ++_num_sending;
 
     for (;;) {
         if (_is_finishing) {
@@ -312,7 +414,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     return;
                 }
                 if (--_num_remaining_eos == 0) {
-                    auto notify = this->defer_notify();
                     _is_finishing = true;
                 }
                 sink_ctx(instance_id.lo).num_sinker--;
@@ -414,8 +515,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
         // so decrease the memory usage of attachment from instance_mem_tracker immediately before sending the request.
-        _mem_tracker->release(request.attachment_physical_bytes);
-        GlobalEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
+        _mem_tracker->release(request.physical_bytes);
+        GlobalEnv::GetInstance()->process_mem_tracker()->consume(request.physical_bytes);
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
