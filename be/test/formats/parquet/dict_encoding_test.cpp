@@ -72,6 +72,7 @@ static Slice unquote(Slice slice) {
 template <LogicalType DICT_TYPE, LogicalType TARGET_TYPE>
 void dict_encoding_test() {
     using DICT_CXX_TYPE = RunTimeCppType<DICT_TYPE>;
+    using TARGET_CXX_TYPE = RunTimeCppType<TARGET_TYPE>;
     faststring fs;
     RleEncoder<DICT_CXX_TYPE> encoder(&fs, 32);
     {
@@ -80,8 +81,8 @@ void dict_encoding_test() {
         }
     }
 
-    DictDecoder<Slice> decoder;
-    FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
+    DictDecoder<TARGET_CXX_TYPE> decoder;
+    FakeDictDecoder<TARGET_TYPE> inner_decoder;
     faststring fs2;
     fs2.resize(fs.length() + 1);
     fs2.data()[0] = 32;
