@@ -47,10 +47,6 @@ public final class ColumnDict extends StatsVersion {
         return dict.size();
     }
 
-    void updateVersion(long version) {
-        this.version = version;
-    }
-
     public String toJson() {
         Gson gson = GsonUtils.GSON;
         // Manually build a JSON object with all fields
