@@ -15,6 +15,7 @@
 #include "types/timestamp_value.h"
 
 #include "runtime/time_types.h"
+#include "util/time.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks {

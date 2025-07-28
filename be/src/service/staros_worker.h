@@ -28,6 +28,7 @@
 #include "fslib/configuration.h"
 #include "fslib/file_system.h"
 #include "starcache/star_cache.h"
+#include "util/time.h"
 #include "worker.pb.h"
 
 namespace starrocks {
