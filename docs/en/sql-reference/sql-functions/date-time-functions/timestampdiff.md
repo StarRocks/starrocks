@@ -25,7 +25,7 @@ BIGINT TIMESTAMPDIFF(unit,DATETIME datetime_expr1, DATETIME datetime_expr2)
 
 ## Return value
 
-Returns an BIGINT value.
+Returns a BIGINT value.
 
 ## Examples
 
