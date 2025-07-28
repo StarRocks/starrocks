@@ -2143,24 +2143,9 @@ public class Config extends ConfigBase {
             "we would use sample statistics instead of full statistics")
     public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
 
-<<<<<<< HEAD
-=======
-    @ConfField(mutable = true)
-    public static boolean statistic_use_meta_statistics = true;
-
-    @ConfField(mutable = true, comment = "collect multi-column combined statistics max column nums")
-    public static int statistics_max_multi_column_combined_num = 10;
-
-    @ConfField(mutable = true, comment = "Whether to allow manual collection of the NDV of array columns")
-    public static boolean enable_manual_collect_array_ndv = false;
-
-    @ConfField(mutable = true, comment = "Whether to allow auto collection of the NDV of array columns")
-    public static boolean enable_auto_collect_array_ndv = false;
-
     @ConfField(mutable = true, comment = "Synchronously load statistics for testing purpose")
     public static boolean enable_sync_statistics_load = false;
 
->>>>>>> 3c3f55d3ba ([BugFix] partition-statistics: load it fully async (#61300))
     /**
      * default bucket size of histogram statistics
      */
