@@ -1309,7 +1309,7 @@ column_name
 | transform_expr(column_name, parameter)
 ```
 
-当前，StarRocks 支持 Apache Iceberg 规范 [transform expr](https://iceberg.apache.org/spec/#partitioning) 中定义的分区转换表达式。这使得 StarRocks 能够基于转换后的列值创建具有隐藏分区的 Iceberg 表。
+当前，StarRocks 支持 Apache Iceberg 规范 [transform expr](https://iceberg.apache.org/spec/#partitioning) 中定义的分区转换表达式。这使得 StarRocks 能够基于转换后的列值创建具有隐藏分区 (Hidden Partition) 的 Iceberg 表。
 
 :::note
 
