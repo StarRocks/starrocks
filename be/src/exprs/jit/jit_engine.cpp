@@ -386,7 +386,12 @@ public:
                 CachePriority::NORMAL);
 
         if (handle != nullptr) {
+            VLOG(10) << "JIT callable cached for " << func_name << ", size: " << value_size << " bytes";
             _cache.release(handle);
+        } else {
+            VLOG(10) << "JIT callable cache for " << func_name << " is full, not cached";
+            GlobalEnv::GetInstance()->jit_cache_mem_tracker()->release(value_size);
+            delete value; // Release the memory if not cached
         }
     }
 
@@ -456,14 +461,14 @@ Status JITEngine::init() {
     if (_initialized) {
         return Status::OK();
     }
-#if BE_TEST
-    _object_cache = std::make_unique<JITObjectCache>(262144);
-    _callable_cache = std::make_unique<JITCallableCache>(262144);
-#else
-    int64_t mem_limit = GlobalEnv::GetInstance()->process_mem_limit();
+
     int64_t jit_lru_object_cache_size = config::jit_lru_object_cache_size;
     int64_t jit_lru_cache_size = config::jit_lru_cache_size;
-
+#if BE_TEST
+    jit_lru_object_cache_size = 16 * 1024 * 1024;
+    jit_lru_cache_size = 16 * 1024 * 1024;
+#else
+    int64_t mem_limit = GlobalEnv::GetInstance()->process_mem_limit();
     if (jit_lru_cache_size <= 0 && jit_lru_object_cache_size <= 0) {
         if (mem_limit < JIT_CACHE_LOWEST_LIMIT) {
             _initialized = true;
@@ -482,11 +487,11 @@ Status JITEngine::init() {
     if (jit_lru_cache_size <= 0) {
         jit_lru_cache_size = std::min<int64_t>((1UL << 22), (int64_t)(mem_limit * 0.01));
     }
+#endif
     LOG(INFO) << "JIT LRU object cache size = " << jit_lru_object_cache_size;
     LOG(INFO) << "JIT LRU cache size = " << jit_lru_cache_size;
     _object_cache = std::make_unique<JITObjectCache>(jit_lru_object_cache_size);
     _callable_cache = std::make_unique<JITCallableCache>(jit_lru_cache_size);
-#endif
     DCHECK(_object_cache != nullptr);
     DCHECK(_callable_cache != nullptr);
     llvm::InitializeNativeTarget();
@@ -514,6 +519,7 @@ StatusOr<JITCallablePtr> JITEngine::_get_jit_callable_or_create(
     auto callable = std::move(result.value());
 
     _callable_cache->populate(expr_name, callable);
+    VLOG(10) << "Created and cached JIT callable for " << expr_name << ", size: " << callable->getSize() << " bytes";
     return callable;
 }
 
