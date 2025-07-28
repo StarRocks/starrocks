@@ -24,7 +24,7 @@ scrape_configs:
 ....
 ```
 
-- `username`: The username used to log into your StarRocks cluster. This user must be granted the `user_admin` role.
+- `username`: The username used to log into your StarRocks cluster. Unless using the root account, the user must be granted both the `user_admin` and `db_admin` roles.
 - `password`: The password used to log into your StarRocks cluster.
 - `'with_materialized_view_metrics'`: The scope of the metrics to collect. Valid values:
   - `'all'`: All metrics relevant to materialized views are collected.
