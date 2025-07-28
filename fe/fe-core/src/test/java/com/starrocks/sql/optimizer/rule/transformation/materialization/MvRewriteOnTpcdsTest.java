@@ -16,11 +16,11 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.planner.MaterializedViewTestBase;
 import com.starrocks.sql.plan.TPCDSPlanTestBase;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class MvRewriteOnTpcdsTest extends MaterializedViewTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TPCDSPlanTestBase.beforeClass();
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");

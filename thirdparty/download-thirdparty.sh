@@ -614,3 +614,15 @@ if [[ -d $TP_SOURCE_DIR/$AZURE_SOURCE ]] ; then
     cd -
     echo "Finished patching $AZURE_SOURCE"
 fi
+
+#patch cctz
+if [[ -d $TP_SOURCE_DIR/$CCTZ_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$CCTZ_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $CCTZ_SOURCE == "cctz-2.3" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/cctz_civil_cache.patch"
+        patch -p1 < "$TP_PATCH_DIR/cctz_02_lookup_offset.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $CCTZ_SOURCE"
+fi

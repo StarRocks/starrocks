@@ -43,12 +43,14 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.platform.commons.util.Preconditions;
 
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ShowMaterializedViewTest {
 
@@ -56,7 +58,7 @@ public class ShowMaterializedViewTest {
     private static ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
@@ -70,26 +72,26 @@ public class ShowMaterializedViewTest {
         ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt(null, "");
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("testDb", stmt.getDb());
+        Assertions.assertEquals("testDb", stmt.getDb());
         checkShowMaterializedViewsStmt(stmt);
 
         stmt = new ShowMaterializedViewsStmt(null, "abc", (String) null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("abc", stmt.getDb());
+        Assertions.assertEquals("abc", stmt.getDb());
         checkShowMaterializedViewsStmt(stmt);
 
         stmt = new ShowMaterializedViewsStmt(null, "abc", "bcd");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("bcd", stmt.getPattern());
-        Assert.assertEquals("abc", stmt.getDb());
+        Assertions.assertEquals("bcd", stmt.getPattern());
+        Assertions.assertEquals("abc", stmt.getDb());
         checkShowMaterializedViewsStmt(stmt);
 
         stmt = (ShowMaterializedViewsStmt) UtFrameUtils.parseStmtWithNewParser(
                 "SHOW MATERIALIZED VIEWS FROM abc where name = 'mv1';", ctx);
         Preconditions.notNull(stmt.toSelectStmt().getOrigStmt(), "stmt's original stmt should not be null");
 
-        Assert.assertEquals("abc", stmt.getDb());
-        Assert.assertEquals(
+        Assertions.assertEquals("abc", stmt.getDb());
+        Assertions.assertEquals(
                 "SELECT information_schema.materialized_views.MATERIALIZED_VIEW_ID AS id, " +
                         "information_schema.materialized_views.TABLE_SCHEMA AS database_name, " +
                         "information_schema.materialized_views.TABLE_NAME AS name, " +
@@ -129,32 +131,34 @@ public class ShowMaterializedViewTest {
 
     private void checkShowMaterializedViewsStmt(ShowMaterializedViewsStmt stmt) {
         Table schemaMVTable = MaterializedViewsSystemTable.create();
-        Assert.assertEquals(schemaMVTable.getBaseSchema().size(), stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals(schemaMVTable.getBaseSchema().size(), stmt.getMetaData().getColumnCount());
 
         List<Column> schemaCols = schemaMVTable.getFullSchema();
         for (int i = 0; i < schemaCols.size(); i++) {
             if (schemaCols.get(i).getName().equalsIgnoreCase("MATERIALIZED_VIEW_ID")) {
-                Assert.assertEquals("id", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("id", stmt.getMetaData().getColumn(i).getName());
             } else if (schemaCols.get(i).getName().equalsIgnoreCase("TABLE_SCHEMA")) {
-                Assert.assertEquals("database_name", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("database_name", stmt.getMetaData().getColumn(i).getName());
             } else if (schemaCols.get(i).getName().equalsIgnoreCase("TABLE_NAME")) {
-                Assert.assertEquals("name", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("name", stmt.getMetaData().getColumn(i).getName());
             } else if (schemaCols.get(i).getName().equalsIgnoreCase("MATERIALIZED_VIEW_DEFINITION")) {
-                Assert.assertEquals("text", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("text", stmt.getMetaData().getColumn(i).getName());
             } else if (schemaCols.get(i).getName().equalsIgnoreCase("TABLE_ROWS")) {
-                Assert.assertEquals("rows", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("rows", stmt.getMetaData().getColumn(i).getName());
             } else {
-                Assert.assertEquals(schemaCols.get(i).getName().toLowerCase(), stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals(schemaCols.get(i).getName().toLowerCase(), stmt.getMetaData().getColumn(i).getName());
             }
         }
     }
 
-    @Test(expected = SemanticException.class)
-    public void testNoDb() throws Exception {
-        ctx = UtFrameUtils.createDefaultCtx();
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt(null, "");
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.fail("No exception throws");
+    @Test
+    public void testNoDb() {
+        assertThrows(SemanticException.class, () -> {
+            ctx = UtFrameUtils.createDefaultCtx();
+            ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt(null, "");
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+            Assertions.fail("No exception throws");
+        });
     }
 
     @Test
@@ -162,21 +166,23 @@ public class ShowMaterializedViewTest {
         ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("default_catalog", "testDb");
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("testDb", stmt.getDb());
-        Assert.assertEquals("default_catalog", stmt.getCatalogName());
+        Assertions.assertEquals("testDb", stmt.getDb());
+        Assertions.assertEquals("default_catalog", stmt.getCatalogName());
         checkShowMaterializedViewsStmt(stmt);
         stmt = (ShowMaterializedViewsStmt) UtFrameUtils.parseStmtWithNewParser(
                 "SHOW MATERIALIZED VIEWS FROM default_catalog.testDb;", ctx);
 
-        Assert.assertEquals("testDb", stmt.getDb());
-        Assert.assertEquals("default_catalog", stmt.getCatalogName());
+        Assertions.assertEquals("testDb", stmt.getDb());
+        Assertions.assertEquals("default_catalog", stmt.getCatalogName());
     }
 
-    @Test(expected = SemanticException.class)
-    public void testUnknownCatalog() throws Exception {
-        ctx = UtFrameUtils.createDefaultCtx();
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("unknown_catalog", "testDb");
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.fail("No exception throws");
+    @Test
+    public void testUnknownCatalog() {
+        assertThrows(SemanticException.class, () -> {
+            ctx = UtFrameUtils.createDefaultCtx();
+            ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("unknown_catalog", "testDb");
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+            Assertions.fail("No exception throws");
+        });
     }
 }

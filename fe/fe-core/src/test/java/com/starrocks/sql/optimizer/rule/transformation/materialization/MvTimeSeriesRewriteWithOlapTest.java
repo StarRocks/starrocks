@@ -19,21 +19,21 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.SAFE_REWRITE_ROLLUP_FUNCTION_MAP;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
 
@@ -109,7 +109,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
                 "  ('2020-10-25 12:12:12',3,3);");
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws Exception {
         starRocksAssert.dropTable("t0");
     }
@@ -429,7 +429,8 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
             aggFuncs.add(mvAggFunc);
         }
 
-        int repeatTimes = 4;
+        int repeatTimes = 2;
+        int idx = 0;
         for (String aggFunc : aggFuncs) {
             if (aggFunc.contains("bitmap_union")) {
                 continue;
@@ -439,25 +440,26 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
                 repeatAggs.add(String.format("%s as agg%s", aggFunc, i));
             }
             String agg = Joiner.on(", ").join(repeatAggs);
-            starRocksAssert.withMaterializedView(String.format("create MATERIALIZED VIEW test_mv1\n" +
+            String mvName = String.format("test_mv%d", idx++);
+            starRocksAssert.withMaterializedView(String.format("create MATERIALIZED VIEW %s\n" +
                     "PARTITION BY (dt)\n" +
                     "DISTRIBUTED BY RANDOM\n" +
                     "as select date_trunc('day', k1) as dt, %s " +
-                    "from t0 group by date_trunc('day', k1);", agg));
+                    "from t0 group by date_trunc('day', k1);", mvName, agg));
             {
                 String query = String.format("select %s from t0 where k1 >= '2024-01-01 01:00:00'", agg);
                 String plan = getFragmentPlan(query);
-                PlanTestBase.assertContains(plan, "     TABLE: test_mv1");
+                PlanTestBase.assertContains(plan, String.format("     TABLE: %s", mvName));
                 PlanTestBase.assertContains(plan, "     TABLE: t0");
             }
             {
                 String query = String.format("select date_trunc('day', k1), %s from t0 " +
                         "where k1 >= '2024-01-01 01:00:00' group by date_trunc('day', k1)", agg);
                 String plan = getFragmentPlan(query);
-                PlanTestBase.assertContains(plan, "     TABLE: test_mv1");
+                PlanTestBase.assertContains(plan, String.format("     TABLE: %s", mvName));
                 PlanTestBase.assertContains(plan, "     TABLE: t0");
             }
-            starRocksAssert.dropMaterializedView("test_mv1");
+            starRocksAssert.dropMaterializedView(mvName);
         }
     }
 

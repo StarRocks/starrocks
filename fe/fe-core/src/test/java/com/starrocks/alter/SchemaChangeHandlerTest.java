@@ -53,18 +53,17 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.utframe.TestWithFeService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.FixMethodOrder;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class SchemaChangeHandlerTest extends TestWithFeService {
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandlerTest.class);
@@ -471,7 +470,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             DDLStmtExecutor.execute(addValColStmt2, connectContext);
         } catch (Exception e) {
             LOG.warn(e.getMessage(), e);
-            Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must not be less than 0"));
+            Assertions.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must not be less than 0"));
         }
 
         try {
@@ -480,7 +479,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             DDLStmtExecutor.execute(addValColStmt3, connectContext);
         } catch (Exception e) {
             LOG.warn(e.getMessage(), e);
-            Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must be integer"));
+            Assertions.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must be integer"));
         }
     }
 
@@ -509,7 +508,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             DDLStmtExecutor.execute(addValColStmt2, connectContext);
         } catch (Exception e) {
             LOG.warn(e.getMessage(), e);
-            Assert.assertTrue(e.getMessage().contains("Column name '__op' is reserved for primary key table"));
+            Assertions.assertTrue(e.getMessage().contains("Column name '__op' is reserved for primary key table"));
         }
 
         try {
@@ -518,7 +517,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             DDLStmtExecutor.execute(addValColStmt3, connectContext);
         } catch (Exception e) {
             LOG.warn(e.getMessage(), e);
-            Assert.assertTrue(e.getMessage().contains("Column name '__row' is reserved for primary key table"));
+            Assertions.assertTrue(e.getMessage().contains("Column name '__row' is reserved for primary key table"));
         }
         Config.allow_system_reserved_names = false;
     }

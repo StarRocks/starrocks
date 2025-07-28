@@ -38,22 +38,22 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ShowFunctionsStmtTest extends DDLTestBase {
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
-
     @Test
-    public void testUnsupportFilter() throws Exception {
+    public void testUnsupportFilter() {
         ctx = UtFrameUtils.createDefaultCtx();
-        expectedEx.expect(AnalysisException.class);
-        expectedEx.expectMessage("Only support like 'function_pattern' syntax.");
+        Throwable exception = assertThrows(AnalysisException.class, () -> {
 
-        String showSQL = "SHOW FULL BUILTIN FUNCTIONS FROM `testDb` where a = 1";
-        ShowFunctionsStmt stmt = (ShowFunctionsStmt) UtFrameUtils.parseStmtWithNewParser(showSQL, ctx);
+            String showSQL = "SHOW FULL BUILTIN FUNCTIONS FROM `testDb` where a = 1";
+            ShowFunctionsStmt stmt = (ShowFunctionsStmt) UtFrameUtils.parseStmtWithNewParser(showSQL, ctx);
+        });
+        assertThat(exception.getMessage(), containsString("Only support like 'function_pattern' syntax."));
     }
 }

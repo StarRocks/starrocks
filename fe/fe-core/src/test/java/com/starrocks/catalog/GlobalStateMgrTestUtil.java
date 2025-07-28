@@ -187,7 +187,7 @@ public class GlobalStateMgrTestUtil {
 
         // index
         MaterializedIndex index = new MaterializedIndex(indexId, IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId + 100, indexId, 0, TStorageMedium.HDD);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId + 100, indexId, TStorageMedium.HDD);
         index.addTablet(tablet, tabletMeta);
 
         tablet.addReplica(replica1);

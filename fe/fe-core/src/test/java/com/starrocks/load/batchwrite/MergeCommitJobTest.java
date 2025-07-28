@@ -32,8 +32,8 @@ import com.starrocks.transaction.TransactionStatus;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -46,14 +46,14 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNotSame;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class MergeCommitJobTest extends BatchWriteTestBase {
 
@@ -65,12 +65,12 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
 
     private MergeCommitJob load;
 
-    @Before
+    @BeforeEach
     public void setup() throws Exception {
         executor = new TestThreadPoolExecutor();
         txnStateDispatcher = new TxnStateDispatcher(executor);
         parallel = 4;
-        assertTrue("Number nodes " + allNodes.size(), parallel < allNodes.size());
+        assertTrue(parallel < allNodes.size(), "Number nodes " + allNodes.size());
         Map<String, String> map = new HashMap<>();
         map.put(StreamLoadHttpHeader.HTTP_FORMAT, "json");
         map.put(StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE, "true");

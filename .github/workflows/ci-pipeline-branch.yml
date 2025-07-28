@@ -7,17 +7,15 @@ on:
       - synchronize
 
     branches:
-      - 'branch*'
+      - "branch*"
 
 concurrency:
   group: ${{ github.event.number }}
   cancel-in-progress: true
 
-
 jobs:
-
   basic-checker:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     name: RUN CHECKER
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -87,7 +85,7 @@ jobs:
           git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
           git fetch upstream
           git merge upstream/${{ github.event.pull_request.base.ref }} --no-edit
-          
+
       - name: Branch Access Check
         id: branch_access_check
         if: steps.checkout_pr.outcome =='success'
@@ -102,7 +100,7 @@ jobs:
           elif [[ "${status}" == "bugfix-only" ]] && [[ "${PR_TITLE}" == *"[Feature]"* || "${PR_TITLE}" == *"[Enhancement]"* ]]; then
             comment="⚠️ Branch in bugfix-only state, [Feature] or [Enhancement] PRs are not allowed!"
           elif [[ "${status}" == "code-freeze" ]] && [[ "${PR_TITLE}" != *"[Bugfix]"* || "${PR_TITLE}" != *"CVE"* ]]; then
-            comment="⚠️ Branch in code-freeze state, only PRs that fix CVE CVE are allowed!"
+            comment="⚠️ Branch in code-freeze state, only PRs that fix CVE are allowed!"
           else
             exit 0
           fi
@@ -197,7 +195,7 @@ jobs:
 
   thirdparty-update:
     runs-on: [self-hosted, normal]
-    needs: [ be-checker, clang-format ]
+    needs: [be-checker, clang-format]
     name: Thirdparty Update
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -207,7 +205,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        linux: [ centos7, ubuntu ]
+        linux: [centos7, ubuntu]
     steps:
       - name: clean
         run: |
@@ -242,7 +240,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   thirdparty-info:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     needs:
       - thirdparty-update
     name: Thirdparty Info
@@ -274,7 +272,7 @@ jobs:
 
   be-ut:
     runs-on: [self-hosted, normal]
-    needs: [ be-checker, thirdparty-info ]
+    needs: [be-checker, thirdparty-info]
     timeout-minutes: 180
     name: BE UT
     env:
@@ -401,11 +399,11 @@ jobs:
 
       - name: Run java checkstyle
         if: ${{ steps.java-file.outputs.java == 'true' }}
-        uses: dbelyaev/action-checkstyle@v1.5.6
+        uses: dbelyaev/action-checkstyle@v1.15.0
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
-          reporter: 'github-pr-check'
+          reporter: "github-pr-check"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
@@ -467,7 +465,7 @@ jobs:
   Teardown:
     runs-on: [self-hosted, normal]
     name: Teardown
-    needs: [ fe-ut, be-ut ]
+    needs: [fe-ut, be-ut]
     if: always()
     env:
       PR_NUMBER: ${{ github.event.number }}

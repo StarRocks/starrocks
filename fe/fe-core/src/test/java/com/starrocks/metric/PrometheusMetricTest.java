@@ -17,8 +17,8 @@ package com.starrocks.metric;
 import io.prometheus.metrics.model.snapshots.CounterSnapshot;
 import io.prometheus.metrics.model.snapshots.GaugeSnapshot;
 import io.prometheus.metrics.model.snapshots.MetricMetadata;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class PrometheusMetricTest {
     @Test
@@ -28,7 +28,7 @@ public class PrometheusMetricTest {
         GaugeSnapshot.GaugeDataPointSnapshot s2 = GaugeSnapshot.GaugeDataPointSnapshot.builder().value(1.0).build();
         PrometheusMetric m1 = PrometheusMetric.create(data, s1);
         PrometheusMetric m2 = PrometheusMetric.create(data, s2);
-        Assert.assertEquals(m1.getType(), Metric.MetricType.COUNTER);
-        Assert.assertEquals(m2.getType(), Metric.MetricType.GAUGE);
+        Assertions.assertEquals(m1.getType(), Metric.MetricType.COUNTER);
+        Assertions.assertEquals(m2.getType(), Metric.MetricType.GAUGE);
     }
 }

@@ -1371,6 +1371,7 @@ public class AnalyzerUtils {
 
     public static AddPartitionClause getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
                                                                               PartitionDesc partitionDesc,
+                                                                              DistributionDesc distributionDesc,
                                                                               List<List<String>> partitionValues,
                                                                               boolean isTemp,
                                                                               String partitionNamePrefix)
@@ -1380,7 +1381,7 @@ public class AnalyzerUtils {
             PartitionMeasure measure = checkAndGetPartitionMeasure(expressionPartitionDesc.getExpr());
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    (ExpressionRangePartitionInfo) partitionInfo);
+                    distributionDesc, (ExpressionRangePartitionInfo) partitionInfo);
         } else {
             throw new AnalysisException("Unsupported partition type " + partitionDesc.getType());
         }
@@ -1401,7 +1402,7 @@ public class AnalyzerUtils {
             Expr expr = partitionExprs.get(0);
             PartitionMeasure measure = checkAndGetPartitionMeasure(expr);
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    expressionRangePartitionInfo);
+                    null, expressionRangePartitionInfo);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
             DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
@@ -1435,14 +1436,7 @@ public class AnalyzerUtils {
                 if (!partitionColNames.contains(partitionName)) {
                     List<List<String>> partitionItems = Collections.singletonList(partitionValue);
                     PListCell cell = new PListCell(partitionItems);
-                    // If the partition name already exists and their partition values are different, change the partition name.
-                    if (tablePartitions.containsKey(partitionName) && !tablePartitions.get(partitionName).equals(cell)) {
-                        partitionName = calculateUniquePartitionName(partitionName, tablePartitions);
-                        if (tablePartitions.containsKey(partitionName)) {
-                            throw new AnalysisException(String.format("partition name %s already exists in table " +
-                                    "%s.", partitionName, olapTable.getName()));
-                        }
-                    }
+                    partitionName = calculateUniquePartitionName(partitionName, cell, tablePartitions);
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
                             partitionName, partitionItems, partitionProperties);
                     multiItemListPartitionDesc.setSystem(true);
@@ -1465,19 +1459,21 @@ public class AnalyzerUtils {
     /**
      * Calculate the unique partition name for list partition.
      */
-    private static String calculateUniquePartitionName(String partitionName,
-                                                       Map<String, PListCell> tablePartitions) {
-        // ensure partition name is unique with case-insensitive
-        int diff = partitionName.hashCode();
-        String newPartitionName = partitionName + "_" + Integer.toHexString(diff);
-        if (tablePartitions.containsKey(newPartitionName)) {
-            int i = 0;
-            do {
-                diff += 1;
-                newPartitionName = partitionName + "_" + Integer.toHexString(diff);
-            } while (i++ < 100 && tablePartitions.containsKey(newPartitionName));
+    private static String calculateUniquePartitionName(String partitionName, PListCell cell,
+                                                       Map<String, PListCell> tablePartitions) throws AnalysisException {
+        String orignialPartitionName = partitionName;
+        int i = 0;
+        // If the partition name already exists and their partition values are different, change the partition name.
+        while (tablePartitions.containsKey(partitionName) && !tablePartitions.get(partitionName).equals(cell)) {
+            // ensure partition name is unique with case-insensitive
+            int diff = orignialPartitionName.hashCode();
+            partitionName = orignialPartitionName + "_" + Integer.toHexString(diff + i);
+            if (++i > 100) {
+                // throw exception
+                throw new AnalysisException("Failed to calculate unique partition name after multiple attempts.");
+            }
         }
-        return newPartitionName;
+        return partitionName;
     }
 
     @VisibleForTesting
@@ -1508,14 +1504,16 @@ public class AnalyzerUtils {
             boolean isTemp,
             String partitionPrefix,
             PartitionMeasure measure,
+            DistributionDesc distributionDesc,
             ExpressionRangePartitionInfo expressionRangePartitionInfo) throws AnalysisException {
         String granularity = measure.getGranularity();
         long interval = measure.getInterval();
         Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())
                 .get(0).getType();
         Short replicationNum = olapTable.getTableProperty().getReplicationNum();
-        DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
-                .toDistributionDesc(olapTable.getIdToColumn());
+        if (distributionDesc == null) {
+            distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc(olapTable.getIdToColumn());
+        }
         Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
         List<PartitionDesc> partitionDescs = Lists.newArrayList();

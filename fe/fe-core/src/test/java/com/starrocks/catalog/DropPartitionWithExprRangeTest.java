@@ -25,10 +25,10 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -39,7 +39,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
     private static String R2;
     private static List<String> RANGE_TABLES;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -80,7 +80,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
         RANGE_TABLES = ImmutableList.of(R1, R2);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws Exception {
     }
 
@@ -107,37 +107,37 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
         starRocksAssert.withTable(R1, (obj) -> {
             String tableName = (String) obj;
             OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
-            Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
+            Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
 
             {
                 String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
                         "WHERE dt >= current_date();", tableName);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
             }
             {
                 String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
                         "WHERE dt >= '2022-03-01';", tableName);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(3, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
             }
             {
                 String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
                         "WHERE dt > '2022-02-02';", tableName);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(3, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
             }
             {
                 String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
                         "WHERE dt >= '2022-01-02';", tableName);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(2, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(2, olapTable.getVisiblePartitions().size());
             }
             {
                 String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
                         "WHERE dt <= current_date();", tableName);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(0, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(0, olapTable.getVisiblePartitions().size());
             }
         });
     }
@@ -148,37 +148,37 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
             String tableName = (String) obj;
             withTablePartitions(tableName);
             OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
-            Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
+            Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
 
             {
                 String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
                         "WHERE dt >= current_date();", tableName);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
             }
             {
                 String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
                         "WHERE dt >= '2024-01-04';", tableName);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(3, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
             }
             {
                 String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
                         "WHERE dt > '2024-01-04';", tableName);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(3, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
             }
             {
                 String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
                         "WHERE dt >= '2024-01-03';", tableName);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(2, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(2, olapTable.getVisiblePartitions().size());
             }
             {
                 String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
                         "WHERE dt <= current_date();", tableName);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(0, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(0, olapTable.getVisiblePartitions().size());
             }
         });
     }
@@ -189,7 +189,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
             String tableName = (String) obj;
             withTablePartitionsV2(tableName);
             OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
-            Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
+            Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
 
             {
                 String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
@@ -198,7 +198,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                         "interval 1 day)", tableName);
                 System.out.println(dropPartitionSql);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
             }
 
             {
@@ -206,7 +206,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                         "WHERE date_trunc('day', dt) <= date_sub('2024-02-01', 2)", tableName);
                 System.out.println(dropPartitionSql);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(3, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
             }
 
             {
@@ -215,7 +215,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                         "dt != (date_trunc(\'month\', dt) + interval 1 month - interval 1 day)", tableName);
                 System.out.println(dropPartitionSql);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(3, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
             }
 
             {
@@ -224,7 +224,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                         "dt <= (date_trunc(\'month\', dt) + interval 1 month - interval 1 day)", tableName);
                 System.out.println(dropPartitionSql);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(3, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
             }
 
             {
@@ -234,7 +234,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                         "dt != '2024-01-31'", tableName);
                 System.out.println(dropPartitionSql);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assert.assertEquals(2, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(2, olapTable.getVisiblePartitions().size());
             }
         });
     }
@@ -259,10 +259,10 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                                     {
                                         // all partitions are expired, no need to create partitions for mv
                                         PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
-                                        Assert.assertEquals(0, mv.getVisiblePartitions().size());
-                                        Assert.assertTrue(processor.getNextTaskRun() == null);
+                                        Assertions.assertEquals(0, mv.getVisiblePartitions().size());
+                                        Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
-                                        Assert.assertTrue(execPlan == null);
+                                        Assertions.assertTrue(execPlan == null);
                                     }
 
                                     {
@@ -277,11 +277,11 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                                                 now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
                                                 true);
                                         PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
-                                        Assert.assertTrue(processor != null);
-                                        Assert.assertTrue(processor.getNextTaskRun() == null);
-                                        Assert.assertEquals(2, mv.getVisiblePartitions().size());
+                                        Assertions.assertTrue(processor != null);
+                                        Assertions.assertTrue(processor.getNextTaskRun() == null);
+                                        Assertions.assertEquals(2, mv.getVisiblePartitions().size());
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
-                                        Assert.assertTrue(execPlan != null);
+                                        Assertions.assertTrue(execPlan != null);
                                         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);
                                         PlanTestBase.assertContains(plan, "     PREAGGREGATION: ON\n" +
                                                 "     partitions=2/6");
@@ -310,10 +310,10 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                                     {
                                         // all partitions are expired, no need to create partitions for mv
                                         PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
-                                        Assert.assertEquals(4, mv.getVisiblePartitions().size());
-                                        Assert.assertTrue(processor.getNextTaskRun() == null);
+                                        Assertions.assertEquals(4, mv.getVisiblePartitions().size());
+                                        Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
-                                        Assert.assertTrue(execPlan == null);
+                                        Assertions.assertTrue(execPlan == null);
                                     }
 
                                     // alter mv ttl condition
@@ -325,10 +325,10 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                                     {
                                         // all partitions are expired, no need to create partitions for mv
                                         PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
-                                        Assert.assertEquals(4, mv.getVisiblePartitions().size());
-                                        Assert.assertTrue(processor.getNextTaskRun() == null);
+                                        Assertions.assertEquals(4, mv.getVisiblePartitions().size());
+                                        Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
-                                        Assert.assertTrue(execPlan == null);
+                                        Assertions.assertTrue(execPlan == null);
                                     }
 
                                     {
@@ -343,11 +343,11 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                                                 now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
                                                 true);
                                         PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
-                                        Assert.assertTrue(processor != null);
-                                        Assert.assertTrue(processor.getNextTaskRun() == null);
-                                        Assert.assertEquals(6, mv.getVisiblePartitions().size());
+                                        Assertions.assertTrue(processor != null);
+                                        Assertions.assertTrue(processor.getNextTaskRun() == null);
+                                        Assertions.assertEquals(6, mv.getVisiblePartitions().size());
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
-                                        Assert.assertTrue(execPlan != null);
+                                        Assertions.assertTrue(execPlan != null);
                                         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);
                                         PlanTestBase.assertContains(plan, "     PREAGGREGATION: ON\n" +
                                                 "     partitions=2/6");
@@ -358,7 +358,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                                         DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
                                                 .getDynamicPartitionScheduler();
                                         scheduler.runOnceForTest();
-                                        Assert.assertEquals(2, mv.getVisiblePartitions().size());
+                                        Assertions.assertEquals(2, mv.getVisiblePartitions().size());
                                     }
                                 });
                     });

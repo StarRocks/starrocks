@@ -258,6 +258,11 @@ statement
     | delBackendBlackListStatement
     | showBackendBlackListStatement
 
+    // Compute Node BlackList
+    | addComputeNodeBlackListStatement
+    | delComputeNodeBlackListStatement
+    | showComputeNodeBlackListStatement
+
     // Data Cache management statement
     | createDataCacheRuleStatement
     | showDataCacheRulesStatement
@@ -674,7 +679,7 @@ taskClause
     ;
 
 dropTaskStatement
-    : DROP TASK qualifiedName FORCE?
+    : DROP TASK (IF EXISTS)? qualifiedName FORCE?
     ;
 
 taskScheduleDesc
@@ -1387,7 +1392,7 @@ dropHistogramStatement
 createAnalyzeStatement
     : CREATE ANALYZE (FULL | SAMPLE)? ALL properties?
     | CREATE ANALYZE (FULL | SAMPLE)? DATABASE db=identifier properties?
-    | CREATE ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName (',' qualifiedName)* ')')? properties?
+    | CREATE ANALYZE (FULL | SAMPLE)? (IF NOT EXISTS)? TABLE qualifiedName ('(' qualifiedName (',' qualifiedName)* ')')? properties?
     | CREATE histogramStatement
     ;
 
@@ -1410,6 +1415,7 @@ showHistogramMetaStatement
 
 killAnalyzeStatement
     : KILL ANALYZE INTEGER_VALUE
+    | KILL ALL PENDING ANALYZE
     ;
 
 // ----------------------------------------- Analyze Profile Statement -------------------------------------------------
@@ -1969,6 +1975,20 @@ delBackendBlackListStatement
 
 showBackendBlackListStatement
     : SHOW BACKEND BLACKLIST
+    ;
+
+// ------------------------------------ Compute Node BlackList Statement ---------------------------------------------------
+
+addComputeNodeBlackListStatement
+    : ADD COMPUTE NODE BLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+delComputeNodeBlackListStatement
+    : DELETE COMPUTE NODE BLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+showComputeNodeBlackListStatement
+    : SHOW COMPUTE NODE BLACKLIST
     ;
 
 // -------------------------------------- DataCache Management Statement --------------------------------------------

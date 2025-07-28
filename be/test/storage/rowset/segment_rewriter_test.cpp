@@ -52,10 +52,7 @@ protected:
         ASSERT_OK(_fs->create_dir_recursive(kSegmentDir));
     }
 
-    void TearDown() override {
-        ASSERT_TRUE(fs::remove_all(kSegmentDir).ok());
-        StoragePageCache::instance()->prune();
-    }
+    void TearDown() override { ASSERT_TRUE(fs::remove_all(kSegmentDir).ok()); }
 
     const std::string kSegmentDir = "./segment_rewriter_test";
 

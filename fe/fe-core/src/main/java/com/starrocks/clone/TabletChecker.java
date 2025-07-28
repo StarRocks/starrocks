@@ -62,7 +62,6 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -203,9 +202,6 @@ public class TabletChecker extends FrontendDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
-        if (RunMode.isSharedDataMode()) {
-            return;
-        }
         int pendingNum = tabletScheduler.getPendingNum();
         int runningNum = tabletScheduler.getRunningNum();
         if (pendingNum > Config.tablet_sched_max_scheduling_tablets

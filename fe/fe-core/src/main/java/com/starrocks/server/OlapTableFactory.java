@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageType;
@@ -376,6 +377,21 @@ public class OlapTableFactory implements AbstractTableFactory {
                             "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
                 }
                 table.setPersistentIndexType(persistentIndexType);
+            }
+
+            if (table.isCloudNativeTable()) {
+                TCompactionStrategy compactionStrategy;
+                try {
+                    compactionStrategy = PropertyAnalyzer.analyzecompactionStrategy(properties);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+                // REAL_TIME strategy only work for primary key table right now, so set compaction strategy to DEFAULT
+                // if table is not primary key table.
+                if (table.getKeysType() != KeysType.PRIMARY_KEYS && compactionStrategy != TCompactionStrategy.DEFAULT) {
+                    throw new DdlException("Only default compaction strategy is allowed for non-pk table.");
+                }
+                table.setCompactionStrategy(compactionStrategy);
             }
 
             try {

@@ -21,9 +21,9 @@ import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -35,7 +35,7 @@ public class RenameMaterializedViewLogTest {
 
     private String fileName = "./RenameMaterializedViewLogTest";
 
-    @After
+    @AfterEach
     public void tearDownDrop() {
         File file = new File(fileName);
         file.delete();
@@ -59,9 +59,9 @@ public class RenameMaterializedViewLogTest {
         DataInputStream in = new DataInputStream(Files.newInputStream(file.toPath()));
         RenameMaterializedViewLog readRenameLog = RenameMaterializedViewLog.read(in);
 
-        Assert.assertEquals(readRenameLog.getNewMaterializedViewName(), newMvName);
-        Assert.assertEquals(readRenameLog.getId(), 1000);
-        Assert.assertEquals(readRenameLog.getDbId(), 100);
+        Assertions.assertEquals(readRenameLog.getNewMaterializedViewName(), newMvName);
+        Assertions.assertEquals(readRenameLog.getId(), 1000);
+        Assertions.assertEquals(readRenameLog.getDbId(), 100);
         in.close();
         new Expectations() {
             {

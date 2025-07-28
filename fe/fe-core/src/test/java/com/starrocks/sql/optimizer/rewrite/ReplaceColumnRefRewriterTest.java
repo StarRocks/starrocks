@@ -22,8 +22,8 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
@@ -40,9 +40,9 @@ public class ReplaceColumnRefRewriterTest {
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(operatorMap, true);
         ColumnRefOperator source = createColumnRef(1);
         ScalarOperator target = rewriter.rewrite(source);
-        Assert.assertTrue(target instanceof ColumnRefOperator);
+        Assertions.assertTrue(target instanceof ColumnRefOperator);
         ColumnRefOperator rewritten = (ColumnRefOperator) target;
-        Assert.assertEquals(3, rewritten.getId());
+        Assertions.assertEquals(3, rewritten.getId());
     }
 
     @Test
@@ -61,18 +61,18 @@ public class ReplaceColumnRefRewriterTest {
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(operatorMap, true);
         ColumnRefOperator source = createColumnRef(1);
         ScalarOperator target = rewriter.rewrite(source);
-        Assert.assertTrue(target instanceof BinaryPredicateOperator);
+        Assertions.assertTrue(target instanceof BinaryPredicateOperator);
         BinaryPredicateOperator rewritten = (BinaryPredicateOperator) target;
 
         BinaryPredicateOperator result = new BinaryPredicateOperator(BinaryType.EQ, columnRef3,
                 ConstantOperator.createInt(1));
-        Assert.assertEquals(result, rewritten);
+        Assertions.assertEquals(result, rewritten);
 
         Map<ColumnRefOperator, ScalarOperator> operatorMap2 = Maps.newHashMap();
         operatorMap.put(columnRef1, columnRef1);
         ReplaceColumnRefRewriter rewriter2 = new ReplaceColumnRefRewriter(operatorMap2, true);
         ScalarOperator result2 = rewriter2.rewrite(columnRef1);
-        Assert.assertEquals(columnRef1, result2);
+        Assertions.assertEquals(columnRef1, result2);
     }
 
     ColumnRefOperator createColumnRef(int id) {

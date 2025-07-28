@@ -63,15 +63,16 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SystemInfoServiceTest {
 
@@ -94,7 +95,7 @@ public class SystemInfoServiceTest {
 
     private long backendId = 10000L;
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         WarehouseManager warehouseManager = new WarehouseManager();
         warehouseManager.initDefaultWarehouse();
@@ -225,16 +226,20 @@ public class SystemInfoServiceTest {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropAllBackend();
     }
 
-    @Test(expected = SemanticException.class)
-    public void validHostAndPortTest1() throws Exception {
-        createHostAndPort(1);
-        systemInfoService.validateHostAndPort(hostPort, false);
+    @Test
+    public void validHostAndPortTest1() {
+        assertThrows(SemanticException.class, () -> {
+            createHostAndPort(1);
+            systemInfoService.validateHostAndPort(hostPort, false);
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void validHostAndPortTest3() throws Exception {
-        createHostAndPort(3);
-        systemInfoService.validateHostAndPort(hostPort, false);
+    @Test
+    public void validHostAndPortTest3() {
+        assertThrows(SemanticException.class, () -> {
+            createHostAndPort(3);
+            systemInfoService.validateHostAndPort(hostPort, false);
+        });
     }
 
     @Test
@@ -260,28 +265,28 @@ public class SystemInfoServiceTest {
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt);
         } catch (DdlException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("already exists"));
+            Assertions.assertTrue(e.getMessage().contains("already exists"));
         }
 
-        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId));
-        Assert.assertNotNull(
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId));
+        Assertions.assertNotNull(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendWithHeartbeatPort("192.168.0.1", 1234));
 
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber() == 1);
-        Assert.assertTrue(
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber() == 1);
+        Assertions.assertTrue(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false).get(0) == backendId);
 
-        Assert.assertTrue(
+        Assertions.assertTrue(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendReportVersion(backendId) == 0L);
 
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateBackendReportVersion(backendId, 2L, 20000L);
-        Assert.assertTrue(
+        Assertions.assertTrue(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendReportVersion(backendId) == 2L);
     }
 
@@ -304,16 +309,16 @@ public class SystemInfoServiceTest {
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt);
         } catch (DdlException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
-        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                 getComputeNodeWithHeartbeatPort("192.168.0.1", 1234));
 
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("Compute node already exists with same host"));
+            Assertions.assertTrue(e.getMessage().contains("Compute node already exists with same host"));
         }
     }
 
@@ -344,13 +349,13 @@ public class SystemInfoServiceTest {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackends(dropStmt);
         } catch (DdlException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackends(dropStmt);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("does not exist"));
+            Assertions.assertTrue(e.getMessage().contains("does not exist"));
         }
 
         new MockUp<RunMode>() {
@@ -398,14 +403,14 @@ public class SystemInfoServiceTest {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackends(dropStmt2);
         } catch (DdlException e) {
             e.printStackTrace();
-            Assert.assertTrue(e.getMessage()
+            Assertions.assertTrue(e.getMessage()
                     .contains("starletPort has not been updated by heartbeat from this backend"));
         }
 
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackends(dropStmt2);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("does not exist"));
+            Assertions.assertTrue(e.getMessage().contains("does not exist"));
         }
     }
 
@@ -428,15 +433,15 @@ public class SystemInfoServiceTest {
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt);
         } catch (DdlException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
-        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                 getComputeNodeWithHeartbeatPort("192.168.0.1", 1234));
 
         List<Long> longList = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector()
                 .seqChooseComputeNodes(1, false, false);
-        Assert.assertEquals(1, longList.size());
+        Assertions.assertEquals(1, longList.size());
         ComputeNode computeNode = new ComputeNode();
         computeNode.setHost("192.168.0.1");
         computeNode.setHttpPort(9030);
@@ -444,13 +449,13 @@ public class SystemInfoServiceTest {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(computeNode);
         List<Long> computeNods = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector()
                 .seqChooseComputeNodes(1, true, false);
-        Assert.assertEquals(1, computeNods.size());
+        Assertions.assertEquals(1, computeNods.size());
 
         // test seqChooseBackendOrComputeId func
         Exception exception = Assertions.assertThrows(StarRocksException.class, () -> {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
         });
-        Assert.assertTrue(exception.getMessage().contains("No backend alive."));
+        Assertions.assertTrue(exception.getMessage().contains("No backend alive."));
 
         new MockUp<RunMode>() {
             @Mock
@@ -466,10 +471,9 @@ public class SystemInfoServiceTest {
             }
         };
 
-        exception = Assert.assertThrows(StarRocksException.class, () -> {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
-        });
-        Assert.assertTrue(exception.getMessage().contains("No backend or compute node alive."));
+        exception = Assertions.assertThrows(StarRocksException.class, () ->
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId());
+        Assertions.assertTrue(exception.getMessage().contains("No backend or compute node alive."));
     }
 
     @Test
@@ -480,7 +484,7 @@ public class SystemInfoServiceTest {
             systemInfoService.addBackend(be);
             be.setDecommissioned(true);
         }
-        Assert.assertTrue(systemInfoService.getDecommissionedBackendIds().size() == 100);
+        Assertions.assertTrue(systemInfoService.getDecommissionedBackendIds().size() == 100);
     }
 
 }

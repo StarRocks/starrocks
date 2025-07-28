@@ -90,18 +90,27 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return Status::OK();
         });
         _config_callback.emplace("storage_page_cache_limit", [&]() -> Status {
-            ASSIGN_OR_RETURN(int64_t cache_limit, DataCache::GetInstance()->get_storage_page_cache_limit());
-            cache_limit = DataCache::GetInstance()->check_storage_page_cache_limit(cache_limit);
-            StoragePageCache::instance()->set_capacity(cache_limit);
+            StoragePageCache* cache = DataCache::GetInstance()->page_cache();
+            if (cache == nullptr || !cache->is_initialized()) {
+                return Status::InternalError("Page cache is not initialized");
+            }
+
+            ASSIGN_OR_RETURN(int64_t cache_limit, DataCache::GetInstance()->get_datacache_limit());
+            cache_limit = DataCache::GetInstance()->check_datacache_limit(cache_limit);
+            cache->set_capacity(cache_limit);
             return Status::OK();
         });
         _config_callback.emplace("disable_storage_page_cache", [&]() -> Status {
+            StoragePageCache* cache = DataCache::GetInstance()->page_cache();
+            if (cache == nullptr || !cache->is_initialized()) {
+                return Status::InternalError("Page cache is not initialized");
+            }
             if (config::disable_storage_page_cache) {
-                StoragePageCache::instance()->set_capacity(0);
+                cache->set_capacity(0);
             } else {
-                ASSIGN_OR_RETURN(int64_t cache_limit, DataCache::GetInstance()->get_storage_page_cache_limit());
-                cache_limit = DataCache::GetInstance()->check_storage_page_cache_limit(cache_limit);
-                StoragePageCache::instance()->set_capacity(cache_limit);
+                ASSIGN_OR_RETURN(int64_t cache_limit, DataCache::GetInstance()->get_datacache_limit());
+                cache_limit = DataCache::GetInstance()->check_datacache_limit(cache_limit);
+                cache->set_capacity(cache_limit);
             }
             return Status::OK();
         });

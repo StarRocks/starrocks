@@ -413,11 +413,11 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(summary);
     }
 
-    private List<String> getAllPulsarPartitions() throws StarRocksException {
+    public List<String> getAllPulsarPartitions() throws StarRocksException {
         // Get custom properties like tokens
         convertCustomProperties(false);
         return PulsarUtil.getAllPulsarPartitions(serviceUrl, topic,
-                subscription, ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
+                subscription, ImmutableMap.copyOf(convertedCustomProperties), computeResource);
     }
 
     public static PulsarRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws StarRocksException {

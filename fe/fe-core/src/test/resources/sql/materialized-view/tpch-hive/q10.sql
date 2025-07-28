@@ -33,9 +33,22 @@ order by
 [result]
 TOP-N (order by [[39: sum DESC NULLS LAST]])
     TOP-N (order by [[39: sum DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{39: sum=sum(39: sum)}] group by [[1: c_custkey, 2: c_name, 6: c_acctbal, 5: c_phone, 35: n_name, 3: c_address, 8: c_comment]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{142: sum=sum(142: sum)}] group by [[1: c_custkey, 2: c_name, 6: c_acctbal, 5: c_phone, 35: n_name, 3: c_address, 8: c_comment]] having [null]
             EXCHANGE SHUFFLE[1, 2, 6, 5, 35, 3, 8]
-                AGGREGATE ([LOCAL] aggregate [{39: sum=sum(38: expr)}] group by [[1: c_custkey, 2: c_name, 6: c_acctbal, 5: c_phone, 35: n_name, 3: c_address, 8: c_comment]] having [null]
-                    SCAN (mv[lineitem_mv] columns[60: c_address, 61: c_acctbal, 62: c_comment, 64: c_name, 66: c_phone, 74: l_returnflag, 79: o_custkey, 80: o_orderdate, 93: l_saleprice, 99: n_name2] predicate[80: o_orderdate >= 1994-05-01 AND 80: o_orderdate < 1994-08-01 AND 74: l_returnflag = R])
+                AGGREGATE ([LOCAL] aggregate [{142: sum=sum(140: sum)}] group by [[1: c_custkey, 2: c_name, 6: c_acctbal, 5: c_phone, 35: n_name, 3: c_address, 8: c_comment]] having [null]
+                    INNER JOIN (join-predicate [4: c_nationkey = 34: n_nationkey] post-join-predicate [null])
+                        INNER JOIN (join-predicate [1: c_custkey = 10: o_custkey] post-join-predicate [null])
+                            EXCHANGE SHUFFLE[1]
+                                HIVE SCAN (columns{1,2,3,4,5,6,8} predicate[1: c_custkey IS NOT NULL])
+                            EXCHANGE SHUFFLE[10]
+                                INNER JOIN (join-predicate [9: o_orderkey = 18: l_orderkey] post-join-predicate [null])
+                                    HIVE SCAN (columns{9,10,13} predicate[13: o_orderdate >= 1994-05-01 AND 13: o_orderdate < 1994-08-01])
+                                    EXCHANGE BROADCAST
+                                        AGGREGATE ([GLOBAL] aggregate [{141: sum=sum(141: sum)}] group by [[116: l_orderkey]] having [null]
+                                            EXCHANGE SHUFFLE[116]
+                                                AGGREGATE ([LOCAL] aggregate [{141: sum=sum(126: sum_disc_price)}] group by [[116: l_orderkey]] having [null]
+                                                    SCAN (mv[lineitem_agg_mv1] columns[116: l_orderkey, 118: l_returnflag, 126: sum_disc_price] predicate[118: l_returnflag = R])
+                        EXCHANGE BROADCAST
+                            HIVE SCAN (columns{34,35} predicate[34: n_nationkey IS NOT NULL])
 [end]
 

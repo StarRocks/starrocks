@@ -48,9 +48,9 @@ import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -65,7 +65,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.spy;
 
 public class ExplicitTxnTest {
-    @BeforeClass
+    @BeforeAll
     public static void init() throws DdlException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         MetricRepo.init();
@@ -128,8 +128,8 @@ public class ExplicitTxnTest {
         ConnectProcessor processor = new ConnectProcessor(context);
         processor.processOnce();
 
-        Assert.assertTrue(context.getState().isError());
-        Assert.assertEquals(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT, context.getState().getErrorCode());
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertEquals(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT, context.getState().getErrorCode());
 
         serializer.reset();
         serializer.writeInt1(3);
@@ -150,8 +150,8 @@ public class ExplicitTxnTest {
         processor = new ConnectProcessor(context);
         processor.processOnce();
 
-        Assert.assertTrue(context.getState().isError());
-        Assert.assertEquals(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT, context.getState().getErrorCode());
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertEquals(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT, context.getState().getErrorCode());
     }
 
     @Test
@@ -209,12 +209,12 @@ public class ExplicitTxnTest {
         Analyzer.analyze(stmt, context);
 
         TransactionStmtExecutor.loadData(database, olapTable, new ExecPlan(), (DmlStmt) stmt, stmt.getOrigStmt(), context);
-        Assert.assertFalse(context.getState().isError());
+        Assertions.assertFalse(context.getState().isError());
         try {
             TransactionStmtExecutor.loadData(database, olapTable, new ExecPlan(), (DmlStmt) stmt, stmt.getOrigStmt(), context);
-            Assert.fail();
+            Assertions.fail();
         } catch (ErrorReportException e) {
-            Assert.assertEquals(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE, e.getErrorCode());
+            Assertions.assertEquals(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE, e.getErrorCode());
         }
     }
 
@@ -279,7 +279,7 @@ public class ExplicitTxnTest {
         String label = explicitTxnState.getTransactionState().getLabel();
         LoadMgr loadMgr = GlobalStateMgr.getCurrentState().getLoadMgr();
         LoadJob loadJob = loadMgr.getLoadJobs(label).get(0);
-        Assert.assertEquals(JobState.CANCELLED, loadJob.getState());
+        Assertions.assertEquals(JobState.CANCELLED, loadJob.getState());
     }
 
     @Test
@@ -301,8 +301,8 @@ public class ExplicitTxnTest {
         context.setTxnId(transactionId);
         TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
 
-        Assert.assertFalse(context.getState().isError());
-        Assert.assertEquals("{'label':'test-label', 'status':'PREPARE', 'txnId':'1'}", context.getState().getInfoMessage());
+        Assertions.assertFalse(context.getState().isError());
+        Assertions.assertEquals("{'label':'test-label', 'status':'PREPARE', 'txnId':'1'}", context.getState().getInfoMessage());
     }
 
     @Test
@@ -327,9 +327,9 @@ public class ExplicitTxnTest {
 
         context.setTxnId(transactionId);
         TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
-        Assert.assertEquals(0, context.getTxnId());
-        Assert.assertEquals("{'label':'test-label', 'status':'VISIBLE', 'txnId':'1'}", context.getState().getInfoMessage());
-        Assert.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertEquals("{'label':'test-label', 'status':'VISIBLE', 'txnId':'1'}", context.getState().getInfoMessage());
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
 
         // Rollback transaction not insert data
         transactionId = 2;
@@ -345,9 +345,9 @@ public class ExplicitTxnTest {
 
         context.setTxnId(transactionId);
         TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
-        Assert.assertEquals(0, context.getTxnId());
-        Assert.assertEquals("{'label':'test-label-2', 'status':'ABORTED', 'txnId':'2'}", context.getState().getInfoMessage());
-        Assert.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertEquals("{'label':'test-label-2', 'status':'ABORTED', 'txnId':'2'}", context.getState().getInfoMessage());
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
     }
 
     @Test
@@ -373,9 +373,9 @@ public class ExplicitTxnTest {
 
         context.setTxnId(transactionId);
         TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
-        Assert.assertEquals(0, context.getTxnId());
-        Assert.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
-        Assert.assertEquals("database 0 is not found", context.getState().getErrorMessage());
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+        Assertions.assertEquals("database 0 is not found", context.getState().getErrorMessage());
 
         transactionId = 2;
         transactionState = new TransactionState(transactionId, "test-label-2", null,
@@ -396,8 +396,8 @@ public class ExplicitTxnTest {
 
         context.setTxnId(transactionId);
         TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
-        Assert.assertEquals(0, context.getTxnId());
-        Assert.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
-        Assert.assertEquals("database 0 is not found", context.getState().getErrorMessage());
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+        Assertions.assertEquals("database 0 is not found", context.getState().getErrorMessage());
     }
 }

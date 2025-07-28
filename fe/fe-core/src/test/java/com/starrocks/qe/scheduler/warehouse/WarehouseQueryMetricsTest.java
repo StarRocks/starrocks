@@ -19,7 +19,7 @@ package com.starrocks.qe.scheduler.warehouse;
 
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.thrift.TGetWarehouseQueriesResponseItem;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 

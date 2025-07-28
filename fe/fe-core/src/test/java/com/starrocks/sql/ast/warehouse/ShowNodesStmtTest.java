@@ -17,8 +17,8 @@ package com.starrocks.sql.ast.warehouse;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ShowNodesStmtTest {
 
@@ -28,32 +28,32 @@ public class ShowNodesStmtTest {
             String sqlText = "SHOW NODES FROM WAREHOUSES LIKE '%query%'";
             ShowNodesStmt stmt =
                     (ShowNodesStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertNull(stmt.getWarehouseName());
-            Assert.assertTrue(stmt.getCnGroupName().isEmpty());
-            Assert.assertEquals("%query%", stmt.getPattern());
+            Assertions.assertNull(stmt.getWarehouseName());
+            Assertions.assertTrue(stmt.getCnGroupName().isEmpty());
+            Assertions.assertEquals("%query%", stmt.getPattern());
         }
 
         {
             String sqlText = "SHOW NODES FROM WAREHOUSE warehouse1";
             ShowNodesStmt stmt =
                     (ShowNodesStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
-            Assert.assertNull(stmt.getPattern());
-            Assert.assertTrue(stmt.getCnGroupName().isEmpty());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertNull(stmt.getPattern());
+            Assertions.assertTrue(stmt.getCnGroupName().isEmpty());
         }
 
         {
             String sqlText = "SHOW NODES FROM WAREHOUSE warehouse1 CNGROUP group2";
             ShowNodesStmt stmt =
                     (ShowNodesStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
-            Assert.assertNull(stmt.getPattern());
-            Assert.assertEquals("group2", stmt.getCnGroupName());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertNull(stmt.getPattern());
+            Assertions.assertEquals("group2", stmt.getCnGroupName());
         }
 
         {
             String sqlText = "SHOW NODES FROM WAREHOUSE warehouse1 CNGROUP";
-            Assert.assertThrows(ParsingException.class,
+            Assertions.assertThrows(ParsingException.class,
                     () -> SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT));
         }
     }

@@ -836,6 +836,7 @@ struct TMasterOpRequest {
     35: optional string session_id
     36: optional i32 connectionId
     37: optional i64 txn_id;
+    38: optional bool isInternalStmt;
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
@@ -1971,6 +1972,7 @@ struct TConnectionInfo {
     9: optional string info;
     10: optional string isPending;
     11: optional string warehouse;
+	12: optional string cngroup;
 }
 
 struct TListConnectionResponse {

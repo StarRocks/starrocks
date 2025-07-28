@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.qe.ConnectContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,8 +49,7 @@ public class MvPlanContextBuilder {
             Optional.ofNullable(doGetOptimizePlan(() -> mvOptimizer.optimize(mv, connectContext), isThrowException))
                     .map(results::add);
 
-            // TODO: Only add context with view when view rewrite is set on.
-            if (mv.getBaseTableTypes().stream().anyMatch(type -> type == TableType.VIEW)) {
+            if (mv.getBaseTables().stream().anyMatch(table -> table.isView())) {
                 Optional.ofNullable(doGetOptimizePlan(() -> mvOptimizer.optimize(mv, connectContext, false, true),
                                 isThrowException))
                         .map(results::add);

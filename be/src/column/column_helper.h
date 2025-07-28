@@ -608,6 +608,8 @@ public:
 
     static MutableColumnPtr create_const_null_column(size_t chunk_size);
 
+    static Status update_nested_has_null(Column* column);
+
     static ColumnPtr convert_time_column_from_double_to_str(const ColumnPtr& column);
 
     // unpack array column, return offsets_column, elements_column, elements_null_column

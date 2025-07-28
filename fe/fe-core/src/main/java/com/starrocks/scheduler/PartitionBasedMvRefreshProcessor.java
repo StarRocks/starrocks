@@ -86,6 +86,7 @@ import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -97,6 +98,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -126,6 +128,24 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     // session.insert_timeout
     private static final String MV_SESSION_INSERT_TIMEOUT =
             PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.INSERT_TIMEOUT;
+
+    // Set of table types that support adaptive materialized view (MV) refresh.
+    //
+    // Internal tables (e.g., OLAP) have direct access to partition information,
+    // enabling accurate and efficient adaptive MV refresh.
+    //
+    // For external tables (e.g., Hive, Iceberg, Hudi, Delta Lake),
+    // partition information is not directly available.
+    // Instead, adaptive refresh relies on statistics collected in the
+    // `external_column_statistics` table under the `_statistics_` database,
+    // which currently only supports these external table types (since v3.3.0).
+    private static final Set<Table.TableType> SUPPORTED_TABLE_TYPES_FOR_ADAPTIVE_MV_REFRESH = EnumSet.of(
+            Table.TableType.OLAP,
+            Table.TableType.HIVE,
+            Table.TableType.ICEBERG,
+            Table.TableType.HUDI,
+            Table.TableType.DELTALAKE
+    );
 
     private Database db;
     private MaterializedView mv;
@@ -314,11 +334,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 logger.info("no partitions to refresh for materialized view");
                 return mvToRefreshedPartitions;
             }
-            // TODO(Hongkun Xu) Because non-OLAP tables cannot directly obtain partition information, currently SMART mode does
-            //  not support base tables that contain external tables. However, support for this scenario will be added in the future.
-            boolean hasExternalTable = mv.getBaseTableTypes().stream().anyMatch(type -> type != Table.TableType.OLAP);
-            if (hasExternalTable) {
-                logger.warn("materialized view {} has external table. so choose default refresh strategy", mv.getId());
+
+            boolean hasUnsupportedTableType = mv.getBaseTableTypes().stream()
+                    .anyMatch(type -> !SUPPORTED_TABLE_TYPES_FOR_ADAPTIVE_MV_REFRESH.contains(type));
+            if (hasUnsupportedTableType) {
+                logger.warn("Materialized view {} contains unsupported external tables. Using default refresh strategy.",
+                        mv.getId());
                 filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
                         tentative);
             } else {
@@ -527,7 +548,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .setClientIp(mvContext.getRemoteIp())
                 .setUser(ctx.getQualifiedUser())
                 .setDb(ctx.getDatabase())
-                .setWarehouse(ctx.getCurrentWarehouseName());
+                .setWarehouse(ctx.getCurrentWarehouseName())
+                .setCNGroup(ctx.getCurrentComputeResourceName());
 
         // 2. Prepare variables
         changeDefaultConnectContextIfNeeded(ctx);
@@ -1470,16 +1492,21 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (!isNeedToTriggerPostProcess) {
             return;
         }
-        // recreate post run context for each task run
         final ConnectContext ctx = context.getCtx();
-        final String postRun = getPostRun(ctx, mv);
-        // visible for tests
-        if (mvContext != null) {
-            mvContext.setPostRun(postRun);
-        }
-        context.setPostRun(postRun);
-        if (StringUtils.isNotEmpty(postRun)) {
-            ctx.executeSql(postRun);
+        try (var ignored = ctx.bindScope()) {
+            // trigger mv into plan cache into plan cache
+            CachingMvPlanContextBuilder.getInstance().loadPlanContextAsync(mv);
+
+            // recreate post run context for each task run
+            final String postRun = getPostRun(ctx, mv);
+            // visible for tests
+            if (mvContext != null) {
+                mvContext.setPostRun(postRun);
+            }
+            context.setPostRun(postRun);
+            if (StringUtils.isNotEmpty(postRun)) {
+                ctx.executeSql(postRun);
+            }
         }
     }
 }

@@ -16,21 +16,20 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTasksScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"TASK_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TASK_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
-        {"SCHEDULE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"EXPIRE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(StringValue), true},
-        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"CREATOR", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"SCHEDULE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"CATALOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DATABASE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DEFINITION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"EXPIRE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(Slice), true},
+        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"CREATOR", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
 };
 
 SchemaTasksScanner::SchemaTasksScanner()

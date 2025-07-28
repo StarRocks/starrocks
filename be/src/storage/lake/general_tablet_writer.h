@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "gutil/macros.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/tablet_writer.h"
 
 namespace starrocks {
@@ -36,7 +37,8 @@ public:
     explicit HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                            std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                            bool is_compaction, ThreadPool* flush_pool = nullptr,
-                                           BundleWritableFileContext* bundle_file_context = nullptr);
+                                           BundleWritableFileContext* bundle_file_context = nullptr,
+                                           GlobalDictByNameMaps* global_dicts = nullptr);
 
     ~HorizontalGeneralTabletWriter() override;
 
@@ -81,6 +83,7 @@ protected:
 
     std::unique_ptr<SegmentWriter> _seg_writer;
     BundleWritableFileContext* _bundle_file_context = nullptr;
+    GlobalDictByNameMaps* _global_dicts = nullptr;
 };
 
 class VerticalGeneralTabletWriter : public TabletWriter {

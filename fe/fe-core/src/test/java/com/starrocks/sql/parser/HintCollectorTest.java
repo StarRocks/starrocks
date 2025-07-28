@@ -19,7 +19,7 @@ import com.starrocks.analysis.HintNode;
 import com.starrocks.qe.SessionVariable;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -42,10 +42,10 @@ class HintCollectorTest {
                 parser.sqlStatements().singleStatement().get(0);
         HintCollector collector = new HintCollector((CommonTokenStream) parser.getTokenStream(), new SessionVariable());
         collector.collect(singleStatementContext);
-        Assert.assertEquals(num, collector.getContextWithHintMap().size());
+        Assertions.assertEquals(num, collector.getContextWithHintMap().size());
         for (List<HintNode> hintNodes : collector.getContextWithHintMap().values()) {
-            Assert.assertEquals(1, hintNodes.size());
-            Assert.assertEquals(hintStr, hintNodes.get(0).toSql());
+            Assertions.assertEquals(1, hintNodes.size());
+            Assertions.assertEquals(hintStr, hintNodes.get(0).toSql());
         }
     }
 

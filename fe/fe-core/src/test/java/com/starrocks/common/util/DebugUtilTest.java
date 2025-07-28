@@ -18,66 +18,66 @@
 package com.starrocks.common.util;
 
 import com.starrocks.common.Pair;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class DebugUtilTest {
     @Test
     public void testGetUint() {
         Pair<Double, String> result;
         result = DebugUtil.getUint(2000000000L);
-        Assert.assertEquals(Double.valueOf(2.0), result.first);
-        Assert.assertEquals(result.second, "B");
+        Assertions.assertEquals(Double.valueOf(2.0), result.first);
+        Assertions.assertEquals(result.second, "B");
 
         result = DebugUtil.getUint(1234567L);
-        Assert.assertEquals(result.first, Double.valueOf(1.234567));
-        Assert.assertEquals(result.second, "M");
+        Assertions.assertEquals(result.first, Double.valueOf(1.234567));
+        Assertions.assertEquals(result.second, "M");
 
         result = DebugUtil.getUint(1234L);
-        Assert.assertEquals(result.first, Double.valueOf(1.234));
-        Assert.assertEquals(result.second, "K");
+        Assertions.assertEquals(result.first, Double.valueOf(1.234));
+        Assertions.assertEquals(result.second, "K");
 
         result = DebugUtil.getUint(123L);
-        Assert.assertEquals(result.first, Double.valueOf(123.0));
-        Assert.assertEquals(result.second, "");
+        Assertions.assertEquals(result.first, Double.valueOf(123.0));
+        Assertions.assertEquals(result.second, "");
     }
 
     @Test
     public void testGetPrettyStringMs() {
         // 6hour1min
-        Assert.assertEquals(DebugUtil.getPrettyStringMs(21660222), "6h1m");
+        Assertions.assertEquals(DebugUtil.getPrettyStringMs(21660222), "6h1m");
 
         // 1min222ms
-        Assert.assertEquals(DebugUtil.getPrettyStringMs(60222), "1m");
+        Assertions.assertEquals(DebugUtil.getPrettyStringMs(60222), "1m");
 
         // 2s222ms
-        Assert.assertEquals(DebugUtil.getPrettyStringMs(2222), "2s222ms");
+        Assertions.assertEquals(DebugUtil.getPrettyStringMs(2222), "2s222ms");
 
         // 22ms
-        Assert.assertEquals(DebugUtil.getPrettyStringMs(22), "22ms");
+        Assertions.assertEquals(DebugUtil.getPrettyStringMs(22), "22ms");
     }
 
     @Test
     public void testGetByteUint() {
         Pair<Double, String> result;
         result = DebugUtil.getByteUint(0);
-        Assert.assertEquals(result.first, Double.valueOf(0.0));
-        Assert.assertEquals(result.second, "B");
+        Assertions.assertEquals(result.first, Double.valueOf(0.0));
+        Assertions.assertEquals(result.second, "B");
 
         result = DebugUtil.getByteUint(123);     // B
-        Assert.assertEquals(result.first, Double.valueOf(123.0));
-        Assert.assertEquals(result.second, "B");
+        Assertions.assertEquals(result.first, Double.valueOf(123.0));
+        Assertions.assertEquals(result.second, "B");
 
         result = DebugUtil.getByteUint(123456);  // K
-        Assert.assertEquals(result.first, Double.valueOf(120.5625));
-        Assert.assertEquals(result.second, "KB");
+        Assertions.assertEquals(result.first, Double.valueOf(120.5625));
+        Assertions.assertEquals(result.second, "KB");
 
         result = DebugUtil.getByteUint(1234567);  // M
-        Assert.assertEquals(result.first, Double.valueOf(1.1773748397827148));
-        Assert.assertEquals(result.second, "MB");
+        Assertions.assertEquals(result.first, Double.valueOf(1.1773748397827148));
+        Assertions.assertEquals(result.second, "MB");
 
         result = DebugUtil.getByteUint(1234567890L);  // G
-        Assert.assertEquals(result.first, Double.valueOf(1.1497809458523989));
-        Assert.assertEquals(result.second, "GB");
+        Assertions.assertEquals(result.first, Double.valueOf(1.1497809458523989));
+        Assertions.assertEquals(result.second, "GB");
     }
 }

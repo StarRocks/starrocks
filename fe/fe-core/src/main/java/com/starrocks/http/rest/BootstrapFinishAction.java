@@ -40,6 +40,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Version;
+import com.starrocks.common.util.MachineInfo;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -79,15 +80,11 @@ public class BootstrapFinishAction extends RestBaseAction {
             result = new BootstrapResult();
             String token = request.getSingleParameter(TOKEN);
             if (!Strings.isNullOrEmpty(token)) {
-                if (result.status == ActionStatus.OK) {
-                    if (!token.equals(GlobalStateMgr.getCurrentState().getNodeMgr().getToken())) {
-                        result.status = ActionStatus.FAILED;
-                        LOG.info("invalid token: {}", token);
-                        result.msg = "invalid parameter";
-                    }
-                }
-
-                if (result.status == ActionStatus.OK) {
+                if (!token.equals(GlobalStateMgr.getCurrentState().getNodeMgr().getToken())) {
+                    result.status = ActionStatus.FAILED;
+                    LOG.info("invalid token: {}", token);
+                    result.msg = "invalid parameter";
+                } else {
                     // cluster id and token are valid, return replayed journal id
                     long replayedJournalId = GlobalStateMgr.getCurrentState().getReplayedJournalId();
                     long feStartTime = GlobalStateMgr.getCurrentState().getFeStartTime();
@@ -97,13 +94,15 @@ public class BootstrapFinishAction extends RestBaseAction {
                     result.setFeStartTime(feStartTime);
                     result.setFeVersion(Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
                     result.setHeapUsedPercent(JvmStats.getJvmHeapUsedPercent());
+                    result.setCpuCores(MachineInfo.getInstance().getCpuCores());
+                    result.setMacAddress(MachineInfo.getInstance().getMacAddress());
                 }
             }
         } else {
             result = new BootstrapResult("not ready");
         }
 
-        // send result
+        // send the result
         response.setContentType("application/json");
         response.getContent().append(result.toJson());
         sendResult(request, response);
@@ -122,6 +121,10 @@ public class BootstrapFinishAction extends RestBaseAction {
         private String feVersion;
         @SerializedName("heapUsedPercent")
         private float heapUsedPercent;
+        @SerializedName("cpuCores")
+        private int cpuCores;
+        @SerializedName("macAddress")
+        private String macAddress;
 
         public BootstrapResult() {
             super();
@@ -177,6 +180,22 @@ public class BootstrapFinishAction extends RestBaseAction {
 
         public void setHeapUsedPercent(float heapUsedPercent) {
             this.heapUsedPercent = heapUsedPercent;
+        }
+
+        public int getCpuCores() {
+            return cpuCores;
+        }
+
+        public void setCpuCores(int cpuCores) {
+            this.cpuCores = cpuCores;
+        }
+
+        public String getMacAddress() {
+            return macAddress;
+        }
+
+        public void setMacAddress(String macAddress) {
+            this.macAddress = macAddress;
         }
 
         @Override

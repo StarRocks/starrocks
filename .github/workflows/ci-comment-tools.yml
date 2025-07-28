@@ -48,3 +48,25 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PAT }}
         run: |
           gh pr merge ${PR_NUMBER} -R ${{ github.repository }} -s --auto
+
+  rerun:
+    name: Rerun
+    runs-on: ubuntu-latest
+    if: >
+      contains(github.event.issue.pull_request.html_url, 'pull') &&
+      contains(github.event.comment.body, 'Re-run the workflow')
+    env:
+      PR_NUMBER: ${{ github.event.issue.number }}
+      GITHUB_TOKEN: ${{ secrets.PAT }}
+      ROBOT_SERVER: ${{ secrets.ROBOT_URL }}
+
+    steps:
+      - name: CLOSE
+        run: |
+          ret=$(curl -sX POST -H "Content-Type: application/json" \
+            -d "{\"repository\":\"${GITHUB_REPOSITORY}\", \"pr_id\":\"${PR_NUMBER}\"}" ${ROBOT_SERVER})
+          ret_code=$(echo "${ret}" | jq -r '.result')
+          if [[ '${ret_code}' == "false" ]]; then
+            echo "Re-run failed!"
+            exit 1
+          fi

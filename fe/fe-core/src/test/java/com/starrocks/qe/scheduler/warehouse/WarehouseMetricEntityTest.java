@@ -23,8 +23,8 @@ import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.qe.scheduler.slot.DefaultSlotSelectionStrategy;
 import com.starrocks.qe.scheduler.slot.SlotTracker;
 import com.starrocks.server.WarehouseManager;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -37,16 +37,16 @@ public class WarehouseMetricEntityTest {
         WarehouseMetricEntity entity = new WarehouseMetricEntity(slotTracker);
 
         List<Metric> metrics = entity.getMetrics();
-        Assert.assertEquals(9, metrics.size());
-        Assert.assertEquals(entity.getWarehouseId(), WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assert.assertEquals(entity.getWarehouseName(), "");
+        Assertions.assertEquals(9, metrics.size());
+        Assertions.assertEquals(entity.getWarehouseId(), WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assertions.assertEquals(entity.getWarehouseName(), "");
 
         PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("sr");
         for (Metric metric : metrics) {
             visitor.visit(metric);
         }
         String result = visitor.build();
-        Assert.assertTrue(result.contains("sr_warehouse_query_queue{field=\"query_pending_length\"} 0\n" +
+        Assertions.assertTrue(result.contains("sr_warehouse_query_queue{field=\"query_pending_length\"} 0\n" +
                 "sr_warehouse_query_queue{field=\"query_running_length\"} 0\n" +
                 "sr_warehouse_query_queue{field=\"max_query_queue_length\"} 1024\n" +
                 "sr_warehouse_query_queue{field=\"earliest_query_wait_time\"} 0.0\n" +

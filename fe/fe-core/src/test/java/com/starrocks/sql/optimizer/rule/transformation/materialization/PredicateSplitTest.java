@@ -29,8 +29,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -39,10 +39,10 @@ public class PredicateSplitTest {
     public void testSplitPredicate() {
         ScalarOperator predicate = null;
         PredicateSplit split = PredicateSplit.splitPredicate(predicate);
-        Assert.assertNotNull(split);
-        Assert.assertNull(split.getEqualPredicates());
-        Assert.assertNull(split.getRangePredicates());
-        Assert.assertNull(split.getResidualPredicates());
+        Assertions.assertNotNull(split);
+        Assertions.assertNull(split.getEqualPredicates());
+        Assertions.assertNull(split.getRangePredicates());
+        Assertions.assertNull(split.getResidualPredicates());
 
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
@@ -60,9 +60,9 @@ public class PredicateSplitTest {
                 BinaryType.GE, callOperator, ConstantOperator.createInt(1));
         ScalarOperator andPredicate = Utils.compoundAnd(binaryPredicate, binaryPredicate2, binaryPredicate3);
         PredicateSplit result = PredicateSplit.splitPredicate(andPredicate);
-        Assert.assertEquals(binaryPredicate, result.getEqualPredicates());
-        Assert.assertEquals(binaryPredicate2, result.getRangePredicates());
-        Assert.assertEquals(binaryPredicate3, result.getResidualPredicates());
+        Assertions.assertEquals(binaryPredicate, result.getEqualPredicates());
+        Assertions.assertEquals(binaryPredicate2, result.getRangePredicates());
+        Assertions.assertEquals(binaryPredicate3, result.getResidualPredicates());
     }
 
     @Test
@@ -105,7 +105,7 @@ public class PredicateSplitTest {
                                 )
                         ));
                 PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
-                Assert.assertEquals("0: a != 0 OR 1: b != 3 AND 0: a != 4 OR 1: b != 7",
+                Assertions.assertEquals("0: a != 0 OR 1: b != 3 AND 0: a != 4 OR 1: b != 7",
                         predicateSplit.getRangePredicates().toString());
             }
         }
@@ -124,7 +124,7 @@ public class PredicateSplitTest {
                                 )
                         ));
                 PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
-                Assert.assertEquals("0: a != 0 AND 1: b != 3 OR 0: a != 4 AND 1: b != 7",
+                Assertions.assertEquals("0: a != 0 AND 1: b != 3 OR 0: a != 4 AND 1: b != 7",
                         predicateSplit.getRangePredicates().toString());
             }
         }
@@ -133,18 +133,18 @@ public class PredicateSplitTest {
             ScalarOperator predicate = CompoundPredicateOperator.and(rangePredicate, equalPredicate, otherPredicate);
 
             PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
-            Assert.assertEquals(equalPredicate, predicateSplit.getEqualPredicates());
-            Assert.assertEquals("0: a >= 0 AND 0: a < 3 OR 0: a >= 4 AND 0: a < 7 AND 1: b != 1",
+            Assertions.assertEquals(equalPredicate, predicateSplit.getEqualPredicates());
+            Assertions.assertEquals("0: a >= 0 AND 0: a < 3 OR 0: a >= 4 AND 0: a < 7 AND 1: b != 1",
                     predicateSplit.getRangePredicates().toString());
-            Assert.assertEquals(inPredicate, predicateSplit.getResidualPredicates());
+            Assertions.assertEquals(inPredicate, predicateSplit.getResidualPredicates());
         }
         {
             ScalarOperator residual = CompoundPredicateOperator.or(equalPredicate, otherPredicate);
             ScalarOperator predicate = CompoundPredicateOperator.and(residual, rangePredicate);
             PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
-            Assert.assertNull(predicateSplit.getEqualPredicates());
-            Assert.assertEquals(rangePredicate, predicateSplit.getRangePredicates());
-            Assert.assertEquals(residual, predicateSplit.getResidualPredicates());
+            Assertions.assertNull(predicateSplit.getEqualPredicates());
+            Assertions.assertEquals(rangePredicate, predicateSplit.getRangePredicates());
+            Assertions.assertEquals(residual, predicateSplit.getResidualPredicates());
         }
 
         {
@@ -159,13 +159,13 @@ public class PredicateSplitTest {
                     )
             );
             PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
-            Assert.assertEquals(predicate, predicateSplit.getRangePredicates());
+            Assertions.assertEquals(predicate, predicateSplit.getRangePredicates());
         }
 
         {
             IsNullPredicateOperator predicate = new IsNullPredicateOperator(a);
             PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
-            Assert.assertEquals(predicate, predicateSplit.getResidualPredicates());
+            Assertions.assertEquals(predicate, predicateSplit.getResidualPredicates());
         }
 
         {
@@ -174,7 +174,7 @@ public class PredicateSplitTest {
                     new IsNullPredicateOperator(a)
             );
             PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
-            Assert.assertEquals(predicate, predicateSplit.getResidualPredicates());
+            Assertions.assertEquals(predicate, predicateSplit.getResidualPredicates());
         }
     }
 
@@ -191,9 +191,9 @@ public class PredicateSplitTest {
 
         ScalarOperator andPredicate = Utils.compoundAnd(predicate1, predicate2);
         PredicateSplit result = PredicateSplit.splitPredicate(andPredicate);
-        Assert.assertNull(result.getEqualPredicates());
-        Assert.assertNull(result.getResidualPredicates());
-        Assert.assertEquals(predicate1, result.getRangePredicates());
+        Assertions.assertNull(result.getEqualPredicates());
+        Assertions.assertNull(result.getResidualPredicates());
+        Assertions.assertEquals(predicate1, result.getRangePredicates());
     }
 
     @Test
@@ -210,8 +210,8 @@ public class PredicateSplitTest {
         ScalarOperator andPredicate = Utils.compoundAnd(predicate1, predicate2);
         PredicateSplit result = PredicateSplit.splitPredicate(andPredicate);
         System.out.println(result);
-        Assert.assertNull(result.getEqualPredicates());
-        Assert.assertNull(result.getResidualPredicates());
-        Assert.assertEquals(ConstantOperator.FALSE, result.getRangePredicates());
+        Assertions.assertNull(result.getEqualPredicates());
+        Assertions.assertNull(result.getResidualPredicates());
+        Assertions.assertEquals(ConstantOperator.FALSE, result.getRangePredicates());
     }
 }

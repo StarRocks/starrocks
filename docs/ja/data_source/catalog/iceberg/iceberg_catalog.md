@@ -1452,6 +1452,65 @@ Iceberg テーブルを強制的に削除する場合（つまり、DROP TABLE �
 DROP TABLE <table_name> [FORCE];
 ```
 
+### Iceberg ビューの作成
+
+StarRocks で Iceberg ビューを定義したり 、 既存の Iceberg ビューに StarRocks 方言を追加することがで き ます。このような Iceberg ビューに対するクエリは、これらのビューの StarRocks 方言の解析をサポートします。この機能は v3.5 以降でサポートされています。
+
+```SQL
+CREATE VIEW [IF NOT EXISTS]
+[<catalog>.<database>.]<view_name>
+(
+    <column_name>[ COMMENT 'column comment']
+    [, <column_name>[ COMMENT 'column comment'], ...]
+)
+[COMMENT 'view comment']
+AS <query_statement>
+```
+
+#### 例
+
+Iceberg テーブル `iceberg_table` に基づいて Iceberg ビュー `iceberg_view1` を作成する。
+
+```SQL
+CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
+SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+### 既存の Iceberg ビューに StarRocks 方言を追加または変更する
+
+Iceberg ビューが Apache Spark などの他のシステムから作成されており、StarRocks からこれらのビューにクエリを実行したい場合、これらのビューに StarRocks 方言を追加できます。この機能は v3.5 以降でサポートされています。
+
+:::note
+
+- ビューの両方の方言の本質的な意味が同一であることを保証する必要があります。StarRocks や他のシステムでは、異なる定義間の一貫性は保証されません。
+- 各 Iceberg ビューに対して定義できる StarRocks 方言は 1 つだけです。方言の定義は MODIFY 句を使用して変更できます。
+:::
+
+```SQL
+ALTER VIEW
+[<catalog>.<database>.]<view_name>
+(
+    <column_name>
+    [, <column_name>]
+)
+{ ADD | MODIFY } DIALECT
+<query_statement>
+```
+
+#### 例
+
+1. 既存の Iceberg ビュー `iceberg_view2` に StarRocks 方言を追加する。
+
+```SQL
+ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+2. 既存の Iceberg ビュー `iceberg_view2` の StarRocks 方言を変更する。
+
+```SQL
+ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
+```
+
 ---
 
 ### メタデータキャッシュの構成

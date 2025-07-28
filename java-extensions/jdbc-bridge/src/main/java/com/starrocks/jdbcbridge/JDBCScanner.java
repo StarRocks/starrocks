@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 public class JDBCScanner {
     private String driverLocation;
@@ -123,7 +124,7 @@ public class JDBCScanner {
     private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET = new HashSet<>(
             Arrays.asList(Boolean.class, Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class,
                     BigInteger.class, BigDecimal.class, java.sql.Date.class, Timestamp.class, LocalDate.class,
-                    LocalDateTime.class, Time.class, String.class));
+                    LocalDateTime.class, Time.class, String.class, UUID.class));
 
     private boolean isGeneralJDBCClassType(Class<?> clazz) {
         return GENERAL_JDBC_CLASS_SET.contains(clazz);

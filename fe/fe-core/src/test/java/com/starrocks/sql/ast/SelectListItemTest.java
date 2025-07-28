@@ -17,8 +17,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.parser.NodePosition;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,13 +41,13 @@ public class SelectListItemTest {
         originalExcluded.add("col3");
         original.getExcludedColumns().add("col4");
 
-        Assert.assertNotSame("excludedColumns should be a deep copy, not a shared reference",
-                original.getExcludedColumns(),
-                copied.getExcludedColumns());
+        Assertions.assertNotSame(original.getExcludedColumns(),
+                copied.getExcludedColumns(),
+                "excludedColumns should be a deep copy, not a shared reference");
         
-        Assert.assertEquals("excludedColumns should be same to before",
-                Arrays.asList("col1", "col2"),
-                copied.getExcludedColumns());
+        Assertions.assertEquals(Arrays.asList("col1", "col2"),
+                copied.getExcludedColumns(),
+                "excludedColumns should be same to before");
     }
 
     @Test
@@ -62,8 +62,8 @@ public class SelectListItemTest {
         SelectListItem copied = new SelectListItem(original);
 
         originalExcluded.add("new_col");
-        Assert.assertEquals("Empty lists should remain empty after deep copying", 
-                Collections.emptyList(), 
-                copied.getExcludedColumns());
+        Assertions.assertEquals(Collections.emptyList(), 
+                copied.getExcludedColumns(), 
+                "Empty lists should remain empty after deep copying");
     }
 }

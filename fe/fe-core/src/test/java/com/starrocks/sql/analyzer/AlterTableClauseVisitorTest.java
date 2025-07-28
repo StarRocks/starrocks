@@ -18,16 +18,16 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.parser.NodePosition;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class AlterTableClauseVisitorTest extends DDLTestBase {
 
-    @Before
+    @BeforeEach
     public void beforeClass() throws Exception {
         super.setUp();
     }
@@ -45,7 +45,7 @@ public class AlterTableClauseVisitorTest extends DDLTestBase {
         OlapTable table = new OlapTable();
         AlterTableClauseAnalyzer visitor = new AlterTableClauseAnalyzer(table);
 
-        Assert.assertThrows("Getting analyzing error. Detail message: Unknown column 'id' does not exist.",
-                SemanticException.class, () -> visitor.visitOptimizeClause(optimizeClause, null));
+        Assertions.assertThrows(SemanticException.class, () -> visitor.visitOptimizeClause(optimizeClause, null),
+                "Getting analyzing error. Detail message: Unknown column 'id' does not exist.");
     }
 }

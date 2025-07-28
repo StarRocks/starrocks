@@ -16,33 +16,31 @@ package com.starrocks.qe.scheduler.plan;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.scheduler.SchedulerConnectorTestBase;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Collection;
 
-@RunWith(Parameterized.class)
 public class SchedulerHiveTPCHTest extends SchedulerConnectorTestBase {
-    private final String fileName;
+    private String fileName;
 
-    public SchedulerHiveTPCHTest(String fileName) {
+    public void initSchedulerHiveTPCHTest(String fileName) {
         this.fileName = fileName;
     }
 
-    @Before
+    @BeforeEach
     public void before() throws DdlException {
         connectContext.changeCatalogDb("hive0.tpch");
     }
 
-    @Test
-    public void testTPCH() {
+    @MethodSource("getTPCHTestFileNames")
+    @ParameterizedTest(name = "{0}")
+    public void testTPCH(String fileName) {
+        initSchedulerHiveTPCHTest(fileName);
         runFileUnitTest(fileName);
     }
 
-    @Parameters(name = "{0}")
     public static Collection<String> getTPCHTestFileNames() {
         return listTestFileNames("scheduler/external/hive/tpch/");
     }

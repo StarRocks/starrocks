@@ -229,7 +229,8 @@ public class ConnectProcessor {
                 .setStmtId(ctx.getStmtId())
                 .setIsForwardToLeader(isForwardToLeader)
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString())
-                .setSessionId(ctx.getSessionId().toString());
+                .setSessionId(ctx.getSessionId().toString())
+                .setCNGroup(ctx.getCurrentComputeResourceName());
 
         if (ctx.getState().isQuery()) {
             MetricRepo.COUNTER_QUERY_ALL.increase(1L);
@@ -335,7 +336,8 @@ public class ConnectProcessor {
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog())
                 .setWarehouse(ctx.getCurrentWarehouseName())
-                .setCustomQueryId(ctx.getCustomQueryId());
+                .setCustomQueryId(ctx.getCustomQueryId())
+                .setCNGroup(ctx.getCurrentComputeResourceName());
         Tracers.register(ctx);
         // set isQuery before `forwardToLeader` to make it right for audit log.
         ctx.getState().setIsQuery(true);
@@ -882,7 +884,7 @@ public class ConnectProcessor {
 
                 StatementBase statement = SqlParser.parseSingleStatement(request.modified_variables_sql,
                         ctx.getSessionVariable().getSqlMode());
-                executor = new StmtExecutor(ctx, statement);
+                executor = StmtExecutor.newInternalExecutor(ctx, statement);
                 executor.setProxy();
                 executor.execute();
             }
@@ -901,7 +903,11 @@ public class ConnectProcessor {
             }.visit(statement);
             statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
-            executor = new StmtExecutor(ctx, statement);
+            if (request.isIsInternalStmt()) {
+                executor = StmtExecutor.newInternalExecutor(ctx, statement);
+            } else {
+                executor = new StmtExecutor(ctx, statement);
+            }
             ctx.setExecutor(executor);
             executor.setProxy();
             executor.execute();

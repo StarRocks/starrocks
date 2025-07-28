@@ -4,6 +4,30 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.5
+
+リリース日: 2025年7月10日
+
+### 改善点
+
+- ロードジョブの実行状況の可観測性を向上: ロードタスクの実行情報を `information_schema.loads` ビューに統一しました。このビューでは、すべての INSERT、Broker Load、Stream Load、Routine Load のサブタスクの実行情報を確認できます。また、より多くのカラムを追加し、ロードタスクの実行状況や親ジョブ（PIPES、Routine Load Job）との関連情報を明確に把握できるようにしました。
+- `ALTER ROUTINE LOAD` ステートメントで `kafka_broker_list` を変更することをサポート。
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- 高頻度ロード時に Compaction が遅延する可能性がある問題。 [#59998](https://github.com/StarRocks/starrocks/pull/59998)
+- Unified Catalog 経由で Iceberg 外部テーブルをクエリすると、`not support getting unified metadata table factory` エラーが発生する問題。 [#59412](https://github.com/StarRocks/starrocks/pull/59412)
+- `DESC FILES()` でリモートストレージ上のCSVファイルを確認する際、システムが `xinf` をFLOAT型と誤認したため、結果が誤って返される問題。 [#59574](https://github.com/StarRocks/starrocks/pull/59574)
+- 空のパーティションに対して `INSERT INTO` を行うと BE がクラッシュする問題。 [#59553](https://github.com/StarRocks/starrocks/pull/59553)
+- Iceberg の Equality Delete ファイルを読み込む際、Icebergテーブルで既に削除されたデータが StarRocks で読み取れてしまう問題。 [#59709](https://github.com/StarRocks/starrocks/pull/59709)
+- カラム名変更後にクエリが失敗する問題。 [#59178](https://github.com/StarRocks/starrocks/pull/59178)
+
+### 動作の変更
+
+- BE 構成パラメータ `skip_pk_preload` のデフォルト値が `false` から `true` に変更されました。これにより、プライマリキーのインデックスプリロードをスキップし、`Reached Timeout` エラーの発生を低減します。この変更により、プライマリキーインデックスの読み込みが必要なクエリの応答時間が増加する可能性があります。
+
 ## 3.4.4
 
 リリース日：2025 年 6 月 10 日

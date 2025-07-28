@@ -4,7 +4,7 @@ on:
   pull_request_target:
     branches:
       - main
-      - 'branch-[0-9].[0-9]'
+      - "branch-[0-9].[0-9]"
     types:
       - closed
 permissions:
@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ['3.5', '3.4', '3.3', '3.2', '3.1']
+        version: ["3.5", "3.4", "3.3", "3.2", "3.1"]
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
@@ -134,11 +134,11 @@ jobs:
           else
             yaml=ci-pipeline-branch.yml
           fi
-          
+
           gh run list --workflow ${yaml} -R ${REPO} -b ${GITHUB_HEAD_REF} --json databaseId -q '.[].databaseId' | xargs gh run cancel -R ${REPO} || true
 
   update_backport_merged_msg:
-    runs-on: [ self-hosted, quick ]
+    runs-on: [self-hosted, quick]
     if: >
       github.base_ref != 'main' && github.event.pull_request.merged == true
     env:
@@ -189,7 +189,7 @@ jobs:
           gh pr edit ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --add-label "${VERSION_LABEL}"
 
   update_version_label_for_main_feature:
-    runs-on: [ self-hosted, quick ]
+    runs-on: [self-hosted, quick]
     if: >
       github.base_ref == 'main' && github.event.pull_request.merged == true &&
       !contains(github.event.pull_request.labels.*.name, 'sync') &&
@@ -220,7 +220,7 @@ jobs:
           gh pr edit ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --add-label "${VERSION_LABEL}"
 
   update_feature_issue:
-    runs-on: [ self-hosted, quick ]
+    runs-on: [self-hosted, quick]
     needs:
       - update_backport_merged_msg
       - update_version_label_for_main_feature
@@ -242,3 +242,17 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           python3 scripts/get_pr_issue.py update_issue ${GITHUB_REPOSITORY} ${PR_NUMBER} ${BRANCH_VERSION_LABEL}
+
+  merge_testcase:
+    runs-on: [self-hosted, quick]
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+      BRANCH: ${{ github.base_ref }}
+    if: >
+      github.base_ref == 'main' && github.event.pull_request.merged == true && !contains(github.event.pull_request.labels.*.name, 'sync')
+    steps:
+      - name: merge testcase
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/merge-testcase.py --pr ${PR_NUMBER} --repo ${REPOSITORY} --branch ${BRANCH}

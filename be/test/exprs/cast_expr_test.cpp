@@ -1067,9 +1067,8 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapFailed0) {
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-
         // right cast
-        auto v = BitmapColumn::static_pointer_cast(ptr);
+        auto v = NullableColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1105,7 +1104,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapFailed1) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // right cast
-        auto v = BitmapColumn::static_pointer_cast(ptr);
+        auto v = NullableColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1177,7 +1176,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingleFailed) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // right cast
-        auto v = BitmapColumn::static_pointer_cast(ptr);
+        auto v = NullableColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1252,7 +1251,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSetFailed) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // right cast
-        auto v = BitmapColumn::static_pointer_cast(ptr);
+        auto v = NullableColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1331,7 +1330,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMapFailed) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // right cast
-        auto v = BitmapColumn::static_pointer_cast(ptr);
+        auto v = NullableColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {

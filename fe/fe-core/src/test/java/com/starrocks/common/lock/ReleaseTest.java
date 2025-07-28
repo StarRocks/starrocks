@@ -18,9 +18,9 @@ import com.starrocks.common.util.concurrent.lock.LockInfo;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.Future;
 
@@ -28,7 +28,7 @@ import static com.starrocks.common.lock.LockTestUtils.assertLockSuccess;
 import static com.starrocks.common.lock.LockTestUtils.assertLockWait;
 
 public class ReleaseTest {
-    @Before
+    @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
     }
@@ -59,8 +59,8 @@ public class ReleaseTest {
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
         LockInfo lockInfo = lockManager.dumpLockManager().get(0);
-        Assert.assertEquals(1, lockInfo.getRid().longValue());
-        Assert.assertEquals(3, lockInfo.getOwners().size());
-        Assert.assertEquals(0, lockInfo.getWaiters().size());
+        Assertions.assertEquals(1, lockInfo.getRid().longValue());
+        Assertions.assertEquals(3, lockInfo.getOwners().size());
+        Assertions.assertEquals(0, lockInfo.getWaiters().size());
     }
 }

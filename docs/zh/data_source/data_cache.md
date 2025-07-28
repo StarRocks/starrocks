@@ -246,9 +246,28 @@ datacache_auto_adjust_enable=true
 - 当磁盘占用比例在一定时间内持续低于 BE 参数 `datacache_disk_low_level` 中规定的阈值（默认值 `60`, 即磁盘空间的 60%），且当前磁盘用于缓存数据的空间已经写满时，系统将自动进行缓存扩容，增加缓存上限。
 - 当进行缓存自动扩容或缩容时，系统将以 BE 参数 `datacache_disk_safe_level` 中规定的阈值（默认值 `70`, 即磁盘空间的 70%）为目标，尽可能得调整缓存容量。
 
+## Cache Sharing
+
+由于 Data Cache 依赖于 BE 节点的本地磁盘，当集群进行扩展时，数据路由的变化可能会导致 Cache Miss，这很容易在弹性扩展过程中导致明显的性能抖动。
+
+Cache Sharing 能够通过网络来访问集群中其他节点上的缓存数据。在集群扩展过程中，如果发生本地 Cache Miss，系统会首先尝试从同一集群内的其他节点获取缓存数据。只有当所有缓存都未命中时，系统才会从远程存储中重新获取数据。这一功能可有效减少弹性扩展过程中缓存失效造成的性能抖动，并确保稳定的查询性能。
+
+![cache sharing workflow](../_assets/cache_sharing_workflow.png)
+
+您可以通过配置以下两个项目启用缓存共享功能：
+
+- 将 FE 配置项 `enable_trace_historical_node` 设为 `true`。
+- 将系统变量 `enable_datacache_sharing` 设置为 `true`。
+
+此外，还可以在查询配置文件中检查以下指标，以监控缓存共享：
+
+- `DataCacheReadPeerCounter`：从其他缓存节点读取的次数。
+- `DataCacheReadPeerBytes`：从其他缓存节点读取的字节数。
+- `DataCacheReadPeerTimer`：从其他节点访问缓存数据所用的时间。
+
 ## 相关参数
 
-您可以通过以下系统变量和 BE 参数配置 Data Cache。
+您可以通过以下系统变量和参数配置 Data Cache。
 
 ### 系统变量
 
@@ -256,6 +275,11 @@ datacache_auto_adjust_enable=true
 - [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
 - [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
 - [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
+- [enable_datacache_sharing](../sql-reference/System_variable.md#enable_datacache_sharing)
+
+### FE 参数
+
+- [enable_trace_historical_node](../administration/management/FE_configuration.md#enable_trace_historical_node)
 
 ### BE 参数
 

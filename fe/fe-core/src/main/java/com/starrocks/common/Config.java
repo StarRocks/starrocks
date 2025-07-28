@@ -803,6 +803,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_http_detail_metrics = false;
 
+    @ConfField(mutable = true, comment = "Whether to handle HTTP request asynchronously." +
+            "If enabled, a HTTP request is received in netty workers, and then submitted to a separate " +
+            "thread pool to handle the business logic to avoid blocking the HTTP server. If disabled, " +
+            "the business logic is also handled in netty workers.")
+    public static boolean enable_http_async_handler = true;
+
+    @ConfField(mutable = true, aliases = {"max_http_sql_service_task_threads_num"},
+            comment = "Size of the thread pool for asynchronously processing HTTP request.")
+    public static int http_async_threads_num = 4096;
+
     /**
      * Cluster name will be shown as the title of web page
      */
@@ -907,12 +917,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int max_mysql_service_task_threads_num = 4096;
-
-    /**
-     * max num of thread to handle task for http sql.
-     */
-    @ConfField
-    public static int max_http_sql_service_task_threads_num = 4096;
 
     /**
      * modifies the version string returned by following situations:
@@ -1053,6 +1057,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_stream_load_timeout_second = 259200; // 3days
+
+    @ConfField(mutable = true, comment =
+            "The capacity of the cache that stores the mapping from transaction label to coordinator node.")
+    public static int transaction_stream_load_coordinator_cache_capacity = 4096;
+
+    @ConfField(mutable = true, comment = "The time to keep the coordinator mapping in the cache before it's evicted.")
+    public static int transaction_stream_load_coordinator_cache_expire_seconds = 900;
 
     /**
      * Max stream load load batch size
@@ -2201,6 +2212,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "collect multi-column combined statistics max column nums")
     public static int statistics_max_multi_column_combined_num = 10;
 
+    @ConfField(mutable = true, comment = "Whether to allow manual collection of the NDV of array columns")
+    public static boolean enable_manual_collect_array_ndv = false;
+
+    @ConfField(mutable = true, comment = "Whether to allow auto collection of the NDV of array columns")
+    public static boolean enable_auto_collect_array_ndv = false;
+
+    @ConfField(mutable = true, comment = "Synchronously load statistics for testing purpose")
+    public static boolean enable_sync_statistics_load = false;
+
     /**
      * default bucket size of histogram statistics
      */
@@ -2906,9 +2926,6 @@ public class Config extends ConfigBase {
     public static String lake_background_warehouse = "default_warehouse";
 
     @ConfField(mutable = true)
-    public static String statistics_collect_warehouse = "default_warehouse";
-
-    @ConfField(mutable = true)
     public static int lake_warehouse_max_compute_replica = 3;
 
     @ConfField(mutable = true, comment = "time interval to check whether warehouse is idle")
@@ -2922,6 +2939,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "disable table or partition compaction, format:'id1;id2'",
             aliases = {"lake_compaction_disable_tables"})
     public static String lake_compaction_disable_ids = "";
+
+    @ConfField(mutable = true, comment = "partitions which can be vacuumed immediately, test only, format:'id1;id2'")
+    public static String lake_vacuum_immediately_partition_ids = "";
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
     public static int lake_publish_version_max_threads = 512;
@@ -2946,7 +2966,7 @@ public class Config extends ConfigBase {
     public static int lake_compaction_default_timeout_second = 86400; // 1 day
 
     @ConfField(mutable = true)
-    public static boolean lake_compaction_allow_partial_success = false;
+    public static boolean lake_compaction_allow_partial_success = true;
 
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
@@ -3256,7 +3276,7 @@ public class Config extends ConfigBase {
     public static boolean enable_fast_schema_evolution_in_share_data_mode = true;
 
     @ConfField(mutable = true)
-    public static boolean enable_file_bundling = false;
+    public static boolean enable_file_bundling = true;
 
     @ConfField(mutable = true)
     public static int pipe_listener_interval_millis = 1000;
@@ -3741,8 +3761,52 @@ public class Config extends ConfigBase {
     public static long max_graceful_exit_time_second = 60;
 
     /**
+     * The default scheduler interval for dynamic tablet jobs.
+     */
+    @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
+    public static long dynamic_tablet_job_scheduler_interval_ms = 10;
+
+    /**
+     * The max keep time of dynamic tablet history jobs.
+     */
+    @ConfField(mutable = true, comment = "The max keep time of dynamic tablet history jobs.")
+    public static long dynamic_tablet_history_job_keep_max_ms = 3 * 24 * 3600 * 1000; // 3 days
+
+    /**
+     * The max number of tablets can do tablet splitting and merging in parallel.
+     */
+    @ConfField(mutable = true, comment = "The max number of tablets can do tablet splitting and merging in parallel.")
+    public static long dynamic_tablet_max_parallel_tablets = 10 * 1024;
+
+    /**
+     * Tablets with size larger than this value will be considered to split.
+     */
+    @ConfField(mutable = true, comment = "Tablets with size larger than this value will be considered to split.")
+    public static long dynamic_tablet_split_size = 4 * 1024 * 1024 * 1024;
+
+    /**
+     * The max number of new tablets that an old tablet can be split into.
+     */
+    @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
+    public static int dynamic_tablet_max_split_count = 1024;
+
+    /**
      * Whether to enable tracing historical nodes when cluster scale
      */
     @ConfField(mutable = true)
     public static boolean enable_trace_historical_node = false;
+
+    /**
+     * The size of the thread pool for deploy serialization.
+     * If set to -1, it means same as cpu core number.
+     */
+    @ConfField
+    public static int deploy_serialization_thread_pool_size = -1;
+
+    /**
+     * The size of the queue for deploy serialization thread pool.
+     * If set to -1, it means same as cpu core number * 2.
+     */
+    @ConfField
+    public static int deploy_serialization_queue_size = -1;
 }

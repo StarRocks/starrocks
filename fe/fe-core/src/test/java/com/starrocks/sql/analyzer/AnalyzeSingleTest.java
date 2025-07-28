@@ -28,9 +28,9 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -41,7 +41,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeSingleTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -103,16 +103,16 @@ public class AnalyzeSingleTest {
     @Test
     public void testIdentifierStartWithDigit() {
         StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select * from a.11b", 0).get(0);
-        Assert.assertEquals("SELECT * FROM a.11b", AstToStringBuilder.toString(statementBase));
+        Assertions.assertEquals("SELECT * FROM a.11b", AstToStringBuilder.toString(statementBase));
 
         statementBase = com.starrocks.sql.parser.SqlParser.parse("select a.11b.22c, * from a.11b", 0).get(0);
-        Assert.assertEquals("SELECT a.11b.22c, * FROM a.11b", AstToStringBuilder.toString(statementBase));
+        Assertions.assertEquals("SELECT a.11b.22c, * FROM a.11b", AstToStringBuilder.toString(statementBase));
 
         statementBase = com.starrocks.sql.parser.SqlParser.parse("select 00a.11b.22c, * from 00a.11b", 0).get(0);
-        Assert.assertEquals("SELECT 00a.11b.22c, * FROM 00a.11b", AstToStringBuilder.toString(statementBase));
+        Assertions.assertEquals("SELECT 00a.11b.22c, * FROM 00a.11b", AstToStringBuilder.toString(statementBase));
 
         statementBase = com.starrocks.sql.parser.SqlParser.parse("select 11b.* from 11b", 0).get(0);
-        Assert.assertEquals("SELECT 11b.* FROM 11b", AstToStringBuilder.toString(statementBase));
+        Assertions.assertEquals("SELECT 11b.* FROM 11b", AstToStringBuilder.toString(statementBase));
     }
 
     @Test
@@ -337,20 +337,22 @@ public class AnalyzeSingleTest {
          * In a double-quoted string, two double-quotes are combined into one double-quote
          */
         QueryStatement statement = (QueryStatement) analyzeSuccess("select '\"\"' ");
-        Assert.assertEquals("'\"\"'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assertions.assertEquals("'\"\"'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select \"\"\"\" ");
-        Assert.assertEquals("'\"'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assertions.assertEquals("'\"'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select \"7\\\"\\\"\"");
-        Assert.assertEquals("'7\"\"'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assertions.assertEquals("'7\"\"'",
+                AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select '7'''");
-        Assert.assertEquals("'7\\''", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assertions.assertEquals("'7\\''", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("SELECT '7\\'\\''");
-        Assert.assertEquals("'7\\'\\''", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assertions.assertEquals("'7\\'\\''",
+                AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select \"Hello ' World ' !\"");
-        Assert.assertEquals("'Hello \\' World \\' !'",
+        Assertions.assertEquals("'Hello \\' World \\' !'",
                 AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select 'Hello \" World \" !'");
-        Assert.assertEquals("'Hello \" World \" !'",
+        Assertions.assertEquals("'Hello \" World \" !'",
                 AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
         analyzeSuccess("select @@`sql_mode`");
@@ -362,12 +364,15 @@ public class AnalyzeSingleTest {
     @Test
     public void testBinaryLiteral() {
         QueryStatement statement = (QueryStatement) analyzeSuccess("select x'0ABC' ");
-        Assert.assertEquals("\'0ABC\'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assertions.assertEquals("\'0ABC\'",
+                AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select \"0ABC\" ");
-        Assert.assertEquals("\'0ABC\'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assertions.assertEquals("\'0ABC\'",
+                AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         // mysql client will output binary format in the outputs.
         statement = (QueryStatement) analyzeSuccess("select '0ABC' ");
-        Assert.assertEquals("\'0ABC\'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assertions.assertEquals("\'0ABC\'",
+                AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
         String expectMsg = "Binary literal can only contain hexadecimal digits and an even number of digits";
         analyzeFail("select x'0AB' ", expectMsg);
@@ -393,7 +398,7 @@ public class AnalyzeSingleTest {
                 "v2&~v1|v3^1,v1+20, case v2 when v3 then 1 else 0 end " +
                 "from t0")).getQueryRelation();
 
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 "v1,v2,v3," +
                         "CAST(v1 AS INT),CAST(v1 AS CHAR),CAST(v1 AS VARCHAR),CAST(v1 AS DECIMAL64(10,5)),CAST(v1 AS BOOLEAN)," +
                         "abs(v1)," +
@@ -406,53 +411,53 @@ public class AnalyzeSingleTest {
         query = ((QueryStatement) analyzeSuccess("select * from (select v1 as v, sum(v2) from t0 group by v1) a " +
                 "inner join (select v1 as v,v2 from t0 order by v3) b on a.v = b.v")
         ).getQueryRelation();
-        Assert.assertEquals("v,sum(v2),v,v2", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v,sum(v2),v,v2", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select * from (select v1 as v, sum(v2) from t0 group by v1) a " +
                 "inner join (select v1 as v,v2 from t0 order by v3) b on a.v = b.v"))
                 .getQueryRelation();
-        Assert.assertEquals("v,sum(v2),v,v2", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v,sum(v2),v,v2", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select * from (select v1 as tt from t0,t1) a " +
                 "inner join (select v1 as v,v2 from t0 order by v3) b on a.tt = b.v"))
                 .getQueryRelation();
-        Assert.assertEquals("tt,v,v2", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("tt,v,v2", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select *, v1+1 from t0")).getQueryRelation();
-        Assert.assertEquals("v1,v2,v3,v1 + 1", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v1,v2,v3,v1 + 1", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select t1.* from t0 left outer join t1 on t0.v1+3=t1.v4"))
                 .getQueryRelation();
-        Assert.assertEquals("v4,v5,v6", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v4,v5,v6", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select v1+1,a.* from (select * from t0) a")).getQueryRelation();
-        Assert.assertEquals("v1 + 1,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v1 + 1,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess(
                 "select v2+1,a.* from (select v1 as v, v2, v3+2 from t0) a left join t1 on a.v = t1.v4"))
                 .getQueryRelation();
-        Assert.assertEquals("v2 + 1,v,v2,v3 + 2", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v2 + 1,v,v2,v3 + 2", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select 1 as a, 2 as b")).getQueryRelation();
-        Assert.assertEquals("a,b", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("a,b", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select * from (values (1,2,3), (4,5,6)) v;")).getQueryRelation();
-        Assert.assertEquals("column_0,column_1,column_2", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("column_0,column_1,column_2", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess(
                 "select * from (select t0.*, v4 from t0 inner join t1 on v1 = v5) tmp")).getQueryRelation();
-        Assert.assertEquals("v1,v2,v3,v4", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v1,v2,v3,v4", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select t1.* from t0 inner join t1 on v1 = v4 order by v1"))
                 .getQueryRelation();
-        Assert.assertEquals("v4,v5,v6", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v4,v5,v6", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select v4,v1,t1.* from t0 inner join t1 on v1 = v4 order by v1"))
                 .getQueryRelation();
-        Assert.assertEquals("v4,v1,v4,v5,v6", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v4,v1,v4,v5,v6", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select v1+2 as v, * from t0 order by v+1")).getQueryRelation();
-        Assert.assertEquals("v,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
     }
 
     @Test
@@ -465,13 +470,13 @@ public class AnalyzeSingleTest {
     public void testLogicalBinaryPredicate() {
         QueryStatement queryStatement = (QueryStatement) analyzeSuccess("select * from test.t0 where v1 = 1 && v2 = 2");
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
-        Assert.assertTrue(selectRelation.getPredicate() instanceof CompoundPredicate);
-        Assert.assertEquals(((CompoundPredicate) selectRelation.getPredicate()).getOp(), CompoundPredicate.Operator.AND);
+        Assertions.assertTrue(selectRelation.getPredicate() instanceof CompoundPredicate);
+        Assertions.assertEquals(((CompoundPredicate) selectRelation.getPredicate()).getOp(), CompoundPredicate.Operator.AND);
 
         queryStatement = (QueryStatement) analyzeSuccess("select * from test.t0 where v1 = 1 || v2 = 2");
         selectRelation = (SelectRelation) queryStatement.getQueryRelation();
-        Assert.assertTrue(selectRelation.getPredicate() instanceof CompoundPredicate);
-        Assert.assertEquals(((CompoundPredicate) selectRelation.getPredicate()).getOp(), CompoundPredicate.Operator.OR);
+        Assertions.assertTrue(selectRelation.getPredicate() instanceof CompoundPredicate);
+        Assertions.assertEquals(((CompoundPredicate) selectRelation.getPredicate()).getOp(), CompoundPredicate.Operator.OR);
     }
 
     @Test
@@ -482,20 +487,20 @@ public class AnalyzeSingleTest {
         StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select true || false from t0",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT TRUE OR FALSE FROM test.t0",
+        Assertions.assertEquals("SELECT TRUE OR FALSE FROM test.t0",
                 AstToStringBuilder.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_PIPES_AS_CONCAT);
         statementBase = com.starrocks.sql.parser.SqlParser.parse("select 'a' || 'b' from t0",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT concat('a', 'b') FROM test.t0",
+        Assertions.assertEquals("SELECT concat('a', 'b') FROM test.t0",
                 AstToStringBuilder.toString(statementBase));
 
         statementBase = SqlParser.parse("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 "SELECT * FROM test.tall WHERE test.tall.ta LIKE (concat(concat('h', 'a', 'i'), '%'))",
                 AstToStringBuilder.toString(statementBase));
 
@@ -503,7 +508,7 @@ public class AnalyzeSingleTest {
         statementBase = SqlParser.parse("select * from  tall where ta like concat(\"h\", \"a\", \"i\")|| true",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 "SELECT * FROM test.tall WHERE (test.tall.ta LIKE (concat('h', 'a', 'i'))) OR TRUE",
                 AstToStringBuilder.toString(statementBase));
 
@@ -513,13 +518,13 @@ public class AnalyzeSingleTest {
         statementBase = SqlParser.parse("select * from  tall order by ta",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT * FROM test.tall ORDER BY test.tall.ta ASC NULLS LAST ",
+        Assertions.assertEquals("SELECT * FROM test.tall ORDER BY test.tall.ta ASC NULLS LAST ",
                 AstToStringBuilder.toString(statementBase));
 
         statementBase = SqlParser.parse("select * from  test.tall order by test.tall.ta desc",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 "SELECT * FROM test.tall ORDER BY test.tall.ta DESC NULLS FIRST ",
                 AstToStringBuilder.toString(statementBase));
 
@@ -527,7 +532,7 @@ public class AnalyzeSingleTest {
         statementBase = SqlParser.parse("select * from  test.tall order by test.tall.ta",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 "SELECT * FROM test.tall ORDER BY test.tall.ta ASC ",
                 AstToStringBuilder.toString(statementBase));
     }
@@ -535,43 +540,43 @@ public class AnalyzeSingleTest {
     @Test
     public void testSqlSplit() {
         List<StatementBase> list = SqlParser.parse("select * from t1;", 0);
-        Assert.assertEquals(1, list.size());
+        Assertions.assertEquals(1, list.size());
 
         list = SqlParser.parse("select * from t1", 0);
-        Assert.assertEquals(1, list.size());
+        Assertions.assertEquals(1, list.size());
 
         list = SqlParser.parse("select * from t1;select * from t2;", 0);
-        Assert.assertEquals(2, list.size());
+        Assertions.assertEquals(2, list.size());
 
         list = SqlParser.parse("select * from t1 where a1 = 'x\"x;asf';", 0);
-        Assert.assertEquals(1, list.size());
+        Assertions.assertEquals(1, list.size());
 
         list = SqlParser.parse("-- xxx;\nselect 1;", 0);
-        Assert.assertEquals(1, list.size());
-        Assert.assertTrue(list.get(0) instanceof QueryStatement);
+        Assertions.assertEquals(1, list.size());
+        Assertions.assertTrue(list.get(0) instanceof QueryStatement);
 
         list = SqlParser.parse("/* xx; x */select 1;", 0);
-        Assert.assertEquals(1, list.size());
-        Assert.assertTrue(list.get(0) instanceof QueryStatement);
+        Assertions.assertEquals(1, list.size());
+        Assertions.assertTrue(list.get(0) instanceof QueryStatement);
 
         list = SqlParser.parse("select array_contains([], cast('2021-01--1 08:00:00' as datetime)) \n from t0", 0);
-        Assert.assertEquals(1, list.size());
-        Assert.assertTrue(list.get(0) instanceof QueryStatement);
+        Assertions.assertEquals(1, list.size());
+        Assertions.assertTrue(list.get(0) instanceof QueryStatement);
 
         list = SqlParser.parse("select array_contains([], cast('2021-01--1 08:00:00' as datetime)) --x\n from t0", 0);
-        Assert.assertEquals(1, list.size());
-        Assert.assertTrue(list.get(0) instanceof QueryStatement);
+        Assertions.assertEquals(1, list.size());
+        Assertions.assertTrue(list.get(0) instanceof QueryStatement);
 
         list = SqlParser.parse("select array_contains([], cast('2021-01--1 08:00:00' as datetime)) --x;x\n from t0", 0);
-        Assert.assertEquals(1, list.size());
-        Assert.assertTrue(list.get(0) instanceof QueryStatement);
+        Assertions.assertEquals(1, list.size());
+        Assertions.assertTrue(list.get(0) instanceof QueryStatement);
     }
 
     @Test
     public void testTablet() {
         StatementBase statementBase = analyzeSuccess("SELECT v1 FROM t0  TABLET(1,2,3) LIMIT 200000");
         SelectRelation queryRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
-        Assert.assertEquals("[1, 2, 3]", ((TableRelation) queryRelation.getRelation()).getTabletIds().toString());
+        Assertions.assertEquals("[1, 2, 3]", ((TableRelation) queryRelation.getRelation()).getTabletIds().toString());
     }
 
     @Test
@@ -579,20 +584,20 @@ public class AnalyzeSingleTest {
         StatementBase statementBase = analyzeSuccess("SELECT /*+ SET_VAR(time_zone='Asia/Shanghai') */ " +
                 "current_timestamp() AS time");
         SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
-        Assert.assertEquals("Asia/Shanghai", statementBase.getAllQueryScopeHints().get(0).getValue().get("time_zone"));
+        Assertions.assertEquals("Asia/Shanghai", statementBase.getAllQueryScopeHints().get(0).getValue().get("time_zone"));
 
         statementBase = analyzeSuccess("select /*+ SET_VAR(broadcast_row_limit=1) */ * from t0");
         selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
-        Assert.assertEquals("1", statementBase.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
+        Assertions.assertEquals("1", statementBase.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
 
         SubmitTaskStmt stmt = (SubmitTaskStmt) analyzeSuccess("submit /*+ SET_VAR(broadcast_row_limit=1) */ task as " +
                 "create table temp as select count(*) as cnt from t0");
-        Assert.assertEquals("1", stmt.getProperties().get("broadcast_row_limit"));
+        Assertions.assertEquals("1", stmt.getProperties().get("broadcast_row_limit"));
 
         LoadStmt loadStmt = (LoadStmt) analyzeSuccess("LOAD /*+ SET_VAR(broadcast_row_limit=1) */  LABEL test.testLabel " +
                 "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") " +
                 "INTO TABLE `t0`) WITH BROKER hdfs_broker PROPERTIES (\"strict_mode\"=\"true\")");
-        Assert.assertEquals("1", loadStmt.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
+        Assertions.assertEquals("1", loadStmt.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
 
     }
 
@@ -600,7 +605,7 @@ public class AnalyzeSingleTest {
     public void testLowCard() {
         String sql = "select * from test.t0 [_META_]";
         QueryStatement queryStatement = (QueryStatement) analyzeSuccess(sql);
-        Assert.assertTrue(((TableRelation) ((SelectRelation) queryStatement.getQueryRelation()).getRelation()).isMetaQuery());
+        Assertions.assertTrue(((TableRelation) ((SelectRelation) queryStatement.getQueryRelation()).getRelation()).isMetaQuery());
     }
 
     @Test
@@ -673,18 +678,18 @@ public class AnalyzeSingleTest {
         QueryRelation query = ((QueryStatement) analyzeSuccess(
                 "select t0.v1, v1 from t0"))
                 .getQueryRelation();
-        Assert.assertEquals("v1,v1", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v1,v1", String.join(",", query.getColumnOutputNames()));
         analyzeFail("create view v as select t0.v1, v1 from t0", "Duplicate column name 'v1'");
 
         query = ((QueryStatement) analyzeSuccess(
                 "select * from t0, t1"))
                 .getQueryRelation();
-        Assert.assertEquals("v1,v2,v3,v4,v5,v6", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v1,v2,v3,v4,v5,v6", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess(
                 "select t0.*, abs(t0.v1), abs(v1) from t0, t1"))
                 .getQueryRelation();
-        Assert.assertEquals("v1,v2,v3,abs(t0.v1),abs(v1)", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v1,v2,v3,abs(t0.v1),abs(v1)", String.join(",", query.getColumnOutputNames()));
 
         analyzeSuccess("select v1 as v from t0 order by v1");
         analyzeSuccess("select v1 as v from t0 order by t0.v1");
@@ -701,18 +706,18 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select * from (select * from test.t0) as t(a,b,c)");
         QueryRelation query = ((QueryStatement) analyzeSuccess("select t.a from (select * from test.t0) as t(a,b,c)"))
                 .getQueryRelation();
-        Assert.assertEquals("a", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("a", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select t.a,* from (select * from test.t0) as t(a,b,c)"))
                 .getQueryRelation();
-        Assert.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select t0.column_0, * from (values(1,2,3)) t0")).getQueryRelation();
-        Assert.assertEquals("column_0,column_0,column_1,column_2",
+        Assertions.assertEquals("column_0,column_0,column_1,column_2",
                 String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select t0.a, * from (values(1,2,3)) t0(a,b,c)")).getQueryRelation();
-        Assert.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
     }
 
     @Test
@@ -736,7 +741,7 @@ public class AnalyzeSingleTest {
                 "*/ col = \"con   tent\n" +
                 "contend\" and col = \"''```中\t文  \\\"\r\n" +
                 "\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';";
-        Assert.assertEquals(expect, res);
+        Assertions.assertEquals(expect, res);
     }
 
     @Test
@@ -750,7 +755,7 @@ public class AnalyzeSingleTest {
                 "*/ col = \"con   tent\n" +
                 "contend and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\\'';";
         String res = LogUtil.removeLineSeparator(invalidSql);
-        Assert.assertEquals("#comment\n" +
+        Assertions.assertEquals("#comment\n" +
                 "select /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from tbl where-- comment\n" +
                 "col = 1 #comment\r\n" +
                 " and /*\n" +

@@ -150,7 +150,19 @@ public class StatisticsCollectionTrigger {
         }
 
         if (dmlType == DmlType.INSERT_OVERWRITE && analyzeType == null) {
-            // update the partition id of existing statistics
+            executeOverWrite();
+            waitFinish();
+        } else if (analyzeType != null) {
+            // collect
+            executeCollect();
+            waitFinish();
+        }
+    }
+
+    private void executeOverWrite() {
+        // update the partition id of existing statistics
+        Runnable task = () -> {
+            isRunning.set(true);
             ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
             try (ConnectContext.ScopeGuard guard = statsConnectCtx.bindScope()) {
                 for (int i = 0; i < overwriteJobStats.getSourcePartitionIds().size(); i++) {
@@ -161,20 +173,22 @@ public class StatisticsCollectionTrigger {
                         continue;
                     }
                     StatisticExecutor.overwritePartitionStatistics(
-                            statsConnectCtx, db.getId(), table.getId(), sourcePartitionId, targetPartitionId);
+                            statsConnectCtx, db.getId(), table.getId(), sourcePartitionId,
+                            targetPartitionId);
                 }
             } catch (Exception e) {
                 LOG.warn("overwrite partition stats failed table={} partitions={}",
                         table.getId(), overwriteJobStats.getTargetPartitionIds(), e);
             }
-        } else if (analyzeType != null) {
-            // collect
-            execute();
-            waitFinish();
+        };
+        try {
+            future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool().submit(task);
+        } catch (Throwable e) {
+            LOG.error("failed to submit statistic overwrite job", e);
         }
     }
 
-    private void execute() {
+    private void executeCollect() {
         Map<String, String> properties = Maps.newHashMap();
         if (SAMPLE == analyzeType) {
             properties = StatsConstants.buildInitStatsProp();
@@ -182,35 +196,40 @@ public class StatisticsCollectionTrigger {
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), table.getId(), null, analyzeType,
                 StatsConstants.ScheduleType.ONCE, properties, LocalDateTime.now());
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
         try {
-            future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool()
-                    .submit(() -> {
-                        isRunning.set(true);
-                        // reset the start time after pending, so [end-start] can represent execution period
-                        analyzeStatus.setStartTime(LocalDateTime.now());
-                        StatisticExecutor statisticExecutor = new StatisticExecutor();
-                        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                        // set session id for temporary table
-                        if (table.isTemporaryTable()) {
-                            statsConnectCtx.setSessionId(((OlapTable) table).getSessionId());
-                        }
-                        statsConnectCtx.setThreadLocalInfo();
-                        StatisticsCollectJob job = StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
-                                new ArrayList<>(partitionIds), null, null,
-                                analyzeType, StatsConstants.ScheduleType.ONCE,
-                                analyzeStatus.getProperties(), List.of(), List.of());
-                        if (!partitionTabletRowCounts.isEmpty()) {
-                            job.setPartitionTabletRowCounts(partitionTabletRowCounts);
-                        }
+            Runnable originalTask = () -> {
+                isRunning.set(true);
+                // reset the start time after pending, so [end-start] can represent execution period
+                analyzeStatus.setStartTime(LocalDateTime.now());
+                StatisticExecutor statisticExecutor = new StatisticExecutor();
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                // set session id for temporary table
+                if (table.isTemporaryTable()) {
+                    statsConnectCtx.setSessionId(((OlapTable) table).getSessionId());
+                }
+                statsConnectCtx.setThreadLocalInfo();
+                StatisticsCollectJob job = StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
+                        new ArrayList<>(partitionIds), null, null,
+                        analyzeType, StatsConstants.ScheduleType.ONCE,
+                        analyzeStatus.getProperties(), List.of(), List.of(), false);
+                if (!partitionTabletRowCounts.isEmpty()) {
+                    job.setPartitionTabletRowCounts(partitionTabletRowCounts);
+                }
 
-                        statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false);
-                    });
+                statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false,
+                        true /* resetWarehouse */);
+            };
+
+            CancelableAnalyzeTask cancelableTask = new CancelableAnalyzeTask(originalTask, analyzeStatus);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool().execute(cancelableTask);
+            this.future = cancelableTask;
         } catch (Throwable e) {
             LOG.error("failed to submit statistic collect job", e);
-            return;
         }
     }
 

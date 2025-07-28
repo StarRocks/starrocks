@@ -48,7 +48,7 @@
         <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
         <slf4j.version>1.7.36</slf4j.version>
         <arrow.version>17.0.0</arrow.version>
-        <jackson.version>2.12.7.2</jackson.version>
+        <jackson.version>2.19.1</jackson.version>
         <guava.version>32.0.1-jre</guava.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
@@ -354,6 +354,16 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
                 <version>${jackson.version}</version>
             </dependency>
             <!-- jackson -->

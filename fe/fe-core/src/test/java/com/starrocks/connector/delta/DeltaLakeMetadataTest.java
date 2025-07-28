@@ -53,9 +53,9 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
@@ -64,7 +64,7 @@ public class DeltaLakeMetadataTest {
     private HiveMetaClient client;
     private DeltaLakeMetadata deltaLakeMetadata;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(Maps.newHashMap());
 
@@ -84,17 +84,17 @@ public class DeltaLakeMetadataTest {
     @Test
     public void testListDbNames() {
         List<String> dbNames = deltaLakeMetadata.listDbNames(new ConnectContext());
-        Assert.assertEquals(2, dbNames.size());
-        Assert.assertEquals("db1", dbNames.get(0));
-        Assert.assertEquals("db2", dbNames.get(1));
+        Assertions.assertEquals(2, dbNames.size());
+        Assertions.assertEquals("db1", dbNames.get(0));
+        Assertions.assertEquals("db2", dbNames.get(1));
     }
 
     @Test
     public void testListTableNames() {
         List<String> tableNames = deltaLakeMetadata.listTableNames(new ConnectContext(), "db1");
-        Assert.assertEquals(2, tableNames.size());
-        Assert.assertEquals("table1", tableNames.get(0));
-        Assert.assertEquals("table2", tableNames.get(1));
+        Assertions.assertEquals(2, tableNames.size());
+        Assertions.assertEquals("table1", tableNames.get(0));
+        Assertions.assertEquals("table2", tableNames.get(1));
     }
 
     @Test
@@ -184,15 +184,15 @@ public class DeltaLakeMetadataTest {
         };
         List<String> partitionNames =
                 deltaLakeMetadata.listPartitionNames("db1", "table1", ConnectorMetadatRequestContext.DEFAULT);
-        Assert.assertEquals(3, partitionNames.size());
-        Assert.assertEquals("ts=1999", partitionNames.get(0));
-        Assert.assertEquals("ts=2000", partitionNames.get(1));
-        Assert.assertEquals("ts=2001", partitionNames.get(2));
+        Assertions.assertEquals(3, partitionNames.size());
+        Assertions.assertEquals("ts=1999", partitionNames.get(0));
+        Assertions.assertEquals("ts=2000", partitionNames.get(1));
+        Assertions.assertEquals("ts=2001", partitionNames.get(2));
     }
 
     @Test
     public void testTableExists() {
-        Assert.assertTrue(deltaLakeMetadata.tableExists(new ConnectContext(), "db1", "table1"));
+        Assertions.assertTrue(deltaLakeMetadata.tableExists(new ConnectContext(), "db1", "table1"));
     }
 
     @Test
@@ -216,9 +216,9 @@ public class DeltaLakeMetadataTest {
             }
         };
         DeltaLakeTable deltaTable = (DeltaLakeTable) deltaLakeMetadata.getTable(new ConnectContext(), "db1", "table1");
-        Assert.assertNotNull(deltaTable);
-        Assert.assertEquals("table1", deltaTable.getName());
-        Assert.assertEquals(Table.TableType.DELTALAKE, deltaTable.getType());
-        Assert.assertEquals("path/to/table", deltaTable.getTableLocation());
+        Assertions.assertNotNull(deltaTable);
+        Assertions.assertEquals("table1", deltaTable.getName());
+        Assertions.assertEquals(Table.TableType.DELTALAKE, deltaTable.getType());
+        Assertions.assertEquals("path/to/table", deltaTable.getTableLocation());
     }
 }

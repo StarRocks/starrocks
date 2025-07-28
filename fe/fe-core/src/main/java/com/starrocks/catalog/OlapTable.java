@@ -52,6 +52,7 @@ import com.starrocks.alter.OlapTableRollupJobBuilder;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -121,6 +122,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.DropAutoIncrementMapTask;
 import com.starrocks.task.TabletTaskExecutor;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TPersistentIndexType;
@@ -1301,32 +1303,40 @@ public class OlapTable extends Table {
                 continue;
             }
             // one item
-            List<String> singleValues = listPartitionInfo.getIdToValues().get(partitionId);
-            if (CollectionUtils.isNotEmpty(singleValues)) {
+            List<LiteralExpr> literalValues = listPartitionInfo.getLiteralExprValues().get(partitionId);
+            if (CollectionUtils.isNotEmpty(literalValues)) {
                 List<List<String>> cellValue = Lists.newArrayList();
                 // for one item(single value), treat it as multi values.
-                for (String val : singleValues) {
-                    cellValue.add(Lists.newArrayList(val));
+                for (LiteralExpr val : literalValues) {
+                    cellValue.add(Lists.newArrayList(val.getStringValue()));
                 }
                 partitionItems.put(partitionName, new PListCell(cellValue));
             }
 
             // multi items
-            List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partitionId);
-            if (CollectionUtils.isNotEmpty(multiValues)) {
-                if (CollectionUtils.isEmpty(colIdxes)) {
-                    partitionItems.put(partitionName, new PListCell(multiValues));
-                } else {
-                    List<List<String>> cellValue = Lists.newArrayList();
-                    for (List<String> multiValue : multiValues) {
-                        List<String> selectedValues = Lists.newArrayList();
-                        for (int idx : colIdxes) {
-                            selectedValues.add(multiValue.get(idx));
+            List<List<LiteralExpr>> multiExprValues = listPartitionInfo.getMultiLiteralExprValues().get(partitionId);
+            if (CollectionUtils.isNotEmpty(multiExprValues)) {
+                List<List<String>> multiValues = Lists.newArrayList();
+                for (List<LiteralExpr> exprValues : multiExprValues) {
+                    List<String> values = Lists.newArrayList();
+                    if (CollectionUtils.isEmpty(colIdxes)) {
+                        for (LiteralExpr literalExpr : exprValues) {
+                            values.add(literalExpr.getStringValue());
                         }
-                        cellValue.add(selectedValues);
+                    } else {
+                        for (int idx : colIdxes) {
+                            if (idx >= 0 && idx < exprValues.size()) {
+                                values.add(exprValues.get(idx).getStringValue());
+                            } else {
+                                // print index and exprValues
+                                throw new SemanticException("Invalid column index during partition processing. " +
+                                        "Index: " + idx + ", ExprValues: " + exprValues);
+                            }
+                        }
                     }
-                    partitionItems.put(partitionName, new PListCell(cellValue));
+                    multiValues.add(values);
                 }
+                partitionItems.put(partitionName, new PListCell(multiValues));
             }
         }
         return partitionItems;
@@ -2610,6 +2620,31 @@ public class OlapTable extends Table {
         tableProperty.buildPersistentIndexType();
     }
 
+    public TCompactionStrategy getCompactionStrategy() {
+        if (tableProperty != null) {
+            return tableProperty.getCompactionStrategy();
+        }
+        return TCompactionStrategy.DEFAULT;
+    }
+
+    public void setCompactionStrategy(TCompactionStrategy compactionStrategy) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+
+        // only support DEFAULT and REAL_TIME for now
+        if (compactionStrategy == TCompactionStrategy.DEFAULT || compactionStrategy == TCompactionStrategy.REAL_TIME) {
+            tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
+                    TableProperty.compactionStrategyToString(compactionStrategy));
+        } else {
+            // do nothing
+            LOG.warn("Unknown TCompactionStrategy");
+            return;
+        }
+
+        tableProperty.buildCompactionStrategy();
+    }
+
     public Multimap<String, String> getLocation() {
         if (tableProperty != null) {
             return tableProperty.getLocation();
@@ -3467,8 +3502,13 @@ public class OlapTable extends Table {
             }
         }
 
-        if (isFileBundling()) {
+        if (isFileBundling() && isCloudNativeTable()) {
             properties.put(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, isFileBundling().toString());
+        }
+
+        if (getCompactionStrategy() != TCompactionStrategy.DEFAULT) {
+            properties.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, 
+                                TableProperty.compactionStrategyToString(getCompactionStrategy()));
         }
 
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();

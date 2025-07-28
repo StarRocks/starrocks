@@ -16,6 +16,7 @@ For Duplicate Key tables, Aggregate tables, and Unique Key tables, you can delet
 - To prevent misoperations from deleting data in the entire table, you must specify the WHERE clause in the DELETE statement.
 - The deleted rows are not immediately cleaned. They are marked as "deleted" and will be temporarily saved in Segment. Physically, the rows are removed only after data version merge (compaction) is completed.
 - This operation also deletes data of the materialized views that reference this table.
+- You can use the system variable `insert_timeout` to set the timeout duration for DELETE operations.
 
 ## Duplicate Key tables, Aggregate tables, and Unique Key tables
 

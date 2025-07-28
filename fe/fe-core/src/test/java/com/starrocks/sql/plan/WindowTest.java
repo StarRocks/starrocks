@@ -16,12 +16,11 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.junit.Assert;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class WindowTest extends PlanTestBase {
 
@@ -41,7 +40,7 @@ public class WindowTest extends PlanTestBase {
                 "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                 "scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))]), " +
                 "has_var_args:false";
-        Assert.assertTrue(plan, plan.contains(expectSlice));
+        Assertions.assertTrue(plan.contains(expectSlice), plan);
 
         sql = "select lag(null, 1,1) OVER () from t0";
         plan = getFragmentPlan(sql);
@@ -50,8 +49,8 @@ public class WindowTest extends PlanTestBase {
 
         String invalidSql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
         SemanticException e = assertThrows(SemanticException.class, () -> getThriftPlan(invalidSql));
-        Assert.assertTrue(e.getMessage(),
-                e.getMessage().contains("The type of the third parameter of LEAD/LAG not match the type DATETIME"));
+        Assertions.assertTrue(e.getMessage().contains("The type of the third parameter of LEAD/LAG not match the type DATETIME"),
+                e.getMessage());
     }
 
     @Test
@@ -74,7 +73,7 @@ public class WindowTest extends PlanTestBase {
     public void testWindowFunctionTest() throws Exception {
         String sql = "select sum(id_decimal - ifnull(id_decimal, 0)) over (partition by t1c) from test_all_type";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(
+        Assertions.assertTrue(
                 plan.contains("decimal_literal:TDecimalLiteral(value:0, integer_value:00 00 00 00 00 00 00 00)"));
     }
 
@@ -228,7 +227,7 @@ public class WindowTest extends PlanTestBase {
     public void testWindowDuplicatedColumnInPartitionExprAndOrderByExpr() throws Exception {
         String sql = "select v1, sum(v2) over (partition by v1, v2 order by v2 desc) as sum1 from t0";
         String plan = getFragmentPlan(sql);
-        Assert.assertNotNull(plan);
+        Assertions.assertNotNull(plan);
     }
 
     @Test
@@ -1346,7 +1345,7 @@ public class WindowTest extends PlanTestBase {
                         "        row_number() over (PARTITION BY v1 order by v2) as rk " +
                         "    from t0 where v1 > 1 and v2 > 1 having rk = 1;\n";
         SemanticException e = assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
-        assertTrue(e.getMessage(), e.getMessage().contains("HAVING clause cannot contain window function"));
+        assertTrue(e.getMessage().contains("HAVING clause cannot contain window function"), e.getMessage());
     }
 
     @Test
@@ -1370,7 +1369,7 @@ public class WindowTest extends PlanTestBase {
             });
             String expectedMessage = "The second parameter of APPROX_TOP_K must be a constant positive integer";
             String actualMessage = exception.getMessage();
-            Assert.assertTrue(actualMessage.contains(expectedMessage));
+            Assertions.assertTrue(actualMessage.contains(expectedMessage));
         }
         {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
@@ -1379,7 +1378,7 @@ public class WindowTest extends PlanTestBase {
             });
             String expectedMessage = "The third parameter of APPROX_TOP_K must be a constant positive integer";
             String actualMessage = exception.getMessage();
-            Assert.assertTrue(actualMessage.contains(expectedMessage));
+            Assertions.assertTrue(actualMessage.contains(expectedMessage));
         }
         {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
@@ -1388,7 +1387,7 @@ public class WindowTest extends PlanTestBase {
             });
             String expectedMessage = "The maximum number of the second parameter is 100000";
             String actualMessage = exception.getMessage();
-            Assert.assertTrue(actualMessage.contains(expectedMessage));
+            Assertions.assertTrue(actualMessage.contains(expectedMessage));
         }
         {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
@@ -1397,7 +1396,7 @@ public class WindowTest extends PlanTestBase {
             });
             String expectedMessage = "The second parameter of APPROX_TOP_K must be a constant positive integer";
             String actualMessage = exception.getMessage();
-            Assert.assertTrue(actualMessage.contains(expectedMessage));
+            Assertions.assertTrue(actualMessage.contains(expectedMessage));
         }
         {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
@@ -1406,7 +1405,7 @@ public class WindowTest extends PlanTestBase {
             });
             String expectedMessage = "The maximum number of the third parameter is 100000";
             String actualMessage = exception.getMessage();
-            Assert.assertTrue(actualMessage.contains(expectedMessage));
+            Assertions.assertTrue(actualMessage.contains(expectedMessage));
         }
         {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
@@ -1415,7 +1414,7 @@ public class WindowTest extends PlanTestBase {
             });
             String expectedMessage = "The third parameter of APPROX_TOP_K must be a constant positive integer";
             String actualMessage = exception.getMessage();
-            Assert.assertTrue(actualMessage.contains(expectedMessage));
+            Assertions.assertTrue(actualMessage.contains(expectedMessage));
         }
         {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
@@ -1424,7 +1423,7 @@ public class WindowTest extends PlanTestBase {
             });
             String expectedMessage = "The second parameter must be smaller than or equal to the third parameter";
             String actualMessage = exception.getMessage();
-            Assert.assertTrue(actualMessage.contains(expectedMessage));
+            Assertions.assertTrue(actualMessage.contains(expectedMessage));
         }
         {
             Exception exception = Assertions.assertThrows(IllegalStateException.class, () -> {
@@ -1434,7 +1433,7 @@ public class WindowTest extends PlanTestBase {
             });
             String expectedMessage = "Unexpected order by clause for approx_top_k()";
             String actualMessage = exception.getMessage();
-            Assert.assertEquals(expectedMessage, actualMessage);
+            Assertions.assertEquals(expectedMessage, actualMessage);
         }
     }
 

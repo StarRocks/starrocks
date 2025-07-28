@@ -83,10 +83,10 @@ import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -101,9 +101,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
@@ -124,7 +124,7 @@ public class GlobalTransactionMgrTest {
     private TransactionState.TxnCoordinator transactionSourceBe =
             new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "localbe");
 
-    @Before
+    @BeforeEach
     public void setUp() throws InstantiationException, IllegalAccessException, IllegalArgumentException,
             InvocationTargetException, NoSuchMethodException, SecurityException {
         fakeEditLog = new FakeEditLog();
@@ -139,7 +139,7 @@ public class GlobalTransactionMgrTest {
         UtFrameUtils.setUpForPersistTest();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -286,7 +286,7 @@ public class GlobalTransactionMgrTest {
         try {
             masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, transTablets,
                     Lists.newArrayList(), null);
-            Assert.fail();
+            Assertions.fail();
         } catch (TabletQuorumFailedException e) {
             transactionState = masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId2);
             // check status is prepare, because the commit failed
@@ -445,9 +445,9 @@ public class GlobalTransactionMgrTest {
         masterTransMgr.commitTransaction(1L, 1L, transTablets, Lists.newArrayList(),
                 txnCommitAttachment);
 
-        Assert.assertEquals(Long.valueOf(102), Deencapsulation.getField(routineLoadJob, "currentTotalRows"));
-        Assert.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "currentErrorRows"));
-        Assert.assertEquals(Long.valueOf(101L), ((KafkaProgress) routineLoadJob.getProgress()).getOffsetByPartition(1));
+        Assertions.assertEquals(Long.valueOf(102), Deencapsulation.getField(routineLoadJob, "currentTotalRows"));
+        Assertions.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "currentErrorRows"));
+        Assertions.assertEquals(Long.valueOf(101L), ((KafkaProgress) routineLoadJob.getProgress()).getOffsetByPartition(1));
         // todo(ml): change to assert queue
         // Assert.assertEquals(1, routineLoadManager.getNeedScheduleTasksQueue().size());
         // Assert.assertNotEquals("label", routineLoadManager.getNeedScheduleTasksQueue().peek().getId());
@@ -545,13 +545,13 @@ public class GlobalTransactionMgrTest {
         masterTransMgr.commitTransaction(1L, 1L, transTablets, Lists.newArrayList(),
                 txnCommitAttachment);
 
-        Assert.assertEquals(Long.valueOf(0), Deencapsulation.getField(routineLoadJob, "currentTotalRows"));
-        Assert.assertEquals(Long.valueOf(0), Deencapsulation.getField(routineLoadJob, "currentErrorRows"));
-        Assert.assertEquals(Long.valueOf(111L),
+        Assertions.assertEquals(Long.valueOf(0), Deencapsulation.getField(routineLoadJob, "currentTotalRows"));
+        Assertions.assertEquals(Long.valueOf(0), Deencapsulation.getField(routineLoadJob, "currentErrorRows"));
+        Assertions.assertEquals(Long.valueOf(111L),
                 ((KafkaProgress) routineLoadJob.getProgress()).getOffsetByPartition(1));
         // todo(ml): change to assert queue
         // Assert.assertEquals(0, routineLoadManager.getNeedScheduleTasksQueue().size());
-        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
     }
 
     @Test
@@ -695,7 +695,7 @@ public class GlobalTransactionMgrTest {
         try {
             masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, transTablets,
                     Lists.newArrayList(), null);
-            Assert.fail();
+            Assertions.fail();
         } catch (TabletQuorumFailedException e) {
             transactionState = masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId2);
             // check status is prepare, because the commit failed
@@ -762,7 +762,7 @@ public class GlobalTransactionMgrTest {
     public void replayWithExpiredJob() throws Exception {
         Config.label_keep_max_second = 1;
         long dbId = 1;
-        Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
+        Assertions.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
 
         // 1. replay a normal finished transaction
         TransactionState state =
@@ -772,7 +772,7 @@ public class GlobalTransactionMgrTest {
         state.setReason("fake reason");
         state.setFinishTime(System.currentTimeMillis() - 2000);
         masterTransMgr.replayUpsertTransactionState(state);
-        Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
+        Assertions.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
 
         // 2. replay a expired transaction
         TransactionState state2 =
@@ -782,7 +782,7 @@ public class GlobalTransactionMgrTest {
         state2.setReason("fake reason");
         state2.setFinishTime(System.currentTimeMillis());
         masterTransMgr.replayUpsertTransactionState(state2);
-        Assert.assertEquals(1, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
+        Assertions.assertEquals(1, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
 
         Thread.sleep(2000);
         // 3. replay a valid transaction, let state expire
@@ -793,7 +793,7 @@ public class GlobalTransactionMgrTest {
         state3.setReason("fake reason");
         state3.setFinishTime(System.currentTimeMillis());
         masterTransMgr.replayUpsertTransactionState(state3);
-        Assert.assertEquals(2, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
+        Assertions.assertEquals(2, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
 
         // 4. write (state, state2) to image
         File tempFile = File.createTempFile("GlobalTransactionMgrTest", ".image");
@@ -809,11 +809,11 @@ public class GlobalTransactionMgrTest {
 
         // 4. read & check if expired
         DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
-        Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
+        Assertions.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
         SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReaderV2(new JsonReader(new InputStreamReader(dis)));
         masterTransMgr.loadTransactionStateV2(srMetaBlockReader);
         dis.close();
-        Assert.assertEquals(1, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
+        Assertions.assertEquals(1, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
         tempFile.delete();
     }
 
@@ -856,7 +856,7 @@ public class GlobalTransactionMgrTest {
             masterTransMgr.commitPreparedTransaction(
                     masterGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1), transactionId,
                     (long) 1000);
-            Assert.fail("should throw publish timeout exception");
+            Assertions.fail("should throw publish timeout exception");
         } catch (StarRocksException e) {
         }
         transactionState = fakeEditLog.getTransaction(transactionId);
@@ -914,7 +914,7 @@ public class GlobalTransactionMgrTest {
         followerTransMgr.loadTransactionStateV2(reader);
         reader.close();
 
-        Assert.assertEquals(1, followerTransMgr.getTransactionNum());
+        Assertions.assertEquals(1, followerTransMgr.getTransactionNum());
     }
 
     @Test
@@ -931,7 +931,8 @@ public class GlobalTransactionMgrTest {
         doThrow(new CommitRateExceededException(1001, now + 60 * 1000L))
                 .when(dbTransactionMgr)
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
-        Assert.assertThrows(CommitRateExceededException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
+        Assertions.assertThrows(CommitRateExceededException.class,
+                () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
                 Collections.emptyList(), Collections.emptyList(), 10, null));
     }
 
@@ -949,7 +950,7 @@ public class GlobalTransactionMgrTest {
         doReturn(new VisibleStateWaiter(new TransactionState()))
                 .when(dbTransactionMgr)
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
-        Assert.assertFalse(globalTransactionMgr.commitAndPublishTransaction(db, 1001,
+        Assertions.assertFalse(globalTransactionMgr.commitAndPublishTransaction(db, 1001,
                 Collections.emptyList(), Collections.emptyList(), 2, null));
     }
 
@@ -964,7 +965,7 @@ public class GlobalTransactionMgrTest {
         doThrow(NullPointerException.class)
                 .when(dbTransactionMgr)
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
-        Assert.assertThrows(StarRocksException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
+        Assertions.assertThrows(StarRocksException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
                 Collections.emptyList(), Collections.emptyList(), 10, null));
     }
 
@@ -981,7 +982,7 @@ public class GlobalTransactionMgrTest {
         doThrow(LockTimeoutException.class)
                 .when(globalTransactionMgr)
                 .retryCommitOnRateLimitExceeded(db, 1001L, Collections.emptyList(), Collections.emptyList(), null, 10L);
-        Assert.assertThrows(LockTimeoutException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
+        Assertions.assertThrows(LockTimeoutException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
                 Collections.emptyList(), Collections.emptyList(), 10L, null));
     }
 
@@ -1004,39 +1005,39 @@ public class GlobalTransactionMgrTest {
         try {
             masterTransMgr.beginTransaction(1L, null, "xxx", null, null, LoadJobSourceType.FRONTEND, 1L, 1000L);
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof ErrorReportException);
-            Assert.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
+            Assertions.assertTrue(e instanceof ErrorReportException);
+            Assertions.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
             exceptionThrown = true;
         } finally {
             Config.disable_load_job = false;
         }
-        Assert.assertTrue(exceptionThrown);
+        Assertions.assertTrue(exceptionThrown);
 
         Config.metadata_enable_recovery_mode = true;
         exceptionThrown = false;
         try {
             masterTransMgr.beginTransaction(1L, null, "xxx", null, null, LoadJobSourceType.FRONTEND, 1L, 1000L);
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof ErrorReportException);
-            Assert.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
+            Assertions.assertTrue(e instanceof ErrorReportException);
+            Assertions.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
             exceptionThrown = true;
         } finally {
             Config.metadata_enable_recovery_mode = false;
         }
-        Assert.assertTrue(exceptionThrown);
+        Assertions.assertTrue(exceptionThrown);
 
         GlobalStateMgr.getCurrentState().setSafeMode(true);
         exceptionThrown = false;
         try {
             masterTransMgr.beginTransaction(1L, null, "xxx", null, null, LoadJobSourceType.FRONTEND, 1L, 1000L);
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof ErrorReportException);
-            Assert.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
+            Assertions.assertTrue(e instanceof ErrorReportException);
+            Assertions.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
             exceptionThrown = true;
         } finally {
             GlobalStateMgr.getCurrentState().setSafeMode(false);
         }
-        Assert.assertTrue(exceptionThrown);
+        Assertions.assertTrue(exceptionThrown);
     }
 
     @Test
@@ -1046,7 +1047,7 @@ public class GlobalTransactionMgrTest {
         doThrow(LockTimeoutException.class)
                 .when(globalTransactionMgr)
                 .commitAndPublishTransaction(db, 1001L, Collections.emptyList(), Collections.emptyList(), 10L, null);
-        Assert.assertThrows(ErrorReportException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
+        Assertions.assertThrows(ErrorReportException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
                 Collections.emptyList(), Collections.emptyList(), 10L));
     }
 
@@ -1062,21 +1063,21 @@ public class GlobalTransactionMgrTest {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         String label = UUIDUtil.genUUID().toString();
         TransactionStateSnapshot state1 = masterTransMgr.getLabelStatus(GlobalStateMgrTestUtil.testDbId1, label);
-        Assert.assertNotNull(state1);
-        Assert.assertEquals(TransactionStatus.UNKNOWN, state1.getStatus());
-        Assert.assertNull(state1.getReason());
+        Assertions.assertNotNull(state1);
+        Assertions.assertEquals(TransactionStatus.UNKNOWN, state1.getStatus());
+        Assertions.assertNull(state1.getReason());
 
         masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
                         label, transactionSource, LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         TransactionStateSnapshot state2 = masterTransMgr.getLabelStatus(GlobalStateMgrTestUtil.testDbId1, label);
-        Assert.assertNotNull(state2);
-        Assert.assertEquals(TransactionStatus.PREPARE, state2.getStatus());
-        Assert.assertEquals("", state2.getReason());
+        Assertions.assertNotNull(state2);
+        Assertions.assertEquals(TransactionStatus.PREPARE, state2.getStatus());
+        Assertions.assertEquals("", state2.getReason());
 
         masterTransMgr.abortTransaction(GlobalStateMgrTestUtil.testDbId1, label, "artificial failure");
         TransactionStateSnapshot state3 = masterTransMgr.getLabelStatus(GlobalStateMgrTestUtil.testDbId1, label);
-        Assert.assertNotNull(state3);
-        Assert.assertEquals(TransactionStatus.ABORTED, state3.getStatus());
-        Assert.assertEquals("artificial failure", state3.getReason());
+        Assertions.assertNotNull(state3);
+        Assertions.assertEquals(TransactionStatus.ABORTED, state3.getStatus());
+        Assertions.assertEquals("artificial failure", state3.getReason());
     }
 }

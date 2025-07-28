@@ -57,10 +57,10 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -83,7 +83,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         connectContext.setThreadLocalInfo();
     }
 
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         FeConstants.runningUnitTest = true;
         new MockUp<StarOSAgent>() {
@@ -122,7 +122,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         db = new Database(dbId, "db0");
 
         Database oldDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().putIfAbsent(db.getId(), db);
-        Assert.assertNull(oldDb);
+        Assertions.assertNull(oldDb);
 
         Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
         DistributionInfo dist = new HashDistributionInfo(NUM_BUCKETS, Collections.singletonList(c0));
@@ -133,7 +133,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         Partition partition = new Partition(partitionId, partitionId + 100, "t0", index, dist);
         TStorageMedium storage = TStorageMedium.HDD;
-        TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
+        TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), storage, true);
         for (int i = 0; i < NUM_BUCKETS; i++) {
             Tablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId());
             index.addTablet(tablet, tabletMeta);
@@ -167,7 +167,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         db.registerTableUnlocked(table);
     }
 
-    @After
+    @AfterEach
     public void after() throws Exception {
         db.dropTable(table.getName());
     }
@@ -202,7 +202,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         //alterMetaJob = schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
-        Assert.assertEquals("7 months", TimeUtils.toHumanReadableString(
+        Assertions.assertEquals("7 months", TimeUtils.toHumanReadableString(
                 table.getTableProperty().getDataCachePartitionDuration()));
 
     }
@@ -233,7 +233,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
 
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
-        Assert.assertEquals("2 days", TimeUtils.toHumanReadableString(
+        Assertions.assertEquals("2 days", TimeUtils.toHumanReadableString(
                 table.getTableProperty().getDataCachePartitionDuration()));
 
     }
@@ -263,7 +263,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
 
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
-        Assert.assertEquals("4 hours", TimeUtils.toHumanReadableString(
+        Assertions.assertEquals("4 hours", TimeUtils.toHumanReadableString(
                 table.getTableProperty().getDataCachePartitionDuration()));
     }
 }

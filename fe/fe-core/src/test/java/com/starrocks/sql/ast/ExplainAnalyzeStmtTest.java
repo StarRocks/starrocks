@@ -17,18 +17,21 @@ package com.starrocks.sql.ast;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class ExplainAnalyzeStmtTest {
 
-    @Test(expected = ParsingException.class)
+    @Test
     public void testTrinoDialectFailure() {
-        SessionVariable sessionVariable = new SessionVariable();
-        SqlParser.parse("explain analyze select array[1,2,3] as numbers", sessionVariable);
+        assertThrows(ParsingException.class, () -> {
+            SessionVariable sessionVariable = new SessionVariable();
+            SqlParser.parse("explain analyze select array[1,2,3] as numbers", sessionVariable);
+        });
     }
 
     @Test
@@ -37,8 +40,8 @@ public class ExplainAnalyzeStmtTest {
         sessionVariable.setSqlDialect("trino");
         List<StatementBase> statementBases =
                 SqlParser.parse("explain analyze select array[1,2,3] as numbers", sessionVariable);
-        Assert.assertEquals(statementBases.size(), 1);
-        Assert.assertNotNull(statementBases.get(0));
+        Assertions.assertEquals(statementBases.size(), 1);
+        Assertions.assertNotNull(statementBases.get(0));
     }
 
     @Test
@@ -46,8 +49,8 @@ public class ExplainAnalyzeStmtTest {
         SessionVariable sessionVariable = new SessionVariable();
         List<StatementBase> statementBases =
                 SqlParser.parse("explain analyze insert into t0(c1, c2) values(1, 2)", sessionVariable);
-        Assert.assertEquals(statementBases.size(), 1);
-        Assert.assertNotNull(statementBases.get(0));
+        Assertions.assertEquals(statementBases.size(), 1);
+        Assertions.assertNotNull(statementBases.get(0));
     }
 
     @Test
@@ -59,7 +62,7 @@ public class ExplainAnalyzeStmtTest {
 
         String expectedMessage = "Getting syntax error. Detail message: Unsupported operation analyze.";
         String actualMessage = exception.getMessage();
-        Assert.assertEquals(expectedMessage, actualMessage);
+        Assertions.assertEquals(expectedMessage, actualMessage);
     }
 
     @Test
@@ -71,7 +74,7 @@ public class ExplainAnalyzeStmtTest {
 
         String expectedMessage = "Getting syntax error. Detail message: Unsupported operation analyze.";
         String actualMessage = exception.getMessage();
-        Assert.assertEquals(expectedMessage, actualMessage);
+        Assertions.assertEquals(expectedMessage, actualMessage);
     }
 
     @Test
@@ -79,7 +82,7 @@ public class ExplainAnalyzeStmtTest {
         SessionVariable sessionVariable = new SessionVariable();
         List<StatementBase> statementBases =
                 SqlParser.parse("explain analyze select * from t0 where id = 1", sessionVariable);
-        Assert.assertEquals(statementBases.size(), 1);
-        Assert.assertNotNull(statementBases.get(0));
+        Assertions.assertEquals(statementBases.size(), 1);
+        Assertions.assertNotNull(statementBases.get(0));
     }
 }

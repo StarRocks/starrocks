@@ -64,9 +64,9 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.apache.http.client.utils.URIBuilder;
 import org.assertj.core.util.Lists;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -79,13 +79,13 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
-@FixMethodOrder(MethodSorters.JVM)
+@TestMethodOrder(MethodName.class)
 public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     private static final String TABLE_PARTITION_URL_PATTERN =
@@ -188,7 +188,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
         // index
         MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(
-                testDbId, RANGE_PARTITION_TABLE_ID, BASE_PARTITION_ID, testIndexId, testSchemaHash, TStorageMedium.HDD, true);
+                testDbId, RANGE_PARTITION_TABLE_ID, BASE_PARTITION_ID, testIndexId, TStorageMedium.HDD, true);
         baseIndex.addTablet(tablet, tabletMeta);
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
@@ -222,7 +222,14 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
                 result = Sets.newHashSet(testBackendId1);
 
                 GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getComputeNodeId((ComputeResource) any, (LakeTablet) any);
+                        .getComputeNodeId((ComputeResource) any, anyLong);
+
+                minTimes = 0;
+                result = testBackendId1;
+
+                GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getAliveComputeNodeId((ComputeResource) any, anyLong);
+
                 minTimes = 0;
                 result = testBackendId1;
             }
@@ -350,7 +357,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
         // index
         MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(
-                testDbId, LIST_PARTITION_TABLE_ID, BASE_PARTITION_ID, testIndexId, testSchemaHash, TStorageMedium.HDD);
+                testDbId, LIST_PARTITION_TABLE_ID, BASE_PARTITION_ID, testIndexId, TStorageMedium.HDD);
         baseIndex.addTablet(tablet, tabletMeta);
 
         tablet.addReplica(new Replica(

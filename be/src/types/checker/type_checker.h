@@ -93,7 +93,7 @@ DEFINE_TYPE_CHECKER(OracleTimestampClassTypeChecker)
 // Define type checker for microsoft.sql.DateTimeOffset
 DEFINE_TYPE_CHECKER(SqlServerDateTimeOffsetTypeChecker)
 
-// Define type checker for byte array, oracle.jdbc.OracleBlob, or [B
+// Define type checker for byte array, oracle.jdbc.OracleBlob, UUID, or [B
 DEFINE_TYPE_CHECKER(ByteArrayTypeChecker)
 
 // Define default type checker for unspecified types

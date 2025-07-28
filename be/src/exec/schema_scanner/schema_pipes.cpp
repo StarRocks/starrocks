@@ -19,21 +19,20 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTablePipes::_s_columns[] = {
-        {"DATABASE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATABASE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"PIPE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"PIPE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"LOAD_STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"LAST_ERROR", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PIPE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"LOAD_STATUS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"LAST_ERROR", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"CREATED_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), false},
 };
 

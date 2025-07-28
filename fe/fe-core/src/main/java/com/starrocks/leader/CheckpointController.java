@@ -35,6 +35,7 @@
 package com.starrocks.leader;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -67,10 +68,11 @@ import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -93,6 +95,7 @@ public class CheckpointController extends FrontendDaemon {
     private final boolean belongToGlobalStateMgr;
 
     private final Set<String> nodesToPushImage;
+    private final Map<String, Long> lastFailedTime = new HashMap<>();
 
     private volatile String workerNodeName;
     private volatile long workerSelectedTime;
@@ -169,6 +172,9 @@ public class CheckpointController extends FrontendDaemon {
                     nodesToPushImage.add(frontend.getNodeName());
                 }
             }
+            lastFailedTime.clear();
+        } else if (!Strings.isNullOrEmpty(createImageRet.second)) {
+            lastFailedTime.put(createImageRet.second, System.currentTimeMillis());
         }
 
         // Step2: push image
@@ -276,31 +282,7 @@ public class CheckpointController extends FrontendDaemon {
     }
 
     private String selectWorker(boolean needClusterSnapshotInfo) {
-        List<Frontend> workers;
-        if (Config.checkpoint_only_on_leader || needClusterSnapshotInfo /* get snapshot info by leader worker to avoid RPC*/) {
-            workers = new ArrayList<>();
-        } else {
-            workers = GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends();
-            // sort workers by heap used percent asc
-            workers.sort((fe1, fe2) -> {
-                if (Math.abs(fe1.getHeapUsedPercent() - fe2.getHeapUsedPercent()) < 1e-6) {
-                    return 0;
-                } else if (fe1.getHeapUsedPercent() > fe2.getHeapUsedPercent()) {
-                    return 1;
-                } else {
-                    return -1;
-                }
-            });
-        }
-
-        // put the leader node to the end
-        workers.add(GlobalStateMgr.getServingState().getNodeMgr().getMySelf());
-
-        for (Frontend frontend : workers) {
-            LOG.info("frontend: {} heap used percent: {}", frontend.getNodeName(), frontend.getHeapUsedPercent());
-        }
-
-        for (Frontend frontend : workers) {
+        for (Frontend frontend : getWorkers(needClusterSnapshotInfo)) {
             if (frontend.isAlive() && doCheckpoint(frontend, needClusterSnapshotInfo)) {
                 LOG.info("select worker: {} to do checkpoint", frontend.getNodeName());
                 return frontend.getNodeName();
@@ -308,6 +290,44 @@ public class CheckpointController extends FrontendDaemon {
         }
 
         return null;
+    }
+
+    protected List<Frontend> getWorkers(boolean needClusterSnapshotInfo) {
+        List<Frontend> workers;
+        if (Config.checkpoint_only_on_leader || needClusterSnapshotInfo /* get snapshot info by leader worker to avoid RPC*/) {
+            workers = Lists.newArrayList(GlobalStateMgr.getServingState().getNodeMgr().getMySelf());
+        } else {
+            workers = GlobalStateMgr.getServingState().getNodeMgr().getAllFrontends();
+            String leaderNode = GlobalStateMgr.getServingState().getNodeMgr().getMySelf().getNodeName();
+            // sort workers by
+            // 1. lastFailedTime: The closer the time of failure, the lower the probability of being selected as a worker.
+            // 2. heapUsedPercent: The higher the heap usage, the lower the probability of being selected as a worker node.
+            //    To conserve the leader node's memory, the leader node's memory usage is considered infinite.
+            workers.sort((fe1, fe2) -> {
+                long failedTime1 = lastFailedTime.getOrDefault(fe1.getNodeName(), -1L);
+                long failedTime2 = lastFailedTime.getOrDefault(fe2.getNodeName(), -1L);
+                if (failedTime1 != failedTime2) {
+                    return Long.compare(failedTime1, failedTime2);
+                } else {
+                    float usedPercent1 = fe1.getNodeName().equals(leaderNode)
+                            ? Float.MAX_VALUE : fe1.getHeapUsedPercent();
+                    float usedPercent2 = fe2.getNodeName().equals(leaderNode)
+                            ? Float.MAX_VALUE : fe2.getHeapUsedPercent();
+                    return Float.compare(usedPercent1, usedPercent2);
+                }
+            });
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("workers: ");
+        for (Frontend fe : workers) {
+            sb.append("nodeName=").append(fe.getNodeName())
+                    .append(", heapUsedPercent=").append(fe.getHeapUsedPercent())
+                    .append(", lastFailedTime=").append(lastFailedTime.getOrDefault(fe.getNodeName(), -1L))
+                    .append(" ");
+        }
+        LOG.info(sb.toString());
+        return workers;
     }
 
     private boolean doCheckpoint(Frontend frontend, boolean needClusterSnapshotInfo) {
@@ -501,5 +521,10 @@ public class CheckpointController extends FrontendDaemon {
             this.reason = reason;
             this.clusterSnapshotInfo = clusterSnapshotInfo;
         }
+    }
+
+    // Only for test
+    protected void setLastFailedTime(String workerNodeName, long ts) {
+        lastFailedTime.put(workerNodeName, ts);
     }
 }

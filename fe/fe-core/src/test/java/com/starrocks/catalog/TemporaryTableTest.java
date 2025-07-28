@@ -29,12 +29,12 @@ import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.List;
@@ -44,13 +44,13 @@ public class TemporaryTableTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         GlobalStateMgr.getCurrentState().clear();
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -73,7 +73,7 @@ public class TemporaryTableTest {
                 "duplicate key (`c1`) distributed by hash(`c1`) properties ('replication_num'='1')");
         {
             String showCreateTable = getShowCreateTableResult("t0", connectContext);
-            Assert.assertEquals("CREATE TEMPORARY TABLE `t0` (\n" +
+            Assertions.assertEquals("CREATE TEMPORARY TABLE `t0` (\n" +
                     "  `c1` int(11) NULL COMMENT \"\",\n" +
                     "  `c2` int(11) NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP \n" +
@@ -96,7 +96,7 @@ public class TemporaryTableTest {
         {
             String showCreateTable = getShowCreateTableResult("t1", connectContext);
 
-            Assert.assertEquals("CREATE TEMPORARY TABLE `t1` (\n" +
+            Assertions.assertEquals("CREATE TEMPORARY TABLE `t1` (\n" +
                     "  `c1` int(11) NULL COMMENT \"\",\n" +
                     "  `c2` int(11) NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP \n" +
@@ -121,7 +121,7 @@ public class TemporaryTableTest {
         starRocksAssert.withTemporaryTableLike("t0", "t");
         {
             String showCreateTable = getShowCreateTableResult("t0", connectContext);
-            Assert.assertEquals("CREATE TEMPORARY TABLE `t0` (\n" +
+            Assertions.assertEquals("CREATE TEMPORARY TABLE `t0` (\n" +
                     "  `c1` int(11) NULL COMMENT \"\",\n" +
                     "  `c2` int(11) NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP \n" +
@@ -142,7 +142,7 @@ public class TemporaryTableTest {
         starRocksAssert.withTemporaryTableLike("t3", "t2");
         {
             String showCreateTable = getShowCreateTableResult("t3", connectContext);
-            Assert.assertEquals("CREATE TEMPORARY TABLE `t3` (\n" +
+            Assertions.assertEquals("CREATE TEMPORARY TABLE `t3` (\n" +
                     "  `c1` int(11) NULL COMMENT \"\",\n" +
                     "  `c2` int(11) NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP \n" +
@@ -161,8 +161,8 @@ public class TemporaryTableTest {
     @Order(1)
     public void testCreateTemporaryTableAbnormal() throws Exception {
         // temporary table only support olap engine
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "temporary table only support olap engine", () -> {
-            starRocksAssert.withTemporaryTable("create temporary table t (c1 int, c2 int) engine = mysql PROPERTIES\n" +
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "temporary table only support olap engine",
+                () -> starRocksAssert.withTemporaryTable("create temporary table t (c1 int, c2 int) engine = mysql PROPERTIES\n" +
                     "(\n" +
                     "    \"host\" = \"127.0.0.1\",\n" +
                     "    \"port\" = \"3306\",\n" +
@@ -170,8 +170,7 @@ public class TemporaryTableTest {
                     "    \"password\" = \"mysql_passwd\",\n" +
                     "    \"database\" = \"mysql_db_test\",\n" +
                     "    \"table\" = \"mysql_table_test\"\n" +
-                    ");");
-        });
+                    ");"));
 
         starRocksAssert.withTable("create table t (c1 int, c2 int) engine = mysql PROPERTIES\n" +
                 "(\n" +
@@ -183,9 +182,8 @@ public class TemporaryTableTest {
                 "    \"table\" = \"mysql_table_test\"\n" +
                 ");");
         // for create table like, source table must be olap table
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "temporary table only support olap engine", () -> {
-            starRocksAssert.withTemporaryTableLike("t0", "t");
-        });
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "temporary table only support olap engine",
+                () -> starRocksAssert.withTemporaryTableLike("t0", "t"));
     }
 
     @Test
@@ -196,20 +194,17 @@ public class TemporaryTableTest {
                 "properties('replication_num'='1', 'colocate_with'='xx')");
 
         // 1. cannot create view based on temporary table
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "View can't base on temporary table.", () -> {
-            starRocksAssert.withView("create view v1 as select * from t1");
-        });
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "View can't base on temporary table.",
+                () -> starRocksAssert.withView("create view v1 as select * from t1"));
         // 2. cannot create sync mv based on temporary table
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized view can't base on temporary table.", () -> {
-            starRocksAssert.withMaterializedView("create materialized view mv1 as select * from t1");
-        });
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized view can't base on temporary table.",
+                () -> starRocksAssert.withMaterializedView("create materialized view mv1 as select * from t1"));
 
         // 3. cannot create refresh mv based on temporary table
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized view can't base on temporary table.", () -> {
-            starRocksAssert.withRefreshedMaterializedView("create materialized view mv1 " +
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized view can't base on temporary table.",
+                () -> starRocksAssert.withRefreshedMaterializedView("create materialized view mv1 " +
                     "properties(\"replication_num\"=\"1\") " +
-                    "refresh IMMEDIATE MANUAL as select * from t1");
-        });
+                    "refresh IMMEDIATE MANUAL as select * from t1"));
 
     }
 
@@ -221,9 +216,8 @@ public class TemporaryTableTest {
                 "properties('replication_num'='1', 'colocate_with'='xx')");
 
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "temporary table doesn't support alter table statement.", () -> {
-                    starRocksAssert.alterTableProperties("alter table t1 add column c3 int");
-            });
+                "temporary table doesn't support alter table statement.",
+                () -> starRocksAssert.alterTableProperties("alter table t1 add column c3 int"));
     }
 
     @Test
@@ -261,7 +255,7 @@ public class TemporaryTableTest {
 
         {
             String showCreateTable = getShowCreateTableResult("t1", connectContext);
-            Assert.assertEquals("CREATE TEMPORARY TABLE `t1` (\n" +
+            Assertions.assertEquals("CREATE TEMPORARY TABLE `t1` (\n" +
                     "  `c1` int(11) NULL COMMENT \"\",\n" +
                     "  `c2` int(11) NULL COMMENT \"\",\n" +
                     "  `c3` int(11) NULL COMMENT \"\"\n" +
@@ -279,7 +273,7 @@ public class TemporaryTableTest {
         {
             String showCreateTable = getShowCreateTableResult("t1", connectContext);
 
-            Assert.assertEquals("CREATE TABLE `t1` (\n" +
+            Assertions.assertEquals("CREATE TABLE `t1` (\n" +
                     "  `c1` int(11) NULL COMMENT \"\",\n" +
                     "  `c2` int(11) NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP \n" +
@@ -309,13 +303,11 @@ public class TemporaryTableTest {
                 "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
                 "properties('replication_num'='1')");
 
-        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Table t1 is not found", () -> {
-            getShowCreateTableResult("t1", connectContext1);
-        });
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Table t1 is not found",
+                () -> getShowCreateTableResult("t1", connectContext1));
 
-        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Table t2 is not found", () -> {
-            getShowCreateTableResult("t2", connectContext);
-        });
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Table t2 is not found",
+                () -> getShowCreateTableResult("t2", connectContext));
 
     }
 
@@ -328,17 +320,14 @@ public class TemporaryTableTest {
         StarRocksAssert starRocksAssert1 = new StarRocksAssert(connectContext1)
                 .withCatalog(createHiveCatalogStmt).withDatabase("t");
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "show temporary table is not supported under non-default catalog", () -> {
-                starRocksAssert1.useCatalog("hive_catalog").useDatabase("t").show("show temporary tables");
-            });
+                "show temporary table is not supported under non-default catalog",
+                () -> starRocksAssert1.useCatalog("hive_catalog").useDatabase("t").show("show temporary tables"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "", () -> {
-            starRocksAssert1.useCatalog("hive_catalog").useDatabase("t")
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "",
+                () -> starRocksAssert1.useCatalog("hive_catalog").useDatabase("t")
                     .withTemporaryTable("create temporary table t1(c1 int,c2 int, c3 int) " +
                     "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
-                    "properties('replication_num'='1')");
-
-        });
+                            "properties('replication_num'='1')"));
     }
 
     @Test
@@ -348,9 +337,7 @@ public class TemporaryTableTest {
                 "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
                 "properties('replication_num'='1')");
         starRocksAssert.dropTemporaryTable("t1", false);
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "", () -> {
-            starRocksAssert.dropTemporaryTable("t1", false);
-        });
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "", () -> starRocksAssert.dropTemporaryTable("t1", false));
         starRocksAssert.dropTemporaryTable("t1", true);
 
     }
@@ -362,7 +349,7 @@ public class TemporaryTableTest {
                 "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
                 "properties('replication_num'='1')");
         List<List<String>> showDataResult = starRocksAssert.show("show data from t1");
-        Assert.assertEquals(showDataResult.get(0).get(0), "t1");
+        Assertions.assertEquals(showDataResult.get(0).get(0), "t1");
 
     }
 
@@ -374,11 +361,11 @@ public class TemporaryTableTest {
                         "distributed by hash(k1) buckets 3 properties('replication_num'='1');");
         LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         Database database = starRocksAssert.getDb("test");
-        Assert.assertNotNull(database);
+        Assertions.assertNotNull(database);
         Table table = MetaUtils.getSessionAwareTable(connectContext, database, new TableName("test", "tmp"));
-        Assert.assertNotNull(table);
-        Assert.assertTrue(table.isOlapTable());
-        Assert.assertTrue(((OlapTable) table).isTemporaryTable());
+        Assertions.assertNotNull(table);
+        Assertions.assertTrue(table.isOlapTable());
+        Assertions.assertTrue(((OlapTable) table).isTemporaryTable());
         // non-master node can replay drop temporary table successfully
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
         localMetastore.replayDropTable(database, table.getId(), false);

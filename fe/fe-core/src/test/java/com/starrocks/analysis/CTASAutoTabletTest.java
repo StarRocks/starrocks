@@ -23,13 +23,13 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class CTASAutoTabletTest {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         // set some parameters to speedup test
         Config.enable_auto_tablet_distribution = true;
@@ -39,7 +39,7 @@ public class CTASAutoTabletTest {
         cluster.runSql(null, "create database db_for_auto_tablets");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(true);
     }
@@ -91,8 +91,8 @@ public class CTASAutoTabletTest {
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
-        Assert.assertEquals(bucketNum1, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
-        Assert.assertEquals(bucketNum2, 3);
-        Assert.assertEquals(bucketNum3, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
+        Assertions.assertEquals(bucketNum1, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
+        Assertions.assertEquals(bucketNum2, 3);
+        Assertions.assertEquals(bucketNum3, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
     }
 }

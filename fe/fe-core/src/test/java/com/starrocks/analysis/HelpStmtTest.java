@@ -36,18 +36,18 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.HelpStmt;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class HelpStmtTest {
     @Test
     public void testNormal() throws AnalysisException {
         HelpStmt stmt = new HelpStmt("contents");
-        Assert.assertEquals("contents", stmt.getMask());
-        Assert.assertEquals("HELP contents", stmt.toString());
+        Assertions.assertEquals("contents", stmt.getMask());
+        Assertions.assertEquals("HELP contents", stmt.toString());
 
-        Assert.assertEquals(3, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals(3, stmt.getCategoryMetaData().getColumnCount());
-        Assert.assertEquals(2, stmt.getKeywordMetaData().getColumnCount());
+        Assertions.assertEquals(3, stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals(3, stmt.getCategoryMetaData().getColumnCount());
+        Assertions.assertEquals(2, stmt.getKeywordMetaData().getColumnCount());
     }
 }

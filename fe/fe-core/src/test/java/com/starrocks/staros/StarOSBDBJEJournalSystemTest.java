@@ -27,8 +27,8 @@ import com.starrocks.journal.bdbje.BDBJournalCursor;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class StarOSBDBJEJournalSystemTest {
     @Mocked
@@ -48,7 +48,7 @@ public class StarOSBDBJEJournalSystemTest {
         // test get and set
         long id = journalSystem.getReplayId();
         journalSystem.setReplayId(id);
-        Assert.assertEquals(journalSystem.getReplayId(), id);
+        Assertions.assertEquals(journalSystem.getReplayId(), id);
 
         journalSystem.getJournal();
 

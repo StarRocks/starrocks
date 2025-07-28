@@ -8,6 +8,9 @@ CREATE DATABASE test_list_partition_selectivity;
 USE test_list_partition_selectivity;
 -- result:
 -- !result
+ADMIN SET FRONTEND CONFIG ("enable_sync_statistics_load" = "true");
+-- result:
+-- !result
 CREATE TABLE partitions_multi_column_1 (
     c1 int NOT NULL,
     c2 int NOT NULL,

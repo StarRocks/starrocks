@@ -1,0 +1,143 @@
+# StarRocks Frontend (fe/) Cursor Rules
+
+## Overview
+The frontend is the Java-based component responsible for SQL parsing, query planning, metadata management, and coordination. It serves as the brain of StarRocks, handling all SQL operations and managing the distributed query execution.
+
+## ⚠️ BUILD WARNING
+**DO NOT attempt to build or run tests unless explicitly requested.** The build system is resource-intensive.
+
+## Frontend Architecture
+
+### Frontend Core (fe-core/)
+The main frontend module containing all core database functionality:
+
+#### Core SQL Processing
+- `fe-core/src/main/java/com/starrocks/sql/` - SQL processing pipeline
+  - `sql/parser/` - SQL parser (ANTLR-based)
+  - `sql/analyzer/` - SQL semantic analysis and validation
+  - `sql/ast/` - Abstract Syntax Tree definitions
+  - `sql/optimizer/` - Cost-based query optimizer
+  - `sql/plan/` - Physical query plan generation
+  - `sql/spm/` - SQL Plan Management
+
+#### Metadata Management
+- `fe-core/src/main/java/com/starrocks/catalog/` - Metadata catalog system
+  - `catalog/system/` - System tables and metadata
+  - `catalog/mv/` - Materialized view metadata
+  - `catalog/constraint/` - Table constraints management
+  - `catalog/combinator/` - Catalog combinators
+
+#### Query Execution
+- `fe-core/src/main/java/com/starrocks/qe/` - Query execution engine
+  - Core classes: `ConnectContext`, `StmtExecutor`, `DefaultCoordinator`
+  - Session management: `SessionVariable`, `ConnectProcessor`
+  - Query scheduling: `SimpleScheduler`, backend selectors
+  - Result processing: `ShowExecutor`, `ResultReceiver`
+
+#### Query Planning
+- `fe-core/src/main/java/com/starrocks/planner/` - Physical query planning
+  - `planner/stream/` - Stream processing plans
+
+#### External Connectors
+- `fe-core/src/main/java/com/starrocks/connector/` - External data source connectors
+  - `connector/hive/` - Apache Hive integration
+  - `connector/iceberg/` - Apache Iceberg support
+  - `connector/hudi/` - Apache Hudi integration
+  - `connector/jdbc/` - JDBC connectivity
+  - `connector/elasticsearch/` - Elasticsearch connector
+  - `connector/delta/` - Delta Lake support
+  - `connector/kudu/` - Apache Kudu connector
+  - `connector/odps/` - ODPS (MaxCompute) connector
+  - `connector/paimon/` - Apache Paimon connector
+
+#### Data Loading
+- `fe-core/src/main/java/com/starrocks/load/` - Data ingestion framework
+  - `load/loadv2/` - Load v2 implementation
+  - `load/routineload/` - Routine/streaming load
+  - `load/streamload/` - Stream loading
+  - `load/batchwrite/` - Batch write operations
+  - `load/pipe/` - Data pipeline management
+
+#### Storage & Persistence
+- `fe-core/src/main/java/com/starrocks/persist/` - Metadata persistence
+- `fe-core/src/main/java/com/starrocks/journal/` - Write-ahead logging
+- `fe-core/src/main/java/com/starrocks/meta/` - Metadata management
+
+#### Cluster Management
+- `fe-core/src/main/java/com/starrocks/system/` - System information service
+- `fe-core/src/main/java/com/starrocks/server/` - Server components and table factories
+- `fe-core/src/main/java/com/starrocks/ha/` - High availability
+- `fe-core/src/main/java/com/starrocks/leader/` - Leader election
+- `fe-core/src/main/java/com/starrocks/clone/` - Data replication
+
+#### Security & Access Control
+- `fe-core/src/main/java/com/starrocks/authentication/` - User authentication
+- `fe-core/src/main/java/com/starrocks/authorization/` - Access control
+- `fe-core/src/main/java/com/starrocks/credential/` - Credential management
+
+#### Advanced Features
+- `fe-core/src/main/java/com/starrocks/mv/` - Materialized views
+- `fe-core/src/main/java/com/starrocks/scheduler/` - Task scheduling
+- `fe-core/src/main/java/com/starrocks/statistic/` - Statistics collection
+- `fe-core/src/main/java/com/starrocks/warehouse/` - Data warehouse management
+- `fe-core/src/main/java/com/starrocks/lake/` - Lake storage format
+
+#### Monitoring & Operations
+- `fe-core/src/main/java/com/starrocks/monitor/` - System monitoring
+- `fe-core/src/main/java/com/starrocks/metric/` - Metrics collection
+- `fe-core/src/main/java/com/starrocks/http/` - HTTP API endpoints
+
+### Other Frontend Modules
+- `fe-common/` - Common frontend utilities and shared code
+- `plugin-common/` - Plugin framework common components
+- `spark-dpp/` - Spark data preprocessing integration
+- `hive-udf/` - Hive UDF compatibility layer
+
+## Development Guidelines
+
+### Key Entry Points
+- `fe-core/src/main/java/com/starrocks/qe/StmtExecutor.java` - Main statement execution
+- `fe-core/src/main/java/com/starrocks/qe/ConnectContext.java` - Session context
+- `fe-core/src/main/java/com/starrocks/server/GlobalStateMgr.java` - Global state management
+
+### SQL Processing Flow
+1. **Parser** (`sql/parser/`) - Parse SQL text to AST
+2. **Analyzer** (`sql/analyzer/`) - Semantic analysis and validation
+3. **Optimizer** (`sql/optimizer/`) - Cost-based optimization
+4. **Planner** (`planner/`) - Generate physical execution plan
+5. **Executor** (`qe/`) - Execute the plan
+
+### Common Patterns
+- Most core classes extend from `GsonSerializable` for persistence
+- Use `ConnectContext.get()` to access current session context
+- Metadata operations go through `GlobalStateMgr.getCurrentState()`
+- External connectors implement `Connector` and `ConnectorMetadata` interfaces
+
+### Testing
+- Unit tests are in `fe-core/src/test/`
+- Integration tests use SQL files in `/test/sql/`
+- Mock objects are in `fe-core/src/test/java/com/starrocks/utframe/`
+
+## Contribution Guidelines
+
+### PR Titles for Frontend Changes
+Use appropriate prefixes for frontend-related PRs:
+- `[BugFix] Fix SQL parser issue with complex expressions`
+- `[Feature] Add materialized view automatic refresh`
+- `[Enhancement] Improve connector metadata caching`
+- `[Performance] Optimize query planner for large joins`
+
+### Commit Message Examples for Frontend
+```
+[Feature] Add support for Apache Paimon connector
+
+Implement Paimon connector in fe-core to enable querying
+Paimon tables with full metadata integration.
+
+- Add PaimonConnector and PaimonMetadata classes
+- Implement schema evolution and partition pruning
+- Add connector configuration and validation
+- Include comprehensive unit tests
+
+Closes: #12345
+```

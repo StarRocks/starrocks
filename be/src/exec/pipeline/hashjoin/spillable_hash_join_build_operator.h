@@ -20,7 +20,7 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
-#include "exec/join_hash_map.h"
+#include "exec/join/join_hash_map.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
 #include "exec/spill/spiller.h"

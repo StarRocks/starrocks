@@ -17,8 +17,8 @@
 
 package com.starrocks.catalog;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -62,22 +62,22 @@ public class ColumnStatsTest {
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
         ColumnStats rStats1 = new ColumnStats();
         rStats1.readFields(dis);
-        Assert.assertTrue(rStats1.equals(stats1));
+        Assertions.assertTrue(rStats1.equals(stats1));
 
         ColumnStats rStats2 = new ColumnStats();
         rStats2.readFields(dis);
-        Assert.assertTrue(rStats2.equals(stats2));
+        Assertions.assertTrue(rStats2.equals(stats2));
 
         ColumnStats rStats3 = ColumnStats.read(dis);
-        Assert.assertTrue(rStats3.equals(stats3));
+        Assertions.assertTrue(rStats3.equals(stats3));
 
         ColumnStats rStats4 = ColumnStats.read(dis);
-        Assert.assertTrue(rStats4.equals(stats4));
-        Assert.assertTrue(rStats4.equals(stats3));
+        Assertions.assertTrue(rStats4.equals(stats4));
+        Assertions.assertTrue(rStats4.equals(stats3));
 
-        Assert.assertTrue(rStats3.equals(rStats3));
-        Assert.assertFalse(rStats3.equals(this));
-        Assert.assertFalse(rStats2.equals(rStats3));
+        Assertions.assertTrue(rStats3.equals(rStats3));
+        Assertions.assertFalse(rStats3.equals(this));
+        Assertions.assertFalse(rStats2.equals(rStats3));
 
         // 3. delete files
         dis.close();

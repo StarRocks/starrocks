@@ -29,7 +29,20 @@ SUBMIT TASK <task_name>
 [PROPERTIES(<"key" = "value"[, ...]>)]
 AS <etl_statement>
 ```
+## PROPERTIES
 
+You can add `session.` with session variables to change the Task running connect context configurations.
+
+
+For example, the following statement submits a task named `test_task` with session properties which enables query profile and increase query timeout:
+```SQL
+SUBMIT TASK test_task
+PROPERTIES (
+    "session.enable_profile" = "true",
+    "session.insert_timeout" = "10000"
+)
+AS insert into t2 select * from t1;
+```
 ## Parameters
 
 | **Parameter**      | **Required** | **Description**                                                                                     |
@@ -99,7 +112,7 @@ SUBMIT TASK AS INSERT OVERWRITE tbl3 SELECT * FROM src_tbl;
 Example 4: Submit an asynchronous task for `INSERT OVERWRITE insert_wiki_edit SELECT * FROM source_wiki_edit` without specifying the task name, and extend the query timeout to `100000` seconds using the hint:
 
 ```SQL
-SUBMIT /*+set_var(query_timeout=100000)*/ TASK AS
+SUBMIT /*+set_var(insert_timeout=100000)*/ TASK AS
 INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
@@ -114,4 +127,15 @@ INSERT OVERWRITE insert_wiki_edit
     SELECT dt, user_id, count(*) 
     FROM source_wiki_edit 
     GROUP BY dt, user_id;
+```
+
+Example 6: Create a task with custom session properties:
+
+```SQL
+SUBMIT TASK test_task
+PROPERTIES (
+    "session.enable_profile" = "true",
+    "session.insert_timeout" = "10000"
+)
+AS insert into t2 select * from t1;
 ```

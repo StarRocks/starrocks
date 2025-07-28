@@ -29,9 +29,9 @@ import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
@@ -43,7 +43,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 public class AnalyzeCreateAnalyzeJobTest {
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -69,9 +69,9 @@ public class AnalyzeCreateAnalyzeJobTest {
         String sql = "create analyze all";
         CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
 
-        Assert.assertEquals(StatsConstants.DEFAULT_ALL_ID, analyzeStmt.getDbId());
-        Assert.assertEquals(StatsConstants.DEFAULT_ALL_ID, analyzeStmt.getTableId());
-        Assert.assertTrue(analyzeStmt.getColumnNames().isEmpty());
+        Assertions.assertEquals(StatsConstants.DEFAULT_ALL_ID, analyzeStmt.getDbId());
+        Assertions.assertEquals(StatsConstants.DEFAULT_ALL_ID, analyzeStmt.getTableId());
+        Assertions.assertTrue(analyzeStmt.getColumnNames().isEmpty());
     }
 
     @Test
@@ -80,9 +80,9 @@ public class AnalyzeCreateAnalyzeJobTest {
         CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
 
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("db");
-        Assert.assertEquals(db.getId(), analyzeStmt.getDbId());
-        Assert.assertEquals(StatsConstants.DEFAULT_ALL_ID, analyzeStmt.getTableId());
-        Assert.assertTrue(analyzeStmt.getColumnNames().isEmpty());
+        Assertions.assertEquals(db.getId(), analyzeStmt.getDbId());
+        Assertions.assertEquals(StatsConstants.DEFAULT_ALL_ID, analyzeStmt.getTableId());
+        Assertions.assertTrue(analyzeStmt.getColumnNames().isEmpty());
     }
 
     @Test
@@ -91,10 +91,10 @@ public class AnalyzeCreateAnalyzeJobTest {
         CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
 
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("db");
-        Assert.assertEquals(db.getId(), analyzeStmt.getDbId());
+        Assertions.assertEquals(db.getId(), analyzeStmt.getDbId());
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl");
-        Assert.assertEquals(table.getId(), analyzeStmt.getTableId());
-        Assert.assertEquals(2, analyzeStmt.getColumnNames().size());
+        Assertions.assertEquals(table.getId(), analyzeStmt.getTableId());
+        Assertions.assertEquals(2, analyzeStmt.getColumnNames().size());
     }
 
     @Test
@@ -103,15 +103,15 @@ public class AnalyzeCreateAnalyzeJobTest {
         CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
 
         DDLStmtExecutor.execute(analyzeStmt, starRocksAssert.getCtx());
-        Assert.assertEquals(1,
+        Assertions.assertEquals(1,
                 starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList().size());
         sql = "create analyze sample table hive0.tpch.customer(C_NAME, C_PHONE)";
         analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
-        Assert.assertEquals(2, analyzeStmt.getColumnNames().size());
-        Assert.assertEquals(StatsConstants.AnalyzeType.SAMPLE, analyzeStmt.getAnalyzeType());
+        Assertions.assertEquals(2, analyzeStmt.getColumnNames().size());
+        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, analyzeStmt.getAnalyzeType());
 
         DDLStmtExecutor.execute(analyzeStmt, starRocksAssert.getCtx());
-        Assert.assertEquals(2,
+        Assertions.assertEquals(2,
                 starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList().size());
     }
 
@@ -134,7 +134,7 @@ public class AnalyzeCreateAnalyzeJobTest {
         List<List<String>> analyzeJobs = starRocksAssert.show("show analyze job where `Type` = 'HISTOGRAM'");
         List<String> jobDesc = analyzeJobs.get(0);
         String jobId = jobDesc.get(0);
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 List.of("default_catalog", "db", "tbl1", "c1,c2", "HISTOGRAM", "SCHEDULE",
                         "{histogram_sample_ratio=1, histogram_mcv_size=100, histogram_bucket_num=128}"),
                 jobDesc.subList(1, jobDesc.size() - 3));
@@ -146,7 +146,7 @@ public class AnalyzeCreateAnalyzeJobTest {
             analyzeJobs = starRocksAssert.show("show analyze job where `Type` = 'HISTOGRAM'");
             jobDesc = analyzeJobs.get(0);
             jobId = jobDesc.get(0);
-            Assert.assertEquals(
+            Assertions.assertEquals(
                     List.of("default_catalog", "db", "tbl1", "c1,c2", "HISTOGRAM", "SCHEDULE",
                             "{histogram_sample_ratio=1, histogram_mcv_size=100, histogram_bucket_num=128}",
                             "FINISH"),
@@ -164,15 +164,15 @@ public class AnalyzeCreateAnalyzeJobTest {
         List<NativeAnalyzeJob> jobs = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllNativeAnalyzeJobList();
 
         Optional<NativeAnalyzeJob> defaultJob = jobs.stream().filter(NativeAnalyzeJob::isDefaultJob).findFirst();
-        Assert.assertTrue(defaultJob.isPresent());
-        Assert.assertSame(StatsConstants.AnalyzeType.FULL, defaultJob.get().getAnalyzeType());
+        Assertions.assertTrue(defaultJob.isPresent());
+        Assertions.assertSame(StatsConstants.AnalyzeType.FULL, defaultJob.get().getAnalyzeType());
 
         Config.enable_collect_full_statistic = false;
         statisticAutoCollector.prepareDefaultJob();
         jobs = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllNativeAnalyzeJobList();
         defaultJob = jobs.stream().filter(NativeAnalyzeJob::isDefaultJob).findFirst();
-        Assert.assertTrue(defaultJob.isPresent());
-        Assert.assertSame(StatsConstants.AnalyzeType.SAMPLE, defaultJob.get().getAnalyzeType());
+        Assertions.assertTrue(defaultJob.isPresent());
+        Assertions.assertSame(StatsConstants.AnalyzeType.SAMPLE, defaultJob.get().getAnalyzeType());
         Config.enable_collect_full_statistic = true;
     }
 }

@@ -33,8 +33,8 @@ import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -66,14 +66,16 @@ public class ColocatedBackendSelectorTest {
 
         {
             int maxBucketsPerBeToUseBalancerAssignment = 5;
-            Assert.assertThrows("Backend node not found", NonRecoverableException.class,
-                    () -> checkColocatedAssignment(scanNode, workerProvider, maxBucketsPerBeToUseBalancerAssignment, null));
+            Assertions.assertThrows(NonRecoverableException.class,
+                    () -> checkColocatedAssignment(scanNode, workerProvider, maxBucketsPerBeToUseBalancerAssignment, null),
+                    "Backend node not found");
         }
 
         {
             int maxBucketsPerBeToUseBalancerAssignment = 0;
-            Assert.assertThrows("Backend node not found", NonRecoverableException.class,
-                    () -> checkColocatedAssignment(scanNode, workerProvider, maxBucketsPerBeToUseBalancerAssignment, null));
+            Assertions.assertThrows(NonRecoverableException.class,
+                    () -> checkColocatedAssignment(scanNode, workerProvider, maxBucketsPerBeToUseBalancerAssignment, null),
+                    "Backend node not found");
         }
     }
 

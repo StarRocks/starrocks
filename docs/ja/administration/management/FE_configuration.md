@@ -288,7 +288,23 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: FE ノード内の HTTP サーバーが保持するバックログキューの長さ。
 - 導入バージョン: -
 
+##### enable_http_async_handler
 
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: システムが HTTP リクエストを非同期に処理できるようにするかどうかを設定します。この機能を有効にすると、Netty ワーカースレッドが受信した HTTP リクエストは、HTTP サーバのブロックを回避するために、サービスロジックを処理する別のスレッドプールに送信されます。無効にすると、Netty ワーカーがサービスロジックを処理します。
+- 導入バージョン: 4.0.0
+
+##### http_async_threads_num
+
+- デフォルト: 4096
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 非同期 HTTP リクエスト処理用のスレッドプールのサイズ。別名は `max_http_sql_service_task_threads_num` である。
+- 導入バージョン: 4.0.0
 
 
 
@@ -407,7 +423,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### mysql_server_version
 
-- デフォルト: 5.1.0
+- デフォルト: 8.0.33
 - タイプ: String
 - 単位: -
 - 変更可能: はい
@@ -654,6 +670,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 変更可能: はい
 - 説明: クエリのプロファイルを収集するかどうか。このパラメータが `TRUE` に設定されている場合、システムはクエリのプロファイルを収集します。このパラメータが `FALSE` に設定されている場合、システムはクエリのプロファイルを収集しません。
+- 導入バージョン: -
+
+##### profile_info_format
+
+- デフォルト: default
+- タイプ: String
+- 単位: -
+- 変更可能: はい
+- 説明: システムが出力する Profile のフォーマット。有効な値：`default` と `json`. `default` に設定すると、Profile はデフォルトのフォーマットで出力される。`json` に設定すると、システムは JSON フォーマットで Profile を出力する。
 - 導入バージョン: -
 
 ##### enable_background_refresh_connector_metadata
@@ -1708,6 +1733,25 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 完了したトランザクションがクリーンアップされる時間間隔。単位: 秒。完了したトランザクションがタイムリーにクリーンアップされるように、短い時間間隔を指定することをお勧めします。
 - 導入バージョン: -
 
+##### transaction_stream_load_coordinator_cache_capacity
+
+- デフォルト：4096
+- タイプ：Int
+- 単位：-
+- 変更可能：是
+- 説明：ストレージトランザクションタグからcoordinatorノードへのマッピングのキャッシュ容量を設定します。
+
+- 導入バージョン：-
+
+##### transaction_stream_load_coordinator_cache_expire_seconds
+
+- デフォルト：900
+- タイプ：Int
+- 単位：-
+- 変更可能：是
+- 説明：トランザクションタグとcoordinatorノードのマッピング関係がキャッシュ内に保持される生存時間（TTL）。
+- 導入バージョン：-
+
 ### ストレージ
 
 ##### default_replication_num
@@ -2100,7 +2144,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ: String
 - 単位: -
 - 変更可能: いいえ
-- 説明: 使用するオブジェクトストレージのタイプ。共有データモードでは、StarRocks は Azure Blob（v3.1.1 以降でサポート）および S3 プロトコルと互換性のあるオブジェクトストレージ（AWS S3、Google GCP、MinIO など）にデータを保存することをサポートしています。有効な値: `S3` (デフォルト) 、`HDFS`、`AZBLOB`、`ADLS2`。このパラメータを `S3` に指定する場合、`aws_s3` で始まるパラメータを追加する必要があります。このパラメータを `AZBLOB` に指定する場合、`azure_blob` で始まるパラメータを追加する必要があります。このパラメータを `ADLS2` に指定する場合、`azure_adls2` で始まるパラメータを追加する必要があります。このパラメータを `HDFS` に指定する場合、`cloud_native_hdfs_url` を追加する必要があります。
+- 説明: 使用するオブジェクトストレージのタイプ。共有データモードでは、StarRocksは、HDFS、Azure Blob（v3.1.1以降でサポート）、Azure Data Lake Storage Gen2（v3.4.1以降でサポート）、Google Storage（ネイティブ SDK は v3.5.1 以降でサポート）、およびS3プロトコルと互換性のあるオブジェクトストレージシステム（AWS S3、MinIOなど）へのデータ保存をサポートしています。有効な値: `S3` (デフォルト) 、`HDFS`、`AZBLOB`、`ADLS2`、`GS`。このパラメータを `S3` に指定する場合、`aws_s3` で始まるパラメータを追加する必要があります。このパラメータを `AZBLOB` に指定する場合、`azure_blob` で始まるパラメータを追加する必要があります。このパラメータを `ADLS2` に指定する場合、`azure_adls2` で始まるパラメータを追加する必要があります。このパラメータを `GS` に指定する場合、`gcp_gcs` で始まるパラメータを追加する必要があります。このパラメータを `HDFS` に指定する場合、`cloud_native_hdfs_url` を追加する必要があります。
 - 導入バージョン: -
 
 ##### cloud_native_hdfs_url
@@ -2305,6 +2349,60 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: Azure Blob Storage へのアクセスにネイティブ SDK を使用し、Managed Identity と Service Principal による認証を許可するかどうか。この項目を `false` に設定すると、Shared Key と SAS Token による認証のみが許可される。
 - 導入バージョン: v3.4.4
 
+##### gcp_gcs_path
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: データを保存するために使用される Google Cloud パス。Google Cloud バケットの名前とその下のサブパス（存在する場合）で構成されます。例: `testbucket/subpath`。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_service_account_email
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Service Account 作成時に生成された JSON ファイル内のメールアドレスです。例：`user@hello.iam.gserviceaccount.com`。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_service_account_private_key_id
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Service Account 作成時に生成された JSON ファイル内の秘密鍵 ID です。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_service_account_private_key
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Service Account 作成時に生成された JSON ファイル内の秘密鍵です。例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_impersonation_service_account
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: なりすましベースの認証を使用する場合、なりすます Service Account です。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_use_compute_engine_service_account
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: Compute Engine にバインドされている Service Account を使用するかどうか。
+- 導入バージョン: v3.5.1
+
 ##### lake_compaction_score_selector_min_score
 
 - デフォルト: 10.0
@@ -2430,6 +2528,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: 共有データモードでCompactionが無効になっているテーブルまたはパーティションのリスト。形式は `tableId1;partitionId2` で、セミコロンで区切ります。例: `12345;98765`。
 - 導入バージョン: v3.4.4
+
+##### lake_compaction_allow_partial_success
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: この項目を `true` に設定すると、サブタスクの 1 つが成功したときに共有データクラスタでのコンパクション操作が成功したとみなす。
+- 導入バージョン: v3.5.2
 
 ##### lake_enable_balance_tablets_between_workers
 
@@ -2649,6 +2756,123 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: ユーザーの認証情報を検索するために使用される管理者のパスワード。
 - 導入バージョン: -
 
+##### jwt_jwks_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JSON Web Key Set (JWKS) サービスの URL または `fe/conf` ディレクトリ内の公開鍵ローカルファイルへのパス。
+- 導入バージョン: v3.5.0
+
+##### jwt_principal_field
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内でサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と一致している必要があります。
+- 導入バージョン: v3.5.0
+
+##### jwt_required_issuer
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 発行者と一致する場合にのみ、JWT は有効と見なされます。
+- 導入バージョン: v3.5.0
+
+##### jwt_required_audience
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内の受信者 (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 受信者と一致する場合にのみ、JWT は有効と見なされます。
+- 導入バージョン: v3.5.0
+
+##### oauth2_auth_server_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: 認可 URL。OAuth 2.0 認可プロセスを開始するためにユーザーのブラウザがリダイレクトされる URL。
+- 導入バージョン: v3.5.0
+
+##### oauth2_token_server_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: StarRocks がアクセストークンを取得する認可サーバーのエンドポイントの URL。
+- 導入バージョン: v3.5.0
+
+##### oauth2_client_id
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: StarRocks クライアントの公開識別子。
+- 導入バージョン: v3.5.0
+
+##### oauth2_client_secret
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: 認可サーバーで StarRocks クライアントを認証するために使用される秘密。
+- 導入バージョン: v3.5.0
+
+##### oauth2_redirect_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: OAuth 2.0 認証が成功した後にユーザーのブラウザがリダイレクトされる URL。この URL に認可コードが送信されます。ほとんどの場合、`http://<starrocks_fe_url>:<fe_http_port>/api/oauth2` として設定する必要があります。
+- 導入バージョン: v3.5.0
+
+##### oauth2_jwks_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JSON Web Key Set (JWKS) サービスの URL または `conf` ディレクトリ内のローカルファイルのパス。
+- 導入バージョン: v3.5.0
+
+##### oauth2_principal_field
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内でサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と同一でなければなりません。
+- 導入バージョン: v3.5.0
+
+##### oauth2_required_issuer
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT の発行者と一致する場合にのみ、JWT は有効と見なされます。
+- 導入バージョン: v3.5.0
+
+##### oauth2_required_audience
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内のオーディエンス (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT のオーディエンスと一致する場合にのみ、JWT は有効と見なされます。
+- 導入バージョン: v3.5.0
+
 ##### auth_token
 
 - デフォルト: 空の文字列
@@ -2807,7 +3031,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト: 8
 - タイプ: Int
 - 単位: -
-- 変更可能: はい
+- 変更可能: いいえ
 - 説明: JDBC catalogs にアクセスするための JDBC 接続プールの最大容量。
 - 導入バージョン: -
 
@@ -2816,7 +3040,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 変更可能: はい
+- 変更可能: いいえ
 - 説明: JDBC catalogs にアクセスするための JDBC 接続プールの最小アイドル接続数。
 - 導入バージョン: -
 
@@ -2825,7 +3049,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト: 600000
 - タイプ: Int
 - 単位: ミリ秒
-- 変更可能: はい
+- 変更可能: いいえ
 - 説明: JDBC catalog にアクセスするための接続がタイムアウトするまでの最大時間。タイムアウトした接続はアイドルと見なされます。
 - 導入バージョン: -
 
@@ -3000,3 +3224,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: FEが Image をロードした後に、再ロードのフラグチェックを行うかどうか。ベースとなるマテリアライズドビューに対してチェックを行う場合、それに関連する他のマテリアライズドビューに対しては必要ありません。
 - 導入バージョン: v3.5.0
+
+##### enable_mv_post_image_reload_cache
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: システムがヒストリカルノードをトレースすることを許可するかどうか。この項目を `true` に設定することで、キャッシュ共有機能を有効にし、エラスティックなスケーリング時にシステムが適切なキャッシュノードを選択できるようにすることができる。
+- 導入バージョン: v3.5.1

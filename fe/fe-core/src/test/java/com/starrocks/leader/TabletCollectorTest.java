@@ -15,8 +15,8 @@
 package com.starrocks.leader;
 
 import com.starrocks.leader.TabletCollector.CollectStat;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.PriorityQueue;
 
@@ -28,8 +28,8 @@ public class TabletCollectorTest {
         queue.add(new CollectStat(1L, 1L));
         queue.add(new CollectStat(2L, 2L));
         queue.add(new CollectStat(3L, 3L));
-        Assert.assertEquals(1L, queue.poll().lastCollectTime);
-        Assert.assertEquals(2L, queue.poll().lastCollectTime);
-        Assert.assertEquals(3L, queue.poll().lastCollectTime);
+        Assertions.assertEquals(1L, queue.poll().lastCollectTime);
+        Assertions.assertEquals(2L, queue.poll().lastCollectTime);
+        Assertions.assertEquals(3L, queue.poll().lastCollectTime);
     }
 }

@@ -50,10 +50,12 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -299,6 +301,14 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                                     " cannot be updated now because this table contains mixed metadata types "  + 
                                     "(both split and aggregate). Please wait until old metadata versions are vacuumed");
             }
+
+            if (!((LakeTable) olapTable).checkLakeRollupAllowFileBundling()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
+                                    " cannot be updated now because this table contains LakeRollup created in old version."  + 
+                                    " You can rebuild the Rollup and retry");
+            }
+
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") &&
                     !properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("false")) {
@@ -406,6 +416,23 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                                     " haven't been enabled");
                 }
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY).equalsIgnoreCase("default") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY).equalsIgnoreCase("real_time")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown compaction strategy: " + 
+                            properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY));
+            }
+            if (!table.isCloudNativeTableOrMaterializedView()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY +
+                                    " can be only set to the cloud native table");
+            }
+
+            OlapTable olapTable = (OlapTable) table;
+            if (olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "The compaction strategy can be only " +
+                            "update for a primary key table. ");
+            }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }
@@ -505,8 +532,20 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                         ErrorCode.ERR_COMMON_ERROR, functionName);
             }
             if (clause.getDistributionDesc() != null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Unsupported change distribution type when merge partitions");
+                DistributionDesc defaultDistributionInfo = olapTable.getDefaultDistributionInfo()
+                        .toDistributionDesc(olapTable.getIdToColumn());
+                if (clause.getDistributionDesc().getType() != defaultDistributionInfo.getType()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Unsupported change distribution type when merge partitions");
+                }
+                if (defaultDistributionInfo instanceof HashDistributionDesc) {
+                    HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) defaultDistributionInfo;
+                    if (!hashDistributionDesc.getDistributionColumnNames().equals(
+                            ((HashDistributionDesc) clause.getDistributionDesc()).getDistributionColumnNames())) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                "Unsupported change distribution column when merge partitions");
+                    }
+                }
             }
             if (clause.getPartitionNames() != null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -561,10 +600,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         // analyze distribution
         DistributionDesc distributionDesc = clause.getDistributionDesc();
         if (distributionDesc != null) {
-            if (distributionDesc instanceof RandomDistributionDesc && targetKeysType != KeysType.DUP_KEYS
-                    && !(targetKeysType == KeysType.AGG_KEYS && !hasReplace)) {
-                throw new SemanticException(targetKeysType.toSql() + (hasReplace ? " with replace " : "")
-                        + " must use hash distribution", distributionDesc.getPos());
+            if (distributionDesc instanceof RandomDistributionDesc && targetKeysType != KeysType.DUP_KEYS) {
+                throw new SemanticException(targetKeysType.toSql() + " must use hash distribution", distributionDesc.getPos());
             }
             distributionDesc.analyze(columnSet);
             clause.setDistributionDesc(distributionDesc);
@@ -1190,6 +1227,13 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         if (!table.isCloudNativeTableOrMaterializedView()) {
             throw new SemanticException("Split tablet only support cloud native tables");
         }
+
+        try {
+            clause.analyze();
+        } catch (StarRocksException e) {
+            throw new SemanticException(e.getMessage());
+        }
+
         return null;
     }
 

@@ -131,8 +131,9 @@ public class LakeRestoreJob extends RestoreJob {
                 MaterializedIndex index = part.getDefaultPhysicalPartition().getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
                 Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tablet);
-
+                        .getAliveComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tablet.getId());
+                Preconditions.checkArgument(computeNodeId != null,
+                        "No alive backend or compute node in %s warehouse", WarehouseManager.DEFAULT_RESOURCE);
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),
                         computeNodeId, tbl.getSchemaHashByIndexId(index.getId()), -1);
@@ -283,7 +284,7 @@ public class LakeRestoreJob extends RestoreJob {
             MaterializedIndexMeta indexMeta = restoreTbl.getIndexMetaByIndexId(restoredIdx.getId());
             TStorageMedium medium = restoreTbl.getPartitionInfo().getDataProperty(restorePart.getId()).getStorageMedium();
             TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), restorePart.getId(),
-                    restoredIdx.getId(), indexMeta.getSchemaHash(), medium, true);
+                    restoredIdx.getId(), medium, true);
             for (Tablet restoreTablet : restoredIdx.getTablets()) {
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
             }

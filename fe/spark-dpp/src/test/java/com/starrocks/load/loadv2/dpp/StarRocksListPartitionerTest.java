@@ -3,8 +3,8 @@
 package com.starrocks.load.loadv2.dpp;
 
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -60,14 +60,14 @@ public class StarRocksListPartitionerTest {
         StarRocksListPartitioner listPartitioner =
                 new StarRocksListPartitioner(partitionInfo, partitionKeyIndexes, partitionListKeys);
         int num = listPartitioner.numPartitions();
-        Assert.assertEquals(3, num);
+        Assertions.assertEquals(3, num);
 
         List<Object> fields1 = new ArrayList<>();
         fields1.add(-100);
         fields1.add("name");
         DppColumns record1 = new DppColumns(fields1);
         int id1 = listPartitioner.getPartition(record1);
-        Assert.assertEquals(-1, id1);
+        Assertions.assertEquals(-1, id1);
 
         List<Object> fields2 = new ArrayList<>();
         fields2.add("2023-01-01");
@@ -75,7 +75,7 @@ public class StarRocksListPartitionerTest {
         fields2.add("123455");
         DppColumns record2 = new DppColumns(fields2);
         int id2 = listPartitioner.getPartition(record2);
-        Assert.assertEquals(1, id2);
+        Assertions.assertEquals(1, id2);
 
         List<Object> fields3 = new ArrayList<>();
         fields3.add("cn");
@@ -83,7 +83,7 @@ public class StarRocksListPartitionerTest {
         fields3.add("123455");
         DppColumns record3 = new DppColumns(fields3);
         int id3 = listPartitioner.getPartition(record3);
-        Assert.assertEquals(-1, id3);
+        Assertions.assertEquals(-1, id3);
 
         List<Object> fields4 = new ArrayList<>();
         fields4.add("2022-02-01");
@@ -91,7 +91,7 @@ public class StarRocksListPartitionerTest {
         fields4.add("123455");
         DppColumns record4 = new DppColumns(fields4);
         int id4 = listPartitioner.getPartition(record4);
-        Assert.assertEquals(2, id4);
+        Assertions.assertEquals(2, id4);
 
     }
 }

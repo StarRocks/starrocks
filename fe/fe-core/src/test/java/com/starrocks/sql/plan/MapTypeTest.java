@@ -15,16 +15,12 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.utframe.StarRocksAssert;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class MapTypeTest extends PlanTestBase {
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);

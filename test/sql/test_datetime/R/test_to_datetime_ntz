@@ -1,0 +1,57 @@
+-- name: test_to_datetime_ntz
+set sql_dialect='StarRocks';
+-- result:
+-- !result
+SELECT to_datetime_ntz(1598306400, 0);
+-- result:
+2020-08-24 22:00:00
+-- !result
+SELECT to_datetime_ntz(1598306400);
+-- result:
+2020-08-24 22:00:00
+-- !result
+SELECT to_datetime_ntz(1598306400123, 3);
+-- result:
+2020-08-24 22:00:00.123000
+-- !result
+SELECT to_datetime_ntz(1598306400123456, 6);
+-- result:
+2020-08-24 22:00:00.123456
+-- !result
+SELECT to_datetime_ntz(0, 0);
+-- result:
+1970-01-01 00:00:00
+-- !result
+SELECT to_datetime_ntz(253402243199, 0);
+-- result:
+9999-12-31 07:59:59
+-- !result
+SELECT to_datetime_ntz(1598306400, 10);
+-- result:
+None
+-- !result
+SELECT to_datetime_ntz(1598306400, null);
+-- result:
+None
+-- !result
+SELECT to_datetime_ntz(null, null);
+-- result:
+None
+-- !result
+SELECT to_datetime_ntz(t.ts_val, t.sc_val) AS dyn_scale
+FROM (VALUES
+        (1598306400123456, 6),
+        (1598306400123,    3),
+        (1598306400,       0),
+        (-1001,            3),
+        (NULL,             0),
+        (1598306400,       NULL)
+     ) AS t(ts_val, sc_val);
+-- result:
+2020-08-24 22:00:00.123456
+2020-08-24 22:00:00.123000
+2020-08-24 22:00:00
+1969-12-31 23:59:58.999000
+None
+None
+-- !result

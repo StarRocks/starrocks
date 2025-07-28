@@ -56,7 +56,7 @@ SELECT flat_json_meta(<json_column>)
 FROM <table_name>[_META_];
 ```
 
-You can verify whether the executed query benefits from Flat JSON optimization through the [Query Profile](../administration/query_profile_overview.md) by observing the following metrics:
+You can verify whether the executed query benefits from Flat JSON optimization through the [Query Profile](../best_practices/query_tuning/query_profile_overview.md) by observing the following metrics:
 - `PushdownAccessPaths`: The number of sub-field paths pushed down to storage.
 - `AccessPathHits`: The number of times Flat JSON sub-fields are hit, with detailed information on the specific JSON hit.
 - `AccessPathUnhits`: The number of times Flat JSON sub-fields are not hit, with detailed information on the specific JSON not hit.
@@ -134,7 +134,7 @@ You can verify whether the executed query benefits from Flat JSON optimization t
    SELECT get_json_string(k2,'\$.Bool') FROM t1 WHERE k2->'arr' = '[10,20,30]';
    ```
 
-7. View Flat JSON-related metrics in the [Query Profile](../administration/query_profile_overview.md)
+7. View Flat JSON-related metrics in the [Query Profile](../best_practices/query_tuning/query_profile_overview.md)
    ```yaml
       PushdownAccessPaths: 2
       - Table: t1

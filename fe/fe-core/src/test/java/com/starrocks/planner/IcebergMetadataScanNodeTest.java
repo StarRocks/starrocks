@@ -38,9 +38,9 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -53,7 +53,7 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
     public IcebergMetadataScanNodeTest() throws IOException {
     }
 
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -62,7 +62,7 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
         starRocksAssert.withCatalog(createCatalog);
     }
 
-    @After
+    @AfterEach
     public void after() throws Exception {
         starRocksAssert.dropCatalog("iceberg_catalog");
     }
@@ -94,18 +94,18 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
         String sql = "explain select file_path from iceberg_catalog.db.tc$logical_iceberg_metadata " +
                 "for version as of " + snapshotId + ";";
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second;
-        Assert.assertEquals(1, execPlan.getScanNodes().size());
-        Assert.assertTrue(execPlan.getScanNodes().get(0) instanceof IcebergMetadataScanNode);
+        Assertions.assertEquals(1, execPlan.getScanNodes().size());
+        Assertions.assertTrue(execPlan.getScanNodes().get(0) instanceof IcebergMetadataScanNode);
         IcebergMetadataScanNode scanNode = (IcebergMetadataScanNode) execPlan.getScanNodes().get(0);
         List<TScanRangeLocations> result = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(1, result.size());
+        Assertions.assertEquals(1, result.size());
 
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
-        Assert.assertTrue(planNode.isSetHdfs_scan_node());
+        Assertions.assertTrue(planNode.isSetHdfs_scan_node());
         THdfsScanNode tHdfsScanNode = planNode.getHdfs_scan_node();
-        Assert.assertTrue(tHdfsScanNode.isSetSerialized_table());
-        Assert.assertTrue(tHdfsScanNode.isSetSerialized_predicate());
+        Assertions.assertTrue(tHdfsScanNode.isSetSerialized_table());
+        Assertions.assertTrue(tHdfsScanNode.isSetSerialized_predicate());
     }
 
     public void testIcebergMetadataScanNodeWithNonSnapshot() throws Exception {
@@ -161,7 +161,7 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
         Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(starRocksAssert.getCtx(), sql);
         List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
                 .get(new PlanNodeId(0)).getScanRangeLocations(100);
-        Assert.assertEquals(2, scanRangeLocations.size());
+        Assertions.assertEquals(2, scanRangeLocations.size());
     }
 
     public void testIcebergDistributedPlanJobError() {

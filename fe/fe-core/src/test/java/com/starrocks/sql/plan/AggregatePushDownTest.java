@@ -16,12 +16,12 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class AggregatePushDownTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
@@ -101,12 +101,12 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "where month(order_date)=1\n" +
                 "order by region, order_date";
         String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, q1);
-        Assert.assertTrue(plan, plan.contains("  1:AGGREGATE (update finalize)\n" +
+        Assertions.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: sum[([3: income, DECIMAL128(10,2), false]); args: DECIMAL128; " +
                 "result: DECIMAL128(38,2); args nullable: false; result nullable: true]\n" +
-                "  |  group by: [1: region, VARCHAR, true], [2: order_date, DATE, false]\n"));
+                "  |  group by: [1: region, VARCHAR, true], [2: order_date, DATE, false]\n"), plan);
 
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     table: trans, rollup: trans\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: month[([2: order_date, DATE, false]); args: DATE; result: TINYINT; " +

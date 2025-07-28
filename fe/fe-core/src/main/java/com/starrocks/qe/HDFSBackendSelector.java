@@ -42,7 +42,6 @@ import com.starrocks.qe.scheduler.CandidateWorkerProvider;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.HistoricalNodeMgr;
@@ -51,7 +50,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -189,11 +188,11 @@ public class HDFSBackendSelector implements BackendSelector {
     }
 
     private boolean isCacheSharingExpired(long cacheSharingWorkPeriod) {
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = warehouseManager.getWarehouse(workerProvider.getComputeResource().getWarehouseId());
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
+        ComputeResource computeResource = workerProvider.getComputeResource();
 
-        long lastUpdateTime = historicalNodeMgr.getLastUpdateTime(warehouse.getName());
+        long lastUpdateTime = historicalNodeMgr.getLastUpdateTime(computeResource.getWarehouseId(),
+                computeResource.getWorkerGroupId());
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastUpdateTime > cacheSharingWorkPeriod * 1000) {
             return true;

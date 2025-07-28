@@ -21,8 +21,8 @@ import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.apache.iceberg.aws.AwsProperties;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -35,23 +35,23 @@ public class CredentialUtilTest {
 
         properties.put(key, "");
         CredentialUtil.maskCredential(properties);
-        Assert.assertEquals("******", properties.get(key));
+        Assertions.assertEquals("******", properties.get(key));
 
         properties.put(key, "he");
         CredentialUtil.maskCredential(properties);
-        Assert.assertEquals("******", properties.get(key));
+        Assertions.assertEquals("******", properties.get(key));
 
         properties.put(key, "hehe");
         CredentialUtil.maskCredential(properties);
-        Assert.assertEquals("******", properties.get(key));
+        Assertions.assertEquals("******", properties.get(key));
 
         properties.put(key, "heheh");
         CredentialUtil.maskCredential(properties);
-        Assert.assertEquals("he******eh", properties.get(key));
+        Assertions.assertEquals("he******eh", properties.get(key));
 
         properties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, "path");
         CredentialUtil.maskCredential(properties);
-        Assert.assertFalse(properties.containsKey(AzureCloudConfigurationProvider.AZURE_PATH_KEY));
+        Assertions.assertFalse(properties.containsKey(AzureCloudConfigurationProvider.AZURE_PATH_KEY));
     }
 
     @Test
@@ -61,25 +61,25 @@ public class CredentialUtilTest {
                 OAuth2SecurityConfig.OAUTH2_CREDENTIAL;
         properties.put(key, "7758258");
         CredentialUtil.maskCredential(properties);
-        Assert.assertEquals("77******58", properties.get(key));
+        Assertions.assertEquals("77******58", properties.get(key));
 
         key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
                 OAuth2SecurityConfig.OAUTH2_TOKEN;
         properties.put(key, "1223344565");
         CredentialUtil.maskCredential(properties);
-        Assert.assertEquals("12******65", properties.get(key));
+        Assertions.assertEquals("12******65", properties.get(key));
 
         key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
                 AwsProperties.REST_ACCESS_KEY_ID;
         properties.put(key, "7758258");
         CredentialUtil.maskCredential(properties);
-        Assert.assertEquals("77******58", properties.get(key));
+        Assertions.assertEquals("77******58", properties.get(key));
 
         key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
                 AwsProperties.REST_SECRET_ACCESS_KEY;
         properties.put(key, "7758258");
         CredentialUtil.maskCredential(properties);
-        Assert.assertEquals("77******58", properties.get(key));
+        Assertions.assertEquals("77******58", properties.get(key));
     }
 
     @Test
@@ -87,57 +87,57 @@ public class CredentialUtilTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(JDBCResource.PASSWORD, "7758258");
         CredentialUtil.maskCredential(properties);
-        Assert.assertFalse(properties.containsKey(JDBCResource.PASSWORD));
+        Assertions.assertFalse(properties.containsKey(JDBCResource.PASSWORD));
     }
 
     @Test
     public void testAzurePathParseWithABFS() {
         String uri = "abfs://bottle@smith.dfs.core.windows.net/path/1/2";
         AzureStoragePath path = CredentialUtil.parseAzureStoragePath(uri);
-        Assert.assertEquals(path.getContainer(), "bottle");
-        Assert.assertEquals(path.getStorageAccount(), "smith");
+        Assertions.assertEquals(path.getContainer(), "bottle");
+        Assertions.assertEquals(path.getStorageAccount(), "smith");
 
         uri = "abfss://bottle@smith.dfs.core.windows.net/path/1/2";
         path = CredentialUtil.parseAzureStoragePath(uri);
-        Assert.assertEquals("bottle", path.getContainer());
-        Assert.assertEquals("smith", path.getStorageAccount());
+        Assertions.assertEquals("bottle", path.getContainer());
+        Assertions.assertEquals("smith", path.getStorageAccount());
 
         uri = "abfs://a@.dfs.core.windows.net/path/1/2";
         path = CredentialUtil.parseAzureStoragePath(uri);
-        Assert.assertEquals("", path.getContainer());
-        Assert.assertEquals("", path.getStorageAccount());
+        Assertions.assertEquals("", path.getContainer());
+        Assertions.assertEquals("", path.getStorageAccount());
 
         uri = "abfs://a@p/path/1/2";
         path = CredentialUtil.parseAzureStoragePath(uri);
-        Assert.assertEquals("", path.getContainer());
-        Assert.assertEquals("", path.getStorageAccount());
+        Assertions.assertEquals("", path.getContainer());
+        Assertions.assertEquals("", path.getStorageAccount());
 
         uri = "";
         path = CredentialUtil.parseAzureStoragePath(uri);
-        Assert.assertEquals("", path.getContainer());
-        Assert.assertEquals("", path.getStorageAccount());
+        Assertions.assertEquals("", path.getContainer());
+        Assertions.assertEquals("", path.getStorageAccount());
     }
 
     @Test
     public void testAzurePathParseWithWASB() {
         String uri = "wasb://bottle@smith.blob.core.windows.net/path/1/2";
         AzureStoragePath path = CredentialUtil.parseAzureStoragePath(uri);
-        Assert.assertEquals(path.getContainer(), "bottle");
-        Assert.assertEquals(path.getStorageAccount(), "smith");
+        Assertions.assertEquals(path.getContainer(), "bottle");
+        Assertions.assertEquals(path.getStorageAccount(), "smith");
 
         uri = "wasbs://bottle@smith.blob.core.windows.net/path/1/2";
         path = CredentialUtil.parseAzureStoragePath(uri);
-        Assert.assertEquals("bottle", path.getContainer());
-        Assert.assertEquals("smith", path.getStorageAccount());
+        Assertions.assertEquals("bottle", path.getContainer());
+        Assertions.assertEquals("smith", path.getStorageAccount());
 
         uri = "wasb://a@.blob.core.windows.net/path/1/2";
         path = CredentialUtil.parseAzureStoragePath(uri);
-        Assert.assertEquals("", path.getContainer());
-        Assert.assertEquals("", path.getStorageAccount());
+        Assertions.assertEquals("", path.getContainer());
+        Assertions.assertEquals("", path.getStorageAccount());
 
         uri = "wasb://a@p/path/1/2";
         path = CredentialUtil.parseAzureStoragePath(uri);
-        Assert.assertEquals("", path.getContainer());
-        Assert.assertEquals("", path.getStorageAccount());
+        Assertions.assertEquals("", path.getContainer());
+        Assertions.assertEquals("", path.getStorageAccount());
     }
 }

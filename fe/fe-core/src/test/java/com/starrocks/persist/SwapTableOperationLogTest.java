@@ -15,8 +15,8 @@
 
 package com.starrocks.persist;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -42,9 +42,9 @@ public class SwapTableOperationLogTest {
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
 
         SwapTableOperationLog readLog = SwapTableOperationLog.read(dis);
-        Assert.assertTrue(readLog.getDbId() == log.getDbId());
-        Assert.assertTrue(readLog.getNewTblId() == log.getNewTblId());
-        Assert.assertTrue(readLog.getOrigTblId() == log.getOrigTblId());
+        Assertions.assertTrue(readLog.getDbId() == log.getDbId());
+        Assertions.assertTrue(readLog.getNewTblId() == log.getNewTblId());
+        Assertions.assertTrue(readLog.getOrigTblId() == log.getOrigTblId());
 
         // 3. delete files
         dis.close();

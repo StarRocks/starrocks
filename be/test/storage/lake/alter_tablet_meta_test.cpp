@@ -633,4 +633,25 @@ TEST_F(AlterTabletMetaTest, test_bundle_tablet_metadata) {
     ASSERT_OK(new_tablet_meta.status());
 }
 
+TEST_F(AlterTabletMetaTest, test_compaction_strategy) {
+    lake::SchemaChangeHandler handler(_tablet_mgr.get());
+    TUpdateTabletMetaInfoReq update_tablet_meta_req;
+    int64_t txn_id = next_id();
+    update_tablet_meta_req.__set_txn_id(txn_id);
+
+    TTabletMetaInfo tablet_meta_info;
+    auto tablet_id = _tablet_metadata->id();
+    tablet_meta_info.__set_tablet_id(tablet_id);
+    tablet_meta_info.__set_compaction_strategy(TCompactionStrategy::REAL_TIME);
+
+    update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
+    ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req));
+
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_TRUE(txn_log->has_op_alter_metadata());
+    auto new_tablet_meta = publish_single_version(tablet_id, 2, txn_id);
+    ASSERT_OK(new_tablet_meta.status());
+    ASSERT_EQ(CompactionStrategyPB::REAL_TIME, new_tablet_meta.value()->compaction_strategy());
+}
+
 } // namespace starrocks::lake

@@ -95,9 +95,11 @@ struct ParquetWriterOptions : FileWriterOptions {
     std::string time_zone = TimezoneUtils::default_time_zone;
     bool use_legacy_decimal_encoding = false;
     bool use_int96_timestamp_encoding = false;
+    ::parquet::ParquetVersion::type version = ::parquet::ParquetVersion::PARQUET_2_6;
 
     inline static std::string USE_LEGACY_DECIMAL_ENCODING = "use_legacy_decimal_encoding";
     inline static std::string USE_INT96_TIMESTAMP_ENCODING = "use_int96_timestamp_encoding";
+    inline static std::string VERSION = "version";
 };
 
 class ParquetFileWriter final : public FileWriter {

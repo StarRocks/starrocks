@@ -280,7 +280,7 @@ public class CatalogMocker {
 
         LocalTablet tablet0 = new LocalTablet(TEST_TABLET0_ID);
         TabletMeta tabletMeta = new TabletMeta(TEST_DB_ID, TEST_TBL_ID, TEST_SINGLE_PARTITION_ID,
-                TEST_TBL_ID, SCHEMA_HASH, TStorageMedium.HDD);
+                TEST_TBL_ID, TStorageMedium.HDD);
         baseIndex.addTablet(tablet0, tabletMeta);
         Replica replica0 = new Replica(TEST_REPLICA0_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
         Replica replica1 = new Replica(TEST_REPLICA1_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
@@ -347,7 +347,7 @@ public class CatalogMocker {
 
         LocalTablet baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);
         TabletMeta tabletMetaBaseTabletP1 = new TabletMeta(TEST_DB_ID, TEST_TBL2_ID, TEST_PARTITION1_ID,
-                TEST_TBL2_ID, SCHEMA_HASH, TStorageMedium.HDD);
+                TEST_TBL2_ID, TStorageMedium.HDD);
         baseIndexP1.addTablet(baseTabletP1, tabletMetaBaseTabletP1);
         Replica replica3 = new Replica(TEST_REPLICA3_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
         Replica replica4 = new Replica(TEST_REPLICA4_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
@@ -359,7 +359,7 @@ public class CatalogMocker {
 
         LocalTablet baseTabletP2 = new LocalTablet(TEST_BASE_TABLET_P2_ID);
         TabletMeta tabletMetaBaseTabletP2 = new TabletMeta(TEST_DB_ID, TEST_TBL2_ID, TEST_PARTITION2_ID,
-                TEST_TBL2_ID, SCHEMA_HASH, TStorageMedium.HDD);
+                TEST_TBL2_ID, TStorageMedium.HDD);
         baseIndexP2.addTablet(baseTabletP2, tabletMetaBaseTabletP2);
         Replica replica6 = new Replica(TEST_REPLICA6_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
         Replica replica7 = new Replica(TEST_REPLICA7_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
@@ -378,7 +378,7 @@ public class CatalogMocker {
         MaterializedIndex rollupIndexP1 = new MaterializedIndex(TEST_ROLLUP_ID, IndexState.NORMAL);
         LocalTablet rollupTabletP1 = new LocalTablet(TEST_ROLLUP_TABLET_P1_ID);
         TabletMeta tabletMetaRollupTabletP1 = new TabletMeta(TEST_DB_ID, TEST_TBL2_ID, TEST_PARTITION1_ID,
-                TEST_ROLLUP_TABLET_P1_ID, ROLLUP_SCHEMA_HASH,
+                TEST_ROLLUP_TABLET_P1_ID,
                 TStorageMedium.HDD);
         rollupIndexP1.addTablet(rollupTabletP1, tabletMetaRollupTabletP1);
         Replica replica9 = new Replica(TEST_REPLICA9_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
@@ -395,7 +395,7 @@ public class CatalogMocker {
         MaterializedIndex rollupIndexP2 = new MaterializedIndex(TEST_ROLLUP_ID, IndexState.NORMAL);
         LocalTablet rollupTabletP2 = new LocalTablet(TEST_ROLLUP_TABLET_P2_ID);
         TabletMeta tabletMetaRollupTabletP2 = new TabletMeta(TEST_DB_ID, TEST_TBL2_ID, TEST_PARTITION1_ID,
-                TEST_ROLLUP_TABLET_P2_ID, ROLLUP_SCHEMA_HASH,
+                TEST_ROLLUP_TABLET_P2_ID,
                 TStorageMedium.HDD);
         rollupIndexP2.addTablet(rollupTabletP2, tabletMetaRollupTabletP2);
         Replica replica12 = new Replica(TEST_REPLICA12_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
@@ -454,7 +454,7 @@ public class CatalogMocker {
 
         LocalTablet baseTabletP1Pk = new LocalTablet(TEST_BASE_TABLET_P1_PK_ID);
         TabletMeta tabletMetaBaseTabletP1Pk = new TabletMeta(TEST_DB_ID, TEST_TBL3_ID, TEST_PARTITION1_PK_ID,
-                TEST_TBL3_ID, SCHEMA_HASH, TStorageMedium.HDD);
+                TEST_TBL3_ID, TStorageMedium.HDD);
         baseIndexP1Pk.addTablet(baseTabletP1Pk, tabletMetaBaseTabletP1Pk);
         Replica replica3Pk = new Replica(TEST_REPLICA3_PK_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
         Replica replica4Pk = new Replica(TEST_REPLICA4_PK_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
@@ -466,7 +466,7 @@ public class CatalogMocker {
 
         LocalTablet baseTabletP2Pk = new LocalTablet(TEST_BASE_TABLET_P2_PK_ID);
         TabletMeta tabletMetaBaseTabletP2Pk = new TabletMeta(TEST_DB_ID, TEST_TBL3_ID, TEST_PARTITION2_PK_ID,
-                TEST_TBL3_ID, SCHEMA_HASH, TStorageMedium.HDD);
+                TEST_TBL3_ID, TStorageMedium.HDD);
         baseIndexP2Pk.addTablet(baseTabletP2Pk, tabletMetaBaseTabletP2Pk);
         Replica replica6Pk = new Replica(TEST_REPLICA6_PK_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
         Replica replica7Pk = new Replica(TEST_REPLICA7_PK_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
@@ -504,7 +504,7 @@ public class CatalogMocker {
 
             baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);
             tabletMetaBaseTabletP1 = new TabletMeta(TEST_DB_ID, TEST_TBL4_ID, TEST_PARTITION1_ID,
-                    TEST_TBL4_ID, SCHEMA_HASH, TStorageMedium.HDD);
+                    TEST_TBL4_ID, TStorageMedium.HDD);
             baseIndexP1.addTablet(baseTabletP1, tabletMetaBaseTabletP1);
             replica3 = new Replica(TEST_REPLICA3_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
             replica4 = new Replica(TEST_REPLICA4_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
@@ -516,7 +516,7 @@ public class CatalogMocker {
 
             baseTabletP2 = new LocalTablet(TEST_BASE_TABLET_P2_ID);
             tabletMetaBaseTabletP2 = new TabletMeta(TEST_DB_ID, TEST_TBL4_ID, TEST_PARTITION2_ID,
-                    TEST_TBL4_ID, SCHEMA_HASH, TStorageMedium.HDD);
+                    TEST_TBL4_ID, TStorageMedium.HDD);
             baseIndexP2.addTablet(baseTabletP2, tabletMetaBaseTabletP2);
             replica6 = new Replica(TEST_REPLICA6_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
             replica7 = new Replica(TEST_REPLICA7_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
@@ -554,7 +554,7 @@ public class CatalogMocker {
 
             baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);
             tabletMetaBaseTabletP1 = new TabletMeta(TEST_DB_ID, TEST_TBL5_ID, TEST_PARTITION1_ID,
-                    TEST_TBL5_ID, SCHEMA_HASH, TStorageMedium.HDD);
+                    TEST_TBL5_ID, TStorageMedium.HDD);
             baseIndexP1.addTablet(baseTabletP1, tabletMetaBaseTabletP1);
             replica3 = new Replica(TEST_REPLICA3_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
             replica4 = new Replica(TEST_REPLICA4_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
@@ -566,7 +566,7 @@ public class CatalogMocker {
 
             baseTabletP2 = new LocalTablet(TEST_BASE_TABLET_P2_ID);
             tabletMetaBaseTabletP2 = new TabletMeta(TEST_DB_ID, TEST_TBL5_ID, TEST_PARTITION2_ID,
-                    TEST_TBL5_ID, SCHEMA_HASH, TStorageMedium.HDD);
+                    TEST_TBL5_ID, TStorageMedium.HDD);
             baseIndexP2.addTablet(baseTabletP2, tabletMetaBaseTabletP2);
             replica6 = new Replica(TEST_REPLICA6_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
             replica7 = new Replica(TEST_REPLICA7_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);

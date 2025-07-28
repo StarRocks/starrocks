@@ -20,9 +20,9 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDataCacheStatus;
 import com.starrocks.thrift.TLoadDataCacheMetrics;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -34,7 +34,7 @@ public class DataCacheSelectMetricsTest {
     private final long be2Id = 77779L;
     private final long cn1Id = 77780L;
 
-    @Before
+    @BeforeEach
     public void setup() {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .addBackend(new Backend(be1Id, "127.0.0.2", 7777));
@@ -90,25 +90,25 @@ public class DataCacheSelectMetricsTest {
         dataCacheSelectMetrics.updateLoadDataCacheMetrics(cn1Id, cn1Metrics);
 
         List<List<String>> rows = dataCacheSelectMetrics.getShowResultSet(false).getResultRows();
-        Assert.assertEquals("6MB,6GB,20s,50.00%", String.join(",", rows.get(0)));
+        Assertions.assertEquals("6MB,6GB,20s,50.00%", String.join(",", rows.get(0)));
         rows = dataCacheSelectMetrics.getShowResultSet(true).getResultRows();
         for (List<String> row : rows) {
             if (row.get(0).equals("127.0.0.2")) {
-                Assert.assertEquals("127.0.0.2,1MB,1s,1GB,10s,50.00%", String.join(",", row));
+                Assertions.assertEquals("127.0.0.2,1MB,1s,1GB,10s,50.00%", String.join(",", row));
             }
             if (row.get(0).equals("127.0.0.3")) {
-                Assert.assertEquals("127.0.0.3,2MB,2s,2GB,35s,50.00%", String.join(",", row));
+                Assertions.assertEquals("127.0.0.3,2MB,2s,2GB,35s,50.00%", String.join(",", row));
             }
             if (row.get(0).equals("127.0.0.4")) {
-                Assert.assertEquals("127.0.0.4,3MB,3s,3GB,15s,50.00%", String.join(",", row));
+                Assertions.assertEquals("127.0.0.4,3MB,3s,3GB,15s,50.00%", String.join(",", row));
             }
         }
 
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 "ReadCacheSize: 6MB, AvgReadCacheTime: 2s, WriteCacheSize: 6GB, AvgWriteCacheTime: 20s, " +
                         "TotalCacheUsage: 50.00%", dataCacheSelectMetrics.debugString(false));
 
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 "[IP: 127.0.0.3, ReadCacheSize: 2MB, AvgReadCacheTime: 2s, WriteCacheSize: 2GB, " +
                         "AvgWriteCacheTime: 35s, TotalCacheUsage: 50.00%], [IP: 127.0.0.2, ReadCacheSize: 1MB, " +
                         "AvgReadCacheTime: 1s, WriteCacheSize: 1GB, AvgWriteCacheTime: 10s, TotalCacheUsage: 50.00%], " +

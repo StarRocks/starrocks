@@ -17,6 +17,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
+#include "storage/sstable/sstable_predicate_utils.h"
 
 namespace starrocks {
 class TxnLogPB;
@@ -45,7 +46,7 @@ public:
               _builder(builder),
               _merge_base_level(merge_base_level) {}
 
-    Status merge(const std::string& key, const std::string& value, uint64_t max_rss_rowid);
+    Status merge(const sstable::Iterator* iter_ptr);
 
     void finish() { flush(); }
 
@@ -59,6 +60,7 @@ private:
     std::list<IndexValueWithVer> _index_value_vers;
     // If do merge base level, that means we can delete NullIndexValue items safely.
     bool _merge_base_level = false;
+    sstable::CachedPredicateEvaluator _predicate_evaluator;
 };
 
 // LakePersistentIndex is not thread-safe.

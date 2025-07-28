@@ -4532,7 +4532,7 @@ Status StringFunctions::parse_url_prepare(FunctionContext* context, FunctionCont
     auto column = context->get_constant_column(1);
     auto part = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     state->url_part = std::make_unique<UrlParser::UrlPart>();
-    *(state->url_part) = UrlParser::get_url_part(StringValue::from_slice(part));
+    *(state->url_part) = UrlParser::get_url_part(part);
 
     if (*(state->url_part) == UrlParser::INVALID) {
         std::stringstream error;
@@ -4567,7 +4567,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
         }
 
         auto part = part_viewer.value(row);
-        UrlParser::UrlPart url_part = UrlParser::get_url_part(StringValue::from_slice(part));
+        UrlParser::UrlPart url_part = UrlParser::get_url_part(part);
 
         if (url_part == UrlParser::INVALID) {
             std::stringstream ss;
@@ -4577,15 +4577,15 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
             continue;
         }
         auto str_value = str_viewer.value(row);
-        StringValue value;
-        if (!UrlParser::parse_url(StringValue::from_slice(str_value), url_part, &value)) {
+        Slice value;
+        if (!UrlParser::parse_url(str_value, url_part, &value)) {
             std::stringstream ss;
             ss << "Could not parse URL: " << str_value.to_string();
             context->add_warning(ss.str().c_str());
             result.append_null();
             continue;
         }
-        result.append(Slice(value.ptr, value.len));
+        result.append(value);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -4604,8 +4604,8 @@ StatusOr<ColumnPtr> StringFunctions::parse_const_urlpart(UrlParser::UrlPart* url
         }
 
         auto str_value = str_viewer.value(row);
-        StringValue value;
-        if (!UrlParser::parse_url(StringValue::from_slice(str_value), *url_part, &value)) {
+        Slice value;
+        if (!UrlParser::parse_url(str_value, *url_part, &value)) {
             std::stringstream ss;
             ss << "Could not parse URL: " << str_value.to_string();
             context->add_warning(ss.str().c_str());
@@ -4613,7 +4613,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_const_urlpart(UrlParser::UrlPart* url
             continue;
         }
 
-        result.append(Slice(value.ptr, value.len));
+        result.append(value);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -4637,14 +4637,14 @@ StatusOr<ColumnPtr> StringFunctions::url_extract_host(FunctionContext* context, 
     return parse_const_urlpart(url_part, context, columns);
 }
 
-static bool seek_param_key_in_query_params(const StringValue& query_params, const StringValue& param_key,
+static bool seek_param_key_in_query_params(const Slice& query_params, const Slice& param_key,
                                            std::string* param_value) {
     const StringSearch param_search(&param_key);
-    auto pos = param_search.search(&query_params);
-    auto* begin = query_params.ptr;
-    auto* end = query_params.ptr + query_params.len;
+    auto pos = param_search.search(query_params);
+    auto* begin = query_params.data;
+    auto* end = query_params.data + query_params.size;
     auto* p_prev_char = begin + pos - 1;
-    auto* p_next_char = begin + pos + param_key.len;
+    auto* p_next_char = begin + pos + param_key.size;
     // NOT FOUND
     // case 1: just not found
     // case 2: suffix found, seek "k1" in "abck1=2", prev char must be '&' if it exists
@@ -4668,11 +4668,11 @@ static bool seek_param_key_in_query_params(const StringValue& query_params, cons
 }
 
 static bool seek_param_key_in_url(const Slice& url, const Slice& param_key, std::string* param_value) {
-    StringValue query_params;
-    if (!UrlParser::parse_url(StringValue::from_slice(url), UrlParser::UrlPart::QUERY, &query_params)) {
+    Slice query_params;
+    if (!UrlParser::parse_url(url, UrlParser::UrlPart::QUERY, &query_params)) {
         return false;
     }
-    return seek_param_key_in_query_params(query_params, StringValue::from_slice(param_key), param_value);
+    return seek_param_key_in_query_params(query_params, param_key, param_value);
 }
 
 static StatusOr<ColumnPtr> url_extract_parameter_const_param_key(const starrocks::Columns& columns,
@@ -4730,7 +4730,7 @@ static StatusOr<ColumnPtr> url_extract_parameter_const_query_params(const starro
                                                                     const std::string& query_params) {
     auto param_key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto num_rows = columns[1]->size();
-    StringValue query_params_str(query_params);
+    Slice query_params_str(query_params);
     ColumnBuilder<TYPE_VARCHAR> result(num_rows);
     std::string param_value;
     for (auto i = 0; i < num_rows; ++i) {
@@ -4744,7 +4744,7 @@ static StatusOr<ColumnPtr> url_extract_parameter_const_query_params(const starro
             result.append_null();
             continue;
         }
-        auto found = seek_param_key_in_query_params(query_params_str, StringValue::from_slice(param_key), &param_value);
+        auto found = seek_param_key_in_query_params(query_params_str, param_key, &param_value);
         if (!found) {
             result.append_null();
         } else {
@@ -4788,11 +4788,10 @@ Status StringFunctions::url_extract_parameter_prepare(starrocks::FunctionContext
     if (url_is_const) {
         auto url_column = context->get_constant_column(0);
         auto url = ColumnHelper::get_const_value<TYPE_VARCHAR>(url_column);
-        StringValue query_params;
-        auto parse_success =
-                UrlParser::parse_url(StringValue::from_slice(url), UrlParser::UrlPart::QUERY, &query_params);
+        Slice query_params;
+        auto parse_success = UrlParser::parse_url(url, UrlParser::UrlPart::QUERY, &query_params);
         state->opt_const_query_params = query_params.to_string();
-        ill_formed |= !parse_success || query_params.len == 0;
+        ill_formed |= !parse_success || query_params.size == 0;
     }
 
     // result is const null is either url or param_key is ill-formed
@@ -4803,8 +4802,8 @@ Status StringFunctions::url_extract_parameter_prepare(starrocks::FunctionContext
     }
 
     if (state->opt_const_query_params.has_value() && state->opt_const_param_key.has_value()) {
-        StringValue query_params(state->opt_const_query_params.value());
-        StringValue param_key(state->opt_const_param_key.value());
+        Slice query_params(state->opt_const_query_params.value());
+        Slice param_key(state->opt_const_param_key.value());
         std::string result;
         state->result_is_null = !seek_param_key_in_query_params(query_params, param_key, &result);
         state->opt_const_result = std::move(result);

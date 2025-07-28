@@ -36,7 +36,7 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return JITExpr::create(pool, _expr); }
 
-    bool is_jit_compiled() { return _jit_function != nullptr; }
+    bool is_jit_compiled() { return _jit_callable != nullptr; }
 
     void set_uncompilable_children(RuntimeState* state);
 
@@ -54,8 +54,7 @@ private:
     // The original expression.
     Expr* _expr;
     bool _is_prepared = false;
-    JITScalarFunction _jit_function = nullptr;
-    std::unique_ptr<JitObjectCache> _jit_obj_cache;
+    JITCallablePtr _jit_callable;
 };
 
 } // namespace starrocks

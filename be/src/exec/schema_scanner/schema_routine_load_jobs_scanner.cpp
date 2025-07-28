@@ -18,33 +18,30 @@
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaRoutineLoadJobsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
         {"ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"PAUSE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"END_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
-        {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DATA_SOURCE_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DATA_SOURCE_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"CURRENT_TASK_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"JOB_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DATA_SOURCE_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         false},
-        {"CUSTOM_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"STATISTICS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"PROGRESS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"REASONS_OF_STATE_CHANGED", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         true},
-        {"ERROR_LOG_URLS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"OTHER_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"JOB_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DATA_SOURCE_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"CUSTOM_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"STATISTICS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"PROGRESS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"REASONS_OF_STATE_CHANGED", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"ERROR_LOG_URLS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"OTHER_MSG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"LATEST_SOURCE_POSITION", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true},
         {"OFFSET_LAG", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true},
         {"TIMESTAMP_PROGRESS", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true}};

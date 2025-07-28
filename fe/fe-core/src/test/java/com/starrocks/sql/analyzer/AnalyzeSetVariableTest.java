@@ -29,9 +29,9 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.uber.m3.util.ImmutableMap;
 import mockit.Expectations;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSetUserVariableFail;
@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class AnalyzeSetVariableTest {
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -94,20 +94,20 @@ public class AnalyzeSetVariableTest {
         UserVariable userVariable = (UserVariable) setStmt.getSetListItems().get(0);
         SetExecutor executor = new SetExecutor(ctx, setStmt);
         executor.execute();
-        Assert.assertNotNull(userVariable.getEvaluatedExpression());
-        Assert.assertEquals("3", ((LiteralExpr) userVariable.getEvaluatedExpression()).getStringValue());
+        Assertions.assertNotNull(userVariable.getEvaluatedExpression());
+        Assertions.assertEquals("3", ((LiteralExpr) userVariable.getEvaluatedExpression()).getStringValue());
 
         sql = "set @var = abs(1.2)";
         setStmt = (SetStmt) analyzeSuccess(sql);
         userVariable = (UserVariable) setStmt.getSetListItems().get(0);
         SetStmtAnalyzer.calcuteUserVariable(userVariable);
-        Assert.assertTrue(userVariable.getUnevaluatedExpression() instanceof Subquery);
+        Assertions.assertTrue(userVariable.getUnevaluatedExpression() instanceof Subquery);
 
         sql = "set @var =JSON_ARRAY(1, 2, 3)";
         setStmt = (SetStmt) analyzeSuccess(sql);
         userVariable = (UserVariable) setStmt.getSetListItems().get(0);
         SetStmtAnalyzer.calcuteUserVariable(userVariable);
-        Assert.assertTrue(userVariable.getUnevaluatedExpression() instanceof Subquery);
+        Assertions.assertTrue(userVariable.getUnevaluatedExpression() instanceof Subquery);
 
         sql = "set @var = (select 1)";
         analyzeSuccess(sql);
@@ -121,15 +121,16 @@ public class AnalyzeSetVariableTest {
         sql = "set @var = (select sum(v1) from test.t0 group by v2)";
         setStmt = (SetStmt) analyzeSuccess(sql);
         SetStmtAnalyzer.calcuteUserVariable((UserVariable) setStmt.getSetListItems().get(0));
-        Assert.assertTrue(((UserVariable) setStmt.getSetListItems().get(0)).getUnevaluatedExpression().getType().isIntegerType());
+        Assertions.assertTrue(
+                ((UserVariable) setStmt.getSetListItems().get(0)).getUnevaluatedExpression().getType().isIntegerType());
 
         sql = "set @var1 = 1, @var2 = 2";
         setStmt = (SetStmt) analyzeSuccess(sql);
-        Assert.assertEquals(2, setStmt.getSetListItems().size());
+        Assertions.assertEquals(2, setStmt.getSetListItems().size());
 
         sql = "set @var = [1,2,3]";
         setStmt = (SetStmt) analyzeSuccess(sql);
-        Assert.assertEquals(1, setStmt.getSetListItems().size());
+        Assertions.assertEquals(1, setStmt.getSetListItems().size());
 
         sql = "set @var = to_binary('abab', 'hex')";
         analyzeSetUserVariableFail(sql, "Can't set variable with type VARBINARY");

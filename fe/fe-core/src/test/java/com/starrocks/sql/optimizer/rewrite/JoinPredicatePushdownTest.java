@@ -15,11 +15,11 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class JoinPredicatePushdownTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
     }

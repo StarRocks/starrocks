@@ -705,6 +705,14 @@ public:
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_32);
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_ms_64);
 
+    // TODO
+    // DEFINE_VECTORIZED_FN(year_from_unixtime);
+    // DEFINE_VECTORIZED_FN(month_from_unixtime);
+    // DEFINE_VECTORIZED_FN(day_from_unixtime);
+    DEFINE_VECTORIZED_FN(hour_from_unixtime);
+    // DEFINE_VECTORIZED_FN(minute_from_unixtime);
+    // DEFINE_VECTORIZED_FN(second_from_unixtime);
+
     // from_unix_datetime with format's auxiliary method
     static Status from_unix_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
@@ -712,6 +720,15 @@ public:
 
     static Status from_unix_timezone_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status from_unix_timezone_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    static Status _unixtime_to_datetime_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope,
+                                                bool timezone_aware);
+    static Status _unixtime_to_datetime_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    static Status unixtime_to_datetime_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status unixtime_to_datetime_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status unixtime_to_datetime_ntz_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status unixtime_to_datetime_ntz_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [timestamp, formatstr]
@@ -721,6 +738,9 @@ public:
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_64);
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_32);
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_timezone);
+
+    DEFINE_VECTORIZED_FN(unixtime_to_datetime);
+    DEFINE_VECTORIZED_FN(unixtime_to_datetime_ntz);
 
     /**
      * return number of seconds in this day.
@@ -864,6 +884,9 @@ private:
     static StatusOr<ColumnPtr> _last_day_with_format_const(std::string& format_content, FunctionContext* context,
                                                            const Columns& columns);
     static Status _error_date_part();
+
+    template <LogicalType TIMESTAMP_TYPE>
+    static StatusOr<ColumnPtr> _unixtime_to_datetime(FunctionContext* context, const Columns& columns);
 
 public:
     static TimestampValue start_of_time_slice;

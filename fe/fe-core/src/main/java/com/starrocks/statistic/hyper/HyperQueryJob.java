@@ -236,8 +236,8 @@ public abstract class HyperQueryJob {
 
     public static List<HyperQueryJob> createFullQueryJobs(ConnectContext context, Database db, Table table,
                                                           List<String> columnNames, List<Type> columnTypes,
-                                                          List<Long> partitionIdList, int batchLimit) {
-        ColumnClassifier classifier = ColumnClassifier.of(columnNames, columnTypes, table);
+                                                          List<Long> partitionIdList, int batchLimit, boolean isManualJob) {
+        ColumnClassifier classifier = ColumnClassifier.of(columnNames, columnTypes, table, isManualJob);
 
         List<ColumnStats> supportedStats = classifier.getColumnStats();
         List<ColumnStats> dataCollectColumns =
@@ -260,8 +260,8 @@ public abstract class HyperQueryJob {
     public static List<HyperQueryJob> createSampleQueryJobs(ConnectContext context, Database db, Table table,
                                                             List<String> columnNames, List<Type> columnTypes,
                                                             List<Long> partitionIdList, int batchLimit,
-                                                            PartitionSampler sampler) {
-        ColumnClassifier classifier = ColumnClassifier.of(columnNames, columnTypes, table);
+                                                            PartitionSampler sampler, boolean isManualJob) {
+        ColumnClassifier classifier = ColumnClassifier.of(columnNames, columnTypes, table, isManualJob);
         List<ColumnStats> supportedStats = classifier.getColumnStats();
 
         List<ColumnStats> metaCollectColumns =

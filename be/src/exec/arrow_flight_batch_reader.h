@@ -18,15 +18,19 @@
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {
+class ResultBufferMgr;
 class ArrowFlightBatchReader : public arrow::RecordBatchReader {
 public:
-    ArrowFlightBatchReader(const TUniqueId& query_id);
+    ArrowFlightBatchReader(ResultBufferMgr* result_buf_mgr, const TUniqueId& query_id);
+
+    arrow::Status init();
 
     [[nodiscard]] std::shared_ptr<arrow::Schema> schema() const override;
 
     arrow::Status ReadNext(std::shared_ptr<arrow::RecordBatch>* out) override;
 
 private:
+    ResultBufferMgr* _result_buffer_mgr = nullptr;
     const TUniqueId _query_id;
     std::shared_ptr<arrow::Schema> _schema;
 };

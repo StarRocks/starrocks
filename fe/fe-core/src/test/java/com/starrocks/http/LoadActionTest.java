@@ -48,8 +48,8 @@ import org.apache.http.impl.client.BasicResponseHandler;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultRedirectStrategy;
 import org.apache.http.impl.client.HttpClients;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -59,8 +59,8 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class LoadActionTest extends StarRocksHttpTestCase {
 
@@ -92,7 +92,7 @@ public class LoadActionTest extends StarRocksHttpTestCase {
         };
 
         try (Response response = noRedirectClient.newCall(request).execute()) {
-            assertEquals(response.message(), 307, response.code());
+            assertEquals(307, response.code(), response.message());
             String location = response.header("Location");
             assertTrue(redirectLocations.contains(location));
         }
@@ -187,10 +187,10 @@ public class LoadActionTest extends StarRocksHttpTestCase {
             // next request entirely, so it will be looked like the server never respond at all from client side.
             HttpPut put = buildPutRequest(2, true);
             try (CloseableHttpResponse response = client.execute(put)) {
-                Assert.assertEquals(HttpResponseStatus.TEMPORARY_REDIRECT.code(),
+                Assertions.assertEquals(HttpResponseStatus.TEMPORARY_REDIRECT.code(),
                         response.getStatusLine().getStatusCode());
                 // The server indicates that the connection should be closed.
-                Assert.assertEquals(HttpHeaderValues.CLOSE.toString(),
+                Assertions.assertEquals(HttpHeaderValues.CLOSE.toString(),
                         response.getFirstHeader(HttpHeaderNames.CONNECTION.toString()).getValue());
             }
         }
@@ -229,10 +229,10 @@ public class LoadActionTest extends StarRocksHttpTestCase {
             HttpPut put = buildPutRequest(128, true);
             put.setProtocolVersion(new ProtocolVersion("HTTP", 1, 1));
             try (CloseableHttpResponse response = client.execute(put)) {
-                Assert.assertEquals(HttpResponseStatus.TEMPORARY_REDIRECT.code(),
+                Assertions.assertEquals(HttpResponseStatus.TEMPORARY_REDIRECT.code(),
                         response.getStatusLine().getStatusCode());
                 // The server indicates that the connection should be closed.
-                Assert.assertEquals(HttpHeaderValues.CLOSE.toString(),
+                Assertions.assertEquals(HttpHeaderValues.CLOSE.toString(),
                         response.getFirstHeader(HttpHeaderNames.CONNECTION.toString()).getValue());
             }
         }
@@ -242,18 +242,18 @@ public class LoadActionTest extends StarRocksHttpTestCase {
             HttpPut put = buildPutRequest(256, false);
             put.setProtocolVersion(new ProtocolVersion("HTTP", 1, 1));
             try (CloseableHttpResponse response = client.execute(put)) {
-                Assert.assertEquals(HttpResponseStatus.OK.code(),
+                Assertions.assertEquals(HttpResponseStatus.OK.code(),
                         response.getStatusLine().getStatusCode());
                 // The server indicates that the connection should be closed.
-                Assert.assertEquals(HttpHeaderValues.CLOSE.toString(),
+                Assertions.assertEquals(HttpHeaderValues.CLOSE.toString(),
                         response.getFirstHeader(HttpHeaderNames.CONNECTION.toString()).getValue());
 
                 String body = new BasicResponseHandler().handleResponse(response);
                 Map<String, Object> result = objectMapper.readValue(body, new TypeReference<>() {});
 
                 // {"Status":"FAILED","Message":"class com.starrocks.common.DdlException: There is no 100-continue header"}
-                Assert.assertEquals("FAILED", result.get("Status"));
-                Assert.assertEquals("class com.starrocks.common.DdlException: There is no 100-continue header",
+                Assertions.assertEquals("FAILED", result.get("Status"));
+                Assertions.assertEquals("class com.starrocks.common.DdlException: There is no 100-continue header",
                         result.get("Message"));
             }
         }
@@ -263,10 +263,10 @@ public class LoadActionTest extends StarRocksHttpTestCase {
             HttpPut put = buildPutRequest(512, false);
             put.setProtocolVersion(new ProtocolVersion("HTTP", 1, 0));
             try (CloseableHttpResponse response = client.execute(put)) {
-                Assert.assertEquals(HttpResponseStatus.TEMPORARY_REDIRECT.code(),
+                Assertions.assertEquals(HttpResponseStatus.TEMPORARY_REDIRECT.code(),
                         response.getStatusLine().getStatusCode());
                 // The server indicates that the connection should be closed.
-                Assert.assertEquals(HttpHeaderValues.CLOSE.toString(),
+                Assertions.assertEquals(HttpHeaderValues.CLOSE.toString(),
                         response.getFirstHeader(HttpHeaderNames.CONNECTION.toString()).getValue());
             }
         }

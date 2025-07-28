@@ -19,8 +19,8 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.azure.AzBlobFileSystem;
 import com.starrocks.fs.hdfs.HdfsFileSystemWrap;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
@@ -34,21 +34,21 @@ public class FileSystemTest {
             // wasbs
             String path = "wasbs://container_name@account_name.blob.core.windows.net/blob_name";
             FileSystem fs = FileSystem.getFileSystem(path, properties);
-            Assert.assertTrue(fs instanceof AzBlobFileSystem);
+            Assertions.assertTrue(fs instanceof AzBlobFileSystem);
         }
 
         {
             // abfs
             String path = "abfs://container_name@account_name.blob.core.windows.net/blob_name";
             FileSystem fs = FileSystem.getFileSystem(path, properties);
-            Assert.assertTrue(fs instanceof HdfsFileSystemWrap);
+            Assertions.assertTrue(fs instanceof HdfsFileSystemWrap);
         }
 
         {
             // hdfs
             String path = "hdfs://host:port/file_name";
             FileSystem fs = FileSystem.getFileSystem(path, properties);
-            Assert.assertTrue(fs instanceof HdfsFileSystemWrap);
+            Assertions.assertTrue(fs instanceof HdfsFileSystemWrap);
         }
 
         {

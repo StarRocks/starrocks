@@ -37,9 +37,9 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -60,7 +60,7 @@ public class OdbcCatalogResourceTest {
     private Map<String, String> properties;
     private Analyzer analyzer;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         name = "odbc";
         type = "odbc_catalog";
@@ -105,13 +105,13 @@ public class OdbcCatalogResourceTest {
         OdbcCatalogResource rOdbcCatalogResource1 = (OdbcCatalogResource) OdbcCatalogResource.read(dis);
         OdbcCatalogResource rOdbcCatalogResource2 = (OdbcCatalogResource) OdbcCatalogResource.read(dis);
 
-        Assert.assertEquals("odbc1", rOdbcCatalogResource1.getName());
-        Assert.assertEquals("odbc2", rOdbcCatalogResource2.getName());
+        Assertions.assertEquals("odbc1", rOdbcCatalogResource1.getName());
+        Assertions.assertEquals("odbc2", rOdbcCatalogResource2.getName());
 
-        Assert.assertEquals(rOdbcCatalogResource2.getProperties("host"), "host");
-        Assert.assertEquals(rOdbcCatalogResource2.getProperties("port"), "port");
-        Assert.assertEquals(rOdbcCatalogResource2.getProperties("user"), "user");
-        Assert.assertEquals(rOdbcCatalogResource2.getProperties("password"), "password");
+        Assertions.assertEquals(rOdbcCatalogResource2.getProperties("host"), "host");
+        Assertions.assertEquals(rOdbcCatalogResource2.getProperties("port"), "port");
+        Assertions.assertEquals(rOdbcCatalogResource2.getProperties("user"), "user");
+        Assertions.assertEquals(rOdbcCatalogResource2.getProperties("password"), "password");
 
         // 3. delete files
         dis.close();

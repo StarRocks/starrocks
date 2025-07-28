@@ -15,8 +15,8 @@
 package com.starrocks.sql.common;
 
 import com.google.common.collect.Lists;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -37,6 +37,6 @@ public class PermutationGeneratorTest {
             generator.next();
             ++count;
         }
-        Assert.assertEquals(100000, count);
+        Assertions.assertEquals(100000, count);
     }
 }

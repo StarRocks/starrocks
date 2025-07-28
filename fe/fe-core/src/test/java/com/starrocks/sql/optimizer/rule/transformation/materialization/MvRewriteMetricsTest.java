@@ -24,18 +24,18 @@ import com.starrocks.metric.MaterializedViewMetricsBlackHoleEntity;
 import com.starrocks.metric.MaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class MvRewriteMetricsTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
 
@@ -59,31 +59,31 @@ public class MvRewriteMetricsTest extends MVTestBase {
             MaterializedView mv = (MaterializedView) getTable(DB_NAME, mvName);
             IMaterializedViewMetricsEntity iEntity =
                     MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
-            Assert.assertTrue(iEntity instanceof MaterializedViewMetricsEntity);
+            Assertions.assertTrue(iEntity instanceof MaterializedViewMetricsEntity);
             MaterializedViewMetricsEntity mvMetric = (MaterializedViewMetricsEntity) iEntity;
 
             // basic test
-            Assert.assertTrue(mvMetric.counterPartitionCount.getValue() == 0);
-            Assert.assertTrue(mvMetric.counterRefreshJobTotal.getValue() == 1);
-            Assert.assertTrue(mvMetric.counterRefreshJobSuccessTotal.getValue() == 1);
-            Assert.assertTrue(mvMetric.counterRefreshJobFailedTotal.getValue() == 0);
-            Assert.assertTrue(mvMetric.counterRefreshJobEmptyTotal.getValue() == 0);
-            Assert.assertTrue(mvMetric.counterRefreshJobRetryCheckChangedTotal.getValue() > 0);
+            Assertions.assertTrue(mvMetric.counterPartitionCount.getValue() == 0);
+            Assertions.assertTrue(mvMetric.counterRefreshJobTotal.getValue() == 1);
+            Assertions.assertTrue(mvMetric.counterRefreshJobSuccessTotal.getValue() == 1);
+            Assertions.assertTrue(mvMetric.counterRefreshJobFailedTotal.getValue() == 0);
+            Assertions.assertTrue(mvMetric.counterRefreshJobEmptyTotal.getValue() == 0);
+            Assertions.assertTrue(mvMetric.counterRefreshJobRetryCheckChangedTotal.getValue() > 0);
 
-            Assert.assertTrue(mvMetric.counterRefreshPendingJobs.getValue() == 0);
-            Assert.assertTrue(mvMetric.counterRefreshRunningJobs.getValue() >= 0);
-            Assert.assertTrue(mvMetric.counterInactiveState.getValue() == 0);
+            Assertions.assertTrue(mvMetric.counterRefreshPendingJobs.getValue() == 0);
+            Assertions.assertTrue(mvMetric.counterRefreshRunningJobs.getValue() >= 0);
+            Assertions.assertTrue(mvMetric.counterInactiveState.getValue() == 0);
             // matched
             {
                 String query = "select * from depts where deptno > 20";
                 String plan = getFragmentPlan(query);
                 assertContains(plan, mvName);
 
-                Assert.assertTrue(mvMetric.counterQueryTextBasedMatchedTotal.getValue() == 0);
-                Assert.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryConsideredTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryMaterializedViewTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryTextBasedMatchedTotal.getValue() == 0);
+                Assertions.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryConsideredTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryMaterializedViewTotal.getValue() == 1);
             }
 
             // directly query
@@ -91,11 +91,11 @@ public class MvRewriteMetricsTest extends MVTestBase {
                 String query = "select * from mv0";
                 String plan = getFragmentPlan(query);
                 assertContains(plan, mvName);
-                Assert.assertTrue(mvMetric.counterQueryTextBasedMatchedTotal.getValue() == 0);
-                Assert.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryConsideredTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryMaterializedViewTotal.getValue() == 2);
+                Assertions.assertTrue(mvMetric.counterQueryTextBasedMatchedTotal.getValue() == 0);
+                Assertions.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryConsideredTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryMaterializedViewTotal.getValue() == 2);
             }
 
             // non matched
@@ -103,11 +103,11 @@ public class MvRewriteMetricsTest extends MVTestBase {
                 String query = "select * from depts where deptno < 20";
                 String plan = getFragmentPlan(query);
                 PlanTestBase.assertNotContains(plan, mvName);
-                Assert.assertTrue(mvMetric.counterQueryTextBasedMatchedTotal.getValue() == 0);
-                Assert.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryConsideredTotal.getValue() == 2);
-                Assert.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryMaterializedViewTotal.getValue() == 2);
+                Assertions.assertTrue(mvMetric.counterQueryTextBasedMatchedTotal.getValue() == 0);
+                Assertions.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryConsideredTotal.getValue() == 2);
+                Assertions.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryMaterializedViewTotal.getValue() == 2);
             }
 
         });
@@ -126,20 +126,20 @@ public class MvRewriteMetricsTest extends MVTestBase {
             MaterializedView mv = (MaterializedView) getTable(DB_NAME, mvName);
             IMaterializedViewMetricsEntity iEntity =
                     MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
-            Assert.assertTrue(iEntity instanceof MaterializedViewMetricsEntity);
+            Assertions.assertTrue(iEntity instanceof MaterializedViewMetricsEntity);
             MaterializedViewMetricsEntity mvMetric = (MaterializedViewMetricsEntity) iEntity;
 
             // basic test
-            Assert.assertTrue(mvMetric.counterPartitionCount.getValue() == 0);
-            Assert.assertTrue(mvMetric.counterRefreshJobTotal.getValue() == 1);
-            Assert.assertTrue(mvMetric.counterRefreshJobSuccessTotal.getValue() == 1);
-            Assert.assertTrue(mvMetric.counterRefreshJobFailedTotal.getValue() == 0);
-            Assert.assertTrue(mvMetric.counterRefreshJobEmptyTotal.getValue() == 0);
-            Assert.assertTrue(mvMetric.counterRefreshJobRetryCheckChangedTotal.getValue() > 0);
+            Assertions.assertTrue(mvMetric.counterPartitionCount.getValue() == 0);
+            Assertions.assertTrue(mvMetric.counterRefreshJobTotal.getValue() == 1);
+            Assertions.assertTrue(mvMetric.counterRefreshJobSuccessTotal.getValue() == 1);
+            Assertions.assertTrue(mvMetric.counterRefreshJobFailedTotal.getValue() == 0);
+            Assertions.assertTrue(mvMetric.counterRefreshJobEmptyTotal.getValue() == 0);
+            Assertions.assertTrue(mvMetric.counterRefreshJobRetryCheckChangedTotal.getValue() > 0);
 
-            Assert.assertTrue(mvMetric.counterRefreshPendingJobs.getValue() == 0);
-            Assert.assertTrue(mvMetric.counterRefreshRunningJobs.getValue() >= 0);
-            Assert.assertTrue(mvMetric.counterInactiveState.getValue() == 0);
+            Assertions.assertTrue(mvMetric.counterRefreshPendingJobs.getValue() == 0);
+            Assertions.assertTrue(mvMetric.counterRefreshRunningJobs.getValue() >= 0);
+            Assertions.assertTrue(mvMetric.counterInactiveState.getValue() == 0);
 
             connectContext.getSessionVariable().setTraceLogMode("command");
             Tracers.register(connectContext);
@@ -154,10 +154,10 @@ public class MvRewriteMetricsTest extends MVTestBase {
                 Tracers.close();
                 assertContains(pr, "TEXT_BASED_REWRITE: Rewrite Succeed");
 
-                Assert.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryTextBasedMatchedTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 0);
-                Assert.assertTrue(mvMetric.counterQueryMaterializedViewTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryTextBasedMatchedTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 0);
+                Assertions.assertTrue(mvMetric.counterQueryMaterializedViewTotal.getValue() == 1);
             }
 
         });
@@ -178,7 +178,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
             MaterializedView mv = (MaterializedView) getTable(DB_NAME, mvName);
             IMaterializedViewMetricsEntity iEntity =
                     MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
-            Assert.assertTrue(iEntity instanceof MaterializedViewMetricsBlackHoleEntity);
+            Assertions.assertTrue(iEntity instanceof MaterializedViewMetricsBlackHoleEntity);
             MaterializedViewMetricsBlackHoleEntity mvMetric = (MaterializedViewMetricsBlackHoleEntity) iEntity;
         });
         Config.enable_materialized_view_metrics_collect = true;
@@ -195,20 +195,20 @@ public class MvRewriteMetricsTest extends MVTestBase {
             MaterializedView mv = (MaterializedView) getTable(DB_NAME, mvName);
             IMaterializedViewMetricsEntity iEntity =
                     MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
-            Assert.assertTrue(iEntity instanceof MaterializedViewMetricsEntity);
+            Assertions.assertTrue(iEntity instanceof MaterializedViewMetricsEntity);
             MaterializedViewMetricsEntity mvMetric = (MaterializedViewMetricsEntity) iEntity;
-            Assert.assertTrue(mvMetric.counterRefreshJobSuccessTotal.getValue() == 1);
-            Assert.assertTrue(mvMetric.counterRefreshJobRetryCheckChangedTotal.getValue() == 1);
-            Assert.assertTrue(mvMetric.counterRefreshJobTotal.getValue() == 1);
+            Assertions.assertTrue(mvMetric.counterRefreshJobSuccessTotal.getValue() == 1);
+            Assertions.assertTrue(mvMetric.counterRefreshJobRetryCheckChangedTotal.getValue() == 1);
+            Assertions.assertTrue(mvMetric.counterRefreshJobTotal.getValue() == 1);
             {
                 // hit mv
                 String query = "select * from depts where deptno = 10";
                 String plan = getFragmentPlan(query);
                 PlanTestBase.assertContains(plan, mvName);
-                Assert.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryConsideredTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryMaterializedViewTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryConsideredTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 1);
+                Assertions.assertTrue(mvMetric.counterQueryMaterializedViewTotal.getValue() == 1);
             }
 
             {
@@ -216,26 +216,26 @@ public class MvRewriteMetricsTest extends MVTestBase {
                 MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
                 String json = visitor.build();
                 System.out.println(json);
-                Assert.assertTrue(json.contains("mv_refresh_jobs"));
-                Assert.assertTrue(json.contains("mv_refresh_total_success_jobs"));
-                Assert.assertTrue(json.contains("mv_refresh_total_retry_meta_count"));
-                Assert.assertTrue(json.contains("mv_query_total_count"));
-                Assert.assertTrue(json.contains("mv_query_total_hit_count"));
-                Assert.assertTrue(json.contains("mv_query_total_considered_count"));
-                Assert.assertTrue(json.contains("mv_query_total_matched_count"));
+                Assertions.assertTrue(json.contains("mv_refresh_jobs"));
+                Assertions.assertTrue(json.contains("mv_refresh_total_success_jobs"));
+                Assertions.assertTrue(json.contains("mv_refresh_total_retry_meta_count"));
+                Assertions.assertTrue(json.contains("mv_query_total_count"));
+                Assertions.assertTrue(json.contains("mv_query_total_hit_count"));
+                Assertions.assertTrue(json.contains("mv_query_total_considered_count"));
+                Assertions.assertTrue(json.contains("mv_query_total_matched_count"));
             }
             {
                 JsonMetricVisitor visitor = new JsonMetricVisitor("starrocks_fe");
                 MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
                 String json = visitor.build();
                 System.out.println(json);
-                Assert.assertTrue(json.contains("mv_refresh_jobs"));
-                Assert.assertTrue(json.contains("mv_refresh_total_success_jobs"));
-                Assert.assertTrue(json.contains("mv_refresh_total_retry_meta_count"));
-                Assert.assertTrue(json.contains("mv_query_total_count"));
-                Assert.assertTrue(json.contains("mv_query_total_hit_count"));
-                Assert.assertTrue(json.contains("mv_query_total_considered_count"));
-                Assert.assertTrue(json.contains("mv_query_total_matched_count"));
+                Assertions.assertTrue(json.contains("mv_refresh_jobs"));
+                Assertions.assertTrue(json.contains("mv_refresh_total_success_jobs"));
+                Assertions.assertTrue(json.contains("mv_refresh_total_retry_meta_count"));
+                Assertions.assertTrue(json.contains("mv_query_total_count"));
+                Assertions.assertTrue(json.contains("mv_query_total_hit_count"));
+                Assertions.assertTrue(json.contains("mv_query_total_considered_count"));
+                Assertions.assertTrue(json.contains("mv_query_total_matched_count"));
             }
 
             {
@@ -243,31 +243,31 @@ public class MvRewriteMetricsTest extends MVTestBase {
                 String query = "select * from depts where deptno = 10";
                 String plan = getFragmentPlan(query);
                 PlanTestBase.assertContains(plan, mvName);
-                Assert.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 2);
-                Assert.assertTrue(mvMetric.counterQueryConsideredTotal.getValue() == 2);
-                Assert.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 2);
-                Assert.assertTrue(mvMetric.counterQueryMaterializedViewTotal.getValue() == 2);
+                Assertions.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 2);
+                Assertions.assertTrue(mvMetric.counterQueryConsideredTotal.getValue() == 2);
+                Assertions.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 2);
+                Assertions.assertTrue(mvMetric.counterQueryMaterializedViewTotal.getValue() == 2);
             }
             // empty refresh
             refreshMaterializedView(DB_NAME, mvName);
-            Assert.assertTrue(mvMetric.counterRefreshJobTotal.getValue() == 2);
-            Assert.assertTrue(mvMetric.counterRefreshJobSuccessTotal.getValue() == 1);
-            Assert.assertTrue(mvMetric.counterRefreshJobEmptyTotal.getValue() == 1);
-            Assert.assertTrue(mvMetric.counterRefreshJobRetryCheckChangedTotal.getValue() == 2);
+            Assertions.assertTrue(mvMetric.counterRefreshJobTotal.getValue() == 2);
+            Assertions.assertTrue(mvMetric.counterRefreshJobSuccessTotal.getValue() == 1);
+            Assertions.assertTrue(mvMetric.counterRefreshJobEmptyTotal.getValue() == 1);
+            Assertions.assertTrue(mvMetric.counterRefreshJobRetryCheckChangedTotal.getValue() == 2);
 
             {
                 JsonMetricVisitor visitor = new JsonMetricVisitor("starrocks_fe");
                 MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
                 String json = visitor.build();
                 System.out.println(json);
-                Assert.assertTrue(json.contains("mv_refresh_jobs"));
-                Assert.assertTrue(json.contains("mv_refresh_total_success_jobs"));
-                Assert.assertTrue(json.contains("mv_refresh_total_empty_jobs"));
-                Assert.assertTrue(json.contains("mv_refresh_total_retry_meta_count"));
-                Assert.assertTrue(json.contains("mv_query_total_count"));
-                Assert.assertTrue(json.contains("mv_query_total_hit_count"));
-                Assert.assertTrue(json.contains("mv_query_total_considered_count"));
-                Assert.assertTrue(json.contains("mv_query_total_matched_count"));
+                Assertions.assertTrue(json.contains("mv_refresh_jobs"));
+                Assertions.assertTrue(json.contains("mv_refresh_total_success_jobs"));
+                Assertions.assertTrue(json.contains("mv_refresh_total_empty_jobs"));
+                Assertions.assertTrue(json.contains("mv_refresh_total_retry_meta_count"));
+                Assertions.assertTrue(json.contains("mv_query_total_count"));
+                Assertions.assertTrue(json.contains("mv_query_total_hit_count"));
+                Assertions.assertTrue(json.contains("mv_query_total_considered_count"));
+                Assertions.assertTrue(json.contains("mv_query_total_matched_count"));
             }
         });
     }
@@ -280,7 +280,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
         MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
         String json = visitor.build();
         System.out.println(json);
-        Assert.assertTrue(json.equals("[]"));
+        Assertions.assertTrue(json.equals("[]"));
     }
 
     @Test
@@ -293,7 +293,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
             MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
             String json = visitor.build();
             System.out.println(json);
-            Assert.assertTrue(json.equals("[]"));
+            Assertions.assertTrue(json.equals("[]"));
         }
 
         // mv2: valid
@@ -311,7 +311,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
             MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
             String json = visitor.build();
             System.out.println(json);
-            Assert.assertEquals("[]", json);
+            Assertions.assertEquals("[]", json);
         }
     }
 }

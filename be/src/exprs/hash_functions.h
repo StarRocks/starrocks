@@ -40,6 +40,12 @@ public:
      * @return LargeIntColumn
      */
     DEFINE_VECTORIZED_FN(xx_hash3_128);
+
+    /**
+     * @param columns: [ArrayColumn, ...]
+     * @return IntColumn
+    */
+    DEFINE_VECTORIZED_FN(crc32_hash);
 };
 
 inline StatusOr<ColumnPtr> HashFunctions::murmur_hash3_32(FunctionContext* context, const starrocks::Columns& columns) {
@@ -157,6 +163,45 @@ inline StatusOr<ColumnPtr> HashFunctions::xx_hash3_128(FunctionContext* context,
     }
 
     return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+inline StatusOr<ColumnPtr> HashFunctions::crc32_hash(FunctionContext* context, const starrocks::Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+    const auto& col = columns[0];
+    const size_t row_size = col->size();
+
+    if (col->only_null()) {
+        return col;
+    }
+
+    if (col->is_constant()) {
+        uint32_t hash_value = 0;
+        auto const_column = ColumnHelper::as_raw_column<ConstColumn>(col);
+        const_column->data_column()->crc32_hash(&hash_value, 0, 1);
+        return ColumnHelper::create_const_column<TYPE_BIGINT>(hash_value, row_size);
+    }
+
+    std::vector<uint32_t> hash_values(row_size);
+    col->crc32_hash(hash_values.data(), 0, row_size);
+
+    ColumnBuilder<TYPE_BIGINT> builder(row_size);
+
+    const bool is_nullable = col->is_nullable();
+    const uint8_t* null_data = nullptr;
+    if (is_nullable) {
+        auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(col);
+        null_data = null_column->null_column()->get_data().data();
+    }
+
+    for (size_t row = 0; row < row_size; ++row) {
+        if (is_nullable && null_data[row]) {
+            builder.append_null();
+        } else {
+            builder.append(hash_values[row]);
+        }
+    }
+
+    return builder.build(false);
 }
 
 } // namespace starrocks

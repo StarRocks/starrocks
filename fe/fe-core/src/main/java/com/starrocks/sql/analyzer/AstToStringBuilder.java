@@ -1971,12 +1971,7 @@ public class AstToStringBuilder {
 
         if (!properties.isEmpty()) {
             createTableSql.append("\nPROPERTIES (");
-            for (Map.Entry<String, String> kv : properties.entrySet()) {
-                createTableSql.append("\"" + kv.getKey() + "\" = \"").append(kv.getValue()).append("\",");
-            }
-            if (createTableSql.charAt(createTableSql.length() - 1) == ',') {
-                createTableSql.deleteCharAt(createTableSql.length() - 1);
-            }
+            createTableSql.append(new PrintableMap<>(properties, "=", true, false, true).toString());
             createTableSql.append(")");
         }
         createTableSql.append(";");

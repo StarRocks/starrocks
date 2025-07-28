@@ -17,7 +17,6 @@
 #include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
@@ -26,8 +25,8 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeMetricsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"LABELS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"LABELS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"VALUE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 

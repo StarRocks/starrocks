@@ -250,6 +250,8 @@ set(STORAGE_FILES
     lake/persistent_index_sstable.cpp
     lake/lake_primary_key_compaction_conflict_resolver.cpp
     lake/column_mode_partial_update_handler.cpp
+    sstable/sstable_predicate.cpp
+    sstable/sstable_predicate_utils.cpp
     primary_key_dump.cpp
     dictionary_cache_manager.cpp
     rows_mapper.cpp
@@ -270,7 +272,9 @@ set(STORAGE_FILES
     index/vector/tenann_index_reader.cpp
     index/vector/tenann/del_id_filter.cpp
     index/vector/tenann/tenann_index_builder.cpp
-    index/vector/tenann/tenann_index_utils.cpp)
+    index/vector/tenann/tenann_index_utils.cpp
+    record_predicate/record_predicate_helper.cpp
+    record_predicate/column_hash_is_congruent.cpp)
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)

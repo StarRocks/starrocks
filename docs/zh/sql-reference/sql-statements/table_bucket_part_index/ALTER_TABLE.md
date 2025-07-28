@@ -17,7 +17,7 @@ displayed_sidebar: docs
 - [修改 bitmap index](#bitmap-index-修改)
 - [修改表的属性](#修改表的属性)
 - [对表进行原子替换](#swap-将两个表原子替换)
-- [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
+- [手动执行 Compaction 合并表数据](#手动-compaction31-版本起)
 - [删除主键索引](#删除主键索引-339-版本起))
 
 :::tip
@@ -31,7 +31,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
 ```
 
-`alter_clause`可以包含以下操作：重命名、注释、分区、分桶、列、汇总索引、Bitmap索引、表属性、交换和合并。
+`alter_clause`可以包含以下操作：重命名、注释、分区、分桶、列、汇总索引、Bitmap索引、表属性、交换和 Compaction。
 
 - rename: 修改表名、rollup index 名、partition 名或列名（从 3.3.2 版本开始支持）。
 - comment: 修改表的注释。**从 3.1 版本开始支持。**
@@ -774,8 +774,7 @@ SET ("key" = "value")
 
 - `replication_num`
 - `default.replication_num`
-- `storage_cooldown_ttl`
-- `storage_cooldown_time`
+- `default.storage_medium`
 - 动态分区相关属性
 - `enable_persistent_index`
 - `bloom_filter_columns`
@@ -806,16 +805,16 @@ SWAP WITH <tbl_name>;
 - 依赖于交换表的物化视图将自动设置为非活动状态，其唯一键和外键约束将被移除且不再可用。
 :::
 
-### 手动合并（从3.1起）
+### 手动 Compaction（从3.1起）
 
-StarRocks使用合并机制来合并已加载数据的不同版本。此功能可以将小文件合并为大文件，从而有效提高查询性能。
+StarRocks使用 Compaction 机制来合并已加载数据的不同版本。此功能可以将小文件合并为大文件，从而有效提高查询性能。
 
 在v3.1之前，合并有两种方式：
 
-- 系统自动合并：在BE级别后台执行合并。用户不能指定数据库或表进行合并。
-- 用户可以通过调用HTTP接口执行合并。
+- 系统自动 Compaction ：在BE级别后台执行 Compaction 。用户不能指定数据库或表进行 Compaction 。
+- 用户可以通过调用 HTTP 接口执行 Compaction 。
 
-从v3.1起，StarRocks提供了一个SQL接口，用户可以通过运行SQL命令手动执行合并。他们可以选择特定的表或分区进行合并。这提供了对合并过程的更多灵活性和控制。
+从 v3.1 起，StarRocks提供了一个SQL接口，用户可以通过运行SQL命令手动执行 Compaction 。他们可以选择特定的表或分区进行 Compaction。这提供了对 Compaction 过程的更多灵活性和控制。
 
 存算分离集群从v3.3.0起支持此功能。
 
@@ -832,23 +831,23 @@ ALTER TABLE <tbl_name> [ BASE | CUMULATIVE ] COMPACT [ <partition_name> | ( <par
 即：
 
 ```SQL
--- 对整个表执行合并。
+-- 对整个表执行 Compaction。
 ALTER TABLE <tbl_name> COMPACT
 
--- 对单个分区执行合并。
+-- 对单个分区执行 Compaction。
 ALTER TABLE <tbl_name> COMPACT <partition_name>
 
--- 对多个分区执行合并。
+-- 对多个分区执行 Compaction。
 ALTER TABLE <tbl_name> COMPACT (<partition1_name>[,<partition2_name>,...])
 
--- 执行增量合并。
+-- 执行增量 Compaction。
 ALTER TABLE <tbl_name> CUMULATIVE COMPACT (<partition1_name>[,<partition2_name>,...])
 
--- 执行基础合并。
+-- 执行 Base Compaction。
 ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 ```
 
-`information_schema`数据库中的`be_compactions`表记录合并结果。可以运行`SELECT * FROM information_schema.be_compactions;`查询合并后的数据版本。
+`information_schema`数据库中的`be_compactions`表记录 Compaction 结果。可以运行`SELECT * FROM information_schema.be_compactions;`查询 Compaction 后的数据版本。
 
 ### 删除主键索引 (3.3.9 版本起)
 
@@ -962,7 +961,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
 2. 基于`example_rollup_index(k1,k3,v1,v2)`创建索引`example_rollup_index2`。
 
-```sql
+    ```sql
     ALTER TABLE example_db.my_table
     ADD ROLLUP example_rollup_index2 (k1, v1)
     FROM example_rollup_index;
@@ -1238,6 +1237,12 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
          );
      ```
 
+3. 修改表的存储介质属性。
+
+     ```sql
+     ALTER TABLE example_db.my_table SET("default.storage_medium"="SSD");
+     ```
+
 ### 重命名
 
 1. 将`table1`重命名为`table2`。
@@ -1282,7 +1287,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 ALTER TABLE table1 SWAP WITH table2
 ```
 
-### 手动合并
+### 手动 Compaction
 
 ```sql
 CREATE TABLE compaction_test( 

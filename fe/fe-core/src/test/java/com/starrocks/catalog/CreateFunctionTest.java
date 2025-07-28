@@ -23,9 +23,9 @@ import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import io.netty.buffer.PooledByteBufAllocator;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -38,7 +38,7 @@ public class CreateFunctionTest {
 
     private FakeGlobalStateMgr fakeGlobalStateMgr;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
@@ -71,11 +71,11 @@ public class CreateFunctionTest {
         Function.FunctionType.read(byteBufInputStream);
         newFunction.readFields(byteBufInputStream);
 
-        Assert.assertEquals(newFunction.getFunctionName().getFunction(), fn);
-        Assert.assertEquals(newFunction.getFunctionId(), tableFunction.getFunctionId());
-        Assert.assertEquals(newFunction.getDefaultColumnNames(), colNames);
-        Assert.assertEquals(Arrays.asList(newFunction.getArgs()), argTypes);
-        Assert.assertEquals(newFunction.getTableFnReturnTypes(), retTypes);
-        Assert.assertEquals(newFunction.getTableFnReturnTypes(), retTypes);
+        Assertions.assertEquals(newFunction.getFunctionName().getFunction(), fn);
+        Assertions.assertEquals(newFunction.getFunctionId(), tableFunction.getFunctionId());
+        Assertions.assertEquals(newFunction.getDefaultColumnNames(), colNames);
+        Assertions.assertEquals(Arrays.asList(newFunction.getArgs()), argTypes);
+        Assertions.assertEquals(newFunction.getTableFnReturnTypes(), retTypes);
+        Assertions.assertEquals(newFunction.getTableFnReturnTypes(), retTypes);
     }
 }

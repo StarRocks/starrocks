@@ -79,6 +79,8 @@ USING SELECT t1.v2, t2.v3 FROM t1 JOIN[BROADCAST] t2 on t1.v2 = t2.v2 where t1.v
 
 ```SQL
 SHOW BASELINE [WHERE <condition>]
+
+SHOW BASELINE [ON <query>]
 ```
 
 **例**:
@@ -127,6 +129,22 @@ source        | USER
 updateTime    | 2025-05-13 15:29:04
 1 row in set
 Time: 0.013s
+
+MySQL > show baseline on SELECT count(1) AS `count(1)` FROM `old`.`t1` INNER JOIN `old`.`t2` ON `old`.`t1`.`k2` = `old`.`t2`.`k2` LIMIT 10\G;
+***************************[ 1. row ]***************************
+Id            | 679817
+global        | Y
+enable        | Y
+bindSQLDigest | SELECT count(?) AS `count(1)` FROM `old`.`t1` INNER JOIN `old`.`t2` ON `old`.`t1`.`k2` = `old`.`t2`.`k2` LIMIT 10
+bindSQLHash   | 1085927
+bindSQL       | SELECT count(_spm_const_var(1)) AS `count(1)` FROM `old`.`t1` INNER JOIN `old`.`t2` ON `old`.`t1`.`k2` = `old`.`t2`.`k2` LIMIT 10
+planSQL       | SELECT count(_spm_const_var(1)) AS c_7 FROM (SELECT 1 AS c_9 FROM t1 INNER JOIN[SHUFFLE] t2 ON t1.k2 = t2.k2) t_0 LIMIT 10
+costs         | 2532.6
+queryMs       | 35.0
+source        | CAPTURE
+updateTime    | 2025-05-27 11:17:48
+1 row in set
+Time: 0.026s
 ```
 
 ### ベースラインの削除
@@ -139,7 +157,7 @@ DROP BASELINE <id>,<id>...
 
 **パラメータ**:
 
-`id`: ベースラインの ID。`SHOW BASELINE` を実行してベースライン ID を取得できます。
+`id`: ベースラインの ID。`SHOW BASELINE` を実行してベースライン ID を取得で���ます。
 
 **例**:
 
@@ -617,7 +635,7 @@ group by i_item_id
 
 ### 自動キャプチャ
 
-自動キャプチャは、過去の期間（デフォルトで3時間）におけるクエリ SQL ステートメントをクエリし、これらのクエリに基づいてベースラインを生成して保存します。生成されたベースラインはデフォルトで 'disable' 状態であり、すぐには有効になりません。
+自動キャプチャは、過去の期間（デフォルトで3時間）におけるクエリ SQL ステートメントをクエリし、これらのクエリに基づいてベースラインを生成して保存します。生成されたベースラインはデフ���ルトで 'disable' 状態であり、すぐには有効になりません。
 次のシナリオで：
 * アップグレード後、実行プランが変更され、クエリ時間が長くなる
 * データが変更され、統計が変更され、実行プランが変更される
@@ -646,8 +664,61 @@ set global plan_capture_include_pattern=".*";
 ```
 
 :::note
-クエリ履歴の保存と自動キャプチャは、いくつかのストレージと計算リソースを消費するため、自分のシナリオに応じて適切に設定してください。
+1. クエリ履歴の保存と自動キャプチャは、いくつかのストレージと計算リソースを消費するため、自分のシナリオに応じて適切に設定してください。
+2. ベースラインをバインドした後、アップグレード後に新しく追加された最適化が無効になる可能性があるため、自動キャプチャされたベースラインはデフォルトで無効になっています。
 :::
+
+#### 使用例
+
+アップグレード時に自動キャプチャ機能を使用して、アップグレード後のプラン回帰問題を回避する：
+
+1. アップグレードの1〜2日前に自動キャプチャ機能を有効にする：
+```SQL
+set global enable_query_history=true;
+set global enable_plan_capture=true;
+```
+
+2. StarRocks が定期的にクエリプランを記録し始め、`show baseline` で確認できます
+
+3. StarRocks をアップグレードする
+
+4. アップグレード後、クエリ実行時間をチェックするか、次の SQL を使用してプラン変更があったクエリを特定する：
+```SQL
+WITH recent_queries AS (
+    -- 3日以内のクエリ実行時間を平均実行時間として使用
+    SELECT 
+        dt,                     -- クエリ実行時間
+        sql_digest,             -- クエリの SQL フィンガープリント
+        `sql`,                  -- クエリ SQL
+        query_ms,               -- 実行時間
+        plan,                   -- 使用されたクエリプラン
+        AVG(query_ms) OVER (PARTITION BY sql_digest) AS avg_ms, -- SQL フィンガープリントグループ内の平均実行時間
+        RANK() OVER (PARTITION BY sql_digest ORDER BY plan) != 1 AS is_changed -- 異なるプラン形式を変更指標として数える
+    FROM _statistics_.query_history
+    WHERE dt >= NOW() - INTERVAL 3 DAY
+)
+-- 過去12時間で平均の1.5倍を超える実行時間のクエリ
+SELECT *, RANK() OVER (PARTITION BY sql_digest ORDER BY query_ms DESC) AS rnk
+FROM recent_queries
+WHERE query_ms > avg_ms * 1.5 and dt >= now() - INTERVAL 12 HOUR
+```
+
+5. プラン変更情報またはクエリ実行時間情報に基づいて、プランロールバックが必要かどうかを判断する
+
+6. SQL と時点に対応するベースラインを見つける：
+```SQL
+show baseline on <query>
+```
+
+7. Enable baseline を使用してロールバックする：
+```SQL
+enable baseline <id>
+```
+
+8. ベースライン書き換えスイッチを有効にする：
+```SQL
+set enable_spm_rewrite = true;
+```
 
 ## 将来の計画
 

@@ -18,8 +18,8 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.sql.ast.UserIdentity;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class UserIdentityTest {
 
@@ -28,16 +28,16 @@ public class UserIdentityTest {
         UserIdentity userIdent = new UserIdentity("cmy", "192.%");
 
         String str = "'" + "cmy" + "'@'192.%'";
-        Assert.assertEquals(str, userIdent.toString());
+        Assertions.assertEquals(str, userIdent.toString());
 
         UserIdentity userIdent2 = UserIdentity.fromString(str);
-        Assert.assertEquals(userIdent2.toString(), userIdent.toString());
+        Assertions.assertEquals(userIdent2.toString(), userIdent.toString());
 
         String str2 = "'walletdc_write'@['cluster-leida.orp.all']";
         userIdent = UserIdentity.fromString(str2);
-        Assert.assertNotNull(userIdent);
-        Assert.assertTrue(userIdent.isDomain());
-        Assert.assertEquals(str2, userIdent.toString());
+        Assertions.assertNotNull(userIdent);
+        Assertions.assertTrue(userIdent.isDomain());
+        Assertions.assertEquals(str2, userIdent.toString());
     }
 
 }

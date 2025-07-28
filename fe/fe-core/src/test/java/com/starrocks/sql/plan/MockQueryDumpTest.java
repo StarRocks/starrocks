@@ -18,25 +18,22 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
-import org.junit.Assert;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 
-@RunWith(Parameterized.class)
 public class MockQueryDumpTest extends ReplayFromDumpTestBase {
     private String fileName;
 
-    public MockQueryDumpTest(String fileName) {
+    public void initMockQueryDumpTest(String fileName) {
         this.fileName = fileName;
     }
 
-    @Parameterized.Parameters
     public static Collection<String> data() {
         String folderPath = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath()
                 + "/query_dump/mock-files";
@@ -52,15 +49,17 @@ public class MockQueryDumpTest extends ReplayFromDumpTestBase {
         return fileNames;
     }
 
-    @Test
-    public void testMockQueryDump() {
+    @MethodSource("data")
+    @ParameterizedTest
+    public void testMockQueryDump(String fileName) {
+        initMockQueryDumpTest(fileName);
         try {
             Pair<QueryDumpInfo, String> replayPair =
                     getPlanFragment(getDumpInfoFromFile("query_dump/mock-files/" + fileName),
                             null, TExplainLevel.NORMAL);
-            Assert.assertTrue(replayPair.second.contains("mock"));
+            Assertions.assertTrue(replayPair.second.contains("mock"));
         } catch (Throwable e) {
-            Assert.fail("file: " + fileName + " should succeed. errMsg: " + e.getMessage());
+            Assertions.fail("file: " + fileName + " should succeed. errMsg: " + e.getMessage());
         }
     }
 }

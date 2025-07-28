@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "exec/arrow_flight_batch_reader.h"
+#include "runtime/result_buffer_mgr.h"
+
 namespace starrocks {
 
 using arrow::flight::CallHeaders;
@@ -53,6 +56,13 @@ TEST_F(ArrowFlightCallHeaderUtilsTest, ParseBasicHeader) {
 
     ASSERT_EQ(username, "user");
     ASSERT_EQ(password, "pass");
+}
+
+TEST_F(ArrowFlightCallHeaderUtilsTest, NotExistQueryId) {
+    ResultBufferMgr buffer_mgr;
+    TUniqueId query_id;
+    auto reader = std::make_shared<ArrowFlightBatchReader>(&buffer_mgr, query_id);
+    ASSERT_TRUE(!reader->init().ok());
 }
 
 } // namespace starrocks

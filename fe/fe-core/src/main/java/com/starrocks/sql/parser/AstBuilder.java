@@ -129,6 +129,7 @@ import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddFollowerClause;
@@ -231,6 +232,7 @@ import com.starrocks.sql.ast.DeallocateStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
+import com.starrocks.sql.ast.DelComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
@@ -384,6 +386,7 @@ import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
+import com.starrocks.sql.ast.ShowComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
@@ -1972,7 +1975,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TaskName taskName = qualifiedNameToTaskName(qualifiedName);
         boolean force = context.FORCE() != null;
-        return new DropTaskStmt(taskName, force, createPos(context));
+        return new DropTaskStmt(taskName, context.IF() != null, force, createPos(context));
     }
 
     // ------------------------------------------- Materialized View Statement -----------------------------------------
@@ -2866,10 +2869,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     collect(toList());
             TableName tableName = qualifiedNameToTableName(qualifiedNames.get(0));
             List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
-            return new CreateAnalyzeJobStmt(tableName, columns, isSample, properties, analyzeType, null, pos);
+            return new CreateAnalyzeJobStmt(tableName, columns, context.IF() != null, isSample, properties,
+                    analyzeType, null, pos);
         } else if (context.histogramStatement() != null) {
             AnalyzeStmt analyzeStmt = histogramStatement(context.histogramStatement());
-            return new CreateAnalyzeJobStmt(analyzeStmt.getTableName(), analyzeStmt.getColumns(),
+            return new CreateAnalyzeJobStmt(analyzeStmt.getTableName(), analyzeStmt.getColumns(), false,
                     analyzeStmt.isSample(), analyzeStmt.getProperties(), analyzeType,
                     analyzeStmt.getAnalyzeTypeDesc(), pos);
         } else {
@@ -2996,7 +3000,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitKillAnalyzeStatement(StarRocksParser.KillAnalyzeStatementContext context) {
-        return new KillAnalyzeStmt(Long.parseLong(context.INTEGER_VALUE().getText()), createPos(context));
+        if (context.ALL() != null) {
+            return new KillAnalyzeStmt(-1, createPos(context));
+        } else {
+            return new KillAnalyzeStmt(Long.parseLong(context.INTEGER_VALUE().getText()), createPos(context));
+        }
     }
 
     // ------------------------------------------- Analyze Profile Statement -------------------------------------------
@@ -3941,6 +3949,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowBackendBlackListStatement(StarRocksParser.ShowBackendBlackListStatementContext ctx) {
         return new ShowBackendBlackListStmt(createPos(ctx));
+    }
+
+    // -------------------------------- Compute Node BlackList Statement ---------------------------------------------------
+
+    @Override
+    public ParseNode visitAddComputeNodeBlackListStatement(StarRocksParser.AddComputeNodeBlackListStatementContext ctx) {
+        List<Long> ids =
+                ctx.INTEGER_VALUE().stream().map(ParseTree::getText).map(Long::parseLong).collect(toList());
+        return new AddComputeNodeBlackListStmt(ids, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitDelComputeNodeBlackListStatement(StarRocksParser.DelComputeNodeBlackListStatementContext ctx) {
+        List<Long> ids =
+                ctx.INTEGER_VALUE().stream().map(ParseTree::getText).map(Long::parseLong).collect(toList());
+        return new DelComputeNodeBlackListStmt(createPos(ctx), ids);
+    }
+
+    @Override
+    public ParseNode visitShowComputeNodeBlackListStatement(StarRocksParser.ShowComputeNodeBlackListStatementContext ctx) {
+        return new ShowComputeNodeBlackListStmt(createPos(ctx));
     }
 
     // --------------------------------------- DataCache Management Statement -----------------------------------------

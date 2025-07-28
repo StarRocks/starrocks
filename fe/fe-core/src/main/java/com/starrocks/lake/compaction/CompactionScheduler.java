@@ -24,14 +24,15 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeAggregator;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.ComputeNodePB;
@@ -50,7 +51,6 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.warehouse.Warehouse;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.logging.log4j.LogManager;
@@ -190,23 +190,31 @@ public class CompactionScheduler extends Daemon {
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         int limitReachCnt = 0;
-        int warehouseCnt = warehouseManager.getAllWarehouseIds().size();
-        Map<Long /* WarehouseId */, Integer /* Running */> taskRunningInWarehouse = getRunningTaskCountInWarehouse();
-        Map<Long /* WarehouseId */, CompactionWarehouseInfo> warehouseTaskInfo = new HashMap<>();
+        int workerGroupCnt = warehouseManager.getAllWorkerGroupCount();
+        Map<ComputeResource, Integer /* Running */> runningTaskInfo = getRunningTaskInfo();
+        Map<ComputeResource, CompactionWarehouseInfo> warehouseTaskInfo = new HashMap<>();
         int index = 0;
-        while (limitReachCnt < warehouseCnt && index < partitions.size()) {
+        while (limitReachCnt < workerGroupCnt && index < partitions.size()) {
             PartitionStatisticsSnapshot partitionStatisticsSnapshot = partitions.get(index++);
-            Warehouse warehouse =
-                    warehouseManager.getCompactionWarehouse(partitionStatisticsSnapshot.getPartition().getTableId());
-            CompactionWarehouseInfo info = warehouseTaskInfo.get(warehouse.getId());
-            if (info == null) {
-                // get already running task count in this warehouse
-                int running = taskRunningInWarehouse.getOrDefault(warehouse.getId(), 0);
-                CRAcquireContext context = CRAcquireContext.of(warehouse.getId());
-                ComputeResource computeResource = warehouseManager.acquireComputeResource(context);
-                int limit = compactionTaskLimit(computeResource);
-                info = new CompactionWarehouseInfo(warehouse.getId(), warehouse.getName(), computeResource, limit, running);
-                warehouseTaskInfo.put(warehouse.getId(), info);
+            CompactionWarehouseInfo info = null;
+            try {
+                ComputeResource computeResource =
+                        warehouseManager.getCompactionComputeResource(partitionStatisticsSnapshot.getPartition().getTableId());
+                Warehouse warehouse = warehouseManager.getWarehouse(computeResource.getWarehouseId());
+                info = warehouseTaskInfo.get(computeResource);
+                if (info == null) {
+                    int running = runningTaskInfo.getOrDefault(computeResource, 0);
+                    int limit = compactionTaskLimit(computeResource);
+                    info = new CompactionWarehouseInfo(warehouse.getName(), computeResource, limit, running);
+                    warehouseTaskInfo.put(computeResource, info);
+                }
+            } catch (ErrorReportException e) { // warehouse not exist or no alive nodes
+                // TODO: if warehouse not exist, we will use `lake_compaction_warehouse` next round
+                //       if no alive nodes, it might be this warehouse is undergoing a reboot,
+                //       do not fall back to `lake_compaction_warehouse` for now
+                LOG.debug("get compaction warehouse info for partition {} error, {}",
+                        partitionStatisticsSnapshot.getPartition(), e);
+                continue;
             }
             if (info.taskRunning >= info.taskLimit) {
                 if (!info.limitReached) {
@@ -222,8 +230,7 @@ public class CompactionScheduler extends Daemon {
             info.taskRunning += job.getNumTabletCompactionTasks();
             runningCompactions.put(partitionStatisticsSnapshot.getPartition(), job);
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Created new compaction job. {}, txnId={}",
-                        partitionStatisticsSnapshot.toString(), job.getTxnId());
+                LOG.debug("Created new compaction job, {}", job.getDebugString());
             }
         }
     }
@@ -341,7 +348,7 @@ public class CompactionScheduler extends Daemon {
 
         long nextCompactionInterval = Config.lake_compaction_interval_ms_on_success;
         CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success,
-                                              info.computeResource);
+                                              info.computeResource, info.warehouseName);
         try {
             if (table.isFileBundling()) {
                 CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
@@ -436,6 +443,9 @@ public class CompactionScheduler extends Daemon {
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         LakeAggregator aggregator = new LakeAggregator();
         ComputeNode aggregatorNode = aggregator.chooseAggregatorNode(computeResource);
+        if (aggregatorNode == null) {
+            throw new NoAliveBackendException("No alive compute node available for aggregate compaction");
+        }
         LakeService service = BrpcProxy.getLakeService(aggregatorNode.getHost(), aggregatorNode.getBrpcPort());
 
         // 3. build AggregateCompactionTask
@@ -450,7 +460,7 @@ public class CompactionScheduler extends Daemon {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
+                ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId());
                 if (computeNode == null) {
                     beToTablets.clear();
                     return beToTablets;
@@ -625,13 +635,13 @@ public class CompactionScheduler extends Daemon {
         disabledIds = Collections.unmodifiableSet(newDisabledIds);
     }
 
-    private Map<Long, Integer> getRunningTaskCountInWarehouse() {
-        Map<Long, Integer> taskRunningInWarehouse = new HashMap<>();
+    private Map<ComputeResource, Integer> getRunningTaskInfo() {
+        Map<ComputeResource, Integer> runningTaskInfo = new HashMap<>();
         runningCompactions.values().stream().forEach((job) -> {
-            long warehouseId = job.getComputeResource().getWarehouseId();
-            int running = taskRunningInWarehouse.getOrDefault(warehouseId, 0);
-            taskRunningInWarehouse.put(warehouseId, running + job.getNumTabletCompactionTasks());
+            ComputeResource computeResource = job.getComputeResource();
+            int running = runningTaskInfo.getOrDefault(computeResource, 0);
+            runningTaskInfo.put(computeResource, running + job.getNumTabletCompactionTasks());
         });
-        return taskRunningInWarehouse;
+        return runningTaskInfo;
     }
 }

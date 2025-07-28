@@ -16,6 +16,7 @@
 
 #include <brpc/controller.h>
 #include <brpc/server.h>
+#include <butil/endpoint.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -1032,6 +1033,27 @@ TEST_F(LakeServiceTest, test_aggregate_compact) {
         agg_compact(&cntl, &agg_request, &response);
         ASSERT_EQ("compute node missing host/port", response.status().error_msgs(0));
     }
+
+    // get stub failed
+    {
+        brpc::Controller cntl;
+        AggregateCompactRequest agg_request;
+        CompactRequest request;
+        ComputeNodePB cn;
+        cn.set_id(1);
+        cn.set_host("invalid.host");
+        cn.set_brpc_port(123);
+        CompactResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(1);
+        // add request to agg_request
+        agg_request.add_requests()->CopyFrom(request);
+        agg_request.add_compute_nodes()->CopyFrom(cn);
+        agg_compact(&cntl, &agg_request, &response);
+        ASSERT_TRUE(response.status().status_code() != 0);
+    }
+
     brpc::ServerOptions options;
     options.num_threads = 1;
     brpc::Server server;
@@ -1100,6 +1122,61 @@ TEST_F(LakeServiceTest, test_aggregate_compact) {
         agg_compact(&cntl, &agg_request, &response);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
+    }
+}
+
+TEST_F(LakeServiceTest, test_aggregate_compact_with_error) {
+    auto agg_compact = [this](::google::protobuf::RpcController* cntl, const AggregateCompactRequest* request,
+                              CompactResponse* response) {
+        CountDownLatch latch(1);
+        auto cb = ::google::protobuf::NewCallback(&latch, &CountDownLatch::count_down);
+        _lake_service.aggregate_compact(cntl, request, response, cb);
+        latch.wait();
+    };
+
+    brpc::ServerOptions options;
+    options.num_threads = 1;
+    brpc::Server server;
+    MockLakeServiceImpl mock_service;
+    ASSERT_EQ(server.AddService(&mock_service, brpc::SERVER_DOESNT_OWN_SERVICE), 0);
+    ASSERT_EQ(server.Start(0, &options), 0);
+
+    butil::EndPoint server_addr = server.listen_address();
+    const int port = server_addr.port;
+    EXPECT_CALL(mock_service, compact(_, _, _, _))
+            .WillRepeatedly(Invoke([&](::google::protobuf::RpcController*, const CompactRequest*, CompactResponse* resp,
+                                       ::google::protobuf::Closure* done) {
+                resp->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+                resp->mutable_status()->add_error_msgs("injected error");
+                done->Run();
+            }));
+
+    auto txn_id = next_id();
+    // compact failed - single cn
+    {
+        brpc::Controller cntl;
+        AggregateCompactRequest agg_request;
+        CompactRequest request;
+        ComputeNodePB cn;
+        cn.set_host("127.0.0.1");
+        cn.set_brpc_port(port);
+        cn.set_id(1);
+        CompactResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(1);
+        request.set_timeout_ms(3000);
+        // add request to agg_request
+        agg_request.add_requests()->CopyFrom(request);
+        agg_request.add_compute_nodes()->CopyFrom(cn);
+        agg_compact(&cntl, &agg_request, &response);
+        ASSERT_FALSE(cntl.Failed());
+        // check status
+        ASSERT_EQ(TStatusCode::INTERNAL_ERROR, response.status().status_code());
+        // check error messages
+        ASSERT_EQ(1, response.status().error_msgs_size());
+        // check error msge
+        ASSERT_EQ("injected error", response.status().error_msgs(0));
     }
 }
 
@@ -2500,6 +2577,25 @@ TEST_F(LakeServiceTest, test_aggregate_publish_version) {
         item2.CopyFrom(schema_pb3);
     }
 
+    {
+        // invalid stub
+        AggregatePublishVersionRequest request;
+        auto* compute_node1 = request.add_compute_nodes();
+        compute_node1->set_host("invalid.host");
+        compute_node1->set_brpc_port(port);
+        auto* compute_node2 = request.add_compute_nodes();
+        compute_node2->set_host("127.0.0.1");
+        compute_node2->set_brpc_port(port);
+        auto* publish_req = request.add_publish_reqs();
+        publish_req->set_timeout_ms(5000);
+
+        PublishVersionResponse response;
+        brpc::Controller cntl;
+        google::protobuf::Closure* done = brpc::NewCallback([]() {});
+        _lake_service.aggregate_publish_version(&cntl, &request, &response, done);
+        EXPECT_FALSE(response.status().status_code() == 0);
+    }
+
     // normal response
     {
         EXPECT_CALL(mock_service, publish_version(_, _, _, _))
@@ -2547,6 +2643,138 @@ TEST_F(LakeServiceTest, test_aggregate_publish_version) {
 
     server.Stop(0);
     server.Join();
+}
+
+TEST_F(LakeServiceTest, test_task_cleared_in_thread_pool_queue) {
+    class MockRunnable : public Runnable {
+    public:
+        MockRunnable() {}
+        virtual ~MockRunnable() override {}
+        virtual void run() override {}
+        virtual void cancel() override {}
+    };
+
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:replace_task", [](void* arg) {
+        auto ptr = (*(std::shared_ptr<Runnable>*)arg);
+        ptr->cancel();
+        (*(std::shared_ptr<Runnable>*)arg) = std::make_shared<MockRunnable>();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:replace_task");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    {
+        brpc::Controller cntl;
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(1000);
+        _lake_service.publish_version(&cntl, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*has been cancelled*"));
+    }
+
+    {
+        auto txn_id = next_id();
+        PublishLogVersionRequest request;
+        PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(10);
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+    }
+
+    {
+        AbortTxnRequest request;
+        request.add_tablet_ids(_tablet_id);
+        request.set_skip_cleanup(false);
+        request.add_txn_ids(next_id());
+        AbortTxnResponse response;
+        _lake_service.abort_txn(nullptr, &request, &response, nullptr);
+    }
+
+    {
+        brpc::Controller cntl;
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(_tablet_id);
+        _lake_service.delete_tablet(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*has been cancelled*"));
+    }
+
+    {
+        std::vector<TxnLog> logs;
+
+        // TxnLog with 2 segments
+        logs.emplace_back(generate_write_txn_log(2, 101, 4096));
+        ASSERT_OK(_tablet_mgr->put_txn_log(logs.back()));
+
+        brpc::Controller cntl;
+        DeleteTxnLogRequest request;
+        DeleteTxnLogResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(logs.back().txn_id());
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*has been cancelled*"));
+    }
+
+    {
+        ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
+        DropTableRequest request;
+        DropTableResponse response;
+
+        brpc::Controller cntl;
+        request.set_tablet_id(_tablet_id);
+        _lake_service.drop_table(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*has been cancelled*"));
+    }
+
+    {
+        DeleteDataRequest request;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(12345);
+        request.mutable_delete_predicate()->set_version(1);
+
+        DeleteDataResponse response;
+        _lake_service.delete_data(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+    }
+
+    {
+        TabletStatRequest request;
+        TabletStatResponse response;
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(_tablet_id);
+        info->set_version(1);
+
+        // Prune metadata cache before getting tablet stats
+        _tablet_mgr->metacache()->prune();
+
+        _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.tablet_stats_size());
+    }
+
+    {
+        brpc::Controller cntl;
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(next_id());
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
+    }
 }
 
 } // namespace starrocks

@@ -2,6 +2,7 @@ set(EXEC_FILES
         ./agent/agent_task_test.cpp
         ./agent/heartbeat_server_test.cpp
         ./agent/master_info_test.cpp
+        ./agent/resource_group_usage_recorder_test.cpp
         ./column/array_column_test.cpp
         ./column/column_view_test.cpp
         ./column/array_view_column_test.cpp
@@ -73,6 +74,7 @@ set(EXEC_FILES
         ./exec/schema_columns_scanner_test.cpp
         ./exec/schema_fe_tablet_schedules_scanner_test.cpp
         ./exec/schema_materialized_views_scanner_test.cpp
+        ./exec/schema_task_runs_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/stream/mem_state_table_test.cpp
@@ -144,7 +146,7 @@ set(EXEC_FILES
         ./exprs/function_helper_test.cpp
         ./exprs/in_predicate_test.cpp
         ./exprs/is_null_predicate_test.cpp
-        ./exprs/jit_func_cache_test.cpp
+        ./exprs/jit_cache_test.cpp
         ./exprs/json_functions_test.cpp
         ./exprs/flat_json_functions_test.cpp
         ./exprs/lambda_array_expr_test.cpp
@@ -228,6 +230,7 @@ set(EXEC_FILES
         ./formats/parquet/parquet_cli_reader.h
         ./formats/parquet/parquet_cli_reader_test.cpp
         ./formats/parquet/parquet_ut_base.cpp
+        ./formats/parquet/parquet_variant_test.cpp
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
         ./formats/disk_range_test.cpp
@@ -433,7 +436,6 @@ set(EXEC_FILES
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/time_bounded_stream_load_pipe_test.cpp
-        ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/user_function_cache_test.cpp
         ./runtime/sorted_chunks_merger_test.cpp
@@ -531,6 +533,7 @@ set(EXEC_FILES
         ./util/stack_util_test.cpp
         ./util/byte_stream_split_test.cpp
         ./util/url_coding_test.cpp
+        ./util/url_parser_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
@@ -548,6 +551,9 @@ set(EXEC_FILES
         ./storage/lake/persistent_index_sstable_test.cpp
         ./storage/lake/write_combined_txn_log_test.cpp
         ./storage/lake/tablet_retain_info_test.cpp
+        ./storage/record_predicate/column_hash_is_congruent_test.cpp
+        ./storage/record_predicate/record_predicate_helper_test.cpp
+        ./storage/sstable/sstable_predicate_test.cpp
         ./cache/datacache_utils_test.cpp
         ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
         ./cache/peer_cache_test.cpp
@@ -555,6 +561,7 @@ set(EXEC_FILES
         ./util/thrift_client_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
+        ./util/table_metrics_mgr_test.cpp
         )
 
 if (${USE_AVX512})

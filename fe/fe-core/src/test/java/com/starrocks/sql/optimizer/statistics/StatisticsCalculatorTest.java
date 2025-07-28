@@ -57,14 +57,15 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -78,10 +79,10 @@ public class StatisticsCalculatorTest {
     private static OptimizerContext optimizerContext;
     private static ColumnRefFactory columnRefFactory;
     private static StarRocksAssert starRocksAssert;
-    @ClassRule
-    public static TemporaryFolder temp = new TemporaryFolder();
+    @TempDir
+    public static File temp;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
@@ -90,13 +91,13 @@ public class StatisticsCalculatorTest {
         optimizerContext = OptimizerFactory.mockContext(connectContext, columnRefFactory);
 
         starRocksAssert = new StarRocksAssert(connectContext);
-        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, newFolder(temp, "junit").toURI().toString());
 
         String dbName = "statistics_test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
     }
 
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `test_all_type` (\n" +
                     "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
@@ -149,7 +150,7 @@ public class StatisticsCalculatorTest {
                     ");");
     }
 
-    @After
+    @AfterEach
     public void after() throws Exception {
         starRocksAssert.dropTable("test_all_type");
         starRocksAssert.dropTable("test_all_type_day_partition");
@@ -178,7 +179,7 @@ public class StatisticsCalculatorTest {
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                     columnRefFactory, optimizerContext);
         statisticsCalculator.estimatorStats();
-        Assert.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+        Assertions.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
 
         groupByColumns = Lists.newArrayList(v1, v2);
         aggNode = new LogicalAggregationOperator(AggType.GLOBAL, groupByColumns, aggCall);
@@ -188,7 +189,7 @@ public class StatisticsCalculatorTest {
         statisticsCalculator = new StatisticsCalculator(expressionContext,
                     columnRefFactory, optimizerContext);
         statisticsCalculator.estimatorStats();
-        Assert.assertEquals(
+        Assertions.assertEquals(
                     50 * 50 * Math.pow(StatisticsEstimateCoefficient.UNKNOWN_GROUP_BY_CORRELATION_COEFFICIENT, 2),
                     expressionContext.getStatistics().getOutputRowCount(), 0.001);
     }
@@ -231,9 +232,9 @@ public class StatisticsCalculatorTest {
 
         ColumnStatistic columnStatisticV5 = expressionContext.getStatistics().getColumnStatistic(v5);
         ColumnStatistic columnStatisticV6 = expressionContext.getStatistics().getColumnStatistic(v6);
-        Assert.assertEquals(30000, expressionContext.getStatistics().getOutputRowCount(), 0.001);
-        Assert.assertEquals(new StatisticRangeValues(0, 200, 99), StatisticRangeValues.from(columnStatisticV5));
-        Assert.assertEquals(new StatisticRangeValues(0, 100, 100), StatisticRangeValues.from(columnStatisticV6));
+        Assertions.assertEquals(30000, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+        Assertions.assertEquals(new StatisticRangeValues(0, 200, 99), StatisticRangeValues.from(columnStatisticV5));
+        Assertions.assertEquals(new StatisticRangeValues(0, 100, 100), StatisticRangeValues.from(columnStatisticV6));
     }
 
     @Test
@@ -280,8 +281,8 @@ public class StatisticsCalculatorTest {
             StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                         columnRefFactory, optimizerContext);
             statisticsCalculator.estimatorStats();
-            Assert.assertEquals(1000 * partitions.size(), expressionContext.getStatistics().getOutputRowCount(), 0.001);
-            Assert.assertEquals(ref.getType().getTypeSize() * 1000 * partitions.size(),
+            Assertions.assertEquals(1000 * partitions.size(), expressionContext.getStatistics().getOutputRowCount(), 0.001);
+            Assertions.assertEquals(ref.getType().getTypeSize() * 1000 * partitions.size(),
                         expressionContext.getStatistics().getComputeSize(), 0.001);
         }
     }
@@ -330,10 +331,10 @@ public class StatisticsCalculatorTest {
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                     columnRefFactory, optimizerContext);
         statisticsCalculator.estimatorStats();
-        Assert.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
-        Assert.assertEquals(50, expressionContext.getStatistics().
+        Assertions.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+        Assertions.assertEquals(50, expressionContext.getStatistics().
                     getColumnStatistic(partitionColumn).getMaxValue(), 0.001);
-        Assert.assertTrue(optimizerContext.isObtainedFromInternalStatistics());
+        Assertions.assertTrue(optimizerContext.isObtainedFromInternalStatistics());
         optimizerContext.setObtainedFromInternalStatistics(false);
     }
 
@@ -384,7 +385,7 @@ public class StatisticsCalculatorTest {
                     columnRefFactory, optimizerContext);
         statisticsCalculator.estimatorStats();
         ColumnStatistic columnStatistic = expressionContext.getStatistics().getColumnStatistic(idDate);
-        Assert.assertEquals(30, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(30, columnStatistic.getDistinctValuesCount(), 0.001);
 
     }
 
@@ -442,9 +443,9 @@ public class StatisticsCalculatorTest {
         statisticsCalculator.estimatorStats();
         // partition column count distinct values is 30 in table level, after partition prune,
         // the column statistic distinct values is 10, so the estimate row count is 1000 * (1/10)
-        Assert.assertEquals(100, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+        Assertions.assertEquals(100, expressionContext.getStatistics().getOutputRowCount(), 0.001);
         ColumnStatistic columnStatistic = expressionContext.getStatistics().getColumnStatistic(idDate);
-        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2013, 12, 30, 0, 0, 0)),
+        Assertions.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2013, 12, 30, 0, 0, 0)),
                     columnStatistic.getMaxValue(), 0.001);
 
         // select partition p2, p3
@@ -474,12 +475,12 @@ public class StatisticsCalculatorTest {
         statisticsCalculator.estimatorStats();
         columnStatistic = expressionContext.getStatistics().getColumnStatistic(idDate);
 
-        Assert.assertEquals(1281.4371, expressionContext.getStatistics().getOutputRowCount(), 0.001);
-        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2014, 5, 1, 0, 0, 0)),
+        Assertions.assertEquals(1281.4371, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+        Assertions.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2014, 5, 1, 0, 0, 0)),
                     columnStatistic.getMinValue(), 0.001);
-        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 1, 0, 0, 0)),
+        Assertions.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 1, 0, 0, 0)),
                     columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(20, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(20, columnStatistic.getDistinctValuesCount(), 0.001);
         FeConstants.runningUnitTest = false;
     }
 
@@ -534,13 +535,13 @@ public class StatisticsCalculatorTest {
                     columnRefFactory, optimizerContext);
         statisticsCalculator.estimatorStats();
 
-        Assert.assertEquals(1000, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+        Assertions.assertEquals(1000, expressionContext.getStatistics().getOutputRowCount(), 0.001);
         ColumnStatistic columnStatistic = expressionContext.getStatistics().getColumnStatistic(idDate);
-        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 24, 0, 0, 0)),
+        Assertions.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 24, 0, 0, 0)),
                     columnStatistic.getMinValue(), 0.001);
-        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 25, 0, 0, 0)),
+        Assertions.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 25, 0, 0, 0)),
                     columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(1, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(1, columnStatistic.getDistinctValuesCount(), 0.001);
 
         // select partition p2, p3
         partitionIds.clear();
@@ -568,12 +569,12 @@ public class StatisticsCalculatorTest {
         statisticsCalculator.estimatorStats();
         columnStatistic = expressionContext.getStatistics().getColumnStatistic(idDate);
         // has two partitions
-        Assert.assertEquals(2000, expressionContext.getStatistics().getOutputRowCount(), 0.001);
-        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 24, 0, 0, 0)),
+        Assertions.assertEquals(2000, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+        Assertions.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 24, 0, 0, 0)),
                     columnStatistic.getMinValue(), 0.001);
-        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 26, 0, 0, 0)),
+        Assertions.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 26, 0, 0, 0)),
                     columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
         FeConstants.runningUnitTest = false;
     }
 
@@ -633,18 +634,18 @@ public class StatisticsCalculatorTest {
         // use middle ground method to estimate
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
         statisticsCalculator.estimatorStats();
-        Assert.assertEquals(400000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
+        Assertions.assertEquals(400000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
         // use correlated method to estimate
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(true);
         statisticsCalculator.estimatorStats();
-        Assert.assertEquals(1800000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
+        Assertions.assertEquals(1800000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
 
         // on predicate : t0.v1 = t1.v3 and t0.v2 = t2.v4
         columnRefFactory.updateColumnToRelationIds(v4.getId(), 2);
         // use middle ground method to estimate
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
         statisticsCalculator.estimatorStats();
-        Assert.assertEquals(40000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
+        Assertions.assertEquals(40000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
         columnRefFactory.updateColumnToRelationIds(v4.getId(), 1);
 
         // on predicate : t0.v1 = t1.v3 and t0.v2 = t2.v4 and t3.v5 = t4.v6
@@ -660,7 +661,7 @@ public class StatisticsCalculatorTest {
         // use middle ground method to estimate
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
         statisticsCalculator.estimatorStats();
-        Assert.assertEquals(4000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
+        Assertions.assertEquals(4000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
 
         // on predicate : t0.v1 = t1.v3 + t1.v4 and t0.v2 = t1.v3 + t1.v4
         BinaryPredicateOperator eqOnPredicateWithAdd1 =
@@ -679,7 +680,7 @@ public class StatisticsCalculatorTest {
         // use middle ground method to estimate
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
         statisticsCalculator.estimatorStats();
-        Assert.assertEquals(200000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
+        Assertions.assertEquals(200000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
     }
 
     @Test
@@ -693,6 +694,15 @@ public class StatisticsCalculatorTest {
         builder.addColumnStatistics(ImmutableMap.of(v1, new ColumnStatistic(0, 100, 0, 10, 50)));
         builder.addColumnStatistics(ImmutableMap.of(v2, new ColumnStatistic(0, 100, 0, 10, 50)));
         Statistics statistics = builder.build();
-        Assert.assertThrows(StarRocksPlannerException.class, () -> statistics.getColumnStatistic(v3));
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> statistics.getColumnStatistic(v3));
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
     }
 }

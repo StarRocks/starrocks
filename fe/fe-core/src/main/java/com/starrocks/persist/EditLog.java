@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.JsonParseException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
+import com.starrocks.alter.dynamictablet.DynamicTabletJob;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
@@ -1245,6 +1246,16 @@ public class EditLog {
                     globalStateMgr.getSqlPlanStorage().replayUpdateBaselinePlan(bp, false);
                     break;
                 }
+                case OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG: {
+                    DynamicTabletJob log = (DynamicTabletJob) journal.data();
+                    globalStateMgr.getDynamicTabletJobMgr().replayUpdateDynamicTabletJob(log);
+                    break;
+                }
+                case OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG: {
+                    RemoveDynamicTabletJobLog log = (RemoveDynamicTabletJobLog) journal.data();
+                    globalStateMgr.getDynamicTabletJobMgr().replayRemoveDynamicTabletJob(log.getJobId());
+                    break;
+                }
                 default: {
                     if (Config.metadata_ignore_unknown_operation_type) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1267,6 +1278,15 @@ public class EditLog {
     public void logEdit(short op, Writable writable) {
         JournalTask task = submitLog(op, writable, -1);
         waitInfinity(task);
+    }
+
+    /**
+     * Apply the in-memory change in WALApplier.
+     */
+    public void logEdit(short op, Writable writable, WALApplier applier) {
+        JournalTask task = submitLog(op, writable, -1);
+        waitInfinity(task);
+        applier.apply(writable);
     }
 
     /**
@@ -2171,5 +2191,13 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_DISABLE_SPM_BASELINE_LOG, info);
         }
+    }
+
+    public void logUpdateDynamicTabletJob(DynamicTabletJob job) {
+        logEdit(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, job);
+    }
+
+    public void logRemoveDynamicTabletJob(long jobId) {
+        logEdit(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, new RemoveDynamicTabletJobLog(jobId));
     }
 }

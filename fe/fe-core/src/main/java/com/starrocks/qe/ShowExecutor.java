@@ -187,6 +187,7 @@ import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
+import com.starrocks.sql.ast.ShowComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
@@ -858,7 +859,6 @@ public class ShowExecutor {
                                 ThriftConnectionPool.frontendPool,
                                 thriftAddress,
                                 client -> client.listConnections(request));
-
                         for (int i = 0; i < response.getConnectionsSize(); ++i) {
                             TConnectionInfo tConnectionInfo = response.getConnections().get(i);
                             List<String> row = new ArrayList<>();
@@ -874,6 +874,7 @@ public class ShowExecutor {
                             row.add(tConnectionInfo.getInfo());
                             row.add(tConnectionInfo.getIsPending());
                             row.add(tConnectionInfo.getWarehouse());
+                            row.add(tConnectionInfo.getCngroup());
 
                             rowSet.add(row);
                         }
@@ -2926,7 +2927,14 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowBackendBlackListStatement(ShowBackendBlackListStmt statement, ConnectContext context) {
-            List<List<String>> rows = SimpleScheduler.getHostBlacklist().getShowData();
+            List<List<String>> rows = SimpleScheduler.getHostBlacklist().getShowData(false /* isComputeNode */);
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowComputeNodeBlackListStatement(ShowComputeNodeBlackListStmt statement,
+                ConnectContext context) {
+            List<List<String>> rows = SimpleScheduler.getHostBlacklist().getShowData(true /* isComputeNode */);
             return new ShowResultSet(statement.getMetaData(), rows);
         }
 

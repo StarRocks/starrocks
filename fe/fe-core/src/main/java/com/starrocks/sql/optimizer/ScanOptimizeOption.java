@@ -16,23 +16,24 @@ package com.starrocks.sql.optimizer;
 
 public class ScanOptimizeOption {
     private boolean canUseAnyColumn;
-    private boolean canUseMinMaxCountOpt;
+    private boolean canUseMinMaxOpt;
     private boolean usePartitionColumnValueOnly;
+    private boolean canUseCountOpt;
 
     public void setCanUseAnyColumn(boolean v) {
         canUseAnyColumn = v;
     }
 
-    public void setCanUseMinMaxCountOpt(boolean v) {
-        canUseMinMaxCountOpt = v;
+    public void setCanUseMinMaxOpt(boolean v) {
+        canUseMinMaxOpt = v;
     }
 
     public boolean getCanUseAnyColumn() {
         return canUseAnyColumn;
     }
 
-    public boolean getCanUseMinMaxCountOpt() {
-        return canUseMinMaxCountOpt;
+    public boolean getCanUseMinMaxOpt() {
+        return canUseMinMaxOpt;
     }
 
     public void setUsePartitionColumnValueOnly(boolean v) {
@@ -43,11 +44,20 @@ public class ScanOptimizeOption {
         return usePartitionColumnValueOnly;
     }
 
+    public void setCanUseCountOpt(boolean v) {
+        this.canUseCountOpt = v;
+    }
+
+    public boolean getCanUseCountOpt() {
+        return canUseCountOpt;
+    }
+
     public ScanOptimizeOption copy() {
         ScanOptimizeOption opt = new ScanOptimizeOption();
         opt.canUseAnyColumn = this.canUseAnyColumn;
-        opt.canUseMinMaxCountOpt = this.canUseMinMaxCountOpt;
+        opt.canUseMinMaxOpt = this.canUseMinMaxOpt;
         opt.usePartitionColumnValueOnly = this.usePartitionColumnValueOnly;
+        opt.canUseCountOpt = this.canUseCountOpt;
         return opt;
     }
 }

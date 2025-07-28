@@ -16,16 +16,21 @@ package com.starrocks.http;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionLoadAction;
+import com.starrocks.http.rest.TransactionLoadCoordinatorMgr;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperation;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -37,6 +42,7 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -56,26 +62,25 @@ import org.apache.http.client.utils.URIBuilder;
 import org.assertj.core.util.Lists;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 
 import static com.starrocks.common.jmockit.Deencapsulation.setField;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@FixMethodOrder(MethodSorters.JVM)
+@TestMethodOrder(MethodName.class)
 public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     private static final String OK = ActionStatus.OK.name();
@@ -132,13 +137,13 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     /**
      * we need close be server after junit test
      */
-    @AfterClass
+    @AfterAll
     public static void close() {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(new Backend(1234, "localhost", HTTP_PORT));
         beServer.shutDown();
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void initBeServer() throws Exception {
         TEST_HTTP_PORT = detectUsableSocketPort();
         beServer = new HttpServer(TEST_HTTP_PORT);
@@ -165,7 +170,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
-    @Ignore("test whether this case affect cases in TableQueryPlanActionTest")
+    @Disabled("test whether this case affect cases in TableQueryPlanActionTest")
     public void beginTransactionTimes() throws Exception {
         for (int i = 0; i < 4096; i++) {
             final String label = Objects.toString(i);
@@ -179,7 +184,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
             }
 
-            assertTrue(TransactionLoadAction.getAction().txnNodeMapSize() <= 2048);
+            assertTrue(TransactionLoadAction.getAction().coordinatorMgrSize() <= 2048);
         }
     }
 
@@ -245,7 +250,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.beginLoadTaskFromFrontend(
                             anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
+                            anyLong, anyInt, anyInt, (TransactionResult) any, (ComputeResource) any);
                     times = 1;
                     result = new Delegate<Void>() {
 
@@ -258,7 +263,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                                                   int channelNum,
                                                   int channelId,
                                                   TransactionResult resp,
-                                                  long warehouseId) {
+                                                  ComputeResource computeResource) {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -286,7 +291,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.beginLoadTaskFromFrontend(
                             anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
+                            anyLong, anyInt, anyInt, (TransactionResult) any, (ComputeResource) any);
                     times = 1;
                     result = new StarRocksException("begin load task error");
                 }
@@ -306,6 +311,148 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("begin load task error"));
             }
         }
+    }
+
+    @Test
+    public void transactionLoadCoordinatorMgrWithoutChannelTest() throws Exception {
+
+        String label = RandomStringUtils.randomAlphanumeric(32);
+        Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        try (Response response = networkClient.newCall(request).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
+        }
+
+        ComputeNode node = TransactionLoadAction.getAction().getCoordinatorMgr().get(label, DB_NAME);
+        assertEquals(node.getId(), 1234);
+
+        request = newRequest(TransactionOperation.TXN_PREPARE, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        try (Response response = networkClient.newCall(request).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
+        }
+    }
+
+    @Test
+    public void transactionLoadCoordinatorMgrMultiBeOnSameNodeWithoutChannelTest() throws Exception {
+
+        String label = RandomStringUtils.randomAlphanumeric(32);
+        Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        try (Response response = networkClient.newCall(request).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
+        }
+
+        ComputeNode node = TransactionLoadAction.getAction().getCoordinatorMgr().get(label, DB_NAME);
+        assertEquals(node.getId(), 1234);
+
+
+        if (RunMode.isSharedDataMode()) {
+            ComputeNode computeNode = new ComputeNode(12345, "localhost", 8041);
+            computeNode.setBePort(9300);
+            computeNode.setAlive(true);
+            computeNode.setHttpPort(TEST_HTTP_PORT);
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(computeNode);
+        } else {
+            Backend backend4 = new Backend(12345, "localhost", 8041);
+            backend4.setBePort(9300);
+            backend4.setAlive(true);
+            backend4.setHttpPort(TEST_HTTP_PORT);
+            backend4.setDisks(new ImmutableMap.Builder<String, DiskInfo>().put("1", new DiskInfo("")).build());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend4);
+        }
+
+        new Expectations() {
+            {
+                globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
+                times = 2;
+                result = newTxnStateWithCoordinator(-1, label,
+                        LoadJobSourceType.BACKEND_STREAMING, TransactionStatus.UNKNOWN, "localhost", 1234);
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String name) {
+                return new Database(testDbId, DB_NAME);
+            }
+        };
+
+
+        TransactionLoadAction.getAction().getCoordinatorMgr().remove(label);
+        request = newRequest(TransactionOperation.TXN_PREPARE, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        try (Response response = networkClient.newCall(request).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
+        }
+
+    }
+
+    @Test
+    public void transactionLoadCoordinatorMgrOneBeOnNodeWithoutChannelTest() throws Exception {
+
+        String label = RandomStringUtils.randomAlphanumeric(32);
+        Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        try (Response response = networkClient.newCall(request).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
+        }
+
+        ComputeNode node = TransactionLoadAction.getAction().getCoordinatorMgr().get(label, DB_NAME);
+        assertEquals(node.getId(), 1234);
+
+        new Expectations() {
+            {
+                globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
+                times = 2;
+                returns(newTxnStateWithCoordinator(-1, label, LoadJobSourceType.BACKEND_STREAMING,
+                        TransactionStatus.UNKNOWN, "localhost", 1234), null);
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String name) {
+                return new Database(testDbId, DB_NAME);
+            }
+        };
+
+        TransactionLoadAction.getAction().getCoordinatorMgr().remove(label);
+        request = newRequest(TransactionOperation.TXN_PREPARE, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        try (Response response = networkClient.newCall(request).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("Can't find the transaction with db"));
+        }
+
     }
 
     @Test
@@ -330,7 +477,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.beginLoadTaskFromFrontend(
                             anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
+                            anyLong, anyInt, anyInt, (TransactionResult) any, (ComputeResource) any);
                     times = 1;
                     result = new Delegate<Void>() {
 
@@ -343,7 +490,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                                                               int channelNum,
                                                               int channelId,
                                                               TransactionResult resp,
-                                                              long warehouseId) {
+                                                              ComputeResource computeResource) {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -569,7 +716,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     @Test
     public void prepareTransactionWithoutChannelInfoTest() throws Exception {
         String label = RandomStringUtils.randomAlphanumeric(32);
-        setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+        setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
             private static final long serialVersionUID = -4276328107866085321L;
 
             {
@@ -779,7 +926,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
                 private static final long serialVersionUID = 5890524883711716645L;
 
                 {
@@ -809,7 +956,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
                 private static final long serialVersionUID = -4276328107866085321L;
 
                 {
@@ -839,7 +986,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
                 private static final long serialVersionUID = 8612091611347668755L;
 
                 {
@@ -869,7 +1016,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
                 private static final long serialVersionUID = 3214813746415023231L;
 
                 {
@@ -903,7 +1050,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
                 private static final long serialVersionUID = 6893430743492341004L;
 
                 {
@@ -937,7 +1084,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
                 private static final long serialVersionUID = 8165080593735535441L;
 
                 {
@@ -1246,7 +1393,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
                 private static final long serialVersionUID = 5890524883711716645L;
 
                 {
@@ -1276,7 +1423,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
                 private static final long serialVersionUID = -4276328107866085321L;
 
                 {
@@ -1306,7 +1453,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
                 private static final long serialVersionUID = -5731416357248595041L;
 
                 {
@@ -1336,7 +1483,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
                 private static final long serialVersionUID = -6655156575562250213L;
 
                 {
@@ -1370,7 +1517,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
                 private static final long serialVersionUID = -891006164191904128L;
 
                 {
@@ -1403,7 +1550,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
                 private static final long serialVersionUID = 4824168412840558066L;
 
                 {
@@ -1627,7 +1774,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     @Test
     public void loadTransactionWithoutChannelInfoTest() throws Exception {
         String label = RandomStringUtils.randomAlphanumeric(32);
-        setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+        setField(TransactionLoadAction.getAction(), "coordinatorMgr", new TransactionLoadCoordinatorMgr() {
             private static final long serialVersionUID = -4276328107866085321L;
 
             {
@@ -1700,6 +1847,25 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 null,
                 sourceType,
                 new TxnCoordinator(TxnSourceType.FE, "127.0.0.1"),
+                -1,
+                20000L
+        );
+        txnState.setTransactionStatus(txnStatus);
+        return txnState;
+    }
+
+    public static TransactionState newTxnStateWithCoordinator(long txnId,
+                                                String label,
+                                                LoadJobSourceType sourceType,
+                                                TransactionStatus txnStatus, String ip, long backendId) {
+        TransactionState txnState = new TransactionState(
+                testDbId,
+                new ArrayList<>(0),
+                txnId,
+                label,
+                null,
+                sourceType,
+                TxnCoordinator.fromBackend(ip, backendId),
                 -1,
                 20000L
         );

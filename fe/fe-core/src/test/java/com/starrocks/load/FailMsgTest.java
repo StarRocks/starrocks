@@ -18,8 +18,8 @@
 package com.starrocks.load;
 
 import com.starrocks.common.io.DataOutputBuffer;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -37,10 +37,10 @@ public class FailMsgTest {
         FailMsg failMsg1 = new FailMsg();
         failMsg1.readFields(dif);
 
-        Assert.assertEquals(failMsg1.getMsg(), "Job failed");
-        Assert.assertEquals(failMsg1.getCancelType(), FailMsg.CancelType.ETL_QUALITY_UNSATISFIED);
+        Assertions.assertEquals(failMsg1.getMsg(), "Job failed");
+        Assertions.assertEquals(failMsg1.getCancelType(), FailMsg.CancelType.ETL_QUALITY_UNSATISFIED);
 
-        Assert.assertEquals(failMsg1, failMsg);
+        Assertions.assertEquals(failMsg1, failMsg);
     }
 
     @Test
@@ -54,7 +54,7 @@ public class FailMsgTest {
         FailMsg failMsg1 = new FailMsg();
         failMsg1.readFields(dif);
 
-        Assert.assertEquals(failMsg1.getMsg(), "");
-        Assert.assertEquals(failMsg1.getCancelType(), FailMsg.CancelType.ETL_QUALITY_UNSATISFIED);
+        Assertions.assertEquals(failMsg1.getMsg(), "");
+        Assertions.assertEquals(failMsg1.getCancelType(), FailMsg.CancelType.ETL_QUALITY_UNSATISFIED);
     }
 }

@@ -27,7 +27,7 @@ import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.BeforeAll;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -55,7 +55,7 @@ public abstract class BatchWriteTestBase {
 
     protected static List<ComputeNode> allNodes;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);

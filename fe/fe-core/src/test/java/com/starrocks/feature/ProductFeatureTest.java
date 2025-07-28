@@ -14,8 +14,8 @@
 
 package com.starrocks.feature;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -24,6 +24,6 @@ public class ProductFeatureTest {
     @Test
     public void testProductFeature() {
         List<ProductFeature> features = ProductFeature.getFeatures();
-        Assert.assertEquals(1, features.size());
+        Assertions.assertEquals(1, features.size());
     }
 }

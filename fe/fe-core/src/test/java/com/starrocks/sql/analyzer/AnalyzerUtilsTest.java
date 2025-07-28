@@ -27,16 +27,16 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class AnalyzerUtilsTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.dynamic_partition_enable = false;
@@ -59,9 +59,9 @@ public class AnalyzerUtilsTest {
 
     @Test
     public void testGetFormatPartitionValue() {
-        Assert.assertEquals("_11", AnalyzerUtils.getFormatPartitionValue("-11"));
-        Assert.assertEquals("20200101", AnalyzerUtils.getFormatPartitionValue("2020-01-01"));
-        Assert.assertEquals("676d5dde", AnalyzerUtils.getFormatPartitionValue("杭州"));
+        Assertions.assertEquals("_11", AnalyzerUtils.getFormatPartitionValue("-11"));
+        Assertions.assertEquals("20200101", AnalyzerUtils.getFormatPartitionValue("2020-01-01"));
+        Assertions.assertEquals("676d5dde", AnalyzerUtils.getFormatPartitionValue("杭州"));
     }
 
     @Test
@@ -73,16 +73,16 @@ public class AnalyzerUtilsTest {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.VARCHAR, "bill_code", false);
         ConstantOperator constantOperator = new ConstantOperator("JT2921712368984", Type.VARCHAR);
         boolean success = ColumnFilterConverter.rewritePredicate(expr, columnRefOperator, constantOperator);
-        Assert.assertTrue(success);
+        Assertions.assertTrue(success);
         Expr shouldReplaceExpr = expr.getChild(0).getChild(0);
-        Assert.assertTrue(shouldReplaceExpr instanceof StringLiteral);
+        Assertions.assertTrue(shouldReplaceExpr instanceof StringLiteral);
     }
 
     @Test
     public void testConvertCatalogMaxStringToOlapMaxString() {
         ScalarType catalogString = ScalarType.createDefaultCatalogString();
         ScalarType convertedString = (ScalarType) AnalyzerUtils.transformTableColumnType(catalogString);
-        Assert.assertEquals(ScalarType.getOlapMaxVarcharLength(), convertedString.getLength());
+        Assertions.assertEquals(ScalarType.getOlapMaxVarcharLength(), convertedString.getLength());
     }
 
 }

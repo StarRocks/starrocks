@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -31,8 +31,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class FurtherPartitionPruneTest extends PlanTestBase {
@@ -141,7 +141,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(1)
     void testEmptyPartitionSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertTrue(plan, plan.contains("partitions=0/4"));
+        assertTrue(plan.contains("partitions=0/4"), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -149,7 +149,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(2)
     void testOnePartitionSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertTrue(plan, plan.contains("partitions=1/4"));
+        assertTrue(plan.contains("partitions=1/4"), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -157,7 +157,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(3)
     void testTwoPartitionsSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertTrue(plan, plan.contains("partitions=2/4"));
+        assertTrue(plan.contains("partitions=2/4"), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -165,7 +165,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(3)
     void testThreePartitionsSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertTrue(plan, plan.contains("partitions=3/4"));
+        assertTrue(plan.contains("partitions=3/4"), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -173,7 +173,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(4)
     void testFourPartitionsSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertTrue(plan, plan.contains("partitions=4/4"));
+        assertTrue(plan.contains("partitions=4/4"), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -181,7 +181,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(5)
     void testCannotPrunePredicateSqls(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertTrue(plan, plan.contains("PREDICATES: "));
+        assertTrue(plan.contains("PREDICATES: "), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -189,7 +189,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(6)
     void testCanPrunePredicateSqls(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertFalse(plan, plan.contains("PREDICATES: "));
+        assertFalse(plan.contains("PREDICATES: "), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -205,7 +205,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
             String matchedLine = matcher.group();
             System.out.println(matchedLine);
             String[] values = matchedLine.split("=")[1].split("/");
-            Assert.assertTrue(matchedLine, Integer.valueOf(values[0]) < Integer.valueOf(values[1]));
+            Assertions.assertTrue(Integer.valueOf(values[0]) < Integer.valueOf(values[1]), matchedLine);
         }
     }
 
@@ -222,7 +222,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
             String matchedLine = matcher.group();
             System.out.println(matchedLine);
             String[] values = matchedLine.split("=")[1].split("/");
-            Assert.assertTrue(matchedLine, Integer.valueOf(values[0]) == Integer.valueOf(values[1]));
+            Assertions.assertTrue(Integer.valueOf(values[0]) == Integer.valueOf(values[1]), matchedLine);
         }
     }
 

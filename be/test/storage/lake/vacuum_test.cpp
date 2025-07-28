@@ -1654,6 +1654,82 @@ TEST_P(LakeVacuumTest, test_datafile_gc) {
     EXPECT_TRUE(file_exist("0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
 }
 
+TEST_P(LakeVacuumTest, test_datafile_gc_with_bundle_metadata) {
+    WritableFileOptions options;
+    options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ABORT(auto f, fs::new_writable_file(options, join_path(kTestDir, "test_datafile_gc.txt")));
+    ASSERT_OK(f->append("111"));
+    ASSERT_OK(f->close());
+
+    create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    create_data_file("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
+    create_data_file("0000000000011111_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst");
+    create_data_file("0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst");
+
+    TabletSchemaPB schema_pb1;
+    {
+        schema_pb1.set_id(0);
+        schema_pb1.set_num_short_key_columns(1);
+        schema_pb1.set_keys_type(DUP_KEYS);
+    }
+
+    auto t600_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 600,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "sstable_meta": {
+            "sstables": [
+                {
+                    "filename": "0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"
+                }
+            ]
+        }
+        }
+        )DEL");
+    auto t601_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 601,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                ],
+                "data_size": 4096
+            }
+        ]
+        }
+        )DEL");
+
+    t600_v2->mutable_schema()->CopyFrom(schema_pb1);
+    t601_v2->mutable_schema()->CopyFrom(schema_pb1);
+
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    tablet_metas_v2[600] = *t600_v2;
+    tablet_metas_v2[601] = *t601_v2;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+
+    ASSERT_OK(datafile_gc(kTestDir, join_path(kTestDir, "audit.log"), 0, false));
+    EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+    EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+    EXPECT_TRUE(file_exist("0000000000011111_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
+    EXPECT_TRUE(file_exist("0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
+
+    ASSERT_OK(datafile_gc(kTestDir, "", 0, true));
+    EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+    EXPECT_FALSE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+    EXPECT_FALSE(file_exist("0000000000011111_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
+    EXPECT_TRUE(file_exist("0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
+}
+
 TEST_P(LakeVacuumTest, test_vacuum_combined_txn_log) {
     ASSERT_OK(_tablet_mgr->put_combined_txn_log(*json_to_pb<CombinedTxnLogPB>(R"DEL(
         {
@@ -2614,6 +2690,37 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
 
     SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_file_modified_time");
     SyncPoint::GetInstance()->DisableProcessing();
+}
+
+TEST_P(LakeVacuumTest, test_garbage_file_check) {
+    create_data_file("00000000000359e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    create_data_file("00000000000359e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 800,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 800,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000359e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                ],
+                "data_size": 4096
+            }
+        ]
+        }
+        )DEL")));
+
+    auto res = garbage_file_check(kTestDir);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(1, res.value());
 }
 
 } // namespace starrocks::lake

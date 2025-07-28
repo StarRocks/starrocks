@@ -24,10 +24,7 @@ CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 [rollup_index]
 [ORDER BY (column_name1,...)]
 [PROPERTIES ("key"="value", ...)]
-[BROKER PROPERTIES ("key"="value", ...)]
 ```
-
-## Parameters
 
 :::tip
 
@@ -36,19 +33,139 @@ CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 
 :::
 
-### column_definition
+## Keywords
 
-Syntax:
+### `EXTERNAL`
+
+:::caution
+The `EXTERNAL` keyword is deprecated.
+
+We recommend that you use [external catalogs](../../../data_source/catalog/catalog_overview.md) to query data from Hive, Iceberg, Hudi, and JDBC data sources instead of using the `EXTERNAL` keyword to create external tables.
+
+:::
+
+:::tip 
+**Recommendation**
+
+From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and supports sinking data to these Parquet-formatted Iceberg tables by using INSERT INTO.
+
+From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and supports sinking data to these Parquet-formatted Hive tables by using INSERT INTO. From v3.3 onwards, StarRocks supports creating ORC- and Textfile-formatted tables in Hive catalogs, and supports sinking data to these ORC- and Textfile-formatted Hive tables by using INSERT INTO.
+:::
+
+If you would like to use the deprecated `EXTERNAL` keyword, please expand **`EXTERNAL` keyword details**
+
+<details>
+
+<summary>`EXTERNAL` keyword details</summary>
+
+To create an external table to query external data sources, specify `CREATE EXTERNAL TABLE` and set `ENGINE` to any of these values. You can refer to [External table](../../../data_source/External_table.md) for more information.
+
+- For MySQL external tables, specify the following properties:
+
+    ```plaintext
+    PROPERTIES (
+        "host" = "mysql_server_host",
+        "port" = "mysql_server_port",
+        "user" = "your_user_name",
+        "password" = "your_password",
+        "database" = "database_name",
+        "table" = "table_name"
+    )
+    ```
+
+    Note:
+
+    "table_name" in MySQL should indicate the real table name. In contrast, "table_name" in CREATE TABLE statement indicates the name of this MySQL table on StarRocks. They can either be different or the same.
+
+    The aim of creating MySQL tables in StarRocks is to access MySQL database. StarRocks itself does not maintain or store any MySQL data.
+
+- For Elasticsearch external tables, specify the following properties:
+
+    ```plaintext
+    PROPERTIES (
+    "hosts" = "http://192.168.xx.xx:8200,http://192.168.xx0.xx:8200",
+    "user" = "root",
+    "password" = "root",
+    "index" = "tindex",
+    "type" = "doc"
+    )
+    ```
+
+  - `hosts`: the URL that is used to connect your Elasticsearch cluster. You can specify one or more URLs.
+  - `user`: the account of the root user that is used to log in to your Elasticsearch cluster for which basic authentication is enabled.
+  - `password`: the password of the preceding root account.
+  - `index`: the index of the StarRocks table in your Elasticsearch cluster. The index name is the same as the StarRocks table name. You can set this parameter to the alias of the StarRocks table.
+  - `type`: the type of index. The default value is `doc`.
+
+- For Hive external tables, specify the following properties:
+
+    ```plaintext
+    PROPERTIES (
+        "database" = "hive_db_name",
+        "table" = "hive_table_name",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
+    )
+    ```
+
+    Here, database is the name of the corresponding database in Hive table. Table is the name of Hive table. `hive.metastore.uris` is the server address.
+
+- For JDBC external tables, specify the following properties:
+
+    ```plaintext
+    PROPERTIES (
+    "resource"="jdbc0",
+    "table"="dest_tbl"
+    )
+    ```
+
+    `resource` is the JDBC resource name and `table` is the destination table.
+
+- For Iceberg external tables, specify the following properties:
+
+   ```plaintext
+    PROPERTIES (
+    "resource" = "iceberg0", 
+    "database" = "iceberg", 
+    "table" = "iceberg_table"
+    )
+    ```
+
+    `resource` is the Iceberg resource name. `database` is the Iceberg database. `table` is the Iceberg table.
+
+- For Hudi external tables, specify the following properties:
+
+  ```plaintext
+    PROPERTIES (
+    "resource" = "hudi0", 
+    "database" = "hudi", 
+    "table" = "hudi_table" 
+    )
+    ```
+
+</details>
+
+### `TEMPORARY`
+
+Creates a temporary table. From v3.3.1, StarRocks supports creating temporary tables in the Default Catalog. For more information, see [Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table).
+
+:::note
+When creating a temporary table, you must set `ENGINE` to `olap`.
+:::
+
+
+## Column definition
 
 ```SQL
 col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT] [AS generation_expr]
 ```
 
-**col_name**: column name.
+### col_name
 
 Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/management/FE_configuration.md#allow_system_reserved_names) to `TRUE`.
 
-**col_type**: Column type. Specific column information, such as types and ranges:
+### col_type
+
+Specific column information, such as types and ranges:
 
 - TINYINT (1 byte): Ranges from -2^7 + 1 to 2^7 - 1.
 - SMALLINT (2 bytes): Ranges from -2^15 + 1 to 2^15 - 1.
@@ -73,18 +190,20 @@ Note that normally you cannot create a column whose name is initiated with `__op
 - HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value. The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md), [Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md), and [hll_hash](../../sql-functions/scalar-functions/hll_hash.md).
 - BITMAP: Bitmap type does not require specified length or default value. It represents a set of unsigned bigint numbers. The largest element could be up to 2^64 - 1.
 
-**agg_type**: aggregation type. If not specified, this column is key column.
-If specified, it is value column. The aggregation types supported are as follows:
+### agg_type
 
-- SUM, MAX, MIN, REPLACE
-- HLL_UNION (only for HLL type)
-- BITMAP_UNION(only for BITMAP)
-- REPLACE_IF_NOT_NULL: This means the imported data will only be replaced when it is of non-null value. If it is of null value, StarRocks will retain the original value.
+Aggregation type. If not specified, this column is a key column.
+If specified, it is a value column. The aggregation types supported are as follows:
 
-> NOTE
->
-> - When the column of aggregation type BITMAP_UNION is imported, its original data types must be TINYINT, SMALLINT, INT, and BIGINT.
-> - If NOT NULL is specified by REPLACE_IF_NOT_NULL column when the table was created, StarRocks will still convert the data to NULL without sending an error report to the user. With this, the user can import selected columns.
+- `SUM`, `MAX`, `MIN`, `REPLACE`
+- `HLL_UNION` (only for `HLL` type)
+- `BITMAP_UNION` (only for `BITMAP`)
+- `REPLACE_IF_NOT_NULL`: This means the imported data will only be replaced when it is of non-null value. If it is of null value, StarRocks will retain the original value.
+
+:::note
+- When the column of aggregation type BITMAP_UNION is imported, its original data types must be TINYINT, SMALLINT, INT, and BIGINT.
+- If NOT NULL is specified by REPLACE_IF_NOT_NULL column when the table was created, StarRocks will still convert the data to NULL without sending an error report to the user. With this, the user can import selected columns.
+:::
 
 This aggregation type applies ONLY to the Aggregate table whose key_desc type is AGGREGATE KEY. Since v3.1.9, `REPLACE_IF_NOT_NULL` newly supports the columns of the BITMAP type.
 
@@ -100,7 +219,7 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 
 **AS generation_expr**: specifies the generated column and its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
 
-### index_definition
+## Index definition
 
 ```SQL
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
@@ -108,103 +227,13 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 
 For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../table_design/indexes/Bitmap_index.md#create-an-index).
 
-### ENGINE type
+## `ENGINE`
 
 Default value: `olap`. If this parameter is not specified, an OLAP table (StarRocks native table) is created by default.
 
-Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `iceberg`, and `hudi` (2.2 and later). If you want to create an external table to query external data sources, specify `CREATE EXTERNAL TABLE` and set `ENGINE` to any of these values. You can refer to [External table](../../../data_source/External_table.md) for more information.
+Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc`, `iceberg`, and `hudi`. 
 
-**We recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. External tables are deprecated.**
-
-**From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using INSERT INTO.**
-
-**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and supports sinking data to these Parquet-formatted Hive tables by using INSERT INTO. From v3.3 onwards, StarRocks supports creating ORC- and Textfile-formatted tables in Hive catalogs, and supports sinking data to these ORC- and Textfile-formatted Hive tables by using INSERT INTO**
-
-- For MySQL, specify the following properties:
-
-    ```plaintext
-    PROPERTIES (
-        "host" = "mysql_server_host",
-        "port" = "mysql_server_port",
-        "user" = "your_user_name",
-        "password" = "your_password",
-        "database" = "database_name",
-        "table" = "table_name"
-    )
-    ```
-
-    Note:
-
-    "table_name" in MySQL should indicate the real table name. In contrast, "table_name" in CREATE TABLE statement indicates the name of this mysql table on StarRocks. They can either be different or the same.
-
-    The aim of creating MySQL tables in StarRocks is to access MySQL database. StarRocks itself does not maintain or store any MySQL data.
-
-- For Elasticsearch, specify the following properties:
-
-    ```plaintext
-    PROPERTIES (
-
-    "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
-    "user" = "root",
-    "password" = "root",
-    "index" = "tindex",
-    "type" = "doc"
-    )
-    ```
-
-  - `hosts`: the URL that is used to connect your Elasticsearch cluster. You can specify one or more URLs.
-  - `user`: the account of the root user that is used to log in to your Elasticsearch cluster for which basic authentication is enabled.
-  - `password`: the password of the preceding root account.
-  - `index`: the index of the StarRocks table in your Elasticsearch cluster. The index name is the same as the StarRocks table name. You can set this parameter to the alias of the StarRocks table.
-  - `type`: the type of index. The default value is `doc`.
-
-- For Hive, specify the following properties:
-
-    ```plaintext
-    PROPERTIES (
-
-        "database" = "hive_db_name",
-        "table" = "hive_table_name",
-        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
-    )
-    ```
-
-    Here, database is the name of the corresponding database in Hive table. Table is the name of Hive table. `hive.metastore.uris` is the server address.
-
-- For JDBC, specify the following properties:
-
-    ```plaintext
-    PROPERTIES (
-    "resource"="jdbc0",
-    "table"="dest_tbl"
-    )
-    ```
-
-    `resource` is the JDBC resource name and `table` is the destination table.
-
-- For Iceberg, specify the following properties:
-
-   ```plaintext
-    PROPERTIES (
-    "resource" = "iceberg0", 
-    "database" = "iceberg", 
-    "table" = "iceberg_table"
-    )
-    ```
-
-    `resource` is the Iceberg resource name. `database` is the Iceberg database. `table` is the Iceberg table.
-
-- For Hudi, specify the following properties:
-
-  ```plaintext
-    PROPERTIES (
-    "resource" = "hudi0", 
-    "database" = "hudi", 
-    "table" = "hudi_table" 
-    )
-    ```
-
-### key_desc
+## Key
 
 Syntax:
 
@@ -216,29 +245,33 @@ Data is sequenced in specified key columns and has different attributes for diff
 
 - AGGREGATE KEY: Identical content in key columns will be aggregated into value columns according to the specified aggregation type. It usually applies to business scenarios such as financial statements and multi-dimensional analysis.
 - UNIQUE KEY/PRIMARY KEY: Identical content in key columns will be replaced in value columns according to the import sequence. It can be applied to make addition, deletion, modification and query on key columns.
-- DUPLICATE KEY: Identical content in key columns, which also exists in StarRocks at the same time. It can be used to store detailed data or data with no aggregation attributes. **DUPLICATE KEY is the default type. Data will be sequenced according to key columns.**
+- DUPLICATE KEY: Identical content in key columns, which also exists in StarRocks at the same time. It can be used to store detailed data or data with no aggregation attributes. 
 
-> **NOTE**
->
-> Value columns do not need to specify aggregation types when other key_type is used to create tables with the exception of AGGREGATE KEY.
+  :::note
+  DUPLICATE KEY is the default type. Data will be sequenced according to key columns.
+  :::
 
-### COMMENT
+:::note
+Value columns do not need to specify aggregation types when other key_type is used to create tables with the exception of AGGREGATE KEY.
+:::
+
+## COMMENT
 
 You can add a table comment when you create a table, optional. Note that COMMENT must be placed after `key_desc`. Otherwise, the table cannot be created.
 
 From v3.1 onwards, you can modify the table comment suing `ALTER TABLE <table_name> COMMENT = "new table comment"`.
 
-### partition_desc
+## Partition
 
-Partition description can be used in the following ways:
+Partitions can be managed in the following ways:
 
-#### Create partitions dynamically
+### Create partitions dynamically
 
 [Dynamic partitioning](../../../table_design/data_distribution/dynamic_partitioning.md) provides a time-to-live (TTL) management for partitions. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness. To enable this feature, you can configure Dynamic partitioning related properties at table creation.
 
-#### Create partitions one by one
+### Create partitions one by one
 
-**Specify only the upper bound for a partition**
+#### Specify only the upper bound for a partition
 
 Syntax:
 
@@ -251,9 +284,9 @@ PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
 )
 ```
 
-Note:
-
+:::note
 Please use specified key columns and specified value ranges for partitioning.
+:::
 
 - For the naming conventions of partitions, see [System limits](../../System_limit.md).
 - Before v3.3.0, columns for the range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, three specific time functions can be used as columns for the range partitioning. For detailed usage, see [Data distribution](../../../table_design/data_distribution/Data_distribution.md#manually-create-partitions).
@@ -270,12 +303,12 @@ Please use specified key columns and specified value ranges for partitioning.
   )
   ```
 
-Please note:
-
+:::note
 - Partitions are often used for managing data related to time.
 - When data backtracking is needed, you may want to consider emptying the first partition for adding partitions later when necessary.
+:::
 
-**Specify both the lower and upper bounds for a partition**
+#### Specify both the lower and upper bounds for a partition
 
 Syntax:
 
@@ -289,11 +322,11 @@ PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
 )
 ```
 
-Note:
-
+:::note
 - Fixed Range is more flexible than LESS THAN. You can customize the left and right partitions.
 - Fixed Range is the same as LESS THAN in the other aspects.
 - When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column of the most recent partition.
+:::
 
   ```SQL
   PARTITION BY RANGE (pay_dt) (
@@ -303,7 +336,7 @@ Note:
   )
   ```
 
-#### Create multiple partitions in a batch
+### Create multiple partitions in a batch
 
 Syntax
 
@@ -332,7 +365,8 @@ You can specify the start and end values in `START()` and `END()` and the time u
 
 For more information, see [Data distribution](../../../table_design/data_distribution/Data_distribution.md).
 
-### distribution_desc
+
+## Distribution
 
 StarRocks supports hash bucketing and random bucketing. If you do not configure bucketing, StarRocks uses random bucketing and automatically sets the number of buckets by default.
 
@@ -375,35 +409,39 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   If partition data cannot be evenly distributed into each bucket by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/data_distribution/Data_distribution.md#hash-bucketing).
 
   **Precautions**:
-
   - **When you create a table, you must specify its bucketing columns**.
   - The values of bucketing columns cannot be updated.
   - Bucketing columns cannot be modified after they are specified.
   - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Set the number of buckets](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
-### ORDER BY
+## Rollup index
+
+You can create rollups in bulk when you create a table.
+
+Syntax:
+
+```SQL
+ROLLUP (rollup_name (column_name1, column_name2, ...)
+[FROM from_index_name]
+[PROPERTIES ("key"="value", ...)],...)
+```
+
+## ORDER BY
 
 Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`. Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`.
 
 For more descriptions of sort keys, see [Sort keys and prefix indexes](../../../table_design/indexes/Prefix_index_sort_key.md).
 
-### TEMPORARY
 
-Creates a temporary table. From v3.3.1, StarRocks supports creating temporary tables in the Default Catalog. For more information, see [Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table).
+## PROPERTIES
 
-:::note
-When creating a temporary table, you must set `ENGINE` to `olap`.
-:::
-
-### PROPERTIES
-
-#### Specify initial storage medium, automatic storage cooldown time, replica number
+### Storage and replicas
 
 If the engine type is `OLAP`, you can specify initial storage medium (`storage_medium`), automatic storage cooldown time (`storage_cooldown_time`) or time interval (`storage_cooldown_ttl`), and replica number (`replication_num`) when you create a table.
 
 The scope where the properties take effect: If the table has only one partition, the properties belong to the table. If the table is divided into multiple partitions, the properties belong to each partition. And when you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md) after table creation.
 
-**Set initial storage medium and automatic storage cooldown time**
+#### Set initial storage medium and automatic storage cooldown time
 
 ```sql
 PROPERTIES (
@@ -412,6 +450,8 @@ PROPERTIES (
     | "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss" }
 )
 ```
+
+**Properties**
 
 - `storage_medium`: the initial storage medium, which can be set to `SSD` or `HDD`. Make sure that the type of storage medium you explicitly specified is consistent with the BE disk types for your StarRocks cluster specified in the BE static parameter `storage_root_path`.<br />
 
@@ -431,8 +471,6 @@ PROPERTIES (
 
 - `storage_cooldown_ttl` or `storage_cooldown_time`: the automatic storage cooldown time or time interval. Automatic storage cooldown refers to automatically migrate data from SSD to HDD. This feature is only effective when the initial storage medium is SSD.
 
-  **Parameter**
-
   - `storage_cooldown_ttl`: the **time interval** of automatic storage cooldown for the partitions in this table. If you need to retain the most recent partitions on SSD and automatically cool down older partitions to HDD after a certain time interval, you can use this parameter. The automatic storage cooldown time for each partition is calculated using the value of this parameter plus the upper time bound of the partition.
 
   The supported values are `<num> YEAR`, `<num> MONTH`, `<num> DAY`, and `<num> HOUR`. `<num>` is a non-negative integer. The default value is null, indicating that storage cooldown is not automatically performed.
@@ -441,7 +479,7 @@ PROPERTIES (
 
   - `storage_cooldown_time`: the automatic storage cooldown time (**absolute time**) when the table is cooled down from SSD to HDD. The specified time needs to be later than the current time. Format: "yyyy-MM-dd HH:mm:ss". When you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md).
 
-**Usages**
+##### Usage
 
 - The comparison between the parameters related to automatic storage cooldown is as follows:
   - `storage_cooldown_ttl`: A table property that specifies the time interval of automatic storage cooldown for partitions in the table. The system automatically cools down a partition at the time `the value of this parameter plus the upper time bound of the partition`. So automatic storage cooldown is performed at the partition granularity, which is more flexible.
@@ -453,14 +491,14 @@ PROPERTIES (
 - If you do not configure these parameters, automatic storage cooldown is not be automatically performed.
 - Execute `SHOW PARTITIONS FROM <table_name>` to view the automatic storage cooldown time for each partition.
 
-**Limit**
+##### Limits
 
 - Expression and List partitioning are not supported.
 - The partition column need to be of date type.
 - Multiple partition columns are not supported.
 - Primary Key tables are not supported.
 
-**Set the number of replicas for each tablet in partitions**
+#### Set the number of replicas for each tablet in partitions
 
 `replication_num`: number of replicas for each table in the partitions. Default number: `3`.
 
@@ -470,9 +508,9 @@ PROPERTIES (
 )
 ```
 
-#### Add bloom filter index for a column
+### Bloom filter indexes
 
-If the Engine type is olap, you can specify a column to adopt bloom filter indexes.
+If the Engine type is `olap`, you can specify a column to adopt bloom filter indexes.
 
 The following limits apply when you use bloom filter index:
 
@@ -488,7 +526,7 @@ PROPERTIES (
 )
 ```
 
-#### Use Colocate Join
+### Colocate Join
 
 If you want to use Colocate Join attributes, specify it in `properties`.
 
@@ -498,13 +536,12 @@ PROPERTIES (
 )
 ```
 
-#### Configure dynamic partitions
+### Dynamic partitions
 
 If you want to use dynamic partition attributes, please specify it in properties.
 
 ```SQL
 PROPERTIES (
-
     "dynamic_partition.enable" = "true|false",
     "dynamic_partition.time_unit" = "DAY|WEEK|MONTH",
     "dynamic_partition.start" = "${integer_value}",
@@ -524,7 +561,7 @@ PROPERTIES (
 | dynamic_partition.prefix    | No       | The prefix added to the names of dynamic partitions. Default value: `p`. |
 | dynamic_partition.buckets   | No       | The number of buckets per dynamic partition. The default value is the same as the number of buckets determined by the reserved word `BUCKETS` or automatically set by StarRocks. |
 
-#### Specify the bucket size (`bucket_size`) for tables configured with random bucketing
+### Bucket size with random bucketing
 
 Since v3.2, for tables configured with random bucketing, you can specify the bucket size by using the `bucket_size` parameter in `PROPERTIES` at table creation to enable the on-demand and dynamic increase of the number of buckets. Unit: B.
 
@@ -534,7 +571,7 @@ PROPERTIES (
 )
 ```
 
-#### Set data compression algorithm
+### Data compression algorithm
 
 You can specify a data compression algorithm for a table by adding property `compression` when you create a table.
 
@@ -563,7 +600,7 @@ PROPERTIES ("compression" = "zstd(3)")
 
 For more information about how to choose a suitable data compression algorithm, see [Data compression](../../../table_design/data_compression.md).
 
-#### Set write quorum for data loading
+### Write quorum for data loading
 
 If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you create a table. This property is supported from v2.5.
 
@@ -573,12 +610,12 @@ The valid values of `write_quorum` are:
 - `ONE`: When **one** of the data replicas returns loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
 - `ALL`: When **all** of the data replicas return loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
 
-> **CAUTION**
->
-> - Setting a low write quorum for loading increases the risk of data inaccessibility and even loss. For example, you load data into a table with one write quorum in a StarRocks cluster of two replicas, and the data was successfully loaded into only one replica. Despite that StarRocks determines the loading task succeeded, there is only one surviving replica of the data. If the server which stores the tablets of loaded data goes down, the data in these tablets becomes inaccessible. And if the disk of the server is damaged, the data is lost.
-> - StarRocks returns the loading task status only after all data replicas have returned the status. StarRocks will not return the loading task status when there are replicas whose loading status is unknown. In a replica, loading timeout is also considered as loading failed.
+:::caution
+- Setting a low write quorum for loading increases the risk of data inaccessibility and even loss. For example, you load data into a table with one write quorum in a StarRocks cluster of two replicas, and the data was successfully loaded into only one replica. Despite that StarRocks determines the loading task succeeded, there is only one surviving replica of the data. If the server which stores the tablets of loaded data goes down, the data in these tablets becomes inaccessible. And if the disk of the server is damaged, the data is lost.
+- StarRocks returns the loading task status only after all data replicas have returned the status. StarRocks will not return the loading task status when there are replicas whose loading status is unknown. In a replica, loading timeout is also considered as loading failed.
+:::
 
-#### Specify data writing and replication mode among replicas
+### Replica data writing and replication mode
 
 If your StarRocks cluster has multiple data replicas, you can specify the `replicated_storage` parameter in `PROPERTIES` to configure the data writing and replication mode among replicas.
 
@@ -588,23 +625,11 @@ If your StarRocks cluster has multiple data replicas, you can specify the `repli
 In most cases, using the default value gains better data writing performance. If you want to change the data writing and replication mode among replicas, run the ALTER TABLE command. Example:
 
 ```sql
-    ALTER TABLE example_db.my_table
-    SET ("replicated_storage" = "false");
+ALTER TABLE example_db.my_table
+SET ("replicated_storage" = "false");
 ```
 
-#### Create rollup in bulk
-
-You can create rollup in bulk when you create a table.
-
-Syntax:
-
-```SQL
-ROLLUP (rollup_name (column_name1, column_name2, ...)
-[FROM from_index_name]
-[PROPERTIES ("key"="value", ...)],...)
-```
-
-#### Define Unique Key constraints and Foreign Key constraints for View Delta Join query rewrite
+### Delta Join unique and foreign key constraints
 
 To enable query rewrite in the View Delta Join scenario, you must define the Unique Key constraints `unique_constraints` and Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#query-delta-join-rewrite) for further information.
 
@@ -626,15 +651,15 @@ PROPERTIES (
 - `parent_table_name`: the name of the table to join.
 - `parent_column`: the column to be joined. They must be the Primary Keys or Unique Keys of the corresponding tables.
 
-> **CAUTION**
->
-> - `unique_constraints` and `foreign_key_constraints` are only used for query rewrite. Foreign Key constraints checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
-> - The primary keys of a Primary Key table or the unique keys of a Unique Key table are, by default, the corresponding `unique_constraints`. You do not need to set it manually.
-> - The `child_column` in a table's `foreign_key_constraints` must be referenced to a `unique_key` in another table's `unique_constraints`.
-> - The number of `child_column` and `parent_column` must agree.
-> - The data types of the `child_column` and the corresponding `parent_column` must match.
+:::caution
+- `unique_constraints` and `foreign_key_constraints` are only used for query rewrite. Foreign Key constraints checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
+- The primary keys of a Primary Key table or the unique keys of a Unique Key table are, by default, the corresponding `unique_constraints`. You do not need to set it manually.
+- The `child_column` in a table's `foreign_key_constraints` must be referenced to a `unique_key` in another table's `unique_constraints`.
+- The number of `child_column` and `parent_column` must agree.
+- The data types of the `child_column` and the corresponding `parent_column` must match.
+:::
 
-#### Create cloud-native tables for StarRocks Shared-data cluster
+### Cloud-native tables for shared-data clusters
 
 To use your StarRocks Shared-data cluster, you must create cloud-native tables with the following properties:
 
@@ -653,36 +678,36 @@ PROPERTIES (
   - When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).
   - When this property is set to `false`, the data is loaded only into the object storage.
 
-  > **NOTE**
-  >
-  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`.
+  :::note
+  To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`.
+  :::
 
 - `datacache.partition_duration`: The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
 
-  > **NOTE**
-  >
-  > This property is available only when `datacache.enable` is set to `true`.
+  :::note
+  This property is available only when `datacache.enable` is set to `true`.
+  :::
 
-#### Set fast schema evolution
+### Fast schema evolution
 
 `fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
 
-  > **NOTE**
-  >
-  > - Fast schema evolution is supported for shared-nothing clusters since v3.2.0.
-  > - Fast schema evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
+  :::note
+  - Fast schema evolution is supported for shared-nothing clusters since v3.2.0.
+  - Fast schema evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
+  :::
 
-#### Forbid Base Compaction
+### Forbid Base Compaction
 
 `base_compaction_forbidden_time_ranges`: The time range within which Base Compaction is forbidden for the table. When this property is set, the system performs Base Compaction on eligible tablets only outside the specified time range. This property is supported from v3.2.13.
 
-> **NOTE**
->
-> Make sure that the number of data loading to the table does not exceed 500 during the period when Base Compaction is forbidden.
+:::note
+Make sure that the number of data loading to the table does not exceed 500 during the period when Base Compaction is forbidden.
+:::
 
 The value of `base_compaction_forbidden_time_ranges` follows the [Quartz cron syntax](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm), and only supports these fields: `<minute> <hour> <day-of-the-month> <month> <day-of-the-week>`, where `<minute>` must be `*`.
 
-```Plain
+```SQL
 crontab_param_value ::= [ "" | crontab ]
 
 crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
@@ -712,7 +737,7 @@ Example:
 'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
 ```
 
-#### Specify Common Partition Expression TTL
+### Specify Common Partition Expression TTL
 
 From v3.5.0 onwards, StarRocks native tables support Common Partition Expression TTL.
 
@@ -735,7 +760,7 @@ To disable this feature, you can use the ALTER TABLE statement to set this prope
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
-#### Configure flat json config (only support on shared-nothing clusters now)
+### Configure flat json config (only support on shared-nothing clusters now)
 
 If you want to use flat json attributes, please specify it in properties. See [ Flat JSON ](../../../using_starrocks/Flat_json.md) for further information
 
@@ -748,19 +773,18 @@ PROPERTIES (
 )
 ```
 
-**`PROPERTIES`**
+**Properties**
 
-| Parameter                   | Required | Description                                                                                                                                                                                                                                                       |
+| Property                    | Required | Description                                                                                                                                                                                                                                                       |
 | --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `flat_json.enable`    | No       | Whether to enable the Flat JSON feature. After this feature is enabled, newly loaded JSON data will be automatically flattened, improving JSON query performance.                                                                                                 |
 | `flat_json.null.factor` | No      | The proportion of NULL values in the column to extract for Flat JSON. A column will not be extracted if its proportion of NULL value is higher than this threshold. This parameter takes effect only when `flat_json.enable` is set to true.  Default value: 0.3. |
 | `flat_json.sparsity.factor`     | No      | The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to true. Default value: 0.9.    |
-| `flat_json.column.max`       | No      | The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to true.  Default value: 100.                                                                                                |
-
+| `flat_json.column.max`       | No      | The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to true.  Default value: 100. |
 
 ## Examples
 
-### Create an Aggregate table that uses Hash bucketing and columnar storage
+### Aggregate table with Hash bucketing and columnar storage
 
 ```SQL
 CREATE TABLE example_db.table_hash
@@ -777,7 +801,7 @@ DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
-### Create an Aggregate table and set the storage medium and cooldown time
+### Aggregate table with storage medium and cooldown time set
 
 ```SQL
 CREATE TABLE example_db.table_hash
@@ -797,7 +821,7 @@ PROPERTIES(
 );
 ```
 
-### Create a Duplicate Key table that uses Range partition, Hash bucketing, and column-based storage, and set the storage medium and cooldown time
+### Duplicate Key table with Range partition, Hash bucketing, column-based storage, storage medium, and cooldown time
 
 LESS THAN
 
@@ -861,7 +885,7 @@ PROPERTIES(
 );
 ```
 
-### Create a MySQL external table
+### MySQL external table
 
 ```SQL
 CREATE EXTERNAL TABLE example_db.table_mysql
@@ -884,7 +908,7 @@ PROPERTIES
 )
 ```
 
-### Create a table that contains HLL columns
+### Table with HLL columns
 
 ```SQL
 CREATE TABLE example_db.example_table
@@ -900,7 +924,7 @@ DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
-### Create a table containing BITMAP_UNION aggregation type
+### Table using BITMAP_UNION aggregation type
 
 The original data type of `v1` and `v2` columns must be TINYINT, SMALLINT, or INT.
 
@@ -918,7 +942,7 @@ DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
-### Create two tables that support Colocate Join
+### Tables that support Colocate Join
 
 ```SQL
 CREATE TABLE `t1` 
@@ -948,7 +972,7 @@ PROPERTIES
 );
 ```
 
-### Create a table with bitmap index
+### Table with bitmap index
 
 ```SQL
 CREATE TABLE example_db.table_hash
@@ -966,7 +990,7 @@ DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
-### Create a dynamic partition table
+### Dynamic partition table
 
 The dynamic partitioning function must be enabled ("dynamic_partition.enable" = "true") in FE configuration. For more information, see [Configure dynamic partitions](#configure-dynamic-partitions).
 
@@ -1008,7 +1032,7 @@ PROPERTIES(
 );
 ```
 
-### Create a table where multiple partitions are created in a batch, and an integer type column is specified as partitioning column
+### Table with multiple partitions created in a batch, and an integer column as a partitioning column
 
   In the following example, the partitioning column `datekey` is of the INT type. All the partitions are created by only one simple partition clause  `START ("1") END ("5") EVERY (1)`. The range of all the partitions starts from `1` and ends at `5`, with a partition granularity of `1`:
   > **NOTE**
@@ -1031,7 +1055,7 @@ PROPERTIES(
   PROPERTIES ("replication_num" = "3");
   ```
 
-### Create a Hive external table
+### Hive external table
 
 Before you create a Hive external table, you must have created a Hive resource and database. For more information, see [External table](../../../data_source/External_table.md#deprecated-hive-external-table).
 
@@ -1051,7 +1075,7 @@ PROPERTIES
 );
 ```
 
-### Create a Primary Key table and specify the sort key
+### Primary Key table with specific sort key
 
 Suppose that you need to analyze user behavior in real time from dimensions such as users' address and last active time. When you create a table, you can define the `user_id` column as the primary key and define the combination of the `address` and `last_active` columns as the sort key.
 
@@ -1078,7 +1102,7 @@ PROPERTIES(
 );
 ```
 
-### Create a partitioned temporary table
+### Partitioned temporary table
 
 ```SQL
 CREATE TEMPORARY TABLE example_db.temp_table
@@ -1100,7 +1124,11 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2);
 ```
 
-### Create a table that support flat json (only support on shared-nothing clusters now)
+### Table supporting flat JSON
+
+:::note
+Flat JSON is only support on shared-nothing clusters now.
+:::
 
 ```SQL
 CREATE TABLE example_db.example_table

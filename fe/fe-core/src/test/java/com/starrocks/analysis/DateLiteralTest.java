@@ -19,8 +19,8 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class DateLiteralTest {
 
@@ -29,31 +29,31 @@ public class DateLiteralTest {
         boolean hasException = false;
         try {
             DateLiteral literal = new DateLiteral("1997-10-07", Type.DATE);
-            Assert.assertEquals(1997, literal.getYear());
+            Assertions.assertEquals(1997, literal.getYear());
 
             DateLiteral literal2 = new DateLiteral("97-10-07", Type.DATE);
-            Assert.assertEquals(1997, literal2.getYear());
+            Assertions.assertEquals(1997, literal2.getYear());
 
             DateLiteral literal3 = new DateLiteral("0097-10-07", Type.DATE);
-            Assert.assertEquals(97, literal3.getYear());
+            Assertions.assertEquals(97, literal3.getYear());
 
             DateLiteral literal4 = new DateLiteral("99-10-07", Type.DATE);
-            Assert.assertEquals(1999, literal4.getYear());
+            Assertions.assertEquals(1999, literal4.getYear());
 
             DateLiteral literal5 = new DateLiteral("70-10-07", Type.DATE);
-            Assert.assertEquals(1970, literal5.getYear());
+            Assertions.assertEquals(1970, literal5.getYear());
 
             DateLiteral literal6 = new DateLiteral("69-10-07", Type.DATE);
-            Assert.assertEquals(2069, literal6.getYear());
+            Assertions.assertEquals(2069, literal6.getYear());
 
             DateLiteral literal7 = new DateLiteral("00-10-07", Type.DATE);
-            Assert.assertEquals(2000, literal7.getYear());
+            Assertions.assertEquals(2000, literal7.getYear());
 
         } catch (AnalysisException e) {
             e.printStackTrace();
             hasException = true;
         }
-        Assert.assertFalse(hasException);
+        Assertions.assertFalse(hasException);
     }
 
     @Test
@@ -62,16 +62,16 @@ public class DateLiteralTest {
         try {
             DateLiteral literal = new DateLiteral("1997-10-07", Type.DATE);
             Expr castToExpr = literal.uncheckedCastTo(Type.DATETIME);
-            Assert.assertTrue(castToExpr instanceof DateLiteral);
-            Assert.assertEquals(castToExpr.type, Type.DATETIME);
+            Assertions.assertTrue(castToExpr instanceof DateLiteral);
+            Assertions.assertEquals(castToExpr.type, Type.DATETIME);
 
             DateLiteral literal2 = new DateLiteral("1997-10-07 12:23:23", Type.DATETIME);
             Expr castToExpr2 = literal2.uncheckedCastTo(Type.DATETIME);
-            Assert.assertTrue(castToExpr2 instanceof DateLiteral);
+            Assertions.assertTrue(castToExpr2 instanceof DateLiteral);
         } catch (AnalysisException e) {
             e.printStackTrace();
             hasException = true;
         }
-        Assert.assertFalse(hasException);
+        Assertions.assertFalse(hasException);
     }
 }

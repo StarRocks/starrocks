@@ -193,6 +193,8 @@ CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 // The user function dir.
 CONF_String(user_function_dir, "${STARROCKS_HOME}/lib/udf");
+// If true, clear udf cache every time be starts
+CONF_Bool(clear_udf_cache_when_start, "false");
 // The sys log level, INFO, WARNING, ERROR, FATAL.
 CONF_mString(sys_log_level, "INFO");
 // TIME-DAY, TIME-HOUR, SIZE-MB-nnn
@@ -305,8 +307,11 @@ CONF_Int32(min_file_descriptor_number, "60000");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
-// Cache for storage page size
-CONF_mString(storage_page_cache_limit, "20%");
+// Page cache is the cache for the decompressed or decoded page of data file.
+// Currently, BE does not support configure the upper limit of the page cache.
+// The memory limit of page cache are uniformly restricted by datacache_mem_size.
+// -1 represents automatic adjustment.
+CONF_mString(storage_page_cache_limit, "-1");
 // whether to disable page cache feature in storage
 CONF_mBool(disable_storage_page_cache, "false");
 // whether to enable the bitmap index memory cache
@@ -391,6 +396,10 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
+// We support real-time compaction strategy for primary key tables in shared-data mode.
+// This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
+// The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.
+CONF_mInt32(size_tiered_max_compaction_level, "3");
 CONF_mInt64(size_tiered_min_level_size, "131072");
 CONF_mInt64(size_tiered_level_multiple, "5");
 CONF_mInt64(size_tiered_level_multiple_dupkey, "10");
@@ -1241,7 +1250,7 @@ CONF_mInt64(max_length_for_bitmap_function, "1000000");
 
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "true");
-CONF_mString(datacache_mem_size, "0");
+CONF_mString(datacache_mem_size, "20%");
 CONF_mString(datacache_disk_size, "100%");
 CONF_Int64(datacache_block_size, "262144"); // 256K
 CONF_Bool(datacache_checksum_enable, "false");
@@ -1271,11 +1280,10 @@ CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
 CONF_Bool(datacache_tiered_cache_enable, "false");
 // Whether to persist cached data
 CONF_Bool(datacache_persistence_enable, "true");
-// DataCache engines, alternatives: starcache.
-// `cachelib` is not support now.
-// Set the default value empty to indicate whether it is manully configured by users.
+// DataCache engines, alternatives: starcache, lrucache
+// Set the default value empty to indicate whether it is manually configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_STARCACHE".
-CONF_String(datacache_engine, "");
+CONF_String_enum(datacache_engine, "", ",starcache,lrucache");
 // The interval time (millisecond) for agent report datacache metrics to FE.
 CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
 
@@ -1324,7 +1332,7 @@ CONF_String(datacache_eviction_policy, "slru");
 // However, these two configuration items are retained for future support.
 CONF_Bool(block_cache_enable, "true");
 CONF_mString(block_cache_disk_size, "-1");
-CONF_mInt64(block_cache_mem_size, "0");
+CONF_mString(block_cache_mem_size, "0");
 CONF_Alias(datacache_block_size, block_cache_block_size);
 CONF_Alias(datacache_max_concurrent_inserts, block_cache_max_concurrent_inserts);
 CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
@@ -1549,10 +1557,15 @@ CONF_mInt32(olap_string_max_length, "1048576");
 // Skip get from pk index when light pk compaction publish is enabled
 CONF_mBool(enable_light_pk_compaction_publish, "true");
 
+// jit LRU object cache size for total 32 shards, it will be an auto value if it < 0
+// mem_limit = system memory or process memory limit if set.
+// if mem_limit < 16 GB, disable JIT.
+// else it  = min(mem_limit*0.01, 4MB);
+CONF_mInt64(jit_lru_object_cache_size, "0");
 // jit LRU cache size for total 32 shards, it will be an auto value if it <=0:
 // mem_limit = system memory or process memory limit if set.
 // if mem_limit < 16 GB, disable JIT.
-// else it = min(mem_limit*0.01, 1GB)
+// else it = min(mem_limit*0.01, 4MB)
 CONF_mInt64(jit_lru_cache_size, "0");
 
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
@@ -1692,6 +1705,12 @@ CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
+// use to decide whether to enable the collection of table metrics
+CONF_Bool(enable_table_metrics, "false");
+// Used to limit the number of tables in table metrics.
+// the metrics/ interface returns metrics for at most max_table_metrics_num tables
+// to avoid including too much data in the response
+CONF_Int64(max_table_metrics_num, "100");
 // some internal parameters are used to control the execution strategy of join runtime filter pushdown.
 // Do not modify them unless necessary.
 CONF_mInt64(rf_sample_rows, "1024");

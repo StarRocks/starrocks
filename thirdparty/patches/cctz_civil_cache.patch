@@ -1,0 +1,130 @@
+diff --git a/src/cctz_benchmark.cc b/src/cctz_benchmark.cc
+index 179ae50..87a7722 100644
+--- a/src/cctz_benchmark.cc
++++ b/src/cctz_benchmark.cc
+@@ -797,6 +797,20 @@ void BM_Time_ToCivil_CCTZ(benchmark::State& state) {
+ }
+ BENCHMARK(BM_Time_ToCivil_CCTZ);
+ 
++void BM_Time_ToCivil_Cached(benchmark::State &state) {
++  const cctz::time_zone tz = TestTimeZone();
++  std::chrono::system_clock::time_point tp =
++      std::chrono::system_clock::from_time_t(1750656243);
++  std::chrono::system_clock::time_point tp2 =
++      std::chrono::system_clock::from_time_t(1750656245);
++  while (state.KeepRunning()) {
++    std::swap(tp, tp2);
++    tp += std::chrono::seconds(1);
++    benchmark::DoNotOptimize(cctz::convert(tp, tz));
++  }
++}
++BENCHMARK(BM_Time_ToCivil_Cached);
++
+ void BM_Time_ToCivil_Libc(benchmark::State& state) {
+   // No timezone support, so just use localtime.
+   time_t t = 1384569027;
+diff --git a/src/time_zone_info.cc b/src/time_zone_info.cc
+index eb1cd8a..6258c27 100644
+--- a/src/time_zone_info.cc
++++ b/src/time_zone_info.cc
+@@ -41,12 +41,14 @@
+ #include <cstring>
+ #include <functional>
+ #include <iostream>
++#include <mutex>
+ #include <memory>
+ #include <sstream>
+ #include <string>
+ 
+ #include "cctz/civil_time.h"
+ #include "time_zone_fixed.h"
++#include "time_zone_if.h"
+ #include "time_zone_posix.h"
+ 
+ namespace cctz {
+@@ -79,6 +81,21 @@ const std::int_least32_t kSecsPerYear[2] = {
+   366 * kSecsPerDay,
+ };
+ 
++static constexpr int kCivilCacheDays = 200 * 365;
++static civil_day gCivilCache[kCivilCacheDays];
++static std::once_flag gCivilCacheInit;
++
++static void InitCivilDaysCache() {
++  std::call_once(gCivilCacheInit, [&]() {
++    civil_day epoch;
++    for (int i = 0; i < kCivilCacheDays; i++) {
++      gCivilCache[i] = epoch;
++      epoch++;
++    }
++  });
++}
++
++
+ // Single-byte, unsigned numeric values are encoded directly.
+ inline std::uint_fast8_t Decode8(const char* cp) {
+   return static_cast<std::uint_fast8_t>(*cp) & 0xff;
+@@ -751,14 +768,56 @@ time_zone::absolute_lookup TimeZoneInfo::LocalTime(
+           tt.utc_offset, tt.is_dst, &abbreviations_[tt.abbr_index]};
+ }
+ 
++static inline int64_t floor_div(int64_t n, int64_t d) {
++  int64_t q = n / d;
++  int64_t r = n % d;
++  return (r < 0) ? q - 1 : q;
++}
++
+ // BreakTime() translation for a particular transition.
+-time_zone::absolute_lookup TimeZoneInfo::LocalTime(
+-    std::int_fast64_t unix_time, const Transition& tr) const {
+-  const TransitionType& tt = transition_types_[tr.type_index];
+-  // Note: (unix_time - tr.unix_time) will never overflow as we
+-  // have ensured that there is always a "nearby" transition.
+-  return {tr.civil_sec + (unix_time - tr.unix_time),  // TODO: Optimize.
+-          tt.utc_offset, tt.is_dst, &abbreviations_[tt.abbr_index]};
++time_zone::absolute_lookup TimeZoneInfo::LocalTime(std::int_fast64_t unix_time,
++                                                   const Transition &tr) const {
++  const TransitionType &tt = transition_types_[tr.type_index];
++  // Baseline
++  // return {tr.civil_sec + (unix_time-tr.unix_time), tt.utc_offset, tt.is_dst,
++  // &abbreviations_[tt.abbr_index]};
++
++  // Optimization: Utilizing a cache for n_days() operation to mitigate its 30+ns performance impact.
++  // Benchmark                                 Time             CPU      Time Old      Time New       CPU Old       CPU New
++  // ----------------------------------------------------------------------------------------------------------------------
++  // BM_Time_ToCivil_CCTZ                   -0.2508         -0.2508            55            41            55            41
++  // BM_Time_ToCivil_Cached                 -0.5182         -0.5182            71            34            71            34
++  // BM_Time_ToCivil_Libc                   +0.0020         +0.0020           217           217           217           217
++  // BM_Time_ToCivilUTC_CCTZ                -0.6477         -0.6477            73            26            73            26
++  // BM_Time_ToCivilUTC_Libc                +0.0145         +0.0144            43            44            43            44
++  // OVERALL_GEOMEAN                        -0.3358         -0.3358             0             0             0             0
++  std::int_fast64_t local_unix = unix_time + tt.utc_offset;
++  if (local_unix < unix_time) {
++    // Handle overflow case
++    return {tr.civil_sec + (unix_time - tr.unix_time), tt.utc_offset, tt.is_dst,
++            &abbreviations_[tt.abbr_index]};
++  }
++
++  constexpr int64_t SECS_PER_DAY = 86400;
++  std::int_fast64_t days = floor_div(local_unix, SECS_PER_DAY);
++  std::int_fast64_t sod = local_unix - days * SECS_PER_DAY;
++  if (sod < 0) {
++    sod += SECS_PER_DAY;
++  }
++
++  if (0 <= days && days < kCivilCacheDays) {
++    InitCivilDaysCache();
++    civil_day local_civil_day = gCivilCache[days];
++    civil_second local_civil(local_civil_day.year(), local_civil_day.month(), local_civil_day.day(), 
++      sod / (3600), sod % 3600 / 60, sod % 60);
++    return {local_civil, tt.utc_offset, tt.is_dst,
++            &abbreviations_[tt.abbr_index]};
++  } else {
++    // Note: (unix_time - tr.unix_time) will never overflow as we
++    // have ensured that there is always a "nearby" transition.
++    return {tr.civil_sec + (unix_time - tr.unix_time), tt.utc_offset, tt.is_dst,
++            &abbreviations_[tt.abbr_index]};
++  }
+ }
+ 
+ // MakeTime() translation with a conversion-preserving +N * 400-year shift.

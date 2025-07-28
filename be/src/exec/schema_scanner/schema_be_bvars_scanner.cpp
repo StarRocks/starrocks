@@ -22,7 +22,6 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -45,8 +44,8 @@ private:
 
 SchemaScanner::ColumnDesc SchemaBeBvarsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"VALUE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
 };
 
 SchemaBeBvarsScanner::SchemaBeBvarsScanner()

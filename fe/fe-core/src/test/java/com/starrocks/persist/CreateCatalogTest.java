@@ -17,9 +17,9 @@ package com.starrocks.persist;
 
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -33,7 +33,7 @@ public class CreateCatalogTest {
 
     private String fileName = "./CreateCatalogTest";
 
-    @After
+    @AfterEach
     public void tearDownCreate() throws Exception {
         File file = new File(fileName);
         file.delete();
@@ -58,10 +58,10 @@ public class CreateCatalogTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         Catalog readCreateCatalogInfo = Catalog.read(in);
-        Assert.assertEquals(readCreateCatalogInfo.getName(), "catalog_name");
-        Assert.assertEquals(readCreateCatalogInfo.getType(), "hive");
-        Assert.assertEquals(readCreateCatalogInfo.getComment(), "external catalog for hive");
-        Assert.assertEquals(readCreateCatalogInfo.getConfig(), properties);
+        Assertions.assertEquals(readCreateCatalogInfo.getName(), "catalog_name");
+        Assertions.assertEquals(readCreateCatalogInfo.getType(), "hive");
+        Assertions.assertEquals(readCreateCatalogInfo.getComment(), "external catalog for hive");
+        Assertions.assertEquals(readCreateCatalogInfo.getConfig(), properties);
         in.close();
     }
 }

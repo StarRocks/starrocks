@@ -50,6 +50,9 @@ ldap_info ::=
     "ldap_bind_base_dn" = "",
     ["ldap_conn_timeout" = "",]
     ["ldap_conn_read_timeout" = ""]
+    ["ldap_ssl_conn_allow_insecure" = ""]
+    ["ldap_ssl_conn_trust_store_path" = ""]
+    ["ldap_ssl_conn_trust_store_pwd" = ""]
 
 ldap_search_group_arg ::= 
     { "ldap_group_dn" = "" 
@@ -113,6 +116,19 @@ LDAP サービスへの接続のタイムアウト時間。
 ##### `ldap_conn_read_timeout`
 
 オプション。LDAP サービスへの接続での読み取り操作のタイムアウト時間。
+
+##### `ldap_ssl_conn_allow_insecure`
+
+オプション。LDAP サーバへの暗号化されていない接続を許可するかどうか。デフォルト値: `true`. この値を `false` に設定すると、LDAP へのアクセスに SSL 暗号化が必要であることを示します。
+
+##### `ldap_ssl_conn_trust_store_path`
+
+オプション。LDAP サーバーの SSL CA 証明書を格納するローカルパス。pem および jks 形式をサポートします。証明書が信頼できる組織によって発行されている場合は、この項目を設定する必要はありません。
+
+##### `ldap_ssl_conn_trust_store_pwd`
+
+オプション。LDAP サーバーのローカルに保存された SSL CA 証明書にアクセスするために使用されるパスワード。pem 形式の証明書にはパスワードは必要ありません。パスワードが必要なのは jsk 形式の証明書だけです。
+
 
 #### `ldap_search_group_arg`
 
@@ -216,7 +232,7 @@ Group Provider を作成した後、セキュリティインテグレーショ�
 ALTER SECURITY INTEGRATION <security_integration_name> SET
 (
     "group_provider" = "",
-    "authenticated_group_list" = ""
+    "permitted_groups" = ""
 )
 ```
 
@@ -226,7 +242,7 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 
 セキュリティインテグレーションと組み合わせる Group Provider の名前。複数の Group Provider はカンマで区切られます。設定されると、StarRocks はログイン時に各指定されたプロバイダーの下でユーザーのグループ情報を記録します。
 
-#### `authenticated_group_list`
+#### `permitted_groups`
 
 オプション。StarRocks にログインすることが許可されているグループの名前。複数のグループはカンマで区切られます。指定されたグループが組み合わせた Group Provider によって取得できることを確認してください。
 
@@ -234,9 +250,9 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 
 ```SQL
 ALTER SECURITY INTEGRATION LDAP SET
-PROPERTIES(
+(
         "group_provider"="ldap_group_provider",
-        "authenticated_group_list"="testgroup"
+        "permitted_groups"="testgroup"
 );
 ```
 

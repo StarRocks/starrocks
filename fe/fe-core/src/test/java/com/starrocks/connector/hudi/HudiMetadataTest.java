@@ -36,10 +36,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.conf.Configuration;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
@@ -63,7 +63,7 @@ public class HudiMetadataTest {
     private static ConnectContext connectContext;
     private static ColumnRefFactory columnRefFactory;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         FeConstants.runningUnitTest = true;
         executorForHmsRefresh = Executors.newFixedThreadPool(5);
@@ -93,7 +93,7 @@ public class HudiMetadataTest {
                         Optional.empty(), new ConnectorProperties(ConnectorType.HUDI));
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         executorForHmsRefresh.shutdown();
         executorForRemoteFileRefresh.shutdown();
@@ -103,26 +103,26 @@ public class HudiMetadataTest {
     @Test
     public void testListDbNames() {
         List<String> databaseNames = hudiMetadata.listDbNames(new ConnectContext());
-        Assert.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
+        Assertions.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
         CachingHiveMetastore queryLevelCache = CachingHiveMetastore.createQueryLevelInstance(cachingHiveMetastore, 100);
-        Assert.assertEquals(Lists.newArrayList("db1", "db2"), queryLevelCache.getAllDatabaseNames());
+        Assertions.assertEquals(Lists.newArrayList("db1", "db2"), queryLevelCache.getAllDatabaseNames());
     }
 
     @Test
     public void testListTableNames() {
         List<String> databaseNames = hudiMetadata.listTableNames(new ConnectContext(), "db1");
-        Assert.assertEquals(Lists.newArrayList("table1", "table2"), databaseNames);
+        Assertions.assertEquals(Lists.newArrayList("table1", "table2"), databaseNames);
     }
 
     @Test
     public void testTableExists() {
         boolean exists = hudiMetadata.tableExists(new ConnectContext(), "db1", "table1");
-        Assert.assertTrue(exists);
+        Assertions.assertTrue(exists);
     }
 
     @Test
     public void testGetPartitionKeys() {
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 Lists.newArrayList("col1"),
                 hudiMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT));
     }
@@ -130,13 +130,13 @@ public class HudiMetadataTest {
     @Test
     public void testGetDb() {
         Database database = hudiMetadata.getDb(new ConnectContext(), "db1");
-        Assert.assertEquals("db1", database.getFullName());
+        Assertions.assertEquals("db1", database.getFullName());
 
     }
 
     @Test
     public void testGetCloudConfiguration() {
         CloudConfiguration cc = hudiMetadata.getCloudConfiguration();
-        Assert.assertEquals(cc.getCloudType(), CloudType.DEFAULT);
+        Assertions.assertEquals(cc.getCloudType(), CloudType.DEFAULT);
     }
 }

@@ -22,8 +22,10 @@ import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.RollupRenameClause;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class AddRollupClauseTest {
     @Test
@@ -33,68 +35,80 @@ public class AddRollupClauseTest {
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
         analyzer.analyze(null, clause);
 
-        Assert.assertEquals("ADD ROLLUP `testRollup` (`col1`, `col2`) FROM `baseRollup`", clause.toString());
-        Assert.assertEquals("baseRollup", clause.getBaseRollupName());
-        Assert.assertEquals("testRollup", clause.getRollupName());
-        Assert.assertEquals("[col1, col2]", clause.getColumnNames().toString());
-        Assert.assertNull(clause.getProperties());
+        Assertions.assertEquals("ADD ROLLUP `testRollup` (`col1`, `col2`) FROM `baseRollup`", clause.toString());
+        Assertions.assertEquals("baseRollup", clause.getBaseRollupName());
+        Assertions.assertEquals("testRollup", clause.getRollupName());
+        Assertions.assertEquals("[col1, col2]", clause.getColumnNames().toString());
+        Assertions.assertNull(clause.getProperties());
 
         clause = new AddRollupClause("testRollup", Lists.newArrayList("col1", "col2"), null, null, null);
         analyzer.analyze(null, clause);
-        Assert.assertEquals("ADD ROLLUP `testRollup` (`col1`, `col2`)", clause.toString());
+        Assertions.assertEquals("ADD ROLLUP `testRollup` (`col1`, `col2`)", clause.toString());
 
         clause = new AddRollupClause("testRollup", Lists.newArrayList("col1", "col2"), null, null, null);
         analyzer.analyze(null, clause);
-        Assert.assertEquals("ADD ROLLUP `testRollup` (`col1`, `col2`)", clause.toString());
+        Assertions.assertEquals("ADD ROLLUP `testRollup` (`col1`, `col2`)", clause.toString());
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testNoRollup() {
-        AddRollupClause clause = new AddRollupClause("", Lists.newArrayList("col1", "col2"), null, null, null);
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        analyzer.analyze(null, clause);
-        Assert.fail("No exception throws.");
+        assertThrows(SemanticException.class, () -> {
+            AddRollupClause clause = new AddRollupClause("", Lists.newArrayList("col1", "col2"), null, null, null);
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+            analyzer.analyze(null, clause);
+            Assertions.fail("No exception throws.");
+        });
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testNoCol() {
-        AddRollupClause clause = new AddRollupClause("testRollup", null, null, null, null);
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        analyzer.analyze(null, clause);
-        Assert.fail("No exception throws.");
+        assertThrows(SemanticException.class, () -> {
+            AddRollupClause clause = new AddRollupClause("testRollup", null, null, null, null);
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+            analyzer.analyze(null, clause);
+            Assertions.fail("No exception throws.");
+        });
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testDupCol() {
-        AddRollupClause clause = new AddRollupClause("testRollup",
-                Lists.newArrayList("col1", "col1"), null, null, null);
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        analyzer.analyze(null, clause);
-        Assert.fail("No exception throws.");
+        assertThrows(SemanticException.class, () -> {
+            AddRollupClause clause = new AddRollupClause("testRollup",
+                    Lists.newArrayList("col1", "col1"), null, null, null);
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+            analyzer.analyze(null, clause);
+            Assertions.fail("No exception throws.");
+        });
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testInvalidCol() {
-        AddRollupClause clause = new AddRollupClause("testRollup", Lists.newArrayList("", "col1"), null, null, null);
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        analyzer.analyze(null, clause);
-        Assert.fail("No exception throws.");
+        assertThrows(SemanticException.class, () -> {
+            AddRollupClause clause = new AddRollupClause("testRollup", Lists.newArrayList("", "col1"), null, null, null);
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+            analyzer.analyze(null, clause);
+            Assertions.fail("No exception throws.");
+        });
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testRename1() {
-        RollupRenameClause clause = new RollupRenameClause("testRollup", "");
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        analyzer.analyze(null, clause);
-        Assert.fail("No exception throws.");
+        assertThrows(SemanticException.class, () -> {
+            RollupRenameClause clause = new RollupRenameClause("testRollup", "");
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+            analyzer.analyze(null, clause);
+            Assertions.fail("No exception throws.");
+        });
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testRename2() {
-        RollupRenameClause clause = new RollupRenameClause("", "testRollup");
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        analyzer.analyze(null, clause);
-        Assert.fail("No exception throws.");
+        assertThrows(SemanticException.class, () -> {
+            RollupRenameClause clause = new RollupRenameClause("", "testRollup");
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+            analyzer.analyze(null, clause);
+            Assertions.fail("No exception throws.");
+        });
     }
 
     @Test

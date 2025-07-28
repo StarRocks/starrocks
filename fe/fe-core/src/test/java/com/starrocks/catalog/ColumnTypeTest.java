@@ -38,9 +38,9 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -48,10 +48,12 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class ColumnTypeTest {
     private FakeGlobalStateMgr fakeGlobalStateMgr;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
@@ -63,92 +65,102 @@ public class ColumnTypeTest {
 
         type.analyze(null);
 
-        Assert.assertEquals(PrimitiveType.INT, type.getType().getPrimitiveType());
-        Assert.assertEquals("int(11)", type.toSql());
+        Assertions.assertEquals(PrimitiveType.INT, type.getType().getPrimitiveType());
+        Assertions.assertEquals("int(11)", type.toSql());
 
         // equal type
         TypeDef type2 = TypeDef.create(PrimitiveType.INT);
-        Assert.assertEquals(type.getType(), type2.getType());
+        Assertions.assertEquals(type.getType(), type2.getType());
 
         // not equal type
         TypeDef type3 = TypeDef.create(PrimitiveType.BIGINT);
-        Assert.assertNotSame(type.getType(), type3.getType());
+        Assertions.assertNotSame(type.getType(), type3.getType());
     }
 
-    @Test(expected = SemanticException.class)
-    public void testInvalidType() throws AnalysisException {
-        TypeDef type = TypeDef.create(PrimitiveType.INVALID_TYPE);
-        type.analyze(null);
+    @Test
+    public void testInvalidType() {
+        assertThrows(SemanticException.class, () -> {
+            TypeDef type = TypeDef.create(PrimitiveType.INVALID_TYPE);
+            type.analyze(null);
+        });
     }
 
     @Test
     public void testCharType() throws AnalysisException {
         TypeDef type = TypeDef.createVarchar(10);
         type.analyze(null);
-        Assert.assertEquals("VARCHAR(10)", type.toString());
-        Assert.assertEquals(PrimitiveType.VARCHAR, type.getType().getPrimitiveType());
-        Assert.assertEquals(10, ((ScalarType) type.getType()).getLength());
+        Assertions.assertEquals("VARCHAR(10)", type.toString());
+        Assertions.assertEquals(PrimitiveType.VARCHAR, type.getType().getPrimitiveType());
+        Assertions.assertEquals(10, ((ScalarType) type.getType()).getLength());
 
         // equal type
         TypeDef type2 = TypeDef.createVarchar(10);
-        Assert.assertEquals(type.getType(), type2.getType());
+        Assertions.assertEquals(type.getType(), type2.getType());
 
         // different type
         TypeDef type3 = TypeDef.createVarchar(3);
-        Assert.assertNotEquals(type.getType(), type3.getType());
+        Assertions.assertNotEquals(type.getType(), type3.getType());
 
         // different type
         TypeDef type4 = TypeDef.create(PrimitiveType.BIGINT);
-        Assert.assertNotEquals(type.getType(), type4.getType());
+        Assertions.assertNotEquals(type.getType(), type4.getType());
     }
 
-    @Test(expected = SemanticException.class)
-    public void testCharInvalid() throws AnalysisException {
-        TypeDef type = TypeDef.createVarchar(-1);
-        type.analyze(null);
-        Assert.fail("No Exception throws");
+    @Test
+    public void testCharInvalid() {
+        assertThrows(SemanticException.class, () -> {
+            TypeDef type = TypeDef.createVarchar(-1);
+            type.analyze(null);
+            Assertions.fail("No Exception throws");
+        });
     }
 
     @Test
     public void testDecimal() throws AnalysisException {
         TypeDef type = TypeDef.createDecimal(12, 5);
         type.analyze(null);
-        Assert.assertEquals("DECIMAL(12,5)", type.toString());
-        Assert.assertEquals(PrimitiveType.DECIMALV2, type.getType().getPrimitiveType());
-        Assert.assertEquals(12, ((ScalarType) type.getType()).getScalarPrecision());
-        Assert.assertEquals(5, ((ScalarType) type.getType()).getScalarScale());
+        Assertions.assertEquals("DECIMAL(12,5)", type.toString());
+        Assertions.assertEquals(PrimitiveType.DECIMALV2, type.getType().getPrimitiveType());
+        Assertions.assertEquals(12, ((ScalarType) type.getType()).getScalarPrecision());
+        Assertions.assertEquals(5, ((ScalarType) type.getType()).getScalarScale());
 
         // equal type
         TypeDef type2 = TypeDef.createDecimal(12, 5);
-        Assert.assertEquals(type.getType(), type2.getType());
+        Assertions.assertEquals(type.getType(), type2.getType());
 
         // different type
         TypeDef type3 = TypeDef.createDecimal(11, 5);
-        Assert.assertNotEquals(type.getType(), type3.getType());
+        Assertions.assertNotEquals(type.getType(), type3.getType());
         type3 = TypeDef.createDecimal(12, 4);
-        Assert.assertNotEquals(type.getType(), type3.getType());
+        Assertions.assertNotEquals(type.getType(), type3.getType());
 
         // different type
         TypeDef type4 = TypeDef.create(PrimitiveType.BIGINT);
-        Assert.assertNotEquals(type.getType(), type4.getType());
+        Assertions.assertNotEquals(type.getType(), type4.getType());
     }
 
-    @Test(expected = SemanticException.class)
-    public void testDecimalPreFail() throws AnalysisException {
-        TypeDef type = TypeDef.createDecimal(28, 3);
-        type.analyze(null);
+    @Test
+    public void testDecimalPreFail() {
+        assertThrows(SemanticException.class, () -> {
+            TypeDef type = TypeDef.createDecimal(28, 3);
+            type.analyze(null);
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void testDecimalScaleFail() throws AnalysisException {
-        TypeDef type = TypeDef.createDecimal(27, 10);
-        type.analyze(null);
+    @Test
+    public void testDecimalScaleFail() {
+        assertThrows(SemanticException.class, () -> {
+            TypeDef type = TypeDef.createDecimal(27, 10);
+            type.analyze(null);
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void testDecimalScaleLargeFial() throws AnalysisException {
-        TypeDef type = TypeDef.createDecimal(8, 9);
-        type.analyze(null);
+    @Test
+    public void testDecimalScaleLargeFial() {
+        assertThrows(SemanticException.class, () -> {
+            TypeDef type = TypeDef.createDecimal(8, 9);
+            type.analyze(null);
+        });
     }
 
     @Test
@@ -173,17 +185,17 @@ public class ColumnTypeTest {
         // 2. Read objects from file
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
         Type rType1 = ColumnType.read(dis);
-        Assert.assertTrue(rType1.equals(type1));
+        Assertions.assertTrue(rType1.equals(type1));
 
         Type rType2 = ColumnType.read(dis);
-        Assert.assertTrue(rType2.equals(type2));
+        Assertions.assertTrue(rType2.equals(type2));
 
         Type rType3 = ColumnType.read(dis);
 
         // Change it when remove DecimalV2
-        Assert.assertTrue(rType3.equals(type3) || rType3.equals(type4));
+        Assertions.assertTrue(rType3.equals(type3) || rType3.equals(type4));
 
-        Assert.assertFalse(type1.equals(this));
+        Assertions.assertFalse(type1.equals(this));
 
         // 3. delete files
         dis.close();

@@ -155,7 +155,7 @@ Among all the information returned, you can focus on the following metrics:
 - `QueryMemCost`: Total memory cost of the query.
 - Other metrics for individual operators, such as join operators and aggregate operators.
 
-For detailed information on how to check the query profile and understand other metrics, see [Analyze query profile](../../administration/query_profile_overview.md).
+For detailed information on how to check the query profile and understand other metrics, see [Analyze query profile](../../best_practices/query_tuning/query_profile_overview.md).
 
 ### Verify whether queries are rewritten by an asynchronous materialized view
 
@@ -295,7 +295,7 @@ Large materialized views may fail to refresh because the refresh task exceeds th
   The default timeout for materialized view refresh tasks is 5 minutes in versions earlier than v3.2 and 1 hour in v3.2 and later. If you encounter timeout exceptions, you can adjust the timeout period by using the following statement:
 
   ```sql
-  ALTER MATERIALIZED VIEW mv2 SET ('session.query_timeout' = '4000');
+  ALTER MATERIALIZED VIEW mv2 SET ('session.insert_timeout' = '4000');
   ```
 
 - **Analyze performance bottlenecks of the materialized view refresh**

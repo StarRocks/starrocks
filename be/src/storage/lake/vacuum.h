@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "common/statusor.h"
 #include "gen_cpp/lake_service.pb.h"
 
 namespace starrocks {
@@ -54,7 +55,11 @@ std::future<Status> delete_files_callable(std::vector<std::string> files_to_dele
 // Run a clear task async
 void run_clear_task_async(std::function<void()> task);
 
-Status datafile_gc(std::string_view root_location, std::string_view audit_file_path, int64_t expired_seconds = 86400,
-                   bool do_delete = false);
+StatusOr<int64_t> datafile_gc(std::string_view root_location, std::string_view audit_file_path,
+                              int64_t expired_seconds = 86400, bool do_delete = false);
+
+// Check if there are any garbage files in the given root location.
+// Returns the number of garbage files found.
+StatusOr<int64_t> garbage_file_check(std::string_view root_location);
 
 } // namespace starrocks::lake
