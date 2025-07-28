@@ -312,7 +312,7 @@ public class RestBaseAction extends BaseAction {
                 .put(HttpHeaders.AUTHORIZATION, authorization).build();
         List<String> result = Lists.newArrayList();
         for (Pair<String, Integer> front : frontends) {
-            String url = String.format("http://%s%s", front, queryPath);
+            String url = String.format("http://%s:%d%s", front.first, front.second, queryPath);
             try {
                 String data = null;
                 if (method == HttpMethod.GET) {

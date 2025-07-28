@@ -77,11 +77,13 @@ public class QueryDetailActionV2 extends RestBaseAction {
                 queryPath += "&user=" + user;
             }
             List<String> dataList = fetchResultFromOtherFrontendNodes(queryPath, authorization, HttpMethod.GET);
-            for (String data : dataList) {
-                if (data != null) {
-                    Gson gson = new Gson();
-                    QueryDetail queryDetail = gson.fromJson(data, QueryDetail.class);
-                    queryDetails.add(queryDetail);
+            if (dataList != null) {
+                for (String data : dataList) {
+                    if (data != null) {
+                        Gson gson = new Gson();
+                        QueryDetail queryDetail = gson.fromJson(data, QueryDetail.class);
+                        queryDetails.add(queryDetail);
+                    }
                 }
             }
         }
