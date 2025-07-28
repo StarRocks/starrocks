@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -101,11 +102,16 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             if (aggCall.getFnName().equals(FunctionSet.COUNT) && aggCall.getChildren().isEmpty()) {
                 usedColumn = metaScan.getOutputColumns().get(0);
                 metaColumnName = "rows_" + usedColumn.getName();
-            } else {
+            } else if (MapUtils.isNotEmpty(project.getColumnRefMap())) {
                 ColumnRefSet usedColumns = aggCall.getUsedColumns();
                 Preconditions.checkArgument(usedColumns.cardinality() == 1);
                 List<ColumnRefOperator> columnRefOperators = usedColumns.getColumnRefOperators(columnRefFactory);
                 usedColumn = (ColumnRefOperator) project.getColumnRefMap().get(columnRefOperators.get(0));
+                metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
+            } else {
+                ColumnRefSet usedColumns = aggCall.getUsedColumns();
+                Preconditions.checkArgument(usedColumns.cardinality() == 1);
+                usedColumn = columnRefFactory.getColumnRef(usedColumns.getFirstId());
                 metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
             }
 

@@ -270,6 +270,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 context.allStringColumns.add(cid);
             } else if (allExprNum > worthless && allExprNum >= worthless * 2) {
                 context.allStringColumns.add(cid);
+            } else if (allExprNum == worthless && allExprNum > 0) {
+                // It's beneficial to rewrite the extended column
+                context.allStringColumns.add(cid);
             }
         }
         // resolve depend-on relation:
@@ -863,6 +866,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     private boolean checkComplexTypeInvalid(PhysicalOlapScanOperator scan, ColumnRefOperator column) {
         String colName = scan.getColRefToColumnMetaMap().get(column).getName();
         for (ColumnAccessPath path : scan.getColumnAccessPaths()) {
+            if (path.isExtended()) {
+                continue;
+            }
+            
             if (!StringUtils.equalsIgnoreCase(colName, path.getPath()) || path.getType() != TAccessPathType.ROOT) {
                 continue;
             }
