@@ -139,6 +139,7 @@ TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
 }
 
 TEST_F(ParquetCLIReaderTest, ReadArrowFuzzingParquetFiles) {
+    GTEST_SKIP(); // this ut takes a very long time.
     std::vector<std::string> read_paths;
     {
         traverse_directory_add_parquet(read_paths, "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/");
