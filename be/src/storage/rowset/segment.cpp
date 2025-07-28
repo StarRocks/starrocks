@@ -482,7 +482,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
 
 StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const TabletColumn& column,
                                                                     ColumnAccessPath* path) {
-    auto source_id = column.source_column()->unique_id();
+    auto source_index = column.source_column_index();
+    auto source_id = _tablet_schema->column(source_index).unique_id();
     std::string full_path = column.access_path()->linear_path();
     auto [col_name, field_name] = JsonFlatPath::split_path(full_path);
     auto& leaf_type = column.access_path()->leaf_value_type();

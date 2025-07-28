@@ -835,8 +835,8 @@ void SegmentIterator::_init_column_access_paths() {
 ColumnAccessPath* SegmentIterator::_lookup_access_path(ColumnId cid, const TabletColumn& col) {
     ColumnAccessPath* access_path = nullptr;
     if (col.is_extended()) {
-        if (const auto* source_col = col.source_column()) {
-            ColumnId source_id = source_col->unique_id();
+        if (col.source_column_index() >= 0) {
+            ColumnId source_id = _opts.tablet_schema->column(col.source_column_index()).unique_id();
             auto it = _column_access_paths.find(source_id);
             if (it != _column_access_paths.end() && it->second->is_extended()) {
                 access_path = it->second;
