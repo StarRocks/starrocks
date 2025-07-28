@@ -302,10 +302,11 @@ public class SplitTabletJobFactory implements DynamicTabletJobFactory {
         TStorageMedium storageMedium = table.getPartitionInfo()
                 .getDataProperty(physicalPartition.getParentId()).getStorageMedium();
 
+        TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), physicalPartition.getId(), newIndexId,
+                storageMedium, table.isCloudNativeTableOrMaterializedView());
+
         for (long tabletId : dynamicTablets.getNewTabletIds()) {
             Tablet tablet = new LakeTablet(tabletId);
-            TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), physicalPartition.getId(), newIndexId,
-                    0, storageMedium, true);
             newIndex.addTablet(tablet, tabletMeta, true);
         }
 
