@@ -141,6 +141,80 @@ public class CompactionSchedulerTest {
     }
 
     @Test
+    public void testStartCompactionWithFileBundling() {
+        LakeTable table = new LakeTable();
+        table.setFileBundling(true);
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        PartitionStatistics statistics = new PartitionStatistics(partition);
+        statistics.setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(statistics);
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return new Database(100, "aaa");
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return table;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
+                return new PhysicalPartition(123, "aaa", 123, new MaterializedIndex());
+            }
+        };
+
+        new MockUp<CompactionScheduler>(compactionScheduler) {
+            @Mock
+            protected long beginTransaction(PartitionIdentifier partition, ComputeResource computeResource) {
+                return 100L;
+            }
+
+            @Mock
+            private Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition,
+                                                                 ComputeResource computeResource) {
+                Map<Long, List<Long>> map = new HashMap<>();
+                map.put(1L, Lists.newArrayList(10L));
+                return map;
+            }
+
+            @Mock
+            private CompactionTask createAggregateCompactionTask(long currentVersion,
+                                                                 Map<Long, List<Long>> beToTablets, long txnId,
+                                                                 PartitionStatistics.CompactionPriority priority,
+                                                                 ComputeResource computeResource, long partitionId) {
+                CompactRequest request = new CompactRequest();
+                request.tabletIds = Lists.newArrayList(10L);
+                return new CompactionTask(1L, lakeService, request);
+            }
+        };
+
+        new MockUp<CompactionTask>() {
+            @Mock
+            public void sendRequest() {
+            }
+        };
+
+        CompactionWarehouseInfo info = new CompactionWarehouseInfo("aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
+        table.setState(OlapTable.OlapTableState.NORMAL);
+        CompactionJob job = compactionScheduler.startCompaction(snapshot, info);
+        Assertions.assertNotNull(job);
+        Assertions.assertEquals(1, job.getNumTabletCompactionTasks());
+    }
+
+    @Test
     public void testGetHistory() {
         CompactionMgr compactionManager = new CompactionMgr();
         CompactionScheduler compactionScheduler =
