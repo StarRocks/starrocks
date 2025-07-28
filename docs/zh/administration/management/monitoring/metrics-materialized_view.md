@@ -24,7 +24,7 @@ scrape_configs:
 ....
 ```
 
-- `username`：用于登录到您的 StarRocks 集群的用户名。此用户必须拥有 `user_admin` 角色。
+- `username`：用于登录到您的 StarRocks 集群的用户名。除非使用root账户，否则用户必须同时拥有`user_admin` 和 `db_admin`角色。
 - `password`：用于登录到您的 StarRocks 集群的密码。
 - `'with_materialized_view_metrics'`：要收集的指标的范围。有效值包括：
 - `'all'`：收集所有与物化视图相关的指标。
