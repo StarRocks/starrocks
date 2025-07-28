@@ -184,7 +184,7 @@ public:
                                  const FilterData* filter) override {
         const uint8_t* __restrict is_nulls = null_infos.nulls_data();
         // fill null data
-        CHECK(dst->is_nullable());
+        DCHECK(dst->is_nullable());
         size_t null_cnt = null_infos.num_nulls;
         if (dst->is_nullable()) {
             NullColumn* null_column = down_cast<NullableColumn*>(dst)->mutable_null_column();

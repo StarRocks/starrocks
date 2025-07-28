@@ -528,7 +528,7 @@ private:
 
     Status next_value_batch_with_nulls(size_t count, size_t cur_size, const NullInfos& null_infos, Column* dst,
                                        const FilterData* filter) {
-        CHECK(dst->is_nullable());
+        DCHECK(dst->is_nullable());
         const uint8_t* __restrict is_nulls = null_infos.nulls_data();
         // assign null infos
         size_t null_cnt = null_infos.num_nulls;
@@ -536,8 +536,39 @@ private:
         auto* binary_column = ColumnHelper::get_binary_column(dst);
         size_t read_count = count - null_cnt;
 
+        if (read_count == 0) {
+            binary_column->append_default(count);
+            return Status::OK();
+        }
+
         if (filter) {
-            CHECK(false);
+            _indexes.reserve(read_count);
+            auto decoded_num = _rle_batch_reader.GetBatch(_indexes.data(), read_count);
+            if (decoded_num < read_count) {
+                return Status::InternalError("didn't get enough data from dict-decoder");
+            }
+            bool flag = false;
+            size_t size = _dict.size();
+            for (int i = 0; i < read_count; i++) {
+                flag |= _indexes[i] >= size;
+            }
+            if (UNLIKELY(flag)) {
+                return Status::InternalError("Index not in dictionary bounds");
+            }
+            if (dst->is_nullable()) {
+                down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
+            }
+            auto* binary_column = ColumnHelper::get_binary_column(dst);
+            size_t cnt = 0;
+            for (int i = 0; i < count; ++i) {
+                if (filter[i] && is_nulls[i]) {
+                    binary_column->append(_dict[_indexes[cnt]]);
+                } else {
+                    binary_column->append_default();
+                }
+                cnt += !is_nulls[i];
+            }
+
         } else {
             auto& bytes = binary_column->get_bytes();
             size_t offset = bytes.size();
