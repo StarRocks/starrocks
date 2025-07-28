@@ -59,6 +59,9 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        if (!context.getSessionVariable().isEnableConstantExecuteInFE()) {
+            return false;
+        }
         if (!isTransformable((LogicalJoinOperator) input.getOp(), constantIndex)) {
             return false;
         }
@@ -107,7 +110,6 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
                                        OptExpression otherOpt,
                                        OptExpression constantOpt,
                                        OptimizerContext context) {
-
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) joinOpt.getOp();
         Map<ColumnRefOperator, ScalarOperator> constants = getConstantInputs(constantOpt);
 
@@ -124,8 +126,12 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
         joinOpt.getOutputColumns().getStream().map(context.getColumnRefFactory()::getColumnRef)
                 .forEach(ref -> outputs.put(ref, rewriter.rewrite(ref)));
         if (joinOperator.getJoinType().isOuterJoin()) {
+            // ensure value is a constant value, otherwise we cannot transform the join's on-predicate
+            if (constants.values().stream().anyMatch(op -> !op.isConstant())) {
+                return Lists.newArrayList();
+            }
             // transform join's on-predicate with case-when operator
-            constantOpt.getRowOutputInfo().getColumnRefMap().forEach((key, value) -> {
+            constants.forEach((key, value) -> {
                 ScalarOperator t = transformOuterJoinOnPredicate(joinOperator, value, rewrittenCondition);
                 outputs.put(key, t);
             });
