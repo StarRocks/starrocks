@@ -109,6 +109,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this(type, scanOperator.getTable(), scanOperator.getColRefToColumnMetaMap(), scanOperator.getLimit(),
                 scanOperator.getPredicate(), scanOperator.getProjection(), scanOperator.getTableVersionRange());
         this.scanOptimizeOption = scanOperator.getScanOptimizeOption().copy();
+        this.columnAccessPaths = ImmutableList.copyOf(scanOperator.getColumnAccessPaths());
     }
 
     public List<ColumnRefOperator> getOutputColumns() {
@@ -216,6 +217,11 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
         public B setColRefToColumnMetaMap(Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
             builder.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
+            return (B) this;
+        }
+
+        public B setColumnAccessPath(List<ColumnAccessPath> accessPaths) {
+            builder.setColumnAccessPaths(accessPaths);
             return (B) this;
         }
 

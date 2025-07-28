@@ -30,7 +30,9 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -149,11 +151,87 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
             return OptExpression.builder().with(optExpr).setInputs(newInputs).build();
         }
 
+        //        @Override
+        //        public OptExpression visitPhysicalMetaScan(OptExpression optExpr, Void v) {
+        //            return rewritePhysicalScan(optExpr, v);
+        //        }
+
         @Override
         public OptExpression visitPhysicalOlapScan(OptExpression optExpr, Void v) {
-            PhysicalOlapScanOperator scanOperator = (PhysicalOlapScanOperator) optExpr.getOp();
-            PhysicalOlapScanOperator.Builder builder =
-                    (PhysicalOlapScanOperator.Builder) OperatorBuilderFactory.build(scanOperator)
+            return rewritePhysicalScan(optExpr, v);
+        }
+
+        @Override
+        public OptExpression visitLogicalProject(OptExpression optExpr, Void v) {
+            Operator child = optExpr.inputAt(0).getOp();
+            if (child instanceof LogicalMetaScanOperator) {
+                return rewriteMetaScan(optExpr, v);
+            }
+            return visit(optExpr, v);
+        }
+
+        // PROJECT(get_json_string(c1, 'f1')) -> META_SCAN(c1)
+        // =>
+        // PROJECT(c1.f1) -> META_SCAN(c1.f1)
+        private OptExpression rewriteMetaScan(OptExpression optExpr, Void v) {
+            LogicalProjectOperator project = (LogicalProjectOperator) optExpr.getOp();
+            LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) optExpr.inputAt(0).getOp();
+            LogicalMetaScanOperator.Builder scanBuilder =
+                    LogicalMetaScanOperator.builder().withOperator(metaScan);
+
+            JsonPathRewriteContext context = new JsonPathRewriteContext(columnRefFactory);
+            JsonPathRewriter rewriter = new JsonPathRewriter(context);
+
+            // rewrite project
+            Map<ColumnRefOperator, ScalarOperator> changed = Maps.newHashMap();
+            for (var entry : project.getColumnRefMap().entrySet()) {
+                ScalarOperator rewritten = rewriteScalar(entry.getValue(), context, rewriter);
+                if (!rewritten.equals(entry.getValue())) {
+                    // no change, keep the original column
+                    changed.put(entry.getKey(), rewritten);
+                }
+            }
+            Map<ColumnRefOperator, ScalarOperator> projection = Maps.newHashMap();
+            projection.putAll(project.getColumnRefMap());
+            projection.putAll(changed);
+            LogicalProjectOperator newProject = new LogicalProjectOperator(changed);
+
+            // add the columns into scan
+            Map<ColumnRefOperator, Column> metaScanColumnMap = Maps.newHashMap();
+            metaScanColumnMap.putAll(rewriter.getExtendedColumns());
+            for (var entry : metaScan.getColRefToColumnMetaMap().entrySet()) {
+                if (!changed.containsKey(entry.getKey())) {
+                    metaScanColumnMap.put(entry.getKey(), entry.getValue());
+                } else {
+                    metaScanColumnMap.put(entry.getKey(), rewriter.getExtendedColumns().get(entry.getKey()));
+                }
+            }
+            scanBuilder.setColRefToColumnMetaMap(metaScanColumnMap);
+
+            // Record the access path into scan node
+            List<ColumnAccessPath> paths = Lists.newArrayList();
+            for (var entry : rewriter.getExtendedColumns().entrySet()) {
+                ColumnAccessPath path = JsonPathRewriteContext.pathFromColumn(entry.getValue());
+                paths.add(path);
+            }
+            scanBuilder.setColumnAccessPaths(paths);
+
+            LogicalMetaScanOperator newMetaScan = scanBuilder.build();
+            OptExpression newMetaScanExpr =
+                    OptExpression.builder()
+                            .with(optExpr.inputAt(0))
+                            .setOp(newMetaScan)
+                            .build();
+            return OptExpression.builder().with(optExpr)
+                    .setOp(newProject)
+                    .setInputs(Lists.newArrayList(newMetaScanExpr))
+                    .build();
+        }
+
+        private OptExpression rewritePhysicalScan(OptExpression optExpr, Void v) {
+            PhysicalScanOperator scanOperator = (PhysicalScanOperator) optExpr.getOp();
+            PhysicalScanOperator.Builder builder =
+                    (PhysicalScanOperator.Builder) OperatorBuilderFactory.build(scanOperator)
                             .withOperator(scanOperator);
 
             JsonPathRewriteContext context = new JsonPathRewriteContext(columnRefFactory);
@@ -206,7 +284,7 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
     // The actual rewrite rule for ScalarOperator, now takes a context
     private static class JsonPathRewriter extends BottomUpScalarOperatorRewriteRule {
         // only simple field access, no array, no functions, no dot in the path
-        private static final Pattern JSON_PATH_VALID_PATTERN = Pattern.compile("^[a-zA-Z0-9]+$");
+        private static final Pattern JSON_PATH_VALID_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
 
         private final JsonPathRewriteContext context;
         // record added fake columns
