@@ -709,7 +709,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
       * used and we need to discard the column for the keys which have already existed in the tablet.
     */
     for (ColumnId cid : txn_meta.partial_update_column_ids()) {
-        if (txn_meta.has_auto_increment_partial_update_column_id() && cid == txn_meta.auto_increment_partial_update_column_id()) {
+        if (txn_meta.has_auto_increment_partial_update_column_id() &&
+            cid == txn_meta.auto_increment_partial_update_column_id()) {
             // skip auto increment column if it is being used for partial update
             continue;
         }
@@ -731,7 +732,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             // skip auto increment column if it is being used for partial update
             continue;
         }
-        if (!column.is_key()){
+        if (!column.is_key()) {
             unique_update_column_ids.push_back(uid);
         }
     }
