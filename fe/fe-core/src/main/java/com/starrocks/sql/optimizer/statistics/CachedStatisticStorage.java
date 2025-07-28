@@ -48,7 +48,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 
@@ -418,17 +417,20 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> resultFuture =
                     partitionStatistics.getAll(cacheKeys);
+            if (Config.enable_sync_statistics_load) {
+                resultFuture.get();
+            }
 
-            Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = resultFuture.get(5, TimeUnit.SECONDS);
-            return columns.stream()
-                    .collect(Collectors.toMap(
-                            column -> column,
-                            column -> result.getOrDefault(new ColumnStatsCacheKey(table.getId(), column), Optional.empty())
-                                    .orElse(null)
-                    ));
-
-        } catch (TimeoutException e) {
-            LOG.warn("Get partition NDV timeout", e);
+            if (resultFuture.isDone()) {
+                Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = resultFuture.get();
+                return columns.stream()
+                        .collect(Collectors.toMap(
+                                column -> column,
+                                column -> result.getOrDefault(new ColumnStatsCacheKey(table.getId(), column),
+                                                Optional.empty())
+                                        .orElse(null)
+                        ));
+            }
             return Collections.emptyMap();
         } catch (InterruptedException e) {
             LOG.warn("Get partition NDV interrupted", e);
