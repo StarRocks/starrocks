@@ -886,10 +886,14 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     protected boolean canEliminateNull(Expr expr, SlotDescriptor slot) {
         if (expr.isBound(slot.getId())) {
-            ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr);
-            ColumnRefOperator column = new ColumnRefOperator(slot.getId().asInt(), slot.getType(),
-                    "any", true);
-            return Utils.canEliminateNull(Sets.newHashSet(column), operator);
+            try {
+                ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr);
+                ColumnRefOperator column = new ColumnRefOperator(slot.getId().asInt(), slot.getType(),
+                        "any", true);
+                return Utils.canEliminateNull(Sets.newHashSet(column), operator);
+            } catch (Exception e) {
+                return false;
+            }
         }
         return false;
     }
