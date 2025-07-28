@@ -57,8 +57,10 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
+import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.ha.FrontendNodeType;
@@ -561,6 +563,10 @@ public abstract class StarRocksHttpTestCase {
                 nodeMgr.getAllFrontends();
                 minTimes = 0;
                 result = Lists.newArrayList(frontend);
+
+                nodeMgr.getSelfNode();
+                minTimes = 0;
+                result = new Pair<>(frontend.getHost(),  Config.http_port);
             }
         };
 

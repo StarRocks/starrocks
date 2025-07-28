@@ -99,6 +99,7 @@ import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
 import com.starrocks.http.rest.v2.ProfileActionV2;
+import com.starrocks.http.rest.v2.QueryDetailActionV2;
 import com.starrocks.http.rest.v2.TablePartitionAction;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
@@ -227,6 +228,7 @@ public class HttpServer {
         ProfileActionV2.registerAction(controller);
         QueryProgressAction.registerAction(controller);
         QueryDetailAction.registerAction(controller);
+        QueryDetailActionV2.registerAction(controller);
         ConnectionAction.registerAction(controller);
         ShowDataAction.registerAction(controller);
         QueryDumpAction.registerAction(controller);

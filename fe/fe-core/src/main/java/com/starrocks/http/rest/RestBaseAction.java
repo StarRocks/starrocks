@@ -299,14 +299,18 @@ public class RestBaseAction extends BaseAction {
         });
     }
 
-    protected List<String> queryOtherFrontendNodes(String queryPlainUrl, String authorization,
+    public static List<String> fetchResultFromOtherFrontendNodes(String queryPath,
+                                                   String authorization,
                                                  HttpMethod method) {
         List<Pair<String, Integer>> frontends = getOtherAliveFe();
+        if (frontends.isEmpty()) {
+            return List.of();
+        }
         ImmutableMap<String, String> header = ImmutableMap.<String, String>builder()
                 .put(HttpHeaders.AUTHORIZATION, authorization).build();
         List<String> result = Lists.newArrayList();
         for (Pair<String, Integer> front : frontends) {
-            String url = String.format("http://%s%s", front, queryPlainUrl);
+            String url = String.format("http://%s%s", front, queryPath);
             try {
                 String data = null;
                 if (method == HttpMethod.GET) {
@@ -345,15 +349,15 @@ public class RestBaseAction extends BaseAction {
     public static List<Pair<String, Integer>> getOtherAliveFe() {
         List<Pair<String, Integer>> allAliveFe = getAllAliveFe();
         if (allAliveFe.isEmpty()) {
-            return null;
+            return List.of();
         }
         Pair<String, Integer> currentFe = getCurrentFe();
         if (currentFe == null) {
-            return null;
+            return List.of();
         }
-        String ip = currentFe.first;
+        String currentFeAddress = currentFe.first;
         return allAliveFe.stream()
-                .filter(fe -> !fe.first.equals(ip))
+                .filter(fe -> !fe.first.equals(currentFeAddress))
                 .collect(Collectors.toList());
 
     }
