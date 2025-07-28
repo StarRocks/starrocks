@@ -3,6 +3,7 @@
 DROP DATABASE IF EXISTS test_list_partition_selectivity;
 CREATE DATABASE test_list_partition_selectivity;
 USE test_list_partition_selectivity;
+ADMIN SET FRONTEND CONFIG ("enable_sync_statistics_load" = "true");
 
 CREATE TABLE partitions_multi_column_1 (
     c1 int NOT NULL,
