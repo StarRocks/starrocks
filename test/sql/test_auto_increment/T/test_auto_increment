@@ -345,7 +345,7 @@ PROPERTIES (
 INSERT INTO t_auto_increment_partial_update_column_upsert VALUES (1, DEFAULT, 3, 4);
 SELECT * FROM t_auto_increment_partial_update_column_upsert;
 
-shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true  -H partial_update_mode:column -H label:test_auto_increment_partial_update_column_upsert_12345 -H column_separator:, -H columns:k,v2,v3 ${url}/api/test_auto_increment_partial_update_column_upsert/t_auto_increment_partial_update_column_upsert/_stream_load
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true  -H partial_update_mode:column -H label:test_auto_increment_partial_update_column_upsert_12345 -H column_separator:, -H columns:k,v2,xx ${url}/api/test_auto_increment_partial_update_column_upsert/t_auto_increment_partial_update_column_upsert/_stream_load
 sync;
 
 SELECT * FROM t_auto_increment_partial_update_column_upsert;
