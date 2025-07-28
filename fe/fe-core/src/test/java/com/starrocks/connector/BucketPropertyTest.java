@@ -52,6 +52,23 @@ public class BucketPropertyTest {
     }
 
     @Test
+    public void testEquals() {
+        Column c1 = new Column("c1", Type.INT);
+        BucketProperty bp1 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, c1);
+        BucketProperty bp2 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, c1);
+        BucketProperty bp3 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 20, c1);
+        Column c2 = new Column("c2", Type.INT);
+        BucketProperty bp4 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, c2);
+
+        Assertions.assertEquals(bp1, bp1);
+        Assertions.assertEquals(bp1, bp2);
+        Assertions.assertNotEquals(bp1, bp3);
+        Assertions.assertNotEquals(bp1, bp4);
+        Assertions.assertNotEquals(bp1, null);
+        Assertions.assertNotEquals(bp1, new Object());
+    }
+
+    @Test
     public void testToThrift() {
         Column c = new Column("c1", Type.INT);
         BucketProperty bp = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, c);
