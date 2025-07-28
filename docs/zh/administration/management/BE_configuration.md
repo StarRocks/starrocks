@@ -5329,9 +5329,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：-
 - 是否动态：是
 - 描述：用于向 FE 汇报执行状态的 RPC 请求的重试次数。默认值为 10，意味着如果该 RPC 请求失败（仅限于 fragment instance 的 finish RPC），将最多重试 10 次。该请求对于导入任务（load job）非常重要，如果某个 fragment instance 的完成状态报告失败，整个导入任务将会一直挂起，直到超时。
-<<<<<<< HEAD
--引入版本：-
-=======
 -引入版本：-
 
 ##### enable_table_metrics
@@ -5354,4 +5351,3 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型: -
 - 是否动态: 否
 - 描述: table metrics中表的最大数量, metrics/接口最多返回max_table_metrics_num个表的metrics。
->>>>>>> d71cc3d2c7 ([BugFix] reduce lock contention of TableMetricsManager (#58911))
