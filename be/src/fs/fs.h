@@ -457,6 +457,11 @@ public:
     virtual int64_t bundle_file_offset() const { return -1; }
 
     virtual void set_encryption_info(const FileEncryptionInfo& info) {}
+
+    // Return statistics about file written, like how many time is spent on IO
+    virtual StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() {
+        return Status::NotSupported("get_numeric_statistics");
+    }
 };
 
 } // namespace starrocks

@@ -202,7 +202,7 @@ public:
         stats->append(kIOCountRemote, read_stats.io_count_remote);
         stats->append(kIONsReadLocalDisk, read_stats.io_ns_read_local_disk);
         stats->append(kIONsWriteLocalDisk, read_stats.io_ns_write_local_disk);
-        stats->append(kIONsRemote, read_stats.io_ns_read_remote);
+        stats->append(kIONsReadRemote, read_stats.io_ns_read_remote);
         stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
         stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
         stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
@@ -267,6 +267,19 @@ public:
             return to_status(stream_st.status());
         }
         return to_status((*stream_st)->close());
+    }
+
+    StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
+        auto stream_st = _file_ptr->stream();
+        if (!stream_st.ok()) {
+            return to_status(stream_st.status());
+        }
+        const auto& io_stats = (*stream_st)->get_io_stats();
+        auto stats = std::make_unique<io::NumericStatistics>();
+        stats->reserve(2);
+        stats->append(kIONsWriteRemote, io_stats.io_ns_write_remote);
+        stats->append(kBytesWriteRemote, io_stats.bytes_write_remote);
+        return std::move(stats);
     }
 
 private:
