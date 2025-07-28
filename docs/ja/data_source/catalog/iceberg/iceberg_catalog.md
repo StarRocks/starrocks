@@ -1274,7 +1274,7 @@ column_name
 | transform_expr(column_name, parameter)
 ```
 
-現在、StarRocks は Apache Iceberg 仕様で定義されたパーティション変換式 [transform expr](https://iceberg.apache.org/spec/#partitioning) をサポートしています。これにより、StarRocks は変換された列値に基づいて隠されたパーティションを持つ Iceberg テーブルを作成できます。
+現在、StarRocks は Apache Iceberg 仕様で定義されたパーティション変換式 [transform expr](https://iceberg.apache.org/spec/#partitioning) をサポートしています。これにより、StarRocks は変換された列値に基づいて隠しパーティション (Hidden Partition) を持つ Iceberg テーブルを作成できます。
 
 :::note
 
