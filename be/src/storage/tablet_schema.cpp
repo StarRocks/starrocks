@@ -138,7 +138,7 @@ TabletColumn::TabletColumn(const TabletColumn& rhs)
           _scale(rhs._scale),
           _is_extended(rhs._is_extended),
           _access_path(rhs._access_path),
-          _source_column(rhs._source_column),
+          _source_column_index(rhs._source_column_index),
           _flags(rhs._flags) {
     if (rhs._extra_fields != nullptr) {
         _extra_fields = new ExtraFields(*rhs._extra_fields);
@@ -159,7 +159,7 @@ TabletColumn::TabletColumn(TabletColumn&& rhs) noexcept
           _scale(rhs._scale),
           _is_extended(std::move(rhs._is_extended)),
           _access_path(std::move(rhs._access_path)),
-          _source_column(std::move(rhs._source_column)),
+          _source_column_index(std::move(rhs._source_column_index)),
           _flags(rhs._flags),
           _extra_fields(rhs._extra_fields),
           _agg_state_desc(rhs._agg_state_desc) {
@@ -195,7 +195,7 @@ void TabletColumn::swap(TabletColumn* rhs) {
 
     swap(_is_extended, rhs->_is_extended);
     swap(_access_path, rhs->_access_path);
-    swap(_source_column, rhs->_source_column);
+    swap(_source_column_index, rhs->_source_column_index);
 }
 
 TabletColumn& TabletColumn::operator=(const TabletColumn& rhs) {

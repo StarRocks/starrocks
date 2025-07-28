@@ -501,7 +501,6 @@ Status OlapChunkSource::_extend_schema_by_access_paths() {
         }
         int root_column_index = _tablet_schema->field_index(path->path());
         RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
-        const TabletColumn& root_column = _tablet_schema->column(root_column_index);
 
         LogicalType value_type = path->value_type().type;
         TabletColumn column;
@@ -512,7 +511,7 @@ Status OlapChunkSource::_extend_schema_by_access_paths() {
         column.set_is_nullable(true);
         column.set_extended(true);
         column.set_access_path(path.get());
-        column.set_source_column(&root_column);
+        column.set_source_column_index(root_column_index);
 
         tmp_schema->append_column(column);
         VLOG(2) << "extend the access path column: " << path->linear_path();
