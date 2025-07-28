@@ -29,7 +29,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.sql.ast.PartitionValue;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -37,6 +36,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.ast.PartitionValue.STARROCKS_DEFAULT_PARTITION_VALUE;
 
 
 /**
@@ -48,7 +49,7 @@ import java.util.stream.Collectors;
 public final class PListCell extends PCell implements Comparable<PListCell> {
     // default partition values which may contain null value, and should be compared in the end
     public static Set<String> DEFAULT_PARTITION_VALUES = new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
-            .add(PartitionValue.STARROCKS_DEFAULT_PARTITION_VALUE)
+            .add(STARROCKS_DEFAULT_PARTITION_VALUE)
             .add(PartitionUtil.ICEBERG_DEFAULT_PARTITION)
             .add(HiveMetaClient.PARTITION_NULL_VALUE)
             .add(HiveMetaClient.HUDI_PARTITION_NULL_VALUE)
@@ -60,17 +61,28 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
 
     public PListCell(List<List<String>> items) {
         Objects.requireNonNull(items);
-        this.partitionItems = items;
+        this.partitionItems = items.stream()
+                .map(item -> item.stream().map(this::adjustPartitionNullValue).collect(Collectors.toList()))
+                .collect(Collectors.toList());
     }
 
     // single value with single partition column cell
     public PListCell(String item) {
         Objects.requireNonNull(item);
-        this.partitionItems = ImmutableList.of(ImmutableList.of(item));
+        this.partitionItems = ImmutableList.of(ImmutableList.of(adjustPartitionNullValue(item)));
     }
 
     public List<List<String>> getPartitionItems() {
         return partitionItems;
+    }
+
+    // If the partition value is null, we should use STARROCKS_DEFAULT_PARTITION_VALUE instead of null.
+    private String adjustPartitionNullValue(String val) {
+        if (val == null || val.equalsIgnoreCase("null")) {
+            return STARROCKS_DEFAULT_PARTITION_VALUE;
+        } else {
+            return val;
+        }
     }
 
     @Override

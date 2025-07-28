@@ -26,7 +26,7 @@ select count(*) from t1;
 -- result:
 11
 -- !result
-admin enable failpoint 'report_exec_state_failed_status';
+[UC]admin enable failpoint 'report_exec_state_failed_status';
 -- result:
 -- !result
 insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;

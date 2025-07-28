@@ -51,6 +51,8 @@ import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
  * refresh.
  */
 public abstract class MVPCTRefreshPartitioner {
+    protected static final int CREATE_PARTITION_BATCH_SIZE = 64;
+
     protected final MvTaskRunContext mvContext;
     protected final TaskRunContext context;
     protected final Database db;
