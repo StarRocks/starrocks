@@ -111,7 +111,7 @@ The base DN of the LDAP user for which the cluster searches.
 
 ##### `ldap_conn_timeout`
 
-The timeout duration for the connection to your LDAP service.
+Optional. The timeout duration for the connection to your LDAP service.
 
 ##### `ldap_conn_read_timeout`
 

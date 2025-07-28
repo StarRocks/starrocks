@@ -111,7 +111,7 @@ LDAP サービスの管理者パスワード。
 
 ##### `ldap_conn_timeout`
 
-LDAP サービスへの接続のタイムアウト時間。
+オプション。LDAP サービスへの接続のタイムアウト時間。
 
 ##### `ldap_conn_read_timeout`
 

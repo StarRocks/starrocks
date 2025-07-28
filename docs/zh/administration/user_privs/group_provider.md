@@ -111,7 +111,7 @@ PROPERTIES (
 
 ##### `ldap_conn_timeout`
 
-连接到您的 LDAP 服务的超时时间。
+可选。连接到您的 LDAP 服务的超时时间。
 
 ##### `ldap_conn_read_timeout`
 
