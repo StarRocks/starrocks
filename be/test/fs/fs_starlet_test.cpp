@@ -161,12 +161,17 @@ TEST_P(StarletFileSystemTest, test_write_and_read) {
     EXPECT_OK(wf->append("hello"));
     EXPECT_OK(wf->append(" world!"));
     EXPECT_OK(wf->sync());
+    ASSIGN_OR_ABORT(auto stats, wf->get_numeric_statistics());
+    EXPECT_EQ((*stats).size(), 2);
+    EXPECT_EQ((*stats).value(1), 12); // write bytes
     EXPECT_OK(wf->close());
     EXPECT_EQ(sizeof("hello world!"), wf->size() + 1);
 
     char buf[1024];
     ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(uri));
     ASSIGN_OR_ABORT(auto nr, rf->read_at(0, buf, sizeof(buf)));
+    ASSIGN_OR_ABORT(auto stats2, rf->get_numeric_statistics());
+    EXPECT_EQ((*stats2).size(), 11);
     EXPECT_EQ("hello world!", std::string_view(buf, nr));
 
     ASSIGN_OR_ABORT(nr, rf->read_at(3, buf, sizeof(buf)));

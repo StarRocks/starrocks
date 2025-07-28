@@ -73,8 +73,8 @@ TEST_F(CompactionTaskContextTest, test_calculation) {
     stats.pk_sst_merge_ns = 5;
     stats.collect(reader_stats);
 
-    EXPECT_EQ(stats.io_ns_remote, 200);
-    EXPECT_EQ(stats.io_ns_local_disk, 300);
+    EXPECT_EQ(stats.io_ns_read_remote, 200);
+    EXPECT_EQ(stats.io_ns_read_local_disk, 300);
     EXPECT_EQ(stats.segment_init_ns, 400);
     EXPECT_EQ(stats.column_iterator_init_ns, 500);
     EXPECT_EQ(stats.io_count_local_disk, 600);
@@ -86,8 +86,8 @@ TEST_F(CompactionTaskContextTest, test_calculation) {
 
     CompactionTaskStats after_add = stats + stats;
 
-    EXPECT_EQ(after_add.io_ns_remote, 400);
-    EXPECT_EQ(after_add.io_ns_local_disk, 600);
+    EXPECT_EQ(after_add.io_ns_read_remote, 400);
+    EXPECT_EQ(after_add.io_ns_read_local_disk, 600);
     EXPECT_EQ(after_add.segment_init_ns, 800);
     EXPECT_EQ(after_add.column_iterator_init_ns, 1000);
     EXPECT_EQ(after_add.io_count_local_disk, 1200);
@@ -99,8 +99,8 @@ TEST_F(CompactionTaskContextTest, test_calculation) {
 
     CompactionTaskStats after_minus = stats - stats;
 
-    EXPECT_EQ(after_minus.io_ns_remote, 0);
-    EXPECT_EQ(after_minus.io_ns_local_disk, 0);
+    EXPECT_EQ(after_minus.io_ns_read_remote, 0);
+    EXPECT_EQ(after_minus.io_ns_read_local_disk, 0);
     EXPECT_EQ(after_minus.segment_init_ns, 0);
     EXPECT_EQ(after_minus.column_iterator_init_ns, 0);
     EXPECT_EQ(after_minus.io_count_local_disk, 0);
@@ -109,6 +109,15 @@ TEST_F(CompactionTaskContextTest, test_calculation) {
     EXPECT_EQ(after_minus.io_bytes_read_local_disk, 0);
     EXPECT_EQ(after_minus.in_queue_time_sec, 0);
     EXPECT_EQ(after_minus.pk_sst_merge_ns, 0);
+
+    OlapWriterStatistics writer_stats;
+    writer_stats.write_remote_ns = 10;
+    writer_stats.bytes_write_remote = 100;
+    writer_stats.segment_count = 1000;
+    stats.collect(writer_stats);
+    EXPECT_EQ(stats.io_ns_write_remote, 10);
+    EXPECT_EQ(stats.write_segment_bytes, 100);
+    EXPECT_EQ(stats.write_segment_count, 1000);
 }
 
 TEST_F(CompactionTaskContextTest, test_to_json_stats) {
@@ -117,13 +126,16 @@ TEST_F(CompactionTaskContextTest, test_to_json_stats) {
     // Set up some stats to test the JSON output
     context.stats->io_bytes_read_remote = 1 * 1048576;
     context.stats->io_bytes_read_local_disk = 1 * 1048576;
-    context.stats->io_ns_remote = 1 * TIME_UNIT_NS_PER_SECOND;
-    context.stats->io_ns_local_disk = 9 * TIME_UNIT_NS_PER_SECOND;
+    context.stats->io_ns_read_remote = 1 * TIME_UNIT_NS_PER_SECOND;
+    context.stats->io_ns_read_local_disk = 9 * TIME_UNIT_NS_PER_SECOND;
     context.stats->segment_init_ns = 2 * TIME_UNIT_NS_PER_SECOND;
     context.stats->io_count_remote = 3;
     context.stats->io_count_local_disk = 2;
     context.stats->segment_init_ns = 3 * TIME_UNIT_NS_PER_SECOND;
     context.stats->column_iterator_init_ns = 4 * TIME_UNIT_NS_PER_SECOND;
+    context.stats->write_segment_count = 2;
+    context.stats->write_segment_bytes = 1 * 1048576;
+    context.stats->io_ns_write_remote = 3 * TIME_UNIT_NS_PER_SECOND;
     context.stats->in_queue_time_sec = 5;
     context.stats->pk_sst_merge_ns = 5 * TIME_UNIT_NS_PER_SECOND;
 
@@ -137,6 +149,9 @@ TEST_F(CompactionTaskContextTest, test_to_json_stats) {
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_local_sec":9)"));
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_remote_count":3)"));
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_local_count":2)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("write_segment_count":2)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("write_remote_mb":1)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("write_remote_sec":3)"));
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("in_queue_sec":5)"));
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("pk_sst_merge_sec":5)"));
 }

@@ -16,6 +16,7 @@
 
 #include "common/ownership.h"
 #include "common/statusor.h"
+#include "io/input_stream.h"
 #include "io/writable.h"
 #include "util/slice.h"
 
@@ -51,6 +52,11 @@ public:
     // returns NULL. The return pointer is invalidated as soon as any other
     // non-const method of OutputStream is called.
     virtual StatusOr<Position> get_direct_buffer_and_advance(int64_t size) = 0;
+
+    // Return statistics about file written, like how many time is spent on IO
+    virtual StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() {
+        return Status::NotSupported("get_numeric_statistics");
+    }
 };
 
 class OutputStreamWrapper : public OutputStream {
@@ -83,6 +89,10 @@ public:
 
     StatusOr<Position> get_direct_buffer_and_advance(int64_t size) override {
         return _impl->get_direct_buffer_and_advance(size);
+    }
+
+    StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
+        return _impl->get_numeric_statistics();
     }
 
 private:

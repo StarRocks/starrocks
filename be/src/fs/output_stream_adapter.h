@@ -55,6 +55,10 @@ public:
 
     const std::string& filename() const override { return _name; }
 
+    StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
+        return _os->get_numeric_statistics();
+    }
+
 private:
     std::unique_ptr<io::OutputStream> _os;
     std::string _name;
