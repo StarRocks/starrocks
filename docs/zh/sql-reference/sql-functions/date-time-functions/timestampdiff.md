@@ -15,7 +15,7 @@ MILLISECOND（3.2 及以后），SECOND，MINUTE，HOUR，DAY，WEEK，MONTH，Y
 ## 语法
 
 ```Haskell
-INT TIMESTAMPDIFF(unit, DATETIME datetime_expr1, DATETIME datetime_expr2)
+BIGINT TIMESTAMPDIFF(unit, DATETIME datetime_expr1, DATETIME datetime_expr2)
 ```
 
 ## 参数说明
@@ -25,7 +25,7 @@ INT TIMESTAMPDIFF(unit, DATETIME datetime_expr1, DATETIME datetime_expr2)
 
 ## 返回值说明
 
-返回 INT 类型的值。
+返回 BIGINT 类型的值。
 
 ## 示例
 

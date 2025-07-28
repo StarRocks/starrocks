@@ -15,7 +15,7 @@ MILLISECOND (since 3.2), SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
 ## Syntax
 
 ```Haskell
-INT TIMESTAMPDIFF(unit,DATETIME datetime_expr1, DATETIME datetime_expr2)
+BIGINT TIMESTAMPDIFF(unit,DATETIME datetime_expr1, DATETIME datetime_expr2)
 ```
 
 ## Parameters
@@ -25,7 +25,7 @@ INT TIMESTAMPDIFF(unit,DATETIME datetime_expr1, DATETIME datetime_expr2)
 
 ## Return value
 
-Returns an INT value.
+Returns a BIGINT value.
 
 ## Examples
 
