@@ -2218,6 +2218,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether to allow auto collection of the NDV of array columns")
     public static boolean enable_auto_collect_array_ndv = false;
 
+    @ConfField(mutable = true, comment = "Synchronously load statistics for testing purpose")
+    public static boolean enable_sync_statistics_load = false;
+
     /**
      * default bucket size of histogram statistics
      */
