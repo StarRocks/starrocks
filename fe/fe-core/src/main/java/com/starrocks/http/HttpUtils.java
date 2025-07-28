@@ -59,7 +59,10 @@ public class HttpUtils {
     private static PoolingHttpClientConnectionManager clientConnectionManager;
 
 
-    public static CloseableHttpClient getInstance() {
+    private static CloseableHttpClient getInstance() {
+        if (httpClient == null) {
+            httpClient = getHttpClient();
+        }
         return httpClient;
     }
 

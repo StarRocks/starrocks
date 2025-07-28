@@ -30,7 +30,7 @@ import java.util.List;
 //   wget http://fe_host:fe_http_port/api/v2/profile?query_id=123456&is_request_all_frontend=true;
 public class ProfileActionV2 extends RestBaseAction {
 
-    private static final String QUERY_PLAN_URI = "api/v2/profile?query_id=%s";
+    private static final String QUERY_PLAN_URI = "/api/v2/profile?query_id=%s";
 
     public ProfileActionV2(ActionController controller) {
         super(controller);
@@ -66,7 +66,7 @@ public class ProfileActionV2 extends RestBaseAction {
             // If the query profile is not found in the local fe's ProfileManager,
             // we will query other frontend nodes to get the query profile.
             String queryPath = String.format(QUERY_PLAN_URI, queryId);
-            List<String> profileList = fetchResultFromOtherFrontendNodes(queryPath, authorization, HttpMethod.GET);
+            List<String> profileList = fetchResultFromOtherFrontendNodes(queryPath, authorization, HttpMethod.GET, false);
             for (String profile : profileList) {
                 if (profile != null) {
                     sendSuccessResponse(response, profile, request);

@@ -113,6 +113,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
+import static com.starrocks.common.Config.http_port;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public abstract class StarRocksHttpTestCase {
@@ -548,7 +549,7 @@ public abstract class StarRocksHttpTestCase {
             }
         };
 
-        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", InetAddress.getLocalHost().getHostAddress(), 0);
+        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "","localhost", 0);
         frontend.setAlive(true);
         new Expectations(nodeMgr) {
             {
@@ -566,9 +567,12 @@ public abstract class StarRocksHttpTestCase {
 
                 nodeMgr.getSelfNode();
                 minTimes = 0;
-                result = new Pair<>(frontend.getHost(),  Config.http_port);
+                result = new Pair<>(frontend.getHost(),  HTTP_PORT);
             }
         };
+
+
+
 
         // init default warehouse
         globalStateMgr.getWarehouseMgr().initDefaultWarehouse();

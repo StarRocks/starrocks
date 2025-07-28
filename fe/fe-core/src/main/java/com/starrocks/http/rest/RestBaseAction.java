@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
@@ -56,6 +57,7 @@ import com.starrocks.http.HttpUtils;
 import com.starrocks.http.WebUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
@@ -300,8 +302,9 @@ public class RestBaseAction extends BaseAction {
     }
 
     public static List<String> fetchResultFromOtherFrontendNodes(String queryPath,
-                                                   String authorization,
-                                                 HttpMethod method) {
+                                                                 String authorization,
+                                                                 HttpMethod method,
+                                                                 Boolean returnMultipleResults) {
         List<Pair<String, Integer>> frontends = getOtherAliveFe();
         if (frontends.isEmpty()) {
             return List.of();
@@ -310,7 +313,7 @@ public class RestBaseAction extends BaseAction {
                 .put(HttpHeaders.AUTHORIZATION, authorization).build();
         List<String> result = Lists.newArrayList();
         for (Pair<String, Integer> front : frontends) {
-            String url = String.format("http://%s%s", front, queryPath);
+            String url = String.format("http://%s:%d%s", front.first, front.second, queryPath);
             try {
                 String data = null;
                 if (method == HttpMethod.GET) {
@@ -320,6 +323,9 @@ public class RestBaseAction extends BaseAction {
                 }
                 if (StringUtils.isNotBlank(data)) {
                     result.add(data);
+                }
+                if (!returnMultipleResults && !result.isEmpty()) {
+                    return result;
                 }
             } catch (Exception e) {
                 LOG.error("request url {} error", url, e);

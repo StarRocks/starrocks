@@ -25,6 +25,8 @@ import com.starrocks.qe.QueryDetailQueue;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 // This class is a RESTFUL interface to get query profile from all frontend nodes.
@@ -76,12 +78,13 @@ public class QueryDetailActionV2 extends RestBaseAction {
             if (user != null && !user.isEmpty()) {
                 queryPath += "&user=" + user;
             }
-            List<String> dataList = fetchResultFromOtherFrontendNodes(queryPath, authorization, HttpMethod.GET);
-            for (String data : dataList) {
-                if (data != null) {
-                    Gson gson = new Gson();
-                    QueryDetail queryDetail = gson.fromJson(data, QueryDetail.class);
-                    queryDetails.add(queryDetail);
+            List<String> dataList = fetchResultFromOtherFrontendNodes(queryPath, authorization, HttpMethod.GET, true);
+            if (dataList != null) {
+                for (String data : dataList) {
+                    if (data != null) {
+                        Gson gson = new Gson();
+                        QueryDetail[] queryDetailArray = gson.fromJson(data, QueryDetail[].class);
+                        queryDetails.addAll(Arrays.asList(queryDetailArray));                    }
                 }
             }
         }

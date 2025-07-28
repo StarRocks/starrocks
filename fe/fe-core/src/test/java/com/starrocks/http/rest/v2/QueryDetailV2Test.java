@@ -16,10 +16,12 @@ package com.starrocks.http.rest.v2;
 
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+import com.starrocks.common.Pair;
 import com.starrocks.http.StarRocksHttpTestCase;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import mockit.Mock;
 import mockit.MockUp;
@@ -29,6 +31,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -37,7 +40,7 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
     private static final String QUERY_PLAN_URI = "/api/v2/query_detail";
 
     @Test
-    public void testQueryDetailWithoutResult() throws IOException {
+    public void testQueryDetail() throws IOException {
         Request request = new Request.Builder()
                 .get()
                 .addHeader("Authorization", rootAuth)
@@ -49,7 +52,7 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
     }
 
     @Test
-    public void testQueryDetail() throws IOException {
+    public void testQueryDetailFromLeaderFront() throws IOException {
 
         QueryDetail startQueryDetail = new QueryDetail("219a2d5443c542d4-8fc938db37c892e3", false, 1, "127.0.0.1",
                 System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
@@ -89,11 +92,9 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
 
 
         new MockUp<RestBaseAction>() {
-
             @Mock
-            public static List<String> fetchResultFromOtherFrontendNodes(String queryPath,
-                                                                         String authorization,
-                                                                         HttpMethod method) {
+            public static List<Pair<String, Integer>> getOtherAliveFe() {
+
                 QueryDetail startQueryDetail = new QueryDetail("219a2d5443c542d4-8fc938db37c892e5", false, 1, "127.0.0.1",
                         System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
                         "testDb", "select * from table2 limit 1",
@@ -105,11 +106,13 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
                 startQueryDetail.setMemCostBytes(100005);
                 QueryDetailQueue.addQueryDetail(startQueryDetail);
 
-                Gson gson = new Gson();
-                String startQueryDetailStr = gson.toJson(startQueryDetail);
-                return Lists.newArrayList(startQueryDetailStr);
+                Pair<String, Integer> frontNode = GlobalStateMgr.getCurrentState()
+                        .getNodeMgr()
+                        .getSelfNode();
+                List<Pair<String, Integer>> frontNodes = new ArrayList<>();
+                frontNodes.add(frontNode);
+                return frontNodes;
             }
-
         };
 
         long eventTime  = startQueryDetail.getEventTime() - 1;
@@ -125,6 +128,6 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
         String respStr = Objects.requireNonNull(response.body()).string();
         Gson gson = new Gson();
         QueryDetail[] details = gson.fromJson(respStr, QueryDetail[].class);
-        Assertions.assertTrue(details.length == 2);
+        Assertions.assertTrue(details.length == 3);
     }
 }
