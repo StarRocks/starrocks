@@ -90,7 +90,7 @@ public class OuterJoinEliminationRule extends TransformationRule {
             return false;
         }
 
-        // if a post-join filter exist, transfrom cause wrong elimination
+        // if a post-join filter exist, transform cause wrong elimination
         if (joinOp.getPredicate() != null) {
             return false;
         }
@@ -140,12 +140,7 @@ public class OuterJoinEliminationRule extends TransformationRule {
         int outerSideIdx = joinType.isLeftOuterJoin() ? 0 : 1;
         OptExpression outerChild = input.inputAt(0).inputAt(outerSideIdx);
 
-        OptExpression result = outerChild;
-
-        LogicalAggregationOperator newAggOp = new LogicalAggregationOperator(
-                aggOp.getType(), aggOp.getGroupingKeys(), aggOp.getAggregations());
-
-        return Lists.newArrayList(OptExpression.create(newAggOp, result));
+        return Lists.newArrayList(OptExpression.create(aggOp, outerChild));
     }
 
     /**
@@ -158,7 +153,7 @@ public class OuterJoinEliminationRule extends TransformationRule {
             return true;
         }
 
-        //count disticnt also duplicate-insensitive
+        //count distinct also duplicate-insensitive
         if (FunctionSet.COUNT.equals(fnName) && aggFunc.isDistinct()) {
             return true;
         }
@@ -178,11 +173,9 @@ public class OuterJoinEliminationRule extends TransformationRule {
 
         List<ScalarOperator> conditions = Utils.extractConjuncts(joinCondition);
         for (ScalarOperator condition : conditions) {
-            if (!(condition instanceof BinaryPredicateOperator)) {
+            if (!(condition instanceof BinaryPredicateOperator binary)) {
                 return false;
             }
-
-            BinaryPredicateOperator binary = (BinaryPredicateOperator) condition;
 
             if (!binary.getBinaryType().equals(BinaryType.EQ)) {
                 return false;
