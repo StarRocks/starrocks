@@ -125,4 +125,19 @@ public class OuterJoinEliminationRuleTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assertions.assertTrue(plan.contains("LEFT OUTER JOIN"));
     }
+
+    @Test
+    public void testLeftSideIsPushdownAgg() throws Exception {
+        String sql = "SELECT /*+ SET_VAR(cbo_push_down_aggregate_mode='1')*/" +
+                " (ifnull(SUM(murmur_hash3_32(col_1)), 0) + ifnull(SUM(murmur_hash3_32(col_2)), 0)) AS f\n" +
+                "FROM (\n" +
+                "        SELECT \n" +
+                "            MAX(CAST((t3.v11 + t3.v12) AS BIGINT)) AS col_1, \n" +
+                "            MIN(CAST(t3.v10 % 2 AS BIGINT)) AS col_2\n" +
+                "        FROM t3 LEFT JOIN t4 ON t3.v10 = t4.v13\n" +
+                "        GROUP BY t3.v10, t3.v11, t3.v12\n" +
+                "    ) AS t;\n";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertFalse(plan.contains("JOIN"));
+    }
 }
