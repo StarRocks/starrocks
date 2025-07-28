@@ -174,9 +174,9 @@ Status AgentServer::Impl::init() {
             }
         }
 
-#define BUILD_DYNAMIC_TASK_THREAD_POOL(name, min_threads, max_threads, queue_size, pool)                              \
-    BUILD_DYNAMIC_TASK_THREAD_POOL_WITH_IDLE(name, min_threads, max_threads, queue_size, 500 /*default value 500ms*/, \
-                                             pool)
+#define BUILD_DYNAMIC_TASK_THREAD_POOL(name, min_threads, max_threads, queue_size, pool) \
+    BUILD_DYNAMIC_TASK_THREAD_POOL_WITH_IDLE(name, min_threads, max_threads, queue_size, \
+                                             THREAD_POOL_DEFAULT_IDLE_TIMEOUT_MS, pool)
 
 #define BUILD_DYNAMIC_TASK_THREAD_POOL_WITH_IDLE(name, min_threads, max_threads, queue_size, idle_timeout, pool) \
     do {                                                                                                         \

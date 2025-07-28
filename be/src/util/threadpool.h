@@ -64,6 +64,8 @@ class Thread;
 class ThreadPool;
 class ThreadPoolToken;
 
+#define THREAD_POOL_DEFAULT_IDLE_TIMEOUT_MS 500
+
 class Runnable {
 public:
     virtual void run() = 0;
