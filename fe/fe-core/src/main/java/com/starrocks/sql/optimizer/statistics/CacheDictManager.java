@@ -49,6 +49,34 @@ import java.util.concurrent.Executor;
 
 import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
 
+/**
+ * CacheDictManager manages global dictionary caching for low cardinality string columns.
+ * <p>
+ * Global Dictionary Maintenance:
+ * <p>
+ * 1. Dictionary Collection:
+ * - Dictionaries are collected from BE (Backend) nodes via queryDictSync()
+ * - Only columns with cardinality <= LOW_CARDINALITY_THRESHOLD are considered
+ * - Dictionary data size must be <= 1MB to ensure BE can generate dictionary pages after compaction
+ * <p>
+ * 2. Cache Management:
+ * - Uses Caffeine AsyncLoadingCache with maximum size from Config.statistic_dict_columns
+ * - Cache entries are keyed by ColumnIdentifier (tableId + columnName)
+ * - Cache automatically loads dictionaries asynchronously when accessed
+ * <p>
+ * 3. Version Control:
+ * - Each dictionary has a version timestamp for consistency checking
+ * - Dictionaries are invalidated when versions become outdated
+ * - Version mismatches trigger dictionary removal and re-collection
+ * <p>
+ * 4. Data Update Handling:
+ * - When data is updated (INSERT/UPDATE/DELETE), the dictionary version becomes stale
+ * - hasGlobalDict() checks version timestamps and invalidates outdated dictionaries
+ * - updateGlobalDict() updates version timestamps when new data is collected
+ * - Version mismatches between collectVersion and dictCollectVersion trigger removal
+ * - During data updates, queries may fall back to non-dictionary optimization temporarily
+ * - New dictionaries are automatically collected when cache is accessed after invalidation
+ */
 public class CacheDictManager implements IDictManager, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CacheDictManager.class);
     private static final Set<ColumnIdentifier> NO_DICT_STRING_COLUMNS = Sets.newConcurrentHashSet();
