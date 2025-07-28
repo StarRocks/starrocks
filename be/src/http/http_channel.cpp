@@ -20,9 +20,9 @@
 #include <event2/buffer.h>
 #include <event2/http.h>
 
+#include <optional>
 #include <sstream>
 #include <string>
-#include <optional>
 
 #include "http/http_headers.h"
 #include "http/http_request.h"
