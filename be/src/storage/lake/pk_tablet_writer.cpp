@@ -93,7 +93,7 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         std::string segment_name = std::string(basename(segment_path));
         _files.emplace_back(FileInfo{segment_name, segment_size, _seg_writer->encryption_meta()});
         _data_size += segment_size;
-        _stats.bytes_write += segment_size;
+        collect_writer_stats(_stats, _seg_writer.get());
         _stats.segment_count++;
         if (segment) {
             segment->set_data_size(segment_size);

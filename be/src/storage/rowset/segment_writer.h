@@ -42,6 +42,7 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
+#include "io/input_stream.h"
 #include "runtime/global_dict/types.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
@@ -147,6 +148,13 @@ public:
 
     const std::string& encryption_meta() const { return _opts.encryption_meta; }
 
+<<<<<<< HEAD
+=======
+    int64_t bundle_file_offset() const;
+
+    StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics();
+
+>>>>>>> b0f5cbbbb1 ([Enhancement] add segment write time in lake compaction (#60891))
 private:
     Status _write_short_key_index();
     Status _write_footer();

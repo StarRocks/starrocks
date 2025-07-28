@@ -451,6 +451,20 @@ public:
 
     // Returns the filename provided when the WritableFile was constructed.
     virtual const std::string& filename() const = 0;
+<<<<<<< HEAD
+=======
+
+    // The offset is the position of the file in the shared file.
+    // It will return -1 if the file is not a shared file.
+    virtual int64_t bundle_file_offset() const { return -1; }
+
+    virtual void set_encryption_info(const FileEncryptionInfo& info) {}
+
+    // Return statistics about file written, like how many time is spent on IO
+    virtual StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() {
+        return Status::NotSupported("get_numeric_statistics");
+    }
+>>>>>>> b0f5cbbbb1 ([Enhancement] add segment write time in lake compaction (#60891))
 };
 
 } // namespace starrocks
