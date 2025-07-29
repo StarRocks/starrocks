@@ -197,6 +197,12 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                         if (usedColumns.size() != 1) {
                             return false;
                         }
+                        ColumnRefOperator usedColumn =
+                                context.getColumnRefFactory().getColumnRef(usedColumns.getFirstId());
+                        Column column = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
+                        if (column == null) {
+                            return false;
+                        }
                         // min/max column should have zonemap index
                         Type type = aggregator.getType();
                         return !(type.isStringType() || type.isComplexType());
@@ -246,6 +252,10 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                 }
                 ColumnRefOperator ref = minMaxRefs.get(0);
                 if (!ref.getType().isNumericType() && !ref.getType().isDate()) {
+                    continue;
+                }
+
+                if (!scanOperator.getColRefToColumnMetaMap().containsKey(ref)) {
                     continue;
                 }
 

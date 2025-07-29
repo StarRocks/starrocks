@@ -117,6 +117,7 @@ public class IcebergColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable 
 
                     ConnectContext context = SIMPLE_EXECUTOR.createConnectContext();
                     context.getSessionVariable().setPipelineDop(1);
+                    context.getSessionVariable().setIsEnableMinMaxOptimization(true);
                     List<TResultBatch> result = SIMPLE_EXECUTOR.executeDQL(sql, context);
                     if (result.isEmpty()) {
                         return Optional.empty();
