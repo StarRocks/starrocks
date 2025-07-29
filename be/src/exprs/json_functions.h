@@ -234,10 +234,6 @@ private:
     // Helper function for json_remove to remove multiple paths from JSON
     static StatusOr<JsonValue> _remove_json_paths(JsonValue* json_value, const std::vector<std::string>& paths, 
                                                    arangodb::velocypack::Builder* builder);
-
-    // Helper function to remove a single path from JSON
-    static StatusOr<JsonValue> _remove_single_path(JsonValue* json_value, const JsonPath& path, 
-                                                    arangodb::velocypack::Builder* builder);
 };
 
 } // namespace starrocks

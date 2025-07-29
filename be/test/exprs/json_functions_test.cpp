@@ -1666,109 +1666,105 @@ TEST_F(JsonFunctionsTest, query_json_obj) {
     ASSERT_EQ(result->debug_string(), "[0]");
 }
 
-// Test for json_remove function
-TEST_F(JsonFunctionsTest, json_remove) {
+// Test parameters for json_remove function
+struct JsonRemoveTestParam {
+    std::string json_input;
+    std::vector<std::string> paths_to_remove;
+    std::vector<std::string> keys_should_exist;
+    std::vector<std::string> keys_should_not_exist;
+    std::string description;
+};
+
+class JsonRemoveTestFixture : public ::testing::TestWithParam<JsonRemoveTestParam> {};
+
+TEST_P(JsonRemoveTestFixture, json_remove) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto param = GetParam();
     
-    // Test case 1: Remove single key from object
-    {
-        JsonColumn::Ptr json_column = JsonColumn::create();
-        auto json = JsonValue::parse(R"({"a": 1, "b": [10, 20, 30]})");
-        ASSERT_TRUE(json.ok());
-        json_column->append(&json.value());
-        
+    // Create JSON column
+    JsonColumn::Ptr json_column = JsonColumn::create();
+    auto json = JsonValue::parse(param.json_input);
+    ASSERT_TRUE(json.ok()) << "Failed to parse JSON: " << param.json_input;
+    json_column->append(&json.value());
+    
+    // Create columns with JSON and all paths
+    Columns columns{json_column};
+    for (const auto& path : param.paths_to_remove) {
         BinaryColumn::Ptr path_column = BinaryColumn::create();
-        path_column->append("$.a");
-        
-        Columns columns{json_column, path_column};
-        
-        ASSERT_TRUE(JsonFunctions::native_json_path_prepare(
-                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-        
-        ColumnPtr result = JsonFunctions::json_remove(ctx.get(), columns).value();
-        ASSERT_TRUE(!!result);
-        
-        Datum datum = result->get(0);
-        ASSERT_FALSE(datum.is_null());
-        std::string json_str = datum.get_json()->to_string().value();
-        
-        // Should remove key "a" and keep "b"
-        ASSERT_TRUE(json_str.find("\"a\"") == std::string::npos);
-        ASSERT_TRUE(json_str.find("\"b\"") != std::string::npos);
-        
-        ASSERT_TRUE(JsonFunctions::native_json_path_close(
-                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
+        path_column->append(path);
+        columns.push_back(path_column);
     }
     
-    // Test case 2: Remove multiple keys
-    {
-        JsonColumn::Ptr json_column = JsonColumn::create();
-        auto json = JsonValue::parse(R"({"a": 1, "b": [10, 20, 30], "c": "test"})");
-        ASSERT_TRUE(json.ok());
-        json_column->append(&json.value());
-        
-        BinaryColumn::Ptr path_column1 = BinaryColumn::create();
-        path_column1->append("$.a");
-        
-        BinaryColumn::Ptr path_column2 = BinaryColumn::create();
-        path_column2->append("$.c");
-        
-        Columns columns{json_column, path_column1, path_column2};
-        
-        ASSERT_TRUE(JsonFunctions::native_json_path_prepare(
-                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-        
-        ColumnPtr result = JsonFunctions::json_remove(ctx.get(), columns).value();
-        ASSERT_TRUE(!!result);
-        
-        Datum datum = result->get(0);
-        ASSERT_FALSE(datum.is_null());
-        std::string json_str = datum.get_json()->to_string().value();
-        
-        // Should remove keys "a" and "c", keep only "b"
-        ASSERT_TRUE(json_str.find("\"a\"") == std::string::npos);
-        ASSERT_TRUE(json_str.find("\"c\"") == std::string::npos);
-        ASSERT_TRUE(json_str.find("\"b\"") != std::string::npos);
-        
-        ASSERT_TRUE(JsonFunctions::native_json_path_close(
-                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
+    // Prepare JSON path context
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+    
+    // Execute json_remove function
+    ColumnPtr result = JsonFunctions::json_remove(ctx.get(), columns).value();
+    ASSERT_TRUE(!!result) << "json_remove returned null result for: " << param.description;
+    
+    // Verify result
+    Datum datum = result->get(0);
+    ASSERT_FALSE(datum.is_null()) << "Result should not be null for: " << param.description;
+    std::string json_str = datum.get_json()->to_string().value();
+    
+    // Check keys that should exist
+    for (const auto& key : param.keys_should_exist) {
+        ASSERT_TRUE(json_str.find("\"" + key + "\"") != std::string::npos) 
+            << "Key '" << key << "' should exist in result: " << json_str 
+            << " for test: " << param.description;
     }
     
-    // Test case 3: Invalid path should be ignored
-    {
-        JsonColumn::Ptr json_column = JsonColumn::create();
-        auto json = JsonValue::parse(R"({"a": 1, "b": 2})");
-        ASSERT_TRUE(json.ok());
-        json_column->append(&json.value());
-        
-        BinaryColumn::Ptr path_column = BinaryColumn::create();
-        path_column->append("invalid_path");
-        
-        Columns columns{json_column, path_column};
-        
-        ASSERT_TRUE(JsonFunctions::native_json_path_prepare(
-                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-        
-        ColumnPtr result = JsonFunctions::json_remove(ctx.get(), columns).value();
-        ASSERT_TRUE(!!result);
-        
-        Datum datum = result->get(0);
-        ASSERT_FALSE(datum.is_null());
-        std::string json_str = datum.get_json()->to_string().value();
-        
-        // Should keep original JSON since path is invalid
-        ASSERT_TRUE(json_str.find("\"a\"") != std::string::npos);
-        ASSERT_TRUE(json_str.find("\"b\"") != std::string::npos);
-        
-        ASSERT_TRUE(JsonFunctions::native_json_path_close(
-                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
+    // Check keys that should not exist
+    for (const auto& key : param.keys_should_not_exist) {
+        ASSERT_TRUE(json_str.find("\"" + key + "\"") == std::string::npos) 
+            << "Key '" << key << "' should not exist in result: " << json_str 
+            << " for test: " << param.description;
     }
+    
+    // Clean up JSON path context
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 }
+
+INSTANTIATE_TEST_SUITE_P(JsonRemoveTests, JsonRemoveTestFixture, ::testing::Values(
+    JsonRemoveTestParam{
+        R"({"a": 1, "b": [10, 20, 30]})",
+        {"$.a"},
+        {"b"},
+        {"a"},
+        "Remove single key from object"
+    },
+    JsonRemoveTestParam{
+        R"({"a": 1, "b": [10, 20, 30], "c": "test"})",
+        {"$.a", "$.c"},
+        {"b"},
+        {"a", "c"},
+        "Remove multiple keys from object"
+    },
+    JsonRemoveTestParam{
+        R"({"a": 1, "b": 2})",
+        {"invalid_path"},
+        {"a", "b"},
+        {},
+        "Invalid path should be ignored"
+    },
+    JsonRemoveTestParam{
+        R"({"x": 100, "y": 200, "z": 300})",
+        {"$.y"},
+        {"x", "z"},
+        {"y"},
+        "Remove middle key from object"
+    },
+    JsonRemoveTestParam{
+        R"({"single": "value"})",
+        {"$.single"},
+        {},
+        {"single"},
+        "Remove single key from single-key object"
+    }
+));
 
 } // namespace starrocks
