@@ -48,11 +48,13 @@
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-api</artifactId>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
+            <scope>provided</scope>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.google.cloud.bigdataoss/gcs-connector -->
@@ -61,6 +63,7 @@
             <artifactId>gcs-connector</artifactId>
             <version>${gcs.connector.version}</version>
             <classifier>shaded</classifier>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 
