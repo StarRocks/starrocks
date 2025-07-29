@@ -514,8 +514,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     // `read_all` only need to one api call and not increase the IOPS
     // but it will incur additional IO bandwidth overhead
     // Perhaps we need to consider the additional costs of IO bandwidth and IOPS later.
-    ASSIGN_OR_RETURN(auto input_file, file_system->new_random_access_file(opts, path));
-    ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
+    auto serialized_string = _bundle_tablet_metadata_group.Do(path, [&]() {
+        ASSIGN_OR_RETURN(auto input_file, file_system->new_random_access_file(opts, path));
+        return input_file->read_all();
+    });
 
     auto file_size = serialized_string.size();
     ASSIGN_OR_RETURN(auto bundle_metadata, parse_bundle_tablet_metadata(path, serialized_string));
