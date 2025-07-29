@@ -153,6 +153,13 @@ public:
     DEFINE_VECTORIZED_FN(json_keys);
 
     /**
+     * Remove data from a JSON document at one or more specified JSON paths
+     * @param JSON, JSONPath, [JSONPath, ...]
+     * @return JSON with specified paths removed
+     */
+    DEFINE_VECTORIZED_FN(json_remove);
+
+    /**
      * Return json built from struct/map
      */
     DEFINE_VECTORIZED_FN(to_json);
@@ -223,6 +230,14 @@ private:
 
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
                                     std::vector<SimpleJsonPath>* parsed_paths);
+
+    // Helper function for json_remove to remove multiple paths from JSON
+    static StatusOr<JsonValue> _remove_json_paths(JsonValue* json_value, const std::vector<std::string>& paths, 
+                                                   arangodb::velocypack::Builder* builder);
+
+    // Helper function to remove a single path from JSON
+    static StatusOr<JsonValue> _remove_single_path(JsonValue* json_value, const JsonPath& path, 
+                                                    arangodb::velocypack::Builder* builder);
 };
 
 } // namespace starrocks
