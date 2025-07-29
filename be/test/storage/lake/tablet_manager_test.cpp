@@ -699,8 +699,8 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
                         auto res = _tablet_manager->get_tablet_metadata(i + 1, 2);
                         ASSERT_TRUE(res.ok());
                         TabletMetadataPtr metadata = std::move(res).value();
-                        ASSERT_EQ(metadata->schema().id(), 10);
-                        ASSERT_EQ(metadata->historical_schemas_size(), 2);
+                        ASSERT_EQ(metadata->schema().id(), 10 + i);
+                        ASSERT_EQ(metadata->historical_schemas_size(), 2 + i);
                         // check id
                         ASSERT_EQ(metadata->id(), i + 1);
                         // check version
@@ -714,6 +714,8 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
     }
 
     {
+        // prune metacache
+        _tablet_manager->prune_metacache();
         std::string fp_name = "tablet_schema_not_found_in_bundle_metadata";
         auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
         PFailPointTriggerMode trigger_mode;
