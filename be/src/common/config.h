@@ -113,6 +113,8 @@ CONF_Int32(push_worker_count_high_priority, "3");
 
 // The count of thread to publish version per transaction
 CONF_mInt32(transaction_publish_version_worker_count, "0");
+// The idle time of transaction publish version thread pool, default 60 seconds.
+CONF_Int32(transaction_publish_version_thread_pool_idle_time_ms, "60000");
 // The min count of thread to publish version per transaction
 CONF_mInt32(transaction_publish_version_thread_pool_num_min, "0");
 

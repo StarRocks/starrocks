@@ -1568,6 +1568,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：生效版本的最大线程数。当该参数被设置为小于或等于 `0` 时，系统默认使用当前节点的 CPU 核数，以避免因使用固定值而导致在导入并行较高时线程资源不足。自 2.5 版本起，默认值由 `8` 变更为 `0`。
 - 引入版本：-
 
+##### transaction_publish_version_thread_pool_idle_time_ms
+
+- 默认值：60000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：否
+- 描述：线程被 Publish Version 线程池回收前的 Idle 时间。
+- 引入版本：-
+
 <!--
 ##### transaction_apply_worker_count
 
