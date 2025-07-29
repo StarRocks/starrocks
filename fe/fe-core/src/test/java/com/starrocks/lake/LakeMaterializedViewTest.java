@@ -145,7 +145,7 @@ public class LakeMaterializedViewTest {
 
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(dbId, mvId, partitionId, indexId, 0, TStorageMedium.HDD, true);
+        TabletMeta tabletMeta = new TabletMeta(dbId, mvId, partitionId, indexId, TStorageMedium.HDD, true);
         index.addTablet(tablet1, tabletMeta);
         index.addTablet(tablet2, tabletMeta);
 
@@ -421,7 +421,7 @@ public class LakeMaterializedViewTest {
 
         // partition1
         MaterializedIndex index1 = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta1 = new TabletMeta(dbId, mvId, partition1Id, indexId, 0, TStorageMedium.HDD, true);
+        TabletMeta tabletMeta1 = new TabletMeta(dbId, mvId, partition1Id, indexId, TStorageMedium.HDD, true);
         Tablet tablet1 = new LakeTablet(tablet1Id);
         index1.addTablet(tablet1, tabletMeta1);
         Partition partition1 = new Partition(partition1Id, physicalPartitionId1, "p1", index1, distributionInfo);
@@ -434,7 +434,7 @@ public class LakeMaterializedViewTest {
 
         // partition2
         MaterializedIndex index2 = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta2 = new TabletMeta(dbId, mvId, partition2Id, indexId, 0, TStorageMedium.HDD, true);
+        TabletMeta tabletMeta2 = new TabletMeta(dbId, mvId, partition2Id, indexId, TStorageMedium.HDD, true);
         Tablet tablet2 = new LakeTablet(tablet2Id);
         index2.addTablet(tablet2, tabletMeta2);
         Partition partition2 = new Partition(partition2Id, physicalPartitionId2, "p2", index1, distributionInfo);

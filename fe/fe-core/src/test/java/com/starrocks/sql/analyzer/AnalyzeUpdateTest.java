@@ -130,7 +130,7 @@ public class AnalyzeUpdateTest {
                 // Index
                 MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
                 TabletMeta tabletMeta =
-                        new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
+                        new TabletMeta(dbId, tableId, partitionId, indexId, TStorageMedium.HDD, true);
                 index.addTablet(tablet, tabletMeta);
 
                 // Partition

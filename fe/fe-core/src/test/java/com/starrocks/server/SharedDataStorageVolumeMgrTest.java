@@ -862,7 +862,7 @@ public class SharedDataStorageVolumeMgrTest {
 
                 // Index
                 MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-                TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
+                TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, TStorageMedium.HDD, true);
                 index.addTablet(tablet1, tabletMeta);
                 index.addTablet(tablet2, tabletMeta);
 

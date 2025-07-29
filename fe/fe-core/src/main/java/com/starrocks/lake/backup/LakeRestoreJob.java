@@ -284,7 +284,7 @@ public class LakeRestoreJob extends RestoreJob {
             MaterializedIndexMeta indexMeta = restoreTbl.getIndexMetaByIndexId(restoredIdx.getId());
             TStorageMedium medium = restoreTbl.getPartitionInfo().getDataProperty(restorePart.getId()).getStorageMedium();
             TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), restorePart.getId(),
-                    restoredIdx.getId(), indexMeta.getSchemaHash(), medium, true);
+                    restoredIdx.getId(), medium, true);
             for (Tablet restoreTablet : restoredIdx.getTablets()) {
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
             }

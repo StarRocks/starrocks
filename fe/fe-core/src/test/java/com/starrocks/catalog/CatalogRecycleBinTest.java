@@ -265,7 +265,7 @@ public class CatalogRecycleBinTest {
 
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, TStorageMedium.SSD);
         index.addTablet(tablet, tabletMeta);
 
         // Partition
@@ -339,7 +339,7 @@ public class CatalogRecycleBinTest {
 
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, TStorageMedium.SSD);
         index.addTablet(tablet, tabletMeta);
 
         // Partition

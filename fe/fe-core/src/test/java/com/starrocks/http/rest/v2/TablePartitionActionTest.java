@@ -188,7 +188,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
         // index
         MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(
-                testDbId, RANGE_PARTITION_TABLE_ID, BASE_PARTITION_ID, testIndexId, testSchemaHash, TStorageMedium.HDD, true);
+                testDbId, RANGE_PARTITION_TABLE_ID, BASE_PARTITION_ID, testIndexId, TStorageMedium.HDD, true);
         baseIndex.addTablet(tablet, tabletMeta);
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
@@ -357,7 +357,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
         // index
         MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(
-                testDbId, LIST_PARTITION_TABLE_ID, BASE_PARTITION_ID, testIndexId, testSchemaHash, TStorageMedium.HDD);
+                testDbId, LIST_PARTITION_TABLE_ID, BASE_PARTITION_ID, testIndexId, TStorageMedium.HDD);
         baseIndex.addTablet(tablet, tabletMeta);
 
         tablet.addReplica(new Replica(

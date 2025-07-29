@@ -104,7 +104,7 @@ public class ReplaceLakePartitionTest {
         MaterializedIndex index = new MaterializedIndex(indexId);
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (long id : tabletId) {
-            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, 0, 0, TStorageMedium.HDD, true);
+            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, 0, TStorageMedium.HDD, true);
             invertedIndex.addTablet(id, tabletMeta);
             index.addTablet(new LakeTablet(id), tabletMeta);
         }
@@ -143,7 +143,7 @@ public class ReplaceLakePartitionTest {
         MaterializedIndex index = new MaterializedIndex(indexId);
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (long id : newTabletId) {
-            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, newPartitionId, 0, 0, TStorageMedium.HDD, true);
+            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, newPartitionId, 0, TStorageMedium.HDD, true);
             invertedIndex.addTablet(id, tabletMeta);
             index.addTablet(new LakeTablet(id), tabletMeta);
         }

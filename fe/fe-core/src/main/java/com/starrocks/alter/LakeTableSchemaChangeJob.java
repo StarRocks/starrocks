@@ -992,7 +992,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             assert shadowIndexId != null;
             assert shadowIndex != null;
             TStorageMedium medium = table.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
-            TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId, 0, medium, true);
+            TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId, medium, true);
             for (Tablet shadowTablet : shadowIndex.getTablets()) {
                 invertedIndex.addTablet(shadowTablet.getId(), shadowTabletMeta);
             }
@@ -1068,7 +1068,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
                 // Add Tablet to TabletInvertedIndex.
                 TabletMeta shadowTabletMeta =
-                        new TabletMeta(dbId, tableId, partition.getId(), shadowIdxId, 0, medium, true);
+                        new TabletMeta(dbId, tableId, partition.getId(), shadowIdxId, medium, true);
                 for (Tablet tablet : shadowIdx.getTablets()) {
                     invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
                 }

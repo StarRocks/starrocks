@@ -779,7 +779,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             PhysicalPartition physicalPartition = tbl.getPhysicalPartition(partitionId);
             TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
             TabletMeta rollupTabletMeta = new TabletMeta(dbId, tableId, partitionId, rollupIndexId,
-                    rollupSchemaHash, medium);
+                    medium);
 
             for (Tablet rollupTablet : rollupIndex.getTablets()) {
                 invertedIndex.addTablet(rollupTablet.getId(), rollupTabletMeta);
