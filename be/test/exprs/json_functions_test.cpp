@@ -1853,5 +1853,69 @@ INSTANTIATE_TEST_SUITE_P(
                         "Remove nested key where intermediate path contains a dot character"}
         ));
 // clang-format on
+// Test cases for json_contains function
+class JsonContainsTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, bool>> {};
+
+TEST_P(JsonContainsTestFixture, json_contains) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    JsonColumn::Ptr target_json = JsonColumn::create();
+    JsonColumn::Ptr candidate_json = JsonColumn::create();
+
+    std::string param_target = std::get<0>(GetParam());
+    std::string param_candidate = std::get<1>(GetParam());
+    bool param_contains = std::get<2>(GetParam());
+
+    auto target = JsonValue::parse(param_target);
+    auto candidate = JsonValue::parse(param_candidate);
+    ASSERT_TRUE(target.ok());
+    ASSERT_TRUE(candidate.ok());
+    
+    target_json->append(&*target);
+    candidate_json->append(&*candidate);
+
+    Columns columns{target_json, candidate_json};
+
+    ColumnPtr result = JsonFunctions::json_contains(ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+
+    if (param_contains) {
+        ASSERT_TRUE((bool)result->get(0).get_uint8());
+    } else {
+        ASSERT_FALSE((bool)result->get(0).get_uint8());
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(JsonContainsTest, JsonContainsTestFixture,
+                         ::testing::Values(
+                                 // Basic scalar contains
+                                 std::make_tuple(R"("hello")", R"("hello")", true),
+                                 std::make_tuple(R"("hello")", R"("world")", false),
+                                 std::make_tuple("123", "123", true),
+                                 std::make_tuple("123", "456", false),
+                                 std::make_tuple("true", "true", true),
+                                 std::make_tuple("true", "false", false),
+                                 std::make_tuple("null", "null", true),
+                                 
+                                 // Object contains
+                                 std::make_tuple(R"({"a": 1, "b": 2})", R"({"a": 1})", true),
+                                 std::make_tuple(R"({"a": 1, "b": 2})", R"({"b": 2})", true),
+                                 std::make_tuple(R"({"a": 1, "b": 2})", R"({"a": 1, "b": 2})", true),
+                                 std::make_tuple(R"({"a": 1, "b": 2})", R"({"c": 3})", false),
+                                 std::make_tuple(R"({"a": 1, "b": 2})", R"({"a": 2})", false),
+                                 
+                                 // Array contains
+                                 std::make_tuple(R"([1, 2, 3])", R"([1, 2])", true),
+                                 std::make_tuple(R"([1, 2, 3])", R"([2, 3])", true),
+                                 std::make_tuple(R"([1, 2, 3])", R"([1, 2, 3])", true),
+                                 std::make_tuple(R"([1, 2, 3])", R"([4, 5])", false),
+                                 std::make_tuple(R"([1, 2, 3])", "2", true),
+                                 std::make_tuple(R"([1, 2, 3])", "4", false),
+                                 
+                                 // Nested structures
+                                 std::make_tuple(R"({"a": [1, 2], "b": {"c": 3}})", R"({"a": [1]})", false), // partial array match not supported
+                                 std::make_tuple(R"({"a": [1, 2], "b": {"c": 3}})", R"({"b": {"c": 3}})", true),
+                                 std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"([{"a": 1}])", true),
+                                 std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 1})", true)
+                         ));
 
 } // namespace starrocks
