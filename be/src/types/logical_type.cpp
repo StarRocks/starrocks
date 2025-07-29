@@ -59,6 +59,9 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "INT256") return TYPE_INT256;
     if (upper_type_str == "JSON") return TYPE_JSON;
     if (upper_type_str == "VARBINARY") return TYPE_VARBINARY;
+    if (upper_type_str == "ANY_ARRAY") return TYPE_ARRAY;
+    if (upper_type_str == "ANY_STRUCT") return TYPE_STRUCT;
+    if (upper_type_str == "ANY_MAP") return TYPE_MAP;
     LOG(WARNING) << "invalid type string. [type='" << type_str << "']";
     return TYPE_UNKNOWN;
 }
