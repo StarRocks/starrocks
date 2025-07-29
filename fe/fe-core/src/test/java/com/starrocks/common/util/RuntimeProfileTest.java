@@ -620,13 +620,6 @@ public class RuntimeProfileTest {
         Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("__MAX_OF_count1"));
         Assertions.assertEquals(1, mergedProfile.getCounterMap().get("__MAX_OF_count1").getValue());
         Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("count1_sub"));
-        Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("count1"));
-        Assertions.assertEquals(2, mergedProfile.getCounterMap().get("count1").getValue());
-        Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("__MIN_OF_count1"));
-        Assertions.assertEquals(1, mergedProfile.getCounterMap().get("__MIN_OF_count1").getValue());
-        Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("__MAX_OF_count1"));
-        Assertions.assertEquals(1, mergedProfile.getCounterMap().get("__MAX_OF_count1").getValue());
-        Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("count1_sub"));
         Assertions.assertEquals(2, mergedProfile.getCounterMap().get("count1_sub").getValue());
         Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("count2"));
         Assertions.assertEquals(5, mergedProfile.getCounterMap().get("count2").getValue());

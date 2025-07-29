@@ -403,6 +403,7 @@ public class RuntimeProfile {
                 if (pair == null) {
                     SummarizationCounter counter =
                             addSummarizationCounter(tcounter.name, tcounter.type, tcounter.strategy, ROOT_COUNTER);
+                    counter.merge(tcounter, true);
                 } else {
                     Preconditions.checkArgument(pair.first.unit == tcounter.type);
                     pair.first.merge(tcounter, true);
