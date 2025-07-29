@@ -513,8 +513,6 @@ struct StatusInstance {
             return Status::InternalError(e.what()); \
         }                                           \
     } while (0)
-<<<<<<< HEAD
-=======
 
 #ifdef NDEBUG
 #define RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, condition)                                    \
@@ -540,4 +538,3 @@ struct StatusInstance {
 #define RETURN_IF_DCHECK_GT_FAILED(val1, val2) DCHECK_GT(val1, val2)
 
 #endif
->>>>>>> d46937ed5c ([UT] Fix compilation and be-ut (#61347))

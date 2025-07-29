@@ -62,12 +62,7 @@ private:
     }
 };
 
-<<<<<<< HEAD
-TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
-    GTEST_SKIP();
-=======
 GROUP_SLOW_TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
->>>>>>> d46937ed5c ([UT] Fix compilation and be-ut (#61347))
     std::vector<std::string> paths;
     // We don't support below files in init phase, but we need to make sure that will not make BE crashed.
     std::set<std::string> unsupported_paths_init;
