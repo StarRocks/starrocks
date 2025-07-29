@@ -314,7 +314,8 @@ PARALLEL_TEST(NullableColumnTest, test_murmur_hash_varbinary) {
 PARALLEL_TEST(NullableColumnTest, test_murmur_hash_uuid) {
     NullableColumn::Ptr c0 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     // f79c3e09-677c-4bbd-a479-3f349cb785e7
-    std::vector<uint8_t> data{0xf7, 0x9c, 0x3e, 0x09, 0x67, 0x7c, 0x4b, 0xbd, 0xa4, 0x79, 0x3f, 0x34, 0x9c, 0xb7, 0x85, 0xe7};
+    std::vector<uint8_t> data{0xf7, 0x9c, 0x3e, 0x09, 0x67, 0x7c, 0x4b, 0xbd,
+                              0xa4, 0x79, 0x3f, 0x34, 0x9c, 0xb7, 0x85, 0xe7};
     Slice slice = Slice(data.data(), 16);
     c0->append_strings(&slice, 1);
 
