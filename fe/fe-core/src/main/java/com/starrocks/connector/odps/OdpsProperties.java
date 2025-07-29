@@ -41,7 +41,7 @@ public class OdpsProperties {
     public static final String ENABLE_TABLE_NAME_CACHE = "odps.cache.table-name.enable";
     public static final String TABLE_NAME_CACHE_EXPIRE_TIME = "odps.cache.table-name.expire";
     public static final String PROJECT_CACHE_SIZE = "odps.cache.table-name.size";
-    public static final String ENABLE_PREDICATE_PUSHDOWN = "odps.predicate-pushdown.enable";
+    public static final String ENABLE_PREDICATE_PUSHDOWN = "odps.predicate.pushdown.enable";
 
     public static final String ROW_OFFSET = "row_offset";
     public static final String SIZE = "size";
