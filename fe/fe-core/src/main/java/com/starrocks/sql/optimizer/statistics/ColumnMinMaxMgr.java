@@ -128,7 +128,7 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
                     Database db = pair.first;
                     OlapTable olapTable = (OlapTable) pair.second;
                     Column column = olapTable.getColumn(key.getColumnName());
-                    if (column == null || !column.getType().isExactNumericType() || !column.getType().isDate()) {
+                    if (column == null || (!column.getType().isNumericType() && !column.getType().isDate())) {
                         return Optional.empty();
                     }
 

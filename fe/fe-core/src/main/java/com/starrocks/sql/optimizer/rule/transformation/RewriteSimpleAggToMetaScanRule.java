@@ -258,7 +258,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                     continue;
                 }
                 ColumnRefOperator ref = minMaxRefs.get(0);
-                if (!ref.getType().isExactNumericType() && !ref.getType().isDate()) {
+                if (!ref.getType().isNumericType() && !ref.getType().isDate()) {
                     continue;
                 }
 
