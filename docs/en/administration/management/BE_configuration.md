@@ -1645,7 +1645,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
-- Description: The publish version thread pool determines whether the idle time of a thread can be reclaimed.
+- Description: The idle time before a thread is reclaimed by the Publish Version thread pool.
 - Introduced in: -
 
 <!--
