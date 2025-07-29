@@ -124,7 +124,7 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
                                                                           @NonNull Executor executor) {
             return CompletableFuture.supplyAsync(() -> {
                 try {
-                    Pair<Database, Table> pair = getDatabaseAndTable(key.getDbId(), key.getTableId());
+                    Pair<Database, Table> pair = getDatabaseAndTable(key.getTableId());
                     Database db = pair.first;
                     OlapTable olapTable = (OlapTable) pair.second;
                     Column column = olapTable.getColumn(key.getColumnName());
@@ -150,7 +150,7 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
                     Preconditions.checkState(result.size() == 1);
                     return Optional.of(new CacheValue(toMinMax(result.get(0)), new StatsVersion(version, version)));
                 } catch (Exception e) {
-                    // ignore
+                    LOG.warn("get MinMax for column: {}, error: {}", key, e.getMessage(), e);
                 }
                 return Optional.empty();
             }, executor);
@@ -166,16 +166,22 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
         }
     }
 
-    public static Pair<Database, Table> getDatabaseAndTable(long dbId, long tableId) {
-        if (dbId == -1) {
-            throw new SemanticException("Database ID is not specified");
-        }
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", dbId);
+    public static Pair<Database, Table> getDatabaseAndTable(long tableId) {
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+        Database db = null;
+        Table table = null;
+        for (Long id : dbIds) {
+            db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
+            if (db == null) {
+                continue;
+            }
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            if (table == null) {
+                continue;
+            }
+            break;
         }
 
-        Table table = db.getTable(tableId);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableId);
         }
