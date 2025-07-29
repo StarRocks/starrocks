@@ -30,7 +30,9 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.ComputeNodePB;
+import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
@@ -138,6 +140,97 @@ public class CompactionSchedulerTest {
         Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
         table.setState(OlapTable.OlapTableState.NORMAL);
         Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
+    }
+
+    @Test
+    public void testStartCompactionWithFileBundling() throws RpcException {
+        LakeTable table = new LakeTable();
+        table.setFileBundling(true);
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        PartitionStatistics statistics = new PartitionStatistics(partition);
+        statistics.setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(statistics);
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return new Database(100, "aaa");
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return table;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
+                return new PhysicalPartition(123, "aaa", 123, new MaterializedIndex());
+            }
+        };
+
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            protected long beginTransaction(PartitionIdentifier partition, ComputeResource computeResource) {
+                return 100L;
+            }
+
+            @Mock
+            protected Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition,
+                                                        ComputeResource computeResource) {
+                Map<Long, List<Long>> map = new HashMap<>();
+                map.put(1L, Lists.newArrayList(10L));
+                return map;
+            }
+        };
+
+        ComputeNode node = new ComputeNode(1L, "127.0.0.1", 9050);
+        node.setBrpcPort(9050);
+        ComputeNode aggregatorNode = new ComputeNode(2L, "127.0.0.2", 9050);
+        aggregatorNode.setBrpcPort(9050);
+        
+        new Expectations() {
+            {
+                systemInfoService.getBackendOrComputeNode(1L);
+                result = node;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+
+                LakeAggregator.chooseAggregatorNode(WarehouseManager.DEFAULT_RESOURCE);
+                result = aggregatorNode;
+            }
+        };
+
+        new Expectations() {
+            {
+                BrpcProxy.getLakeService("127.0.0.1", 9050);
+                result = lakeService;
+                
+                // 添加为 aggregator node 的 LakeService
+                BrpcProxy.getLakeService("127.0.0.2", 9050);
+                result = lakeService;
+            }
+        };
+
+        new MockUp<CompactionTask>() {
+            @Mock
+            public void sendRequest() {
+            }
+        };
+
+        CompactionWarehouseInfo info = new CompactionWarehouseInfo("aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
+        table.setState(OlapTable.OlapTableState.NORMAL);
+        compactionScheduler.startCompaction(snapshot, info);
     }
 
     @Test
@@ -322,10 +415,11 @@ public class CompactionSchedulerTest {
                 globalTransactionMgr, globalStateMgr, "");
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
-                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, ComputeResource.class);
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, ComputeResource.class,
+                long.class);
         method.setAccessible(true);
         CompactionTask task = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId, priority,
-                WarehouseManager.DEFAULT_RESOURCE);
+                WarehouseManager.DEFAULT_RESOURCE, 99L);
 
         Assertions.assertNotNull(task);
         Assertions.assertTrue(task instanceof AggregateCompactionTask);
@@ -480,12 +574,12 @@ public class CompactionSchedulerTest {
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
                 long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class,
-                ComputeResource.class);
+                ComputeResource.class, long.class);
         method.setAccessible(true);
         ExceptionChecker.expectThrows(InvocationTargetException.class,
                 () -> {
                     method.invoke(scheduler, currentVersion, beToTablets, txnId, priority,
-                            WarehouseManager.DEFAULT_RESOURCE);
+                            WarehouseManager.DEFAULT_RESOURCE, 99L);
                 });
     }
 }
