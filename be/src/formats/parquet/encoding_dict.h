@@ -247,7 +247,7 @@ public:
 
     Status _do_next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
                                      Column* dst, const FilterData* filter) override {
-        CHECK(dst->is_nullable());
+        DCHECK(dst->is_nullable());
         if (null_infos.num_ranges <= 2) {
             return Decoder::next_batch_with_nulls(count, null_infos, content_type, dst, filter);
         }
@@ -269,7 +269,7 @@ public:
 
     Status next_value_batch_with_nulls(size_t count, size_t cur_size, const NullInfos& null_infos, Column* dst,
                                        const FilterData* filter) {
-        CHECK(dst->is_nullable());
+        DCHECK(dst->is_nullable());
         const uint8_t* __restrict is_nulls = null_infos.nulls_data();
         // assign null infos
         size_t null_cnt = null_infos.num_nulls;
@@ -506,7 +506,7 @@ private:
 
     Status _do_next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
                                      Column* dst, const FilterData* filter) override {
-        CHECK(dst->is_nullable());
+        DCHECK(dst->is_nullable());
         if (null_infos.num_ranges <= 1) {
             return Decoder::next_batch_with_nulls(count, null_infos, content_type, dst, filter);
         }
@@ -576,8 +576,8 @@ private:
                 return Status::InternalError("DictDecoder<Slice> GetBatchWithDict failed");
             }
 
-            uint32_t lengths[read_count * sizeof(uint32_t)];
-            char* datas[read_count * sizeof(uint32_t)];
+            uint32_t lengths[read_count + 1];
+            char* datas[read_count + 1];
 
             for (size_t i = 0; i < read_count; ++i) {
                 datas[i] = _slices[i].data;
