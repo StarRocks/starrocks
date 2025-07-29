@@ -2,6 +2,12 @@
 
 Manage compute resources in a shared-data StarRocks cluster using the Multi-Warehouse feature. This feature is supported in the StarRocks Enterprise Edition from v3.2.0 onwards.
 
+:::note
+
+If you use CelerData Manager to deploy your cluster, you can only use the Manager to create, alter, and drop warehouses, and add CNs to warehouses.
+
+:::
+
 ## Overview
 
 A warehouse in a share-data cluster is a group of Compute Nodes (CNs) that can provide with you the required compute resources (CPU/Memory/Temporary storage) to perform query, ingestion, and data processing tasks. Each warehouse serves as an individual compute resource pool, which allows you to isolate compute resources physically.
