@@ -19,7 +19,6 @@
 #include <libdivide.h>
 
 #include <algorithm>
-#include <mutex>
 #include <string_view>
 #include <unordered_map>
 
@@ -3891,3 +3890,5 @@ StatusOr<ColumnPtr> TimeFunctions::time_format(FunctionContext* context, const s
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/TimeFunctions.inc"

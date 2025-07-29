@@ -112,3 +112,5 @@ StatusOr<ColumnPtr> HyperloglogFunctions::hll_deserialize(FunctionContext* conte
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/HyperloglogFunctions.inc"

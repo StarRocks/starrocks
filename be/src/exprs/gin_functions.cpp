@@ -22,7 +22,6 @@
 #include "column/array_column.h"
 #include "column/column_viewer.h"
 #include "column/datum.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 
@@ -115,3 +114,4 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
 }
 
 } // namespace starrocks
+#include "gen_cpp/opcode/GinFunctions.inc"

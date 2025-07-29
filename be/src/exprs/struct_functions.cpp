@@ -51,3 +51,5 @@ StatusOr<ColumnPtr> StructFunctions::named_struct(FunctionContext* context, cons
     return new_struct(context, cols);
 }
 } // namespace starrocks
+
+#include "gen_cpp/opcode/StructFunctions.inc"

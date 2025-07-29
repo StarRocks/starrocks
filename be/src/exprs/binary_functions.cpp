@@ -17,13 +17,10 @@
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
-#include "column/column_viewer.h"
 #include "column/nullable_column.h"
-#include "exprs/base64.h"
 #include "exprs/encryption_functions.h"
 #include "exprs/function_helper.h"
 #include "exprs/string_functions.h"
-#include "gutil/strings/escaping.h"
 
 namespace starrocks {
 
@@ -147,3 +144,5 @@ StatusOr<ColumnPtr> BinaryFunctions::iceberg_truncate_binary(FunctionContext* co
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/BinaryFunctions.inc"

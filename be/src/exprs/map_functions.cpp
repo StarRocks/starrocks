@@ -484,3 +484,5 @@ StatusOr<ColumnPtr> MapFunctions::map_concat(FunctionContext* context, const Col
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/MapFunctions.inc"

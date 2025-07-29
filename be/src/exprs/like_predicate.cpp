@@ -685,3 +685,5 @@ void LikePredicate::remove_escape_character(std::string* search_string) {
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/LikePredicate.inc"
