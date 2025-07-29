@@ -299,13 +299,13 @@ void FixedLengthColumnBase<T>::crc32_hash_selective(uint32_t* hash, uint16_t* se
 template <typename T>
 void FixedLengthColumnBase<T>::murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const {
     for (uint32_t i = from; i < to; ++i) {
-        int32_t hash_value = 0;
+        uint32_t hash_value = 0;
         if constexpr (IsDate<T>) {
             // Julian Day -> epoch day
             // TODO, This is not a good place to do a project, this is just for test.
             // If we need to make it more general, we should do this project in `IcebergMurmurHashProject`
             // but consider that use date type column as bucket transform is rare, we can do it later.
-            long long_value = _data[i].julian() - date::UNIX_EPOCH_JULIAN;
+            int64_t long_value = _data[i].julian() - date::UNIX_EPOCH_JULIAN;
             hash_value = HashUtil::murmur_hash3_32(&long_value, sizeof(int64_t), 0);
         } else if constexpr (std::is_same<T, int32_t>::value) {
             // Integer and long hash results must be identical for all integer values.
