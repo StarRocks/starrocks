@@ -178,9 +178,9 @@ StatusOr<CacheOptions> DataCache::_init_cache_options() {
                 corresponding_starlet_dirs = *s;
             }
         }
+        int idx = 0;
 #endif
 
-        int idx = 0;
         for (auto& root_path : _store_paths) {
             // Because we have unified the datacache between datalake and starlet, we also need to unify the
             // cache path and quota.
