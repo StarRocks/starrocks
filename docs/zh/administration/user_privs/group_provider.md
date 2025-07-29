@@ -89,7 +89,7 @@ PROPERTIES (
 - `unix`：创建一个 Unix Group Provider。
 - `file`：创建一个 File Group Provider。当设置此值时，您需要指定 `group_file_url`。
 
-#### `ldap_info`
+#### `ldap_info` 参数组
 
 用于连接到您的 LDAP 服务的信息。
 
@@ -129,7 +129,7 @@ PROPERTIES (
 
 可选。访问本地存储的 LDAP 服务器的 SSL CA 证书所用的密码。pem 格式证书不需要密码，只有 jsk 格式证书需要。
 
-#### `ldap_search_group_arg`
+#### `ldap_search_group_arg` 参数组
 
 用于控制 StarRocks 如何搜索组的参数。
 
@@ -149,7 +149,7 @@ LDAP 服务器可以识别的自定义组过滤器。它将被直接发送到您
 
 用作组名称标识符的属性。
 
-#### `ldap_search_user_arg`
+#### `ldap_search_user_arg` 参数组
 
 用于控制 StarRocks 如何识别组中用户的参数。
 
@@ -161,7 +161,7 @@ LDAP 服务器可以识别的自定义组过滤器。它将被直接发送到您
 
 指定如何从成员属性值中提取用户标识符。您可以显式定义一个属性（例如，`cn` 或 `uid`）或使用正则表达式。
 
-#### `ldap_cache_arg`
+#### `ldap_cache_arg` 参数组
 
 用于定义 LDAP 组信息缓存行为的参数。
 
