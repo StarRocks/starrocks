@@ -37,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -298,7 +299,9 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         if (constantMap.size() == aggregationOperator.getAggregations().size()) {
             // all aggregations can be replaced
             Preconditions.checkState(newAggCalls.isEmpty());
-            return Optional.of(OptExpression.create(project, input.getInputs()));
+            LogicalValuesOperator row = new LogicalValuesOperator(scanOperator.getOutputColumns().subList(0, 1),
+                    List.of(List.of(ConstantOperator.createNull(Type.BIGINT))));
+            return Optional.of(OptExpression.create(project, OptExpression.create(row)));
         }
 
         // some aggregations can be replaced, but not all
