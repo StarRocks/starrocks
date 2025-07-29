@@ -435,4 +435,8 @@ void SegmentWriter::_verify_footer() {
 #endif
 }
 
+StatusOr<std::unique_ptr<io::NumericStatistics>> SegmentWriter::get_numeric_statistics() {
+    return _wfile->get_numeric_statistics();
+}
+
 } // namespace starrocks
