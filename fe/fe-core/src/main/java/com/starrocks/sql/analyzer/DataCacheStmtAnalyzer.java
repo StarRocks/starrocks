@@ -154,7 +154,7 @@ public class DataCacheStmtAnalyzer {
             // Duration for cache remains active.
             // Use PT0M to prevent expiration of the rule.
             // Use duration specified in ISO-8601 duration format (PnDTnHnMn).
-            long ttlSeconds = context.getSessionVariable().getDatacacheTTLSeconds();;
+            long ttlSeconds = context.getSessionVariable().getDatacacheTTLSeconds();
             if (properties.containsKey("ttl")) {
                 try {
                     ttlSeconds = Duration.parse(properties.get("ttl")).toSeconds();
