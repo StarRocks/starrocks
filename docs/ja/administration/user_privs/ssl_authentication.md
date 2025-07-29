@@ -16,6 +16,7 @@ StarRocks で SSL 認証を有効にするには、FE 構成ファイル **fe.co
 - `ssl_keystore_location`：SSL 証明書とキーを格納するキーストアファイルへのパスを指定します。
 - `ssl_keystore_password`：キーストアファイルにアクセスするためのパスワード。StarRocks は、キーストアファイルを読み取るためにこのパスワードを要求します。
 - `ssl_key_password`：キーにアクセスするためのパスワード。StarRocks は、キーストアからキーを取得するためにこのパスワードを要求します。
+- `ssl_force_secure_transport`: SSL 認証を強制するかどうか。デフォルト値：`FALSE`。この項目を `TRUE` に設定すると、SSL で暗号化されていない接続はシステムによって拒否されます。
 
 例：
 
