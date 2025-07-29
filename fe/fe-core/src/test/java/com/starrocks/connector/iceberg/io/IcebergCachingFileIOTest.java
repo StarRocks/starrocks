@@ -88,7 +88,7 @@ public class IcebergCachingFileIOTest {
     }
 
     @Test
-    public void testBuildAWSConfFromProperties() throws StarRocksException {
+    public void testBuildAzureConfFromProperties() throws StarRocksException {
         Map<String, String> properties = new HashMap<>();
         String key = ADLS_SAS_TOKEN + "account." + ADLS_ENDPOINT;
         String sasToken = "sas_token";
