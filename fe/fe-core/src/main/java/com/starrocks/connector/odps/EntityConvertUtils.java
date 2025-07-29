@@ -15,12 +15,12 @@
 package com.starrocks.connector.odps;
 
 import com.aliyun.odps.TableSchema;
-import com.aliyun.odps.table.optimizer.predicate.Attribute;
 import com.aliyun.odps.table.optimizer.predicate.BinaryPredicate;
 import com.aliyun.odps.table.optimizer.predicate.CompoundPredicate;
 import com.aliyun.odps.table.optimizer.predicate.Constant;
 import com.aliyun.odps.table.optimizer.predicate.InPredicate;
 import com.aliyun.odps.table.optimizer.predicate.Predicate;
+import com.aliyun.odps.table.optimizer.predicate.RawPredicate;
 import com.aliyun.odps.table.optimizer.predicate.UnaryPredicate;
 import com.aliyun.odps.type.ArrayTypeInfo;
 import com.aliyun.odps.type.CharTypeInfo;
@@ -134,8 +134,7 @@ public class EntityConvertUtils {
      */
     public static Predicate convertPredicate(ScalarOperator predicate, Set<String> partitionColumns) {
         // First, filter out predicates that can be converted
-        ScalarOperator convertiblePredicate = getConvertiblePredicate(predicate, partitionColumns, true);
-
+        ScalarOperator convertiblePredicate = getConvertiblePredicate(predicate, partitionColumns);
         // Then convert the filtered predicate
         return doConvertPredicate(convertiblePredicate);
     }
@@ -145,8 +144,7 @@ public class EntityConvertUtils {
      * Implements partial pushdown logic similar to Spark's convertibleFilters
      */
     private static ScalarOperator getConvertiblePredicate(ScalarOperator predicate,
-                                                          Set<String> partitionColumns,
-                                                          boolean canPartialPushDown) {
+                                                          Set<String> partitionColumns) {
         if (predicate == null) {
             return null;
         }
@@ -180,8 +178,8 @@ public class EntityConvertUtils {
             ScalarOperator left = binaryPredicate.getChild(0);
             ScalarOperator right = binaryPredicate.getChild(1);
 
-            ScalarOperator leftConvertible = getConvertiblePredicate(left, partitionColumns, canPartialPushDown);
-            ScalarOperator rightConvertible = getConvertiblePredicate(right, partitionColumns, canPartialPushDown);
+            ScalarOperator leftConvertible = getConvertiblePredicate(left, partitionColumns);
+            ScalarOperator rightConvertible = getConvertiblePredicate(right, partitionColumns);
 
             if (leftConvertible != null && rightConvertible != null) {
                 // Create a new binary predicate with the converted children
@@ -190,9 +188,6 @@ public class EntityConvertUtils {
                         leftConvertible,
                         rightConvertible
                 );
-            } else if (canPartialPushDown) {
-                // For AND context, we can push down one side if the other is not convertible
-                return leftConvertible != null ? leftConvertible : rightConvertible;
             }
             return null;
         } else if (predicate instanceof CompoundPredicateOperator) {
@@ -206,9 +201,9 @@ public class EntityConvertUtils {
                 ScalarOperator convertibleChild;
                 // For NOT, we cannot do partial pushdown
                 if (type == CompoundPredicateOperator.CompoundType.NOT) {
-                    convertibleChild = getConvertiblePredicate(child, partitionColumns, false);
+                    convertibleChild = getConvertiblePredicate(child, partitionColumns);
                 } else {
-                    convertibleChild = getConvertiblePredicate(child, partitionColumns, canPartialPushDown);
+                    convertibleChild = getConvertiblePredicate(child, partitionColumns);
                 }
 
                 if (convertibleChild != null) {
@@ -249,7 +244,7 @@ public class EntityConvertUtils {
             return null;
         } else if (predicate instanceof IsNullPredicateOperator) {
             ScalarOperator operand = predicate.getChild(0);
-            ScalarOperator convertibleOperand = getConvertiblePredicate(operand, partitionColumns, canPartialPushDown);
+            ScalarOperator convertibleOperand = getConvertiblePredicate(operand, partitionColumns);
             if (convertibleOperand != null) {
                 return new IsNullPredicateOperator(
                         ((IsNullPredicateOperator) predicate).isNotNull(),
@@ -260,7 +255,7 @@ public class EntityConvertUtils {
         } else if (predicate instanceof InPredicateOperator) {
             InPredicateOperator inPredicate = (InPredicateOperator) predicate;
             ScalarOperator operand = inPredicate.getChild(0);
-            ScalarOperator convertibleOperand = getConvertiblePredicate(operand, partitionColumns, canPartialPushDown);
+            ScalarOperator convertibleOperand = getConvertiblePredicate(operand, partitionColumns);
 
             if (convertibleOperand == null) {
                 return null;
@@ -270,7 +265,7 @@ public class EntityConvertUtils {
             List<ScalarOperator> convertibleValues = new ArrayList<>();
             convertibleValues.add(convertibleOperand);
             for (ScalarOperator value : inPredicate.getListChildren()) {
-                ScalarOperator convertibleValue = getConvertiblePredicate(value, partitionColumns, canPartialPushDown);
+                ScalarOperator convertibleValue = getConvertiblePredicate(value, partitionColumns);
                 if (convertibleValue == null) {
                     allValuesConvertible = false;
                     break;
@@ -299,7 +294,7 @@ public class EntityConvertUtils {
 
         if (predicate instanceof ColumnRefOperator) {
             String attributeName = quoteAttribute(((ColumnRefOperator) predicate).getName());
-            return Attribute.of(attributeName);
+            return RawPredicate.of(attributeName);
         } else if (predicate instanceof ConstantOperator) {
             return Constant.of(((ConstantOperator) predicate).getValue());
         } else if (predicate instanceof BinaryPredicateOperator) {
@@ -361,10 +356,8 @@ public class EntityConvertUtils {
 
             List<Serializable> values = new ArrayList<>();
             for (ScalarOperator value : inPredicate.getListChildren()) {
-                // We assume constant values here
-                values.add((Serializable) ((ConstantOperator) value).getValue());
+                values.add(doConvertPredicate(value));
             }
-
             if (inPredicate.isNotIn()) {
                 return new InPredicate(InPredicate.Operator.NOT_IN, operand, values);
             } else {

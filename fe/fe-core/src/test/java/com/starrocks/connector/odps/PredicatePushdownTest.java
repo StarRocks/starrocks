@@ -70,8 +70,7 @@ public class PredicatePushdownTest {
 
     // Helper method to create a simple unary predicate
     private IsNullPredicateOperator createIsNullOp(boolean isNotNull, String colName, Type colType) {
-        return new IsNullPredicateOperator(!isNotNull,
-                createColumnRef(colName, colType)); // Note: IsNullPredicateOperator constructor might take isNull flag
+        return new IsNullPredicateOperator(isNotNull, createColumnRef(colName, colType));
     }
 
     @Test
@@ -270,7 +269,7 @@ public class PredicatePushdownTest {
         Predicate result1 =
                 EntityConvertUtils.convertPredicate(predWithPartitionInAnd, ImmutableSet.of(PARTITION_COL_NAME));
         // Expected: Only col2 > 10 remains
-        assertEquals("col2 > 10", result1.toString());
+        assertEquals(BinaryPredicate.greaterThanOrEqual(Attribute.of(COL2_NAME), Constant.of(10L)), result1);
 
         // Test with OR where one part is on partition col (unsupported op)
         CompoundPredicateOperator predWithPartitionInOr =
@@ -289,7 +288,67 @@ public class PredicatePushdownTest {
         Predicate result3 =
                 EntityConvertUtils.convertPredicate(predWithInAndOR, ImmutableSet.of(PARTITION_COL_NAME));
         // Expected: Only col2 > 10 remains
-        assertEquals("col2 > 10", result3.toString());
+        assertEquals(BinaryPredicate.greaterThanOrEqual(Attribute.of(COL2_NAME), Constant.of(10L)), result3);
+    }
+
+    @Test
+    public void testConvertPredicate_notSupportPredicate() {
+        BinaryPredicateOperator supportPred = createBinaryOp(BinaryType.GT, COL1_NAME, 2, Type.BIGINT);
+        BinaryPredicateOperator notSupportPred = createBinaryOp(BinaryType.EQ_FOR_NULL, COL2_NAME, 2, Type.BIGINT);
+
+        CompoundPredicateOperator pred1 =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT,
+                        new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                                supportPred,
+                                notSupportPred
+                        )
+                );
+        Predicate result = EntityConvertUtils.convertPredicate(pred1, new HashSet<>());
+        // NOT(support OR not-support) -> no predicate
+        assertNoPredicate(result);
+
+        CompoundPredicateOperator pred2 =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT,
+                        new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                                supportPred,
+                                notSupportPred
+                        )
+                );
+        Predicate result2 = EntityConvertUtils.convertPredicate(pred2, new HashSet<>());
+
+        // NOT(support AND not-support) -> NOT(support)
+        assertEquals(CompoundPredicate.not(BinaryPredicate.greaterThan(Attribute.of(COL1_NAME), Constant.of(2L))), result2);
+
+        CompoundPredicateOperator pred3 =
+                        new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                                supportPred,
+                                notSupportPred
+                        );
+        Predicate result3 = EntityConvertUtils.convertPredicate(pred3, new HashSet<>());
+        // support AND not-support -> support
+        assertEquals(BinaryPredicate.greaterThan(Attribute.of(COL1_NAME), Constant.of(2L)), result3);
+
+        CompoundPredicateOperator pred4 =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                        supportPred,
+                        notSupportPred
+                );
+        Predicate result4 = EntityConvertUtils.convertPredicate(pred4, new HashSet<>());
+        // support or not-support -> no-predicate
+        assertNoPredicate(result4);
+
+        CompoundPredicateOperator pred5 =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT,
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT,
+                        new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                                supportPred,
+                                notSupportPred
+                        )
+                ));
+        Predicate result5 = EntityConvertUtils.convertPredicate(pred5, new HashSet<>());
+        // actually we expect NOT(NOT(xxx)) convert to xxx, but we don't support that yet
+        // for now, we first deal with NOT(xxx) and get no-predicate, and then deal with NOT(no-predicate)
+        assertNoPredicate(result5);
     }
 
     @Test
