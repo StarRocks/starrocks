@@ -451,7 +451,7 @@ static void assign_nulls(int16_t* __restrict levels, uint16_t def_level, size_t 
     for (size_t i = 1; i < num_values; ++i) {
         is_nulls[i] = levels[i] < max_def_level;
         num_nulls += is_nulls[i];
-        num_ranges += is_nulls[i] ^ is_nulls[i - 1];
+        num_ranges += is_nulls[i] != is_nulls[i - 1];
     }
 
     *ranges_dst = num_ranges;
