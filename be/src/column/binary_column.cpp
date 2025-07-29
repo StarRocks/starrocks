@@ -321,6 +321,54 @@ bool BinaryColumnBase<T>::append_continuous_fixed_length_strings(const char* dat
 }
 
 template <typename T>
+void BinaryColumnBase<T>::append_bytes(char* const* data, uint32_t* length, size_t size) {
+    for (size_t i = 0; i < size; i++) {
+        _bytes.insert(_bytes.end(), data[i], data[i] + length[i]);
+    }
+    _slices_cache = false;
+}
+
+template <typename T, size_t copy_length>
+void append_bytes_fixed_length(char* const* data, const uint32_t* lengths, size_t data_size, Bytes* bytes,
+                               const typename BinaryColumnBase<T>::Offsets& offsets) __attribute__((noinline));
+
+template <typename T, size_t copy_length>
+__attribute__((noinline)) void append_bytes_fixed_length(char* const* data, const uint32_t* lengths, size_t data_size,
+                                                         Bytes* bytes,
+                                                         const typename BinaryColumnBase<T>::Offsets& offsets) {
+    size_t length = offsets.size();
+    size_t byte_sizes = offsets[length - 1];
+
+    size_t offset = bytes->size();
+    bytes->resize(byte_sizes + copy_length);
+
+    for (size_t i = 0; i < data_size; ++i) {
+        memcpy(&(*bytes)[offset], data[i], copy_length);
+        offset += lengths[i];
+    }
+
+    bytes->resize(offset);
+}
+
+template <typename T>
+void BinaryColumnBase<T>::append_bytes_overflow(char* const* data, uint32_t* lengths, size_t size, size_t max_length) {
+    if (max_length <= 8) {
+        append_bytes_fixed_length<T, 8>(data, lengths, size, &_bytes, _offsets);
+    } else if (max_length <= 16) {
+        append_bytes_fixed_length<T, 16>(data, lengths, size, &_bytes, _offsets);
+    } else if (max_length <= 32) {
+        append_bytes_fixed_length<T, 32>(data, lengths, size, &_bytes, _offsets);
+    } else if (max_length <= 64) {
+        append_bytes_fixed_length<T, 64>(data, lengths, size, &_bytes, _offsets);
+    } else if (max_length <= 128) {
+        append_bytes_fixed_length<T, 128>(data, lengths, size, &_bytes, _offsets);
+    } else {
+        append_bytes(data, lengths, size);
+    }
+    _slices_cache = false;
+}
+
+template <typename T>
 void BinaryColumnBase<T>::append_value_multiple_times(const void* value, size_t count) {
     const auto* slice = reinterpret_cast<const Slice*>(value);
     size_t size = slice->size * count;

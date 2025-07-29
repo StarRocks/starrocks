@@ -530,7 +530,15 @@ public:
     ColumnNePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kNE, type_info, id, value) {}
 
-    bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
+    bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        const auto& min = detail.min_or_null_value();
+        const auto& max = detail.max_value();
+        const auto type_info = this->type_info();
+        if (min == max) {
+            return type_info->cmp(Datum(this->_value), min) != 0;
+        }
+        return true;
+    }
 
     bool support_bitmap_filter() const override { return false; }
 
