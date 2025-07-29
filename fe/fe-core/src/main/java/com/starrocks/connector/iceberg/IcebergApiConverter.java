@@ -31,6 +31,7 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -58,6 +59,7 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ManifestEvaluator;
 import org.apache.iceberg.expressions.Projections;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.transforms.PartitionSpecVisitor;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.view.SQLViewRepresentation;
@@ -72,6 +74,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -465,6 +468,63 @@ public class IcebergApiConverter {
         return spec.fields().stream()
                 .map(field -> toPartitionField(spec, field, withTransfomPrefix))
                 .collect(toImmutableList());
+    }
+
+    public static List<Pair<Integer, Integer>> getBucketSourceIdWithBucketNum(PartitionSpec spec) {
+        return PartitionSpecVisitor.visit(spec, new BucketPartitionSpecVisitor()).stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    private static class BucketPartitionSpecVisitor
+            implements PartitionSpecVisitor<Pair<Integer, Integer>> {
+        @Override
+        public Pair<Integer, Integer> identity(int fieldId, String sourceName, int sourceId) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> bucket(
+                int fieldId, String sourceName, int sourceId, int numBuckets) {
+            return new Pair<>(sourceId, numBuckets);
+        }
+
+        @Override
+        public Pair<Integer, Integer> truncate(
+                int fieldId, String sourceName, int sourceId, int width) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> year(int fieldId, String sourceName, int sourceId) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> month(int fieldId, String sourceName, int sourceId) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> day(int fieldId, String sourceName, int sourceId) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> hour(int fieldId, String sourceName, int sourceId) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> alwaysNull(int fieldId, String sourceName, int sourceId) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> unknown(
+                int fieldId, String sourceName, int sourceId, String transform) {
+            return null;
+        }
     }
 
     public static String toPartitionField(PartitionSpec spec, PartitionField field, Boolean withTransfomPrefix) {
