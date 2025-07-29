@@ -1242,10 +1242,11 @@ StatusOr<JsonValue> JsonFunctions::_remove_json_paths(JsonValue* json_value, con
     // Helper function to check if a path should be removed
     auto should_remove_path = [&](const std::string& current_path) -> bool {
         for (const auto& remove_path : valid_paths) {
-            // For now, handle simple object key removal (e.g., $.key)
-            if (remove_path.paths.size() == 1 && 
-                remove_path.paths[0].array_selector->type == NONE &&
-                current_path == ("$." + remove_path.paths[0].key)) {
+            // Handle simple object key removal (e.g., $.key)
+            // JsonPath::parse("$.key") creates 2 components: root ($) at index 0, key at index 1
+            if (remove_path.paths.size() == 2 && 
+                remove_path.paths[1].array_selector->type == NONE &&
+                current_path == ("$." + remove_path.paths[1].key)) {
                 return true;
             }
         }
