@@ -14,14 +14,12 @@
 
 #include "exprs/encryption_functions.h"
 
+#include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/status.h"
 #include "exprs/base64.h"
-#include "exprs/expr.h"
 #include "util/aes_util.h"
-#include "util/debug_util.h"
-#include "util/integer_util.h"
 #include "util/md5.h"
 #include "util/sha.h"
 
@@ -420,3 +418,5 @@ Status EncryptionFunctions::sha2_close(FunctionContext* context, FunctionContext
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/EncryptionFunctions.inc"

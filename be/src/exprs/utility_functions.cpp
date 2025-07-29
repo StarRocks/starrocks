@@ -27,9 +27,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
-#include <mutex>
 #include <random>
-#include <thread>
 
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
@@ -45,10 +43,8 @@
 #include "util/cidr.h"
 #include "util/monotime.h"
 #include "util/network_util.h"
-#include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -371,3 +367,5 @@ StatusOr<ColumnPtr> UtilityFunctions::equiwidth_bucket(FunctionContext* context,
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/UtilityFunctions.inc"

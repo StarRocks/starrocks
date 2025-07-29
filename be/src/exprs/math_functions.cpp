@@ -29,7 +29,6 @@
 #include "exprs/function_helper.h"
 #include "exprs/math_functions.h"
 #include "util/murmur_hash3.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -1342,3 +1341,5 @@ StatusOr<ColumnPtr> MathFunctions::l2_distance(FunctionContext* context, const C
 template StatusOr<ColumnPtr> MathFunctions::l2_distance<TYPE_FLOAT>(FunctionContext* context, const Columns& columns);
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/MathFunctions.inc"

@@ -45,16 +45,16 @@ struct FunctionDescriptor {
                        bool exception_safe_, bool check_overflow_)
             : name(std::move(nm)),
               args_nums(args),
-              scalar_function(sf),
-              prepare_function(pf),
-              close_function(cf),
+              scalar_function(std::move(sf)),
+              prepare_function(std::move(pf)),
+              close_function(std::move(cf)),
               exception_safe(exception_safe_),
               check_overflow(check_overflow_) {}
 
     FunctionDescriptor(std::string nm, uint8_t args, ScalarFunction sf, bool exception_safe_, bool check_overflow_)
             : name(std::move(nm)),
               args_nums(args),
-              scalar_function(sf),
+              scalar_function(std::move(sf)),
               prepare_function(nullptr),
               close_function(nullptr),
               exception_safe(exception_safe_),
@@ -66,14 +66,22 @@ class BuiltinFunctions {
 
 public:
     static const FunctionDescriptor* find_builtin_function(uint64_t id) {
-        if (auto iter = _fn_tables.find(id); iter != _fn_tables.end()) {
+        if (auto iter = fn_tables().find(id); iter != fn_tables().end()) {
             return &iter->second;
         }
         return nullptr;
     };
 
+    template <class... Args>
+    static void emplace_builtin_function(uint64_t id, Args&&... args) {
+        fn_tables().emplace(id, FunctionDescriptor(std::forward<Args>(args)...));
+    }
+
 private:
-    static FunctionTables _fn_tables;
+    static FunctionTables& fn_tables() {
+        static FunctionTables fn_tables;
+        return fn_tables;
+    }
 };
 
 } // namespace starrocks

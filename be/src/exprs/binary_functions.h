@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include "column/column_builder.h"
-#include "column/column_viewer.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 

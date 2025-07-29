@@ -26,7 +26,27 @@ all: gen_version gen_functions
 
 # generated vectorized engine function
 GEN_FUNCTIONS_OUTPUT = ${FE_TARGET_DIR}/com/starrocks/builtins/VectorizedBuiltinFunctions.java  \
-                                  ${BUILD_DIR}/gen_cpp/opcode/builtin_functions.cpp
+					${BUILD_DIR}/gen_cpp/opcode/MathFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/StringFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/LikePredicate.inc \
+					${BUILD_DIR}/gen_cpp/opcode/BinaryFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/BitFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/TimeFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/ConditionFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/HyperloglogFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/BitmapFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/HashFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/GroupingSetsFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/StructFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/UtilityFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/JsonFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/EncryptionFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/ESFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/GeoFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/PercentileFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/ArrayFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/MapFunctions.inc \
+					${BUILD_DIR}/gen_cpp/opcode/GinFunctions.inc \
 
 ${GEN_FUNCTIONS_OUTPUT}: functions.py gen_functions.py 
 	${PYTHON} ${CURDIR}/gen_functions.py --cpp ${BUILD_DIR}/gen_cpp  --java ${FE_TARGET_DIR}

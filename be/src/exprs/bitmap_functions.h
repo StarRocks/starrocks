@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "column/column.h"
 #include "exprs/function_helper.h"
 
 namespace starrocks {

@@ -20,13 +20,9 @@
 
 #include <utility>
 
-#include "column/column_builder.h"
-#include "column/vectorized_fwd.h"
-#include "common/compiler_util.h"
 #include "common/status.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
-#include "exprs/jsonpath.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
