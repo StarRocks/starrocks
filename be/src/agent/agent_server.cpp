@@ -176,7 +176,7 @@ Status AgentServer::Impl::init() {
 
 #define BUILD_DYNAMIC_TASK_THREAD_POOL(name, min_threads, max_threads, queue_size, pool) \
     BUILD_DYNAMIC_TASK_THREAD_POOL_WITH_IDLE(name, min_threads, max_threads, queue_size, \
-                                             THREAD_POOL_DEFAULT_IDLE_TIMEOUT_MS, pool)
+                                             ThreadPoolDefaultIdleTimeoutMS, pool)
 
 #define BUILD_DYNAMIC_TASK_THREAD_POOL_WITH_IDLE(name, min_threads, max_threads, queue_size, idle_timeout, pool) \
     do {                                                                                                         \
@@ -185,7 +185,7 @@ Status AgentServer::Impl::init() {
                                 .set_max_threads(max_threads)                                                    \
                                 .set_max_queue_size(queue_size)                                                  \
                                 .set_idle_timeout(MonoDelta::FromMilliseconds(idle_timeout))                     \
-                                .build(&(pool)));                                                                \
+                                .build(&pool));                                                                  \
         REGISTER_THREAD_POOL_METRICS(name, pool);                                                                \
     } while (false)
 

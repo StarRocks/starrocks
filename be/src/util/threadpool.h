@@ -64,7 +64,7 @@ class Thread;
 class ThreadPool;
 class ThreadPoolToken;
 
-#define THREAD_POOL_DEFAULT_IDLE_TIMEOUT_MS 500
+static constexpr int64_t ThreadPoolDefaultIdleTimeoutMS = 500;
 
 class Runnable {
 public:
