@@ -1574,7 +1574,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：毫秒
 - 是否动态：否
-- 描述：publish version线程池决定是否可以回收线程的idle时长。
+- 描述：线程被 Publish Version 线程池回收前的 Idle 时间。
 - 引入版本：-
 
 <!--
