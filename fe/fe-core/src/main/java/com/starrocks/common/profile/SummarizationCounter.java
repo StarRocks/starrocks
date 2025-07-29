@@ -36,23 +36,30 @@ public final class SummarizationCounter {
     }
 
     public void merge(TCounter counter, boolean updateSum) {
+        // Use consistent value access to avoid potential issues if getValue() logic changes
+        long counterValue = counter.getValue();
+        
         if (updateSum) {
             if (Counter.isSkipMerge(strategy)) {
-                sum = counter.value;
+                sum = counterValue;
                 cnt = 1;
             } else {
-                sum += counter.value;
+                sum += counterValue;
                 cnt++;
             }
         }
-        min = Long.min(min, counter.getValue());
-        max = Long.max(max, counter.getValue());
+        min = Long.min(min, counterValue);
+        max = Long.max(max, counterValue);
     }
 
     public void finalized(Counter minCounter, Counter maxCounter, Counter mergedCounter) {
         if (cnt == 0) {
             min = 0L;
             max = 0L;
+            // Always update the output counters, even when no data was merged
+            minCounter.setValue(min);
+            maxCounter.setValue(max);
+            mergedCounter.setValue(0L);
             return;
         }
         long mergedValue = Counter.isAvg(strategy) ? sum / cnt : sum;
