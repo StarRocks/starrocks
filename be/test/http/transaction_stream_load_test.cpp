@@ -72,6 +72,7 @@ public:
         _env._transaction_mgr = new TransactionMgr(&_env);
 
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
+        _evhttp_req->remote_host = nullptr;
     }
     void TearDown() override {
         delete _env._transaction_mgr;
@@ -314,10 +315,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_success) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
-
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_LABEL_KEY, "123");
@@ -365,10 +362,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_prepared_success) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
-
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_LABEL_KEY, "123");
@@ -415,10 +408,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_put_fail) {
 
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
-
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
 
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
@@ -468,10 +457,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_fe_fail) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
-
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_LABEL_KEY, "123");
@@ -520,10 +505,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_prepare_fe_fail) {
 
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
-
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
 
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
@@ -596,10 +577,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_plan_fail) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
-
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_LABEL_KEY, "123");
@@ -670,10 +647,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_idle_timeout) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
-
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_LABEL_KEY, "123");
@@ -708,10 +681,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
-
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_DB_KEY, "db");
@@ -729,10 +698,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
-
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_DB_KEY, "db");
@@ -749,10 +714,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
     {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
-
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
 
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
@@ -785,7 +746,6 @@ TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
     ctx->ref();
     ctx->body_sink = std::make_shared<StreamLoadPipe>();
     bool remove_from_stream_context_mgr = false;
-    auto evb = evbuffer_new();
     DeferOp defer([&]() {
         if (remove_from_stream_context_mgr) {
             _env.stream_context_mgr()->remove(ctx->label);
@@ -793,7 +753,6 @@ TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
         if (ctx->unref()) {
             delete ctx;
         }
-        evbuffer_free(evb);
     });
     ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
     remove_from_stream_context_mgr = true;
@@ -802,11 +761,7 @@ TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
     request.set_handler(&action);
     std::string content = "abc";
 
-    struct evhttp_request ev_req;
-    ev_req.remote_host = nullptr;
-    ev_req.input_buffer = evb;
-    request._ev_req = &ev_req;
-
+    auto evb = request.get_evhttp_request()->input_buffer;
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
     request._headers.emplace(HTTP_DB_KEY, ctx->db);
@@ -885,13 +840,8 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_success_request) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
         std::string content = "abc";
-        auto evb = evbuffer_new();
+        auto evb = request.get_evhttp_request()->input_buffer;
         evbuffer_add(evb, content.data(), content.size());
-        DeferOp free_evb([&]() { evbuffer_free(evb); });
-        struct evhttp_request ev_req {
-            .remote_host = nullptr, .input_buffer = evb
-        };
-        request._ev_req = &ev_req;
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
         request._headers.emplace(HTTP_DB_KEY, ctx->db);
@@ -952,13 +902,8 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_on_header_failure) 
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
         std::string content = "abc";
-        auto evb = evbuffer_new();
+        auto evb = request.get_evhttp_request()->input_buffer;
         evbuffer_add(evb, content.data(), content.size());
-        DeferOp free_evb([&]() { evbuffer_free(evb); });
-        struct evhttp_request ev_req {
-            .remote_host = nullptr, .input_buffer = evb
-        };
-        request._ev_req = &ev_req;
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
         request._headers.emplace(HTTP_DB_KEY, ctx->db);
@@ -1014,13 +959,8 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
         std::string content = "abc";
-        auto evb = evbuffer_new();
+        auto evb = request.get_evhttp_request()->input_buffer;
         evbuffer_add(evb, content.data(), content.size());
-        DeferOp free_evb([&]() { evbuffer_free(evb); });
-        struct evhttp_request ev_req {
-            .remote_host = nullptr, .input_buffer = evb
-        };
-        request._ev_req = &ev_req;
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
         request._headers.emplace(HTTP_DB_KEY, ctx->db);
