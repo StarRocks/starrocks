@@ -1158,7 +1158,7 @@ StatusOr<ColumnPtr> JsonFunctions::_json_keys_without_path(FunctionContext* cont
 
 StatusOr<ColumnPtr> JsonFunctions::json_remove(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    
+
     if (columns.size() < 2) {
         return Status::InvalidArgument("json_remove requires at least 2 arguments: json_doc and path");
     }
@@ -1166,13 +1166,13 @@ StatusOr<ColumnPtr> JsonFunctions::json_remove(FunctionContext* context, const C
     size_t rows = columns[0]->size();
     ColumnBuilder<TYPE_JSON> result(rows);
     ColumnViewer<TYPE_JSON> json_viewer(columns[0]);
-    
+
     // Get all path arguments
     std::vector<ColumnViewer<TYPE_VARCHAR>> path_viewers;
     for (size_t i = 1; i < columns.size(); i++) {
         path_viewers.emplace_back(columns[i]);
     }
-    
+
     for (size_t row = 0; row < rows; row++) {
         if (json_viewer.is_null(row)) {
             result.append_null();
@@ -1191,9 +1191,9 @@ StatusOr<ColumnPtr> JsonFunctions::json_remove(FunctionContext* context, const C
             if (path_viewers[path_idx].is_null(row)) {
                 continue; // Skip null paths
             }
-            
+
             std::string path_str = path_viewers[path_idx].value(row).to_string();
-            
+
             // Parse the JSON path to validate it
             auto jsonpath = JsonPath::parse(path_str);
             if (jsonpath.ok()) {
@@ -1201,26 +1201,26 @@ StatusOr<ColumnPtr> JsonFunctions::json_remove(FunctionContext* context, const C
             }
             // Skip invalid paths silently (following MySQL behavior)
         }
-        
+
         // Create new JSON with paths removed
         vpack::Builder builder;
         ASSIGN_OR_RETURN(auto removed_json, _remove_json_paths(json_value, paths_to_remove, &builder));
         result.append(std::move(removed_json));
     }
-    
+
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<JsonValue> JsonFunctions::_remove_json_paths(JsonValue* json_value, const std::vector<std::string>& paths, 
-                                                     vpack::Builder* builder) {
+StatusOr<JsonValue> JsonFunctions::_remove_json_paths(JsonValue* json_value, const std::vector<std::string>& paths,
+                                                      vpack::Builder* builder) {
     namespace vpack = arangodb::velocypack;
-    
+
     if (paths.empty()) {
         // No paths to remove, return original JSON
         builder->add(json_value->to_vslice());
         return JsonValue(builder->slice());
     }
-    
+
     // Parse all valid paths first
     std::vector<JsonPath> valid_paths;
     for (const auto& path_str : paths) {
@@ -1230,62 +1230,60 @@ StatusOr<JsonValue> JsonFunctions::_remove_json_paths(JsonValue* json_value, con
         }
         // Skip invalid paths silently (following MySQL behavior)
     }
-    
+
     if (valid_paths.empty()) {
         // No valid paths to remove, return original JSON
         builder->add(json_value->to_vslice());
         return JsonValue(builder->slice());
     }
-    
+
     vpack::Slice original_slice = json_value->to_vslice();
-    
+
     // Helper function to check if a path should be removed
     auto should_remove_path = [&](const std::string& current_path) -> bool {
         for (const auto& remove_path : valid_paths) {
             // Handle simple object key removal (e.g., $.key)
             // JsonPath::parse("$.key") creates 2 components: root ($) at index 0, key at index 1
-            if (remove_path.paths.size() == 2 && 
-                remove_path.paths[1].array_selector->type == NONE &&
+            if (remove_path.paths.size() == 2 && remove_path.paths[1].array_selector->type == NONE &&
                 current_path == ("$." + remove_path.paths[1].key)) {
                 return true;
             }
         }
         return false;
     };
-    
+
     // Recursive function to rebuild JSON while excluding specified paths
-    std::function<void(vpack::Slice, vpack::Builder&, const std::string&)> rebuild_json = 
-        [&](vpack::Slice slice, vpack::Builder& b, const std::string& current_path) {
-            
-        if (slice.isObject()) {
-            vpack::ObjectBuilder obj_builder(&b);
-            for (auto it : vpack::ObjectIterator(slice)) {
-                std::string key = it.key.copyString();
-                std::string child_path = current_path.empty() ? ("$." + key) : (current_path + "." + key);
-                
-                if (!should_remove_path(child_path)) {
-                    b.add(key, it.value);
+    std::function<void(vpack::Slice, vpack::Builder&, const std::string&)> rebuild_json =
+            [&](vpack::Slice slice, vpack::Builder& b, const std::string& current_path) {
+                if (slice.isObject()) {
+                    vpack::ObjectBuilder obj_builder(&b);
+                    for (auto it : vpack::ObjectIterator(slice)) {
+                        std::string key = it.key.copyString();
+                        std::string child_path = current_path.empty() ? ("$." + key) : (current_path + "." + key);
+
+                        if (!should_remove_path(child_path)) {
+                            b.add(key, it.value);
+                        }
+                    }
+                } else if (slice.isArray()) {
+                    vpack::ArrayBuilder arr_builder(&b);
+                    vpack::ArrayIterator arr_it(slice);
+                    size_t index = 0;
+
+                    for (auto it : arr_it) {
+                        std::string child_path = current_path + "[" + std::to_string(index) + "]";
+
+                        if (!should_remove_path(child_path)) {
+                            rebuild_json(it, b, child_path);
+                        }
+                        index++;
+                    }
+                } else {
+                    // Primitive value, just add it
+                    b.add(slice);
                 }
-            }
-        } else if (slice.isArray()) {
-            vpack::ArrayBuilder arr_builder(&b);
-            vpack::ArrayIterator arr_it(slice);
-            size_t index = 0;
-            
-            for (auto it : arr_it) {
-                std::string child_path = current_path + "[" + std::to_string(index) + "]";
-                
-                if (!should_remove_path(child_path)) {
-                    rebuild_json(it, b, child_path);
-                }
-                index++;
-            }
-        } else {
-            // Primitive value, just add it
-            b.add(slice);
-        }
-    };
-    
+            };
+
     rebuild_json(original_slice, *builder, "$");
     return JsonValue(builder->slice());
 }
