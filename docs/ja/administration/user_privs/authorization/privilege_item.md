@@ -31,6 +31,7 @@ sidebar_position: 20
 | OPERATE                 | レプリカ、設定項目、変数、およびトランザクションを管理します。       |
 | CREATE GLOBAL FUNCTION  | グローバル UDF を作成します。                                       |
 | CREATE STORAGE VOLUME   | リモートストレージシステムのストレージボリュームを作成します。       |
+| SECURITY                | セキュリティインテグレーションおよび Group Provider の作成または管理を行います。 |
 
 ### RESOURCE GROUP
 
