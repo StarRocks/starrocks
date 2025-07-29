@@ -339,12 +339,12 @@ public class PredicatePushdownTest {
 
         CompoundPredicateOperator pred5 =
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT,
-                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT,
-                        new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
-                                supportPred,
-                                notSupportPred
-                        )
-                ));
+                        new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT,
+                                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                                        supportPred,
+                                        notSupportPred
+                                )
+                        ));
         Predicate result5 = EntityConvertUtils.convertPredicate(pred5, new HashSet<>());
         // actually we expect NOT(NOT(xxx)) convert to xxx, but we don't support that yet
         // for now, we first deal with NOT(xxx) and get no-predicate, and then deal with NOT(no-predicate)
