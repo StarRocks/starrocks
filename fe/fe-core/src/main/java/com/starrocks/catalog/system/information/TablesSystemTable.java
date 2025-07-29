@@ -104,6 +104,18 @@ public class TablesSystemTable extends SystemTable {
         return isSupportedEqualPredicateColumn(conjuncts, SUPPORTED_EQUAL_COLUMNS);
     }
 
+    /**
+     * To be compatible with BE's implementation, treat some special values as constant null.
+     */
+    private static boolean isConstantNullValue(Type valueType, Object object) {
+        if (valueType.isStringType() && object == null) {
+            return true;
+        } else if (valueType.isBigint() && (Long) object == InformationSchemaDataSource.DEFAULT_EMPTY_NUM) {
+            return true;
+        }
+        return false;
+    }
+
     public static List<ScalarOperator> infoToScalar(SystemTable systemTable,
                                                     TTableInfo tableInfo) {
         List<ScalarOperator> result = Lists.newArrayList();
@@ -114,16 +126,18 @@ public class TablesSystemTable extends SystemTable {
             FieldValueMetaData meta = TTableInfo.metaDataMap.get(field).valueMetaData;
             Object obj = tableInfo.getFieldValue(field);
             Type valueType = thriftToScalarType(meta.type);
-            if (valueType.isStringType() && obj == null) {
-                obj = ""; // Convert null string to empty string
-            }
-            ConstantOperator scalar = ConstantOperator.createNullableObject(obj, valueType);
-            try {
-                scalar = mayCast(scalar, column.getType());
-            } catch (Exception e) {
-                LOG.debug("Failed to cast scalar operator for column: {}, value: {}, type: {}",
-                        column.getName(), obj, valueType, e);
+            ConstantOperator scalar;
+            if (isConstantNullValue(valueType, obj)) {
                 scalar = ConstantOperator.createNull(column.getType());
+            } else {
+                scalar = ConstantOperator.createNullableObject(obj, valueType);
+                try {
+                    scalar = mayCast(scalar, column.getType());
+                } catch (Exception e) {
+                    LOG.debug("Failed to cast scalar operator for column: {}, value: {}, type: {}",
+                            column.getName(), obj, valueType, e);
+                    scalar = ConstantOperator.createNull(column.getType());
+                }
             }
             result.add(scalar);
         }

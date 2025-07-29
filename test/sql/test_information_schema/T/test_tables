@@ -1,0 +1,13 @@
+-- name: test_tables
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `unique_table_with_null` ( `k1` date, `k2` datetime, `k3` char(20), `k4` varchar(20), `k5` boolean, `v1` tinyint, `v2` smallint, `v3` int, `v4` bigint, `v5` largeint, `v6` float, `v7` double, `v8` decimal(27,9) ) UNIQUE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) COMMENT "OLAP" DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3;
+select TABLE_TYPE, `VERSION`, ROW_FORMAT  from information_schema.tables where TABLE_SCHEMA='db_${uuid0}' limit 1;
+[UC]select * from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null';
+[UC]select a.TABLE_NAME, b.* from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null';
+set enable_constant_execute_in_fe=true;
+select a.TABLE_NAME, b.TABLE_MODEL, b.PRIMARY_KEY, b.PARTITION_KEY, b.DISTRIBUTE_KEY from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null' and a.TABLE_SCHEMA='db_${uuid0}';
+
+set enable_constant_execute_in_fe=false;
+select a.TABLE_NAME, b.TABLE_MODEL, b.PRIMARY_KEY, b.PARTITION_KEY, b.DISTRIBUTE_KEY from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null' and a.TABLE_SCHEMA='db_${uuid0}';
