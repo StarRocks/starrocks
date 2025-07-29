@@ -1069,12 +1069,10 @@ TEST_F(LakeServiceTest, test_aggregate_compact) {
                 TxnLogPB txnlog;
                 txnlog.set_tablet_id(100);
                 txnlog.set_txn_id(100);
-                txnlog.set_partition_id(99);
                 resp->add_txn_logs()->CopyFrom(txnlog);
                 TxnLogPB txnlog2;
                 txnlog2.set_tablet_id(101);
                 txnlog2.set_txn_id(100);
-                txnlog2.set_partition_id(99);
                 resp->add_txn_logs()->CopyFrom(txnlog2);
                 resp->mutable_status()->set_status_code(0);
                 done->Run();
@@ -1096,6 +1094,7 @@ TEST_F(LakeServiceTest, test_aggregate_compact) {
         // add request to agg_request
         agg_request.add_requests()->CopyFrom(request);
         agg_request.add_compute_nodes()->CopyFrom(cn);
+        agg_request.set_partition_id(99);
         agg_compact(&cntl, &agg_request, &response);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
@@ -1117,6 +1116,7 @@ TEST_F(LakeServiceTest, test_aggregate_compact) {
             // add request to agg_request
             agg_request.add_requests()->CopyFrom(request);
             agg_request.add_compute_nodes()->CopyFrom(cn);
+            agg_request.set_partition_id(99);
         }
         CompactResponse response;
         agg_compact(&cntl, &agg_request, &response);

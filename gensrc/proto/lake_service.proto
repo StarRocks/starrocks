@@ -120,6 +120,7 @@ message CompactRequest {
 message AggregateCompactRequest {
     repeated ComputeNodePB compute_nodes = 1;
     repeated CompactRequest requests = 2;
+    optional int64 partition_id = 3;
 }
 
 message CompactStat {
