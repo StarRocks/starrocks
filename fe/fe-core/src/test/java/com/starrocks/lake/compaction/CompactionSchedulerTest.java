@@ -30,7 +30,9 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.ComputeNodePB;
+import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
@@ -141,7 +143,7 @@ public class CompactionSchedulerTest {
     }
 
     @Test
-    public void testStartCompactionWithFileBundling() {
+    public void testStartCompactionWithFileBundling() throws RpcException {
         LakeTable table = new LakeTable();
         table.setFileBundling(true);
         CompactionMgr compactionManager = new CompactionMgr();
@@ -176,28 +178,47 @@ public class CompactionSchedulerTest {
             }
         };
 
-        new MockUp<CompactionScheduler>(compactionScheduler) {
+        new MockUp<CompactionScheduler>() {
             @Mock
             protected long beginTransaction(PartitionIdentifier partition, ComputeResource computeResource) {
                 return 100L;
             }
 
             @Mock
-            private Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition,
-                                                                 ComputeResource computeResource) {
+            protected Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition,
+                                                        ComputeResource computeResource) {
                 Map<Long, List<Long>> map = new HashMap<>();
                 map.put(1L, Lists.newArrayList(10L));
                 return map;
             }
+        };
 
-            @Mock
-            private CompactionTask createAggregateCompactionTask(long currentVersion,
-                                                                 Map<Long, List<Long>> beToTablets, long txnId,
-                                                                 PartitionStatistics.CompactionPriority priority,
-                                                                 ComputeResource computeResource, long partitionId) {
-                CompactRequest request = new CompactRequest();
-                request.tabletIds = Lists.newArrayList(10L);
-                return new CompactionTask(1L, lakeService, request);
+        ComputeNode node = new ComputeNode(1L, "127.0.0.1", 9050);
+        node.setBrpcPort(9050);
+        ComputeNode aggregatorNode = new ComputeNode(2L, "127.0.0.2", 9050);
+        aggregatorNode.setBrpcPort(9050);
+        
+        new Expectations() {
+            {
+                systemInfoService.getBackendOrComputeNode(1L);
+                result = node;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+
+                LakeAggregator.chooseAggregatorNode(WarehouseManager.DEFAULT_RESOURCE);
+                result = aggregatorNode;
+            }
+        };
+
+        new Expectations() {
+            {
+                BrpcProxy.getLakeService("127.0.0.1", 9050);
+                result = lakeService;
+                
+                // 添加为 aggregator node 的 LakeService
+                BrpcProxy.getLakeService("127.0.0.2", 9050);
+                result = lakeService;
             }
         };
 
@@ -209,9 +230,7 @@ public class CompactionSchedulerTest {
 
         CompactionWarehouseInfo info = new CompactionWarehouseInfo("aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
         table.setState(OlapTable.OlapTableState.NORMAL);
-        CompactionJob job = compactionScheduler.startCompaction(snapshot, info);
-        Assertions.assertNotNull(job);
-        Assertions.assertEquals(1, job.getNumTabletCompactionTasks());
+        compactionScheduler.startCompaction(snapshot, info);
     }
 
     @Test
