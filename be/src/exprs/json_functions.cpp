@@ -1221,51 +1221,71 @@ StatusOr<JsonValue> JsonFunctions::_remove_json_paths(JsonValue* json_value, con
         return JsonValue(builder->slice());
     }
     
-    // For now, implement a simple approach that removes one path at a time
-    // This is not the most efficient but it's correct and follows MySQL behavior
-    JsonValue working_json = *json_value;
-    
+    // Parse all valid paths first
+    std::vector<JsonPath> valid_paths;
     for (const auto& path_str : paths) {
         auto jsonpath = JsonPath::parse(path_str);
-        if (!jsonpath.ok()) {
-            continue; // Skip invalid paths
+        if (jsonpath.ok()) {
+            valid_paths.push_back(*jsonpath.value());
         }
-        
-        // Try to remove this path from the working JSON
-        vpack::Builder temp_builder;
-        ASSIGN_OR_RETURN(working_json, _remove_single_path(&working_json, *jsonpath.value(), &temp_builder));
+        // Skip invalid paths silently (following MySQL behavior)
     }
     
-    builder->add(working_json.to_vslice());
-    return JsonValue(builder->slice());
-}
-
-StatusOr<JsonValue> JsonFunctions::_remove_single_path(JsonValue* json_value, const JsonPath& path, 
-                                                        vpack::Builder* builder) {
-    namespace vpack = arangodb::velocypack;
+    if (valid_paths.empty()) {
+        // No valid paths to remove, return original JSON
+        builder->add(json_value->to_vslice());
+        return JsonValue(builder->slice());
+    }
     
     vpack::Slice original_slice = json_value->to_vslice();
     
-    // For simplicity, handle only simple object key removal for now
-    // This covers the most common use case: $.key
-    if (path.paths.size() == 1 && path.paths[0].array_selector->type == NONE) {
-        std::string key_to_remove = path.paths[0].key;
-        
-        if (original_slice.isObject()) {
-            vpack::ObjectBuilder obj_builder(builder);
-            for (auto it : vpack::ObjectIterator(original_slice)) {
+    // Helper function to check if a path should be removed
+    auto should_remove_path = [&](const std::string& current_path) -> bool {
+        for (const auto& remove_path : valid_paths) {
+            // For now, handle simple object key removal (e.g., $.key)
+            if (remove_path.paths.size() == 1 && 
+                remove_path.paths[0].array_selector->type == NONE &&
+                current_path == ("$." + remove_path.paths[0].key)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    
+    // Recursive function to rebuild JSON while excluding specified paths
+    std::function<void(vpack::Slice, vpack::Builder&, const std::string&)> rebuild_json = 
+        [&](vpack::Slice slice, vpack::Builder& b, const std::string& current_path) {
+            
+        if (slice.isObject()) {
+            vpack::ObjectBuilder obj_builder(&b);
+            for (auto it : vpack::ObjectIterator(slice)) {
                 std::string key = it.key.copyString();
-                if (key != key_to_remove) {
-                    builder->add(key, it.value);
+                std::string child_path = current_path.empty() ? ("$." + key) : (current_path + "." + key);
+                
+                if (!should_remove_path(child_path)) {
+                    b.add(key, it.value);
                 }
             }
-            return JsonValue(builder->slice());
+        } else if (slice.isArray()) {
+            vpack::ArrayBuilder arr_builder(&b);
+            vpack::ArrayIterator arr_it(slice);
+            size_t index = 0;
+            
+            for (auto it : arr_it) {
+                std::string child_path = current_path + "[" + std::to_string(index) + "]";
+                
+                if (!should_remove_path(child_path)) {
+                    rebuild_json(it, b, child_path);
+                }
+                index++;
+            }
+        } else {
+            // Primitive value, just add it
+            b.add(slice);
         }
-    }
+    };
     
-    // For other cases, return the original JSON unchanged
-    // TODO: Implement full path removal for nested objects and arrays
-    builder->add(original_slice);
+    rebuild_json(original_slice, *builder, "$");
     return JsonValue(builder->slice());
 }
 
