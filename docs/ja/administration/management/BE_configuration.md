@@ -1181,7 +1181,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - タイプ: Int
 - 単位: ミリ秒
 - 可変: いいえ
-- 説明: publish version のスレッドプールは、スレッドのアイドル時間を回収できるかどうかを決定します。
+- 説明: スレッドが Publish Version スレッドプールによって再利用されるまでの Idle 時間。
 - 導入バージョン: -
 
 ##### clear_transaction_task_worker_count
