@@ -571,9 +571,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             new BigInteger("170141183460469231731687303715884105728"); // 2^127
 
     private static final List<String> DATE_FUNCTIONS =
-            Lists.newArrayList(FunctionSet.DATE_ADD,
+            Lists.newArrayList(
+                    FunctionSet.DATE_ADD,
                     FunctionSet.ADDDATE,
-                    FunctionSet.DATE_ADD, FunctionSet.DATE_SUB,
+                    FunctionSet.DATE_SUB,
                     FunctionSet.SUBDATE,
                     FunctionSet.DAYS_SUB);
 
