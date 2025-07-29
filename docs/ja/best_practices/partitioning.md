@@ -25,7 +25,7 @@ StarRocks での高速分析は、クエリパターンに合ったテーブル�
 | **主な目的** | 粗粒度のデータプルーニングとライフサイクル管理 (TTL、アーカイブ)。 | 各パーティション内での細粒度の並行性とデータのローカル性。 |
 | **プランナーの可視性** | パーティションは catalog オブジェクトであり、FE は述語を使用してそれらをスキップできます。 | 等価述語のみがバケットプルーニングをサポートします。 |
 | **ライフサイクル操作** | DROP PARTITION はメタデータのみで、GDPR 削除や月次ロールオフに最適です。 | バケットは削除できません; `ALTER TABLE … MODIFY DISTRIBUTED BY` でのみ変更されます。 |
-| **典型的な数** | テーブルごとに 10^2–10^4（日、週、テナント）。 | パーティションごとに 10–120; StarRocks `BUCKETS AUTO` がこれを調整します。 |
+| **典型的な数** | テーブルごとに 10^2–10^4（日、週、テナント）。 | パーティションごとに 10–120; StarRocks `BUCKETS xxx` がこれを調整します。 |
 | **スキュー処理** | パーティションをマージまたは分割します。複合/ハイブリッドスキームを検討します。 | バケット数を増やし、複合キーでハッシュし、「クジラ」を分離するか、ランダムバケット法を使用します。 |
 | **注意点** | >100 k パーティションは FE に大きなメモリフットプリントをもたらす可能性があります。 | >200 k tablets per BE; 10 GB を超える tablets は Compaction の問題に直面する可能性があります。 |
 
@@ -42,7 +42,7 @@ StarRocks での高速分析は、クエリパターンに合ったテーブル�
 1. **時間優先のデフォルト**–クエリの 80% に時間フィルターが含まれる場合、`date_trunc('day', dt)` を先頭にします。
 2. **テナントの分離**–テナント単位でデータを管理する必要がある場合、`tenant_id` をキーに追加します。
 3. **保持の整合性**–削除予定の列をキーに含めます。
-4. **複合キー**: `PARTITION BY (tenant_id, date_trunc('day', dt))` は完全にプルーニングしますが、`#tenants × #days` のパーティションを作成します。合計約 100 k 以下に抑えないと、FE メモリと BE Compaction に影響します。
+4. **複合キー**: `PARTITION BY tenant_id, date_trunc('day', dt)` は完全にプルーニングしますが、`#tenants × #days` のパーティションを作成します。合計約 100 k 以下に抑えないと、FE メモリと BE Compaction に影響します。
 
 ## 粒度の選択
 
@@ -68,8 +68,8 @@ CREATE TABLE click_stream (
   ...
 )
 DUPLICATE KEY(user_id, event_time)
-PARTITION BY (date_trunc('day', event_time))
-DISTRIBUTED BY HASH(user_id) BUCKETS AUTO;
+PARTITION BY date_trunc('day', event_time)
+DISTRIBUTED BY HASH(user_id) BUCKETS xxx;
 ```
 
 ### SaaS メトリクス（マルチテナント、パターン A）
@@ -85,7 +85,7 @@ CREATE TABLE metrics (
 )
 PRIMARY KEY(tenant_id, dt, metric_name)
 PARTITION BY date_trunc('DAY', dt)
-DISTRIBUTED BY HASH(tenant_id) BUCKETS AUTO;
+DISTRIBUTED BY HASH(tenant_id) BUCKETS xxx;
 ```
 
 ### クジラテナントの複合（パターン B）
@@ -100,6 +100,6 @@ CREATE TABLE activity (
   ....
 )
 DUPLICATE KEY(dt, id)
-PARTITION BY (tenant_id, date_trunc('MONTH', dt))
-DISTRIBUTED BY HASH(id) BUCKETS AUTO;
+PARTITION BY tenant_id, date_trunc('MONTH', dt)
+DISTRIBUTED BY HASH(id) BUCKETS xxx;
 ```

@@ -101,23 +101,6 @@ ORDER BY (device_id, ts);
     一个按 (device_id, ts) 排序的遥测表实现了 1.8 倍更好的压缩（LZ4）和 25 % 更低的 CPU/扫描消耗，相比于未排序的数据。
 
 ---
-5. 更快的主键表写合并
-
-    工作原理：
-
-    在更新插入期间，引擎仅重写键范围与批次重叠的部分，而不是整个 tablet。
-
-    示例：
-
-    ```sql
-    UPDATE balances
-    SET    amount = amount + 100
-    WHERE  account_id = 123;
-    ```
-
-    使用 `ORDER BY (account_id)`，接触的 segment 数据不到 1 %，而未排序时为 100 %——在更新密集型工作负载中实现 2–4 倍更高的写入吞吐量。
-
----
 
 ## 排序键的工作原理
 
