@@ -555,13 +555,10 @@ private:
             if (UNLIKELY(flag)) {
                 return Status::InternalError("Index not in dictionary bounds");
             }
-            if (dst->is_nullable()) {
-                down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
-            }
             auto* binary_column = ColumnHelper::get_binary_column(dst);
             size_t cnt = 0;
             for (int i = 0; i < count; ++i) {
-                if (filter[i] && is_nulls[i]) {
+                if (filter[i] && !is_nulls[i]) {
                     binary_column->append(_dict[_indexes[cnt]]);
                 } else {
                     binary_column->append_default();

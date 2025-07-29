@@ -162,6 +162,30 @@ void dict_encoding_test() {
         EXPECT_EQ(dst->size(), chunk_size);
     }
     {
+        decoder._dict_size_threshold = 0;
+        TypeDescriptor type_desc = TypeDescriptor(TARGET_TYPE);
+        auto dst = ColumnHelper::create_column(type_desc, true);
+        auto filter = std::make_unique<uint8_t[]>(chunk_size);
+        memset(filter.get(), 0x01, chunk_size);
+        filter[1] = 0;
+        filter[1000] = 0;
+        ASSERT_OK(decoder.next_batch_with_nulls(chunk_size, infos, ColumnContentType::VALUE, dst.get(), filter.get()));
+        EXPECTED_UNQUOTE(dst->debug_item(0), "6");
+        EXPECTED_UNQUOTE(dst->debug_item(2), "NULL");
+        EXPECTED_UNQUOTE(dst->debug_item(2000), "6");
+        EXPECT_EQ(dst->size(), chunk_size);
+    }
+    {
+        // all filtered
+        decoder._dict_size_threshold = 0;
+        TypeDescriptor type_desc = TypeDescriptor(TARGET_TYPE);
+        auto dst = ColumnHelper::create_column(type_desc, true);
+        auto filter = std::make_unique<uint8_t[]>(chunk_size);
+        memset(filter.get(), 0x00, chunk_size);
+        ASSERT_OK(decoder.next_batch_with_nulls(chunk_size, infos, ColumnContentType::VALUE, dst.get(), filter.get()));
+        EXPECT_EQ(dst->size(), chunk_size);
+    }
+    {
         // all null
         for (size_t i = 0; i < chunk_size; ++i) {
             infos.nulls_data()[i] = 1;
