@@ -96,7 +96,7 @@ public class TabletStatMgr extends FrontendDaemon {
         return lastWorkTimestamp;
     }
 
-    public boolean workTimeIsMustBefore(LocalDateTime time) {
+    public boolean workTimeIsMustAfter(LocalDateTime time) {
         return lastWorkTimestamp.minusSeconds(Config.tablet_stat_update_interval_second * 2).isAfter(time);
     }
 

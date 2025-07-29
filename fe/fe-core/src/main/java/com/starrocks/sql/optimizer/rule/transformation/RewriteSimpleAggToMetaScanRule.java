@@ -80,7 +80,6 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         Map<ColumnRefOperator, Column> newScanColumnRefs = Maps.newHashMap();
         // this variable is introduced to solve compatibility issues,
         // see more details in the description of https://github.com/StarRocks/starrocks/pull/17619
-        boolean hasCountAgg = aggs.values().stream().anyMatch(aggCall -> aggCall.getFnName().equals(FunctionSet.COUNT));
 
         ColumnRefOperator countPlaceHolderColumn = null;
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggs.entrySet()) {
@@ -268,7 +267,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                 re.ifPresent(cc -> constantMap.put(entry.getKey(), cc));
             } else if (call.getFnName().equals(FunctionSet.COUNT) && !call.isDistinct()
                     && call.getUsedColumns().size() <= 1 && GlobalStateMgr.getCurrentState().getTabletStatMgr()
-                    .workTimeIsMustBefore(lastUpdateTime)) {
+                    .workTimeIsMustAfter(lastUpdateTime)) {
                 long count = table.getVisiblePartitions().stream().mapToLong(Partition::getRowCount).sum();
                 constantMap.put(entry.getKey(), ConstantOperator.createBigint(count));
             } else {
