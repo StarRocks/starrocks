@@ -449,6 +449,14 @@ TEST_P(BuiltinFunctionTest, TestIndividualFunction) {
     if (!descriptor.scalar_function) {
         GTEST_SKIP() << "Function " << descriptor.name << " has no scalar function implementation";
     }
+    if (!descriptor.return_type) {
+        GTEST_SKIP() << "Function " << descriptor.name << " has no return type";
+    }
+    for (auto& arg_type : descriptor.arg_types) {
+        if (!arg_type) {
+            GTEST_SKIP() << "Function " << descriptor.name << " has no argument type";
+        }
+    }
 
     try {
         test_single_function(function_id, descriptor);
