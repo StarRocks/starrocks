@@ -1081,11 +1081,12 @@ struct AggregateCompactContext {
     std::unique_ptr<BThreadCountDownLatch> latch;
     CombinedTxnLogPB combined_txn_log;
     int64_t begin_us = 0;
+    int64_t partition_id = 0;
 
     using CompactRequestCtx = RequestContext<CompactResponse>;
     std::vector<CompactRequestCtx> compact_request_ctx;
 
-    AggregateCompactContext() : begin_us(butil::gettimeofday_us()) {}
+    AggregateCompactContext(int64_t partition_id) : begin_us(butil::gettimeofday_us()), partition_id(partition_id) {}
 
     void handle_failure(const std::string& error) {
         std::lock_guard l(response_mtx);
@@ -1100,7 +1101,9 @@ struct AggregateCompactContext {
     void collect_txnlogs(CompactResponse* response) {
         std::lock_guard l(response_mtx);
         for (const auto& log : response->txn_logs()) {
-            combined_txn_log.add_txn_logs()->CopyFrom(log);
+            auto* next_txn_log = combined_txn_log.add_txn_logs();
+            next_txn_log->CopyFrom(log);
+            next_txn_log->set_partition_id(partition_id);
         }
     }
 
@@ -1193,7 +1196,7 @@ void LakeServiceImpl::aggregate_compact(::google::protobuf::RpcController* contr
         return;
     }
 
-    AggregateCompactContext ac_context;
+    AggregateCompactContext ac_context(request->partition_id());
     ac_context.latch = std::make_unique<BThreadCountDownLatch>(request->requests_size());
 
     for (int i = 0; i < request->requests_size(); i++) {
