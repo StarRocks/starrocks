@@ -18,6 +18,8 @@
 
 #include <filesystem>
 
+#include "testutil/parallel_test.h"
+
 namespace starrocks::parquet {
 class ParquetCLIReaderTest : public testing::Test {
 public:
@@ -60,8 +62,7 @@ private:
     }
 };
 
-TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
-    GTEST_SKIP(); // this ut takes a very long time.
+GROUP_SLOW_TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
     std::vector<std::string> paths;
     // We don't support below files in init phase, but we need to make sure that will not make BE crashed.
     std::set<std::string> unsupported_paths_init;
@@ -138,8 +139,7 @@ TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
     }
 }
 
-TEST_F(ParquetCLIReaderTest, ReadArrowFuzzingParquetFiles) {
-    GTEST_SKIP(); // this ut takes a very long time.
+GROUP_SLOW_TEST_F(ParquetCLIReaderTest, ReadArrowFuzzingParquetFiles) {
     std::vector<std::string> read_paths;
     {
         traverse_directory_add_parquet(read_paths, "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/");

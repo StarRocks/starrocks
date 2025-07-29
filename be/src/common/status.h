@@ -528,7 +528,7 @@ struct StatusInstance {
 #define RETURN_IF_DCHECK_GE_FAILED(val1, val2) RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, >=)
 #define RETURN_IF_DCHECK_GT_FAILED(val1, val2) RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, >)
 
-#elif
+#else
 
 #define RETURN_IF_DCHECK_EQ_FAILED(val1, val2) DCHECK_EQ(val1, val2)
 #define RETURN_IF_DCHECK_LE_FAILED(val1, val2) DCHECK_LE(val1, val2)
