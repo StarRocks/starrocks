@@ -43,21 +43,13 @@ protected:
     // Generate a random value for the given type
     template <typename T>
     T generate_random_value() {
-        std::uniform_int_distribution<T> dist;
-        return dist(_rng);
-    }
-
-    // Specialized for floating point types
-    template <>
-    double generate_random_value<double>() {
-        std::uniform_real_distribution<double> dist(-1000.0, 1000.0);
-        return dist(_rng);
-    }
-
-    template <>
-    float generate_random_value<float>() {
-        std::uniform_real_distribution<float> dist(-1000.0f, 1000.0f);
-        return dist(_rng);
+        if constexpr (std::is_floating_point_v<T>) {
+            std::uniform_real_distribution<T> dist(-1000.0, 1000.0);
+            return dist(_rng);
+        } else {
+            std::uniform_int_distribution<T> dist;
+            return dist(_rng);
+        }
     }
 
     // Generate random string
