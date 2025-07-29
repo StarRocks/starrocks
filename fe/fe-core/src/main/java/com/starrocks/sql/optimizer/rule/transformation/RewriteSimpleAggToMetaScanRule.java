@@ -103,28 +103,22 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                 if (countPlaceHolderColumn != null) {
                     metaColumn = countPlaceHolderColumn;
                 } else {
-                    metaColumn = columnRefFactory.create(metaColumnName, columnType, aggCall.isNullable());
+                    metaColumn = columnRefFactory.create(metaColumnName, columnType, true);
                     countPlaceHolderColumn = metaColumn;
                 }
             } else {
-                metaColumn = columnRefFactory.create(metaColumnName, columnType, aggCall.isNullable());
+                metaColumn = columnRefFactory.create(metaColumnName, columnType, true);
             }
 
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
             Column c = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
 
-            if (aggCall.getFnName().equals(FunctionSet.COUNT) || hasCountAgg) {
-                Column copiedColumn = new Column(c);
-                if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
-                    copiedColumn.setType(Type.BIGINT);
-                }
-                if (hasCountAgg) {
-                    copiedColumn.setIsAllowNull(true);
-                }
-                newScanColumnRefs.put(metaColumn, copiedColumn);
-            } else {
-                newScanColumnRefs.put(metaColumn, c);
+            Column copiedColumn = new Column(c);
+            if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
+                copiedColumn.setType(Type.BIGINT);
             }
+            copiedColumn.setIsAllowNull(true);
+            newScanColumnRefs.put(metaColumn, copiedColumn);
 
             Function aggFunction = aggCall.getFunction();
             String newAggFnName = aggCall.getFnName();
@@ -202,13 +196,6 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                     ColumnRefSet usedColumns = aggregator.getUsedColumns();
                     if (functionName.equals(FunctionSet.MAX) || functionName.equals(FunctionSet.MIN)) {
                         if (usedColumns.size() != 1) {
-                            return false;
-                        }
-                        ColumnRefOperator usedColumn =
-                                context.getColumnRefFactory().getColumnRef(usedColumns.getFirstId());
-                        Column column = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
-                        if (column == null || column.isAllowNull()) {
-                            // this is not a primitive column on table or it is nullable
                             return false;
                         }
                         // min/max column should have zonemap index
