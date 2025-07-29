@@ -2016,6 +2016,7 @@ class StarrocksSQLApiLib(object):
             res = self.retry_execute_sql(show_sql, True)
             refresh_count = self.get_task_run_success_count(res["result"])
             if refresh_count >= expect_count:
+                time.sleep(1)
                 return
             else:
                 print("current refresh count is {}, expect is {}".format(refresh_count, expect_count))
