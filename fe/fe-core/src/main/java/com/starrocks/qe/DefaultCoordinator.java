@@ -1117,6 +1117,17 @@ public class DefaultCoordinator extends Coordinator {
                     }
                 })
                 .thenRun(() -> {
+                    // If the instance is finished, merge it into fragment profile and purge existing instance profiles
+                    // If the instance is still running, merge it into instance profiles for use by running profile
+                    if (queryProfile.mergeFragmentProfile(execState, params)) {
+                        // Purge instance running profile to reduce memory footprint
+                        execState.purgeInstanceRunningProfile();
+                    } else {
+                        // Merge into instance running profile
+                        execState.updateInstanceRunningProfile(params);
+                    }
+                })
+                .thenRun(() -> {
                     // update load info if it's a isDone rpc
                     if (isDone && execState.isFinished()) {
                         updateFinishInstance(params, execState, instanceId);
@@ -1131,22 +1142,6 @@ public class DefaultCoordinator extends Coordinator {
                     return null; // Return null to continue the chain
                 });
 
-        // Build profiles
-        // 1. Build running profile if necessary
-        queryProfile.updateProfile(execState, params);
-
-        // 2. Either merge into fragment or instance profile:
-        // If the instance is finished, merge it into fragment profile and purge existing instance profiles
-        // If the instance is still running, merge it into instance profiles for use by running profile
-        if (queryProfile.mergeFragmentProfile(execState, params)) {
-            // Purge instance running profile to reduce memory footprint
-            execState.purgeInstanceRunningProfile();
-        } else {
-            // Merge into instance running profile
-            execState.updateInstanceRunningProfile(params);
-        }
-
-        lock();
         try {
             future.get();
         } catch (Exception e) {
