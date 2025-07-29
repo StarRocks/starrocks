@@ -1643,7 +1643,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - Default: 60000
 - Type: Int
-- Unit: -
+- Unit: Milliseconds
 - Is mutable: No
 - Description: The publish version thread pool determines whether the idle time of a thread can be reclaimed.
 - Introduced in: -

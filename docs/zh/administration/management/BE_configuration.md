@@ -1572,7 +1572,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - 默认值：60000
 - 类型：Int
-- 单位：-
+- 单位：毫秒
 - 是否动态：否
 - 描述：publish version线程池决定是否可以回收线程的idle时长。
 - 引入版本：-
