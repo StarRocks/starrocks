@@ -88,6 +88,9 @@ public:
     virtual Status next_batch(size_t count, uint8_t* dst) {
         return Status::NotSupported("next_batch is not supported");
     }
+
+protected:
+    void _next_null_column(size_t count, const NullInfos& null_infos, NullableColumn* dst);
 };
 
 class EncodingInfo {
