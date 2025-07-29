@@ -58,6 +58,7 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+<<<<<<< HEAD
         if (OperatorType.LOGICAL_PROJECT.equals(input.inputAt(constantIndex).getOp().getOpType())) {
             LogicalProjectOperator project = input.inputAt(constantIndex).getOp().cast();
             if (!project.getColumnRefMap().values().stream().allMatch(ScalarOperator::isConstant)) {
@@ -66,6 +67,13 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
             OptExpression optExpression = input.inputAt(constantIndex);
             OptExpression valuesOpt = optExpression.inputAt(0);
             return checkValuesOptExpression(valuesOpt);
+=======
+        if (!context.getSessionVariable().isEnableConstantExecuteInFE()) {
+            return false;
+        }
+        if (!isTransformable((LogicalJoinOperator) input.getOp(), constantIndex)) {
+            return false;
+>>>>>>> aa109b6310 ([BugFix] Fix a EliminateJoinWithConstantRule rewrite bug (#61338))
         }
         return false;
     }
@@ -110,7 +118,6 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
                                        OptExpression otherOpt,
                                        OptExpression constantOpt,
                                        OptimizerContext context) {
-
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) joinOpt.getOp();
         LogicalProjectOperator projectOperator = (LogicalProjectOperator) constantOpt.getOp();
 
@@ -127,8 +134,12 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
         joinOpt.getOutputColumns().getStream().map(context.getColumnRefFactory()::getColumnRef)
                 .forEach(ref -> outputs.put(ref, rewriter.rewrite(ref)));
         if (joinOperator.getJoinType().isOuterJoin()) {
+            // ensure value is a constant value, otherwise we cannot transform the join's on-predicate
+            if (constants.values().stream().anyMatch(op -> !op.isConstant())) {
+                return Lists.newArrayList();
+            }
             // transform join's on-predicate with case-when operator
-            constantOpt.getRowOutputInfo().getColumnRefMap().forEach((key, value) -> {
+            constants.forEach((key, value) -> {
                 ScalarOperator t = transformOuterJoinOnPredicate(joinOperator, value, rewrittenCondition);
                 outputs.put(key, t);
             });

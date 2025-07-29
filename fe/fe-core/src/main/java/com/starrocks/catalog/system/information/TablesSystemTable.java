@@ -53,4 +53,117 @@ public class TablesSystemTable {
                 .column("TABLE_COMMENT", ScalarType.createVarchar(2048))
                 .build(), TSchemaTableType.SCH_TABLES);
     }
+<<<<<<< HEAD
+=======
+
+    public static SystemTable create(String catalogName) {
+        return new TablesSystemTable(catalogName);
+    }
+
+    private static final Set<String> SUPPORTED_EQUAL_COLUMNS =
+            Collections.unmodifiableSet(new TreeSet<>(String.CASE_INSENSITIVE_ORDER) {
+                {
+                    add("TABLE_SCHEMA");
+                    add("TABLE_NAME");
+                }
+            });
+
+    @Override
+    public boolean supportFeEvaluation(ScalarOperator predicate) {
+        final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        if (conjuncts.isEmpty()) {
+            return true;
+        }
+        if (!isEmptyOrOnlyEqualConstantOps(conjuncts)) {
+            return false;
+        }
+        return isSupportedEqualPredicateColumn(conjuncts, SUPPORTED_EQUAL_COLUMNS);
+    }
+
+    /**
+     * To be compatible with BE's implementation, treat some special values as constant null.
+     */
+    private static boolean isConstantNullValue(Type valueType, Object object) {
+        if (valueType.isStringType() && object == null) {
+            return true;
+        } else if (valueType.isBigint() && (Long) object == InformationSchemaDataSource.DEFAULT_EMPTY_NUM) {
+            return true;
+        }
+        return false;
+    }
+
+    public static List<ScalarOperator> infoToScalar(SystemTable systemTable,
+                                                    TTableInfo tableInfo) {
+        List<ScalarOperator> result = Lists.newArrayList();
+        for (Column column : systemTable.getBaseSchema()) {
+            String name = column.getName().toLowerCase();
+            TTableInfo._Fields field = TTableInfo._Fields.findByName(name);
+            Preconditions.checkArgument(field != null, "Unknown field: " + name);
+            FieldValueMetaData meta = TTableInfo.metaDataMap.get(field).valueMetaData;
+            Object obj = tableInfo.getFieldValue(field);
+            Type valueType = thriftToScalarType(meta.type);
+            ConstantOperator scalar;
+            if (isConstantNullValue(valueType, obj)) {
+                scalar = ConstantOperator.createNull(column.getType());
+            } else {
+                scalar = ConstantOperator.createNullableObject(obj, valueType);
+                try {
+                    scalar = mayCast(scalar, column.getType());
+                } catch (Exception e) {
+                    LOG.debug("Failed to cast scalar operator for column: {}, value: {}, type: {}",
+                            column.getName(), obj, valueType, e);
+                    scalar = ConstantOperator.createNull(column.getType());
+                }
+            }
+            result.add(scalar);
+        }
+        return result;
+    }
+
+    @Override
+    public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
+        final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
+        TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
+        TGetTablesInfoRequest params = new TGetTablesInfoRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setCurrent_user_ident(userIdentity);
+        authInfo.setCatalog_name(this.getCatalogName());
+        if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(this.getCatalogName())) {
+            authInfo.setPattern(context.getDatabase());
+        }
+        for (ScalarOperator conjunct : conjuncts) {
+            BinaryPredicateOperator binary = (BinaryPredicateOperator) conjunct;
+            ColumnRefOperator columnRef = binary.getChild(0).cast();
+            String name = columnRef.getName();
+            ConstantOperator value = binary.getChild(1).cast();
+            switch (name.toUpperCase()) {
+                case "TABLE_NAME":
+                    params.setTable_name(value.getVarchar());
+                    break;
+                case "TABLE_SCHEMA":
+                    authInfo.setPattern(value.getVarchar());
+                    break;
+                default:
+                    throw new NotImplementedException("unsupported column: " + name);
+            }
+        }
+        params.setAuth_info(authInfo);
+
+        try {
+            TGetTablesInfoResponse result = query(params);
+            return result.getTables_infos().stream()
+                    .map(t -> infoToScalar(this, t))
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            LOG.warn("Failed to query tables ", e);
+            // Return empty result if query failed
+            return Lists.newArrayList();
+        }
+    }
+
+    public static TGetTablesInfoResponse query(TGetTablesInfoRequest request) throws TException {
+        return InformationSchemaDataSource.generateTablesInfoResponse(request);
+    }
+>>>>>>> aa109b6310 ([BugFix] Fix a EliminateJoinWithConstantRule rewrite bug (#61338))
 }
