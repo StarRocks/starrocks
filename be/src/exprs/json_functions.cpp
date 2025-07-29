@@ -1226,7 +1226,7 @@ StatusOr<JsonValue> JsonFunctions::_remove_json_paths(JsonValue* json_value, con
     for (const auto& path_str : paths) {
         auto jsonpath = JsonPath::parse(path_str);
         if (jsonpath.ok()) {
-            valid_paths.push_back(*jsonpath.value());
+            valid_paths.emplace_back(jsonpath.value());
         }
         // Skip invalid paths silently (following MySQL behavior)
     }
