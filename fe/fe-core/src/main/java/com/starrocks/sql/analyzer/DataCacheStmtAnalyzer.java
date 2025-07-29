@@ -154,13 +154,15 @@ public class DataCacheStmtAnalyzer {
             // Duration for cache remains active.
             // Use PT0M to prevent expiration of the rule.
             // Use duration specified in ISO-8601 duration format (PnDTnHnMn).
-            long ttlSeconds = 0L;
-            try {
-                ttlSeconds = Duration.parse(properties.getOrDefault("ttl", "PT0M")).toSeconds();
-            } catch (DateTimeParseException e) {
-                throw new SemanticException(String.format(
-                        "Illegal ttl format, use duration specified in ISO-8601 duration format (PnDTnHnMn). Error msg: %s",
-                        e.getMessage()));
+            long ttlSeconds = context.getSessionVariable().getDatacacheTTLSeconds();;
+            if (properties.containsKey("ttl")) {
+                try {
+                    ttlSeconds = Duration.parse(properties.get("ttl")).toSeconds();
+                } catch (DateTimeParseException e) {
+                    throw new SemanticException(String.format(
+                            "Illegal ttl format, use duration specified in ISO-8601 duration format (PnDTnHnMn). Error msg: %s",
+                            e.getMessage()));
+                }
             }
             if (priority > 0 && ttlSeconds == 0) {
                 throw new SemanticException("TTL must be specified when priority > 0");
