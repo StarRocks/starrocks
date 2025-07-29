@@ -167,26 +167,24 @@ public class ColocatedBackendSelector implements BackendSelector {
     }
 
     public static class Assignment {
+        public enum ScanRangeType {
+            NATIVE,
+            NONNATIVE
+        }
         private final Map<Integer, Long> seqToWorkerId = Maps.newHashMap();
         // < bucket_seq -> < scan_node_id -> scan_range_params >>
         private final ColocatedBackendSelector.BucketSeqToScanRange seqToScanRange =
                 new ColocatedBackendSelector.BucketSeqToScanRange();
         private final Map<Long, Integer> backendIdToBucketCount = Maps.newHashMap();
         private final int bucketNum;
-
-        private final int numOlapScanNodes;
+        private final int numScanNodes;
+        private final ScanRangeType type;
         private final Set<PlanNodeId> assignedScanNodeIds = Sets.newHashSet();
 
-        public Assignment(OlapScanNode scanNode, int numOlapScanNodes) {
-            this.numOlapScanNodes = numOlapScanNodes;
-
-            int curBucketNum = scanNode.getOlapTable().getDefaultDistributionInfo().getBucketNum();
-            if (scanNode.getSelectedPartitionIds().size() <= 1) {
-                for (Long pid : scanNode.getSelectedPartitionIds()) {
-                    curBucketNum = scanNode.getOlapTable().getPartition(pid).getDistributionInfo().getBucketNum();
-                }
-            }
-            this.bucketNum = curBucketNum;
+        public Assignment(int bucketNum, int numScanNodes, ScanRangeType type) {
+            this.numScanNodes = numScanNodes;
+            this.bucketNum = bucketNum;
+            this.type = type;
         }
 
         public Map<Integer, Long> getSeqToWorkerId() {
@@ -201,12 +199,16 @@ public class ColocatedBackendSelector implements BackendSelector {
             return bucketNum;
         }
 
+        public boolean isNative() {
+            return type.equals(ScanRangeType.NATIVE);
+        }
+
         public void recordAssignedScanNode(OlapScanNode scanNode) {
             assignedScanNodeIds.add(scanNode.getId());
         }
 
         public boolean isAllScanNodesAssigned() {
-            return assignedScanNodeIds.size() == numOlapScanNodes;
+            return assignedScanNodeIds.size() == numScanNodes;
         }
     }
 

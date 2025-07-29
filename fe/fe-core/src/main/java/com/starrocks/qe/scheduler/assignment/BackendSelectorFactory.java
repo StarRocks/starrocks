@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.assignment;
 
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
@@ -43,7 +44,7 @@ public class BackendSelectorFactory {
                                          WorkerProvider workerProvider,
                                          ConnectContext connectContext,
                                          Set<Integer> destReplicatedScanIds,
-                                         boolean useIncrementalScanRanges) {
+                                         boolean useIncrementalScanRanges) throws StarRocksException {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
 
