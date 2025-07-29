@@ -710,7 +710,7 @@ public class Config extends ConfigBase {
 
     /**
      * Fe https port
-     * Currently, all FEs' https port must be same.
+     * Currently, all FEs' https port must be the same.
      */
     @ConfField
     public static int https_port = 8443;

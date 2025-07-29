@@ -26,14 +26,15 @@ import javax.net.ssl.KeyManagerFactory;
 
 public class HttpSSLContextLoader {
     private static SslContext sslContext;
+    private static boolean initialized = false;
 
-    public static void load() throws Exception {
-        if (Config.enable_https && !Strings.isNullOrEmpty(Config.ssl_keystore_location)) {
-            sslContext = createSSLContext();
+    public static synchronized SslContext getSslContext() throws Exception {
+        if (!initialized) {
+            if (Config.enable_https && !Strings.isNullOrEmpty(Config.ssl_keystore_location)) {
+                sslContext = createSSLContext();
+            }
+            initialized = true;
         }
-    }
-
-    public static SslContext getSslContext() {
         return sslContext;
     }
 

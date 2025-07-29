@@ -162,14 +162,14 @@ public class HttpServer {
         registerActions();
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() ->
                 ThreadPoolManager.setCacheThreadPoolSize(asyncExecutor, Config.http_async_threads_num));
-        if (enableHttps) {
-            try {
-                HttpSSLContextLoader.load();
-            } catch (Exception e) {
-                throw new IllegalArgException("Failed to create SSL context. Please check your " +
-                        "SSL configuration including ssl_keystore_location, ssl_keystore_password, " +
-                        "and ssl_key_password: " + e.getMessage(), e);
+        try {
+            if (enableHttps) {
+                HttpSSLContextLoader.getSslContext();
             }
+        } catch (Exception e) {
+            throw new IllegalArgException("Failed to create SSL context. Please check your " +
+                    "SSL configuration including ssl_keystore_location, ssl_keystore_password, " +
+                    "and ssl_key_password: " + e.getMessage(), e);
         }
     }
 
