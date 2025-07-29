@@ -17,6 +17,7 @@ To enable SSL authentication in StarRocks, configure the following parameters in
 - `ssl_keystore_location`: Specifies the path to the keystore file that stores the SSL certificate and key.
 - `ssl_keystore_password`: The password for accessing the keystore file. StarRocks requires this password to read the keystore file.
 - `ssl_key_password`: The password for accessing the key. StarRocks requires this password to retrieve the key from the keystore.
+- `ssl_force_secure_transport`: Whether to force SSL authentication. Default value: `FALSE`. If this item is set to `TRUE`, the system will reject connections that are not encrypted with SSL.
 
 Example:
 

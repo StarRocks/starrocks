@@ -16,6 +16,7 @@ sidebar_position: 40
 - `ssl_keystore_location`：指定存储 SSL 证书和密钥的 keystore 文件路径。
 - `ssl_keystore_password`：keystore 文件的访问密码，StarRocks 读取 keystore 文件时需要提供该密码。
 - `ssl_key_password`：密钥的访问密码，StarRocks 读取 keystore 文件中的密钥时需要提供该密码。
+- `ssl_force_secure_transport`: 是否强制启用 SSL 认证，默认为 `FALSE`。如设置为 `TRUE`，则系统会拒绝未通过 SSL 加密的连接。
 
 示例：
 
