@@ -583,7 +583,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 #endif
 
     _agent_server = new AgentServer(this, false);
-    _agent_server->init_or_die();
+    RETURN_IF_ERROR(_agent_server->init());
 
     _broker_mgr->init();
     RETURN_IF_ERROR(_small_file_mgr->init());

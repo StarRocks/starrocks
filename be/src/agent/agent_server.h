@@ -58,7 +58,7 @@ public:
 
     ~AgentServer();
 
-    void init_or_die();
+    Status init();
 
     void stop();
 

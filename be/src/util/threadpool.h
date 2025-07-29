@@ -64,6 +64,8 @@ class Thread;
 class ThreadPool;
 class ThreadPoolToken;
 
+static constexpr int64_t ThreadPoolDefaultIdleTimeoutMS = 500;
+
 class Runnable {
 public:
     virtual void run() = 0;
