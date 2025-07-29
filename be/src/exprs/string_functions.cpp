@@ -4849,3 +4849,5 @@ StatusOr<ColumnPtr> StringFunctions::crc32(FunctionContext* context, const Colum
     return VectorizedStrictUnaryFunction<crc32Impl>::evaluate<TYPE_VARCHAR, TYPE_BIGINT>(columns[0]);
 }
 } // namespace starrocks
+
+#include "gen_cpp/opcode/StringFunctions.inc"

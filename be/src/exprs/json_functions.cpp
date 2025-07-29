@@ -1162,3 +1162,5 @@ StatusOr<ColumnPtr> JsonFunctions::to_json(FunctionContext* context, const Colum
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/JsonFunctions.inc"
