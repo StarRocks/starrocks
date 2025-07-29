@@ -4,8 +4,8 @@ sidebar_position: 25
 sidebar_label: Built-in Roles
 ---
 
-import DBAdmin from '../_assets/commonMarkdown/role_db_admin.mdx'
-import ClusterAdmin from '../_assets/commonMarkdown/role_cluster_admin.mdx'
+import DBAdmin from '../../../_assets/commonMarkdown/role_db_admin.mdx'
+import ClusterAdmin from '../../../_assets/commonMarkdown/role_cluster_admin.mdx'
 
 # StarRocks がサポートするビルトインロール
 
