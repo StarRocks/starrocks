@@ -17,11 +17,7 @@ package com.starrocks.qe.scheduler;
 import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.Config;
-import com.starrocks.common.StarRocksException;
->>>>>>> 8a4ef5c2f1 ([BugFix] fix deploy serialize pool block (#61150))
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;

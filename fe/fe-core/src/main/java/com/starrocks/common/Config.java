@@ -3361,61 +3361,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_get_partitions_meta_result_count = 100000;
-<<<<<<< HEAD
-=======
-
-    @ConfField(mutable = false)
-    public static int max_spm_cache_baseline_size = 1000;
-
-    /**
-     * The process must be stopped after the load balancing detection becomes Unhealthy,
-     * otherwise the new connection will still be forwarded to the machine where the FE node is located,
-     * causing the connection to fail.
-     */
-    @ConfField(mutable = true)
-    public static long min_graceful_exit_time_second = 15;
-
-    /**
-     * timeout for graceful exit
-     */
-    @ConfField(mutable = true)
-    public static long max_graceful_exit_time_second = 60;
-
-    /**
-     * The default scheduler interval for dynamic tablet jobs.
-     */
-    @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
-    public static long dynamic_tablet_job_scheduler_interval_ms = 10;
-
-    /**
-     * The max keep time of dynamic tablet history jobs.
-     */
-    @ConfField(mutable = true, comment = "The max keep time of dynamic tablet history jobs.")
-    public static long dynamic_tablet_history_job_keep_max_ms = 3 * 24 * 3600 * 1000; // 3 days
-
-    /**
-     * The max number of tablets can do tablet splitting and merging in parallel.
-     */
-    @ConfField(mutable = true, comment = "The max number of tablets can do tablet splitting and merging in parallel.")
-    public static long dynamic_tablet_max_parallel_tablets = 10 * 1024;
-
-    /**
-     * Tablets with size larger than this value will be considered to split.
-     */
-    @ConfField(mutable = true, comment = "Tablets with size larger than this value will be considered to split.")
-    public static long dynamic_tablet_split_size = 4 * 1024 * 1024 * 1024;
-
-    /**
-     * The max number of new tablets that an old tablet can be split into.
-     */
-    @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
-    public static int dynamic_tablet_max_split_count = 1024;
-
-    /**
-     * Whether to enable tracing historical nodes when cluster scale
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_trace_historical_node = false;
 
     /**
      * The size of the thread pool for deploy serialization.
@@ -3430,5 +3375,4 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int deploy_serialization_queue_size = -1;
->>>>>>> 8a4ef5c2f1 ([BugFix] fix deploy serialize pool block (#61150))
 }
