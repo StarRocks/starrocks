@@ -69,7 +69,7 @@ ThreadPoolBuilder::ThreadPoolBuilder(string name)
           _min_threads(0),
           _max_threads(CpuInfo::num_cores()),
           _max_queue_size(std::numeric_limits<int>::max()),
-          _idle_timeout(MonoDelta::FromMilliseconds(500)) {}
+          _idle_timeout(MonoDelta::FromMilliseconds(ThreadPoolDefaultIdleTimeoutMS)) {}
 
 ThreadPoolBuilder& ThreadPoolBuilder::set_min_threads(int min_threads) {
     CHECK_GE(min_threads, 0);
