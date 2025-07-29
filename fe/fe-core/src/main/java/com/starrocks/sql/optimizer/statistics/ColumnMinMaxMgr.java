@@ -81,9 +81,9 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
                 if (cacheValue.isPresent()) {
                     CacheValue value = cacheValue.get();
                     if (value.version().getVersion() >= version.getVersion()) {
-                        cache.synchronous().invalidate(identifier);
                         return Optional.of(value.minMax());
                     }
+                    cache.synchronous().invalidate(identifier);
                 }
             } catch (Exception e) {
                 LOG.warn("Failed to get MinMax for column: {}, version: {}", identifier, version, e);
