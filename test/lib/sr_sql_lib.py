@@ -1759,6 +1759,32 @@ class StarrocksSQLApiLib(object):
             times += 1
         tools.assert_true(load_state in ("FINISHED", "CANCELLED"), "wait load finish error, timeout 300s")
 
+    def wait_db_transaction_finish(self, db_name, timeout_sec=30):
+        """
+        Wait until all transactions in the specified database are finished.
+        :param db_name: database name
+        :param timeout_sec: timeout in seconds
+        """
+        times = 0
+        interval = 1  # seconds
+        max_times = max(1, timeout_sec)
+        row_count = -1
+        while times < max_times:
+            sql = f"show proc '/transactions/{db_name}/running'"
+            result = self.execute_sql(sql, True)
+            log.info(sql)
+            log.info(result)
+            # count the number of rows
+            if result["status"] and "result" in result:
+                row_count = len(result["result"])
+            else:
+                row_count = -1
+            if row_count == 0:
+                break
+            time.sleep(interval)
+            times += 1
+        tools.assert_true(row_count == 0, f"wait db transaction finish error, timeout {timeout_sec}s, row_count={row_count}")
+
     def show_routine_load(self, routine_load_task_name):
         show_sql = "show routine load for %s" % routine_load_task_name
         return self.execute_sql(show_sql, True)
