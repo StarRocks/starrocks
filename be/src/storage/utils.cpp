@@ -435,20 +435,18 @@ int64_t parse_data_size(const std::string& value_str) {
     unit.erase(std::remove_if(unit.begin(), unit.end(), ::isspace), unit.end());
     std::transform(unit.begin(), unit.end(), unit.begin(), ::toupper);
 
-    static const std::unordered_map<std::string, int64_t> unit_map = {
-        {"", 1LL},
-        {"B", 1LL},
-        {"K", 1024LL},
-        {"KB", 1024LL},
-        {"M", 1024LL * 1024},
-        {"MB", 1024LL * 1024},
-        {"G", 1024LL * 1024 * 1024},
-        {"GB", 1024LL * 1024 * 1024},
-        {"T", 1024LL * 1024 * 1024 * 1024},
-        {"TB", 1024LL * 1024 * 1024 * 1024},
-        {"P", 1024LL * 1024 * 1024 * 1024 * 1024},
-        {"PB", 1024LL * 1024 * 1024 * 1024 * 1024}
-    };
+    static const std::unordered_map<std::string, int64_t> unit_map = {{"", 1LL},
+                                                                      {"B", 1LL},
+                                                                      {"K", 1024LL},
+                                                                      {"KB", 1024LL},
+                                                                      {"M", 1024LL * 1024},
+                                                                      {"MB", 1024LL * 1024},
+                                                                      {"G", 1024LL * 1024 * 1024},
+                                                                      {"GB", 1024LL * 1024 * 1024},
+                                                                      {"T", 1024LL * 1024 * 1024 * 1024},
+                                                                      {"TB", 1024LL * 1024 * 1024 * 1024},
+                                                                      {"P", 1024LL * 1024 * 1024 * 1024 * 1024},
+                                                                      {"PB", 1024LL * 1024 * 1024 * 1024 * 1024}};
 
     auto it = unit_map.find(unit);
     if (it == unit_map.end()) return 0;

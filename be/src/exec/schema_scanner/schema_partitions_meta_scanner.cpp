@@ -19,8 +19,8 @@
 #include "common/logging.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "types/logical_type.h"
 #include "storage/utils.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
