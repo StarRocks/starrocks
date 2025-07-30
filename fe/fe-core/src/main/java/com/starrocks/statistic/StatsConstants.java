@@ -101,6 +101,9 @@ public class StatsConstants {
     public static final String SPM_BASELINE_TABLE_NAME = "spm_baselines";
     public static final String QUERY_HISTORY_TABLE_NAME = "query_history";
 
+    // Partitions scan
+    public static final String PARTITIONS_SCAN_TABLE_NAME = "partitions_scan";
+
     /**
      * Deprecated stats properties
      */
