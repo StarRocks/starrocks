@@ -48,7 +48,6 @@
 #include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
 #include "storage/tablet_index.h"
-#include "storage/type_utils.h"
 #include "storage/types.h"
 #include "util/c_string.h"
 #include "util/once.h"
@@ -60,6 +59,17 @@ class MemTracker;
 class SegmentReaderWriterTest;
 class POlapTableIndexSchema;
 class TColumn;
+
+struct ExtendedColumnInfo {
+    ExtendedColumnInfo(ColumnAccessPath* access_path, int source_column_index)
+            : access_path(access_path), source_column_index(source_column_index) {
+        DCHECK(access_path != nullptr);
+        DCHECK(source_column_index >= 0);
+    }
+
+    ColumnAccessPath* access_path = nullptr;
+    int source_column_index = -1;
+};
 
 class TabletColumn {
     struct ExtraFields {
@@ -198,13 +208,10 @@ public:
 
     bool is_support_checksum() const;
 
-    // Extended access path column
-    void set_extended(bool value) { _is_extended = value; }
-    bool is_extended() const { return _is_extended; }
-    void set_access_path(ColumnAccessPath* access_path) { _access_path = access_path; }
-    ColumnAccessPath* access_path() const { return _access_path; }
-    void set_source_column_index(int source_column_index) { _source_column_index = source_column_index; }
-    int source_column_index() const { return _source_column_index; }
+    // Extended column from the access path
+    bool is_extended() const { return !!_extended_info; }
+    void set_extended_info(std::unique_ptr<ExtendedColumnInfo> info) { _extended_info = std::move(info); }
+    const ExtendedColumnInfo* extended_info() const { return _extended_info.get(); }
 
 private:
     inline static const std::string kEmptyDefaultValue;
@@ -251,9 +258,7 @@ private:
     ColumnScale _scale = 0;
 
     // Extended access path column
-    bool _is_extended = false;
-    ColumnAccessPath* _access_path = nullptr;
-    int _source_column_index = -1;
+    std::unique_ptr<ExtendedColumnInfo> _extended_info;
 
     uint8_t _flags = 0;
 

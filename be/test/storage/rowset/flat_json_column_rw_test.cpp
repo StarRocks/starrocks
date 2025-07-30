@@ -2489,10 +2489,8 @@ TEST_F(FlatJsonColumnRWTest, testSegmentWriterIteratorWithMixedDataTypes) {
             ASSERT_EQ("$." + field_name, path->linear_path());
 
             TabletColumn col(STORAGE_AGGREGATE_NONE, field_type, true);
-            col.set_extended(true);
-            col.set_source_column_index(0);
             col.set_unique_id(123);
-            col.set_access_path(path.get());
+            col.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), 0));
 
             ASSIGN_OR_ABORT(auto column_iter, segment->new_column_iterator_or_default(col, path.get()));
             ASSERT_OK(column_iter->init(column_opts));

@@ -482,11 +482,18 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
 
 StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const TabletColumn& column,
                                                                     ColumnAccessPath* path) {
-    auto source_index = column.source_column_index();
+    auto extended_info = column.extended_info();
+    RETURN_IF(extended_info == nullptr, Status::InvalidArgument("extended info is null"));
+    auto source_index = extended_info->source_column_index;
+    RETURN_IF(source_index < 0 || static_cast<size_t>(source_index) >= _tablet_schema->num_columns(),
+              Status::InvalidArgument(fmt::format("invalid source column index: {}", source_index)));
+    auto access_path = extended_info->access_path;
+    RETURN_IF(access_path == nullptr, Status::InvalidArgument("access path is null for extended column"));
+
     auto source_id = _tablet_schema->column(source_index).unique_id();
-    std::string full_path = column.access_path()->linear_path();
+    std::string full_path = access_path->linear_path();
     auto [col_name, field_name] = JsonFlatPath::split_path(full_path);
-    auto& leaf_type = column.access_path()->leaf_value_type();
+    auto& leaf_type = access_path->leaf_value_type();
     RETURN_IF(!_column_readers.contains(source_id),
               Status::RuntimeError(fmt::format("unknown root column: {}", source_id)));
 
