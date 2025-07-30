@@ -17,6 +17,7 @@
 #include <bthread/bthread.h>
 
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <string_view>
 #include <thread>
@@ -112,9 +113,9 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
         auto& context = sink_ctx(instance_id.lo);
 
         if (request.params->has_use_pass_through() && request.params->use_pass_through()) {
-            RETURN_IF_ERROR(_try_to_send_local(instance_id, [&]() {
+            RETURN_IF_ERROR(_try_to_send_local(instance_id, [&, tracker = CurrentThread::current().mem_tracker()]() {
                 // Release allocated bytes in current MemTracker, since it would not be released at current MemTracker
-                CurrentThread::current().mem_release(request.physical_bytes);
+                tracker->release(request.physical_bytes);
                 GlobalEnv::GetInstance()->passthrough_mem_tracker()->consume(request.physical_bytes);
                 context.buffer.push(std::move(request));
             }));
@@ -273,16 +274,14 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
     auto& context = sink_ctx(instance_id.lo);
     auto notify = this->finishing_defer();
     std::lock_guard guard(context.mutex);
-    DeferOp decrease_defer([this, &context]() {
-        --_num_sending;
-        context.owner_id = {};
-    });
+    DeferOp decrease_defer([this]() { --_num_sending; });
     ++_num_sending;
-    context.owner_id = std::this_thread::get_id();
 
     pre_works();
 
     for (;;) {
+        DeferOp reset_owner_id([&context]() { context.owner_id = {}; });
+
         if (_is_finishing) {
             return Status::OK();
         }
@@ -323,14 +322,23 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
             }
         }
 
-        auto* closure = new DisposablePassThroughClosure([this, instance_id]() noexcept {
-            auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
-            auto query_ctx_guard = query_ctx->shared_from_this();
-            auto notify = this->defer_notify();
-
+        auto query_ctx = std::weak_ptr(_fragment_ctx->runtime_state()->query_ctx()->shared_from_this());
+        context.owner_id = std::this_thread::get_id();
+        auto* closure = new DisposablePassThroughClosure([query_ctx, this, instance_id]() noexcept {
+            auto guard = query_ctx.lock();
+            RETURN_IF(guard == nullptr, (void)0);
             auto& context = sink_ctx(instance_id.lo);
+
+            // Avoid local-passthrough recursive calls.
+            if (context.owner_id == std::this_thread::get_id()) {
+                --_total_in_flight_rpc;
+                context.pass_through_blocked = false;
+                return;
+            }
+
+            auto notify = this->defer_notify();
+            auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
             context.pass_through_blocked = false;
-            if (context.owner_id == std::this_thread::get_id()) return;
             static_cast<void>(_try_to_send_local(instance_id, []() {}));
         });
 
@@ -342,10 +350,14 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
         // Decrease memory from pass through before moving chunks to the reciever fragment.
         GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(request.physical_bytes);
 
-        ::google::protobuf::Closure* done = closure;
         DCHECK_EQ(request.params->use_pass_through(), true);
+        ::google::protobuf::Closure* done = closure;
+
+        _total_in_flight_rpc++;
+        auto defer = CancelableDefer([this]() { --_total_in_flight_rpc; });
         Status st = request.stream_mgr->transmit_chunk(instance_id, *request.params,
                                                        std::move(request.pass_through_chunks), &done);
+        if (st.ok()) defer.cancel();
         if (st.ok() && done != nullptr) {
             // if the closure was not removed delete it and continue transmitting chunks.
             done->Run();
