@@ -148,7 +148,7 @@ static void _send_reply(HttpRequest* req, const std::string& str) {
     if (config::enable_stream_load_verbose_log) {
         LOG(INFO) << "streaming load response: " << str;
     }
-    HttpChannel::send_reply(req, str);
+    HttpChannel::send_reply_json(req, HttpStatus::OK, str);
 }
 
 void StreamLoadAction::handle(HttpRequest* req) {
