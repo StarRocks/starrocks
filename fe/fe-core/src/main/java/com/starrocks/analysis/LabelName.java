@@ -42,6 +42,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.builder.HashCodeBuilder;
+import static com.starrocks.common.util.Util.normalizeName;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -64,7 +65,7 @@ public class LabelName implements ParseNode, Writable {
 
     public LabelName(String dbName, String labelName, NodePosition pos) {
         this.pos = pos;
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.labelName = labelName;
     }
 
@@ -73,7 +74,7 @@ public class LabelName implements ParseNode, Writable {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public String getLabelName() {

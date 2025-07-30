@@ -27,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class CreateAnalyzeJobStmt extends DdlStmt {
     private String catalogName;
     private long dbId;
@@ -127,7 +129,7 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     }
 
     public void setCatalogName(String catalogName) {
-        this.catalogName = catalogName;
+        this.catalogName = normalizeName(catalogName);
     }
 
     public StatsConstants.AnalyzeType getAnalyzeType() {

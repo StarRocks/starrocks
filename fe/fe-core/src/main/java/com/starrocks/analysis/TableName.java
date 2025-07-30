@@ -58,6 +58,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class TableName implements Writable, GsonPreProcessable, GsonPostProcessable {
     public static final String LAMBDA_FUNC_TABLE = "__LAMBDA_TABLE";
 
@@ -84,9 +86,9 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     public TableName(String catalog, String db, String tbl, NodePosition pos) {
         this.pos = pos;
-        this.catalog = catalog;
-        this.db = db;
-        this.tbl = tbl;
+        this.catalog = normalizeName(catalog);
+        this.db = normalizeName(db);
+        this.tbl = normalizeName(tbl);
     }
 
     public static TableName fromString(String name) {
@@ -112,11 +114,11 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     public void analyze(Analyzer analyzer) throws AnalysisException {
         if (Strings.isNullOrEmpty(catalog)) {
-            catalog = analyzer.getDefaultCatalog();
+            catalog = normalizeName(analyzer.getDefaultCatalog());
         }
 
         if (Strings.isNullOrEmpty(db)) {
-            db = analyzer.getDefaultDb();
+            db = normalizeName(analyzer.getDefaultDb());
             if (Strings.isNullOrEmpty(db)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
@@ -132,11 +134,11 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
             if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalog);
             }
-            catalog = connectContext.getCurrentCatalog();
+            catalog = normalizeName(connectContext.getCurrentCatalog());
         }
 
         if (Strings.isNullOrEmpty(db)) {
-            db = connectContext.getDatabase();
+            db = normalizeName(connectContext.getDatabase());
             if (Strings.isNullOrEmpty(db)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
@@ -152,7 +154,7 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     }
 
     public void setDb(String db) {
-        this.db = db;
+        this.db = normalizeName(db);
     }
 
     public String getTbl() {
@@ -164,12 +166,12 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     }
 
     public void setCatalog(String catalog) {
-        this.catalog = catalog;
+        this.catalog = normalizeName(catalog);
     }
 
     // for rename table
     public void setTbl(String tbl) {
-        this.tbl = tbl;
+        this.tbl = normalizeName(tbl);
     }
 
     public boolean isEmpty() {

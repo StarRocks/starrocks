@@ -20,6 +20,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // Show create database statement
 //  Syntax:
 //      SHOW CREATE DATABASE db
@@ -39,7 +41,7 @@ public class ShowCreateDbStmt extends ShowStmt {
 
     public ShowCreateDbStmt(String db, NodePosition pos) {
         super(pos);
-        this.db = db;
+        this.db = normalizeName(db);
     }
 
     public String getCatalogName() {
@@ -47,7 +49,7 @@ public class ShowCreateDbStmt extends ShowStmt {
     }
 
     public void setCatalogName(String catalogName) {
-        this.catalog = catalogName;
+        this.catalog = normalizeName(catalogName);
     }
 
     public String getDb() {
@@ -55,7 +57,7 @@ public class ShowCreateDbStmt extends ShowStmt {
     }
 
     public void setDb(String db) {
-        this.db = db;
+        this.db = normalizeName(db);
     }
 
     @Override

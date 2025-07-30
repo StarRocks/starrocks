@@ -320,21 +320,30 @@ public class VariableMgr {
         }
 
         if (!onlySetSessionVar && setVar.getType() == SetType.GLOBAL) {
-            wLock.lock();
-            try {
-                setValue(ctx.getObj(), ctx.getField(), value);
-                // write edit log
-                GlobalVarPersistInfo info =
-                        new GlobalVarPersistInfo(defaultSessionVariable, Lists.newArrayList(attr.name()));
-                EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-                editLog.logGlobalVariableV2(info);
-            } finally {
-                wLock.unlock();
-            }
+            setGlobalVariableAndWriteEditLog(ctx, attr.name(), value);
         }
 
         // set session variable
         setValue(sessionVariable, ctx.getField(), value);
+    }
+
+    private void setGlobalVariableAndWriteEditLog(VarContext ctx, String name, String value) throws DdlException {
+        wLock.lock();
+        try {
+            setValue(ctx.getObj(), ctx.getField(), value);
+            // write edit log
+            GlobalVarPersistInfo info =
+                    new GlobalVarPersistInfo(defaultSessionVariable, Lists.newArrayList(name));
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logGlobalVariableV2(info);
+        } finally {
+            wLock.unlock();
+        }
+    }
+
+    public void setCaseInsensitive(boolean caseInsensitive) throws DdlException {
+        VarContext ctx = getVarContext(GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE);
+        setGlobalVariableAndWriteEditLog(ctx, GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE, String.valueOf(caseInsensitive));
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
@@ -365,9 +374,12 @@ public class VariableMgr {
             for (Field field : GlobalVariable.class.getDeclaredFields()) {
                 field.setAccessible(true);
                 VarAttr attr = field.getAnnotation(VarAttr.class);
-                if (attr == null || (attr.flag() & GLOBAL) != GLOBAL) {
+                if (attr == null ||
+                        ((attr.flag() & GLOBAL) != GLOBAL &&
+                                !attr.name().equalsIgnoreCase(GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE))) {
                     continue;
                 }
+
                 switch (field.getType().getSimpleName()) {
                     case "boolean":
                     case "int":

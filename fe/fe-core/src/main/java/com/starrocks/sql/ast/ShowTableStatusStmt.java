@@ -26,6 +26,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // SHOW TABLE STATUS
 public class ShowTableStatusStmt extends ShowStmt {
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "tables");
@@ -61,13 +63,13 @@ public class ShowTableStatusStmt extends ShowStmt {
 
     public ShowTableStatusStmt(String db, String wild, Expr where, NodePosition pos) {
         super(pos);
-        this.db = db;
+        this.db = normalizeName(db);
         this.wild = wild;
         this.where = where;
     }
 
     public void setDb(String db) {
-        this.db = db;
+        this.db = normalizeName(db);
     }
 
     public String getDb() {

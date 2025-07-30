@@ -34,6 +34,8 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 import java.util.Optional;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class ShowPipeStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData META_DATA =
@@ -58,7 +60,7 @@ public class ShowPipeStmt extends ShowStmt {
     public ShowPipeStmt(String dbName, String like, Expr where, List<OrderByElement> orderBy, LimitElement limit,
                         NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.like = like;
         this.where = where;
         this.orderBy = orderBy;
@@ -85,7 +87,7 @@ public class ShowPipeStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public String getDbName() {

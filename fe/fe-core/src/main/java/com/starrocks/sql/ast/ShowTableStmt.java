@@ -29,6 +29,8 @@ import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // SHOW TABLES
 public class ShowTableStmt extends ShowStmt {
     private static final String NAME_COL_PREFIX = "Tables_in_";
@@ -55,11 +57,11 @@ public class ShowTableStmt extends ShowStmt {
     public ShowTableStmt(String db, boolean isVerbose, String pattern, Expr where,
                          String catalogName, NodePosition pos) {
         super(pos);
-        this.db = db;
+        this.db = normalizeName(db);
         this.isVerbose = isVerbose;
         this.pattern = pattern;
         this.where = where;
-        this.catalogName = catalogName;
+        this.catalogName = normalizeName(catalogName);
     }
 
     public String getDb() {
@@ -123,7 +125,7 @@ public class ShowTableStmt extends ShowStmt {
     }
 
     public void setDb(String db) {
-        this.db = db;
+        this.db = normalizeName(db);
     }
 
     @Override

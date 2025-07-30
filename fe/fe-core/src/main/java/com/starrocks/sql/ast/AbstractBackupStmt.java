@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class AbstractBackupStmt extends DdlStmt {
     public enum BackupObjectType {
         TABLE,
@@ -76,7 +78,7 @@ public class AbstractBackupStmt extends DdlStmt {
             this.allMarker = Sets.newHashSet();
         }
 
-        this.originDbName = originDbName;
+        this.originDbName = normalizeName(originDbName);
         this.withOnClause = withOnClause;
         this.properties = properties == null ? Maps.newHashMap() : properties;
     }

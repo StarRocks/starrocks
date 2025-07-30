@@ -34,6 +34,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 /*
  * ShowAlterStmt: used to show process state of alter statement.
  * Syntax:
@@ -64,7 +66,7 @@ public class ShowAlterStmt extends ShowStmt {
                          LimitElement limitElement, NodePosition pos) {
         super(pos);
         this.type = type;
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.whereClause = whereClause;
         this.orderByElements = orderByElements;
         this.limitElement = limitElement;
@@ -79,7 +81,7 @@ public class ShowAlterStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public HashMap<String, Expr> getFilterMap() {
