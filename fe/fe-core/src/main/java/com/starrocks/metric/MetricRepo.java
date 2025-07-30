@@ -916,8 +916,8 @@ public final class MetricRepo {
             collectMemoryUsageMetrics(visitor);
         }
 
-        // collect warehouse metrics
-        if (Config.enable_collect_warehouse_metrics) {
+        // warehouse metrics is only collected when the FE is leader
+        if (Config.enable_collect_warehouse_metrics && GlobalStateMgr.getCurrentState().isLeader()) {
             BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
             slotManager.collectWarehouseMetrics(visitor);
         }
