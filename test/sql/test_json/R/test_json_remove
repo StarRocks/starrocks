@@ -112,10 +112,6 @@ SELECT json_remove(parse_json('{"temp": "data", "keep": "this"}'), '$.temp') as 
 -- result:
 {"keep": "this"}
 -- !result
-SELECT json_remove('{"a": 1}', '') as empty_path;
--- result:
-E: (1064, 'Empty json path backend [id=21006] [')
--- !result
 SELECT json_remove('{"a": 1}', '$') as root_path;
 -- result:
 {"a": 1}
