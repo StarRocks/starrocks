@@ -227,6 +227,7 @@ import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.summary.QueryHistoryMgr;
+import com.starrocks.summary.TabletStatisticsMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -532,6 +533,7 @@ public class GlobalStateMgr {
     private final SQLPlanStorage sqlPlanStorage;
     private final QueryHistoryMgr queryHistoryMgr;
     private final SPMAutoCapturer spmAutoCapturer;
+    private final TabletStatisticsMgr tabletStatisticsMgr;
 
     private JwkMgr jwkMgr;
 
@@ -688,6 +690,7 @@ public class GlobalStateMgr {
         this.sqlPlanStorage = SQLPlanStorage.create(true);
         this.queryHistoryMgr = new QueryHistoryMgr();
         this.spmAutoCapturer = new SPMAutoCapturer();
+        this.tabletStatisticsMgr = new TabletStatisticsMgr();
 
         this.replayedJournalId = new AtomicLong(0L);
         this.synchronizedTimeMs = 0;
@@ -926,6 +929,10 @@ public class GlobalStateMgr {
 
     public QueryHistoryMgr getQueryHistoryMgr() {
         return queryHistoryMgr;
+    }
+
+    public TabletStatisticsMgr getTabletStatisticsMgr() {
+        return tabletStatisticsMgr;
     }
 
     public AuthenticationMgr getAuthenticationMgr() {

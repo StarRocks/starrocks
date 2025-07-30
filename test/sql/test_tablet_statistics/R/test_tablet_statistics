@@ -1,0 +1,71 @@
+-- name: test_tablet_statistics
+create database test_tablet_statistics_db;
+-- result:
+-- !result
+CREATE TABLE test_tablet_statistics_db.test_tablet_statistics_tab (
+  `a` varchar(65533),
+  `b` varchar(65533),
+  `dt` date
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+PARTITION BY (`dt`)
+DISTRIBUTED BY HASH(`a`) buckets 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into test_tablet_statistics_db.test_tablet_statistics_tab(a,b,dt) values('1','1','2025-06-01'),('2','2','2025-06-02'),('3','3','2025-06-03');
+-- result:
+-- !result
+set global enable_tablet_statistics=true;
+-- result:
+-- !result
+set global tablet_statistics_load_interval_seconds=0;
+-- result:
+-- !result
+select count(*) from test_tablet_statistics_db.test_tablet_statistics_tab;
+-- result:
+3
+-- !result
+select sleep(2);
+-- result:
+1
+-- !result
+select count(*) from _statistics_.tablet_statistics where db_name='test_tablet_statistics_db' and table_name='test_tablet_statistics_tab';
+-- result:
+9
+-- !result
+select cast(sum(read_count) as int) from _statistics_.tablet_statistics where db_name='test_tablet_statistics_db' and table_name='test_tablet_statistics_tab';
+-- result:
+9
+-- !result
+set global tablet_statistics_load_interval_seconds=3;
+-- result:
+-- !result
+select count(*) from test_tablet_statistics_db.test_tablet_statistics_tab;
+-- result:
+3
+-- !result
+select sleep(5);
+-- result:
+1
+-- !result
+select count(*) from _statistics_.tablet_statistics where db_name='test_tablet_statistics_db' and table_name='test_tablet_statistics_tab';
+-- result:
+9
+-- !result
+select cast(sum(read_count) as int) from _statistics_.tablet_statistics where db_name='test_tablet_statistics_db' and table_name='test_tablet_statistics_tab';
+-- result:
+18
+-- !result
+set global enable_tablet_statistics=false;
+-- result:
+-- !result
+set global tablet_statistics_load_interval_seconds=300;
+-- result:
+-- !result
