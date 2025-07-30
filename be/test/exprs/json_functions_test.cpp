@@ -1667,11 +1667,15 @@ TEST_F(JsonFunctionsTest, query_json_obj) {
 }
 
 // Test parameters for json_remove function
+// Note: Implementation supports:
+// - Top-level object key removal (e.g., $.key)
+// - Nested path removal (e.g., $.outer.inner1)
+// - Array element removal (e.g., $.arr[2])
+// - Mixed path removal from nested structures
 struct JsonRemoveTestParam {
     std::string json_input;
     std::vector<std::string> paths_to_remove;
-    std::vector<std::string> keys_should_exist;
-    std::vector<std::string> keys_should_not_exist;
+    std::string expected_result;
     std::string description;
 };
 
@@ -1714,24 +1718,25 @@ TEST_P(JsonRemoveTestFixture, json_remove) {
 
     // Verify result
     Datum datum = result->get(0);
-    if (param.json_input == "null") {
-        ASSERT_TRUE(datum.is_null());
+    if (param.expected_result == "null") {
+        ASSERT_TRUE(datum.is_null()) << "Expected null result for: " << param.description;
     } else {
         ASSERT_FALSE(datum.is_null()) << "Result should not be null for: " << param.description;
         std::string json_str = datum.get_json()->to_string().value();
 
-        // Check keys that should exist
-        for (const auto& key : param.keys_should_exist) {
-            ASSERT_TRUE(json_str.find("\"" + key + "\"") != std::string::npos)
-                    << "Key '" << key << "' should exist in result: " << json_str << " for test: " << param.description;
-        }
+        // Parse and re-serialize both JSON strings to normalize key ordering
+        auto expected_json = JsonValue::parse(param.expected_result);
+        auto actual_json = JsonValue::parse(json_str);
 
-        // Check keys that should not exist
-        for (const auto& key : param.keys_should_not_exist) {
-            ASSERT_TRUE(json_str.find("\"" + key + "\"") == std::string::npos)
-                    << "Key '" << key << "' should not exist in result: " << json_str
-                    << " for test: " << param.description;
-        }
+        ASSERT_TRUE(expected_json.ok()) << "Failed to parse expected JSON: " << param.expected_result;
+        ASSERT_TRUE(actual_json.ok()) << "Failed to parse actual JSON: " << json_str;
+
+        std::string normalized_expected = expected_json->to_string().value();
+        std::string normalized_actual = actual_json->to_string().value();
+
+        ASSERT_EQ(normalized_expected, normalized_actual)
+                << "Test: " << param.description << "\nExpected: " << normalized_expected
+                << "\nActual: " << normalized_actual;
     }
 
     // Clean up JSON path context
@@ -1747,57 +1752,91 @@ INSTANTIATE_TEST_SUITE_P(
                 JsonRemoveTestParam{
                         "null", // JSON input is null
                         {"$.a"}, // Any path (should not matter)
-                        {}, // No keys should exist
-                        {}, // No keys should not exist (result is null)
+                        "null", // Expected result
                         "Null input JSON should result in null output"},
                 JsonRemoveTestParam{
                         R"({"foo": 123, "bar": 456})", // JSON input
-                        {"null"}, // paths_to_remove is null (empty vector)
-                        {"foo", "bar"}, // All keys should still exist
-                        {}, // No keys should not exist
+                        {"null"}, // paths_to_remove is null
+                        R"({"foo": 123, "bar": 456})", // Expected result (no change)
                         "No paths to remove: output should be identical to input"
                 },
                 JsonRemoveTestParam{
                         R"({"a": 1, "b": [10, 20, 30]})", 
                         {"$.a"}, 
-                        {"b"}, {"a"}, 
+                        R"({"b": [10, 20, 30]})", // Expected result
                         "Remove single key from object"},
-                JsonRemoveTestParam{R"({"a": 1, "b": [10, 20, 30], "c": "test"})",
-                                    {"$.a", "$.c"},
-                                    {"b"},
-                                    {"a", "c"},
-                                    "Remove multiple keys from object"},
+                JsonRemoveTestParam{
+                        R"({"a": 1, "b": [10, 20, 30], "c": "test"})",
+                        {"$.a", "$.c"},
+                        R"({"b": [10, 20, 30]})", // Expected result
+                        "Remove multiple keys from object"},
                 JsonRemoveTestParam{
                         R"({"a": 1, "b": 2})", 
                         {"invalid_path"}, 
-                        {"a", "b"}, 
-                        {}, 
+                        R"({"a": 1, "b": 2})", // Expected result (invalid path ignored)
                         "Invalid path should be ignored"},
-                JsonRemoveTestParam{R"({"x": 100, "y": 200, "z": 300})",
-                                    {"$.y"},
-                                    {"x", "z"},
-                                    {"y"},
-                                    "Remove middle key from object"},
-                JsonRemoveTestParam{R"({"single": "value"})",
-                                    {"$.single"},
-                                    {},
-                                    {"single"},
-                                    "Remove single key from single-key object"},
+                JsonRemoveTestParam{
+                        R"({"x": 100, "y": 200, "z": 300})",
+                        {"$.y"},
+                        R"({"x": 100, "z": 300})", // Expected result
+                        "Remove middle key from object"},
+                JsonRemoveTestParam{
+                        R"({"single": "value"})",
+                        {"$.single"},
+                        R"({})", // Expected result (empty object)
+                        "Remove single key from single-key object"},
+                        // TODO
                 JsonRemoveTestParam{
                         R"([1, 2, 3, {"a": 10, "b": 20}])", // JSON input is an array
-                        {"$[0]", "$[1]"}, // Try to remove keys from object inside array
-                        {}, // No top-level keys should exist (array stays the same)
-                        {}, // No keys should not exist at top level
-                        "Removing object keys from array root should have no effect"
-                },
+                        {"$[0]", "$[1]"}, // Try to remove array elements
+                        R"([3, {"a": 10, "b": 20}])", // Expected result
+                        "Remove array elements from array"},
                 JsonRemoveTestParam{
                         R"({"outer": {"inner1": 1, "inner2": 2}, "keep": 42})",
                         {"$.outer.inner1"},
-                        {"outer", "keep"}, // "outer" and "keep" should still exist at top level
-                        {}, // No top-level keys should not exist
-                        "Remove nested key from nested object"
-                }
-));
+                        R"({"keep": 42, "outer": {"inner2": 2}})", // Expected result
+                        "Remove nested key from nested object"},
+                JsonRemoveTestParam{
+                        R"({"deep": {"level1": {"level2": {"level3": "value"}}}})",
+                        {"$.deep.level1.level2"},
+                        R"({"deep": {"level1": {}}})", // Expected result
+                        "Remove deeply nested object"},
+                JsonRemoveTestParam{
+                        R"({"arr": [0, 1, 2, 3, 4]})",
+                        {"$.arr[2]"},
+                        R"({"arr": [0, 1, 3, 4]})", // Expected result
+                        "Remove middle element from array"},
+                JsonRemoveTestParam{
+                        R"({"mixed": {"obj": {"key": "value"}, "arr": [1, 2, 3]}})",
+                        {"$.mixed.obj.key", "$.mixed.arr[1]"},
+                        R"({"mixed": {"obj": {}, "arr": [1, 3]}})", // Expected result
+                        "Remove mixed paths from nested structure"},
+                JsonRemoveTestParam{
+                        R"({"top_level": "value", "nested": {"inner": "data"}})",
+                        {"$.top_level"},
+                        R"({"nested": {"inner": "data"}})", // Expected result
+                        "Remove top-level key from object"},
+                JsonRemoveTestParam{
+                        R"({"key1": "value1", "key2": "value2", "key3": "value3"})",
+                        {"$.key1", "$.key3"},
+                        R"({"key2": "value2"})", // Expected result
+                        "Remove multiple top-level keys from object"},
+                JsonRemoveTestParam{
+                        R"({"nested": {"a": 1, "b": 2, "c": 3}, "other": "value"})",
+                        {"$.nested.b", "$.nested.c"},
+                        R"({"nested": {"a": 1}, "other": "value"})", // Expected result
+                        "Remove multiple nested keys from object"},
+                JsonRemoveTestParam{
+                        R"({"array": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}, {"id": 3, "name": "Charlie"}]})",
+                        {"$.array[1]"},
+                        R"({"array": [{"id": 1, "name": "Alice"}, {"id": 3, "name": "Charlie"}]})", // Expected result
+                        "Remove object from array"},
+                JsonRemoveTestParam{
+                        R"({"complex": {"users": [{"id": 1}, {"id": 2}], "settings": {"theme": "dark", "lang": "en"}}})",
+                        {"$.complex.users[0]", "$.complex.settings.theme"},
+                        R"({"complex": {"users": [{"id": 2}], "settings": {"lang": "en"}}})", // Expected result
+                        "Remove mixed paths from complex nested structure"}
+        ));
 // clang-format on
 
 } // namespace starrocks
