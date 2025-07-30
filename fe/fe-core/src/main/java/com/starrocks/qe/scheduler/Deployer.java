@@ -70,6 +70,7 @@ public class Deployer {
         EXECUTOR = ThreadPoolManager.newDaemonThreadPool(1, threadPoolSize, 60, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(threadPoolQueueSize), new ThreadPoolExecutor.AbortPolicy(),
                 "deployer", true);
+        ThreadPoolManager.registerAllThreadPoolMetric();
     }
 
     private final ConnectContext context;
