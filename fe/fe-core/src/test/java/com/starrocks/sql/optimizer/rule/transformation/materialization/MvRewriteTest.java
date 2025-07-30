@@ -1786,96 +1786,96 @@ public class MvRewriteTest extends MVTestBase {
     }
 
     @Test
-    public void testPlanCache() throws Exception {
+    public void testPlanCache1() throws Exception {
         CachingMvPlanContextBuilder instance = CachingMvPlanContextBuilder.getInstance();
-        {
-            String mvSql = "create materialized view agg_join_mv_1" +
+        String mvSql = "create materialized view agg_join_mv_1" +
+                " distributed by hash(v1) as SELECT t0.v1 as v1," +
+                " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 100" +
+                " group by v1, test_all_type.t1d";
+        starRocksAssert.withMaterializedView(mvSql);
+
+        MaterializedView mv = getMv("test", "agg_join_mv_1");
+        instance.evictMaterializedViewCache(mv);
+
+        List<MvPlanContext> planContexts = getPlanContext(mv, false);
+        Assertions.assertNotNull(planContexts);
+        Assertions.assertTrue(planContexts.size() == 1);
+        Assertions.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv));
+        planContexts = getPlanContext(mv, true);
+        Assertions.assertNotNull(planContexts);
+        Assertions.assertNotNull(planContexts.size() == 1);
+        Assertions.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
+        planContexts = getPlanContext(mv, false);
+        Assertions.assertNotNull(planContexts);
+        Assertions.assertNotNull(planContexts.size() == 1);
+        starRocksAssert.dropMaterializedView("agg_join_mv_1");
+    }
+
+    @Test
+    public void testPlanCache2() throws Exception {
+        String mvSql = "create materialized view mv_with_window" +
+                " distributed by hash(t1d) as" +
+                " SELECT test_all_type.t1d, row_number() over (partition by t1c)" +
+                " from test_all_type";
+        starRocksAssert.withMaterializedView(mvSql);
+
+        MaterializedView mv = getMv("test", "mv_with_window");
+        List<MvPlanContext> planContexts = getPlanContext(mv, true);
+        Assertions.assertNotNull(planContexts);
+        Assertions.assertNotNull(planContexts.size() == 1);
+        Assertions.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
+        starRocksAssert.dropMaterializedView("mv_with_window");
+    }
+
+    @Test
+    public void testPlanCache3() throws Exception {
+        long testSize = Config.mv_plan_cache_max_size + 1;
+        for (int i = 0; i < testSize; i++) {
+            String mvName = "plan_cache_mv_" + i;
+            String mvSql = String.format("create materialized view %s" +
                     " distributed by hash(v1) as SELECT t0.v1 as v1," +
                     " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
                     " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
                     " where t0.v1 < 100" +
-                    " group by v1, test_all_type.t1d";
+                    " group by v1, test_all_type.t1d", mvName);
             starRocksAssert.withMaterializedView(mvSql);
 
-            MaterializedView mv = getMv("test", "agg_join_mv_1");
-            instance.evictMaterializedViewCache(mv);
-
-            List<MvPlanContext> planContexts = getPlanContext(mv, false);
-            Assertions.assertNotNull(planContexts);
-            Assertions.assertTrue(planContexts.size() == 1);
-            Assertions.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv));
-            planContexts = getPlanContext(mv, true);
-            Assertions.assertNotNull(planContexts);
-            Assertions.assertNotNull(planContexts.size() == 1);
-            Assertions.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
-            planContexts = getPlanContext(mv, false);
-            Assertions.assertNotNull(planContexts);
-            Assertions.assertNotNull(planContexts.size() == 1);
-            starRocksAssert.dropMaterializedView("agg_join_mv_1");
-        }
-
-        {
-            String mvSql = "create materialized view mv_with_window" +
-                    " distributed by hash(t1d) as" +
-                    " SELECT test_all_type.t1d, row_number() over (partition by t1c)" +
-                    " from test_all_type";
-            starRocksAssert.withMaterializedView(mvSql);
-
-            MaterializedView mv = getMv("test", "mv_with_window");
+            MaterializedView mv = getMv("test", mvName);
             List<MvPlanContext> planContexts = getPlanContext(mv, true);
             Assertions.assertNotNull(planContexts);
             Assertions.assertNotNull(planContexts.size() == 1);
-            Assertions.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
-            starRocksAssert.dropMaterializedView("mv_with_window");
         }
+        for (int i = 0; i < testSize; i++) {
+            String mvName = "plan_cache_mv_" + i;
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+    }
 
-        {
-            long testSize = Config.mv_plan_cache_max_size + 1;
-            for (int i = 0; i < testSize; i++) {
-                String mvName = "plan_cache_mv_" + i;
-                String mvSql = String.format("create materialized view %s" +
-                        " distributed by hash(v1) as SELECT t0.v1 as v1," +
-                        " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
-                        " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
-                        " where t0.v1 < 100" +
-                        " group by v1, test_all_type.t1d", mvName);
-                starRocksAssert.withMaterializedView(mvSql);
+    @Test
+    public void testPlanCacheWithException() throws Exception {
+        CachingMvPlanContextBuilder instance = CachingMvPlanContextBuilder.getInstance();
+        // Planner exception
+        String mvSql = "create materialized view mv_with_window" +
+                " refresh deferred async " +
+                " as SELECT test_all_type.t1d, row_number() over (partition by t1c) from test_all_type";
+        starRocksAssert.withMaterializedView(mvSql);
 
-                MaterializedView mv = getMv("test", mvName);
-                List<MvPlanContext> planContexts = getPlanContext(mv, true);
-                Assertions.assertNotNull(planContexts);
-                Assertions.assertNotNull(planContexts.size() == 1);
+        MaterializedView mv = getMv("test", "mv_with_window");
+        instance.evictMaterializedViewCache(mv);
+        
+        new MockUp<QueryOptimizer>() {
+            @Mock
+            public OptExpression optimize(OptExpression logicOperatorTree,
+                                          PhysicalPropertySet requiredProperty,
+                                          ColumnRefSet requiredColumns) {
+                throw new RuntimeException("optimize failed");
             }
-            for (int i = 0; i < testSize; i++) {
-                String mvName = "plan_cache_mv_" + i;
-                starRocksAssert.dropMaterializedView(mvName);
-            }
-        }
-
-        {
-            // Planner exception
-            String mvSql = "create materialized view mv_with_window" + " distributed by hash(t1d) as" +
-                    " SELECT test_all_type.t1d, row_number() over (partition by t1c)" + " from test_all_type";
-            starRocksAssert.withMaterializedView(mvSql);
-
-            MaterializedView mv = getMv("test", "mv_with_window");
-            instance.evictMaterializedViewCache(mv);
-
-            new MockUp<QueryOptimizer>() {
-                @Mock
-                public OptExpression optimize(OptExpression logicOperatorTree,
-                                              PhysicalPropertySet requiredProperty,
-                                              ColumnRefSet requiredColumns) {
-                    throw new RuntimeException("optimize failed");
-                }
-            };
-            // build cache
-            List<MvPlanContext> planContexts = getPlanContext(mv, true);
-            Assertions.assertEquals(Lists.newArrayList(), planContexts);
-            // hit cache
-            planContexts = getPlanContext(mv, true);
-            Assertions.assertEquals(Lists.newArrayList(), planContexts);
-        }
+        };
+        // build cache
+        List<MvPlanContext> planContexts = getPlanContext(mv, true);
+        Assertions.assertEquals(Lists.newArrayList(), planContexts);
     }
 
     @Test

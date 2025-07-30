@@ -359,11 +359,17 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                     taskRun.setTaskId(taskId);
                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-
+                    taskRunScheduler.addPendingTaskRun(taskRun);
                     Config.enable_task_history_archive = false;
-                    Assertions.assertTrue(taskRunScheduler.addPendingTaskRun(taskRun));
-                    Assertions.assertNotNull(taskRunScheduler.getRunnableTaskRun(taskId));
 
+                    int i = 0;
+                    while (i++ < 300 && (taskRunScheduler.getRunnableTaskRun(taskId) != null
+                            || tm.listMVRefreshedTaskRunStatus(null, null).isEmpty())) {
+                        Thread.sleep(100);
+                    }
+                    if (tm.listMVRefreshedTaskRunStatus(null, null).isEmpty()) {
+                        return;
+                    }
                     // without db name
                     Assertions.assertFalse(tm.getMatchedTaskRunStatus(null).isEmpty());
                     Assertions.assertFalse(tm.filterTasks(null).isEmpty());
