@@ -701,7 +701,7 @@ PROPERTIES (
       SELECT METADATA_SWITCH_VERSION FROM information_schema.partitions_meta WHERE TABLE_NAME = '<table_name>';
       ```
 
-      `file_bundling` プロパティを変更できるのは、`0` が返される場合のみです。非ゼロ値は、`METADATA_SWITCH_VERSION` に対応するデータバージョンが GC メカニズムによってまだ再利用されていないことを示します。データバージョンが再利用されるまで待つ必要があります。
+      `file_bundling` プロパティを変更できるのは、`0` が返される場合のみです。非ゼロ値は、`METADATA_SWITCH_VERSION` に対応するデータバージョンが GC メカニズムによってまだ回収されていないことを示します。データバージョンが回収されるまで待つ必要があります。
 
       この間隔を短縮するには、FE の動的設定 `lake_autovacuum_grace_period_minutes` の値を低く設定します。ただし、`file_bundling` プロパティを変更した後は、設定を元の値に戻すことを忘れないでください。
   :::

@@ -704,7 +704,7 @@ PROPERTIES (
       SELECT METADATA_SWITCH_VERSION FROM information_schema.partitions_meta WHERE TABLE_NAME = '<table_name>';
       ```
 
-      You are allowed to modify the `file_bundling` property only when `0` is returned. Non-zero values indicate that the data version corresponding to `METADATA_SWITCH_VERSION` is yet to be recycled by the GC mechanism. You must wait until the data version is recycled.
+      You are allowed to modify the `file_bundling` property only when `0` is returned. Non-zero values indicate that the data version corresponding to `METADATA_SWITCH_VERSION` is yet to be reclaimed by the GC mechanism. You must wait until the data version is reclaimed.
 
       You can foreshorten this interval by setting a lower value for the FE dynamic configuration `lake_autovacuum_grace_period_minutes`. However, remember to reset the configuration to its original value after you modify the `file_bundling` property.
   :::
