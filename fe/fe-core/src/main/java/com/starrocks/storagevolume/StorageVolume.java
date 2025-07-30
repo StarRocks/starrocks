@@ -98,13 +98,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public StorageVolume(String id, String name, String svt, List<String> locations,
                          Map<String, String> params, boolean enabled, String comment, long uniqueId) throws DdlException {
-        this(id, name, svt, locations, params, enabled, comment);
-        this.uniqueId = uniqueId;
-    }
-
-    public StorageVolume(String id, String name, String svt, List<String> locations,
-                         Map<String, String> params, boolean enabled, String comment) throws DdlException {
         this.id = id;
+        this.uniqueId = uniqueId;
         this.name = name;
         this.svt = toStorageVolumeType(svt);
         this.locations = new ArrayList<>(locations);
