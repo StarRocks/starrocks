@@ -29,13 +29,11 @@ import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.QueryOptimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -1866,16 +1864,7 @@ public class MvRewriteTest extends MVTestBase {
 
         MaterializedView mv = getMv("test", "mv_with_window");
         instance.evictMaterializedViewCache(mv);
-
-        new MockUp<MaterializedViewOptimizer>() {
-            @Mock
-            private MvPlanContext optimizeImpl(MaterializedView mv,
-                                               ConnectContext connectContext,
-                                               boolean inlineView,
-                                               boolean isCheckNonDeterministicFunction) {
-                throw new RuntimeException("optimize failed");
-            }
-        };
+        
         new MockUp<QueryOptimizer>() {
             @Mock
             public OptExpression optimize(OptExpression logicOperatorTree,
