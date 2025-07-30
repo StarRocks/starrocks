@@ -4,6 +4,7 @@ package com.starrocks.epack.connector.delta;
 
 import com.databricks.sdk.WorkspaceClient;
 import com.databricks.sdk.service.catalog.AwsCredentials;
+import com.databricks.sdk.service.catalog.GcpOauthToken;
 import com.databricks.sdk.service.catalog.GenerateTemporaryTableCredentialRequest;
 import com.databricks.sdk.service.catalog.GenerateTemporaryTableCredentialResponse;
 import com.databricks.sdk.service.catalog.TableInfo;
@@ -164,4 +165,49 @@ public class DatabricksUnityMetastoreTest {
         Assert.assertNull(table.getCloudConfiguration());
     }
 
+    @Test
+    public void testGCPVendingCredentials(@Mocked WorkspaceClient workspaceClient,
+                                          @Mocked TableInfo tableInfo,
+                                          @Mocked GenerateTemporaryTableCredentialResponse response,
+                                          @Mocked GcpOauthToken gcpOauthToken) {
+        HashMap<String, String> props = new HashMap<>();
+        props.put(DatabricksUnityMetastore.DATABRICKS_VENDED_CREDENTIALS_ENABLED, "true");
+        DeltaLakeCatalogProperties properties = new DeltaLakeCatalogProperties(props);
+        // Mock TableInfo
+        new Expectations() {
+            {
+                workspaceClient.tables().get(anyString);
+                result = tableInfo;
+                tableInfo.getDataSourceFormat();
+                result = com.databricks.sdk.service.catalog.DataSourceFormat.DELTA;
+                tableInfo.getTableId();
+                result = "tableId";
+                workspaceClient.temporaryTableCredentials().
+                        generateTemporaryTableCredentials((GenerateTemporaryTableCredentialRequest) any);
+                result = response;
+                response.getAwsTempCredentials();
+                result = null;
+                response.getGcpOauthToken();
+                result = gcpOauthToken;
+                gcpOauthToken.getOauthToken();
+                result = "access_token";
+                response.getExpirationTime();
+                result = 1234567890L;
+                tableInfo.getStorageLocation();
+                result = "gs://bucket/table";
+                tableInfo.getCreatedAt();
+                result = 123L;
+            }
+        };
+        DatabricksUnityMetastore metastore = new DatabricksUnityMetastore("delta0", "databricks0",
+                workspaceClient, null, properties);
+        MetastoreTable table = metastore.getMetastoreTable("db", "tbl");
+        Assert.assertNotNull(table);
+        CloudConfiguration conf = table.getCloudConfiguration();
+        Assert.assertNotNull(conf);
+        Assert.assertEquals("GCPCloudConfiguration{resources='', jars='', hdpuser='', " +
+                "cred=GCPCloudCredential{endpoint='', useComputeEngineServiceAccount=false, serviceAccountEmail='', " +
+                "serviceAccountPrivateKeyId='', serviceAccountPrivateKey='', impersonationServiceAccount='', " +
+                "accessToken='access_token', accessTokenExpiresAt='1234567890'}}", conf.toConfString());
+    }
 }

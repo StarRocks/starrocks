@@ -5,6 +5,7 @@ package com.starrocks.epack.connector.delta;
 import com.databricks.sdk.WorkspaceClient;
 import com.databricks.sdk.service.catalog.AwsCredentials;
 import com.databricks.sdk.service.catalog.DataSourceFormat;
+import com.databricks.sdk.service.catalog.GcpOauthToken;
 import com.databricks.sdk.service.catalog.GenerateTemporaryTableCredentialRequest;
 import com.databricks.sdk.service.catalog.GenerateTemporaryTableCredentialResponse;
 import com.databricks.sdk.service.catalog.SchemaInfo;
@@ -26,6 +27,7 @@ import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -126,24 +128,7 @@ public class DatabricksUnityMetastore implements IMetastore {
             }
             CloudConfiguration cloudConfiguration = null;
             if (vendedCredentialsEnabled) {
-                // try to get the temporary credentials
-                GenerateTemporaryTableCredentialResponse response = workspaceClient.temporaryTableCredentials().
-                        generateTemporaryTableCredentials(new GenerateTemporaryTableCredentialRequest().
-                                setTableId(tableInfo.getTableId()).setOperation(TableOperation.READ));
-                // only support aws temporary credentials for now
-                if (response.getAwsTempCredentials() != null) {
-                    AwsCredentials credentials = response.getAwsTempCredentials();
-                    ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
-                    if (credentials != null) {
-                        builder.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, credentials.getAccessKeyId())
-                                .put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, credentials.getSecretAccessKey())
-                                .put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, credentials.getSessionToken())
-                                .put(CloudConfigurationConstants.AWS_S3_REGION,
-                                        deltaLakeCatalogProperties.getProperties().
-                                                get(CloudConfigurationConstants.AWS_S3_REGION));
-                        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(builder.build());
-                    }
-                }
+                cloudConfiguration = getVendedCredentials(tableInfo);
             }
             String path = tableInfo.getStorageLocation();
             long createTime = tableInfo.getCreatedAt();
@@ -156,5 +141,32 @@ public class DatabricksUnityMetastore implements IMetastore {
         String fullName = Joiner.on(".").join(databricksCatalogName, dbName, tblName);
         TableInfo tableInfo = workspaceClient.tables().get(fullName);
         return tableInfo != null;
+    }
+
+    public CloudConfiguration getVendedCredentials(TableInfo tableInfo) {
+        CloudConfiguration cloudConfiguration = null;
+        // try to get the temporary credentials
+        GenerateTemporaryTableCredentialResponse response = workspaceClient.temporaryTableCredentials().
+                generateTemporaryTableCredentials(new GenerateTemporaryTableCredentialRequest().
+                        setTableId(tableInfo.getTableId()).setOperation(TableOperation.READ));
+
+        ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
+        if (response.getAwsTempCredentials() != null) {
+            AwsCredentials credentials = response.getAwsTempCredentials();
+            builder.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, credentials.getAccessKeyId())
+                    .put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, credentials.getSecretAccessKey())
+                    .put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, credentials.getSessionToken())
+                    .put(CloudConfigurationConstants.AWS_S3_REGION,
+                            deltaLakeCatalogProperties.getProperties().
+                                    get(CloudConfigurationConstants.AWS_S3_REGION));
+        } else if (response.getGcpOauthToken() != null) {
+            // if the vended credentials is GCP, we can use the OAuth token directly
+            GcpOauthToken gcpOauthToken = response.getGcpOauthToken();
+            builder.put(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN, gcpOauthToken.getOauthToken())
+                    .put(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT,
+                            String.valueOf(response.getExpirationTime()));
+        }
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(builder.build());
+        return cloudConfiguration;
     }
 }
