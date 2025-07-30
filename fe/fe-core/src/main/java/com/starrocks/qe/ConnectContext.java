@@ -43,6 +43,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.OAuth2Context;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
@@ -181,6 +182,9 @@ public class ConnectContext {
     protected Set<Long> currentRoleIds = new HashSet<>();
     // groups of current user
     protected Set<String> groups = new HashSet<>();
+
+    // The security integration method used for authentication.
+    protected String securityIntegration = SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE;
 
     // The Token in the OpenIDConnect authentication method is obtained
     // from the authentication logic and stored in the ConnectContext.
@@ -533,6 +537,14 @@ public class ConnectContext {
 
     public void setGroups(Set<String> groups) {
         this.groups = groups;
+    }
+
+    public String getSecurityIntegration() {
+        return securityIntegration;
+    }
+
+    public void setSecurityIntegration(String securityIntegration) {
+        this.securityIntegration = securityIntegration;
     }
 
     public String getAuthToken() {

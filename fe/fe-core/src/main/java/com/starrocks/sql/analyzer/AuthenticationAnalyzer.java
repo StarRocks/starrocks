@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.Config;
@@ -142,7 +143,12 @@ public class AuthenticationAnalyzer {
             if (stmt.isAllowRevert()) {
                 throw new SemanticException("`EXECUTE AS` must use with `WITH NO REVERT` for now!");
             }
-            analyseUser(stmt.getToUser(), true);
+
+            if (session.getSecurityIntegration().equalsIgnoreCase(SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                analyseUser(stmt.getToUser(), true);
+            } else {
+                stmt.getToUser().setEphemeral(true);
+            }
             return null;
         }
     }

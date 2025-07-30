@@ -12,24 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.common.Config;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+
 public class ExecuteAsExecutor {
-    private static final Logger LOG = LogManager.getLogger(ExecuteAsStmt.class);
+    private static final Logger LOG = LogManager.getLogger(ExecuteAsExecutor.class);
 
     /**
      * Only set current user, won't reset any other context, for example, current database.
      * Because mysql client still think that this session is using old databases and will show such hint,
      * which will only confuse the user
-     *
+     * <p>
      * MySQL [test_priv]> execute as test1 with no revert;
      * Query OK, 0 rows affected (0.00 sec)
      * MySQL [test_priv]> select * from test_table2;
@@ -49,5 +56,21 @@ public class ExecuteAsExecutor {
                     .getUserProperty(user.getUser());
             ctx.updateByUserProperty(userProperty);
         }
+
+        List<String> groupProviders;
+        if (ctx.securityIntegration.equals(SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+            groupProviders = List.of(Config.group_provider);
+        } else {
+            SecurityIntegration securityIntegration =
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().getSecurityIntegration(ctx.getSecurityIntegration());
+            if (securityIntegration == null) {
+                groupProviders = Collections.emptyList();
+            } else {
+                groupProviders = securityIntegration.getGroupProviderName();
+            }
+        }
+
+        Set<String> groups = AuthenticationHandler.getGroups(user, groupProviders);
+        ctx.setGroups(groups);
     }
 }

@@ -35,6 +35,7 @@
 package com.starrocks.common;
 
 import com.starrocks.StarRocksFE;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
@@ -1886,7 +1887,7 @@ public class Config extends ConfigBase {
      * {@link com.starrocks.authentication.SecurityIntegration}
      */
     @ConfField(mutable = true)
-    public static String[] authentication_chain = {AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
+    public static String[] authentication_chain = {SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
 
     /**
      * If set to true, the granularity of auth check extends to the column level
