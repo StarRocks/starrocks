@@ -1249,6 +1249,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboJSONV2Rewrite;
     }
 
+    public void setEnableJSONV2Rewrite(boolean enableJSONV2Rewrite) {
+        this.cboJSONV2Rewrite = enableJSONV2Rewrite;
+    }
+
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature

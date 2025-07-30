@@ -225,6 +225,14 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
             return (B) this;
         }
 
+        public B addColumnAccessPaths(List<ColumnAccessPath> accessPaths) {
+            ImmutableList.Builder<ColumnAccessPath> builder = ImmutableList.<ColumnAccessPath>builder()
+                    .addAll(this.builder.columnAccessPaths)
+                    .addAll(accessPaths);
+            this.builder.setColumnAccessPaths(builder.build());
+            return (B) this;
+        }
+
         @Override
         public O build() {
             O op = super.build();

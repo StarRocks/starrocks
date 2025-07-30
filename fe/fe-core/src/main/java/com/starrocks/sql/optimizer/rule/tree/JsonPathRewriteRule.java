@@ -263,7 +263,7 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
                 ColumnAccessPath path = JsonPathRewriteContext.pathFromColumn(entry.getValue());
                 paths.add(path);
             }
-            builder.setColumnAccessPath(paths);
+            builder.addColumnAccessPaths(paths);
 
             Operator newOp = builder.build();
             return OptExpression.builder().with(optExpr).setOp(newOp).build();
