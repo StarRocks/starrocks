@@ -89,7 +89,7 @@ The type of the group provider to create. Valid values:
 - `unix`: Creates a Unix group provider.
 - `file`: Creates a File group provider. When this value is set, you need to specify `group_file_url`.
 
-#### `ldap_info`
+#### `ldap_info` parameter group
 
 The information used to connect to your LDAP service.
 
@@ -129,7 +129,7 @@ Optional. Local path to store the SSL CA certificate of the LDAP server. Support
 
 Optional. The password used to access the locally stored SSL CA certificate of the LDAP server. pem-formatted certificates do not require a password. Only jsk-formatted certificates do.
 
-#### `ldap_search_group_arg`
+#### `ldap_search_group_arg` parameter group
 
 The arguments used to control how StarRocks searches for a group.
 
@@ -149,7 +149,7 @@ A customized group filter that can be recognized by the LDAP server. It will be 
 
 The attribute used as the identifier for the group name.
 
-#### `ldap_search_user_arg`
+#### `ldap_search_user_arg` parameter group
 
 The arguments used to control how StarRocks identifies for a user in a group.
 
@@ -161,7 +161,7 @@ The attribute that represents group members. Valid values: `member` and `memberU
 
 Specifies how to extract the user identifier from the member attribute value. You can explicitly define an attribute (for example, `cn` or `uid`) or use a regular expression.
 
-#### `ldap_cache_arg`
+#### `ldap_cache_arg` parameter group
 
 The argument used to define the cache behavior for the LDAP group information.
 
