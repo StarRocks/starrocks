@@ -699,6 +699,7 @@ Status AdaptivePartitionHashJoinBuilder::_convert_to_single_partition() {
     }
     _builders.resize(1);
     _partition_num = 1;
+    COUNTER_SET(_hash_joiner.build_metrics().partition_nums, static_cast<int64_t>(1));
     return Status::OK();
 }
 
