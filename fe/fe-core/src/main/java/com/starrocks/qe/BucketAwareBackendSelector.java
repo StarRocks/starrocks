@@ -20,6 +20,7 @@ import com.google.common.hash.Funnel;
 import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.common.util.RendezvousHashRing;
 import com.starrocks.planner.ScanNode;
@@ -104,6 +105,7 @@ public class BucketAwareBackendSelector implements BackendSelector {
             scanRanges.put(scanNode.getId().asInt(), entry.getValue());
             seqToWorkerId.put(entry.getKey(), bucketSeqToWorkerId.get(entry.getKey()));
         }
+        recordScanRangeStatistic();
 
         if (useIncrementalScanRanges) {
             boolean hasMore = scanNode.hasMoreScanRanges();
@@ -136,6 +138,25 @@ public class BucketAwareBackendSelector implements BackendSelector {
                     bucketSeqToScanRange.get(bucketSeq).put(scanNode.getId().asInt(), Lists.newArrayList());
                 }
             }
+        }
+    }
+
+    private void recordScanRangeStatistic() {
+        // record bucket counts for each backend
+        Map<Integer, Long> seqToWorkerId = colocatedAssignment.getSeqToWorkerId();
+        Map<Long, Integer> workerIdSeqCount = new HashMap<>();
+        for (Map.Entry<Integer, Long> entry : seqToWorkerId.entrySet()) {
+            if (workerIdSeqCount.containsKey(entry.getValue())) {
+                workerIdSeqCount.put(entry.getValue(), workerIdSeqCount.get(entry.getValue()) + 1);
+            } else {
+                workerIdSeqCount.put(entry.getValue(), 1);
+            }
+        }
+        for (Map.Entry<Long, Integer> entry : workerIdSeqCount.entrySet()) {
+            String host = workerProvider.getWorkerById(entry.getKey()).getAddress().hostname.replace('.', '_');
+            long value = entry.getValue();
+            String key = String.format("Bucket Placement.%s.assign.%s", scanNode.getTableName(), host);
+            Tracers.count(Tracers.Module.EXTERNAL, key, value);
         }
     }
 }
