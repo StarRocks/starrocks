@@ -27,7 +27,9 @@
 #include "common/statusor.h"
 #include "exprs/function_context.h"
 #include "exprs/json_functions.h"
+#include "exprs/jsonpath.h"
 #include "gutil/casts.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "storage/rowset/column_iterator.h"
@@ -645,36 +647,37 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> JsonMergeIterator::get_io_ran
 
 class JsonExtractIterator final : public ColumnIteratorDecorator {
 public:
-    explicit JsonExtractIterator(ColumnIteratorUPtr source_iter, std::string path, LogicalType type)
+    explicit JsonExtractIterator(ColumnIteratorUPtr source_iter, JsonPath path, LogicalType type)
             : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
               _path(std::move(path)),
               _type(type),
-              _obj_pool(new ObjectPool()),
+              _state(ExecEnv::GetInstance()),
+              _mem_pool(),
               _source_chunk() {
         // prepare the source chunk
         auto column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
         _source_chunk.append_column(std::move(column), SlotId(0));
-        auto path_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(_path, 1);
+        auto path_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(_path.to_string(), 1);
         _source_chunk.append_column(std::move(path_column), SlotId(1));
 
         // prepare the function
         TypeDescriptor return_type(_type);
         std::vector<TypeDescriptor> arg_types = {TypeDescriptor::create_json_type(), TypeDescriptor(TYPE_VARCHAR)};
-        _fn_context = FunctionContext::create_context(&_state, &_mem_pool, return_type, arg_types);
-        _obj_pool->add(_fn_context);
-        
-        auto st = JsonFunctions::native_json_path_prepare(_fn_context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-        CHECK(st.ok()) << st;
+        _fn_context.reset(FunctionContext::create_context(&_state, &_mem_pool, return_type, arg_types));
     }
 
     ~JsonExtractIterator() override {
-        auto st = JsonFunctions::native_json_path_close(_fn_context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-        CHECK(st.ok()) << st;
+        auto st = JsonFunctions::native_json_path_close(_fn_context.get(),
+                                                        FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        LOG_IF(WARNING, !st.ok()) << "close json path function context failed path=" << _path.to_string()
+                                  << " status=" << st;
     }
 
     Status init(const ColumnIteratorOptions& opts) override {
+        RETURN_IF_ERROR(JsonFunctions::native_json_path_prepare(_fn_context.get(),
+                                                                FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
         // record the hits into stats
-        opts.stats->extract_json_hits[_path]++;
+        opts.stats->extract_json_hits[_path.to_string()]++;
         return _parent->init(opts);
     }
 
@@ -723,20 +726,20 @@ private:
         StatusOr<ColumnPtr> output_column;
         switch (_type) {
         case TYPE_BOOLEAN:
-            output_column = JsonFunctions::get_native_json_bool(_fn_context, _source_chunk.columns());
+            output_column = JsonFunctions::get_native_json_bool(_fn_context.get(), _source_chunk.columns());
             break;
         case TYPE_INT:
-            output_column = JsonFunctions::get_native_json_int(_fn_context, _source_chunk.columns());
+            output_column = JsonFunctions::get_native_json_int(_fn_context.get(), _source_chunk.columns());
             break;
         case TYPE_BIGINT:
-            output_column = JsonFunctions::get_native_json_bigint(_fn_context, _source_chunk.columns());
+            output_column = JsonFunctions::get_native_json_bigint(_fn_context.get(), _source_chunk.columns());
             break;
         case TYPE_DOUBLE:
-            output_column = JsonFunctions::get_native_json_double(_fn_context, _source_chunk.columns());
+            output_column = JsonFunctions::get_native_json_double(_fn_context.get(), _source_chunk.columns());
             break;
         case TYPE_CHAR:
         case TYPE_VARCHAR:
-            output_column = JsonFunctions::get_native_json_string(_fn_context, _source_chunk.columns());
+            output_column = JsonFunctions::get_native_json_string(_fn_context.get(), _source_chunk.columns());
             break;
         default:
             return Status::RuntimeError(
@@ -760,12 +763,11 @@ private:
         return {};
     }
 
-    std::string _path;
+    JsonPath _path;
     LogicalType _type;
-    std::unique_ptr<ObjectPool> _obj_pool;
     RuntimeState _state;
     MemPool _mem_pool;
-    FunctionContext* _fn_context;
+    std::unique_ptr<FunctionContext> _fn_context;
 
     // Hold the data fetched from the parent iterator
     Chunk _source_chunk;
@@ -802,7 +804,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
 StatusOr<ColumnIteratorUPtr> create_json_extract_iterator(ColumnIteratorUPtr source_iter, const std::string& path,
                                                           LogicalType type) {
     VLOG(2) << fmt::format("create_json_extract_iterator: path={} type={}", path, type);
-    return std::make_unique<JsonExtractIterator>(std::move(source_iter), path, type);
+    ASSIGN_OR_RETURN(auto normalized_path, JsonPath::parse(path));
+    return std::make_unique<JsonExtractIterator>(std::move(source_iter), normalized_path, type);
 }
 
 } // namespace starrocks

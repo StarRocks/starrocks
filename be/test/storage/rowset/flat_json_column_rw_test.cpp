@@ -2480,15 +2480,17 @@ TEST_F(FlatJsonColumnRWTest, testSegmentWriterIteratorWithMixedDataTypes) {
         };
         // clang-format on
 
+        int index = 0;
         for (const auto& [field_name, field_type, result] : fields) {
-            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::FIELD, "", 0));
+            std::cerr << "running test case " << index++ << std::endl;
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::FIELD, "$", 0));
             ColumnAccessPath::insert_json_path(path.get(), field_type, field_name);
             // ASSERT_EQ(kJsonColumnName + "." + field_name, path->full_path());
-            ASSERT_EQ(field_name, path->linear_path());
+            ASSERT_EQ("$." + field_name, path->linear_path());
 
             TabletColumn col(STORAGE_AGGREGATE_NONE, field_type, true);
             col.set_extended(true);
-            col.set_source_column(&tablet_schema->column(0));
+            col.set_source_column_index(0);
             col.set_unique_id(123);
             col.set_access_path(path.get());
 
