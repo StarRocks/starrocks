@@ -95,7 +95,7 @@ static void _send_reply(HttpRequest* req, const std::string& str) {
     if (config::enable_stream_load_verbose_log) {
         LOG(INFO) << "transaction streaming load response: " << str;
     }
-    HttpChannel::send_reply(req, str);
+    HttpChannel::send_reply_json(req, HttpStatus::OK, str);
 }
 
 void TransactionManagerAction::_send_error_reply(HttpRequest* req, const Status& st) {
@@ -103,7 +103,7 @@ void TransactionManagerAction::_send_error_reply(HttpRequest* req, const Status&
     ctx->label = req->header(HTTP_LABEL_KEY);
 
     auto str = ctx->to_resp_json(req->param(HTTP_TXN_OP_KEY), st);
-    HttpChannel::send_reply(req, str);
+    HttpChannel::send_reply_json(req, HttpStatus::OK, str);
 }
 
 void TransactionManagerAction::handle(HttpRequest* req) {

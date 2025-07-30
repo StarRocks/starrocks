@@ -20,6 +20,7 @@
 #include <event2/buffer.h>
 #include <event2/http.h>
 
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -52,6 +53,19 @@ void HttpChannel::send_reply(HttpRequest* request, HttpStatus status) {
 }
 
 void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, std::string_view content) {
+    send_reply(request, status, content, std::nullopt);
+}
+
+void HttpChannel::send_reply_json(HttpRequest* request, HttpStatus status, std::string_view content) {
+    send_reply(request, status, content, HttpHeaders::JsonType);
+}
+
+void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, std::string_view content,
+                             const std::optional<std::string_view>& content_type) {
+    if (content_type.has_value()) {
+        auto headers = evhttp_request_get_output_headers(request->get_evhttp_request());
+        evhttp_add_header(headers, HttpHeaders::CONTENT_TYPE, std::string(*content_type).c_str());
+    }
 #ifdef BE_TEST
     if (s_injected_send_reply != nullptr) {
         s_injected_send_reply(request, status, content);
