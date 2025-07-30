@@ -2,6 +2,7 @@ set(EXEC_FILES
         ./agent/agent_task_test.cpp
         ./agent/heartbeat_server_test.cpp
         ./agent/master_info_test.cpp
+        ./agent/resource_group_usage_recorder_test.cpp
         ./column/array_column_test.cpp
         ./column/column_view_test.cpp
         ./column/array_view_column_test.cpp
@@ -67,6 +68,7 @@ set(EXEC_FILES
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
+        ./exec/pipeline/exchange_pass_through_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/query_cache/query_cache_test.cpp
@@ -403,7 +405,6 @@ set(EXEC_FILES
         ./runtime/agg_state_desc_test.cpp
         ./runtime/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
-        ./runtime/data_stream_mgr_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
         ./runtime/decimalv3_test.cpp
@@ -561,6 +562,7 @@ set(EXEC_FILES
         ./util/thrift_client_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
+        ./util/table_metrics_mgr_test.cpp
         )
 
 if (${USE_AVX512})
@@ -598,3 +600,6 @@ ADD_BE_TEST(storage/lake/compaction_task_test)
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/sorting_test)
+
+# Standalone executable for builtin_functions_fuzzy_test
+ADD_BE_TEST(fuzzy/builtin_functions_fuzzy_test)

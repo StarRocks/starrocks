@@ -1639,6 +1639,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.
 - Introduced in: -
 
+##### transaction_publish_version_thread_pool_idle_time_ms
+
+- Default: 60000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: The idle time before a thread is reclaimed by the Publish Version thread pool.
+- Introduced in: -
+
 <!--
 ##### transaction_apply_worker_count
 

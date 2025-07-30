@@ -18,7 +18,7 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
-#include "util/thread.h"
+#include "util/time.h"
 
 namespace starrocks {
 

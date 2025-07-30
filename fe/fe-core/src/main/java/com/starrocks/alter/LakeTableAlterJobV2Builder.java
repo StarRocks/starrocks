@@ -93,7 +93,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
                 TabletMeta shadowTabletMeta =
-                        new TabletMeta(dbId, tableId, physicalPartitionId, shadowIndexId, 0, medium, true);
+                        new TabletMeta(dbId, tableId, physicalPartitionId, shadowIndexId, medium, true);
                 MaterializedIndex shadowIndex =
                         new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW, shardGroupId);
                 Map<Long, Long> tabletIdMap = new HashMap<>();

@@ -20,8 +20,11 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
+import com.starrocks.catalog.system.information.TablesSystemTable;
+import com.starrocks.catalog.system.information.ViewsSystemTable;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.SlotManager;
@@ -47,17 +50,22 @@ import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
+import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TGetWarehouseMetricsRequest;
 import com.starrocks.thrift.TGetWarehouseMetricsRespone;
 import com.starrocks.thrift.TGetWarehouseQueriesRequest;
 import com.starrocks.thrift.TGetWarehouseQueriesResponse;
 import com.starrocks.thrift.TKeywordInfo;
+import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
+import com.starrocks.thrift.TTableStatus;
+import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -75,18 +83,20 @@ import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class InformationSchemaDataSourceTest {
+public class InformationSchemaDataSourceTest extends StarRocksTestBase {
 
     @Mocked
     ExecuteEnv exeEnv;
-    private static StarRocksAssert starRocksAssert;
+    private static ConnectContext connectContext;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
-        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+        connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        connectContext.setThreadLocalInfo();
+        starRocksAssert = new StarRocksAssert(connectContext);
     }
 
     @Test
@@ -718,5 +728,197 @@ public class InformationSchemaDataSourceTest {
         starRocksAssert.query("select * from information_schema.warehouse_queries where WAREHOUSE_ID = 0 or " +
                         "WAREHOUSE_NAME = 'default_warehouse'")
                 .explainContains("SCAN SCHEMA");
+    }
+
+    @Test
+    public void testTablesSystemTable() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("test_db").useDatabase("test_db");
+        String createTblStmtStr = "CREATE TABLE test_db.`test_tbl1` (\n" +
+                "  `k1` date  COMMENT \"\",\n" +
+                "  `k2` datetime  COMMENT \"\",\n" +
+                "  `k3` varchar(20)  COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY RANGE(k1)()\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"dynamic_partition.enable\" = \"true\",\n" +
+                "\"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                "\"dynamic_partition.start\" = \"-3\",\n" +
+                "\"dynamic_partition.end\" = \"3\",\n" +
+                "\"dynamic_partition.prefix\" = \"p\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        {
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_tbl2'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_NAME = 'test_tbl2'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_SCHEMA = 'test_db_xxx'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select * from information_schema.tables")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select * from information_schema.tables where TABLE_SCHEMA = 'test_db'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select * from information_schema.tables where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_tbl1'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.tables")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_SCHEMA = 'test_db'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_tbl1'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_tbl2'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_SCHEMA = 'test_db' or " +
+                            "TABLE_NAME ='test_view1'")
+                    .explainWithout("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.tables where ENGINE = 'xxx'")
+                    .explainWithout("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_CATALOG= 'xxx'")
+                    .explainWithout("     constant exprs: ");
+        }
+
+        TGetTablesInfoRequest params = new TGetTablesInfoRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("test_db");
+        authInfo.setCurrent_user_ident(connectContext.getCurrentUserIdentity().toThrift());
+        params.setAuth_info(authInfo);
+        {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TGetTablesInfoResponse result = impl.getTablesInfo(params);
+            Assertions.assertEquals(1, result.getTables_infos().size());
+            TTableInfo tableStatus = result.getTables_infos().get(0);
+            Assertions.assertEquals("test_tbl1", tableStatus.getTable_name());
+        }
+        {
+            TGetTablesInfoResponse result = TablesSystemTable.query(params);
+            Assertions.assertEquals(1, result.getTables_infos().size());
+            TTableInfo tableStatus = result.getTables_infos().get(0);
+            Assertions.assertEquals("test_tbl1", tableStatus.getTable_name());
+        }
+        {
+            authInfo.setPattern("test_db2");
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TGetTablesInfoResponse result = impl.getTablesInfo(params);
+            Assertions.assertEquals(0, result.getTables_infos().size(),
+                    "Should return empty result for non-existing db");
+        }
+        {
+            params.setTable_name("test_tabl2_xx");
+            TGetTablesInfoResponse result = TablesSystemTable.query(params);
+            Assertions.assertEquals(0, result.getTables_infos().size(),
+                    "Should return empty result for non-existing db");
+        }
+    }
+
+    @Test
+    public void testTablesSystemView() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("test_db").useDatabase("test_db");
+        String createTblStmtStr = "CREATE TABLE test_db.`test_tbl1` (\n" +
+                "  `k1` date  COMMENT \"\",\n" +
+                "  `k2` datetime  COMMENT \"\",\n" +
+                "  `k3` varchar(20)  COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY RANGE(k1)()\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3;";
+        starRocksAssert.withTable(createTblStmtStr);
+        starRocksAssert.withView("CREATE VIEW test_db.test_view1 AS SELECT k1, k2 FROM test_db.test_tbl1");
+
+        {
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_tbl2'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_NAME = 'test_tbl2'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_SCHEMA = 'test_db_xxx'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select * from information_schema.views")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select * from information_schema.views where TABLE_SCHEMA = 'test_db'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select * from information_schema.views where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_view1'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select * from information_schema.views where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_tbl1'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select count(1) from information_schema.views")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_SCHEMA = 'test_db'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_view1'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_SCHEMA = 'test_db' or " +
+                            "TABLE_NAME ='test_view1'")
+                    .explainWithout("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.views where DEFINER = 'xxx'")
+                    .explainWithout("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_CATALOG= 'xxx'")
+                    .explainWithout("     constant exprs: ");
+        }
+
+        TGetTablesParams params = new TGetTablesParams();
+        params.setCurrent_user_ident(connectContext.getCurrentUserIdentity().toThrift());
+        params.setDb("test_db");
+        params.setType(TTableType.SCHEMA_TABLE);
+
+        {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TListTableStatusResult result = impl.listTableStatus(params);
+            Assertions.assertEquals(2, result.getTables().size());
+            Set<String> tableNames = result.getTables().stream()
+                    .map(TTableStatus::getName)
+                    .collect(Collectors.toUnmodifiableSet());
+            Assertions.assertEquals(Set.of("test_tbl1", "test_view1"), tableNames);
+        }
+        {
+            params.setDb("test_db");
+            params.setType(TTableType.SCHEMA_TABLE);
+            TListTableStatusResult result = ViewsSystemTable.query(params, connectContext);
+            Assertions.assertEquals(2, result.getTables().size());
+            Set<String> tableNames = result.getTables().stream()
+                    .map(TTableStatus::getName)
+                    .collect(Collectors.toUnmodifiableSet());
+            Assertions.assertEquals(Set.of("test_tbl1", "test_view1"), tableNames);
+        }
+        {
+            params.setDb("test_db");
+            params.setType(TTableType.VIEW);
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TListTableStatusResult result = impl.listTableStatus(params);
+            Assertions.assertEquals(1, result.getTables().size());
+            TTableStatus tableStatus = result.getTables().get(0);
+            Assertions.assertEquals("test_view1", tableStatus.getName());
+
+        }
+        {
+            params.setDb("test_db");
+            params.setType(TTableType.VIEW);
+            TListTableStatusResult result = ViewsSystemTable.query(params, connectContext);
+            Assertions.assertEquals(1, result.getTables().size());
+            TTableStatus tableStatus = result.getTables().get(0);
+            Assertions.assertEquals("test_view1", tableStatus.getName());
+        }
+        {
+            params.setDb("test_db2");
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TListTableStatusResult result = impl.listTableStatus(params);
+            Assertions.assertEquals(0, result.getTables().size(),
+                    "Should return empty result for non-existing db");
+        }
+        {
+            params.setDb("test_db1");
+            params.setType(TTableType.VIEW);
+            TListTableStatusResult result = ViewsSystemTable.query(params, connectContext);
+            Assertions.assertEquals(0, result.getTables().size(),
+                    "Should return empty result for non-existing db");
+        }
     }
 }

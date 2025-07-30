@@ -42,6 +42,7 @@ public class ComputeNodeBlacklistTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
+        SimpleScheduler.disableUpdateBlocklistThread();
     }
 
     @Test

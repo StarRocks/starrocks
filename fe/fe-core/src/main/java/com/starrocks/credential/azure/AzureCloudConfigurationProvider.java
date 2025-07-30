@@ -49,6 +49,10 @@ public class AzureCloudConfigurationProvider implements CloudConfigurationProvid
     // Used to retrieve azure load path from configuration map
     public static final String AZURE_PATH_KEY = "azure_path_key";
 
+    public static final String ADLS_ENDPOINT = "dfs.core.windows.net";
+    public static final String BLOB_ENDPOINT = "blob.core.windows.net";
+    public static final String ADLS_SAS_TOKEN = "adls.sas-token.";
+
     @Override
     public CloudConfiguration build(Map<String, String> properties) {
         Preconditions.checkNotNull(properties);

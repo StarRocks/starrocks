@@ -96,9 +96,9 @@ shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue"  -H "for
 
 } END CONCURRENCY
 
-select sleep(5);
+function: wait_db_transaction_finish("db_${uuid0}", 60)
 -- result:
-1
+None
 -- !result
 sync;
 -- result:

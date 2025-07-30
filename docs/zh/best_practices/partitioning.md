@@ -25,7 +25,7 @@ sidebar_position: 10
 | **主要目标** | 粗粒度的数据裁剪和生命周期控制（TTL、归档）。 | 细粒度的并行度和每个分区内的数据局部性。 |
 | **计划器可见性** | 分区是 catalog 对象；FE 可以通过谓词跳过它们。 | 仅相等谓词支持桶裁剪 |
 | **生命周期操作** | DROP PARTITION 是仅元数据操作——理想用于 GDPR 删除、每月滚动。 | 桶不能被删除；它们仅通过 `ALTER TABLE … MODIFY DISTRIBUTED BY` 更改。 |
-| **典型数量** | 每个表 10^2–10^4（天、周、租户）。 | 每个分区 10–120；StarRocks `BUCKETS AUTO` 调整此值。 |
+| **典型数量** | 每个表 10^2–10^4（天、周、租户）。 | 每个分区 10–120；StarRocks `BUCKETS xxx` 调整此值。 |
 | **倾斜处理** | 合并或拆分分区；考虑复合/混合方案。 | 提高桶数量，哈希复合键，隔离“大户”，或使用随机分桶 |
 | **警示信号** | >100 k 分区可能会对 FE 引入显著的内存占用 | >200 k tablet 每个 BE；超过 10 GB 的 tablet 可能遇到 compaction 问题。 |
 
@@ -42,7 +42,7 @@ sidebar_position: 10
 1. **时间优先默认**——如果 80% 的查询包含时间过滤器，则以 `date_trunc('day', dt)` 开始。
 2. **租户隔离**——当需要按租户管理数据时，将 `tenant_id` 添加到键中。
 3. **保留对齐**——将计划清除的列放入键中。
-4. **复合键**：`PARTITION BY (tenant_id, date_trunc('day', dt))` 可以完美裁剪，但会创建 `#tenants × #days` 个分区。保持总数低于 ≈ 100 k，否则 FE 内存和 BE compaction 会受到影响。
+4. **复合键**：`PARTITION BY tenant_id, date_trunc('day', dt)` 可以完美裁剪，但会创建 `#tenants × #days` 个分区。保持总数低于 ≈ 100 k，否则 FE 内存和 BE compaction 会受到影响。
 
 ## 选择粒度
 
@@ -68,8 +68,8 @@ CREATE TABLE click_stream (
   ...
 )
 DUPLICATE KEY(user_id, event_time)
-PARTITION BY (date_trunc('day', event_time))
-DISTRIBUTED BY HASH(user_id) BUCKETS AUTO;
+PARTITION BY date_trunc('day', event_time)
+DISTRIBUTED BY HASH(user_id) BUCKETS xxx;
 ```
 
 ### SaaS 指标（多租户，模式 A）
@@ -85,7 +85,7 @@ CREATE TABLE metrics (
 )
 PRIMARY KEY(tenant_id, dt, metric_name)
 PARTITION BY date_trunc('DAY', dt)
-DISTRIBUTED BY HASH(tenant_id) BUCKETS AUTO;
+DISTRIBUTED BY HASH(tenant_id) BUCKETS xxx;
 ```
 
 ### 大租户复合（模式 B）
@@ -100,6 +100,6 @@ CREATE TABLE activity (
   ....
 )
 DUPLICATE KEY(dt, id)
-PARTITION BY (tenant_id, date_trunc('MONTH', dt))
-DISTRIBUTED BY HASH(id) BUCKETS AUTO;
+PARTITION BY tenant_id, date_trunc('MONTH', dt)
+DISTRIBUTED BY HASH(id) BUCKETS xxx;
 ```

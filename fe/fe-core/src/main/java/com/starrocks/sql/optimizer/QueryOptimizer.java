@@ -127,6 +127,7 @@ import com.starrocks.sql.optimizer.task.TaskScheduler;
 import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import com.starrocks.sql.optimizer.validate.PlanValidator;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -244,7 +245,7 @@ public class QueryOptimizer extends Optimizer {
 
         Preconditions.checkNotNull(memo);
         memo.init(logicOperatorTree);
-        if (context.getQueryMaterializationContext() != null) {
+        if (mvRewriteStrategy.enableViewBasedRewrite && context.getQueryMaterializationContext() != null) {
             // LogicalTreeWithView is logically equivalent to logicOperatorTree
             addViewBasedPlanIntoMemo(context.getQueryMaterializationContext().getQueryOptPlanWithView());
         }
@@ -458,10 +459,11 @@ public class QueryOptimizer extends Optimizer {
 
     private void doRuleBasedMaterializedViewRewrite(OptExpression tree,
                                                     TaskContext rootTaskContext) {
-        if (mvRewriteStrategy.enableViewBasedRewrite) {
-            // try view based mv rewrite first, then try normal mv rewrite rules
-            viewBasedMvRuleRewrite(tree, rootTaskContext);
+        // view rewrite can handle single table and multi tables query rewrite, no need extra rules to further optimization
+        if (mvRewriteStrategy.enableViewBasedRewrite && viewBasedMvRuleRewrite(tree, rootTaskContext)) {
+            return;
         }
+
         if (mvRewriteStrategy.enableForceRBORewrite) {
             // use rule based mv rewrite strategy to do mv rewrite for multi tables query
             if (mvRewriteStrategy.enableMultiTableRewrite) {
@@ -744,10 +746,15 @@ public class QueryOptimizer extends Optimizer {
     }
 
     // for single scan node, to make sure we can rewrite
-    private void viewBasedMvRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
+    private boolean viewBasedMvRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
         QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
         Preconditions.checkArgument(queryMaterializationContext != null);
+        if (queryMaterializationContext.getQueryOptPlanWithView() == null ||
+                CollectionUtils.isEmpty(queryMaterializationContext.getQueryViewScanOps())) {
+            return false;
+        }
 
+        boolean isRewrittenSuccess = false;
         try (Timer ignored = Tracers.watchScope("MVViewRewrite")) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "try VIEW_BASED_MV_REWRITE");
             OptExpression treeWithView = queryMaterializationContext.getQueryOptPlanWithView();
@@ -770,7 +777,8 @@ public class QueryOptimizer extends Optimizer {
                 deriveLogicalProperty(tree);
 
                 // if there are view scan operator left, we should replace it back to original plans
-                if (!leftViewScanOperators.isEmpty()) {
+                isRewrittenSuccess = leftViewScanOperators.isEmpty();
+                if (!isRewrittenSuccess) {
                     MvUtils.replaceLogicalViewScanOperator(tree);
                 }
             }
@@ -780,6 +788,7 @@ public class QueryOptimizer extends Optimizer {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
                     "single table view based mv rule rewrite failed.", e);
         }
+        return isRewrittenSuccess;
     }
 
     private OptExpression rewriteAndValidatePlan(

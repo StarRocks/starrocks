@@ -63,7 +63,7 @@ public final class ConstructorReflection {
      * invoke the constructor with no parameters of {@aClass Class<T>}.
      */
     private static <T> T newInstance(Class<T> aClass) {
-        return (T) newInstance((Class) aClass, ParameterReflection.NO_PARAMETERS);
+        return (T) newInstance((Class) aClass, (Object[]) ParameterReflection.NO_PARAMETERS);
     }
 
     /**
@@ -161,4 +161,3 @@ public final class ConstructorReflection {
         }
     }
 }
-

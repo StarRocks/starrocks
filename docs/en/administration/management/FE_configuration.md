@@ -5357,7 +5357,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: 8
 - Type: Int
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum capacity of the JDBC connection pool for accessing JDBC catalogs.
 - Introduced in: -
 
@@ -5366,7 +5366,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: 1
 - Type: Int
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
 - Introduced in: -
 
@@ -5375,7 +5375,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: 600000
 - Type: Int
 - Unit: Milliseconds
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
 - Introduced in: -
 
@@ -5508,3 +5508,12 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to perform reload flag check after FE loaded an image. If the check is performed for a base materialized view, it is not needed for other materialized views that related to it.
 - Introduced in: v3.5.0
+
+##### enable_trace_historical_node
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
+- Introduced in: v3.5.1

@@ -25,7 +25,7 @@ Understanding the distinction between partitioning and bucketing is fundamental 
 | **Primary goal** | Coarse‑grain data pruning and lifecycle control(TTL, archiving). | Fine‑grain parallelism and data locality inside each partition. |
 | **Planner visibility** | Partitions are catalog objects; FE can skip them via predicates. | Only equality predicates support bucket pruning |
 | **Lifecycle ops** | DROP PARTITION is metadata‑only—ideal for GDPR deletes, monthly roll‑off. | Buckets can’t be dropped; they change only with `ALTER TABLE … MODIFY DISTRIBUTED BY`. |
-| **Typical count** | 10^2–10^4 per table (days, weeks, tenants). | 10–120 per partition; StarRocks `BUCKETS AUTO` tunes this. |
+| **Typical count** | 10^2–10^4 per table (days, weeks, tenants). | 10–120 per partition; StarRocks `BUCKETS xxx` tunes this. |
 | **Skew handling** | Merge or split partitions; consider composite/hybrid scheme. | Raise bucket count, hash on compound key, isolate “whales”, or use random bucketing |
 | **Red flags** | >100 k partitions can introduce significant memory footprint for FE | >200 k tablets per BE; tablets exceeding 10 GB may encounter compaction issues. |
 
@@ -42,7 +42,7 @@ Understanding the distinction between partitioning and bucketing is fundamental 
 1. **Time‑first default**–If 80 % of queries include a time filter, lead with `date_trunc('day', dt)`.
 2. **Tenant isolation**–Add `tenant_id` into the key when you need to manage the data in tenant basis
 3. **Retention alignment**–Put the column you plan to purge on into the key.
-4. **Composite keys**: `PARTITION BY (tenant_id, date_trunc('day', dt))` prunes perfectly but creates `#tenants × #days` partitions. Keep below ≈ 100 k total or FE memory & BE compaction suffer.
+4. **Composite keys**: `PARTITION BY tenant_id, date_trunc('day', dt)` prunes perfectly but creates `#tenants × #days` partitions. Keep below ≈ 100 k total or FE memory & BE compaction suffer.
 
 ## Picking granularity
 
@@ -68,8 +68,8 @@ CREATE TABLE click_stream (
   ...
 )
 DUPLICATE KEY(user_id, event_time)
-PARTITION BY (date_trunc('day', event_time))
-DISTRIBUTED BY HASH(user_id) BUCKETS AUTO;
+PARTITION BY date_trunc('day', event_time)
+DISTRIBUTED BY HASH(user_id) BUCKETS xxx;
 ```
 
 ### SaaS metrics (multi‑tenant, pattern A)
@@ -85,7 +85,7 @@ CREATE TABLE metrics (
 )
 PRIMARY KEY(tenant_id, dt, metric_name)
 PARTITION BY date_trunc('DAY', dt)
-DISTRIBUTED BY HASH(tenant_id) BUCKETS AUTO;
+DISTRIBUTED BY HASH(tenant_id) BUCKETS xxx;
 ```
 
 ### Whale tenant composite (pattern B)
@@ -100,6 +100,6 @@ CREATE TABLE activity (
   ....
 )
 DUPLICATE KEY(dt, id)
-PARTITION BY (tenant_id, date_trunc('MONTH', dt))
-DISTRIBUTED BY HASH(id) BUCKETS AUTO;
+PARTITION BY tenant_id, date_trunc('MONTH', dt)
+DISTRIBUTED BY HASH(id) BUCKETS xxx;
 ```

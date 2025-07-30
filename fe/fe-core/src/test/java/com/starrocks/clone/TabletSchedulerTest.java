@@ -256,7 +256,7 @@ public class TabletSchedulerTest {
                                          TabletScheduler tabletScheduler)
             throws InvocationTargetException, IllegalAccessException {
         Config.tablet_sched_slot_num_per_path = newSlotPerPath;
-        updateWorkingSlotsMethod.invoke(tabletScheduler, null);
+        updateWorkingSlotsMethod.invoke(tabletScheduler, (Object[]) null);
     }
 
     private long takeSlotNTimes(int nTimes, TabletScheduler.PathSlot pathSlot, long pathHash) throws SchedException {
@@ -301,9 +301,9 @@ public class TabletSchedulerTest {
         systemInfoService.addBackend(be2);
 
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
-        Method m = TabletScheduler.class.getDeclaredMethod("updateWorkingSlots", null);
+        Method m = TabletScheduler.class.getDeclaredMethod("updateWorkingSlots", (Class<?>[]) null);
         m.setAccessible(true);
-        m.invoke(tabletScheduler, null);
+        m.invoke(tabletScheduler, (Object[]) null);
         Map<Long, TabletScheduler.PathSlot> bslots = tabletScheduler.getBackendsWorkingSlots();
         Assertions.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(1L).peekSlot(11));
         Assertions.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(2L).peekSlot(22));
@@ -440,7 +440,7 @@ public class TabletSchedulerTest {
                 .setTabletSchema(tabletSchema)
                 .build();
 
-        TabletMeta tabletMeta = new TabletMeta(dbId, tblId, partitionId, indexId, -1, TStorageMedium.HDD);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tblId, partitionId, indexId, TStorageMedium.HDD);
 
         Replica replica = new Replica(replicaId, beId, -1, Replica.ReplicaState.RECOVER);
 
