@@ -1682,16 +1682,24 @@ TEST_P(JsonRemoveTestFixture, json_remove) {
     auto param = GetParam();
 
     // Create JSON column
-    JsonColumn::Ptr json_column = JsonColumn::create();
-    auto json = JsonValue::parse(param.json_input);
-    ASSERT_TRUE(json.ok()) << "Failed to parse JSON: " << param.json_input;
-    json_column->append(&json.value());
+    auto json_column = ColumnHelper::cast_to_nullable_column(JsonColumn::create());
+    if (param.json_input == "null") {
+        json_column->append_nulls(1);
+    } else {
+        auto json = JsonValue::parse(param.json_input);
+        ASSERT_TRUE(json.ok()) << "Failed to parse JSON: " << param.json_input;
+        json_column->append_datum(Datum(&json.value()));
+    }
 
     // Create columns with JSON and all paths
     Columns columns{json_column};
     for (const auto& path : param.paths_to_remove) {
-        BinaryColumn::Ptr path_column = BinaryColumn::create();
-        path_column->append(path);
+        auto path_column = ColumnHelper::cast_to_nullable_column(BinaryColumn::create());
+        if (path == "null") {
+            path_column->append_nulls(1);
+        } else {
+            path_column->append_datum(Datum(Slice(path)));
+        }
         columns.emplace_back(path_column);
     }
 
@@ -1706,19 +1714,24 @@ TEST_P(JsonRemoveTestFixture, json_remove) {
 
     // Verify result
     Datum datum = result->get(0);
-    ASSERT_FALSE(datum.is_null()) << "Result should not be null for: " << param.description;
-    std::string json_str = datum.get_json()->to_string().value();
+    if (param.json_input == "null") {
+        ASSERT_TRUE(datum.is_null());
+    } else {
+        ASSERT_FALSE(datum.is_null()) << "Result should not be null for: " << param.description;
+        std::string json_str = datum.get_json()->to_string().value();
 
-    // Check keys that should exist
-    for (const auto& key : param.keys_should_exist) {
-        ASSERT_TRUE(json_str.find("\"" + key + "\"") != std::string::npos)
-                << "Key '" << key << "' should exist in result: " << json_str << " for test: " << param.description;
-    }
+        // Check keys that should exist
+        for (const auto& key : param.keys_should_exist) {
+            ASSERT_TRUE(json_str.find("\"" + key + "\"") != std::string::npos)
+                    << "Key '" << key << "' should exist in result: " << json_str << " for test: " << param.description;
+        }
 
-    // Check keys that should not exist
-    for (const auto& key : param.keys_should_not_exist) {
-        ASSERT_TRUE(json_str.find("\"" + key + "\"") == std::string::npos)
-                << "Key '" << key << "' should not exist in result: " << json_str << " for test: " << param.description;
+        // Check keys that should not exist
+        for (const auto& key : param.keys_should_not_exist) {
+            ASSERT_TRUE(json_str.find("\"" + key + "\"") == std::string::npos)
+                    << "Key '" << key << "' should not exist in result: " << json_str
+                    << " for test: " << param.description;
+        }
     }
 
     // Clean up JSON path context
@@ -1727,18 +1740,39 @@ TEST_P(JsonRemoveTestFixture, json_remove) {
                         .ok());
 }
 
+// clang-format off
 INSTANTIATE_TEST_SUITE_P(
         JsonRemoveTests, JsonRemoveTestFixture,
         ::testing::Values(
                 JsonRemoveTestParam{
-                        R"({"a": 1, "b": [10, 20, 30]})", {"$.a"}, {"b"}, {"a"}, "Remove single key from object"},
+                        "null", // JSON input is null
+                        {"$.a"}, // Any path (should not matter)
+                        {}, // No keys should exist
+                        {}, // No keys should not exist (result is null)
+                        "Null input JSON should result in null output"},
+                JsonRemoveTestParam{
+                        R"({"foo": 123, "bar": 456})", // JSON input
+                        {"null"}, // paths_to_remove is null (empty vector)
+                        {"foo", "bar"}, // All keys should still exist
+                        {}, // No keys should not exist
+                        "No paths to remove: output should be identical to input"
+                },
+                JsonRemoveTestParam{
+                        R"({"a": 1, "b": [10, 20, 30]})", 
+                        {"$.a"}, 
+                        {"b"}, {"a"}, 
+                        "Remove single key from object"},
                 JsonRemoveTestParam{R"({"a": 1, "b": [10, 20, 30], "c": "test"})",
                                     {"$.a", "$.c"},
                                     {"b"},
                                     {"a", "c"},
                                     "Remove multiple keys from object"},
                 JsonRemoveTestParam{
-                        R"({"a": 1, "b": 2})", {"invalid_path"}, {"a", "b"}, {}, "Invalid path should be ignored"},
+                        R"({"a": 1, "b": 2})", 
+                        {"invalid_path"}, 
+                        {"a", "b"}, 
+                        {}, 
+                        "Invalid path should be ignored"},
                 JsonRemoveTestParam{R"({"x": 100, "y": 200, "z": 300})",
                                     {"$.y"},
                                     {"x", "z"},
@@ -1748,6 +1782,22 @@ INSTANTIATE_TEST_SUITE_P(
                                     {"$.single"},
                                     {},
                                     {"single"},
-                                    "Remove single key from single-key object"}));
+                                    "Remove single key from single-key object"},
+                JsonRemoveTestParam{
+                        R"([1, 2, 3, {"a": 10, "b": 20}])", // JSON input is an array
+                        {"$[0]", "$[1]"}, // Try to remove keys from object inside array
+                        {}, // No top-level keys should exist (array stays the same)
+                        {}, // No keys should not exist at top level
+                        "Removing object keys from array root should have no effect"
+                },
+                JsonRemoveTestParam{
+                        R"({"outer": {"inner1": 1, "inner2": 2}, "keep": 42})",
+                        {"$.outer.inner1"},
+                        {"outer", "keep"}, // "outer" and "keep" should still exist at top level
+                        {}, // No top-level keys should not exist
+                        "Remove nested key from nested object"
+                }
+));
+// clang-format on
 
 } // namespace starrocks

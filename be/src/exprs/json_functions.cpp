@@ -1158,10 +1158,8 @@ StatusOr<ColumnPtr> JsonFunctions::_json_keys_without_path(FunctionContext* cont
 
 StatusOr<ColumnPtr> JsonFunctions::json_remove(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-
-    if (columns.size() < 2) {
-        return Status::InvalidArgument("json_remove requires at least 2 arguments: json_doc and path");
-    }
+    RETURN_IF(columns.size() < 2,
+              Status::InvalidArgument("json_remove requires at least 2 arguments: json_doc and path"));
 
     size_t rows = columns[0]->size();
     ColumnBuilder<TYPE_JSON> result(rows);
