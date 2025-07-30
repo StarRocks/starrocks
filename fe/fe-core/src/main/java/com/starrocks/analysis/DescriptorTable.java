@@ -175,7 +175,6 @@ public class DescriptorTable {
             result.addToTableDescriptors(
                     tbl.toThrift(referencedPartitionsPerTable.getOrDefault(tbl, Lists.newArrayList())));
         }
-
         return result;
     }
 

@@ -65,7 +65,6 @@ public class ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setJoinImplementationMode("auto");
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
-        connectContext.getSessionVariable().setEnableJSONV2Rewrite(false);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
