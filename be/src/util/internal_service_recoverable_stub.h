@@ -28,6 +28,7 @@ public:
     ~PInternalService_RecoverableStub();
 
     Status reset_channel(int64_t next_connection_group = 0);
+    Status check_health();
 
     std::shared_ptr<starrocks::PInternalService_Stub> stub() const {
         std::shared_lock l(_mutex);

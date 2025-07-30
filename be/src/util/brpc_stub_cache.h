@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -45,6 +46,7 @@
 #include "util/lake_service_recoverable_stub.h"
 #include "util/network_util.h"
 #include "util/spinlock.h"
+#include "util/thread.h"
 
 namespace starrocks {
 
@@ -56,18 +58,26 @@ public:
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const butil::EndPoint& endpoint);
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const TNetworkAddress& taddr);
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const std::string& host, int port);
+    void check_and_cleanup_unhealthy_stubs();
 
 private:
     struct StubPool {
         StubPool();
+        ~StubPool();
+
         std::shared_ptr<PInternalService_RecoverableStub> get_or_create(const butil::EndPoint& endpoint);
+        bool is_unhealthy();
 
         std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
         int64_t _idx;
     };
 
+    StubPool* get_stub_pool_readonly(const butil::EndPoint& endpoint);
+
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, StubPool*> _stub_map;
+    std::atomic<bool> _stopped{false};
+    std::thread _cleanup_thread;
 };
 
 class HttpBrpcStubCache {

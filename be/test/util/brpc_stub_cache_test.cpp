@@ -108,4 +108,25 @@ TEST_F(BrpcStubCacheTest, test_http_stub) {
     ASSERT_EQ(nullptr, *stub4);
 }
 
+TEST_F(BrpcStubCacheTest, cleanup) {
+    BrpcStubCache cache;
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    // healthy port
+    address.port = 123;
+    auto stub1 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub1);
+    cache.check_and_cleanup_unhealthy_stubs();
+    auto stub2 = cache.get_stub(address);
+    ASSERT_EQ(stub2, stub1);
+
+    // unhealthy port
+    address.port = 125;
+    auto stub3 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub1);
+    cache.check_and_cleanup_unhealthy_stubs();
+    auto stub4 = cache.get_stub(address);
+    ASSERT_NE(stub4, stub3);
+}
+
 } // namespace starrocks
