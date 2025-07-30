@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.google.api.client.util.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.hash.Funnel;
 import com.google.common.hash.Hashing;
@@ -42,15 +43,18 @@ public class BucketAwareBackendSelector implements BackendSelector {
     private final List<TScanRangeLocations> locations;
     private final ColocatedBackendSelector.Assignment colocatedAssignment;
     private final WorkerProvider workerProvider;
+    private final boolean isRightOrFullBucketShuffleFragment;
     private final boolean useIncrementalScanRanges;
 
     public BucketAwareBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
                                       ColocatedBackendSelector.Assignment colocatedAssignment,
-                                      WorkerProvider workerProvider, boolean useIncrementalScanRanges) {
+                                      WorkerProvider workerProvider, boolean isRightOrFullBucketShuffleFragment,
+                                      boolean useIncrementalScanRanges) {
         this.scanNode = scanNode;
         this.locations = locations;
         this.colocatedAssignment = colocatedAssignment;
         this.workerProvider = workerProvider;
+        this.isRightOrFullBucketShuffleFragment = isRightOrFullBucketShuffleFragment;
         this.useIncrementalScanRanges = useIncrementalScanRanges;
     }
 
@@ -63,6 +67,8 @@ public class BucketAwareBackendSelector implements BackendSelector {
 
     @Override
     public void computeScanRangeAssignment() throws StarRocksException {
+        colocatedAssignment.recordAssignedScanNode(scanNode);
+
         // use consistent hashing to schedule remote scan ranges
         HashRing<Integer, ComputeNode> hashRing = new RendezvousHashRing<>(Hashing.murmur3_128(), new BucketIdFunnel(),
                         new HDFSBackendSelector.ComputeNodeFunnel(), workerProvider.getAllWorkers());
@@ -113,9 +119,22 @@ public class BucketAwareBackendSelector implements BackendSelector {
                     bucketSeqToScanRange.put(bucketSeq, Maps.newHashMap());
                 }
                 if (!bucketSeqToScanRange.get(bucketSeq).containsKey(scanNode.getId().asInt())) {
-                    bucketSeqToScanRange.get(bucketSeq).put(scanNode.getId().asInt(), new ArrayList<>());
+                    bucketSeqToScanRange.get(bucketSeq).put(scanNode.getId().asInt(), Lists.newArrayList());
                 }
                 bucketSeqToScanRange.get(bucketSeq).get(scanNode.getId().asInt()).add(end);
+            }
+        } else if (isRightOrFullBucketShuffleFragment && colocatedAssignment.isAllScanNodesAssigned()) {
+            // Because the right table will not send data to the bucket which has been pruned, the right join or full join will get wrong result.
+            // Therefore, if this bucket shuffle is right join or full join, we need to add empty bucket scan range which is pruned by predicate,
+            // after the last scan node of this fragment is assigned.
+            for (int bucketSeq = 0; bucketSeq < colocatedAssignment.getBucketNum(); ++bucketSeq) {
+                if (!seqToWorkerId.containsKey(bucketSeq)) {
+                    seqToWorkerId.put(bucketSeq, bucketSeqToWorkerId.get(bucketSeq));
+                }
+                if (!bucketSeqToScanRange.containsKey(bucketSeq)) {
+                    bucketSeqToScanRange.put(bucketSeq, Maps.newHashMap());
+                    bucketSeqToScanRange.get(bucketSeq).put(scanNode.getId().asInt(), Lists.newArrayList());
+                }
             }
         }
     }

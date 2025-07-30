@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -203,7 +204,7 @@ public class ColocatedBackendSelector implements BackendSelector {
             return type.equals(ScanRangeType.NATIVE);
         }
 
-        public void recordAssignedScanNode(OlapScanNode scanNode) {
+        public void recordAssignedScanNode(ScanNode scanNode) {
             assignedScanNodeIds.add(scanNode.getId());
         }
 
