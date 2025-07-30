@@ -58,6 +58,9 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        if (!context.getSessionVariable().isEnableConstantExecuteInFE()) {
+            return false;
+        }
         if (OperatorType.LOGICAL_PROJECT.equals(input.inputAt(constantIndex).getOp().getOpType())) {
             LogicalProjectOperator project = input.inputAt(constantIndex).getOp().cast();
             if (!project.getColumnRefMap().values().stream().allMatch(ScalarOperator::isConstant)) {
@@ -110,15 +113,14 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
                                        OptExpression otherOpt,
                                        OptExpression constantOpt,
                                        OptimizerContext context) {
-
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) joinOpt.getOp();
-        LogicalProjectOperator projectOperator = (LogicalProjectOperator) constantOpt.getOp();
+        Map<ColumnRefOperator, ScalarOperator> constants = getConstantInputs(constantOpt);
 
         ScalarOperator condition = joinOperator.getOnPredicate();
         ScalarOperator predicate = joinOperator.getPredicate();
 
         // rewrite join's on-predicate with constant column values
-        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectOperator.getColumnRefMap());
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(constants);
         ScalarOperator rewrittenCondition = rewriter.rewrite(condition);
         ScalarOperator rewrittenPredicate = rewriter.rewrite(predicate);
 
@@ -127,8 +129,12 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
         joinOpt.getOutputColumns().getStream().map(context.getColumnRefFactory()::getColumnRef)
                 .forEach(ref -> outputs.put(ref, rewriter.rewrite(ref)));
         if (joinOperator.getJoinType().isOuterJoin()) {
+            // ensure value is a constant value, otherwise we cannot transform the join's on-predicate
+            if (constants.values().stream().anyMatch(op -> !op.isConstant())) {
+                return Lists.newArrayList();
+            }
             // transform join's on-predicate with case-when operator
-            constantOpt.getRowOutputInfo().getColumnRefMap().forEach((key, value) -> {
+            constants.forEach((key, value) -> {
                 ScalarOperator t = transformOuterJoinOnPredicate(joinOperator, value, rewrittenCondition);
                 outputs.put(key, t);
             });
@@ -144,6 +150,31 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
             result = OptExpression.create(new LogicalFilterOperator(rewrittenPredicate), result);
         }
         return Lists.newArrayList(result);
+    }
+
+    private Map<ColumnRefOperator, ScalarOperator> getConstantInputs(OptExpression constantOpt) {
+        OptExpression valuesOpt = constantOpt;
+        if (constantOpt.getOp().getOpType() == OperatorType.LOGICAL_PROJECT) {
+            valuesOpt = constantOpt.inputAt(0);
+        }
+        LogicalValuesOperator valuesOperator = (LogicalValuesOperator) valuesOpt.getOp();
+        Map<ColumnRefOperator, ScalarOperator> values = Maps.newHashMap();
+        for (int i = 0; i < valuesOperator.getColumnRefSet().size(); i++) {
+            List<ScalarOperator> row = valuesOperator.getRows().get(0);
+            values.put(valuesOperator.getColumnRefSet().get(i), row.get(i));
+        }
+        if (constantOpt.getOp().getOpType() == OperatorType.LOGICAL_PROJECT) {
+            // if the constantOpt is a project, we need to rewrite the column references
+            LogicalProjectOperator project = constantOpt.getOp().cast();
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(values);
+            Map<ColumnRefOperator, ScalarOperator> projectValues = Maps.newHashMap();
+
+            for (var entry : project.getColumnRefMap().entrySet()) {
+                projectValues.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
+            }
+            return projectValues;
+        }
+        return values;
     }
 
     /**
