@@ -814,6 +814,14 @@ public class Config extends ConfigBase {
     public static int http_async_threads_num = 4096;
 
     /**
+     * Whether to enable the http server v2.
+     *
+     */
+
+    @ConfField
+    public static boolean enable_http_server_v2 = false;
+
+    /**
      * Cluster name will be shown as the title of web page
      */
     @ConfField
