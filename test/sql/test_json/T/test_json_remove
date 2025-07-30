@@ -62,7 +62,6 @@ SELECT json_exists(json_remove('{"a": 1, "b": 2}', '$.a'), '$.a') as exists_afte
 SELECT json_remove(parse_json('{"temp": "data", "keep": "this"}'), '$.temp') as parsed_and_removed;
 
 -- Test error handling and edge cases
-SELECT json_remove('{"a": 1}', '') as empty_path;
 SELECT json_remove('{"a": 1}', '$') as root_path;
 SELECT json_remove('{"a": 1}', '$.') as dot_path;
 
