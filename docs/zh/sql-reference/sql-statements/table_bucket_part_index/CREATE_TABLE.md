@@ -665,7 +665,7 @@ PROPERTIES (
     "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
     "datacache.partition_duration" = "<string_value>",
-    "file_bundling" = "true"
+    "file_bundling" = "{ true | false }"
 )
 ```
 
