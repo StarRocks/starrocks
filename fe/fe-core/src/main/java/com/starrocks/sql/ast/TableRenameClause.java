@@ -18,6 +18,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class TableRenameClause extends AlterTableClause {
     private final String newTableName;
 
@@ -27,7 +29,7 @@ public class TableRenameClause extends AlterTableClause {
 
     public TableRenameClause(String newTableName, NodePosition pos) {
         super(AlterOpType.RENAME, pos);
-        this.newTableName = newTableName;
+        this.newTableName = normalizeName(newTableName);
     }
 
     public String getNewTableName() {

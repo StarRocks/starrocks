@@ -36,6 +36,8 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // Show rollup statement, used to show rollup information of one table.
 //
 // Syntax:
@@ -105,8 +107,8 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
 
     public ShowMaterializedViewsStmt(String catalogName, String db, String pattern, Expr where, NodePosition pos) {
         super(pos);
-        this.catalogName = catalogName;
-        this.db = db;
+        this.catalogName = normalizeName(catalogName);
+        this.db = normalizeName(db);
         this.pattern = pattern;
         this.where = where;
     }
@@ -116,7 +118,7 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
     }
 
     public void setDb(String db) {
-        this.db = db;
+        this.db = normalizeName(db);
     }
 
     public String getPattern() {

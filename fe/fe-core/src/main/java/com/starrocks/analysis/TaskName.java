@@ -16,6 +16,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.sql.parser.NodePosition;
+import static com.starrocks.common.util.Util.normalizeName;
 
 public class TaskName {
 
@@ -26,17 +27,13 @@ public class TaskName {
     private final NodePosition pos;
 
     public TaskName(String dbName, String name, NodePosition pos) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.name = name;
         this.pos = pos;
     }
 
     public String getDbName() {
         return dbName;
-    }
-
-    public void setDbName(String dbName) {
-        this.dbName = dbName;
     }
 
     public String getName() {

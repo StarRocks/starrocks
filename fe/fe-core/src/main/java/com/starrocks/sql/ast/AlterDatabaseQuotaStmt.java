@@ -17,6 +17,8 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class AlterDatabaseQuotaStmt extends DdlStmt {
     private String catalog;
     private String dbName;
@@ -36,7 +38,7 @@ public class AlterDatabaseQuotaStmt extends DdlStmt {
 
     public AlterDatabaseQuotaStmt(String dbName, QuotaType quotaType, String quotaValue, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.quotaType = quotaType;
         this.quotaValue = quotaValue;
     }
@@ -46,7 +48,7 @@ public class AlterDatabaseQuotaStmt extends DdlStmt {
     }
 
     public void setCatalogName(String catalogName) {
-        this.catalog = catalogName;
+        this.catalog = normalizeName(catalogName);
     }
 
     public String getDbName() {
@@ -62,7 +64,7 @@ public class AlterDatabaseQuotaStmt extends DdlStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public void setQuota(long quota) {

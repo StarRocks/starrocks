@@ -35,6 +35,7 @@
 package com.starrocks.common.util;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.GlobalVariable;
 
 import java.security.SecureRandom;
 
@@ -65,11 +66,11 @@ public class SRStringUtils {
         if (table == null) {
             return false;
         }
-
-        if (table.isNativeTableOrMaterializedView()) {
-            return table.getName().equals(toCheck);
+        String tableName = table.getName();
+        if (table.isNativeTableOrMaterializedView() && !GlobalVariable.enableTableNameCaseInsensitive) {
+            return tableName.equals(toCheck);
         } else {
-            return table.getName().equalsIgnoreCase(toCheck);
+            return tableName.equalsIgnoreCase(toCheck);
         }
     }
 

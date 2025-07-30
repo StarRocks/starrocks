@@ -26,6 +26,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.net.URL;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // SHOW LOAD WARNINGS statement used to get error detail of src data.
 public class ShowLoadWarningsStmt extends ShowStmt {
     private static final Logger LOG = LogManager.getLogger(ShowLoadWarningsStmt.class);
@@ -54,7 +56,7 @@ public class ShowLoadWarningsStmt extends ShowStmt {
     public ShowLoadWarningsStmt(String db, String url, Expr labelExpr, LimitElement limitElement,
                                 NodePosition pos) {
         super(pos);
-        this.dbName = db;
+        this.dbName = normalizeName(db);
         this.rawUrl = url;
         this.whereClause = labelExpr;
         this.limitElement = limitElement;
@@ -66,7 +68,7 @@ public class ShowLoadWarningsStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public Expr getWhereClause() {

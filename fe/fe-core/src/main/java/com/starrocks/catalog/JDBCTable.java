@@ -27,8 +27,6 @@ import com.starrocks.thrift.TTableType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.net.URI;
 import java.security.MessageDigest;
@@ -38,7 +36,6 @@ import java.util.List;
 import java.util.Map;
 
 public class JDBCTable extends Table {
-    private static final Logger LOG = LogManager.getLogger(JDBCTable.class);
 
     private static final String TABLE = "table";
     private static final String RESOURCE = "resource";

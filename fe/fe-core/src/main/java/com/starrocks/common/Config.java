@@ -3809,4 +3809,8 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int deploy_serialization_queue_size = -1;
+
+    @ConfField(comment = "Enable case-insensitive catalog/database/table names. " +
+            "Only configurable during cluster initialization, immutable once set.")
+    public static boolean enable_table_name_case_insensitive = false;
 }

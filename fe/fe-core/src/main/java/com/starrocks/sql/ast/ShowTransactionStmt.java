@@ -23,6 +23,8 @@ import com.starrocks.common.proc.TransProcDir;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // syntax:
 //      SHOW TRANSACTION  WHERE id=123
 public class ShowTransactionStmt extends ShowStmt {
@@ -37,7 +39,7 @@ public class ShowTransactionStmt extends ShowStmt {
 
     public ShowTransactionStmt(String dbName, Expr whereClause, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.whereClause = whereClause;
     }
 
@@ -54,7 +56,7 @@ public class ShowTransactionStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public void setTxnId(long txnId) {
