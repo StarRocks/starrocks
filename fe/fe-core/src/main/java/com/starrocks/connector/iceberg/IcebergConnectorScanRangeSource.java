@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.Lists;
@@ -297,7 +298,8 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         return ret == null ? bucketInfo.get(i).second : ret;
     }
 
-    private int extractBucketId(FileScanTask task) {
+    @VisibleForTesting
+    int extractBucketId(FileScanTask task) {
         int bucketValue = 0;
         int i = 0;
         for (; i < bucketInfo.size() - 1; i++) {
