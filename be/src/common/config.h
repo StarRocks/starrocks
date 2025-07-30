@@ -1318,8 +1318,9 @@ CONF_mInt64(datacache_mem_adjust_period, "20");
 CONF_mInt64(datacache_mem_adjust_interval_seconds, "10");
 
 CONF_Int32(datacache_inline_item_count_limit, "130172");
-CONF_Int32(datacache_ttl_check_interval_ms, "0");
-CONF_Int32(datacache_ttl_remove_batch, "100");
+// The interval for ttl reaper to check the expired cache item.
+// If set to 0, the ttl dose not take effect.
+CONF_Int32(datacache_ttl_check_interval_ms, "1000");
 // Whether use an unified datacache instance.
 CONF_Bool(datacache_unified_instance_enable, "true");
 // The eviction policy for datacache, alternatives: [lru, slru].

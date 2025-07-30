@@ -2086,7 +2086,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private int datacachePriority = 0;
 
-    @VariableMgr.VarAttr(name = DATACACHE_TTL_SECONDS)
+    @VariableMgr.VarAttr(name = DATACACHE_TTL_SECONDS, flag = VariableMgr.INVISIBLE)
     private long datacacheTTLSeconds = 0L;
 
     private boolean enableCacheSelect = false;
