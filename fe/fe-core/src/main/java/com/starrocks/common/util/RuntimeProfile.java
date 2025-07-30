@@ -368,6 +368,10 @@ public class RuntimeProfile {
                     TCounter tcounter = tCounterMap.get(topName);
                     String parentName = child2ParentMap.get(topName);
 
+                    if (tcounter == null) {
+                        continue;
+                    }
+
                     String target = topName;
                     boolean updateSum = true;
                     // For this kind of special counter, we need to merge them into another target
