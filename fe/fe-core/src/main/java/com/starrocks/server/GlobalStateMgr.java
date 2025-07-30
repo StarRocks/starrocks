@@ -189,6 +189,7 @@ import com.starrocks.plugin.PluginMgr;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.SessionVariable;
@@ -1316,6 +1317,10 @@ public class GlobalStateMgr {
                 nodeMgr.resetFrontends();
             }
 
+            if (nodeMgr.isFirstTimeStartUp()) {
+                initCaseInsensitive();
+            }
+
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
@@ -1348,6 +1353,7 @@ public class GlobalStateMgr {
                                 LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
             }
+            checkCaseInsensitive();
         } catch (StarRocksException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
         } catch (Throwable t) {
@@ -2722,6 +2728,48 @@ public class GlobalStateMgr {
         } catch (PrivilegeException e) {
             LOG.warn("Failed to grant builtin storage volume usage to public role", e);
         }
+    }
+
+    /**
+     * Initialize the global case-insensitive setting during cluster first startup.
+     *
+     * This method is called ONLY during the initial cluster initialization to set
+     * the global variable {@code GlobalVariable.enable_table_name_case_insensitive} from
+     * {@link Config#enable_table_name_case_insensitive}.
+     *
+     * Once set, this value becomes immutable for the entire cluster lifecycle.
+     * Any failure during initialization will cause the system to exit.
+     */
+    private void initCaseInsensitive() {
+        try {
+            GlobalStateMgr.getCurrentState().getVariableMgr().setCaseInsensitive(Config.enable_table_name_case_insensitive);
+        } catch (Exception e) {
+            LOG.error("Initialization of case-insensitive failed.", e);
+            System.exit(-1);
+        }
+        LOG.info("Finish initializing case-insensitive, value is {}", GlobalVariable.enableTableNameCaseInsensitive);
+    }
+
+    /**
+     * Validate that the configuration value matches the initially recorded value.
+     *
+     * This method ensures that {@link Config#enable_table_name_case_insensitive} has not been
+     * modified since the cluster's initial setup. It compares the current config
+     * value against the immutable {@code GlobalVariable.enableCaseInsensitive}
+     * that was set during first initialization.
+     *
+     * If values don't match, the leader node will fail to start to prevent
+     * potential data inconsistencies from case sensitivity changes.
+     */
+    private void checkCaseInsensitive() {
+        if (Config.enable_table_name_case_insensitive != GlobalVariable.enableTableNameCaseInsensitive) {
+            LOG.error("The configuration of \'enable_table_name_case_insensitive\' does not support modification, "
+                            + "the expected value is {}, but the actual value is {}",
+                    GlobalVariable.enableTableNameCaseInsensitive,
+                    Config.enable_table_name_case_insensitive);
+            System.exit(-1);
+        }
+        LOG.info("enable_table_name_case_insensitive is {}", GlobalVariable.enableTableNameCaseInsensitive);
     }
 
     public BaseSlotManager getSlotManager() {

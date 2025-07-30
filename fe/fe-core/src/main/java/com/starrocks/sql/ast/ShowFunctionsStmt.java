@@ -20,6 +20,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class ShowFunctionsStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -45,7 +47,7 @@ public class ShowFunctionsStmt extends ShowStmt {
     public ShowFunctionsStmt(String dbName, boolean isBuiltin, boolean isGlobal, boolean isVerbose, String wild,
                              Expr expr, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.isBuiltin = isBuiltin;
         this.isGlobal = isGlobal;
         this.isVerbose = isVerbose;
@@ -83,7 +85,7 @@ public class ShowFunctionsStmt extends ShowStmt {
     }
 
     public void setDbName(String db) {
-        this.dbName = db;
+        this.dbName = normalizeName(db);
     }
 
     @Override

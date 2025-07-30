@@ -21,6 +21,8 @@ import com.starrocks.common.proc.DeleteInfoProcDir;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class ShowDeleteStmt extends ShowStmt {
 
     private String dbName;
@@ -31,7 +33,7 @@ public class ShowDeleteStmt extends ShowStmt {
 
     public ShowDeleteStmt(String dbName, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public String getDbName() {
@@ -39,7 +41,7 @@ public class ShowDeleteStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     @Override
