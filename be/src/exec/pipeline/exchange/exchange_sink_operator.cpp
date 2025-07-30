@@ -320,6 +320,7 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
                 RETURN_IF_ERROR(res = send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
             }
         }
+
         RETURN_IF_ERROR(res = send_one_chunk(state, nullptr, ExchangeSinkOperator::DEFAULT_DRIVER_SEQUENCE, true));
     }
 
@@ -648,7 +649,6 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
 
     if (_chunk_request != nullptr) {
         butil::IOBuf attachment;
-        DCHECK_EQ(_chunk_request->chunks_size(), 0);
         const int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& [_, channel] : _instance_id2channel) {
             if (!channel->use_pass_through()) {
