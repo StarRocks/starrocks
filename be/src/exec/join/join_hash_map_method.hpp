@@ -161,8 +161,8 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(JoinHa
         for (uint32_t i = 1; i < num_rows; i++) {
             // Use `next` stores `bucket_num` temporarily.
             if (need_calc_bucket_num(i)) {
-                next[i] = JoinHashMapHelper::calc_bucket_num<CppType>(keys[i], table_items->bucket_size << SALT_BITS,
-                                                                      table_items->log_bucket_size + SALT_BITS);
+                next[i] = JoinHashMapHelper::calc_bucket_num<CppType>(keys[i], table_items->bucket_size << FP_BITS,
+                                                                      table_items->log_bucket_size + FP_BITS);
             }
         }
 
@@ -177,7 +177,7 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(JoinHa
             }
 
             const uint32_t hash = next[i];
-            const uint32_t salt = _get_salt_from_hash(hash);
+            const uint32_t fp = _get_fp_from_hash(hash);
             uint32_t bucket_num = _get_bucket_num_from_hash(hash);
 
             uint32_t probe_times = 1;
@@ -186,14 +186,14 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(JoinHa
                     if constexpr (NeedBuildChained) {
                         next[i] = 0;
                     }
-                    first[bucket_num] = _combine_data_salt(i, salt);
+                    first[bucket_num] = _combine_data_fp(i, fp);
                     break;
                 }
 
-                if (salt == _extract_salt(first[bucket_num]) && keys[i] == keys[_extract_data(first[bucket_num])]) {
+                if (fp == _extract_fp(first[bucket_num]) && keys[i] == keys[_extract_data(first[bucket_num])]) {
                     if constexpr (NeedBuildChained) {
                         next[i] = _extract_data(first[bucket_num]);
-                        first[bucket_num] = _combine_data_salt(i, salt);
+                        first[bucket_num] = _combine_data_fp(i, fp);
                     }
                     break;
                 }
@@ -250,7 +250,7 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::lookup_init(const JoinHashT
         for (uint32_t i = 0; i < row_count; i++) {
             if (need_calc_bucket_num(i)) {
                 hashes[i] = JoinHashMapHelper::calc_bucket_num<CppType>(
-                        probe_keys[i], table_items.bucket_size << SALT_BITS, table_items.log_bucket_size + SALT_BITS);
+                        probe_keys[i], table_items.bucket_size << FP_BITS, table_items.log_bucket_size + FP_BITS);
             }
         }
 
@@ -265,7 +265,7 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::lookup_init(const JoinHashT
             }
 
             const uint32_t hash = hashes[i];
-            const uint32_t salt = _get_salt_from_hash(hash);
+            const uint32_t fp = _get_fp_from_hash(hash);
             uint32_t bucket_num = _get_bucket_num_from_hash(hash);
 
             uint32_t probe_times = 1;
@@ -275,9 +275,9 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::lookup_init(const JoinHashT
                     break;
                 }
 
-                const uint32_t cur_salt = _extract_salt(firsts[bucket_num]);
+                const uint32_t cur_fp = _extract_fp(firsts[bucket_num]);
                 const uint32_t cur_index = _extract_data(firsts[bucket_num]);
-                if (salt == cur_salt && probe_keys[i] == build_keys[cur_index]) {
+                if (fp == cur_fp && probe_keys[i] == build_keys[cur_index]) {
                     if constexpr (NeedBuildChained) {
                         nexts[i] = cur_index;
                     } else {

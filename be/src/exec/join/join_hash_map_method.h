@@ -72,6 +72,14 @@ public:
 // - `first` stores the build index of the header of the linked list for each distinct key.
 // - `next` maintains the linked list structure for each distinct key.
 //
+// Fingerprint
+// - Each `first` entry uses the highest 1 byte to store the fingerprint and the lower 3 bytes for the build index,
+//   thus supporting up to 0xFFFFFF buckets.
+// - The fingerprint is generated via hashing.
+//   During hashing, `bucket_num_with_fp = hash % (bucket_size * 8)` is computed instead of `hash % bucket_size`.
+//   - The lower 8 bits of `bucket_num_with_fp` represent the fingerprint (`fp`),
+//   - while `bucket_num_with_fp >> 8` yields the bucket number.
+//
 // Insert and probe
 // - During insertion, linear probing is used in `first` to locate either the first empty bucket or an existing matching key.
 //   The new build index is then inserted into the corresponding linked list in `next`.
@@ -82,29 +90,29 @@ public:
 //
 // The following diagram illustrates the structure of `LinearChainedJoinHashMap`:
 //
-// build keys                  first       next
-//                             ┌───┐       ┌───┐
-//                             │   │       │   │◄───┐
-//                             │   │       │   │◄┐  │
-//                             ├───┤       ├───┤ │  │
-//                    ┌───────►│   │       │   │ │  │
-//           ┌────┐   │     ┌──┤   │       │   │ │  │
-// ┌──────┐  │    │   │     │  ├───┤       ├───┤ │  │
-// │ key  ├─►│hash├───┘     └─►│   │       │   ├─┘  │
-// └──────┘  │    │         ┌──┤   │       │   │◄─┐ │
-//           └────┘         │  ├───┤       ├───┤  │ │
-//                          │  │   │       │   │  │ │
-//                          │  │   │       │   │  │ │
-//                          │  ├───┤       ├───┤  │ │
-//                          └─►│   ├──────►│   │  │ │
-//                             │   │       │   ├──┘ │
-//                             ├───┤       ├───┤    │
-//                             │   ├──────►│   │    │
-//                             │   │       │   │    │
-//                             ├───┤       ├───┤    │
-//                             │   │       │   │    │
-//                             │   │       │   ├────┘
-//                             └───┘       └───┘
+// build keys                  first              next
+//                             ┌──────────────┐   ┌───┐
+//                             │FP|build_index│   │   │◄───┐
+//                             │1B     3B     │   │   │◄┐  │
+//                             ├──────────────┤   ├───┤ │  │
+//                    ┌───────►│              │   │   │ │  │
+//           ┌────┐   │     ┌──┤              │   │   │ │  │
+// ┌──────┐  │    │   │     │  ├──────────────┤   ├───┤ │  │
+// │ key  ├─►│hash├───┘     └─►│              │   │   ├─┘  │
+// └──────┘  │    │         ┌──┤              │   │   │◄─┐ │
+//           └────┘         │  ├──────────────┤   ├───┤  │ │
+//                          │  │              │   │   │  │ │
+//                          │  │              │   │   │  │ │
+//                          │  ├──────────────┤   ├───┤  │ │
+//                          └─►│              ├──►│   │  │ │
+//                             │              │   │   ├──┘ │
+//                             ├──────────────┤   ├───┤    │
+//                             │              ├──►│   │    │
+//                             │              │   │   │    │
+//                             ├──────────────┤   ├───┤    │
+//                             │              │   │   │    │
+//                             │              │   │   ├────┘
+//                             └──────────────┘   └───┘
 template <LogicalType LT, bool NeedBuildChained = true>
 class LinearChainedJoinHashMap {
 public:
@@ -124,16 +132,16 @@ public:
     static uint32_t max_supported_bucket_size() { return DATA_MASK; }
 
 private:
-    static constexpr uint32_t SALT_BITS = 8;
-    static constexpr uint32_t SALT_MASK = 0xFF00'0000ul;
+    static constexpr uint32_t FP_BITS = 8;
+    static constexpr uint32_t FP_MASK = 0xFF00'0000ul;
     static constexpr uint32_t DATA_MASK = 0x00FF'FFFFul;
 
-    static uint32_t _combine_data_salt(const uint32_t data, const uint32_t salt) { return salt | data; }
+    static uint32_t _combine_data_fp(const uint32_t data, const uint32_t fp) { return fp | data; }
     static uint32_t _extract_data(const uint32_t v) { return v & DATA_MASK; }
-    static uint32_t _extract_salt(const uint32_t v) { return v & SALT_MASK; }
+    static uint32_t _extract_fp(const uint32_t v) { return v & FP_MASK; }
 
-    static uint32_t _get_bucket_num_from_hash(const uint32_t hash) { return hash >> SALT_BITS; }
-    static uint32_t _get_salt_from_hash(const uint32_t hash) { return hash << (32 - SALT_BITS); }
+    static uint32_t _get_bucket_num_from_hash(const uint32_t hash) { return hash >> FP_BITS; }
+    static uint32_t _get_fp_from_hash(const uint32_t hash) { return hash << (32 - FP_BITS); }
 };
 
 template <LogicalType LT>
