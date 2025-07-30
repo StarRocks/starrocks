@@ -15,15 +15,15 @@ SELECT json_remove('{"a": 1, "b": 2, "c": 3}', '$.a', '$.c') as remove_multiple_
 -- !result
 SELECT json_remove('{"a": 1, "b": [10, 20, 30]}', '$.b[1]') as remove_array_element;
 -- result:
-{"a": 1, "b": [10, 20, 30]}
+{"a": 1, "b": [10, 30]}
 -- !result
 SELECT json_remove('{"a": {"x": 1, "y": 2}, "b": 3}', '$.a.x') as remove_nested_key;
 -- result:
-{"a": {"x": 1, "y": 2}, "b": 3}
+{"a": {"y": 2}, "b": 3}
 -- !result
 SELECT json_remove('{"level1": {"level2": {"level3": "value"}}}', '$.level1.level2') as remove_nested_object;
 -- result:
-{"level1": {"level2": {"level3": "value"}}}
+{"level1": {}}
 -- !result
 SELECT json_remove('{"a": 1, "b": 2}', '$.nonexistent') as remove_nonexistent_key;
 -- result:
@@ -81,11 +81,11 @@ SELECT id, json_remove(json_data, '$.city', '$.hobbies') as filtered_data FROM j
 -- !result
 SELECT id, json_remove(json_data, '$.specs.ram') as without_ram FROM json_test_table WHERE id = 3;
 -- result:
-3	{"price": 999.99, "product": "laptop", "specs": {"cpu": "Intel", "ram": "16GB"}}
+3	{"price": 999.99, "product": "laptop", "specs": {"cpu": "Intel"}}
 -- !result
 SELECT id, json_remove(json_data, '$.array[2]', '$.array[3]') as removed_elements FROM json_test_table WHERE id = 4;
 -- result:
-4	{"array": [1, 2, 3, 4, 5], "empty": {}}
+4	{"array": [1, 2, 5], "empty": {}}
 -- !result
 SELECT id, json_remove(json_data, '$.any') as null_result FROM json_test_table WHERE id = 5;
 -- result:
@@ -122,19 +122,19 @@ SELECT json_remove('{"a": 1}', '$.') as dot_path;
 -- !result
 SELECT json_remove('{"a": {"b": {"c": {"d": {"e": "deep"}}}}}', '$.a.b.c.d') as remove_deep_nested;
 -- result:
-{"a": {"b": {"c": {"d": {"e": "deep"}}}}}
+{"a": {"b": {"c": {}}}}
 -- !result
 SELECT json_remove('{"arr": [0, 1, 2, 3, 4]}', '$.arr[0]') as remove_first_element;
 -- result:
-{"arr": [0, 1, 2, 3, 4]}
+{"arr": [1, 2, 3, 4]}
 -- !result
 SELECT json_remove('{"arr": [0, 1, 2, 3, 4]}', '$.arr[4]') as remove_last_element;
 -- result:
-{"arr": [0, 1, 2, 3, 4]}
+{"arr": [0, 1, 2, 3]}
 -- !result
 SELECT json_remove('{"arr": [0, 1, 2, 3, 4]}', '$.arr[2]') as remove_middle_element;
 -- result:
-{"arr": [0, 1, 2, 3, 4]}
+{"arr": [0, 1, 3, 4]}
 -- !result
 SELECT json_remove('{"key with spaces": "value", "normal": "data"}', '$."key with spaces"') as remove_special_key;
 -- result:

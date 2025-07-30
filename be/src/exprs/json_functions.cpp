@@ -1237,52 +1237,120 @@ StatusOr<JsonValue> JsonFunctions::_remove_json_paths(JsonValue* json_value, con
 
     vpack::Slice original_slice = json_value->to_vslice();
 
-    // Helper function to check if a path should be removed
-    auto should_remove_path = [&](const std::string& current_path) -> bool {
-        for (const auto& remove_path : valid_paths) {
-            // Handle simple object key removal (e.g., $.key)
-            // JsonPath::parse("$.key") creates 2 components: root ($) at index 0, key at index 1
-            if (remove_path.paths.size() == 2 && remove_path.paths[1].array_selector->type == NONE &&
-                current_path == ("$." + remove_path.paths[1].key)) {
-                return true;
+    // Build efficient lookup structures
+    std::unordered_set<std::string> exact_paths_to_remove;  // Target level paths
+    std::unordered_set<std::string> prefix_paths_to_remove; // Non-target level path prefixes
+
+    for (const auto& remove_path : valid_paths) {
+        std::string path_str = remove_path.to_string();
+        exact_paths_to_remove.insert(path_str);
+
+        // Build prefix paths for quick recursion decision
+        size_t pos = path_str.find('.');
+        while (pos != std::string::npos) {
+            prefix_paths_to_remove.insert(path_str.substr(0, pos));
+            pos = path_str.find('.', pos + 1);
+        }
+
+        // Handle array index cases
+        pos = path_str.find('[');
+        while (pos != std::string::npos) {
+            // Add the path before the array index (e.g., for $.arr[2], add $.arr)
+            prefix_paths_to_remove.insert(path_str.substr(0, pos));
+            size_t end_pos = path_str.find(']', pos);
+            if (end_pos != std::string::npos) {
+                prefix_paths_to_remove.insert(path_str.substr(0, end_pos + 1));
+                pos = path_str.find('[', end_pos + 1);
+            } else {
+                break;
             }
         }
-        return false;
+    }
+
+    // Recursive function with optimized path checking
+    std::function<vpack::Slice(vpack::Slice, const std::string&)> remove_paths_recursive =
+            [&](vpack::Slice slice, const std::string& current_path) -> vpack::Slice {
+        if (slice.isObject()) {
+            vpack::Builder obj_builder;
+            {
+                vpack::ObjectBuilder builder(&obj_builder);
+
+                // Iterate the object directly without collecting and sorting keys
+                for (auto it : vpack::ObjectIterator(slice)) {
+                    auto key = it.key.copyString();
+                    std::string child_path = current_path.empty() ? ("$." + key) : (current_path + "." + key);
+
+                    // 1. Check if this is the target level (exact match)
+                    if (exact_paths_to_remove.find(child_path) != exact_paths_to_remove.end()) {
+                        // This is the target level, skip it
+                        continue;
+                    }
+
+                    vpack::Slice value = it.value;
+                    if (value.isNone()) {
+                        continue;
+                    }
+
+                    // 2. Check if recursion is needed (prefix match)
+                    bool needs_recursion = false;
+                    if (value.isObject() || value.isArray()) {
+                        needs_recursion = (prefix_paths_to_remove.find(child_path) != prefix_paths_to_remove.end());
+                    }
+
+                    if (needs_recursion) {
+                        vpack::Slice processed_value = remove_paths_recursive(value, child_path);
+                        builder->add(key, processed_value);
+                    } else {
+                        builder->add(key, value);
+                    }
+                }
+            } // ObjectBuilder automatically closes here
+
+            return obj_builder.slice();
+        } else if (slice.isArray()) {
+            vpack::Builder arr_builder;
+            {
+                vpack::ArrayBuilder builder(&arr_builder);
+
+                size_t array_size = slice.length();
+                for (size_t index = 0; index < array_size; index++) {
+                    std::string child_path = current_path + "[" + std::to_string(index) + "]";
+
+                    // 1. Check if this is the target level (exact match)
+                    if (exact_paths_to_remove.find(child_path) != exact_paths_to_remove.end()) {
+                        continue;
+                    }
+
+                    vpack::Slice element = slice.at(index);
+                    if (element.isNone()) {
+                        continue; // Index out of bounds
+                    }
+
+                    // 2. Check if recursion is needed (prefix match)
+                    bool needs_recursion = false;
+                    if (element.isObject() || element.isArray()) {
+                        // Check if current path is a prefix of any removal path
+                        needs_recursion = (prefix_paths_to_remove.find(child_path) != prefix_paths_to_remove.end());
+                    }
+
+                    if (needs_recursion) {
+                        vpack::Slice processed_element = remove_paths_recursive(element, child_path);
+                        builder->add(processed_element);
+                    } else {
+                        builder->add(element);
+                    }
+                }
+            } // ArrayBuilder automatically closes here
+
+            return arr_builder.slice();
+        } else {
+            // Primitive value, return as is
+            return slice;
+        }
     };
 
-    // Recursive function to rebuild JSON while excluding specified paths
-    std::function<void(vpack::Slice, vpack::Builder&, const std::string&)> rebuild_json =
-            [&](vpack::Slice slice, vpack::Builder& b, const std::string& current_path) {
-                if (slice.isObject()) {
-                    vpack::ObjectBuilder obj_builder(&b);
-                    for (auto it : vpack::ObjectIterator(slice)) {
-                        std::string key = it.key.copyString();
-                        std::string child_path = current_path.empty() ? ("$." + key) : (current_path + "." + key);
-
-                        if (!should_remove_path(child_path)) {
-                            b.add(key, it.value);
-                        }
-                    }
-                } else if (slice.isArray()) {
-                    vpack::ArrayBuilder arr_builder(&b);
-                    vpack::ArrayIterator arr_it(slice);
-                    size_t index = 0;
-
-                    for (auto it : arr_it) {
-                        std::string child_path = current_path + "[" + std::to_string(index) + "]";
-
-                        if (!should_remove_path(child_path)) {
-                            rebuild_json(it, b, child_path);
-                        }
-                        index++;
-                    }
-                } else {
-                    // Primitive value, just add it
-                    b.add(slice);
-                }
-            };
-
-    rebuild_json(original_slice, *builder, "$");
+    vpack::Slice result = remove_paths_recursive(original_slice, "$");
+    builder->add(result);
     return JsonValue(builder->slice());
 }
 
