@@ -32,7 +32,6 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 // for a simple min/max/count aggregation query like
 // 'select min(c1),max(c2) from table',
