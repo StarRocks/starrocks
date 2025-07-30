@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 20
-sidebar_label: "Privilege Item"
+sidebar_label: "Privilege Items"
 ---
 
 # Privileges supported by StarRocks

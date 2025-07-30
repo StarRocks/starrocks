@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 25
-sidebar_label: Built-in Roles
+sidebar_label: "ビルトインロール"
 ---
 
 import DBAdmin from '../../../_assets/commonMarkdown/role_db_admin.mdx'

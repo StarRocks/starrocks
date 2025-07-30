@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 20
+sidebar_label: "権限項目"
 ---
 
 # StarRocks がサポートする権限
