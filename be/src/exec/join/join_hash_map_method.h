@@ -69,7 +69,7 @@ public:
 
 // The `LinearChainedJoinHashMap` uses linear probing to store distinct keys and chained to storage for linked lists of
 // identical keys.
-// - `first` stores the build index of the header of the linked list for each distinct key.
+// - `first` stores the build index of the header for the linked list for each distinct key.
 // - `next` maintains the linked list structure for each distinct key.
 //
 // Fingerprint
@@ -107,11 +107,11 @@ public:
 //                          └─►│              ├──►│   │  │ │
 //                             │              │   │   ├──┘ │
 //                             ├──────────────┤   ├───┤    │
-//                             │              ├──►│   │    │
+//                             │              │   │   │    │
 //                             │              │   │   │    │
 //                             ├──────────────┤   ├───┤    │
 //                             │              │   │   │    │
-//                             │              │   │   ├────┘
+//                             │              ├──►│   ├────┘
 //                             └──────────────┘   └───┘
 template <LogicalType LT, bool NeedBuildChained = true>
 class LinearChainedJoinHashMap {
