@@ -27,7 +27,13 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT;
 
-public class GCPCloudConfigurationProvoder implements CloudConfigurationProvider {
+public class GCPCloudConfigurationProvider implements CloudConfigurationProvider {
+    public static final String GCS_ACCESS_TOKEN = "gcs.oauth2.token";
+    public static final String GCS_ACCESS_TOKEN_EXPIRES_AT = "gcs.oauth2.token-expires-at";
+    public static final String ACCESS_TOKEN_KEY = "fs.gs.temporary.access.token";
+    public static final String TOKEN_EXPIRATION_KEY = "fs.gs.temporary.token.expiration";
+    public static final String ACCESS_TOKEN_PROVIDER_IMPL =
+            "com.starrocks.connector.gcp.TemporaryGCPAccessTokenProvider";
 
     @Override
     public CloudConfiguration build(Map<String, String> properties) {
@@ -39,7 +45,9 @@ public class GCPCloudConfigurationProvoder implements CloudConfigurationProvider
                 properties.getOrDefault(GCP_GCS_SERVICE_ACCOUNT_EMAIL, ""),
                 properties.getOrDefault(GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID, ""),
                 properties.getOrDefault(GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY, ""),
-                properties.getOrDefault(GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT, "")
+                properties.getOrDefault(GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT, ""),
+                properties.getOrDefault(GCS_ACCESS_TOKEN, ""),
+                properties.getOrDefault(GCS_ACCESS_TOKEN_EXPIRES_AT, "")
         );
         if (!gcpCloudCredential.validate()) {
             return null;
