@@ -162,6 +162,10 @@ TEST_F(TransactionStreamLoadActionTest, txn_begin_normal) {
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("OK", doc["Status"].GetString());
+
+    auto* val = evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), "Content-Type");
+    ASSERT_NE(val, nullptr);
+    ASSERT_STREQ("application/json", val);
 }
 
 TEST_F(TransactionStreamLoadActionTest, txn_commit_fail) {
