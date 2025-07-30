@@ -41,24 +41,33 @@ struct FunctionDescriptor {
     bool exception_safe;
     bool check_overflow;
 
+    const char* return_type;
+    std::vector<const char*> arg_types;
+
     FunctionDescriptor(std::string nm, uint8_t args, ScalarFunction sf, PrepareFunction pf, CloseFunction cf,
-                       bool exception_safe_, bool check_overflow_)
+                       bool exception_safe_, bool check_overflow_, const char* in_return_type = nullptr,
+                       std::vector<const char*> in_arg_types = {})
             : name(std::move(nm)),
               args_nums(args),
               scalar_function(std::move(sf)),
               prepare_function(std::move(pf)),
               close_function(std::move(cf)),
               exception_safe(exception_safe_),
-              check_overflow(check_overflow_) {}
+              check_overflow(check_overflow_),
+              return_type(in_return_type),
+              arg_types(std::move(in_arg_types)) {}
 
-    FunctionDescriptor(std::string nm, uint8_t args, ScalarFunction sf, bool exception_safe_, bool check_overflow_)
+    FunctionDescriptor(std::string nm, uint8_t args, ScalarFunction sf, bool exception_safe_, bool check_overflow_,
+                       const char* in_return_type = nullptr, std::vector<const char*> in_arg_types = {})
             : name(std::move(nm)),
               args_nums(args),
               scalar_function(std::move(sf)),
               prepare_function(nullptr),
               close_function(nullptr),
               exception_safe(exception_safe_),
-              check_overflow(check_overflow_) {}
+              check_overflow(check_overflow_),
+              return_type(in_return_type),
+              arg_types(std::move(in_arg_types)) {}
 };
 
 class BuiltinFunctions {
@@ -76,6 +85,9 @@ public:
     static void emplace_builtin_function(uint64_t id, Args&&... args) {
         fn_tables().emplace(id, FunctionDescriptor(std::forward<Args>(args)...));
     }
+
+    // For testing purposes - get all function tables
+    static const FunctionTables& get_all_functions() { return fn_tables(); }
 
 private:
     static FunctionTables& fn_tables() {
