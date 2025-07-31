@@ -21,6 +21,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sorting.h"
+#include "types/date_value.h"
 
 namespace starrocks {
 
@@ -532,6 +533,40 @@ TEST(FixedLengthColumnTest, test_update_rows) {
     for (int i = 10; i < 100; i++) {
         ASSERT_EQ(column->get_data()[i], i);
     }
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_murmur_hash) {
+    auto column = Int32Column::create();
+    column->append(34);
+
+    std::vector<uint32_t> hash_values(1);
+    column->murmur_hash3_x86_32(hash_values.data(), 0, 1);
+
+    ASSERT_EQ(2017239379, hash_values[0]);
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_murmur_hash_int64) {
+    auto column = Int64Column::create();
+    column->append(34);
+
+    std::vector<uint32_t> hash_values(1);
+    column->murmur_hash3_x86_32(hash_values.data(), 0, 1);
+
+    ASSERT_EQ(2017239379, hash_values[0]);
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_murmur_hash_date) {
+    auto column = DateColumn::create();
+    DateValue date = DateValue::create(2017, 11, 16);
+    column->append(date);
+
+    std::vector<uint32_t> hash_values(1);
+    column->murmur_hash3_x86_32(hash_values.data(), 0, 1);
+
+    ASSERT_EQ(-653330422, *reinterpret_cast<int32_t*>(&hash_values[0]));
 }
 
 TEST(FixedLengthColumnTest, test_xor_checksum) {

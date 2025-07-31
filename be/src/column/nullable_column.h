@@ -225,6 +225,8 @@ public:
     void crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
     void crc32_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const override;
 
+    void murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const override;
+
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
