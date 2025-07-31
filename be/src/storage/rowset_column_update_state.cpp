@@ -426,8 +426,7 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
 void split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<uint32_t>* sorted_source_rowids,
                        std::vector<uint32_t>* unsorted_upt_rowids, StreamChunkContainer* container) {
     // rowid_pairs MUST be sorted already
-    auto comp_fn = [](const RowidPairs& a, const RowidPairs& b) { return a.first < b.first; };
-    DCHECK(std::is_sorted(rowid_pairs.begin(), rowid_pairs.end(), comp_fn));
+    DCHECK(std::is_sorted(rowid_pairs.begin(), rowid_pairs.end(), RowidPairsCompFn));
     for (const auto& each : rowid_pairs) {
         if (container == nullptr) {
             // If container is not provided, we just push back the rowids.

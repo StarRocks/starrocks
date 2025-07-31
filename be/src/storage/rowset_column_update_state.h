@@ -63,6 +63,7 @@ struct RowsetSegmentId {
 
 // from source rowid -> upt rowid
 using RowidPairs = std::pair<uint32_t, uint32_t>;
+auto RowidPairsCompFn = [](const RowidPairs& a, const RowidPairs& b) { return a.first < b.first; };
 
 struct ColumnPartialUpdateState {
     bool inited = false;
@@ -93,9 +94,8 @@ struct ColumnPartialUpdateState {
         }
         // sort RowidPairs via source rowid
         for (auto& each : rss_rowid_to_update_rowid) {
-            auto comp_fn = [](const RowidPairs& a, const RowidPairs& b) { return a.first < b.first; };
-            if (!std::is_sorted(each.second.begin(), each.second.end(), comp_fn)) {
-                std::sort(each.second.begin(), each.second.end(), comp_fn);
+            if (!std::is_sorted(each.second.begin(), each.second.end(), RowidPairsCompFn)) {
+                std::sort(each.second.begin(), each.second.end(), RowidPairsCompFn);
             }
         }
 #ifndef BE_TEST
