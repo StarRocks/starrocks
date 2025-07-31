@@ -1263,10 +1263,18 @@ All non-partition columns must use `NULL` as the default value. This means that 
 The syntax of `partition_desc` is as follows:
 
 ```SQL
-PARTITION BY (par_col1[, par_col2...])
+PARTITION BY (partition_expr[, partition_expr...])
 ```
 
-Currently StarRocks only supports [identity transforms](https://iceberg.apache.org/spec/#partitioning), which means that StarRocks creates a partition for each unique partition value.
+Each `partition_expr` can be one of the following forms:
+
+```SQL
+column_name
+| transform_expr(column_name)
+| transform_expr(column_name, parameter)
+```
+
+Currently, StarRocks supports partition transformation expressions defined in the Apache Iceberg specification [transform expr](https://iceberg.apache.org/spec/#partitioning). This enables StarRocks to create Iceberg tables with hidden partitions based on transformed column values.
 
 :::note
 
@@ -1329,6 +1337,16 @@ Description: The compression algorithm used for the Iceberg table. The supported
    AS SELECT * from employee;
    ```
 
+4. Create a table named `partition_tbl_3` with hidden partitions. The table contains three columns: `action`, `id`, and `dt`. Among them, `id` and `dt` are used as partition keys, but the partitions are defined by transformation expressions, so these partitions are hidden.
+
+```sql
+  CREATE TABLE partition_tbl_3 (
+    action VARCHAR(20),
+    id INT,
+    dt DATE
+  )
+  PARTITION BY bucket(id, 10), year(dt);
+```
 ---
 
 ### Sink data to an Iceberg table
