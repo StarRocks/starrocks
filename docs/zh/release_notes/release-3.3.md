@@ -10,6 +10,47 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.17
+
+发布日期：2025 年 7 月 30 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 升级 HttpClient5 至 5.4.3。[#61298](https://github.com/StarRocks/starrocks/pull/61298)
+- 资源组 `cpu_core_used_permille` 限制错误。[#61177](https://github.com/StarRocks/starrocks/pull/61177)
+- ALTER 任务和分区创建任务冲突。[#61167](https://github.com/StarRocks/starrocks/pull/61167)
+- `ConnectContext` 中缺失 `globalStateMgr` 导致的 NPE。 [#60880](https://github.com/StarRocks/starrocks/pull/60880)
+- 当分区的值不同但名称在不区分大小写的情况下相同时，分区创建失败。 [#60909](https://github.com/StarRocks/starrocks/pull/60909)
+- 分区统计信息使用同步访问方式导致锁竞争。 [#61041](https://github.com/StarRocks/starrocks/pull/61041)
+- 重启 FE 后，ANALYZE 任务停滞在 `pending` 状态。 [#61113](https://github.com/StarRocks/starrocks/pull/61113)
+- BE 中 JIT (Just-In-Time) 编译导致的问题。 [#61060](https://github.com/StarRocks/starrocks/pull/61060)
+- Starmgr 的 Leader 地址问题。 [#61016](https://github.com/StarRocks/starrocks/pull/61016)
+- Broker 上的 CVE 漏洞。 [#60908](https://github.com/StarRocks/starrocks/pull/60908)
+- 实际的 JDBC 连接数超出 `jdbc_connection_pool_size` 限制。 [#61004](https://github.com/StarRocks/starrocks/pull/61004) 
+- CVE-2022-41404 漏洞。 [#59689](https://github.com/StarRocks/starrocks/pull/59689)
+- Parquet 和 HttpClient5 相关的 CVE 漏洞。 [#58750](https://github.com/StarRocks/starrocks/pull/58750)
+- 当物理分区 ID 为空时，系统未能将分区从 `_partition_map` 中删除导致的问题。 [#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- 存算分离集群中缺少版本检查。 [#59422](https://github.com/StarRocks/starrocks/pull/59422)
+- 存算分离集群中，系统批量发布日志时，事务日志不存在的问题。[#60949](https://github.com/StarRocks/starrocks/pull/60949)
+- 存算分离集群中，启用批量发布时，系统并发发布相同事务的问题。[#57574](https://github.com/StarRocks/starrocks/pull/57574)
+- 统计信息 Overwrite 未使用半同步模式导致的问题。 [#60897](https://github.com/StarRocks/starrocks/pull/60897) 
+- 获取最新合并文件切片时，用于过滤 Hudi 文件的 `maxInstantTime` 不准确问题。[#60927](https://github.com/StarRocks/starrocks/pull/60927)
+- TaskRun 状态与低版本的不兼容导致的问题。 [#60438](https://github.com/StarRocks/starrocks/pull/60438)
+- CVE-2025-52999 漏洞。[#60795](https://github.com/StarRocks/starrocks/pull/60795)
+- Broker 中 `log4j-1.2.17-cloudera6` 导致的漏洞。[#59579](https://github.com/StarRocks/starrocks/pull/59579)
+- 加载 OOM 分区时 BE 崩溃的问题。 [#60778](https://github.com/StarRocks/starrocks/pull/60778)
+- 大量 Base Compaction 任务阻塞其他 Compaction 任务问题。[#60711](https://github.com/StarRocks/starrocks/pull/60711)
+- 系统无法高效处理错误字符串截断。[#60878](https://github.com/StarRocks/starrocks/pull/60878)
+- 物化视图在多 FE 环境下改写失败。[#60841](https://github.com/StarRocks/starrocks/pull/60841)
+- INSERT OVERWRITE 在手动创建分区的失败问题。[#60750](https://github.com/StarRocks/starrocks/pull/60750)
+- 聚合键使用随机分布导致的问题。[#60702](https://github.com/StarRocks/starrocks/pull/60702)
+- 低基数改写导致 `multi_distinct_count` 崩溃问题。[#60664](https://github.com/StarRocks/starrocks/pull/60664)
+- Pivot 解析字段问题。[#60748](https://github.com/StarRocks/starrocks/pull/60748) 
+- 升级 `hudi-common` 至1.0.2。[#59501](https://github.com/StarRocks/starrocks/pull/59501)
+- CLONE 任务和 DROP TABLE 并发时可能导致 BE Crash 的问题。[#61359](https://github.com/StarRocks/starrocks/pull/61359)
+
 ## 3.3.16
 
 发布日期：2025 年 7 月 4 日
