@@ -45,6 +45,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     private TopNType topNType;
     private boolean isSplit;
     private boolean isEnforced;
+    private boolean perPipeline;
 
     // only set when rank <=1 with preAgg optimization is triggered, otherwise it's empty!
     // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
@@ -62,6 +63,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
                                 TopNType topNType,
                                 boolean isSplit,
                                 boolean isEnforced,
+                                boolean perPipeline,
                                 ScalarOperator predicate,
                                 Projection projection,
                                 Map<ColumnRefOperator, CallOperator> analyticCall) {
@@ -74,6 +76,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         this.topNType = topNType;
         this.isSplit = isSplit;
         this.isEnforced = isEnforced;
+        this.perPipeline = perPipeline;
         this.predicate = predicate;
         this.projection = projection;
         this.preAggCall = analyticCall;
@@ -109,6 +112,10 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     public Map<ColumnRefOperator, CallOperator> getPreAggCall() {
         return preAggCall;
+    }
+
+    public boolean isPerPipeline() {
+        return perPipeline;
     }
 
     @Override
