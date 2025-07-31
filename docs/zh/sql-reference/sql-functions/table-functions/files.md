@@ -132,7 +132,8 @@ Parquet 格式示例：
 
 ```SQL
 "format"="parquet",
-"parquet.use_legacy_encoding" = "true"  -- 仅用于数据导出
+"parquet.use_legacy_encoding" = "true",  -- 仅用于数据导出
+"parquet.version" = "2.6"                -- 仅用于数据导出
 ```
 
 ###### parquet.use_legacy_encoding
@@ -154,6 +155,10 @@ Parquet 格式示例：
 对于 DECIMAL 128 数据类型，仅可使用 `fixed_len_byte_array` 编码。`parquet.use_legacy_encoding` 不生效。
 
 :::
+
+###### parquet.version
+
+控制系统导出数据时使用的 Parquet 版本。自 v3.4.6 版本起支持该功能。有效值：`1.0`、`2.4` 和 `2.6`（默认）。该属性仅支持数据导出。
 
 ##### CSV
 
