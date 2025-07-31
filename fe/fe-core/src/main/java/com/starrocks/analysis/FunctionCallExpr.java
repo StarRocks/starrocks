@@ -327,10 +327,6 @@ public class FunctionCallExpr extends Expr {
         }
     }
 
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
     public void setMergeAggFnHasNullableChild(boolean value) {
         this.mergeAggFnHasNullableChild = value;
     }

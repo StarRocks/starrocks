@@ -125,10 +125,6 @@ public class LargeIntLiteral extends LiteralExpr {
     }
 
     @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
-    @Override
     public boolean isMinValue() {
         return this.value.compareTo(LARGE_INT_MIN) == 0;
     }

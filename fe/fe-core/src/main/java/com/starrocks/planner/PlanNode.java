@@ -631,20 +631,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return result;
     }
 
-    /**
-     * Sets outputSmap_ to compose(existing smap, combined child smap). Also
-     * substitutes conjuncts_ using the combined child smap.
-     *
-     * @throws AnalysisException
-     */
-    protected void createDefaultSmap(Analyzer analyzer) throws StarRocksException {
-        ExprSubstitutionMap combinedChildSmap = getCombinedChildSmap();
-        outputSmap =
-                ExprSubstitutionMap.compose(outputSmap, combinedChildSmap, analyzer);
-
-        conjuncts = Expr.substituteList(conjuncts, outputSmap, analyzer, false);
-    }
-
     public void setHasNullableGenerateChild() {
         this.hasNullableGenerateChild = checkHasNullableGenerateChild();
     }

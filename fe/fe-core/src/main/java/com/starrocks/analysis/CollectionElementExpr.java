@@ -72,10 +72,6 @@ public class CollectionElementExpr extends Expr {
     }
 
     @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
-    @Override
     protected String toSqlImpl() {
         Expr expr = this.children.get(0);
         Expr subscript = this.children.get(1);

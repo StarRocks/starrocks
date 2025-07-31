@@ -99,7 +99,6 @@ public abstract class LoadScanNode extends ScanNode {
     protected void checkBitmapCompatibility(Analyzer analyzer, SlotDescriptor slotDesc, Expr expr)
             throws AnalysisException {
         if (slotDesc.getColumn().getAggregationType() == AggregateType.BITMAP_UNION) {
-            expr.analyze(analyzer);
             if (!expr.getType().isBitmapType()) {
                 String errorMsg = String.format("bitmap column %s require the function return type is BITMAP",
                         slotDesc.getColumn().getName());

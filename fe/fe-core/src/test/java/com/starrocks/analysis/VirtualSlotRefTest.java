@@ -98,13 +98,4 @@ public class VirtualSlotRefTest {
         Assertions.assertFalse(((VirtualSlotRef) v).getRealSlots().get(0) == virtualSlot.getRealSlots().get(0));
 
     }
-
-    @Test
-    public void analyzeImpl() {
-        try {
-            virtualSlot.analyzeImpl(analyzer);
-        } catch (Exception e) {
-            Assertions.fail("analyze throw exception");
-        }
-    }
 }

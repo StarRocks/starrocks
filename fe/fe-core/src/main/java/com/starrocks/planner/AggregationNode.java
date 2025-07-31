@@ -158,10 +158,6 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         this.withLocalShuffle = withLocalShuffle;
     }
 
-    @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-    }
-
     public void setStreamingPreaggregationMode(String mode) {
         this.streamingPreaggregationMode = mode;
     }

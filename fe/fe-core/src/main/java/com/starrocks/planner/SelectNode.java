@@ -81,10 +81,6 @@ public class SelectNode extends PlanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-    }
-
-    @Override
     public void computeStats(Analyzer analyzer) {
     }
 

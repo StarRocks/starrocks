@@ -273,10 +273,6 @@ public class SlotRef extends Expr {
     }
 
     @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
-    @Override
     public String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
         helper.add("slotDesc", desc != null ? desc.debugString() : "null");
