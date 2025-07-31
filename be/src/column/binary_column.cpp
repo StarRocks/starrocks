@@ -745,6 +745,14 @@ void BinaryColumnBase<T>::crc32_hash_selective(uint32_t* hashes, uint16_t* sel, 
 }
 
 template <typename T>
+void BinaryColumnBase<T>::murmur_hash3_x86_32(uint32_t* hashes, uint32_t from, uint32_t to) const {
+    for (uint32_t i = from; i < to; ++i) {
+        hashes[i] = HashUtil::murmur_hash3_32(_bytes.data() + _offsets[i],
+                                              static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), 0);
+    }
+}
+
+template <typename T>
 int64_t BinaryColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const {
     // The XOR of BinaryColumn
     // For one string, treat it as a number of 64-bit integers and 8-bit integers.
