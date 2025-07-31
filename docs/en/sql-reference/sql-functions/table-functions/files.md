@@ -133,7 +133,8 @@ Example of the Parquet format:
 
 ```SQL
 "format"="parquet",
-"parquet.use_legacy_encoding" = "true"   -- for unloading only
+"parquet.use_legacy_encoding" = "true",   -- for unloading only
+"parquet.version" = "2.6"                 -- for unloading only
 ```
 
 ###### parquet.use_legacy_encoding
@@ -155,6 +156,10 @@ If this item is set to `false`:
 For DECIMAL 128 data type, only `fixed_len_byte_array` encoding is available. `parquet.use_legacy_encoding` does not take effect.
 
 :::
+
+###### parquet.version
+
+Controls the Parquet version into which the system unloads data. Supported from v3.4.6 onwards. Valid values: `1.0`, `2.4`, and `2.6` (default). This property is only supported for data unloading.
 
 ##### CSV
 

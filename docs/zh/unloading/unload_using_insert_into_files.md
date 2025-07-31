@@ -213,10 +213,11 @@ INSERT INTO FILES(
 )
 SELECT * FROM sales_records;
 
--- 导出为 Parquet 文件。
+-- 导出为 Parquet 文件，并将 Parquet 版本设置为 1.0。
 INSERT INTO FILES(
   'path' = 'file:///home/ubuntu/parquetfile/',
-   'format' = 'parquet'
+  'format' = 'parquet',
+  'parquet.version' = '1.0'
 )
 SELECT * FROM sales_records;
 ```
