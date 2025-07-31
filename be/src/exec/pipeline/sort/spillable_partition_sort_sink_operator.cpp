@@ -111,8 +111,7 @@ OperatorPtr SpillablePartitionSortSinkOperatorFactory::create(int32_t degree_of_
     std::shared_ptr<ChunksSorter> chunks_sorter;
 
     chunks_sorter = std::make_unique<SpillableChunksSorterFullSort>(
-            runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first, _sort_keys,
-            _max_buffered_rows, _max_buffered_bytes, _early_materialized_slots);
+            runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first, _sort_keys);
 
     auto spiller = _spill_factory->create(*_spill_options);
     auto spill_channel = _spill_channel_factory->get_or_create(driver_sequence);

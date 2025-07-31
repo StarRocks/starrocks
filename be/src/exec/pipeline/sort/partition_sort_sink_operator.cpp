@@ -131,9 +131,9 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
                     max_buffered_chunks);
         }
     } else {
-        chunks_sorter = std::make_unique<ChunksSorterFullSort>(
-                runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                _sort_keys, _max_buffered_rows, _max_buffered_bytes, _early_materialized_slots);
+        chunks_sorter =
+                std::make_unique<ChunksSorterFullSort>(runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                       &_is_asc_order, &_is_null_first, _sort_keys);
     }
 
     auto sort_context = _sort_context_factory->create(driver_sequence);
