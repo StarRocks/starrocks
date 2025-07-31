@@ -295,6 +295,36 @@ PARALLEL_TEST(NullableColumnTest, test_update_rows) {
     ASSERT_EQ("jk", column1->get(4).get_slice().to_string());
 }
 
+PARALLEL_TEST(NullableColumnTest, test_murmur_hash_varbinary) {
+    NullableColumn::Ptr c0 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+
+    c0->append_datum({});
+    // 00 01 02 03
+    std::vector<uint8_t> data{0, 1, 2, 3};
+    Slice slice = Slice(data.data(), 4);
+    c0->append_strings(&slice, 1);
+
+    std::vector<uint32_t> hash_values(2);
+    c0->murmur_hash3_x86_32(hash_values.data(), 0, 2);
+
+    ASSERT_EQ(0, hash_values[0]);
+    ASSERT_EQ(-188683207, *reinterpret_cast<int32_t*>(&hash_values[1]));
+}
+
+PARALLEL_TEST(NullableColumnTest, test_murmur_hash_uuid) {
+    NullableColumn::Ptr c0 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    // f79c3e09-677c-4bbd-a479-3f349cb785e7
+    std::vector<uint8_t> data{0xf7, 0x9c, 0x3e, 0x09, 0x67, 0x7c, 0x4b, 0xbd,
+                              0xa4, 0x79, 0x3f, 0x34, 0x9c, 0xb7, 0x85, 0xe7};
+    Slice slice = Slice(data.data(), 16);
+    c0->append_strings(&slice, 1);
+
+    std::vector<uint32_t> hash_values(1);
+    c0->murmur_hash3_x86_32(hash_values.data(), 0, 1);
+
+    ASSERT_EQ(1488055340, hash_values[0]);
+}
+
 PARALLEL_TEST(NullableColumnTest, test_xor_checksum) {
     NullableColumn::Ptr c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 

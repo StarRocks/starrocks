@@ -205,6 +205,17 @@ PARALLEL_TEST(BinaryColumnTest, test_append_nulls) {
 }
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_murmur_hash) {
+    auto column = BinaryColumn::create();
+    column->append_string("iceberg");
+
+    std::vector<uint32_t> hash_values(1);
+    column->murmur_hash3_x86_32(hash_values.data(), 0, 1);
+
+    ASSERT_EQ(1210000089, hash_values[0]);
+}
+
+// NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_append_defaults) {
     // BinaryColumn
     BinaryColumn::Ptr c1 = BinaryColumn::create();
