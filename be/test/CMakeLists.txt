@@ -555,6 +555,7 @@ set(EXEC_FILES
         ./storage/rows_mapper_test.cpp
         ./storage/lake/persistent_index_memtable_test.cpp
         ./storage/lake/lake_persistent_index_test.cpp
+        ./storage/lake/publish_dynamic_tablet_test.cpp
         ./storage/lake/replication_txn_manager_test.cpp
         ./storage/lake/persistent_index_sstable_test.cpp
         ./storage/lake/write_combined_txn_log_test.cpp
