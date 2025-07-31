@@ -221,7 +221,7 @@ SELECT * FROM sales_records;
 INSERT INTO FILES(
   'path' = 'file:///home/ubuntu/parquetfile/',
   'format' = 'parquet',
-  'parquet.version' = '2.6'
+  'parquet.version' = '1.0'
 )
 SELECT * FROM sales_records;
 ```
