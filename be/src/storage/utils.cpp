@@ -411,8 +411,8 @@ int64_t parse_data_size(const std::string& value_str) {
 
     // Trim leading/trailing spaces
     size_t start = value_str.find_first_not_of(" \t\n\r");
-    size_t end = value_str.find_last_not_of(" \t\n\r");
     if (start == std::string::npos) return 0;
+    size_t end = value_str.find_last_not_of(" \t\n\r");
     std::string s = value_str.substr(start, end - start + 1);
 
     // Find where the number ends

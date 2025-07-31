@@ -454,6 +454,9 @@ public class InformationSchemaDataSource {
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));
         // DATA_SIZE
+        // DATA_SIZE in PARTITIONS_META is string before, and bigint is more programmer-friendly and change it to bigint
+        // We do not change the field type in `TPartitionMetaInfo` for compatibility and BE will finished the type 
+        // convertion.
         partitionMetaInfo.setData_size(String.valueOf(physicalPartition.storageDataSize()));
         DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
         // STORAGE_MEDIUM
