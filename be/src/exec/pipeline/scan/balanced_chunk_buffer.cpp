@@ -14,7 +14,6 @@
 
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 
-#include "fmt/format.h"
 #include "util/blocking_queue.hpp"
 
 namespace starrocks::pipeline {
@@ -83,11 +82,12 @@ bool BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferToken
     if (_strategy == BalanceStrategy::kDirect) {
         ret = _get_sub_buffer(buffer_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else if (_strategy == BalanceStrategy::kRoundRobin) {
-        // TODO: try to balance data according to number of rows
-        // But the hard part is, that may needs to maintain a min-heap to account the rows of each
-        // output operator, which would introduce some extra overhead
-        int target_index = _output_index.fetch_add(1);
-        target_index %= _output_operators;
+        // In the round-robin strategy, assign every N consecutive chunks to the same output operator,
+        // then switch to the next operator. N is determined by config::io_task_shared_scan_step_size.
+        // A smaller N increases scheduling overhead, while a larger N may cause load imbalance among operators.
+        // This strategy is used to balance the load among operators, and it is more efficient than the direct strategy.
+        int64_t current = _output_index.fetch_add(1);
+        int target_index = (current / config::io_task_shared_scan_step_size) % _output_operators;
         ret = _get_sub_buffer(target_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else {
         CHECK(false) << "unreachable";

@@ -135,7 +135,7 @@ void ScanOperator::close(RuntimeState* state) {
 
 size_t ScanOperator::_buffer_unplug_threshold() const {
     size_t threshold = buffer_capacity() / _dop / 2;
-    threshold = std::max<size_t>(1, std::min<size_t>(kIOTaskBatchSize, threshold));
+    threshold = std::max<size_t>(1, std::min<size_t>(config::io_task_batch_size, threshold));
     return threshold;
 }
 
@@ -480,7 +480,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             Status status;
 
             if (start_status.ok()) {
-                status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
+                status = chunk_source->buffer_next_batch_chunks_blocking(state, config::io_task_batch_size,
+                                                                         _workgroup.get());
             }
 
             if (!status.ok() && !status.is_end_of_file()) {
