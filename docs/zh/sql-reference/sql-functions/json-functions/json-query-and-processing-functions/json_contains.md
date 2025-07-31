@@ -9,7 +9,6 @@ displayed_sidebar: docs
 :::tip
 所有的 JSON 函数和操作符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)上。
 
-通过[生成列](../../../sql-statements/generated_columns.md)加速查询。
 :::
 
 ## 语法

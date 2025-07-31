@@ -9,7 +9,6 @@ JSON ドキュメントが特定の値またはサブドキュメントを含ん
 :::tip
 すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
 
-クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
 :::
 
 ## Syntax

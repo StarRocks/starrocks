@@ -1446,10 +1446,10 @@ static bool json_slice_contains(const arangodb::velocypack::Slice& target, const
     }
     
     // If both are the same type and equal, target contains candidate
-    if (target.equals(candidate)) {
+    if (JsonValue::compare(target, candidate) == 0) {
         return true;
     }
-    
+
     // If target is an object
     if (target.isObject() && candidate.isObject()) {
         // Check if target object contains all key-value pairs from candidate object
@@ -1458,7 +1458,7 @@ static bool json_slice_contains(const arangodb::velocypack::Slice& target, const
             if (!target.hasKey(key)) {
                 return false;
             }
-            if (!json_slice_contains(target.get(key), item.value)) {
+            if (JsonValue::compare(target.get(key), item.value) != 0) {
                 return false;
             }
         }

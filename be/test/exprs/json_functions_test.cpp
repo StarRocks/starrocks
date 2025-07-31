@@ -1869,7 +1869,7 @@ TEST_P(JsonContainsTestFixture, json_contains) {
     auto candidate = JsonValue::parse(param_candidate);
     ASSERT_TRUE(target.ok());
     ASSERT_TRUE(candidate.ok());
-    
+
     target_json->append(&*target);
     candidate_json->append(&*candidate);
 
@@ -1885,37 +1885,61 @@ TEST_P(JsonContainsTestFixture, json_contains) {
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(JsonContainsTest, JsonContainsTestFixture,
-                         ::testing::Values(
-                                 // Basic scalar contains
-                                 std::make_tuple(R"("hello")", R"("hello")", true),
-                                 std::make_tuple(R"("hello")", R"("world")", false),
-                                 std::make_tuple("123", "123", true),
-                                 std::make_tuple("123", "456", false),
-                                 std::make_tuple("true", "true", true),
-                                 std::make_tuple("true", "false", false),
-                                 std::make_tuple("null", "null", true),
-                                 
-                                 // Object contains
-                                 std::make_tuple(R"({"a": 1, "b": 2})", R"({"a": 1})", true),
-                                 std::make_tuple(R"({"a": 1, "b": 2})", R"({"b": 2})", true),
-                                 std::make_tuple(R"({"a": 1, "b": 2})", R"({"a": 1, "b": 2})", true),
-                                 std::make_tuple(R"({"a": 1, "b": 2})", R"({"c": 3})", false),
-                                 std::make_tuple(R"({"a": 1, "b": 2})", R"({"a": 2})", false),
-                                 
-                                 // Array contains
-                                 std::make_tuple(R"([1, 2, 3])", R"([1, 2])", true),
-                                 std::make_tuple(R"([1, 2, 3])", R"([2, 3])", true),
-                                 std::make_tuple(R"([1, 2, 3])", R"([1, 2, 3])", true),
-                                 std::make_tuple(R"([1, 2, 3])", R"([4, 5])", false),
-                                 std::make_tuple(R"([1, 2, 3])", "2", true),
-                                 std::make_tuple(R"([1, 2, 3])", "4", false),
-                                 
-                                 // Nested structures
-                                 std::make_tuple(R"({"a": [1, 2], "b": {"c": 3}})", R"({"a": [1]})", false), // partial array match not supported
-                                 std::make_tuple(R"({"a": [1, 2], "b": {"c": 3}})", R"({"b": {"c": 3}})", true),
-                                 std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"([{"a": 1}])", true),
-                                 std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 1})", true)
-                         ));
+// clang-format off
+INSTANTIATE_TEST_SUITE_P(
+        JsonContainsTest, JsonContainsTestFixture,
+        ::testing::Values(
+                // Basic scalar contains
+                std::make_tuple(R"("hello")", R"("hello")", true), 
+                std::make_tuple(R"("hello")", R"("world")", false),
+                std::make_tuple("123", "123", true), 
+                std::make_tuple("123", "456", false),
+                std::make_tuple("true", "true", true), 
+                std::make_tuple("true", "false", false),
+                std::make_tuple("null", "null", true),
+
+                // Object contains
+                std::make_tuple(R"({"a": 1, "b": 2})", R"({"a": 1})", true),
+                std::make_tuple(R"({"a": 1, "b": 2})", R"({"b": 2})", true),
+                std::make_tuple(R"({"a": 1, "b": 2})", R"({"a": 1, "b": 2})", true),
+                std::make_tuple(R"({"a": 1, "b": 2})", R"({"c": 3})", false),
+                std::make_tuple(R"({"a": 1, "b": 2})", R"({"a": 2})", false),
+
+                // Test cases for objects with multiple keys
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"a": 1, "b": 2})", true),
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"b": 2, "c": 3})", true),
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"a": 1, "c": 3})", true),
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"a": 1, "b": 2, "c": 3})", true),
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"a": 1, "b": 2, "d": 4})", false),
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"a": 2, "b": 2})", false),
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"a": 1, "b": 3})", false),
+
+                // Array contains
+                std::make_tuple(R"([1, 2, 3])", R"([1, 2])", true), 
+                std::make_tuple(R"([1, 2, 3])", R"([2, 3])", true),
+                std::make_tuple(R"([1, 2, 3])", R"([1, 2, 3])", true),
+                std::make_tuple(R"([1, 2, 3])", R"([4, 5])", false), 
+                std::make_tuple(R"([1, "2", 3])", "2", true),
+                std::make_tuple(R"([1, 2, 3])", "4", false),
+
+                // Nested structures
+                std::make_tuple(R"({"a": [1, 2], "b": {"c": 3}})", R"({"a": [1]})", false), // partial array match
+                std::make_tuple(R"({"a": [1, 2], "b": {"c": 3}})", R"({"b": {"c": 3}})", true),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"([{"a": 1}])", true),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 1})", true),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 2})", false),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 1, "b": 2})", true),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 1, "b": 3})", false),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 1, "b": 2, "c": 3})", false),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 1, "b": 2, "c": 3})", false),
+
+                // Nested structures: these cases do not perform recursive containment checks
+                // (i.e., the function does not search for sub-objects deeply nested within the target)
+                std::make_tuple(R"({"x": {"a": 1}})", R"({"a": 1})", false),
+                std::make_tuple(R"({"x": {"a": 1}})", R"({"b": 2})", false),
+                std::make_tuple(R"([{"x": {"a": 1}}])", R"({"a": 1})", false),
+                std::make_tuple(R"([{"x": {"a": 1}}])", R"({"b": 2})", false))
+);
+// clang-format on
 
 } // namespace starrocks
