@@ -74,22 +74,20 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class ReplicationJob implements GsonPostProcessable {
-    protected static final Logger LOG = LogManager.getLogger(ReplicationJob.class);
+    private static final Logger LOG = LogManager.getLogger(ReplicationJob.class);
 
-    protected static class TableInfo {
-        protected final long tableId;
-        protected final long srcTableId;
-        protected final Table.TableType tableType;
-        protected final Table.TableType srcTableType;
-        protected final long tableDataSize;
-        protected final long srcTableDataSize;
-        protected final long replicationReplicaCount;
-        protected final Map<Long, PartitionInfo> partitionInfos;
+    private static class TableInfo {
+        private final long tableId;
+        private final Table.TableType tableType;
+        private final Table.TableType srcTableType;
+        private final long tableDataSize;
+        private final long srcTableDataSize;
+        private final long replicationReplicaCount;
+        private final Map<Long, PartitionInfo> partitionInfos;
 
-        public TableInfo(long tableId, long srcTableId, TableType tableType, TableType srcTableType, long tableDataSize,
+        public TableInfo(long tableId, TableType tableType, TableType srcTableType, long tableDataSize,
                 long srcTableDataSize, Map<Long, PartitionInfo> partitionInfos) {
             this.tableId = tableId;
-            this.srcTableId = srcTableId;
             this.tableType = tableType;
             this.srcTableType = srcTableType;
             this.tableDataSize = tableDataSize;
@@ -100,10 +98,6 @@ public class ReplicationJob implements GsonPostProcessable {
 
         public long getTableId() {
             return tableId;
-        }
-
-        public long getSrcTableId() {
-            return srcTableId;
         }
 
         public Table.TableType getTableType() {
@@ -134,7 +128,7 @@ public class ReplicationJob implements GsonPostProcessable {
             return partitionInfos;
         }
 
-        protected static long calcReplicationReplicaCount(Map<Long, PartitionInfo> partitionInfos) {
+        private static long calcReplicationReplicaCount(Map<Long, PartitionInfo> partitionInfos) {
             long replicationReplicaSize = 0;
             for (PartitionInfo partitionInfo : partitionInfos.values()) {
                 for (IndexInfo indexInfo : partitionInfo.getIndexInfos().values()) {
@@ -149,22 +143,22 @@ public class ReplicationJob implements GsonPostProcessable {
 
     protected static class PartitionInfo {
         @SerializedName(value = "partitionId")
-        protected final long partitionId;
+        private final long partitionId;
 
         @SerializedName(value = "version")
-        protected final long version;
+        private final long version;
 
         @SerializedName(value = "dataVersion")
-        protected final long dataVersion;
+        private final long dataVersion;
 
         @SerializedName(value = "srcVersion")
-        protected final long srcVersion;
+        private final long srcVersion;
 
         @SerializedName(value = "srcVersionEpoch")
-        protected final long srcVersionEpoch;
+        private final long srcVersionEpoch;
 
         @SerializedName(value = "indexInfos")
-        protected final Map<Long, IndexInfo> indexInfos;
+        private final Map<Long, IndexInfo> indexInfos;
 
         @SerializedName(value = "srcPartitionId")
         protected final long srcPartitionId;
@@ -211,16 +205,16 @@ public class ReplicationJob implements GsonPostProcessable {
 
     protected static class IndexInfo {
         @SerializedName(value = "indexId")
-        protected final long indexId;
+        private final long indexId;
 
         @SerializedName(value = "schemaHash")
-        protected final int schemaHash;
+        private final int schemaHash;
 
         @SerializedName(value = "srcSchemaHash")
-        protected final int srcSchemaHash;
+        private final int srcSchemaHash;
 
         @SerializedName(value = "tabletInfos")
-        protected final Map<Long, TabletInfo> tabletInfos;
+        private final Map<Long, TabletInfo> tabletInfos;
 
         public IndexInfo(long indexId, int schemaHash, int srcSchemaHash, Map<Long, TabletInfo> tabletInfos) {
             this.indexId = indexId;
@@ -248,13 +242,13 @@ public class ReplicationJob implements GsonPostProcessable {
 
     protected static class TabletInfo {
         @SerializedName(value = "tabletId")
-        protected final long tabletId;
+        private final long tabletId;
 
         @SerializedName(value = "srcTabletId")
-        protected final long srcTabletId;
+        private final long srcTabletId;
 
         @SerializedName(value = "replicaInfos")
-        protected final Map<Long, ReplicaInfo> replicaInfos;
+        private final Map<Long, ReplicaInfo> replicaInfos;
 
         public TabletInfo(long tabletId, long srcTabletId, Map<Long, ReplicaInfo> replicaInfos) {
             this.tabletId = tabletId;
@@ -275,15 +269,15 @@ public class ReplicationJob implements GsonPostProcessable {
         }
     }
 
-    protected static class ReplicaInfo {
+    private static class ReplicaInfo {
         @SerializedName(value = "backendId")
-        protected final long backendId;
+        private final long backendId;
 
         @SerializedName(value = "srcBackendInfos")
-        protected final List<BackendInfo> srcBackendInfos;
+        private final List<BackendInfo> srcBackendInfos;
 
         @SerializedName(value = "srcSnapshotInfo")
-        protected volatile SnapshotInfo srcSnapshotInfo;
+        private volatile SnapshotInfo srcSnapshotInfo;
 
         public ReplicaInfo(long backendId, List<BackendInfo> srcBackendInfos) {
             this.backendId = backendId;
@@ -311,15 +305,15 @@ public class ReplicationJob implements GsonPostProcessable {
         }
     }
 
-    protected static class BackendInfo {
+    private static class BackendInfo {
         @SerializedName(value = "host")
-        protected final String host;
+        private final String host;
 
         @SerializedName(value = "bePort")
-        protected final int bePort;
+        private final int bePort;
 
         @SerializedName(value = "httpPort")
-        protected final int httpPort;
+        private final int httpPort;
 
         public BackendInfo(String host, int bePort, int httpPort) {
             this.host = host;
@@ -344,15 +338,15 @@ public class ReplicationJob implements GsonPostProcessable {
         }
     }
 
-    protected static class SnapshotInfo {
+    private static class SnapshotInfo {
         @SerializedName(value = "backendInfo")
-        protected final BackendInfo backendInfo;
+        private final BackendInfo backendInfo;
 
         @SerializedName(value = "snapshotPath")
-        protected final String snapshotPath;
+        private final String snapshotPath;
 
         @SerializedName(value = "incrementalSnapshot")
-        protected final boolean incrementalSnapshot;
+        private final boolean incrementalSnapshot;
 
         public SnapshotInfo(BackendInfo backendInfo, String snapshotPath, boolean incrementalSnapshot) {
             this.backendInfo = backendInfo;
@@ -376,53 +370,59 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     @SerializedName(value = "jobId")
-    protected final String jobId;
+    private final String jobId;
 
     @SerializedName(value = "createdTimeMs")
-    protected final long createdTimeMs;
+    private final long createdTimeMs;
 
     @SerializedName(value = "finishedTimeMs")
-    protected volatile long finishedTimeMs;
+    private volatile long finishedTimeMs;
 
     @SerializedName(value = "srcToken")
-    protected final String srcToken;
+    private final String srcToken;
 
     @SerializedName(value = "databaseId")
-    protected final long databaseId;
+    private final long databaseId;
 
     @SerializedName(value = "tableId")
-    protected final long tableId;
+    private final long tableId;
 
     @SerializedName(value = "tableType")
-    protected final Table.TableType tableType;
+    private final Table.TableType tableType;
 
     @SerializedName(value = "srcTableType")
-    protected final Table.TableType srcTableType;
+    private final Table.TableType srcTableType;
 
     @SerializedName(value = "replicationDataSize")
-    protected final long replicationDataSize;
+    private final long replicationDataSize;
 
     @SerializedName(value = "replicationReplicaCount")
-    protected final long replicationReplicaCount;
+    private final long replicationReplicaCount;
 
     @SerializedName(value = "partitionInfos")
-    protected final Map<Long, PartitionInfo> partitionInfos;
+    private final Map<Long, PartitionInfo> partitionInfos;
 
     @SerializedName(value = "transactionId")
-    protected volatile long transactionId;
+    private volatile long transactionId;
 
     @SerializedName(value = "state")
-    protected volatile ReplicationJobState state;
-
-    @SerializedName(value = "srcDatabaseId")
-    protected final long srcDatabaseId;
-
-    @SerializedName(value = "srcTableId")
-    protected final long srcTableId;
+    private volatile ReplicationJobState state;
 
     protected Map<AgentTask, AgentTask> runningTasks = Maps.newConcurrentMap();
     protected volatile int taskNum = 0;
-    protected Map<AgentTask, AgentTask> finishedTasks = Maps.newConcurrentMap();
+    private Map<AgentTask, AgentTask> finishedTasks = Maps.newConcurrentMap();
+
+    protected Table.TableType getTableType() {
+        return tableType;
+    }
+
+    protected Table.TableType getSrcTableType() {
+        return srcTableType;
+    }
+
+    protected Map<Long, PartitionInfo> getPartitionInfos() {
+        return partitionInfos;
+    }
 
     public String getJobId() {
         return jobId;
@@ -442,14 +442,6 @@ public class ReplicationJob implements GsonPostProcessable {
 
     public long getTableId() {
         return tableId;
-    }
-
-    public long getSrcDatabaseId() {
-        return srcDatabaseId;
-    }
-
-    public long getSrcTableId() {
-        return srcTableId;
     }
 
     public long getTransactionId() {
@@ -504,6 +496,8 @@ public class ReplicationJob implements GsonPostProcessable {
         return transactionState.getReason();
     }
 
+
+
     public ReplicationJob(TTableReplicationRequest request) throws MetaNotFoundException {
         Preconditions.checkState(request.src_table_type == TTableType.OLAP_TABLE);
 
@@ -516,10 +510,8 @@ public class ReplicationJob implements GsonPostProcessable {
         this.finishedTimeMs = 0;
         this.srcToken = request.src_token;
         this.databaseId = request.database_id;
-        this.srcDatabaseId = request.src_database_id;
         TableInfo tableInfo = initTableInfo(request);
         this.tableId = tableInfo.getTableId();
-        this.srcTableId = tableInfo.getSrcTableId();
         this.tableType = tableInfo.getTableType();
         this.srcTableType = tableInfo.getSrcTableType();
         this.replicationDataSize = tableInfo.getReplicationDataSize();
@@ -533,8 +525,8 @@ public class ReplicationJob implements GsonPostProcessable {
         }
     }
 
-    public ReplicationJob(String jobId, String srcToken, long databaseId, long srcDatabaseId,
-                          OlapTable table, OlapTable srcTable, SystemInfoService srcSystemInfoService) {
+    public ReplicationJob(String jobId, String srcToken, long databaseId, OlapTable table, OlapTable srcTable,
+            SystemInfoService srcSystemInfoService) {
         if (Strings.isNullOrEmpty(jobId)) {
             this.jobId = UUIDUtil.genUUID().toString();
         } else {
@@ -544,10 +536,8 @@ public class ReplicationJob implements GsonPostProcessable {
         this.finishedTimeMs = 0;
         this.srcToken = srcToken;
         this.databaseId = databaseId;
-        this.srcDatabaseId = srcDatabaseId;
         TableInfo tableInfo = initTableInfo(table, srcTable, srcSystemInfoService);
         this.tableId = tableInfo.getTableId();
-        this.srcTableId = tableInfo.getSrcTableId();
         this.tableType = tableInfo.getTableType();
         this.srcTableType = tableInfo.getSrcTableType();
         this.replicationDataSize = tableInfo.getReplicationDataSize();
@@ -660,7 +650,7 @@ public class ReplicationJob implements GsonPostProcessable {
         finishedTasks.put(task, task);
     }
 
-    protected static TableInfo initTableInfo(TTableReplicationRequest request) throws MetaNotFoundException {
+    private static TableInfo initTableInfo(TTableReplicationRequest request) throws MetaNotFoundException {
         Table.TableType tableType;
         long tableDataSize;
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
@@ -739,11 +729,11 @@ public class ReplicationJob implements GsonPostProcessable {
         }
 
         TableType srcTableType = srcClusterRunMode == TRunMode.SHARED_DATA ? TableType.CLOUD_NATIVE : TableType.OLAP;
-        return new TableInfo(request.table_id, request.src_table_id, tableType, srcTableType, tableDataSize,
+        return new TableInfo(request.table_id, tableType, srcTableType, tableDataSize,
                 request.src_table_data_size, partitionInfos);
     }
 
-    protected static PartitionInfo initPartitionInfo(OlapTable olapTable, TPartitionReplicationInfo tPartitionInfo,
+    private static PartitionInfo initPartitionInfo(OlapTable olapTable, TPartitionReplicationInfo tPartitionInfo,
             PhysicalPartition partition) throws MetaNotFoundException {
         Map<Long, IndexInfo> indexInfos = Maps.newHashMap();
         for (TIndexReplicationInfo tIndexInfo : tPartitionInfo.index_replication_infos.values()) {
@@ -760,7 +750,7 @@ public class ReplicationJob implements GsonPostProcessable {
                 tPartitionInfo.src_partition_id);
     }
 
-    protected static IndexInfo initIndexInfo(OlapTable olapTable, TIndexReplicationInfo tIndexInfo,
+    private static IndexInfo initIndexInfo(OlapTable olapTable, TIndexReplicationInfo tIndexInfo,
             MaterializedIndex index)
             throws MetaNotFoundException {
         Map<Long, TabletInfo> tabletInfos = Maps.newHashMap();
@@ -777,7 +767,7 @@ public class ReplicationJob implements GsonPostProcessable {
         return new IndexInfo(tIndexInfo.index_id, schemaHash, tIndexInfo.src_schema_hash, tabletInfos);
     }
 
-    protected static TabletInfo initTabletInfo(TTabletReplicationInfo tTabletInfo, Tablet tablet)
+    private static TabletInfo initTabletInfo(TTabletReplicationInfo tTabletInfo, Tablet tablet)
             throws MetaNotFoundException {
         Map<Long, ReplicaInfo> replicaInfos = Maps.newHashMap();
         List<Replica> replicas = tablet.getAllReplicas();
@@ -801,14 +791,14 @@ public class ReplicationJob implements GsonPostProcessable {
         return new TabletInfo(tTabletInfo.tablet_id, tTabletInfo.src_tablet_id, replicaInfos);
     }
 
-    protected static TableInfo initTableInfo(OlapTable table, OlapTable srcTable,
+    private static TableInfo initTableInfo(OlapTable table, OlapTable srcTable,
             SystemInfoService srcSystemInfoService) {
         Map<Long, PartitionInfo> partitionInfos = initPartitionInfos(table, srcTable, srcSystemInfoService);
-        return new TableInfo(table.getId(), srcTable.getId(), table.getType(), srcTable.getType(), table.getDataSize(),
+        return new TableInfo(table.getId(), table.getType(), srcTable.getType(), table.getDataSize(),
                 srcTable.getDataSize(), partitionInfos);
     }
 
-    protected static Map<Long, PartitionInfo> initPartitionInfos(OlapTable table, OlapTable srcTable,
+    private static Map<Long, PartitionInfo> initPartitionInfos(OlapTable table, OlapTable srcTable,
             SystemInfoService srcSystemInfoService) {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
@@ -829,7 +819,7 @@ public class ReplicationJob implements GsonPostProcessable {
         return partitionInfos;
     }
 
-    protected static PartitionInfo initPartitionInfo(OlapTable table, OlapTable srcTable, PhysicalPartition partition,
+    private static PartitionInfo initPartitionInfo(OlapTable table, OlapTable srcTable, PhysicalPartition partition,
             PhysicalPartition srcPartition, SystemInfoService srcSystemInfoService) {
         Map<Long, IndexInfo> indexInfos = Maps.newHashMap();
         for (Map.Entry<String, Long> indexNameToId : table.getIndexNameToId().entrySet()) {
@@ -844,7 +834,7 @@ public class ReplicationJob implements GsonPostProcessable {
                 srcPartition.getDataVersion(), srcPartition.getVersionEpoch(), indexInfos, srcPartition.getId());
     }
 
-    protected static IndexInfo initIndexInfo(OlapTable table, OlapTable srcTable, MaterializedIndex index,
+    private static IndexInfo initIndexInfo(OlapTable table, OlapTable srcTable, MaterializedIndex index,
             MaterializedIndex srcIndex,
             SystemInfoService srcSystemInfoService) {
         int schemaHash = table.getSchemaHashByIndexId(index.getId());
@@ -863,7 +853,7 @@ public class ReplicationJob implements GsonPostProcessable {
         return new IndexInfo(index.getId(), schemaHash, srcSchemaHash, tabletInfos);
     }
 
-    protected static TabletInfo initTabletInfo(Tablet tablet, Tablet srcTablet,
+    private static TabletInfo initTabletInfo(Tablet tablet, Tablet srcTablet,
             SystemInfoService srcSystemInfoService) {
         Map<Long, ReplicaInfo> replicaInfos = Maps.newHashMap();
         List<Replica> replicas = tablet.getAllReplicas();
@@ -939,7 +929,7 @@ public class ReplicationJob implements GsonPostProcessable {
         removeRunningTasks();
     }
 
-    protected Pair<List<TabletCommitInfo>, List<TabletFailInfo>> getTabletsCommitInfo() {
+    private Pair<List<TabletCommitInfo>, List<TabletFailInfo>> getTabletsCommitInfo() {
         List<TabletCommitInfo> tabletCommitInfos = Lists.newArrayList();
         List<TabletFailInfo> tabletFailInfos = Lists.newArrayList();
         for (AgentTask task : finishedTasks.values()) {
@@ -971,7 +961,7 @@ public class ReplicationJob implements GsonPostProcessable {
         return false;
     }
 
-    protected void sendRemoteSnapshotTasks() {
+    private void sendRemoteSnapshotTasks() {
         runningTasks.clear();
         for (PartitionInfo partitionInfo : partitionInfos.values()) {
             for (IndexInfo indexInfo : partitionInfo.getIndexInfos().values()) {
@@ -999,7 +989,7 @@ public class ReplicationJob implements GsonPostProcessable {
         sendRunningTasks();
     }
 
-    protected void sendReplicateSnapshotTasks() throws Exception {
+    private void sendReplicateSnapshotTasks() throws Exception {
         runningTasks.clear();
         byte[] encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
         for (PartitionInfo partitionInfo : partitionInfos.values()) {
@@ -1040,7 +1030,6 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     protected void sendRunningTasks() {
-        LOG.info("Send running replicate tasks, taskNum: " + taskNum);
         if (runningTasks.isEmpty()) {
             throw new RuntimeException("Running tasks is empty");
         }
@@ -1056,7 +1045,7 @@ public class ReplicationJob implements GsonPostProcessable {
         AgentTaskExecutor.submit(batchTask);
     }
 
-    protected void removeRunningTasks() {
+    private void removeRunningTasks() {
         for (AgentTask task : runningTasks.values()) {
             AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
         }

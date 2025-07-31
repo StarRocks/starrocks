@@ -14,6 +14,7 @@
 
 package com.starrocks.replication;
 
+import com.google.gson.annotations.SerializedName;
 import com.staros.client.StarClientException;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
@@ -38,8 +39,16 @@ public class LakeReplicationJob extends ReplicationJob {
     private final long fakedShardId;
     static Map<String, Long> storageVolumeNameToShardIdMap = new ConcurrentHashMap<>();
 
+    @SerializedName(value = "srcDatabaseId")
+    protected final long srcDatabaseId;
+
+    @SerializedName(value = "srcTableId")
+    protected final long srcTableId;
+
     public LakeReplicationJob(TTableReplicationRequest request) throws MetaNotFoundException {
         super(request);
+        this.srcDatabaseId = request.src_database_id;
+        this.srcTableId = request.src_table_id;
         this.fakedShardId = getFakedShardId(request.src_storage_volume_name, request.src_service_id);
     }
 
@@ -87,25 +96,25 @@ public class LakeReplicationJob extends ReplicationJob {
     @Override
     public void run() {
         try {
-            if (state.equals(ReplicationJobState.INITIALIZING)) {
+            if (super.getState().equals(ReplicationJobState.INITIALIZING)) {
                 beginTransaction();
                 sendReplicateLakeRemoteStorageTasks();
                 setState(ReplicationJobState.REPLICATING);
-            } else if (state.equals(ReplicationJobState.REPLICATING)) {
+            } else if (super.getState().equals(ReplicationJobState.REPLICATING)) {
                 if (isTransactionAborted()) {
                     setState(ReplicationJobState.ABORTED);
                 } else if (isCrashRecovery()) {
                     sendReplicateLakeRemoteStorageTasks();
-                    LOG.info("Lake replication job recovered, state: {}, database id: {}, table id: {}, transaction id: {}",
-                            state, databaseId, tableId, transactionId);
+                    LOG.info("Lake replication job recovered, super.getState(): {}, database id: {}, table id: {}, transaction id: {}",
+                            super.getState(), super.getDatabaseId(), super.getTableId(), super.getTransactionId());
                 } else if (isAllTaskFinished()) {
                     commitTransaction();
                     setState(ReplicationJobState.COMMITTED);
                 }
             }
         } catch (Exception e) {
-            LOG.warn("Lake replication job exception, state: {}, database id: {}, table id: {}, transaction id: {}, ",
-                    state, databaseId, tableId, transactionId, e);
+            LOG.warn("Lake replication job exception, super.getState(): {}, database id: {}, table id: {}, transaction id: {}, ",
+                    super.getState(), super.getDatabaseId(), super.getTableId(), super.getTransactionId(), e);
             abortTransaction(e.getMessage());
             setState(ReplicationJobState.ABORTED);
         }
@@ -114,7 +123,7 @@ public class LakeReplicationJob extends ReplicationJob {
     private void sendReplicateLakeRemoteStorageTasks() throws Exception {
         runningTasks.clear();
         byte[] encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
-        for (PartitionInfo partitionInfo : partitionInfos.values()) {
+        for (PartitionInfo partitionInfo : super.getPartitionInfos().values()) {
             for (IndexInfo indexInfo : partitionInfo.getIndexInfos().values()) {
                 for (TabletInfo tabletInfo : indexInfo.getTabletInfos().values()) {
                     Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
@@ -123,16 +132,16 @@ public class LakeReplicationJob extends ReplicationJob {
                         throw new RuntimeException("Send lake replicate task failed, no compute node found for tablet: "
                                 + tabletInfo.getTabletId());
                     }
-                    ReplicateSnapshotTask task = new ReplicateSnapshotTask(computeNodeId, databaseId, tableId,
+                    ReplicateSnapshotTask task = new ReplicateSnapshotTask(computeNodeId, super.getDatabaseId(), super.getTableId(),
                             partitionInfo.getPartitionId(), indexInfo.getIndexId(),
-                            tabletInfo.getTabletId(), getTabletType(tableType), transactionId,
+                            tabletInfo.getTabletId(), getTabletType(super.getTableType()), super.getTransactionId(),
                             indexInfo.getSchemaHash(), partitionInfo.getVersion(),
                             partitionInfo.getDataVersion(), tabletInfo.getSrcTabletId(),
-                            getTabletType(srcTableType),
+                            getTabletType(super.getSrcTableType()),
                             indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(), encryptionMeta,
                             fakedShardId, srcDatabaseId, srcTableId, partitionInfo.getSrcPartitionId());
                     LOG.info("Add lake replicate snapshot task, tablet id: {}, txn id: {}, src partition info: {}/{}/{}",
-                            tabletInfo.getTabletId(), transactionId, srcDatabaseId, srcTableId,
+                            tabletInfo.getTabletId(), super.getTransactionId(), srcDatabaseId, srcTableId,
                             partitionInfo.getSrcPartitionId());
                     runningTasks.put(task, task);
                 }
@@ -140,7 +149,7 @@ public class LakeReplicationJob extends ReplicationJob {
         }
         taskNum = runningTasks.size();
         LOG.info("Send lake replicate snapshot task, task num: {}, database id: {}, table id: {}, transaction id: {}",
-                taskNum, databaseId, tableId, transactionId);
+                taskNum, super.getDatabaseId(), super.getTableId(), super.getTransactionId());
         sendRunningTasks();
     }
 
