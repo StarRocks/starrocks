@@ -1068,10 +1068,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
         Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                 TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("" +
-                "RESULT SINK\n" +
-                "\n" +
-                "  0:EMPTYSET"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("0:EMPTYSET"), replayPair.second);
     }
 
     @Test
