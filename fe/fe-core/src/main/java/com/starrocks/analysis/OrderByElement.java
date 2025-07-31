@@ -119,25 +119,6 @@ public class OrderByElement implements ParseNode {
         return result;
     }
 
-    /**
-     * Returns a new list of order-by elements with the order by exprs of src substituted
-     * according to smap. Preserves the other sort params from src.
-     *
-     * @throws AnalysisException
-     */
-    public static ArrayList<OrderByElement> substitute(List<OrderByElement> src,
-                                                       ExprSubstitutionMap smap, Analyzer analyzer)
-            throws AnalysisException {
-        ArrayList<OrderByElement> result = Lists.newArrayListWithCapacity(src.size());
-
-        for (OrderByElement element : src) {
-            result.add(new OrderByElement(element.getExpr().substitute(smap, analyzer, false),
-                    element.isAsc, element.nullsFirstParam));
-        }
-
-        return result;
-    }
-
     public String toSql() {
         StringBuilder strBuilder = new StringBuilder();
         strBuilder.append(expr.toSql());

@@ -118,10 +118,6 @@ public class TimestampArithmeticExpr extends Expr {
     }
 
     @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.COMPUTE_FUNCTION_CALL;
         msg.setOpcode(opcode);

@@ -62,10 +62,6 @@ public class EmptySetNode extends PlanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) {
-    }
-
-    @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.EMPTY_SET_NODE;
     }

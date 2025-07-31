@@ -163,10 +163,6 @@ public class CaseExpr extends Expr {
     }
 
     @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitCaseWhenExpr(this, context);
     }
