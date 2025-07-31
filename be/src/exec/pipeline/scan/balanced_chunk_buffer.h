@@ -22,7 +22,6 @@
 
 namespace starrocks::pipeline {
 
-// TODO: support hash distribution instead of simple round-robin
 enum BalanceStrategy {
     kDirect,     // Assign chunks from input operator to output operator directly
     kRoundRobin, // Assign chunks from input operator to output with round-robin strategy

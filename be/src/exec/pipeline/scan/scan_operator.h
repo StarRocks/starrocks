@@ -41,7 +41,7 @@ public:
 
     ~ScanOperator() override;
 
-    static size_t max_buffer_capacity() { return kIOTaskBatchSize; }
+    static size_t max_buffer_capacity() { return config::io_task_batch_size; }
 
     Status prepare(RuntimeState* state) override;
 
@@ -116,8 +116,6 @@ public:
     }
 
 protected:
-    static constexpr size_t kIOTaskBatchSize = 64;
-
     // TODO: remove this to the base ScanContext.
     /// Shared scan
     virtual void attach_chunk_source(int32_t source_index) = 0;
