@@ -339,14 +339,7 @@ public class FragmentInstanceExecState {
      * Purse all counters to release memory
      */
     public synchronized void purgeInstanceRunningProfile() {
-        RuntimeProfile emptyProfile = new RuntimeProfile(profile.getName());
-        for (String key : PROFILE_BASIC_INFO) {
-            String value = profile.getInfoString(key);
-            if (value != null) {
-                emptyProfile.addInfoString(key, value);
-            }
-        }
-        profile = emptyProfile;
+        profile.clearCounters();
     }
 
     public synchronized void updateInstanceRunningProfile(TReportExecStatusParams params) {

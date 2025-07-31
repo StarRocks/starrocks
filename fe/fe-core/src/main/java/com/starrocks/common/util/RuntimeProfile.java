@@ -133,11 +133,6 @@ public class RuntimeProfile {
         return childMap.get(childName);
     }
 
-    public void removeAllChildren() {
-        childList.clear();
-        childMap.clear();
-    }
-
     public SummarizationCounter getOrAddSummarizationCounter(String name, TUnit unit,
                                                              TCounterStrategy strategy, String parentName) {
         Pair<SummarizationCounter, String> pair = fragmentCounterMap.get(name);
@@ -634,6 +629,18 @@ public class RuntimeProfile {
         formatter.format(this, prefix);
     }
 
+    /**
+     * Clear all counters but keep the info-string
+     */
+    public void clearCounters() {
+        counterMap.clear();
+        childMap.clear();
+        childCounterMap.clear();
+        childList.clear();
+        fragmentCounterMap.clear();
+        counterTotalTime.setValue(0);
+    }
+
     public String toString() {
         ProfileFormatter formater = new DefaultProfileFormatter();
         return formater.format(this);
@@ -727,20 +734,6 @@ public class RuntimeProfile {
         this.childList.addAll(childList);
     }
 
-    public void removeChild(String childName) {
-        RuntimeProfile childProfile = childMap.remove(childName);
-        if (childProfile == null) {
-            return;
-        }
-        childList.removeIf(childPair -> childPair.first == childProfile);
-    }
-
-    // Because the profile of summary and child fragment is not a real parent-child relationship
-    // Each child profile needs to calculate the time proportion consumed by itself
-    public void computeTimeInChildProfile() {
-        childMap.values().forEach(RuntimeProfile::computeTimeInProfile);
-    }
-
     public void computeTimeInProfile() {
         computeTimeInProfile(this.counterTotalTime.getValue());
     }
@@ -777,10 +770,6 @@ public class RuntimeProfile {
 
     public void addInfoString(String key, String value) {
         this.infoStrings.put(key, value);
-    }
-
-    public void removeInfoString(String key) {
-        infoStrings.remove(key);
     }
 
     // Copy all info strings from src profile
