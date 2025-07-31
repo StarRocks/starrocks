@@ -63,7 +63,7 @@ struct RowsetSegmentId {
 
 // from source rowid -> upt rowid
 using RowidPairs = std::pair<uint32_t, uint32_t>;
-auto RowidPairsCompFn = [](const RowidPairs& a, const RowidPairs& b) { return a.first < b.first; };
+inline auto RowidPairsCompFn = [](const RowidPairs& a, const RowidPairs& b) { return a.first < b.first; };
 
 struct ColumnPartialUpdateState {
     bool inited = false;
