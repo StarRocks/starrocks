@@ -344,21 +344,21 @@ public class UtFrameUtils {
 
     public static Backend addMockBackend(int backendId, String host, int beThriftPort) throws Exception {
         // start be
-        MockedBackend backend = new MockedBackend(host, beThriftPort);
+        MockedBackend backend = new MockedBackend(backendId, host, beThriftPort);
         // add be
         return addMockBackend(backend, backendId);
     }
 
     public static Backend addMockBackend(int backendId) throws Exception {
         // start be
-        MockedBackend backend = new MockedBackend("127.0.0.1");
+        MockedBackend backend = new MockedBackend(backendId, "127.0.0.1");
         // add be
         return addMockBackend(backend, backendId);
     }
 
     public static ComputeNode addMockComputeNode(int backendId) throws Exception {
         // start be
-        MockedBackend backend = new MockedBackend("127.0.108.1");
+        MockedBackend backend = new MockedBackend(backendId, "127.0.108.1");
         // add be
         return addMockComputeNode(backend, backendId);
     }

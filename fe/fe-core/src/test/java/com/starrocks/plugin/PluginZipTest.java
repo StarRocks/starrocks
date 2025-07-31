@@ -130,7 +130,8 @@ public class PluginZipTest {
     @Test
     public void testExtract() {
         try {
-            Files.copy(PluginTestUtil.getTestPath("source/test.zip"), PluginTestUtil.getTestPath("source/test-a.zip"));
+            Files.copy(PluginTestUtil.getTestPath("source/test.zip"), PluginTestUtil.getTestPath("source/test-a.zip"),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
             PluginZip util = new PluginZip(PluginTestUtil.getTestPathString("source/test-a.zip"), null);
 

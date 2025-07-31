@@ -39,45 +39,50 @@ public class ExportMgrTest {
 
     @Test
     public void testExpiredJob() throws Exception {
-        Config.history_job_keep_max_second = 10;
-        ExportMgr mgr = new ExportMgr();
+        int oldMaxSecond = Config.history_job_keep_max_second;
+        Config.history_job_keep_max_second = 60;
+        try {
+            ExportMgr mgr = new ExportMgr();
 
-        // 1. create job 1
-        ExportJob job1 = new ExportJob(1, new UUID(1, 1));
-        job1.setTableName(new TableName("dummy", "dummy"));
-        mgr.replayCreateExportJob(job1);
-        Assertions.assertEquals(1, mgr.getIdToJob().size());
+            // 1. create job 1
+            ExportJob job1 = new ExportJob(1, new UUID(1, 1));
+            job1.setTableName(new TableName("dummy", "dummy"));
+            mgr.replayCreateExportJob(job1);
+            Assertions.assertEquals(1, mgr.getIdToJob().size());
 
-        // 2. create job 2
-        ExportJob job2 = new ExportJob(2, new UUID(2, 2));
-        mgr.replayCreateExportJob(job2);
-        Assertions.assertEquals(2, mgr.getIdToJob().size());
+            // 2. create job 2
+            ExportJob job2 = new ExportJob(2, new UUID(2, 2));
+            mgr.replayCreateExportJob(job2);
+            Assertions.assertEquals(2, mgr.getIdToJob().size());
 
-        // 3. job 1 finished
-        mgr.replayUpdateJobState(job1.getId(), ExportJob.JobState.FINISHED);
-        Assertions.assertEquals(2, mgr.getIdToJob().size());
+            // 3. job 1 finished
+            mgr.replayUpdateJobState(job1.getId(), ExportJob.JobState.FINISHED);
+            Assertions.assertEquals(2, mgr.getIdToJob().size());
 
-        // 4. job 2 finished, but expired
-        Config.history_job_keep_max_second = 1;
-        Thread.sleep(2000);
-        mgr.replayUpdateJobState(job2.getId(), ExportJob.JobState.FINISHED);
-        Assertions.assertEquals(1, mgr.getIdToJob().size());
+            // 4. job 2 finished, but expired
+            Config.history_job_keep_max_second = 1;
+            Thread.sleep(2000);
+            mgr.replayUpdateJobState(job2.getId(), ExportJob.JobState.FINISHED);
+            Assertions.assertEquals(1, mgr.getIdToJob().size());
 
-        // 5. create job 3
-        ExportJob job3 = new ExportJob(3, new UUID(3, 3));
-        job3.setTableName(new TableName("dummy", "dummy"));
-        mgr.replayCreateExportJob(job3);
-        mgr.replayUpdateJobState(job3.getId(), ExportJob.JobState.FINISHED);
-        Assertions.assertEquals(2, mgr.getIdToJob().size());
+            // 5. create job 3
+            ExportJob job3 = new ExportJob(3, new UUID(3, 3));
+            job3.setTableName(new TableName("dummy", "dummy"));
+            mgr.replayCreateExportJob(job3);
+            mgr.replayUpdateJobState(job3.getId(), ExportJob.JobState.FINISHED);
+            Assertions.assertEquals(2, mgr.getIdToJob().size());
 
-        // 6. get job by queryId
-        ExportJob jobResult = mgr.getExportByQueryId(job3.getQueryId());
-        Assertions.assertNotNull(jobResult);
-        Assertions.assertEquals(3, jobResult.getId());
-        ExportJob jobResultNull = mgr.getExportByQueryId(null);
-        Assertions.assertNull(jobResultNull);
-        ExportJob jobResultNotExist = mgr.getExportByQueryId(new UUID(4, 4));
-        Assertions.assertNull(jobResultNotExist);
+            // 6. get job by queryId
+            ExportJob jobResult = mgr.getExportByQueryId(job3.getQueryId());
+            Assertions.assertNotNull(jobResult);
+            Assertions.assertEquals(3, jobResult.getId());
+            ExportJob jobResultNull = mgr.getExportByQueryId(null);
+            Assertions.assertNull(jobResultNull);
+            ExportJob jobResultNotExist = mgr.getExportByQueryId(new UUID(4, 4));
+            Assertions.assertNull(jobResultNotExist);
+        } finally {
+            Config.history_job_keep_max_second = oldMaxSecond;
+        }
     }
 
     @Test
