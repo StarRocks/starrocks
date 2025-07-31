@@ -461,18 +461,7 @@ Status JITEngine::init() {
     if (_initialized) {
         return Status::OK();
     }
-<<<<<<< HEAD
-#if BE_TEST
-    _object_cache = std::make_unique<JITObjectCache>(262144);
-    _callable_cache = std::make_unique<JITCallableCache>(262144);
-#else
-    int64_t mem_limit = MemInfo::physical_mem();
-    if (GlobalEnv::GetInstance()->process_mem_tracker()->has_limit()) {
-        mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
-    }
-=======
 
->>>>>>> ac5fc3f681 ([UT] [BugFix] Fix unstable JITCacheTest tests (#61331))
     int64_t jit_lru_object_cache_size = config::jit_lru_object_cache_size;
     int64_t jit_lru_cache_size = config::jit_lru_cache_size;
 #if BE_TEST
