@@ -10,6 +10,47 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
+## v3.3.17
+
+Release Date: July 30, 2025
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Upgraded HttpClient5 to 5.4.3. [#61298](https://github.com/StarRocks/starrocks/pull/61298)
+- Incorrect `cpu_core_used_permille` limit in resource groups. [#61177](https://github.com/StarRocks/starrocks/pull/61177)
+- Conflict between ALTER jobs and partition creation tasks. [#61167](https://github.com/StarRocks/starrocks/pull/61167)
+- NPE caused by missing `globalStateMgr` in `ConnectContext`. [#60880](https://github.com/StarRocks/starrocks/pull/60880)
+- Partition creation failed when partition names matched case-insensitively but had different values. [#60909](https://github.com/StarRocks/starrocks/pull/60909)
+- Lock competition caused by synchronous access to partition statistics. [#61041](https://github.com/StarRocks/starrocks/pull/61041)
+- ANALYZE tasks stuck in `pending` state after FE restart. [#61113](https://github.com/StarRocks/starrocks/pull/61113)
+- Issue with JIT (Just-In-Time) compilation in BE. [#61060](https://github.com/StarRocks/starrocks/pull/61060)
+- Leader address issue in Starmgr. [#61016](https://github.com/StarRocks/starrocks/pull/61016)
+- CVE vulnerabilities in Broker. [#60908](https://github.com/StarRocks/starrocks/pull/60908)
+- Actual number of JDBC connections exceeded `jdbc_connection_pool_size` limit. [#61004](https://github.com/StarRocks/starrocks/pull/61004)
+- CVE-2022-41404 vulnerability. [#59689](https://github.com/StarRocks/starrocks/pull/59689)
+- CVEs related to Parquet and HttpClient5. [#58750](https://github.com/StarRocks/starrocks/pull/58750)
+- Partition not removed from `_partition_map` when physical partition ID was empty. [#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- Missing version check in shared-data clusters. [#59422](https://github.com/StarRocks/starrocks/pull/59422)
+- Transaction log missing when publishing logs in batches in shared-data clusters. [#60949](https://github.com/StarRocks/starrocks/pull/60949)
+- Concurrent publishing of the same transaction when Batch Publish is enabled in shared-data clusters. [#57574](https://github.com/StarRocks/starrocks/pull/57574)
+- Statistics overwrite issue caused by lack of semi-synchronous mode. [#60897](https://github.com/StarRocks/starrocks/pull/60897)
+- Inaccurate `maxInstantTime` used for filtering Hudi files when retrieving latest merged file slices. [#60927](https://github.com/StarRocks/starrocks/pull/60927)
+- TaskRun state incompatible with earlier versions. [#60438](https://github.com/StarRocks/starrocks/pull/60438)
+- CVE-2025-52999 vulnerability. [#60795](https://github.com/StarRocks/starrocks/pull/60795)
+- Vulnerability caused by `log4j-1.2.17-cloudera6` in Broker. [#59579](https://github.com/StarRocks/starrocks/pull/59579)
+- BE crash when loading OOM partitions. [#60778](https://github.com/StarRocks/starrocks/pull/60778)
+- Base Compaction tasks blocking other compaction tasks. [#60711](https://github.com/StarRocks/starrocks/pull/60711)
+- Inefficient handling of error string truncation. [#60878](https://github.com/StarRocks/starrocks/pull/60878)
+- Materialized view rewrite failed in multi-FE environments. [#60841](https://github.com/StarRocks/starrocks/pull/60841)
+- INSERT OVERWRITE failed on manually created partitions. [#60750](https://github.com/StarRocks/starrocks/pull/60750)
+- Issue caused by using random distribution in aggregate keys. [#60702](https://github.com/StarRocks/starrocks/pull/60702)
+- Crash caused by low cardinality rewrite in `multi_distinct_count`. [#60664](https://github.com/StarRocks/starrocks/pull/60664)
+- Issue with Pivot resolving fields. [#60748](https://github.com/StarRocks/starrocks/pull/60748)
+- Upgraded `hudi-common` to 1.0.2. [#59501](https://github.com/StarRocks/starrocks/pull/59501)
+- BE crash when CLONE and DROP TABLE run concurrently. [#61359](https://github.com/StarRocks/starrocks/pull/61359)
+
 ## 3.3.16
 
 Release Date: July 4, 2025
