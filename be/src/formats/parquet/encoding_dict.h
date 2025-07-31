@@ -25,6 +25,7 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
+#include "simd/expand.h"
 #include "simd/simd.h"
 #include "util/coding.h"
 #include "util/cpu_info.h"
@@ -162,12 +163,7 @@ public:
             }
             DCHECK_EQ(cnt, num_non_nulls) << "count:" << count << " null_cnt:" << count - num_non_nulls;
         } else {
-            size_t cnt = 0;
-            for (size_t i = 0; i < count; ++i) {
-                dst_data[i] = src_data[cnt];
-                cnt += !nulls[i];
-            }
-            DCHECK_EQ(cnt, num_non_nulls) << "count:" << count << " null_cnt:" << count - num_non_nulls;
+            SIMD::Expand::expand_load(dst_data, src_data, nulls, count);
         }
     }
 

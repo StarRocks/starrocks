@@ -41,6 +41,7 @@ set(STARROCKS_LIBS
     StarRocksGen
     Webserver
     TestUtil
+    Simd
     Cache
     ${WL_END_GROUP}
 )
