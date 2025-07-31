@@ -65,6 +65,7 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
+import com.starrocks.metric.RoutineLoadLagTimeMetricMgr;
 import com.starrocks.monitor.jvm.JvmStatCollector;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
@@ -879,6 +880,13 @@ public final class MetricRepo {
         // collect routine load process metrics
         if (Config.enable_routine_load_lag_metrics) {
             collectRoutineLoadProcessMetrics(visitor);
+        }
+
+        // ADD: Collect Kafka routine load lag metrics
+        try {
+            RoutineLoadLagTimeMetricMgr.getInstance().collectRoutineLoadLagTimeMetrics(visitor);
+        } catch (Exception e) {
+            LOG.warn("Failed to collect routine load lag metrics", e);
         }
 
         if (Config.memory_tracker_enable) {
