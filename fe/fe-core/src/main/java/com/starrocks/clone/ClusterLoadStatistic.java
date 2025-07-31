@@ -69,6 +69,7 @@ public class ClusterLoadStatistic {
     // storage medium -> number of backend which has this kind of medium
     private Map<TStorageMedium, Integer> backendNumMap = Maps.newHashMap();
     private List<BackendLoadStatistic> beLoadStatistics = Lists.newArrayList();
+    private Map<Long, String> pathHashToRootPath = Maps.newHashMap();
 
     public ClusterLoadStatistic(SystemInfoService infoService, TabletInvertedIndex invertedIndex) {
         this.infoService = infoService;
@@ -120,6 +121,13 @@ public class ClusterLoadStatistic {
 
         // sort be stats by mix load score
         Collections.sort(beLoadStatistics, BackendLoadStatistic.MIX_COMPARATOR);
+
+        // create path hash to root path map
+        for (BackendLoadStatistic beStatistic : beLoadStatistics) {
+            for (RootPathLoadStatistic pathLoadStat : beStatistic.getPathStatistics()) {
+                pathHashToRootPath.put(pathLoadStat.getPathHash(), pathLoadStat.getPath());
+            }
+        }
     }
 
     /*
@@ -228,5 +236,9 @@ public class ClusterLoadStatistic {
             sb.append("    ").append(backendLoadStatistic).append("\n");
         }
         return sb.toString();
+    }
+
+    public String getPath(long pathHash) {
+        return pathHashToRootPath.get(pathHash);
     }
 }

@@ -97,4 +97,10 @@ public abstract class Rebalancer {
     public void updateLoadStatistic(ClusterLoadStatistic loadStatistic) {
         this.loadStatistic = loadStatistic;
     }
+
+    // For show proc
+    // Get cluster disk usage balance stat by storage medium.
+    public abstract BalanceStat getClusterDiskBalanceStat(TStorageMedium medium);
+    // Get backend disk usage balance stat by storage medium.
+    public abstract BalanceStat getBackendDiskBalanceStat(TStorageMedium medium, long beId);
 }
