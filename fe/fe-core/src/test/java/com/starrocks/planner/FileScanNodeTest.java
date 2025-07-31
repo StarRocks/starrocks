@@ -160,7 +160,7 @@ public class FileScanNodeTest {
                 2, WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.finalizeStats();
 
         // check
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
@@ -221,7 +221,7 @@ public class FileScanNodeTest {
                 WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.finalizeStats();
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -274,7 +274,7 @@ public class FileScanNodeTest {
                 WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.finalizeStats();
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -323,7 +323,7 @@ public class FileScanNodeTest {
                 WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.finalizeStats();
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -357,7 +357,7 @@ public class FileScanNodeTest {
                 WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.finalizeStats();
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -394,7 +394,7 @@ public class FileScanNodeTest {
                 WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.finalizeStats();
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -436,7 +436,7 @@ public class FileScanNodeTest {
                 WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.finalizeStats();
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);

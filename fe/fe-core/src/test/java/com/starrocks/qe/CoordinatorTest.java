@@ -158,7 +158,7 @@ public class CoordinatorTest extends PlanTestBase {
 
         BinlogScanNode binlogScan = new BinlogScanNode(planNodeId, tupleDesc);
         binlogScan.setFragmentId(fragmentId);
-        binlogScan.finalizeStats(null);
+        binlogScan.finalizeStats();
 
         List<ScanNode> scanNodes = Arrays.asList(binlogScan);
         CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(Lists.newArrayList(), scanNodes,
@@ -207,7 +207,7 @@ public class CoordinatorTest extends PlanTestBase {
         List<PlanFragment> fragments = new ArrayList<>();
         BinlogScanNode binlogScan = new BinlogScanNode(new PlanNodeId(1), scanTuple);
         binlogScan.setFragmentId(fragmentId);
-        binlogScan.finalizeStats(null);
+        binlogScan.finalizeStats();
         List<ScanNode> scanNodes = Arrays.asList(binlogScan);
 
         // Build agg node

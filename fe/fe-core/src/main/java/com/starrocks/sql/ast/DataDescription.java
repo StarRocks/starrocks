@@ -697,7 +697,7 @@ public class DataDescription implements ParseNode {
         }
 
         if (partitionNames != null) {
-            partitionNames.analyze(null);
+            partitionNames.analyze();
         }
 
         analyzeColumns();

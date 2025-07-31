@@ -61,11 +61,6 @@ public class GroupByClauseTest {
 
         GroupByClause groupByClause = new GroupByClause(Expr.cloneList(groupingExprs),
                 GroupByClause.GroupingType.GROUP_BY);
-        try {
-            groupByClause.analyze(analyzer);
-        } catch (AnalysisException execption) {
-            Assertions.assertTrue(false);
-        }
         Assertions.assertEquals("`testdb`.`t`.`k2`, `testdb`.`t`.`k2`, `testdb`.`t`.`k3`, `testdb`.`t`.`k1`",
                 groupByClause.toSql());
         Assertions.assertEquals(3, groupByClause.getGroupingExprs().size());
@@ -85,11 +80,6 @@ public class GroupByClauseTest {
         GroupByClause groupByClause = new GroupByClause(Expr.cloneList(groupingExprs),
                 GroupByClause.GroupingType.GROUP_BY);
         try {
-            groupByClause.analyze(analyzer);
-        } catch (AnalysisException execption) {
-            Assertions.assertTrue(false);
-        }
-        try {
             groupByClause.reset();
         } catch (Exception e) {
             Assertions.fail("reset throw exceptions!" + e);
@@ -106,10 +96,5 @@ public class GroupByClauseTest {
         }
         GroupByClause groupByClause = new GroupByClause(Expr.cloneList(groupingExprs),
                 GroupByClause.GroupingType.GROUP_BY);
-        try {
-            groupByClause.analyze(analyzer);
-        } catch (AnalysisException exception) {
-            Assertions.assertTrue(false);
-        }
     }
 }

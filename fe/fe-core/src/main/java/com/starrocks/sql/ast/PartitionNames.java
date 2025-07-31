@@ -19,7 +19,6 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
@@ -118,8 +117,7 @@ public class PartitionNames implements ParseNode, Writable {
         return !partitionColValues.isEmpty();
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
+    public void analyze() throws AnalysisException {
         if (partitionNames.isEmpty()) {
             throw new AnalysisException("No partition specifed in partition lists");
         }
