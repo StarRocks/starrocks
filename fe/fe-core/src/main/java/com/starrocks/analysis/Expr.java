@@ -80,15 +80,12 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 /**
  * Root of the expr node hierarchy.
@@ -97,9 +94,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // Name of the function that needs to be implemented by every Expr that
     // supports negation.
     private static final String NEGATE_FN = "negate";
-
-    // to be used where we can't come up with a better estimate
-    protected static final double DEFAULT_SELECTIVITY = 0.1;
 
     public static final float FUNCTION_CALL_COST = 10;
 
@@ -127,14 +121,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 @Override
                 public boolean apply(Expr arg) {
                     return arg instanceof NullLiteral;
-                }
-            };
-
-    public static final com.google.common.base.Predicate<Expr> IS_LITERAL =
-            new com.google.common.base.Predicate<Expr>() {
-                @Override
-                public boolean apply(Expr arg) {
-                    return arg instanceof LiteralExpr;
                 }
             };
 
@@ -369,19 +355,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     /**
-     * Perform semantic analysis of node and all of its children.
-     * Throws exception if any errors found.
-     */
-    public final void analyze(Analyzer analyzer) throws AnalysisException {
-    }
-
-    /**
-     * Does subclass-specific analysis. Subclasses should override analyzeImpl().
-     */
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
-    /**
      * Set the expr to be analyzed and computes isConstant_.
      */
     protected void analysisDone() {
@@ -445,31 +418,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             }
         }
         return false;
-    }
-
-    /**
-     * Return true if l1[i].equals(l2[i]) for all i.
-     */
-    public static <C extends Expr> boolean equalLists(List<C> l1, List<C> l2) {
-        if (l1.size() != l2.size()) {
-            return false;
-        }
-        Iterator<C> l1Iter = l1.iterator();
-        Iterator<C> l2Iter = l2.iterator();
-        while (l1Iter.hasNext()) {
-            if (!l1Iter.next().equals(l2Iter.next())) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public void analyzeNoThrow(Analyzer analyzer) {
-        try {
-            analyze(analyzer);
-        } catch (AnalysisException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     public static Expr compoundAnd(Collection<Expr> conjuncts) {
@@ -613,135 +561,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
         return false;
     }
-
-    /**
-     * Returns an analyzed clone of 'this' with exprs substituted according to smap.
-     * Removes implicit casts and analysis state while cloning/substituting exprs within
-     * this tree, such that the returned result has minimal implicit casts and types.
-     * Throws if analyzing the post-substitution expr tree failed.
-     * If smap is null, this function is equivalent to clone().
-     * If preserveRootType is true, the resulting expr tree will be cast if necessary to
-     * the type of 'this'.
-     */
-    public Expr trySubstitute(ExprSubstitutionMap smap, Analyzer analyzer,
-                              boolean preserveRootType) throws AnalysisException {
-        Expr result = clone();
-        // Return clone to avoid removing casts.
-        if (smap == null) {
-            return result;
-        }
-        result = result.substituteImpl(smap, analyzer);
-        result.analyze(analyzer);
-        if (preserveRootType && !type.isInvalid() && !type.equals(result.getType())) {
-            result = result.castTo(type);
-        }
-        return result;
-    }
-
-    /**
-     * Returns an analyzed clone of 'this' with exprs substituted according to smap.
-     * Removes implicit casts and analysis state while cloning/substituting exprs within
-     * this tree, such that the returned result has minimal implicit casts and types.
-     * Expects the analysis of the post-substitution expr to succeed.
-     * If smap is null, this function is equivalent to clone().
-     * If preserveRootType is true, the resulting expr tree will be cast if necessary to
-     * the type of 'this'.
-     *
-     * @throws AnalysisException
-     */
-    public Expr substitute(ExprSubstitutionMap smap, Analyzer analyzer, boolean preserveRootType)
-            throws AnalysisException {
-        try {
-            return trySubstitute(smap, analyzer, preserveRootType);
-        } catch (AnalysisException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed analysis after expr substitution.", e);
-        }
-    }
-
-    public static ArrayList<Expr> trySubstituteList(Iterable<? extends Expr> exprs,
-                                                    ExprSubstitutionMap smap, Analyzer analyzer,
-                                                    boolean preserveRootTypes)
-            throws AnalysisException {
-        if (exprs == null) {
-            return null;
-        }
-        ArrayList<Expr> result = new ArrayList<Expr>();
-        for (Expr e : exprs) {
-            result.add(e.trySubstitute(smap, analyzer, preserveRootTypes));
-        }
-        return result;
-    }
-
-    public static ArrayList<Expr> substituteList(
-            Iterable<? extends Expr> exprs,
-            ExprSubstitutionMap smap, Analyzer analyzer, boolean preserveRootTypes) {
-        try {
-            return trySubstituteList(exprs, smap, analyzer, preserveRootTypes);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed analysis after expr substitution.", e);
-        }
-    }
-
-    /**
-     * Recursive method that performs the actual substitution for try/substitute() while
-     * removing implicit casts. Resets the analysis state in all non-SlotRef expressions.
-     * Exprs that have non-child exprs which should be affected by substitutions must
-     * override this method and apply the substitution to such exprs as well.
-     */
-    protected Expr substituteImpl(ExprSubstitutionMap smap, Analyzer analyzer)
-            throws AnalysisException {
-        if (isImplicitCast()) {
-            return getChild(0).substituteImpl(smap, analyzer);
-        }
-        if (smap != null) {
-            Expr substExpr = smap.get(this);
-            if (substExpr != null) {
-                return substExpr.clone();
-            }
-        }
-        for (int i = 0; i < children.size(); ++i) {
-            children.set(i, children.get(i).substituteImpl(smap, analyzer));
-        }
-        // SlotRefs must remain analyzed to support substitution across query blocks. All
-        // other exprs must be analyzed again after the substitution to add implicit casts
-        // and for resolving their correct function signature.
-        if (!(this instanceof SlotRef)) {
-            resetAnalysisState();
-        }
-        return this;
-    }
-
-    /**
-     * Removes duplicate exprs (according to equals()).
-     */
-    public static <C extends Expr> void removeDuplicates(List<C> l) {
-        if (l == null) {
-            return;
-        }
-        ListIterator<C> it1 = l.listIterator();
-        while (it1.hasNext()) {
-            C e1 = it1.next();
-            ListIterator<C> it2 = l.listIterator();
-            boolean duplicate = false;
-            while (it2.hasNext()) {
-                C e2 = it2.next();
-                if (e1 == e2) {
-                    // only check up to but excluding e1
-                    break;
-                }
-                if (e1.equals(e2)) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (duplicate) {
-                it1.remove();
-            }
-        }
-    }
-
 
     /**
      * toSql is an obsolete interface, because of historical reasons, the implementation of toSql is not rigorous enough.

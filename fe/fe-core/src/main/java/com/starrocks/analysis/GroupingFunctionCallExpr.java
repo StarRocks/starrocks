@@ -73,10 +73,6 @@ public class GroupingFunctionCallExpr extends FunctionCallExpr {
         return new GroupingFunctionCallExpr(this);
     }
 
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
     // set child to virtual slot
     public void resetChild(VirtualSlotRef virtualSlot) {
         ArrayList<Expr> newChildren = new ArrayList<>();

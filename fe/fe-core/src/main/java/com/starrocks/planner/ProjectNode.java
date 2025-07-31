@@ -71,13 +71,6 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-        Preconditions.checkState(conjuncts.isEmpty());
-        computeStats(analyzer);
-        createDefaultSmap(analyzer);
-    }
-
-    @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 

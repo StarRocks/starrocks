@@ -82,11 +82,6 @@ public class SubfieldExpr extends Expr {
     }
 
     @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        Preconditions.checkState(false, "unreachable");
-    }
-
-    @Override
     protected String toSqlImpl() {
         return getChild(0).toSqlImpl() + "." + Joiner.on('.').join(fieldNames) + '[' + copyFlag + ']';
     }

@@ -42,12 +42,6 @@ public class PlaceHolderExpr extends Expr {
     }
 
     @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        LOG.warn("unreachable path");
-        Preconditions.checkState(false);
-    }
-
-    @Override
     protected String toSqlImpl() {
         return "<place-holder>";
     }

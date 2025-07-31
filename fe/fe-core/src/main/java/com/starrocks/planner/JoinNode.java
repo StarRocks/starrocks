@@ -461,10 +461,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-    }
-
-    @Override
     public void computeStats(Analyzer analyzer) {
     }
 
