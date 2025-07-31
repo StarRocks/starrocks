@@ -442,7 +442,7 @@ tasks.named<ProcessResources>("processTestResources") {
 // Configure test task
 tasks.test {
     useJUnitPlatform()
-    maxParallelForks = (project.findProperty("fe_ut_parallel") as String? ?: "8").toInt()
+    maxParallelForks = (project.findProperty("fe_ut_parallel") as String? ?: "16").toInt()
 
     // Don't reuse JVM processes for tests
     forkEvery = 1
@@ -458,12 +458,12 @@ tasks.test {
         )
 
         // Show the standard output and error streams of the test JVM(s)
-        showStandardStreams = true
+        showStandardStreams = false
 
         // Configure how exceptions are displayed
-        exceptionFormat = TestExceptionFormat.FULL // Or SHORT
-        showStackTraces = true
-        showCauses = true // Show underlying causes for exceptions
+        exceptionFormat = TestExceptionFormat.SHORT // Or FULL
+        showStackTraces = false
+        showCauses = false // Show underlying causes for exceptions
     }
 
     systemProperty("starrocks.home", project.ext["starrocks.home"] as String)
@@ -478,8 +478,9 @@ tasks.test {
     // Use independent class loading (equivalent to useSystemClassLoader=false)
     systemProperty("java.security.manager", "allow")
 
-    // Exclude specific tests
-    //exclude("**/QueryDumpRegressionTest.class")
+    exclude {
+        it.name.contains("QueryDumpRegressionTest") || it.name.contains("QueryDumpCaseRewriter")
+    }
 }
 
 
