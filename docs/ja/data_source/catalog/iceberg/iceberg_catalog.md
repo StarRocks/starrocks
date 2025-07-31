@@ -1263,10 +1263,18 @@ col_name col_type [COMMENT 'comment']
 `partition_desc` の構文は次のとおりです。
 
 ```SQL
-PARTITION BY (par_col1[, par_col2...])
+PARTITION BY (partition_expr[, partition_expr...])
 ```
 
-現在、StarRocks は [identity transforms](https://iceberg.apache.org/spec/#partitioning) のみをサポートしており、これは StarRocks が各一意のパーティション値に対してパーティションを作成することを意味します。
+各 `partition_expr` は以下の形式のいずれかです。
+
+```SQL
+column_name
+| transform_expr(column_name)
+| transform_expr(column_name, parameter)
+```
+
+現在、StarRocks は Apache Iceberg 仕様で定義されたパーティション変換式 [transform expr](https://iceberg.apache.org/spec/#partitioning) をサポートしています。これにより、StarRocks は変換された列値に基づいて隠しパーティション (Hidden Partition) を持つ Iceberg テーブルを作成できます。
 
 :::note
 
@@ -1327,6 +1335,17 @@ PARTITION BY (par_col1[, par_col2...])
    CREATE TABLE partition_tbl_2
    PARTITION BY (id, dt)
    AS SELECT * from employee;
+   ```
+
+4. 隠されたパーティションを持つ `partition_tbl_3` という名前のテーブルを作成します。このテーブルには `action`、`id`、`dt` の三つの列が含まれています。そのうち、`id` と `dt` はパーティションキーとして使用されますが、パーティションは変換式によって定義されているため、これらのパーティションは隠されています。
+
+   ```SQL
+   CREATE TABLE partition_tbl_3 (
+     action VARCHAR(20),
+     id INT,
+     dt DATE
+   )
+   PARTITION BY bucket(id, 10), year(dt);
    ```
 
 ---
