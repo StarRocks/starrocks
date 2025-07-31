@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 
+#include "common/config.h"
 #include "util/blocking_queue.hpp"
 
 namespace starrocks::pipeline {
@@ -87,7 +88,8 @@ bool BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferToken
         // A smaller N increases scheduling overhead, while a larger N may cause load imbalance among operators.
         // This strategy is used to balance the load among operators, and it is more efficient than the direct strategy.
         int64_t current = _output_index.fetch_add(1);
-        int target_index = (current / config::io_task_shared_scan_step_size) % _output_operators;
+        int step_size = std::max(1, config::io_task_shared_scan_step_size);
+        int target_index = (current / step_size) % _output_operators;
         ret = _get_sub_buffer(target_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else {
         CHECK(false) << "unreachable";
