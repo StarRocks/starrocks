@@ -37,6 +37,7 @@ JSON query functions and processing functions are used to query and process JSON
 | [json_keys](./json-query-and-processing-functions/json_keys.md) | Returns the top-level keys from a JSON object as a JSON array, or, if a path is specified, the top-level keys from the path.   | `SELECT JSON_KEYS('{"a": 1, "b": 2, "c": 3}');` |  `["a", "b", "c"]`|
 | [json_length](./json-query-and-processing-functions/json_length.md) | Returns the length of a JSON document.  | `SELECT json_length('{"Name": "Alice"}');` |  `1`  |
 | [json_string](./json-query-and-processing-functions/json_string.md)   | Converts the JSON object to a JSON string      | `SELECT json_string(parse_json('{"Name": "Alice"}'));` | `{"Name": "Alice"}`  |
+| [json_update](./json-query-and-processing-functions/json_update.md) | Updates a JSON object by setting the value at the specified path | `SELECT json_update(parse_json('{"a": 1}'), 'a', parse_json('2'));` | `{"a": 2}` |
 
 ## JSON operators
 
