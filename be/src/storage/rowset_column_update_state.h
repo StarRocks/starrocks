@@ -91,6 +91,13 @@ struct ColumnPartialUpdateState {
                 insert_rowids.push_back(upt_row_id);
             }
         }
+        // sort RowidPairs via source rowid
+        for (auto& each : rss_rowid_to_update_rowid) {
+            auto comp_fn = [](const RowidPairs& a, const RowidPairs& b) { return a.first < b.first; };
+            if (!std::is_sorted(each.second.begin(), each.second.end(), comp_fn)) {
+                std::sort(each.second.begin(), each.second.end(), comp_fn);
+            }
+        }
 #ifndef BE_TEST
         src_rss_rowids.clear();
         src_rss_rowids.shrink_to_fit();
@@ -248,6 +255,9 @@ private:
     std::map<uint32_t, DeltaColumnGroupPtr> _rssid_to_delta_column_group;
     std::map<string, string> _column_to_expr_value;
 };
+
+void split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<uint32_t>* sorted_source_rowids,
+                       std::vector<uint32_t>* unsorted_upt_rowids, StreamChunkContainer* container);
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetColumnUpdateState& o) {
     os << o.to_string();
