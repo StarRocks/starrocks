@@ -61,7 +61,7 @@ struct CacheOptions {
     double skip_read_factor = 0;
     uint32_t inline_item_count_limit = 0;
     std::string eviction_policy;
-    uint32_t ttl_check_interval_ms = 1000;
+    uint32_t ttl_check_interval_ms = 0;
 };
 
 struct WriteCacheOptions {
