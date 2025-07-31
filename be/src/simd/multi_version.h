@@ -22,13 +22,14 @@
 
 #define MFV_IMPL(IMPL, ATTR)                                                               \
     _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wunused-function\"") \
-            ATTR static inline IMPL _Pragma("GCC diagnostic pop")
+            ATTR static IMPL _Pragma("GCC diagnostic pop")
 
 #define MFV_SSE42(IMPL) MFV_IMPL(IMPL, __attribute__((target("sse4.2"))))
 #define MFV_AVX2(IMPL) MFV_IMPL(IMPL, __attribute__((target("avx2"))))
 #define MFV_AVX512F(IMPL) MFV_IMPL(IMPL, __attribute__((target("avx512f"))))
 #define MFV_AVX512BW(IMPL) MFV_IMPL(IMPL, __attribute__((target("avx512bw"))))
 #define MFV_AVX512VL(IMPL) MFV_IMPL(IMPL, __attribute__((target("avx512vl"))))
+#define MFV_AVX512VLBW(IMPL) MFV_IMPL(IMPL, __attribute__((target("avx512f,avx512vl,avx512bw"))))
 #define MFV_DEFAULT(IMPL) MFV_IMPL(IMPL, __attribute__((target("default"))))
 
 #else
@@ -38,6 +39,7 @@
 #define MFV_AVX512F(IMPL)
 #define MFV_AVX512BW(IMPL)
 #define MFV_AVX512VL(IMPL)
+#define MFV_AVX512VLBW(IMPL)
 #define MFV_DEFAULT(IMPL) IMPL
 
 #endif
