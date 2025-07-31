@@ -15,13 +15,16 @@
 package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.pipe.Pipe;
@@ -36,17 +39,16 @@ import java.util.Optional;
 
 public class ShowPipeStmt extends ShowStmt {
 
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("DATABASE_NAME", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("PIPE_ID", ScalarType.BIGINT))
-                    .addColumn(new Column("PIPE_NAME", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("STATE", ScalarType.createVarcharType(8)))
-                    .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("LOAD_STATUS", ScalarType.createVarchar(512)))
-                    .addColumn(new Column("LAST_ERROR", ScalarType.createVarchar(1024)))
-                    .addColumn(new Column("CREATED_TIME", ScalarType.DATETIME))
-                    .build();
+    private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
+            .addColumn(new Column("DATABASE_NAME", ScalarType.createVarchar(64)))
+            .addColumn(new Column("PIPE_ID", ScalarType.BIGINT))
+            .addColumn(new Column("PIPE_NAME", ScalarType.createVarchar(64)))
+            .addColumn(new Column("STATE", ScalarType.createVarcharType(8)))
+            .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
+            .addColumn(new Column("LOAD_STATUS", ScalarType.createVarchar(512)))
+            .addColumn(new Column("LAST_ERROR", ScalarType.createVarchar(1024)))
+            .addColumn(new Column("CREATED_TIME", ScalarType.DATETIME))
+            .build();
 
     private String dbName;
     private final String like;
@@ -54,13 +56,23 @@ public class ShowPipeStmt extends ShowStmt {
     private final List<OrderByElement> orderBy;
     private final LimitElement limit;
     private List<OrderByPair> orderByPairs;
+    private String pattern;
+    private PatternMatcher matcher;
 
     public ShowPipeStmt(String dbName, String like, Expr where, List<OrderByElement> orderBy, LimitElement limit,
-                        NodePosition pos) {
+            NodePosition pos) {
         super(pos);
         this.dbName = dbName;
         this.like = like;
         this.where = where;
+        if (where != null) {
+            StringLiteral condition = (StringLiteral) where.getChild(1);
+            pattern = condition.getValue();
+            if (where instanceof LikePredicate) {
+                matcher = PatternMatcher.createMysqlPattern(pattern, true);
+            }
+        }
+
         this.orderBy = orderBy;
         this.limit = limit;
     }
@@ -78,6 +90,18 @@ public class ShowPipeStmt extends ShowStmt {
         row.add(pipe.getLoadStatus().toJson());
         row.add(pipe.getLastErrorInfo().toJson());
         row.add(DateUtils.formatTimestampInSeconds(pipe.getCreatedTime()));
+    }
+
+    public boolean match(Pipe pipe) {
+        if (where == null) {
+            return true;
+        }
+
+        if (matcher != null) {
+            return matcher.match(pipe.getName());
+        }
+
+        return pattern.equals(pipe.getName());
     }
 
     public static int findSlotIndex(String name) {
