@@ -10,6 +10,47 @@ StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、
 
 :::
 
+## 3.3.17
+
+リリース日： 2025年7月30日
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- HttpClient5 を 5.4.3 にアップグレードしました。[#61298](https://github.com/StarRocks/starrocks/pull/61298)
+- リソースグループの `cpu_core_used_permille` 制限の誤りを修正しました。[#61177](https://github.com/StarRocks/starrocks/pull/61177)
+- ALTER タスクとパーティション作成タスクの競合を修正しました。[#61167](https://github.com/StarRocks/starrocks/pull/61167)
+- `ConnectContext` における `globalStateMgr` 欠落による NullPointerException を修正しました。[#60880](https://github.com/StarRocks/starrocks/pull/60880)
+- パーティション値が異なっても、大文字小文字を無視して同じ名前の場合に作成に失敗する問題を修正しました。[#60909](https://github.com/StarRocks/starrocks/pull/60909)
+- パーティション統計への同期アクセスによるロック競合を修正しました。[#61041](https://github.com/StarRocks/starrocks/pull/61041)
+- FE 再起動後に ANALYZE タスクが `pending` 状態で停止する問題を修正しました。[#61113](https://github.com/StarRocks/starrocks/pull/61113)
+- BE における JIT コンパイルの問題を修正しました。[#61060](https://github.com/StarRocks/starrocks/pull/61060)
+- Starmgr の Leader アドレスに関する問題を修正しました。[#61016](https://github.com/StarRocks/starrocks/pull/61016)
+- Broker の CVE 脆弱性を修正しました。[#60908](https://github.com/StarRocks/starrocks/pull/60908)
+- JDBC 接続数が `jdbc_connection_pool_size` を超過する問題を修正しました。[#61004](https://github.com/StarRocks/starrocks/pull/61004)
+- CVE-2022-41404 の脆弱性に対応しました。[#59689](https://github.com/StarRocks/starrocks/pull/59689)
+- Parquet および HttpClient5 関連の CVE 脆弱性を修正しました。[#58750](https://github.com/StarRocks/starrocks/pull/58750)
+- 物理パーティション ID が null の場合、`_partition_map` からパーティションを削除できない問題を修正しました。[#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- 共有データクラスターにおけるバージョンチェックの欠如を修正しました。[#59422](https://github.com/StarRocks/starrocks/pull/59422)
+- 共有データクラスターでログをバッチ公開する際、トランザクションログが存在しない問題を修正しました。[#60949](https://github.com/StarRocks/starrocks/pull/60949)
+- バッチ公開有効時に、同一トランザクションが並行して公開される問題を修正しました。[#57574](https://github.com/StarRocks/starrocks/pull/57574)
+- 統計の Overwrite が半同期モードを使用していなかった問題を修正しました。[#60897](https://github.com/StarRocks/starrocks/pull/60897)
+- 最新のマージファイルスライスを取得する際、Hudi ファイルのフィルターに使う `maxInstantTime` が正しくない問題を修正しました。[#60927](https://github.com/StarRocks/starrocks/pull/60927)
+- TaskRun のステータスが古いバージョンと互換性がない問題を修正しました。[#60438](https://github.com/StarRocks/starrocks/pull/60438)
+- CVE-2025-52999 の脆弱性に対応しました。[#60795](https://github.com/StarRocks/starrocks/pull/60795)
+- Broker 内の `log4j-1.2.17-cloudera6` に起因する脆弱性を修正しました。[#59579](https://github.com/StarRocks/starrocks/pull/59579)
+- OOM パーティションを読み込む際に BE がクラッシュする問題を修正しました。[#60778](https://github.com/StarRocks/starrocks/pull/60778)
+- 多数の Base Compaction タスクが他の Compaction をブロックする問題を修正しました。[#60711](https://github.com/StarRocks/starrocks/pull/60711)
+- エラー文字列の切り捨てを効率的に処理できない問題を修正しました。[#60878](https://github.com/StarRocks/starrocks/pull/60878)
+- マテリアライズドビューの改写が複数 FE 環境で失敗する問題を修正しました。[#60841](https://github.com/StarRocks/starrocks/pull/60841)
+- INSERT OVERWRITE が手動作成パーティションで失敗する問題を修正しました。[#60750](https://github.com/StarRocks/starrocks/pull/60750)
+- 集約キーにランダム分布を使用することで発生する問題を修正しました。[#60702](https://github.com/StarRocks/starrocks/pull/60702)
+- 低カーディナリティ書き換えが `multi_distinct_count` のクラッシュを引き起こす問題を修正しました。[#60664](https://github.com/StarRocks/starrocks/pull/60664)
+- Pivot のフィールド解析問題を修正しました。[#60748](https://github.com/StarRocks/starrocks/pull/60748)
+- `hudi-common` を 1.0.2 にアップグレードしました。[#59501](https://github.com/StarRocks/starrocks/pull/59501)
+- CLONE タスクと DROP TABLE が同時に実行されると BE がクラッシュする可能性がある問題を修正しました。[#61359](https://github.com/StarRocks/starrocks/pull/61359)
+
 ## 3.3.16
 
 リリース日: 2025年7月4日
