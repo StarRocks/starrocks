@@ -76,7 +76,6 @@ INSERT INTO
 FILES(
     "path" = "s3://mybucket/unload/data1",
     "format" = "parquet",
-    "parquet.version" = "2.6",
     "compression" = "uncompressed",
     "target_max_file_size" = "1024", -- 1KB
     "aws.s3.access_key" = "xxxxxxxxxx",
@@ -93,7 +92,6 @@ INSERT INTO
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/data1",
     "format" = "parquet",
-    "parquet.version" = "2.6",
     "compression" = "uncompressed",
     "target_max_file_size" = "1024", -- 1KB
     "hadoop.security.authentication" = "simple",
@@ -116,7 +114,6 @@ INSERT INTO
 FILES(
     "path" = "s3://mybucket/unload/partitioned/",
     "format" = "parquet",
-    "parquet.version" = "2.6",
     "compression" = "lz4",
     "partition_by" = "sales_time",
     "aws.s3.access_key" = "xxxxxxxxxx",
@@ -133,7 +130,6 @@ INSERT INTO
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
     "format" = "parquet",
-    "parquet.version" = "2.6",
     "compression" = "lz4",
     "partition_by" = "sales_time",
     "hadoop.security.authentication" = "simple",
@@ -156,7 +152,6 @@ INSERT INTO
 FILES(
     "path" = "s3://mybucket/unload/data2",
     "format" = "parquet",
-    "parquet.version" = "2.6",
     "compression" = "lz4",
     "single" = "true",
     "aws.s3.access_key" = "xxxxxxxxxx",
@@ -173,7 +168,6 @@ INSERT INTO
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/data2",
     "format" = "parquet",
-    "parquet.version" = "2.6",
     "compression" = "lz4",
     "single" = "true",
     "hadoop.security.authentication" = "simple",
@@ -192,7 +186,6 @@ INSERT INTO
 FILES(
     "path" = "s3://huditest/unload/data3",
     "format" = "parquet",
-    "parquet.version" = "2.6",
     "compression" = "zstd",
     "single" = "true",
     "aws.s3.access_key" = "xxxxxxxxxx",
@@ -220,7 +213,7 @@ INSERT INTO FILES(
 )
 SELECT * FROM sales_records;
 
--- 导出为 Parquet 文件。
+-- 导出为 Parquet 文件，并将 Parquet 版本设置为 1.0。
 INSERT INTO FILES(
   'path' = 'file:///home/ubuntu/parquetfile/',
   'format' = 'parquet',
