@@ -168,7 +168,7 @@ public class QueryRuntimeProfile {
             fragmentProfiles.add(profile);
             queryProfile.addChild(profile);
 
-            if (Config.enable_profile_jit_merge) {
+            if (Config.enable_profile_runtime_merge) {
                 RuntimeProfile mergeProfile = new RuntimeProfile("Fragment " + i);
                 mergedFragmentProfiles.add(mergeProfile);
             }

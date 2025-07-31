@@ -310,9 +310,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_profile_log_compress = false;
 
-    @ConfField(mutable = true, comment = "Whether merge the running profile just in time, it can reduce memory " +
+    @ConfField(mutable = true, comment = "Merge the profile in runtime, which can reduce memory " +
             "footprint of profile for a large cluster")
-    public static boolean enable_profile_jit_merge = true;
+    public static boolean enable_profile_runtime_merge = true;
 
     /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
