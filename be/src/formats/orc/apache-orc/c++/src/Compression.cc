@@ -1086,7 +1086,12 @@ private:
 
 uint64_t ZSTDDecompressionStream::decompress(const char* inputPtr, uint64_t length, char* output,
                                              size_t maxOutputLength) {
-    return static_cast<uint64_t>(ZSTD_decompressDCtx(dctx, output, maxOutputLength, inputPtr, length));
+    auto ret = ZSTD_decompressDCtx(dctx, output, maxOutputLength, inputPtr, length);
+    if (ZSTD_isError(ret)) {
+        throw std::runtime_error(std::string("Error while calling ZSTD_decompressDCtx for zstd. error: ") +
+                                 ZSTD_getErrorName(ret));
+    }
+    return static_cast<uint64_t>(ret);
 }
 
 DIAGNOSTIC_PUSH
