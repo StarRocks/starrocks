@@ -60,6 +60,12 @@ PROPERTIES(
 | dynamic_partition.start_day_of_month     | 否   |     当 `dynamic_partition.time_unit` 为 `MONTH` 时，该参数指定每月的第一天。有效值为 `1` 到 `28`。`1` 表示每月的第一天，`28` 表示每月的第 `28` 天。默认值为 `1`，表示每月从第一天开始。每月的第一天不支持为 29 日、30 日或 31 日。   |
 | dynamic_partition.replication_num     | 否   |  在动态创建的分区中，每个 tablet 副本的数量。默认值与建表时配置的副本数量相同。      |
 
+:::note
+
+当分区列的类型为 INT 时，其格式必须为 `yyyyMMdd`，无论分区的时间粒度如何。
+
+:::
+
 **动态分区相关 FE 配置项：**
 
 `dynamic_partition_check_interval_seconds`：FE 配置项，动态分区检查的时间周期，默认为 600，单位为 s，即每10分钟检查一次分区情况是否满足`PROPERTIES`中动态分区属性，如不满足，则会自动创建和删除分区。
