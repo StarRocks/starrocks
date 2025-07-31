@@ -577,7 +577,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
             return new PhysicalTopNOperator(newOrderSpec, operator.getLimit(), operator.getOffset(), partitionByColumns,
                     operator.getPartitionLimit(), operator.getSortPhase(), operator.getTopNType(), operator.isSplit(),
-                    operator.isEnforced(), predicate, operator.getProjection(), ImmutableMap.of());
+                    operator.isEnforced(), operator.isPerPipeline(), predicate, operator.getProjection(), ImmutableMap.of());
         }
 
         private void rewriteOneScalarOperatorForProjection(ColumnRefOperator keyColumn, ScalarOperator valueOperator,

@@ -50,6 +50,10 @@ public class LogicalTopNOperator extends LogicalOperator {
     private TopNType topNType;
     private boolean isSplit;
 
+    // Only set when partial topN is pushed above local aggregation. To avoid introducing a local shuffle
+    // before the local aggregation the topN is evaluated for each pipeline without merging.
+    private boolean perPipeline;
+
     // only set when rank <=1 with preAgg optimization is triggered
     // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
     private ImmutableMap<ColumnRefOperator, CallOperator> partitionPreAggCall;
@@ -139,6 +143,10 @@ public class LogicalTopNOperator extends LogicalOperator {
 
     public ImmutableMap<ColumnRefOperator, CallOperator> getPartitionPreAggCall() {
         return partitionPreAggCall;
+    }
+
+    public boolean isPerPipeline() {
+        return perPipeline;
     }
 
     @Override
@@ -287,6 +295,11 @@ public class LogicalTopNOperator extends LogicalOperator {
         public LogicalTopNOperator.Builder setPartitionPreAggCall(
                 Map<ColumnRefOperator, CallOperator> partitionPreAggCall) {
             builder.partitionPreAggCall = ImmutableMap.copyOf(partitionPreAggCall);
+            return this;
+        }
+
+        public LogicalTopNOperator.Builder setPerPipeline(boolean perPipeline) {
+            builder.perPipeline = perPipeline;
             return this;
         }
     }
