@@ -607,7 +607,7 @@ public:
 
         JsonFlattener flattener(paths, types, has_remain);
         flattener.flatten(input.get());
-        return ColumnHelper::to_columns(std::move(flattener.mutable_result()));
+        return ColumnHelper::to_columns(flattener.mutable_result());
     }
 };
 

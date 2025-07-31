@@ -371,7 +371,7 @@ protected:
         //     variations.push_back(make_const(make_nullable(array_column->clone())));
         // }
 
-        return std::move(variations);
+        return variations;
     }
 
     struct FnTypeDesc {
