@@ -2770,6 +2770,11 @@ public class ShowExecutor {
                     continue;
                 }
 
+                // check where condition
+                if (!statement.match(pipe)) {
+                    continue;
+                }
+                
                 // check privilege
                 try {
                     Authorizer.checkAnyActionOnPipe(context, new PipeName(dbName, pipe.getName()));
