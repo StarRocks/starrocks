@@ -1063,7 +1063,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = TABLET_INTERNAL_PARALLEL_MODE, flag = VariableMgr.INVISIBLE)
     private String tabletInternalParallelMode = "auto";
 
-    @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN_V2, alias = ENABLE_SHARED_SCAN, show = ENABLE_SHARED_SCAN)
+    @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN) 
     private boolean enableSharedScan = true;
 
     // max memory used on each fragment instance
