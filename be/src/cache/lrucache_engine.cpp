@@ -18,7 +18,7 @@
 
 namespace starrocks {
 Status LRUCacheEngine::init(const CacheOptions& options) {
-    _cache = std::make_unique<ShardedLRUCache>(options.mem_space_size);
+    _cache = std::make_unique<ShardedLRUCache>(options.mem_space_size, config::page_cache_shard_bits);
     _initialized.store(true, std::memory_order_relaxed);
     return Status::OK();
 }

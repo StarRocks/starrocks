@@ -312,8 +312,8 @@ static const int kNumShards = 1 << kNumShardBits;
 
 class ShardedLRUCache : public Cache {
 public:
-    explicit ShardedLRUCache(size_t capacity);
-    ~ShardedLRUCache() override = default;
+    explicit ShardedLRUCache(size_t capacity, int shard_bits = kNumShardBits);
+    ~ShardedLRUCache() override;
     Handle* insert(const CacheKey& key, void* value, size_t value_size,
                    void (*deleter)(const CacheKey& key, void* value),
                    CachePriority priority = CachePriority::NORMAL) override;
@@ -338,10 +338,12 @@ private:
     void _set_capacity(size_t capacity);
     size_t _get_stat(size_t (LRUCache::*mem_fun)() const) const;
 
-    LRUCache _shards[kNumShards];
+    LRUCache* _shards;
     mutable std::mutex _mutex;
     uint64_t _last_id;
     size_t _capacity;
+    int _shard_bits;
+    int _shard_count;
 };
 
 } // namespace starrocks

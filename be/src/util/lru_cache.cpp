@@ -395,18 +395,25 @@ inline uint32_t ShardedLRUCache::_hash_slice(const CacheKey& s) {
 }
 
 uint32_t ShardedLRUCache::_shard(uint32_t hash) {
-    return hash >> (32 - kNumShardBits);
+    return hash >> (32 - _shard_bits);
 }
 
-ShardedLRUCache::ShardedLRUCache(size_t capacity) : _last_id(0), _capacity(capacity) {
-    const size_t per_shard = (_capacity + (kNumShards - 1)) / kNumShards;
+ShardedLRUCache::ShardedLRUCache(size_t capacity, int shard_bits) : _last_id(0), _capacity(capacity) {
+    _shard_bits = shard_bits;
+    _shard_count = 1 << _shard_bits;
+    _shards = new LRUCache[_shard_count];
+    const size_t per_shard = (_capacity + (_shard_count - 1)) / _shard_count;
     for (auto& _shard : _shards) {
         _shard.set_capacity(per_shard);
     }
 }
 
+ShardedLRUCache::~ShardedLRUCache() {
+    delete []_shards;
+}
+
 void ShardedLRUCache::_set_capacity(size_t capacity) {
-    const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
+    const size_t per_shard = (capacity + (_shard_count - 1)) / _shard_count;
     for (auto& _shard : _shards) {
         _shard.set_capacity(per_shard);
     }
