@@ -2695,7 +2695,10 @@ public class OlapTable extends Table {
 
     public void updateBaseCompactionForbiddenTimeRanges(boolean isDrop) {
         try {
-            if (isDrop && getBaseCompactionForbiddenTimeRanges().isEmpty()) {
+            if (this.isCloudNativeTableOrMaterializedView()) {
+                return;
+            }
+            if (getBaseCompactionForbiddenTimeRanges().isEmpty()) {
                 return;
             }
             GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
