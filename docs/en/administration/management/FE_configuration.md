@@ -530,22 +530,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Size of the thread pool for asynchronous HTTP request processing. The alias is `max_http_sql_service_task_threads_num`.
 - Introduced in: 4.0.0
 
-#### enable_https
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Whether to enable HTTPS server alongside HTTP server in FE nodes.
-- Introduced in: -
-
-#### https_port
-- Default: 8443
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The port on which the HTTPS server in the FE node listens.
-- Introduced in: -
-
 ##### cluster_name
 
 - Default: StarRocks Cluster
