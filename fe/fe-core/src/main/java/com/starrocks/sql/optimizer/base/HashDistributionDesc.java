@@ -136,6 +136,10 @@ public class HashDistributionDesc {
         return false;
     }
 
+    public boolean canColocate(HashDistributionDesc o) {
+        return !o.isBucketLocal();
+    }
+
     public boolean isShuffle() {
         return this.sourceType == SourceType.SHUFFLE_AGG || this.sourceType == SourceType.SHUFFLE_JOIN;
     }

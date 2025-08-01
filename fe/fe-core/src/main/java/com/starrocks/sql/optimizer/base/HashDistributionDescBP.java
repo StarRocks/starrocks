@@ -44,6 +44,25 @@ public class HashDistributionDescBP extends HashDistributionDesc {
     }
 
     @Override
+    public boolean canColocate(HashDistributionDesc o) {
+        if (!o.isBucketLocal()) {
+            return false;
+        }
+        List<BucketProperty> oBP = ((HashDistributionDescBP) o).getBucketProperties();
+        if (bucketProperties.size() != oBP.size()) {
+            return false;
+        }
+        for (int i = 0; i < bucketProperties.size(); i++) {
+            BucketProperty leftProperty = bucketProperties.get(i);
+            BucketProperty rightProperty = oBP.get(i);
+            if (!leftProperty.satisfy(rightProperty)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
     public HashDistributionDescBP getNullRelaxDesc() {
         return new HashDistributionDescBP(super.getNullRelaxDesc(), bucketProperties);
     }
