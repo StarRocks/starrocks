@@ -135,9 +135,12 @@ private:
     std::vector<PartitionColumnType> _partition_types;
     bool _has_nullable_key = false;
 
-    // only set when _enable_pre_agg=true
+    // used in preagg
+    std::unique_ptr<MemPool> _mem_pool = nullptr;
     bool _enable_pre_agg;
+    // only set when _enable_pre_agg=true
     std::unique_ptr<PreAggState> _pre_agg;
+<<<<<<< HEAD
     // bool _is_first_chunk_of_current_sorter = true;
     // const std::vector<TExpr>& _t_pre_agg_exprs;
     // const std::vector<TSlotId>& _t_pre_agg_output_slot_id;
@@ -158,6 +161,8 @@ private:
     // std::vector<FunctionTypes> _agg_fn_types;
     // // every partition has one Agg State
     // std::vector<ManagedFunctionStatesPtr<LocalPartitionTopnContext>> _managed_fn_states;
+=======
+>>>>>>> 94726f0973 ([BugFix] Fix UAF in local-partition preagg (#61524))
 
     // No more input chunks if after _is_sink_complete is set to true
     bool _is_sink_complete = false;
@@ -178,7 +183,11 @@ private:
 
     int32_t _sorter_index = 0;
 
+<<<<<<< HEAD
     std::unique_ptr<MemPool> _mem_pool = nullptr;
+=======
+    PipeObservable _observable;
+>>>>>>> 94726f0973 ([BugFix] Fix UAF in local-partition preagg (#61524))
 };
 
 using LocalPartitionTopnContextPtr = std::shared_ptr<LocalPartitionTopnContext>;
