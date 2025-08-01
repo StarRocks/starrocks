@@ -17,7 +17,6 @@ package com.starrocks.planner;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -90,11 +89,6 @@ public class BinlogScanNode extends ScanNode {
         offset.setVersion(-1);
         offset.setLsn(-1);
         return offset;
-    }
-
-    @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-        super.init(analyzer);
     }
 
     @Override

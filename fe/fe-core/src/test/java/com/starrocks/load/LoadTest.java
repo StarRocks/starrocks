@@ -17,7 +17,6 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DescriptorTable;
@@ -53,8 +52,7 @@ import java.util.List;
 import java.util.Map;
 
 public class LoadTest {
-    @Mocked
-    private Analyzer analyzer;
+
     @Mocked
     private OlapTable table;
 
@@ -78,14 +76,6 @@ public class LoadTest {
         descTable = new DescriptorTable();
         srcTupleDesc = descTable.createTupleDescriptor();
         srcTupleDesc.setTable(table);
-
-        new Expectations() {
-            {
-                analyzer.getDescTbl();
-                result = descTable;
-                minTimes = 0;
-            }
-        };
 
         columnExprs = Lists.newArrayList();
         columnsFromPath = Lists.newArrayList();
@@ -130,7 +120,7 @@ public class LoadTest {
             }
         };
 
-        Load.initColumns(table, columnExprs, null, exprsByName, analyzer, srcTupleDesc,
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
                 slotDescByName, params, true, true, columnsFromPath);
 
         // check
@@ -199,7 +189,7 @@ public class LoadTest {
             }
         };
 
-        Load.initColumns(table, columnExprs, null, exprsByName, analyzer, srcTupleDesc,
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
                 slotDescByName, params, true, true, columnsFromPath);
 
         // check
@@ -248,7 +238,7 @@ public class LoadTest {
             }
         };
 
-        Load.initColumns(table, columnExprs, null, exprsByName, analyzer, srcTupleDesc,
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
                 slotDescByName, params, true, true, columnsFromPath);
 
         // check
@@ -290,7 +280,7 @@ public class LoadTest {
 
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Expr 'year()' analyze error: No matching function with signature: year(), derived column is 'c1'",
-                () -> Load.initColumns(table, columnExprs, null, exprsByName, analyzer, srcTupleDesc,
+                () -> Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
                         slotDescByName, params, true, true, columnsFromPath));
     }
 
@@ -359,7 +349,7 @@ public class LoadTest {
         ImportColumnsStmt columnsStmt =
                 com.starrocks.sql.parser.SqlParser.parseImportColumns(columnsSQL, SqlModeHelper.MODE_DEFAULT);
         columnExprs.addAll(columnsStmt.getColumns());
-        Load.initColumns(table, columnExprs, null, exprsByName, analyzer, srcTupleDesc,
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
                 slotDescByName, params, true, true, columnsFromPath);
         Assertions.assertEquals(7, slotDescByName.size());
         Assertions.assertTrue(slotDescByName.containsKey("c0"));

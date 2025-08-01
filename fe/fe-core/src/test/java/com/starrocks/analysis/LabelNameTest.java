@@ -29,8 +29,6 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class LabelNameTest {
-    @Mocked
-    private Analyzer analyzer;
 
     @BeforeEach
     public void setUp() {
@@ -38,14 +36,6 @@ public class LabelNameTest {
 
     @Test
     public void testNormal() throws AnalysisException {
-        new Expectations() {
-            {
-                analyzer.getDefaultDb();
-                minTimes = 0;
-                result = "testDb";
-            }
-        };
-
         LabelName label = new LabelName("testDb", "testLabel");
         label.analyze(new ConnectContext());
         Assertions.assertEquals("testDb", label.getDbName());
@@ -62,14 +52,6 @@ public class LabelNameTest {
     @Test
     public void testNoDb() {
         assertThrows(SemanticException.class, () -> {
-            new Expectations() {
-                {
-                    analyzer.getDefaultDb();
-                    minTimes = 0;
-                    result = null;
-                }
-            };
-
             LabelName label = new LabelName("", "testLabel");
             label.analyze(new ConnectContext());
             Assertions.fail("No exception throws");
@@ -79,14 +61,6 @@ public class LabelNameTest {
     @Test
     public void testNoLabel() {
         assertThrows(SemanticException.class, () -> {
-            new Expectations() {
-                {
-                    analyzer.getDefaultDb();
-                    minTimes = 0;
-                    result = "testDb";
-                }
-            };
-
             LabelName label = new LabelName("", "");
             label.analyze(new ConnectContext());
             Assertions.fail("No exception throws");

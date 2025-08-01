@@ -43,7 +43,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
@@ -345,12 +345,6 @@ public class OlapScanNode extends ScanNode {
         helper.addValue(super.debugString());
         helper.addValue("olapTable=" + olapTable.getName());
         return helper.toString();
-    }
-
-    @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-        super.init(analyzer);
-        computePartitionInfo();
     }
 
     @Override
@@ -683,7 +677,7 @@ public class OlapScanNode extends ScanNode {
         }
     }
 
-    private void computePartitionInfo() throws AnalysisException {
+    public void computePartitionInfo() throws AnalysisException {
         long start = System.currentTimeMillis();
         // Step1: compute partition ids
         PartitionNames partitionNames = desc.getRef().getPartitionNames();

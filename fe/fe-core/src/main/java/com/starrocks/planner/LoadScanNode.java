@@ -36,7 +36,6 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotDescriptor;
@@ -62,7 +61,7 @@ public abstract class LoadScanNode extends ScanNode {
         super(id, desc, planNodeName);
     }
 
-    protected void initWhereExpr(Expr whereExpr, Analyzer analyzer) throws StarRocksException {
+    protected void initWhereExpr(Expr whereExpr) throws StarRocksException {
         if (whereExpr == null) {
             return;
         }
@@ -96,7 +95,7 @@ public abstract class LoadScanNode extends ScanNode {
         addConjuncts(AnalyzerUtils.extractConjuncts(whereExpr));
     }
 
-    protected void checkBitmapCompatibility(Analyzer analyzer, SlotDescriptor slotDesc, Expr expr)
+    protected void checkBitmapCompatibility(SlotDescriptor slotDesc, Expr expr)
             throws AnalysisException {
         if (slotDesc.getColumn().getAggregationType() == AggregateType.BITMAP_UNION) {
             if (!expr.getType().isBitmapType()) {

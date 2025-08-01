@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
@@ -3948,18 +3947,18 @@ public class PlanFragmentBuilder {
         }
 
         @Override
-        public PlanFragment visitPhysicalTableFunctionTableScan(OptExpression optExpression, ExecPlan context) {
+        public PlanFragment visitPhysicalTableFunctionTableScan(OptExpression optExpression, ExecPlan execPlan) {
             PhysicalTableFunctionTableScanOperator node = (PhysicalTableFunctionTableScanOperator) optExpression.getOp();
 
             TableFunctionTable table = (TableFunctionTable) node.getTable();
 
-            TupleDescriptor tupleDesc = context.getDescTbl().createTupleDescriptor();
-            prepareContextSlots(node, context, tupleDesc);
+            TupleDescriptor tupleDesc = execPlan.getDescTbl().createTupleDescriptor();
+            prepareContextSlots(node, execPlan, tupleDesc);
 
             List<List<TBrokerFileStatus>> files = new ArrayList<>();
             files.add(table.loadFileList());
-            ComputeResource computeResource = context.getConnectContext().getCurrentComputeResource();
-            FileScanNode scanNode = new FileScanNode(context.getNextNodeId(), tupleDesc,
+            ComputeResource computeResource = execPlan.getConnectContext().getCurrentComputeResource();
+            FileScanNode scanNode = new FileScanNode(execPlan.getNextNodeId(), tupleDesc,
                     "FileScanNode", files, table.loadFileList().size(), computeResource);
 
             Set<String> scanColumns = tupleDesc.getSlots().stream().map(SlotDescriptor::getColumn).map(Column::getName).collect(
@@ -3980,10 +3979,8 @@ public class PlanFragmentBuilder {
             scanNode.setFlexibleColumnMapping(table.isFlexibleColumnMapping());
             scanNode.setFileScanType(table.isLoadType() ? TFileScanType.FILES_INSERT : TFileScanType.FILES_QUERY);
 
-            Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), context.getConnectContext());
-            analyzer.setDescTbl(context.getDescTbl());
             try {
-                scanNode.init(analyzer);
+                scanNode.init(execPlan.getDescTbl());
                 scanNode.finalizeStats();
             } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
@@ -3994,7 +3991,7 @@ public class PlanFragmentBuilder {
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
             ScalarOperatorToExpr.FormatterContext formatterContext =
-                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                    new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr());
             for (ScalarOperator predicate : predicates) {
                 scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
@@ -4003,10 +4000,10 @@ public class PlanFragmentBuilder {
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
 
-            context.getScanNodes().add(scanNode);
+            execPlan.getScanNodes().add(scanNode);
             PlanFragment fragment =
-                    new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
-            context.getFragments().add(fragment);
+                    new PlanFragment(execPlan.getNextFragmentId(), scanNode, DataPartition.RANDOM);
+            execPlan.getFragments().add(fragment);
             return fragment;
         }
 

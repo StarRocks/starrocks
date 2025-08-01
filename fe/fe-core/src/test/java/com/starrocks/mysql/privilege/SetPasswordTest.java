@@ -34,7 +34,6 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.EditLog;
@@ -56,8 +55,6 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.parseSql;
 
 public class SetPasswordTest {
 
-    @Mocked
-    private Analyzer analyzer;
     @Mocked
     private EditLog editLog;
 

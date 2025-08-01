@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
@@ -56,7 +55,6 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadScanNode;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -122,7 +120,6 @@ public class LoadPlanner {
     private List<BrokerFileGroup> fileGroups;
     private List<List<TBrokerFileStatus>> fileStatusesList;
     private int filesAdded;
-    private Analyzer analyzer;
 
     IdGenerator<PlanNodeId> planNodeGenerator = PlanNodeId.createGenerator();
 
@@ -176,10 +173,8 @@ public class LoadPlanner {
         } else {
             this.parallelInstanceNum = Config.load_parallel_instance_num;
         }
-        this.analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), this.context);
-        this.analyzer.setTimezone(timezone);
         this.timezone = timezone;
-        this.descTable = this.analyzer.getDescTbl();
+        this.descTable = new DescriptorTable();
         this.loadMemLimit = loadMemLimit;
         this.execMemLimit = execMemLimit;
         this.sessionVariables = sessionVariables;
@@ -219,8 +214,7 @@ public class LoadPlanner {
         this.parallelInstanceNum = parallelInstanceNum;
         this.columnDescs = columnDescs;
         this.streamLoadInfo = streamLoadInfo;
-        this.analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), this.context);
-        this.descTable = analyzer.getDescTbl();
+        this.descTable = new DescriptorTable();
         this.enableDictOptimize = Config.enable_dict_optimize_stream_load;
         this.startTime = System.currentTimeMillis();
         this.sessionVariables = sessionVariables;
@@ -433,7 +427,7 @@ public class LoadPlanner {
                     parallelInstanceNum);
             fileScanNode.setUseVectorizedLoad(true);
             fileScanNode.setJSONOptions(jsonOptions);
-            fileScanNode.init(analyzer);
+            fileScanNode.init(descTable);
             fileScanNode.finalizeStats();
             fileScanNode.setComputeResource(computeResource);
             scanNode = fileScanNode;
@@ -445,7 +439,7 @@ public class LoadPlanner {
                 streamScanNode.setBatchWrite(batchWriteIntervalMs, batchWriteParameters, batchWriteBackendIds);
             }
             streamScanNode.setUseVectorizedLoad(true);
-            streamScanNode.init(analyzer);
+            streamScanNode.init(descTable);
             streamScanNode.finalizeStats();
             streamScanNode.setComputeResource(computeResource);
             scanNode = streamScanNode;

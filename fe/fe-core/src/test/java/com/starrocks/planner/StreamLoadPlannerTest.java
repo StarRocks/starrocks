@@ -35,7 +35,6 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
@@ -107,8 +106,6 @@ public class StreamLoadPlannerTest {
                 destTable.getPartitions();
                 minTimes = 0;
                 result = Arrays.asList(partition);
-                scanNode.init((Analyzer) any);
-                minTimes = 0;
                 scanNode.getChildren();
                 minTimes = 0;
                 result = Lists.newArrayList();
@@ -151,8 +148,6 @@ public class StreamLoadPlannerTest {
                 destTable.getPartitions();
                 minTimes = 0;
                 result = Arrays.asList(partition);
-                scanNode.init((Analyzer) any);
-                minTimes = 0;
                 scanNode.getChildren();
                 minTimes = 0;
                 result = Lists.newArrayList();

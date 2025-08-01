@@ -61,7 +61,7 @@ import java.util.stream.Collectors;
  * Representation of the common elements of all scan nodes.
  */
 public abstract class ScanNode extends PlanNode {
-    protected final TupleDescriptor desc;
+    protected TupleDescriptor desc;
     protected Map<String, PartitionColumnFilter> columnFilters;
     protected String sortColumn = null;
     protected List<ColumnAccessPath> columnAccessPaths;
