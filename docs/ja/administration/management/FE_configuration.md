@@ -306,9 +306,23 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 非同期 HTTP リクエスト処理用のスレッドプールのサイズ。別名は `max_http_sql_service_task_threads_num` である。
 - 導入バージョン: 4.0.0
 
+##### enable_https
 
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: No
+- 説明: FEノードにおいて、HTTP サーバーと並行して HTTPS サーバーを有効化するかどうか。
+- 導入バージョン: v4.0
 
+##### https_port
 
+- デフォルト: 8443
+- タイプ: Int
+- 単位:  -
+- 変更可能: No
+- 説明: FE ノード内の HTTPS サーバーがリスニングするポート番号。
+- 導入バージョン: v4.0
 
 ##### cluster_name
 
