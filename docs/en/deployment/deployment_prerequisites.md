@@ -40,7 +40,10 @@ StarRocks supports deployments on Red Hat Enterprise Linux 7.9, CentOS Linux 7.9
 
 ## Software
 
-You must install JDK 17 on your servers to run StarRocks v3.5 and later versions.
+You must install the corresponding JDK version on the server to run StarRocks.
+
+- For StarRocks v3.3 and v3.4, use JDK 11 or later.
+- For StarRocks v3.5, use JDK 17 or later.
 
 > **CAUTION**
 >
