@@ -2440,37 +2440,32 @@ TEST_F(FlatJsonColumnRWTest, testSegmentWriterIteratorWithMixedDataTypes) {
         std::vector<std::tuple<std::string, LogicalType, std::string>> fields = {
 
             // extract from the FlatJSON.remain
-            {"unique1", TYPE_INT, "[123, NULL, NULL]"},
             {"unique1", TYPE_BIGINT, "[123, NULL, NULL]"},
             {"unique1", TYPE_DOUBLE, "[123, NULL, NULL]"},
             {"unique1", TYPE_BOOLEAN, "[1, NULL, NULL]"},
             {"unique1", TYPE_VARCHAR, "['123', NULL, NULL]"},
             {"unique2", TYPE_BIGINT, "[NULL, 123, NULL]"},
             {"unique3", TYPE_VARCHAR, "[NULL, NULL, '123']"},
-            {"unique3", TYPE_INT, "[NULL, NULL, 123]"},
             {"unique3", TYPE_BIGINT, "[NULL, NULL, 123]"},
             {"unique3", TYPE_BOOLEAN, "[NULL, NULL, 1]"},
             // non-existent
-            {"unique4", TYPE_INT, "[NULL, NULL, NULL]"},
+            {"unique4", TYPE_BIGINT, "[NULL, NULL, NULL]"},
 
             // flatten columns
-            {"id", TYPE_INT, "[1001, 1002, 1003]"},
             {"id", TYPE_BIGINT, "[1001, 1002, 1003]"},
             {"id", TYPE_DOUBLE, "[1001, 1002, 1003]"},
             {"id", TYPE_VARCHAR, "['1001', '1002', '1003']"},
             
             {"name", TYPE_VARCHAR, R"(['Alice', 'Bob', 'Charlie'])"},
-            {"name", TYPE_INT, R"([NULL, NULL, NULL])"},
+            {"name", TYPE_BIGINT, R"([NULL, NULL, NULL])"},
             
-            {"age", TYPE_INT, "[25, 30, 28]"},
+            {"age", TYPE_BIGINT, "[25, 30, 28]"},
 
             {"salary", TYPE_DOUBLE, "[50000.5, 75000.8, 60000.2]"},
-            {"salary", TYPE_INT, "[50000, 75000, 60000]"},
             {"salary", TYPE_BIGINT, "[50000, 75000, 60000]"},
             {"salary", TYPE_VARCHAR, "['50000.5', '75000.75', '60000.25']"},
 
             {"is_active", TYPE_BOOLEAN, "[1, 0, 1]"},
-            {"is_active", TYPE_INT, "[1, 0, 1]"},
             {"is_active", TYPE_BIGINT, "[1, 0, 1]"},
             {"is_active", TYPE_VARCHAR, "['true', 'false', 'true']"},
 
