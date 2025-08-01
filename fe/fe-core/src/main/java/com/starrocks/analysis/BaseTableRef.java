@@ -48,12 +48,4 @@ public class BaseTableRef extends TableRef {
     public TableRef clone() {
         return new BaseTableRef(this);
     }
-
-    @Override
-    public TupleDescriptor createTupleDescriptor(Analyzer analyzer) {
-        TupleDescriptor result = analyzer.getDescTbl().createTupleDescriptor();
-        result.setTable(table);
-        return result;
-    }
-
 }

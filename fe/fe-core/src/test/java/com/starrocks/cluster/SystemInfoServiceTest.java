@@ -35,7 +35,6 @@
 package com.starrocks.cluster;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
@@ -88,8 +87,6 @@ public class SystemInfoServiceTest {
 
     @Mocked
     private Database db;
-
-    private Analyzer analyzer;
 
     private String hostPort;
 
@@ -167,8 +164,6 @@ public class SystemInfoServiceTest {
                 result = systemInfoService;
             }
         };
-
-        analyzer = new Analyzer(globalStateMgr, new ConnectContext(null));
     }
 
     public void mkdir(String dirString) {

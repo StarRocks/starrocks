@@ -35,8 +35,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.Analyzer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,7 +56,6 @@ public class OdbcCatalogResourceTest {
     private String user;
     private String passwd;
     private Map<String, String> properties;
-    private Analyzer analyzer;
 
     @BeforeEach
     public void setUp() {
@@ -74,7 +71,6 @@ public class OdbcCatalogResourceTest {
         properties.put("port", port);
         properties.put("user", user);
         properties.put("password", passwd);
-        analyzer = AccessTestUtil.fetchAdminAnalyzer();
     }
 
     @Test

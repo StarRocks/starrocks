@@ -38,9 +38,9 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -66,6 +66,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.BrokerUtil;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.FileSystem;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
@@ -154,8 +155,6 @@ public class FileScanNode extends LoadScanNode {
     private List<ComputeNode> nodes;
     private int nextBe = 0;
 
-    private Analyzer analyzer;
-
     // Use vectorized load for improving load performance
     // 1. now for orcfile only
     // 2. remove cast string, and transform data from orig datatype directly
@@ -173,6 +172,8 @@ public class FileScanNode extends LoadScanNode {
     private TFileScanType fileScanType = TFileScanType.LOAD;
 
     private boolean nullExprInAutoIncrement;
+
+    private DescriptorTable descriptorTable;
 
     private static class ParamCreateContext {
         public BrokerFileGroup fileGroup;
@@ -196,11 +197,9 @@ public class FileScanNode extends LoadScanNode {
         this.computeResource = computeResource;
     }
 
-    @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-        super.init(analyzer);
+    public void init(DescriptorTable descriptorTable) throws StarRocksException {
+        this.descriptorTable = descriptorTable;
 
-        this.analyzer = analyzer;
         if (desc.getTable() != null) {
             Table tbl = desc.getTable();
             if (tbl instanceof BrokerTable) {
@@ -223,7 +222,7 @@ public class FileScanNode extends LoadScanNode {
         for (BrokerFileGroup fileGroup : fileGroups) {
             ParamCreateContext context = new ParamCreateContext();
             context.fileGroup = fileGroup;
-            context.timezone = analyzer.getTimezone();
+            context.timezone = TimeUtils.DEFAULT_TIME_ZONE;
             // csv/json/parquet load is controlled by Config::enable_vectorized_file_load
             // if Config::enable_vectorized_file_load is set true,
             // vectorized load will been enabled
@@ -340,7 +339,7 @@ public class FileScanNode extends LoadScanNode {
         params.setFlexible_column_mapping(flexibleColumnMapping);
         params.setFile_scan_type(fileScanType);
         initColumns(context);
-        initWhereExpr(fileGroup.getWhereExpr(), analyzer);
+        initWhereExpr(fileGroup.getWhereExpr());
     }
 
     /**
@@ -354,7 +353,7 @@ public class FileScanNode extends LoadScanNode {
      * @throws StarRocksException
      */
     private void initColumns(ParamCreateContext context) throws StarRocksException {
-        context.tupleDescriptor = analyzer.getDescTbl().createTupleDescriptor();
+        context.tupleDescriptor = descriptorTable.createTupleDescriptor();
         // columns in column list is case insensitive
         context.slotDescByName = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         context.exprMap = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
@@ -369,7 +368,7 @@ public class FileScanNode extends LoadScanNode {
         }
 
         Load.initColumns(targetTable, columnExprs,
-                context.fileGroup.getColumnToHadoopFunction(), context.exprMap, analyzer,
+                context.fileGroup.getColumnToHadoopFunction(), context.exprMap, descriptorTable,
                 context.tupleDescriptor, context.slotDescByName, context.params, true,
                 useVectorizedLoad, columnsFromPath);
     }
@@ -437,7 +436,7 @@ public class FileScanNode extends LoadScanNode {
                 expr.setType(Type.HLL);
             }
 
-            checkBitmapCompatibility(analyzer, destSlotDesc, expr);
+            checkBitmapCompatibility(destSlotDesc, expr);
 
             // analyze negative
             if (isNegative && destSlotDesc.getColumn().getAggregationType() == AggregateType.SUM) {

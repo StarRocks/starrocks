@@ -15,8 +15,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.BaseProcResult;
@@ -31,11 +29,9 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class JDBCResourceTest {
-    private Analyzer analyzer;
 
     @BeforeEach
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer();
         FeConstants.runningUnitTest = true;
     }
 

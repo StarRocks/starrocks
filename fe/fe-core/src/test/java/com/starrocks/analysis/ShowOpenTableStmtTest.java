@@ -48,9 +48,6 @@ public class ShowOpenTableStmtTest {
 
     private static ConnectContext ctx;
 
-    @Mocked
-    private Analyzer analyzer;
-
     @BeforeAll
     public static void beforeClass() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();

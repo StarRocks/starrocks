@@ -15,18 +15,15 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeEach;
 
 public class DDLTestBase {
 
-    protected static Analyzer analyzer;
     protected static ConnectContext ctx;
     protected static StarRocksAssert starRocksAssert;
 
@@ -34,7 +31,6 @@ public class DDLTestBase {
     public void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
-        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), ctx);
 
         FeConstants.runningUnitTest = true;
         starRocksAssert = new StarRocksAssert(ctx);
