@@ -273,7 +273,8 @@ public class ColocatedBackendSelectorTest {
             throws StarRocksException {
         FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
         ColocatedBackendSelector.Assignment colocatedAssignemnt =
-                new ColocatedBackendSelector.Assignment(scanNodes.get(0), scanNodes.size());
+                new ColocatedBackendSelector.Assignment(scanNodes.get(0).getBucketNums(), scanNodes.size(),
+                        ColocatedBackendSelector.Assignment.ScanRangeType.NATIVE);
 
         for (OlapScanNode scanNode : scanNodes) {
             ColocatedBackendSelector backendSelector =

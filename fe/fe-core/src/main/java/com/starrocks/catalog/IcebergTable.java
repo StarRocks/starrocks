@@ -334,10 +334,19 @@ public class IcebergTable extends Table {
 
         for (Pair<Integer, Integer> bucket : bucketSourceIdWithBucketNums) {
             Column column = getColumn(nativeTable.schema().findColumnName(bucket.first));
+            if (!bucketPropertySupported(column.getType())) {
+                continue;
+            }
             bucketProperties.add(new BucketProperty(TBucketFunction.MURMUR3_X86_32, bucket.second, column));
         }
 
         return bucketProperties;
+    }
+
+    private boolean bucketPropertySupported(Type columnType) {
+        //other type such as decimal/date/timestamp are merely used as bucket partition column,
+        // and the storage is very different from StarRocks, it's cumbersome to calc hash value
+        return columnType.isInt() || columnType.isBigint() || columnType.isBinaryType() || columnType.isVarchar();
     }
 
     public org.apache.iceberg.Table getNativeTable() {

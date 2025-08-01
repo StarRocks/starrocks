@@ -22,6 +22,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.connector.hive.HiveConnectorScanRangeSource;
@@ -30,6 +31,7 @@ import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TBucketProperty;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TDataCacheOptions;
 import com.starrocks.thrift.TExplainLevel;
@@ -38,6 +40,7 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.starrocks.thrift.TExplainLevel.VERBOSE;
@@ -222,6 +225,14 @@ public class HdfsScanNode extends ScanNode {
             tDataCacheOptions.setEnable_populate_datacache(options.isEnablePopulate());
             tHdfsScanNode.setDatacache_options(tDataCacheOptions);
         }
+    }
+
+    public static void setBucketProperties(THdfsScanNode tHdfsScanNode, List<BucketProperty> bucketProperties) {
+        List<TBucketProperty> tBucketProperties = new ArrayList<>();
+        for (BucketProperty bucketProperty : bucketProperties) {
+            tBucketProperties.add(bucketProperty.toThrift());
+        }
+        tHdfsScanNode.setBucket_properties(tBucketProperties);
     }
 
     public static void setMinMaxConjunctsToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode,
