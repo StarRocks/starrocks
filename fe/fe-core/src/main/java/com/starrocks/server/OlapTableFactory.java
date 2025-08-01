@@ -521,7 +521,6 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             boolean hasGin = table.getIndexes().stream()
                             .anyMatch(index -> index.getIndexType() == IndexType.GIN);
-            LOG.info("table: {} hasGin: {}, enableReplicatedStorage: {}", tableName, hasGin, table.enableReplicatedStorage());
             if (hasGin && table.enableReplicatedStorage()) {
                 // GIN indexes are incompatible with replicated_storage right now and we will disable replicated_storage
                 // if table contains GIN Index.

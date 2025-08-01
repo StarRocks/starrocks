@@ -2861,12 +2861,6 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
-        /*
-        if (newIndex.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
-            throw new SemanticException("GIN does not support replicated mode");
-        }
-        */
-        // check 
         if (newIndex.getIndexType() == IndexType.GIN) {
             for (Column col : olapTable.getFullSchema()) {
                 if (col.isAutoIncrement()) {
