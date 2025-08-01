@@ -496,8 +496,6 @@ public class ReplicationJob implements GsonPostProcessable {
         return transactionState.getReason();
     }
 
-
-
     public ReplicationJob(TTableReplicationRequest request) throws MetaNotFoundException {
         Preconditions.checkState(request.src_table_type == TTableType.OLAP_TABLE);
 
