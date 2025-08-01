@@ -1172,25 +1172,20 @@ StatusOr<ColumnPtr> JsonFunctions::json_remove(FunctionContext* context, const C
     }
 
     for (size_t row = 0; row < rows; row++) {
-        if (json_viewer.is_null(row)) {
+        if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr) {
             result.append_null();
             continue;
         }
-
         JsonValue* json_value = json_viewer.value(row);
-        if (json_value == nullptr) {
-            result.append_null();
-            continue;
-        }
 
         // Collect all valid paths to remove
-        std::vector<std::string> paths_to_remove;
+        std::vector<Slice> paths_to_remove;
         for (size_t path_idx = 0; path_idx < path_viewers.size(); path_idx++) {
             if (path_viewers[path_idx].is_null(row)) {
                 continue; // Skip null paths
             }
 
-            std::string path_str = path_viewers[path_idx].value(row).to_string();
+            Slice path_str = path_viewers[path_idx].value(row);
 
             // Parse the JSON path to validate it
             auto jsonpath = JsonPath::parse(path_str);
@@ -1209,7 +1204,7 @@ StatusOr<ColumnPtr> JsonFunctions::json_remove(FunctionContext* context, const C
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<JsonValue> JsonFunctions::_remove_json_paths(JsonValue* json_value, const std::vector<std::string>& paths,
+StatusOr<JsonValue> JsonFunctions::_remove_json_paths(JsonValue* json_value, const std::vector<Slice>& paths,
                                                       vpack::Builder* builder) {
     namespace vpack = arangodb::velocypack;
 
