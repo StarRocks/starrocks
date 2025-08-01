@@ -483,10 +483,8 @@ INSTANTIATE_TEST_SUITE_P(AllBuiltinFunctions, BuiltinFunctionTest,
                              return "Function_" + std::to_string(info.param.first) + "_" + info.param.second.name;
                          });
 
+} // namespace starrocks
+
 int main(int argc, char** argv) {
-    // Set the glog basename before calling init_test_env
-    setenv("GTEST_LOG_BASENAME", "builtin_functions_fuzzy_test", 1);
     return starrocks::init_test_env(argc, argv);
 }
-
-} // namespace starrocks
