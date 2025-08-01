@@ -422,6 +422,34 @@ public class ListPartitionPrunerTest {
     }
 
     @Test
+    public void testExternalTableBinaryPredicate5() throws AnalysisException {
+        // col='1'
+        // col='2'
+        // col='ab'
+
+        ColumnRefOperator intColumn = new ColumnRefOperator(1, Type.STRING, "col", true);
+
+        // column -> partition values
+        Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
+                Maps.newHashMap();
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> intPartitionValuesMap = new ConcurrentSkipListMap<>();
+        columnToPartitionValuesMap.put(intColumn, intPartitionValuesMap);
+        intPartitionValuesMap.put(new StringLiteral("1"), Sets.newHashSet(1L));
+        intPartitionValuesMap.put(new StringLiteral("2"), Sets.newHashSet(2L));
+        intPartitionValuesMap.put(new StringLiteral("ab"), Sets.newHashSet(3L));
+
+        Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
+        columnToNullPartitions.put(intColumn, Sets.newHashSet(3L));
+
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(Type.INT, intColumn),
+                ConstantOperator.createInt(1)));
+
+        ListPartitionPruner pruner =
+                new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
+        Assert.assertEquals(Lists.newArrayList(1L), pruner.prune());
+    }
+
+    @Test
     public void testExternalTableBinaryPredicateWithException() throws AnalysisException {
         // string_col="01"   1
         // string_col="02"  2
