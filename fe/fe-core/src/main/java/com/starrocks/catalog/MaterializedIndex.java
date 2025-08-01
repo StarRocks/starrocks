@@ -38,6 +38,8 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.clone.BalanceStat;
+import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTablet;
@@ -51,6 +53,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 public class MaterializedIndex extends MetaObject implements Writable, GsonPostProcessable {
@@ -125,6 +128,9 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     // whose txn id is less than 'visibleTxnId' will ignore this index when sending
     // PublishVersionRequest requests to BE nodes.
     private long visibleTxnId;
+
+    // Tablet distribution balance stat
+    private AtomicReference<BalanceStat> balanceStat = new AtomicReference<>(BalanceStat.BALANCED_STAT);
 
     public MaterializedIndex() {
         this(0, IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID);
@@ -326,6 +332,22 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
             idx++;
         }
         return -1;
+    }
+
+    public void setBalanceStat(BalanceStat balanceStat) {
+        this.balanceStat.set(balanceStat);
+    }
+
+    public BalanceStat getBalanceStat() {
+        return balanceStat.get();
+    }
+
+    public boolean isTabletBalanced() {
+        return getBalanceStat().isBalanced();
+    }
+
+    public BalanceType getBalanceType() {
+        return getBalanceStat().getBalanceType();
     }
 
     @Override

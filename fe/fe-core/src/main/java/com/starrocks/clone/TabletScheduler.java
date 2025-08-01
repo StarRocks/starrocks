@@ -103,6 +103,7 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -164,7 +165,7 @@ public class TabletScheduler extends FrontendDaemon {
 
     // be id -> #working slots
     private final Map<Long, PathSlot> backendsWorkingSlots = Maps.newConcurrentMap();
-    private ClusterLoadStatistic loadStatistic;
+    private AtomicReference<ClusterLoadStatistic> loadStatistic = new AtomicReference<>(null);
     private long lastStatUpdateTime = 0;
     private long lastClusterLoadLoggingTime = 0;
 
@@ -194,8 +195,12 @@ public class TabletScheduler extends FrontendDaemon {
         return stat;
     }
 
-    public void setLoadStatistic(ClusterLoadStatistic loadStatistic) {
-        this.loadStatistic = loadStatistic;
+    public void setClusterLoadStatistic(ClusterLoadStatistic loadStatistic) {
+        this.loadStatistic.set(loadStatistic);
+    }
+
+    public ClusterLoadStatistic getClusterLoadStatistic() {
+        return loadStatistic.get();
     }
 
     /*
@@ -472,7 +477,7 @@ public class TabletScheduler extends FrontendDaemon {
 
     private void updateClusterLoadStatisticsAndPriority() {
         updateClusterLoadStatistic();
-        rebalancer.updateLoadStatistic(loadStatistic);
+        rebalancer.updateLoadStatistic(getClusterLoadStatistic());
 
         adjustPriorities();
 
@@ -490,15 +495,20 @@ public class TabletScheduler extends FrontendDaemon {
                 new ClusterLoadStatistic(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                         GlobalStateMgr.getCurrentState().getTabletInvertedIndex());
         clusterLoadStatistic.init();
+
+        // update disk balance stats using old load statistic
+        ClusterLoadStatistic oldLoadStatistic = getClusterLoadStatistic();
+        if (oldLoadStatistic != null) {
+            clusterLoadStatistic.updateClusterDiskBalanceStats(oldLoadStatistic.getClusterDiskBalanceStats());
+            clusterLoadStatistic.updateBackendDiskBalanceStats(oldLoadStatistic.getBackendDiskBalanceStats());
+        }
+
         if (System.currentTimeMillis() - lastClusterLoadLoggingTime > CLUSTER_LOAD_STATISTICS_LOGGING_INTERVAL_MS) {
             LOG.debug("update cluster load statistic:\n{}", clusterLoadStatistic.getBrief());
             lastClusterLoadLoggingTime = System.currentTimeMillis();
         }
-        this.loadStatistic = clusterLoadStatistic;
-    }
 
-    public ClusterLoadStatistic getLoadStatistic() {
-        return loadStatistic;
+        setClusterLoadStatistic(clusterLoadStatistic);
     }
 
     /**
@@ -984,7 +994,7 @@ public class TabletScheduler extends FrontendDaemon {
     private void handleReplicaVersionIncomplete(TabletSchedCtx tabletCtx, AgentBatchTask batchTask)
             throws SchedException {
         stat.counterReplicaVersionMissingErr.incrementAndGet();
-        ClusterLoadStatistic statistic = loadStatistic;
+        ClusterLoadStatistic statistic = getClusterLoadStatistic();
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
@@ -1208,7 +1218,7 @@ public class TabletScheduler extends FrontendDaemon {
     }
 
     private boolean deleteReplicaOnSameHost(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
-        ClusterLoadStatistic statistic = loadStatistic;
+        ClusterLoadStatistic statistic = getClusterLoadStatistic();
         if (statistic == null) {
             return false;
         }
@@ -1252,7 +1262,7 @@ public class TabletScheduler extends FrontendDaemon {
     }
 
     private boolean deleteReplicaOnHighLoadBackend(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
-        ClusterLoadStatistic statistic = loadStatistic;
+        ClusterLoadStatistic statistic = getClusterLoadStatistic();
         if (statistic == null) {
             return false;
         }
@@ -1471,7 +1481,7 @@ public class TabletScheduler extends FrontendDaemon {
         tabletCtx.setSrc(decommissionedReplica);
 
         // set dest path
-        BackendLoadStatistic beLoad = loadStatistic.getBackendLoadStatistic(decommissionedReplica.getBackendId());
+        BackendLoadStatistic beLoad = getClusterLoadStatistic().getBackendLoadStatistic(decommissionedReplica.getBackendId());
         List<RootPathLoadStatistic> pathLoadStatistics = beLoad.getPathStatistics(tabletCtx.getStorageMedium());
         if (pathLoadStatistics.size() < 2) {
             throw new SchedException(SchedException.Status.UNRECOVERABLE, "there is only one path on backend "
@@ -1666,7 +1676,7 @@ public class TabletScheduler extends FrontendDaemon {
     // choose a path on a backend which is fit for the tablet
     private RootPathLoadStatistic chooseAvailableDestPath(TabletSchedCtx tabletCtx, boolean forColocate)
             throws SchedException {
-        ClusterLoadStatistic statistic = loadStatistic;
+        ClusterLoadStatistic statistic = getClusterLoadStatistic();
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }

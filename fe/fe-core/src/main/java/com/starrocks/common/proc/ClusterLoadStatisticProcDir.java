@@ -60,7 +60,7 @@ public class ClusterLoadStatisticProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        ClusterLoadStatistic statistic = GlobalStateMgr.getCurrentState().getTabletScheduler().getLoadStatistic();
+        ClusterLoadStatistic statistic = GlobalStateMgr.getCurrentState().getTabletScheduler().getClusterLoadStatistic();
         statistic.getClusterStatistic(medium).forEach(result::addRow);
 
         return result;
