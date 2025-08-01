@@ -215,16 +215,6 @@ public class TableRef implements ParseNode, Writable {
         return pos;
     }
 
-    /**
-     * Creates and returns a empty TupleDescriptor registered with the analyzer. The
-     * returned tuple descriptor must have its source table set via descTbl.setTable()).
-     * This method is called from the analyzer when registering this table reference.
-     */
-    public TupleDescriptor createTupleDescriptor(Analyzer analyzer) throws AnalysisException {
-        ErrorReport.reportAnalysisException(ErrorCode.ERR_UNRESOLVED_TABLE_REF, tableRefToSql());
-        return null;
-    }
-
     public List<Long> getTabletIds() {
         return tabletIds;
     }

@@ -40,7 +40,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BaseTableRef;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
@@ -145,7 +144,6 @@ public class ExportJob implements Writable, GsonPostProcessable {
     private final DescriptorTable desc;
     private final Set<String> exportedTempFiles = Sets.newConcurrentHashSet();
     private Set<String> exportedFiles = Sets.newConcurrentHashSet();
-    private final Analyzer analyzer;
     private final List<Coordinator> coordList = Lists.newArrayList();
     private final AtomicInteger nextId = new AtomicInteger(0);
     // backedn_address => snapshot path
@@ -217,8 +215,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.startTimeMs = -1;
         this.finishTimeMs = -1;
         this.failMsg = new ExportFailMsg(ExportFailMsg.CancelType.UNKNOWN, "");
-        this.analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), null);
-        this.desc = analyzer.getDescTbl();
+        this.desc = new DescriptorTable();
         this.exportPath = "";
         this.exportTempPath = "";
         this.fileNamePrefix = "";
@@ -414,7 +411,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 scanNode.setColumnFilters(Maps.newHashMap());
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
                 ((OlapScanNode) scanNode).setCanTurnOnPreAggr(false);
-                scanNode.init(analyzer);
+                ((OlapScanNode) scanNode).computePartitionInfo();
                 ((OlapScanNode) scanNode).selectBestRollupByRollupSelector();
                 break;
             case MYSQL:
@@ -527,11 +524,10 @@ public class ExportJob implements Writable, GsonPostProcessable {
         }
 
         OlapScanNode newOlapScanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
-        Analyzer tmpAnalyzer = new Analyzer(GlobalStateMgr.getCurrentState(), null);
         newOlapScanNode.setColumnFilters(Maps.newHashMap());
         newOlapScanNode.setIsPreAggregation(false, "This an export operation");
         newOlapScanNode.setCanTurnOnPreAggr(false);
-        newOlapScanNode.init(tmpAnalyzer);
+        newOlapScanNode.computePartitionInfo();
         newOlapScanNode.selectBestRollupByRollupSelector();
         List<TScanRangeLocations> newLocations = newOlapScanNode.updateScanRangeLocations(locations, computeResource);
 

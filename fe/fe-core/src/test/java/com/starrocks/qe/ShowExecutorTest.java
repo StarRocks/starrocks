@@ -37,7 +37,6 @@ package com.starrocks.qe;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
@@ -404,7 +403,7 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testShowPartitions(@Mocked Analyzer analyzer) throws StarRocksException {
+    public void testShowPartitions() throws StarRocksException {
 
         new MockUp<SystemInfoService>() {
             @Mock
