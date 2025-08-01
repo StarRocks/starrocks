@@ -18,7 +18,6 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 
 /**
  * An actual table, such as OLAP table or a MySQL table.
@@ -57,14 +56,4 @@ public class BaseTableRef extends TableRef {
         return result;
     }
 
-    /**
-     * Register this table ref and then analyze the Join clause.
-     */
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        name = analyzer.getFqTableName(name);
-        name.analyze(analyzer);
-        desc = analyzer.registerTableRef(this);
-        isAnalyzed = true;  // true that we have assigned desc
-    }
 }

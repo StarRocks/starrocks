@@ -424,7 +424,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 throw new StarRocksException("Unsupported table type: " + exportTable.getType());
         }
 
-        scanNode.finalizeStats(analyzer);
+        scanNode.finalizeStats();
         scanNode.setComputeResource(computeResource);
         return scanNode;
     }

@@ -434,7 +434,7 @@ public class LoadPlanner {
             fileScanNode.setUseVectorizedLoad(true);
             fileScanNode.setJSONOptions(jsonOptions);
             fileScanNode.init(analyzer);
-            fileScanNode.finalizeStats(analyzer);
+            fileScanNode.finalizeStats();
             fileScanNode.setComputeResource(computeResource);
             scanNode = fileScanNode;
         } else if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == EtlJobType.ROUTINE_LOAD) {
@@ -446,7 +446,7 @@ public class LoadPlanner {
             }
             streamScanNode.setUseVectorizedLoad(true);
             streamScanNode.init(analyzer);
-            streamScanNode.finalizeStats(analyzer);
+            streamScanNode.finalizeStats();
             streamScanNode.setComputeResource(computeResource);
             scanNode = streamScanNode;
         }

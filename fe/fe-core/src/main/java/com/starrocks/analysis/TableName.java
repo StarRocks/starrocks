@@ -39,7 +39,6 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
@@ -109,23 +108,6 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
             return new TableName(catalog, pieces.get(0), pieces.get(1));
         } else {
             throw new IllegalArgumentException("illegal table name: " + name);
-        }
-    }
-
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(catalog)) {
-            catalog = normalizeName(analyzer.getDefaultCatalog());
-        }
-
-        if (Strings.isNullOrEmpty(db)) {
-            db = normalizeName(analyzer.getDefaultDb());
-            if (Strings.isNullOrEmpty(db)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        }
-
-        if (Strings.isNullOrEmpty(tbl)) {
-            throw new AnalysisException("Table name is null");
         }
     }
 

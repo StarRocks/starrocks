@@ -63,10 +63,10 @@ public class JDBCScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+    public void finalizeStats() throws StarRocksException {
         createJDBCTableColumns();
         createJDBCTableFilters();
-        computeStats(analyzer);
+        computeStats();
     }
 
     public void computeColumnsAndFilters() {
@@ -167,8 +167,8 @@ public class JDBCScanNode extends ScanNode {
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
-        super.computeStats(analyzer);
+    public void computeStats() {
+        super.computeStats();
     }
 
 }

@@ -34,23 +34,10 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
 public interface ParseNode {
-    /**
-     * Perform semantic analysis of node and all of its children.
-     * Throws exception if any errors found.
-     *
-     * @param analyzer
-     * @throws AnalysisException, InternalException
-     */
-    default void analyze(Analyzer analyzer) throws StarRocksException {
-        throw new RuntimeException("New AST not support analyze function");
-    }
-
     /**
      * @return SQL syntax corresponding to this node.
      */

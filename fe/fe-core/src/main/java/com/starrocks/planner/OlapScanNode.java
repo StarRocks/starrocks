@@ -354,7 +354,7 @@ public class OlapScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+    public void finalizeStats() throws StarRocksException {
         if (isFinalized) {
             return;
         }
@@ -366,12 +366,12 @@ public class OlapScanNode extends ScanNode {
             throw new StarRocksException(e.getMessage());
         }
 
-        computeStats(analyzer);
+        computeStats();
         isFinalized = true;
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
+    public void computeStats() {
         if (cardinality > 0) {
             long totalBytes = 0;
             avgRowSize = totalBytes / (float) cardinality;
