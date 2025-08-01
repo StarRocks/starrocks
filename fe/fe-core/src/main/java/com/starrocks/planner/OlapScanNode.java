@@ -316,6 +316,17 @@ public class OlapScanNode extends ScanNode {
         return bucketExprs;
     }
 
+    @Override
+    public int getBucketNums() {
+        int bucketNum = olapTable.getDefaultDistributionInfo().getBucketNum();
+        if (getSelectedPartitionIds().size() <= 1) {
+            for (Long pid : getSelectedPartitionIds()) {
+                bucketNum = olapTable.getPartition(pid).getDistributionInfo().getBucketNum();
+            }
+        }
+        return bucketNum;
+    }
+
     public void setBucketExprs(List<Expr> bucketExprs) {
         this.bucketExprs = bucketExprs;
     }

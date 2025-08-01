@@ -92,7 +92,8 @@ public class CoordinatorTest extends PlanTestBase {
         return fragment;
     }
 
-    private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
+    private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode)
+            throws IOException, StarRocksException {
         PlanFragment fragment = genFragment();
         ExecutionFragment execFragment = new ExecutionFragment(null, fragment, 0);
         FragmentInstance instance0 = new FragmentInstance(null, execFragment);
@@ -126,12 +127,12 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     @Test
-    public void testColocateRuntimeFilter() throws IOException {
+    public void testColocateRuntimeFilter() throws IOException, StarRocksException {
         testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.COLOCATE);
     }
 
     @Test
-    public void testBucketShuffleRuntimeFilter() throws IOException {
+    public void testBucketShuffleRuntimeFilter() throws IOException, StarRocksException {
         testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.LOCAL_HASH_BUCKET);
     }
 
