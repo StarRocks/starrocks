@@ -531,6 +531,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：用于异步处理 HTTP 请求的线程池大小。别名为 `max_http_sql_service_task_threads_num`。
 - 引入版本：4.0.0
 
+##### enable_https
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：No
+- 描述：是否在 FE 节点上同时启用 HTTPS 服务器和 HTTP 服务器。
+- 引入版本：v4.0
+
+##### https_port
+
+- 默认值：8443
+- 类型：Int
+- 单位：-
+- 是否动态：No
+- 描述：FE 节点中 HTTPS 服务器监听的端口。
+- 引入版本：v4.0
+
 ##### cluster_name
 
 - 默认值：StarRocks Cluster
