@@ -521,6 +521,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to allow the system to process HTTP requests asynchronously. If this feature is enabled, an HTTP request received by Netty worker threads will then be submitted to a separate thread pool for service logic handling to avoid blocking the HTTP server. If disabled, Netty workers will handle the service logic.
 - Introduced in: 4.0.0
 
+##### enable_https
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable HTTPS server alongside HTTP server in FE nodes.
+- Introduced in: v4.0
+
+##### https_port
+
+- Default: 8443
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The port on which the HTTPS server in the FE node listens.
+- Introduced in: v4.0
+
 ##### http_async_threads_num
 
 - Default: 4096
