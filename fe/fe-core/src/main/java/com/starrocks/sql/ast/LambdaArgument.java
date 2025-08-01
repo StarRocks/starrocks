@@ -15,10 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Preconditions;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -58,11 +55,6 @@ public class LambdaArgument extends Expr {
 
     public void setNullable(boolean nullable) {
         this.nullable = nullable;
-    }
-
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        Preconditions.checkState(false, "unreachable");
     }
 
     @Override

@@ -96,55 +96,6 @@ public final class ExprSubstitutionMap {
     }
 
     /**
-     * Returns true if the smap contains a mapping for lhsExpr.
-     */
-    public boolean containsMappingFor(Expr lhsExpr) {
-        return lhs_.contains(lhsExpr);
-    }
-
-    /**
-     * Return a map  which is equivalent to applying f followed by g,
-     * i.e., g(f()).
-     * Always returns a non-null map.
-     */
-    public static ExprSubstitutionMap compose(ExprSubstitutionMap f, ExprSubstitutionMap g,
-                                              Analyzer analyzer) {
-        if (f == null && g == null) {
-            return new ExprSubstitutionMap();
-        }
-        if (f == null) {
-            return g;
-        }
-        if (g == null) {
-            return f;
-        }
-        ExprSubstitutionMap result = new ExprSubstitutionMap();
-        // f's substitution targets need to be substituted via g
-        result.lhs_ = Expr.cloneList(f.lhs_);
-        result.rhs_ = Expr.substituteList(f.rhs_, g, analyzer, false);
-
-        // substitution maps are cumulative: the combined map contains all
-        // substitutions from f and g.
-        for (int i = 0; i < g.lhs_.size(); i++) {
-            // If f contains expr1->fn(expr2) and g contains expr2->expr3,
-            // then result must contain expr1->fn(expr3).
-            // The check before adding to result.lhs is to ensure that cases
-            // where expr2.equals(expr1) are handled correctly.
-            // For example f: count(*) -> zeroifnull(count(*))
-            // and g: count(*) -> slotref
-            // result.lhs must only have: count(*) -> zeroifnull(slotref) from f above,
-            // and not count(*) -> slotref from g as well.
-            if (!result.lhs_.contains(g.lhs_.get(i))) {
-                result.lhs_.add(g.lhs_.get(i).clone());
-                result.rhs_.add(g.rhs_.get(i).clone());
-            }
-        }
-
-        result.verify();
-        return result;
-    }
-
-    /**
      * Returns the union of two substitution maps. Always returns a non-null map.
      */
     public static ExprSubstitutionMap combine(ExprSubstitutionMap f,
@@ -165,10 +116,6 @@ public final class ExprSubstitutionMap {
         result.rhs_.addAll(g.rhs_);
         result.verify();
         return result;
-    }
-
-    public void substituteLhs(ExprSubstitutionMap lhsSmap, Analyzer analyzer) {
-        lhs_ = Expr.substituteList(lhs_, lhsSmap, analyzer, false);
     }
 
     public List<Expr> getLhs() {

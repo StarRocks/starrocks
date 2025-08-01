@@ -15,7 +15,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
@@ -44,11 +43,6 @@ public class DictMappingExpr extends Expr {
 
     protected DictMappingExpr(DictMappingExpr other) {
         super(other);
-    }
-
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-
     }
 
     @Override

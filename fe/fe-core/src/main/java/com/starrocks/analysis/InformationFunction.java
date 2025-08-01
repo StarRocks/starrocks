@@ -80,10 +80,6 @@ public class InformationFunction extends Expr {
         return new InformationFunction(this);
     }
 
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
     public String getFuncType() {
         return funcType;
     }

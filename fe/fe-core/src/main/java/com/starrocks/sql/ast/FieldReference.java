@@ -14,10 +14,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TExprNode;
@@ -81,11 +79,6 @@ public class FieldReference extends Expr {
 
     @Override
     protected void toThrift(TExprNode msg) {
-        throw new StarRocksPlannerException("FieldReference not implement toThrift", ErrorType.INTERNAL_ERROR);
-    }
-
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
         throw new StarRocksPlannerException("FieldReference not implement toThrift", ErrorType.INTERNAL_ERROR);
     }
 }

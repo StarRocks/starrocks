@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Type;
@@ -41,10 +40,6 @@ public class ArrayExpr extends Expr {
 
     public ArrayExpr(ArrayExpr other) {
         super(other);
-    }
-
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
     @Override

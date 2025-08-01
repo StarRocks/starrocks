@@ -178,12 +178,6 @@ public class ExchangeNode extends PlanNode {
         nullableTupleIds.addAll(getChild(0).getNullableTupleIds());
     }
 
-    @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-        super.init(analyzer);
-        Preconditions.checkState(conjuncts.isEmpty());
-    }
-
     /**
      * Set the parameters used to merge sorted input streams. This can be called
      * after init().

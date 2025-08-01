@@ -84,11 +84,6 @@ public class DataPartition {
         }
     }
 
-    public void substitute(ExprSubstitutionMap smap, Analyzer analyzer) throws AnalysisException {
-        List<Expr> list = Expr.trySubstituteList(partitionExprs, smap, analyzer, false);
-        partitionExprs = ImmutableList.copyOf(list);
-    }
-
     public DataPartition(TPartitionType type) {
         Preconditions.checkState(
                 type == TPartitionType.UNPARTITIONED || type == TPartitionType.RANDOM ||

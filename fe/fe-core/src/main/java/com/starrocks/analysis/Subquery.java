@@ -35,7 +35,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Objects;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -118,10 +117,6 @@ public class Subquery extends Expr {
         return ret;
     }
 
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-
-    }
 
     @Override
     public String toSqlImpl() {

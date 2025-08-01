@@ -34,7 +34,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.parser.NodePosition;
 
 public abstract class Predicate extends Expr {
@@ -53,9 +52,5 @@ public abstract class Predicate extends Expr {
     protected Predicate(Predicate other) {
         super(other);
         isEqJoinConjunct = other.isEqJoinConjunct;
-    }
-
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 }

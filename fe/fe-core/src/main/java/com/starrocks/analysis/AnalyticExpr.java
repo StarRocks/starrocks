@@ -342,10 +342,6 @@ public class AnalyticExpr extends Expr {
         }
     }
 
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
     /**
      * Keep fnCall_, partitionExprs_ and orderByElements_ in sync with children_.
      */
@@ -403,18 +399,6 @@ public class AnalyticExpr extends Expr {
         resetWindow = false;
         // sync with children, now that they've been reset
         syncWithChildren();
-    }
-
-    @Override
-    protected Expr substituteImpl(ExprSubstitutionMap sMap, Analyzer analyzer)
-            throws AnalysisException {
-        Expr e = super.substituteImpl(sMap, analyzer);
-        if (!(e instanceof AnalyticExpr)) {
-            return e;
-        }
-        // Re-sync state after possible child substitution.
-        ((AnalyticExpr) e).syncWithChildren();
-        return e;
     }
 
     @Override

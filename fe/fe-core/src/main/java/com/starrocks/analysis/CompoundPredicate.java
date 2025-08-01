@@ -100,10 +100,6 @@ public class CompoundPredicate extends Predicate {
         msg.setOpcode(op.toThrift());
     }
 
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
     public enum Operator {
         AND("AND", TExprOpcode.COMPOUND_AND),
         OR("OR", TExprOpcode.COMPOUND_OR),

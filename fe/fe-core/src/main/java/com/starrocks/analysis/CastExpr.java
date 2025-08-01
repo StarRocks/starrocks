@@ -182,14 +182,6 @@ public class CastExpr extends Expr {
     }
 
     @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        Preconditions.checkState(!isImplicit);
-        targetTypeDef.analyze(analyzer);
-        type = targetTypeDef.getType();
-        analyze();
-    }
-
-    @Override
     public Expr reset() {
         Expr e = super.reset();
         if (noOp && !getChild(0).getType().matchesType(this.type)) {

@@ -115,10 +115,6 @@ public class RepeatNode extends PlanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-    }
-
-    @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.REPEAT_NODE;
         msg.repeat_node = new TRepeatNode(outputTupleDesc.getId().asInt(), repeatSlotIdList, groupingList.get(0),

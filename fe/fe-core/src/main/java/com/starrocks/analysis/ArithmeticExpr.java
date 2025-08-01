@@ -514,9 +514,6 @@ public class ArithmeticExpr extends Expr {
         }
     }
 
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
 
     @Override
     public int hashCode() {

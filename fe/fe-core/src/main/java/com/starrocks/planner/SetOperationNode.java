@@ -161,19 +161,6 @@ public abstract class SetOperationNode extends PlanNode {
     public void computeStats(Analyzer analyzer) {
     }
 
-    /**
-     * Must be called after addChild()/addConstExprList(). Computes the materialized
-     * result/const expr lists based on the materialized slots of this UnionNode's
-     * produced tuple. The UnionNode doesn't need an smap: like a ScanNode, it
-     * materializes an original tuple.
-     * There is no need to call assignConjuncts() because all non-constant conjuncts
-     * have already been assigned to the set operation operands, and all constant conjuncts have
-     * been evaluated during registration to set analyzer.hasEmptyResultSet_.
-     */
-    @Override
-    public void init(Analyzer analyzer) {
-    }
-
     protected void toThrift(TPlanNode msg, TPlanNodeType nodeType) {
         Preconditions.checkState(materializedResultExprLists_.size() == children.size());
         List<List<TExpr>> texprLists = Lists.newArrayList();

@@ -125,10 +125,6 @@ public class AnalyticEvalNode extends PlanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-    }
-
-    @Override
     protected void computeStats(Analyzer analyzer) {
     }
 
