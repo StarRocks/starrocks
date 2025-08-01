@@ -51,6 +51,7 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.utframe.TestWithFeService;
+import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Assertions;
@@ -68,6 +69,11 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandlerTest.class);
     private int jobSize = 0;
+
+    @Override
+    protected void createStarrocksCluster() {
+        UtFrameUtils.createMinStarRocksCluster(false, runMode);
+    }
 
     @Override
     protected void runBeforeAll() throws Exception {

@@ -302,6 +302,10 @@ public class UtFrameUtils {
     }
 
     public static synchronized void createMinStarRocksCluster(boolean startBDB, RunMode runMode) {
+        createMinStarRocksCluster(startBDB, runMode, "fe/mocked/test/" + UUID.randomUUID().toString() + "/");
+    }
+
+    public static synchronized void createMinStarRocksCluster(boolean startBDB, RunMode runMode, String runningDir) {
         // to avoid call createMinStarRocksCluster multiple times
         if (CREATED_MIN_CLUSTER.get()) {
             return;
@@ -310,7 +314,7 @@ public class UtFrameUtils {
             ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ThriftConnectionPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
-            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB, runMode);
+            startFEServer(runningDir, startBDB, runMode);
 
             addMockBackend(10001);
 

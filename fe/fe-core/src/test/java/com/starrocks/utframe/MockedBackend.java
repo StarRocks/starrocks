@@ -293,36 +293,60 @@ public class MockedBackend {
     }
 
     private static class MockBeThriftClient extends BackendService.Client {
-        // task queue to save all agent tasks coming from Frontend
-        private final BlockingQueue<TAgentTaskRequest> taskQueue = Queues.newLinkedBlockingQueue();
+        // Shared static resources across all MockBeThriftClient instances
+        private static BlockingQueue<TaskWrapper> sharedTaskQueue = Queues.newLinkedBlockingQueue();
+        private static LeaderImpl sharedMaster = new LeaderImpl();
+        private static volatile boolean workerThreadStarted = false;
+        private static Object lock = new Object();
+
+        // Wrapper class to include backend reference with task
+        private static class TaskWrapper {
+            final TAgentTaskRequest request;
+            final TBackend backend;
+            final long reportVersion;
+
+            TaskWrapper(TAgentTaskRequest request, TBackend backend, long reportVersion) {
+                this.request = request;
+                this.backend = backend;
+                this.reportVersion = reportVersion;
+            }
+        }
+
         private final TBackend tBackend;
         private long reportVersion = 0;
-        private final LeaderImpl master = new LeaderImpl();
 
         public MockBeThriftClient(MockedBackend backend) {
             super(null);
 
             tBackend = new TBackend(backend.getHost(), backend.getBeThriftPort(), backend.getHttpPort());
-            new Thread(() -> {
-                while (true) {
-                    try {
-                        TAgentTaskRequest request = taskQueue.take();
-                        TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(tBackend,
-                                request.getTask_type(), request.getSignature(), new TStatus(TStatusCode.OK));
-                        finishTaskRequest.setReport_version(++reportVersion);
-                        if (request.getTask_type() == CREATE) {
-                            TTabletInfo tabletInfo = new TTabletInfo();
-                            tabletInfo.setPath_hash(PATH_HASH);
-                            tabletInfo.setData_size(0);
-                            tabletInfo.setTablet_id(request.getSignature());
-                            finishTaskRequest.setFinish_tablet_infos(Lists.newArrayList(tabletInfo));
+
+            // Start the shared worker thread only once
+            synchronized (lock) {
+                if (!workerThreadStarted) {
+                    workerThreadStarted = true;
+                    new Thread(() -> {
+                        while (true) {
+                            try {
+                                TaskWrapper taskWrapper = sharedTaskQueue.take();
+                                TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(taskWrapper.backend,
+                                        taskWrapper.request.getTask_type(), taskWrapper.request.getSignature(),
+                                        new TStatus(TStatusCode.OK));
+                                finishTaskRequest.setReport_version(taskWrapper.reportVersion);
+                                if (taskWrapper.request.getTask_type() == CREATE) {
+                                    TTabletInfo tabletInfo = new TTabletInfo();
+                                    tabletInfo.setPath_hash(PATH_HASH);
+                                    tabletInfo.setData_size(0);
+                                    tabletInfo.setTablet_id(taskWrapper.request.getSignature());
+                                    finishTaskRequest.setFinish_tablet_infos(Lists.newArrayList(tabletInfo));
+                                }
+                                sharedMaster.finishTask(finishTaskRequest);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
                         }
-                        master.finishTask(finishTaskRequest);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
+                    }, "shared-mock-be-thrift-worker").start();
                 }
-            }, "mock-be-thrift-client-" + backend.getBackendId()).start();
+            }
         }
 
         @Override
@@ -347,7 +371,9 @@ public class MockedBackend {
 
         @Override
         public TAgentResult submit_tasks(List<TAgentTaskRequest> tasks) {
-            taskQueue.addAll(tasks);
+            for (TAgentTaskRequest task : tasks) {
+                sharedTaskQueue.add(new TaskWrapper(task, tBackend, ++reportVersion));
+            }
             return new TAgentResult(new TStatus(TStatusCode.OK));
         }
 
