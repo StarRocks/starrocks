@@ -883,6 +883,7 @@ displayed_sidebar: docs
 
 #### 其他
 
+- 从 StarRocks v3.3.0 起，需使用 JDK 11 或更高版本。
 - 物化视图属性 `partition_refresh_num` 默认值从 `-1` 调整为 `1`，当物化视图有多个分区需要刷新时，原来在一个刷新任务重刷新所有的分区，当前会一个分区一个分区增量刷新，避免先前行为消耗过多资源。可以通过 FE 参数 `default_mv_partition_refresh_number` 调整默认行为。
 - 系统原先按照 GMT+8 时区的时间调度数据库一致性检查，现在将按照当地时区的时间进行调度。[#45748](https://github.com/StarRocks/starrocks/issues/45748)
 - 默认启用 Data Cache 来加速数据湖查询。用户也可通过 `SET enable_scan_datacache = false` 手动关闭 Data Cache。
