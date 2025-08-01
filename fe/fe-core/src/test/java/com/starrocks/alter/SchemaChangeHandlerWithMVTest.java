@@ -73,6 +73,11 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
         }
     }
 
+    @Override
+    protected void createStarrocksCluster() {
+        UtFrameUtils.createMinStarRocksCluster(false, runMode);
+    }
+
     private void waitAlterJobDone(Map<Long, AlterJobV2> alterJobs) throws Exception {
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
             while (!alterJobV2.getJobState().isFinalState()) {
