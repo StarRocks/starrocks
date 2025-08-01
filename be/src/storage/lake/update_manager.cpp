@@ -19,6 +19,7 @@
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/delta_column_group.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -32,6 +33,9 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_schema.h"
+#include "storage/tablet_updates.h"
+#include "storage/utils.h"
 #include "testutil/sync_point.h"
 #include "util/failpoint/fail_point.h"
 #include "util/pretty_printer.h"
@@ -562,6 +566,47 @@ Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_ve
     return st;
 }
 
+static StatusOr<std::shared_ptr<Segment>> get_lake_dcg_segment(GetDeltaColumnContext& ctx, uint32_t ucid, int32_t* col_index,
+                                                               const TabletSchemaCSPtr& read_tablet_schema) {
+    // iterate dcg from new ver to old ver
+    for (const auto& dcg : ctx.dcgs) {
+        std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
+        if (idx.first >= 0) {
+            ASSIGN_OR_RETURN(std::string column_file,
+                             dcg->column_file_by_idx(parent_name(ctx.segment->file_name()), idx.first));
+            if (ctx.dcg_segments.count(column_file) == 0) {
+                ASSIGN_OR_RETURN(auto dcg_segment, ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema));
+                ctx.dcg_segments[column_file] = dcg_segment;
+            }
+            if (col_index != nullptr) {
+                *col_index = idx.second;
+            }
+            return ctx.dcg_segments[column_file];
+        }
+    }
+    // the column not exist in dcg
+    return nullptr;
+}
+
+static StatusOr<std::unique_ptr<ColumnIterator>> new_lake_dcg_column_iterator(GetDeltaColumnContext& ctx,
+                                                                              const std::shared_ptr<FileSystem>& fs,
+                                                                              ColumnIteratorOptions& iter_opts,
+                                                                              const TabletColumn& column,
+                                                                              const TabletSchemaCSPtr& read_tablet_schema) {
+    // build column iter from dcg
+    int32_t col_index = 0;
+    ASSIGN_OR_RETURN(auto dcg_segment, get_lake_dcg_segment(ctx, column.unique_id(), &col_index, read_tablet_schema));
+    if (dcg_segment != nullptr) {
+        if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
+            ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(dcg_segment->file_info()));
+            ctx.dcg_read_files[dcg_segment->file_name()] = std::move(read_file);
+        }
+        iter_opts.read_file = ctx.dcg_read_files[dcg_segment->file_name()].get();
+        return dcg_segment->new_column_iterator(column, nullptr);
+    }
+    return nullptr;
+}
+
 Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, std::vector<uint32_t>& column_ids,
                                         bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<MutableColumnPtr>* columns,
@@ -601,6 +646,31 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
     watch.reset();
 
     std::shared_ptr<FileSystem> fs;
+    
+    bool need_dcg_check = false;
+    std::unordered_map<uint32_t, GetDeltaColumnContext> dcg_contexts;
+    bool has_any_dcg = false;
+    if (params.op_write.has_txn_meta()) {
+        // only enable dcg logic when switching from column mode to row mode
+        need_dcg_check = !params.metadata->dcg_meta().dcgs().empty();
+    }
+    
+    if (need_dcg_check) {
+        LakeDeltaColumnGroupLoader dcg_loader(params.metadata);
+        for (const auto& [rssid, rowids] : rowids_by_rssid) {
+            TabletSegmentId tsid;
+            tsid.tablet_id = params.tablet->id();
+            tsid.segment_id = rssid;
+            
+            DeltaColumnGroupList dcgs;
+            Status dcg_status = dcg_loader.load(tsid, params.metadata->version(), &dcgs);
+            if (dcg_status.ok() && !dcgs.empty()) {
+                dcg_contexts[rssid].dcgs = std::move(dcgs);
+                has_any_dcg = true;
+            }
+        }
+    }
+
     auto fetch_values_from_segment = [&](const FileInfo& segment_info, uint32_t segment_id,
                                          const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& rowids,
                                          const std::vector<uint32_t>& read_column_ids) -> Status {
@@ -632,9 +702,31 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
         iter_opts.stats = &stats;
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file_with_bundling(opts, file_info));
         iter_opts.read_file = read_file.get();
+        
+        GetDeltaColumnContext* dcg_ctx = nullptr;
+        if (has_any_dcg && dcg_contexts.count(segment_id) > 0 && !dcg_contexts[segment_id].dcgs.empty()) {
+            dcg_ctx = &dcg_contexts[segment_id];
+            dcg_ctx->segment = *segment;
+        }
+        
         for (auto i = 0; i < read_column_ids.size(); ++i) {
             const TabletColumn& col = tablet_schema->column(read_column_ids[i]);
-            ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator_or_default(col, nullptr));
+            std::unique_ptr<ColumnIterator> col_iter = nullptr;
+            
+            // try dcg read only if dcg context exists
+            if (dcg_ctx != nullptr) {
+                auto dcg_col_iter_result = new_lake_dcg_column_iterator(*dcg_ctx, fs, iter_opts, col, tablet_schema);
+                if (dcg_col_iter_result.ok() && dcg_col_iter_result.value() != nullptr) {
+                    col_iter = std::move(dcg_col_iter_result.value());
+                }
+            }
+            
+            // read from original segment if no dcg data available
+            if (col_iter == nullptr) {
+                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator_or_default(col, nullptr));
+                iter_opts.read_file = read_file.get();
+            }
+            
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
             // padding char columns
@@ -657,8 +749,8 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
             return Status::Cancelled(fmt::format("tablet id {} version {} rowset_segment_id {} no exist",
                                                  params.metadata->id(), params.metadata->version(), rssid));
         }
-        // use 0 segment_id is safe, because we need not get either delvector or dcg here
-        RETURN_IF_ERROR(fetch_values_from_segment(params.container.rssid_to_file().at(rssid), 0, params.tablet_schema,
+        // pass the actual segment_id to properly handle DCG reading
+        RETURN_IF_ERROR(fetch_values_from_segment(params.container.rssid_to_file().at(rssid), rssid, params.tablet_schema,
                                                   rowids, column_ids));
     }
     if (auto_increment_state != nullptr && with_default) {
