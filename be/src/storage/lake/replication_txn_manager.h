@@ -30,7 +30,7 @@ namespace starrocks {
 class FileSystem;
 } // namespace starrocks
 
-using starrocks::FileConverterFunc;
+using starrocks::FileConverterCreatorFunc;
 
 namespace starrocks::lake {
 
@@ -83,11 +83,13 @@ private:
             TxnLogPB::OpWrite* op_write,
             std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>* filename_map);
 
-    FileConverterFunc build_file_converters(
+    FileConverterCreatorFunc build_file_converters(
             const TReplicateSnapshotRequest& request,
             const std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>& filename_map,
             std::unordered_map<uint32_t, uint32_t>& column_unique_id_map,
             std::vector<std::string>& files_to_delete) const;
+
+    StatusOr<std::shared_ptr<FileSystem>> get_or_create_shared_src_fs(int64_t shard_id);
 
 private:
     static Status convert_rowset_meta(
@@ -98,6 +100,7 @@ private:
 
 private:
     lake::TabletManager* _tablet_manager;
+    std::unordered_map<int64_t, std::shared_ptr<FileSystem>> _faked_starlet_fs_map;
 };
 
 } // namespace starrocks::lake

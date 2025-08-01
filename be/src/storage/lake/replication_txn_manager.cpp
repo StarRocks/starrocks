@@ -239,12 +239,7 @@ Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnap
             << ", target_tablet_id: " << target_tablet_id;
 
     // use faked_shard_id here to distinguish src starlet fs
-    auto shared_src_fs = new_fs_starlet_with_shard_fs(request.faked_shard_id);
-    if (shared_src_fs == nullptr) {
-        return Status::InternalError(fmt::format("Failed to create file system for faked shard id {}, tablet_id: {} ",
-                                                 request.faked_shard_id, target_tablet_id));
-    }
-
+    ASSIGN_OR_RETURN(auto shared_src_fs, get_or_create_shared_src_fs(request.faked_shard_id));
     ASSIGN_OR_RETURN(auto last_src_tablet_meta,
                      build_source_tablet_meta(src_tablet_id, request.data_version, src_meta_dir, shared_src_fs));
     ASSIGN_OR_RETURN(auto current_src_tablet_meta,
@@ -346,6 +341,22 @@ Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnap
     return Status::OK();
 }
 
+StatusOr<std::shared_ptr<FileSystem>> ReplicationTxnManager::get_or_create_shared_src_fs(int64_t faked_shard_id) {
+    std::shared_ptr<FileSystem> shared_src_fs;
+    auto it = _faked_starlet_fs_map.find(faked_shard_id);
+    if (it != _faked_starlet_fs_map.end()) {
+        shared_src_fs = it->second;
+    } else {
+        shared_src_fs = new_fs_starlet_with_shard_fs(faked_shard_id);
+        if (shared_src_fs == nullptr) {
+            return Status::InternalError(
+                    fmt::format("Failed to create file system for faked shard id {}", faked_shard_id));
+        }
+        _faked_starlet_fs_map.insert({faked_shard_id, shared_src_fs});
+    }
+    return shared_src_fs;
+}
+
 Status ReplicationTxnManager::build_lake_file_mappings(
         const TReplicateSnapshotRequest& request, TabletMetadataPtr last_src_tablet_meta,
         TabletMetadataPtr current_src_tablet_meta, TabletMetadataPtr last_target_tablet_meta,
@@ -407,7 +418,7 @@ Status ReplicationTxnManager::build_lake_file_mappings(
     return Status::OK();
 }
 
-FileConverterFunc ReplicationTxnManager::build_file_converters(
+FileConverterCreatorFunc ReplicationTxnManager::build_file_converters(
         const TReplicateSnapshotRequest& request,
         const std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>& filename_map,
         std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete) const {
