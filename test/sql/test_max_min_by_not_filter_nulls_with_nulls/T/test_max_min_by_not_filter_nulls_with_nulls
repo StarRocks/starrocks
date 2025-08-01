@@ -1,4 +1,4 @@
--- name: test_max_min_by_not_filter_nulls_with_nulls
+-- name: test_max_min_by_not_filter_nulls_with_nulls @slow @sequential
  DROP TABLE if exists t0;
 
  CREATE TABLE if not exists t0
