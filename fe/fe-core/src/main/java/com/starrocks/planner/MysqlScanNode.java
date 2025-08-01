@@ -37,7 +37,6 @@ package com.starrocks.planner;
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotDescriptor;
@@ -87,7 +86,7 @@ public class MysqlScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+    public void finalizeStats() throws StarRocksException {
         computeColumnsAndFilters();
     }
 
@@ -178,8 +177,8 @@ public class MysqlScanNode extends ScanNode {
 
 
     @Override
-    public void computeStats(Analyzer analyzer) {
-        super.computeStats(analyzer);
+    public void computeStats() {
+        super.computeStats();
         // this is just to avoid mysql scan node's cardinality being -1. So that we can calculate the join cost
         // normally.
         // We assume that the data volume of all mysql tables is very small, so set cardinality directly to 1.

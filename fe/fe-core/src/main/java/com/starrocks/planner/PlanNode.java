@@ -46,7 +46,6 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TreeNode;
 import com.starrocks.sql.common.PermutationGenerator;
@@ -303,15 +302,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         isReplicated = replicated;
     }
 
-    /**
-     * Call computeMemLayout() for all materialized tuples.
-     */
-    protected void computeMemLayout(Analyzer analyzer) {
-        for (TupleId id : tupleIds) {
-            analyzer.getDescTbl().getTupleDesc(id).computeMemLayout();
-        }
-    }
-
     public String getExplainString() {
         return getExplainString("", "", TExplainLevel.VERBOSE);
     }
@@ -560,11 +550,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Call this once on the root of the plan tree before calling toThrift().
      * Subclasses need to override this.
      */
-    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+    public void finalizeStats() throws StarRocksException {
         for (PlanNode child : children) {
-            child.finalizeStats(analyzer);
+            child.finalizeStats();
         }
-        computeStats(analyzer);
+        computeStats();
     }
 
     /**
@@ -575,7 +565,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * from finalize() (to facilitate inserting additional nodes during plan
      * partitioning w/o the need to call finalize() recursively on the whole tree again).
      */
-    protected void computeStats(Analyzer analyzer) {
+    protected void computeStats() {
         avgRowSize = 0.0F;
         for (TupleId tid : tupleIds) {
             avgRowSize += 4;
@@ -593,42 +583,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         multiColumnCombinedStats = statistics.getMultiColumnCombinedStats();
     }
 
-    public ExprSubstitutionMap getOutputSmap() {
-        return outputSmap;
-    }
-
     public void init(Analyzer analyzer) throws StarRocksException {
-    }
-
-    /**
-     * Assign remaining unassigned conjuncts.
-     */
-    protected void assignConjuncts(Analyzer analyzer) {
-        List<Expr> unassigned = analyzer.getUnassignedConjuncts(this.getTupleIds());
-        conjuncts.addAll(unassigned);
-        analyzer.markConjunctsAssigned(unassigned);
-    }
-
-    /**
-     * Returns an smap that combines the childrens' smaps.
-     */
-    protected ExprSubstitutionMap getCombinedChildSmap() {
-        if (getChildren().size() == 0) {
-            return new ExprSubstitutionMap();
-        }
-
-        if (getChildren().size() == 1) {
-            return getChild(0).getOutputSmap();
-        }
-
-        ExprSubstitutionMap result = ExprSubstitutionMap.combine(
-                getChild(0).getOutputSmap(), getChild(1).getOutputSmap());
-
-        for (int i = 2; i < getChildren().size(); ++i) {
-            result = ExprSubstitutionMap.combine(result, getChild(i).getOutputSmap());
-        }
-
-        return result;
     }
 
     public void setHasNullableGenerateChild() {

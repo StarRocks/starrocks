@@ -38,7 +38,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DescriptorTable;
@@ -50,7 +49,6 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
@@ -461,7 +459,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
+    public void computeStats() {
     }
 
     @Override

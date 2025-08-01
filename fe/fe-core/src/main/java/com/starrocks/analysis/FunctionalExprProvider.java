@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -139,20 +138,6 @@ public abstract class FunctionalExprProvider<U> {
      * This function will be invoked at the end of the predicate chain.
      */
     protected abstract boolean delegatePostRowFilter(ConnectContext ctx, U row);
-
-    @Deprecated
-    public void analyze(Analyzer analyzer, Expr predicate, List<OrderByElement> orderByElements, LimitElement limit)
-            throws AnalysisException {
-        this.connCtx = analyzer.getContext();
-        // analyze where clase
-        predicateChain = null;
-        analyzeWhere(predicate);
-        connectPredicate(row -> delegatePostRowFilter(connCtx, row));
-        // analyze order by
-        analyzeOrder(orderByElements);
-        // analyze limit
-        analyzeLimit(limit);
-    }
 
     public void analyze(ConnectContext connCtx, Expr predicate, List<OrderByElement> orderByElements, LimitElement limit) {
         this.connCtx = connCtx;

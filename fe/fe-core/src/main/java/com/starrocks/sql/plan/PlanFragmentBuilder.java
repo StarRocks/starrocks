@@ -3984,7 +3984,7 @@ public class PlanFragmentBuilder {
             analyzer.setDescTbl(context.getDescTbl());
             try {
                 scanNode.init(analyzer);
-                scanNode.finalizeStats(analyzer);
+                scanNode.finalizeStats();
             } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
                         "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),

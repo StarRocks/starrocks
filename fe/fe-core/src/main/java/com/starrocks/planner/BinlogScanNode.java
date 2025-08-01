@@ -98,16 +98,16 @@ public class BinlogScanNode extends ScanNode {
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
+    public void computeStats() {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+    public void finalizeStats() throws StarRocksException {
         if (isFinalized) {
             return;
         }
         computeScanRanges();
-        computeStats(analyzer);
+        computeStats();
         isFinalized = true;
     }
 

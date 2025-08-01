@@ -202,7 +202,11 @@ public class StreamLoadScanNode extends LoadScanNode {
         if (needAssignBE) {
             assignBackends();
         }
-        assignConjuncts(analyzer);
+
+        List<Expr> unassigned = analyzer.getUnassignedConjuncts(this.getTupleIds());
+        conjuncts.addAll(unassigned);
+        analyzer.markConjunctsAssigned(unassigned);
+
         this.analyzer = analyzer;
         paramCreateContext = new ParamCreateContext();
         initParams();
@@ -263,7 +267,7 @@ public class StreamLoadScanNode extends LoadScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws StarRocksException, StarRocksException {
+    public void finalizeStats() throws StarRocksException, StarRocksException {
         finalizeParams();
     }
 

@@ -525,7 +525,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                     throw new AnalysisException("repeat setting of partition names");
                 }
                 partitionNames = (PartitionNames) parseNode;
-                partitionNames.analyze(null);
+                partitionNames.analyze();
             }
         }
         return new RoutineLoadDesc(columnSeparator, rowDelimiter, importColumnsStmt, importWhereStmt,

@@ -16,10 +16,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -107,10 +105,6 @@ public class OptimizeRange implements ParseNode, Writable {
     @Override
     public NodePosition getPos() {
         return pos;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
     }
 
     @Override
