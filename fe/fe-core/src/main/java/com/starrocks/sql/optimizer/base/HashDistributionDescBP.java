@@ -39,13 +39,13 @@ public class HashDistributionDescBP extends HashDistributionDesc {
     }
 
     @Override
-    public boolean isBucketLocal() {
-        return true;
+    public boolean isNativeLocal() {
+        return false;
     }
 
     @Override
     public boolean canColocate(HashDistributionDesc o) {
-        if (!o.isBucketLocal()) {
+        if (o.isNativeLocal()) {
             return false;
         }
         List<BucketProperty> oBP = ((HashDistributionDescBP) o).getBucketProperties();

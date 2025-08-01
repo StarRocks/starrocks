@@ -132,12 +132,12 @@ public class HashDistributionDesc {
         return this.sourceType == SourceType.LOCAL;
     }
 
-    public boolean isBucketLocal() {
-        return false;
+    public boolean isNativeLocal() {
+        return true;
     }
 
     public boolean canColocate(HashDistributionDesc o) {
-        return !o.isBucketLocal();
+        return o.isNativeLocal();
     }
 
     public boolean isShuffle() {
