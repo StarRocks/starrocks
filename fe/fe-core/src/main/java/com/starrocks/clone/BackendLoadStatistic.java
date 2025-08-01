@@ -210,8 +210,15 @@ public class BackendLoadStatistic {
     }
 
     // Get max|min path used percent.
-    // Return Pair<max, min>, return null if be has no medium path.
+    // Return Pair<maxUsedPercent, minUsedPercent>, return null if be has no medium path.
     public Pair<Double, Double> getMaxMinPathUsedPercent(TStorageMedium medium) {
+        Pair<Pair<Double, String>, Pair<Double, String>> maxMin = getMaxMinPathUsedPercentWithPath(medium);
+        return maxMin == null ? null : Pair.create(maxMin.first.first, maxMin.second.first);
+    }
+
+    // Get max|min path used percent with path.
+    // Return Pair<Pair<maxUsedPercent, maxPath>, Pair<minUsedPercent, minPath>>, return null if be has no medium path.
+    public Pair<Pair<Double, String>, Pair<Double, String>> getMaxMinPathUsedPercentWithPath(TStorageMedium medium) {
         List<RootPathLoadStatistic> pathStats = getPathStatistics(medium);
         if (pathStats.isEmpty()) {
             return null;
@@ -219,6 +226,8 @@ public class BackendLoadStatistic {
 
         double maxUsedPercent = Double.MIN_VALUE;
         double minUsedPercent = Double.MAX_VALUE;
+        String maxPath = "";
+        String minPath = "";
         for (RootPathLoadStatistic pathStat : pathStats) {
             if (pathStat.getDiskState() != DiskState.ONLINE) {
                 continue;
@@ -227,12 +236,14 @@ public class BackendLoadStatistic {
             double usedPercent = pathStat.getUsedPercent();
             if (usedPercent > maxUsedPercent) {
                 maxUsedPercent = usedPercent;
+                maxPath = pathStat.getPath();
             }
             if (usedPercent < minUsedPercent) {
                 minUsedPercent = usedPercent;
+                minPath = pathStat.getPath();
             }
         }
-        return Pair.create(maxUsedPercent, minUsedPercent);
+        return Pair.create(Pair.create(maxUsedPercent, maxPath), Pair.create(minUsedPercent, minPath));
     }
 
     public long getReplicaNum(TStorageMedium medium) {
