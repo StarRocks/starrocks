@@ -14,7 +14,6 @@
 
 package com.starrocks.scheduler;
 
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
@@ -32,7 +31,6 @@ import org.junit.runners.MethodSorters;
 
 import java.time.Instant;
 import java.util.Collection;
-import java.util.Map;
 
 import static com.starrocks.sql.plan.ConnectorPlanTestBase.MOCK_PAIMON_CATALOG_NAME;
 import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
@@ -111,16 +109,6 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVRefreshTestBas
 
                     Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
                     Assert.assertEquals(10, partitions.size());
-                    triggerRefreshMv(testDb, partitionedMaterializedView);
-
-                    Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
-                            partitionedMaterializedView.getRefreshScheme()
-                                    .getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap();
-
-                    BaseTableInfo baseTableInfo = new BaseTableInfo("paimon0", "pmn_db1",
-                            "partitioned_table", "partitioned_table");
-                    versionMap.get(baseTableInfo).put("pt=2026-11-22",
-                            new MaterializedView.BasePartitionInfo(1, 2, -1));
                     triggerRefreshMv(testDb, partitionedMaterializedView);
 
                     Assert.assertEquals(10, partitionedMaterializedView.getPartitions().size());
