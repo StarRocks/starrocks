@@ -39,7 +39,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -51,7 +50,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -176,7 +174,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
+    public void computeStats() {
     }
 
     private void updateplanNodeName() {

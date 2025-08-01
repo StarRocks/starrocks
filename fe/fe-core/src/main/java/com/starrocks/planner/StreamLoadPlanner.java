@@ -197,7 +197,7 @@ public class StreamLoadPlanner {
                 new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc, destTable, streamLoadInfo);
         scanNode.setUseVectorizedLoad(true);
         scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.finalizeStats();
         scanNode.setComputeResource(computeResource);
 
         descTable.computeMemLayout();

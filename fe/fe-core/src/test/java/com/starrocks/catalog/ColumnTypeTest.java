@@ -63,7 +63,7 @@ public class ColumnTypeTest {
     public void testPrimitiveType() throws AnalysisException {
         TypeDef type = TypeDef.create(PrimitiveType.INT);
 
-        type.analyze(null);
+        type.analyze();
 
         Assertions.assertEquals(PrimitiveType.INT, type.getType().getPrimitiveType());
         Assertions.assertEquals("int(11)", type.toSql());
@@ -81,14 +81,14 @@ public class ColumnTypeTest {
     public void testInvalidType() {
         assertThrows(SemanticException.class, () -> {
             TypeDef type = TypeDef.create(PrimitiveType.INVALID_TYPE);
-            type.analyze(null);
+            type.analyze();
         });
     }
 
     @Test
     public void testCharType() throws AnalysisException {
         TypeDef type = TypeDef.createVarchar(10);
-        type.analyze(null);
+        type.analyze();
         Assertions.assertEquals("VARCHAR(10)", type.toString());
         Assertions.assertEquals(PrimitiveType.VARCHAR, type.getType().getPrimitiveType());
         Assertions.assertEquals(10, ((ScalarType) type.getType()).getLength());
@@ -110,7 +110,7 @@ public class ColumnTypeTest {
     public void testCharInvalid() {
         assertThrows(SemanticException.class, () -> {
             TypeDef type = TypeDef.createVarchar(-1);
-            type.analyze(null);
+            type.analyze();
             Assertions.fail("No Exception throws");
         });
     }
@@ -118,7 +118,7 @@ public class ColumnTypeTest {
     @Test
     public void testDecimal() throws AnalysisException {
         TypeDef type = TypeDef.createDecimal(12, 5);
-        type.analyze(null);
+        type.analyze();
         Assertions.assertEquals("DECIMAL(12,5)", type.toString());
         Assertions.assertEquals(PrimitiveType.DECIMALV2, type.getType().getPrimitiveType());
         Assertions.assertEquals(12, ((ScalarType) type.getType()).getScalarPrecision());
@@ -143,7 +143,7 @@ public class ColumnTypeTest {
     public void testDecimalPreFail() {
         assertThrows(SemanticException.class, () -> {
             TypeDef type = TypeDef.createDecimal(28, 3);
-            type.analyze(null);
+            type.analyze();
         });
     }
 
@@ -151,7 +151,7 @@ public class ColumnTypeTest {
     public void testDecimalScaleFail() {
         assertThrows(SemanticException.class, () -> {
             TypeDef type = TypeDef.createDecimal(27, 10);
-            type.analyze(null);
+            type.analyze();
         });
     }
 
@@ -159,7 +159,7 @@ public class ColumnTypeTest {
     public void testDecimalScaleLargeFial() {
         assertThrows(SemanticException.class, () -> {
             TypeDef type = TypeDef.createDecimal(8, 9);
-            type.analyze(null);
+            type.analyze();
         });
     }
 
