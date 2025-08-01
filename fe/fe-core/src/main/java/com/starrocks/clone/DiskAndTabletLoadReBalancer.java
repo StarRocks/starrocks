@@ -86,11 +86,6 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     // used to delete src replica after copy task success
     private final Map<Long, Long> cachedReplicaId = new ConcurrentHashMap<>();
 
-    // TStorageMedium -> BalanceStat
-    private final Map<TStorageMedium, BalanceStat> clusterDiskBalanceStats = new ConcurrentHashMap<>();
-    // Pair<TStorageMedium, BeId> -> BalanceStat
-    private final Map<Pair<TStorageMedium, Long>, BalanceStat> backendDiskBalanceStats = new ConcurrentHashMap<>();
-
     @Override
     protected List<TabletSchedCtx> selectAlternativeTabletsForCluster(
             ClusterLoadStatistic clusterStat, TStorageMedium medium) {
@@ -134,7 +129,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     public void completeSchedCtx(TabletSchedCtx tabletCtx, Map<Long, TabletScheduler.PathSlot> backendsWorkingSlots)
             throws SchedException {
         TStorageMedium medium = tabletCtx.getStorageMedium();
-        ClusterLoadStatistic clusterStat = loadStatistic;
+        ClusterLoadStatistic clusterStat = getClusterLoadStatistic();
         if (clusterStat == null) {
             throw new SchedException(SchedException.Status.UNRECOVERABLE, "cluster does not exist");
         }
@@ -378,7 +373,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         BalanceStat balanceStat = isClusterDiskBalanced ? BalanceStat.BALANCED_STAT
                 : BalanceStat.createClusterDiskBalanceStat(maxBackendId, minBackendId, maxUsedPercent, minUsedPercent);
-        clusterDiskBalanceStats.put(medium, balanceStat);
+        clusterStat.updateClusterDiskBalanceStat(medium, balanceStat);
 
         return isClusterDiskBalanced;
     }
@@ -406,7 +401,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             BalanceStat balanceStat = isBackendDiskBalanced ? BalanceStat.BALANCED_STAT
                     : BalanceStat.createBackendDiskBalanceStat(beStat.getBeId(), max.second, min.second, maxUsedPercent,
                         minUsedPercent);
-            backendDiskBalanceStats.put(Pair.create(medium, beStat.getBeId()), balanceStat);
+            clusterStat.updateBackendDiskBalanceStat(Pair.create(medium, beStat.getBeId()), balanceStat);
         }
 
         return isAllBackendDiskBalanced;
@@ -1542,7 +1537,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         continue;
                     }
 
-                    RootPathLoadStatistic pathLoadStatistic = loadStatistic
+                    RootPathLoadStatistic pathLoadStatistic = getClusterLoadStatistic()
                             .getRootPathLoadStatistic(replica.getBackendId(), replica.getPathHash());
                     if (pathLoadStatistic == null || pathLoadStatistic.getDiskState() != DiskInfo.DiskState.ONLINE) {
                         continue;
@@ -1628,7 +1623,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     // Get path by path hash.
     // If path does not exist, returns path hash.
     private String getPath(long pathHash) {
-        ClusterLoadStatistic clusterStat = loadStatistic;
+        ClusterLoadStatistic clusterStat = getClusterLoadStatistic();
         if (clusterStat == null) {
             return String.valueOf(pathHash);
         }
@@ -2201,15 +2196,5 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 }
             }
         }
-    }
-
-    @Override
-    public BalanceStat getClusterDiskBalanceStat(TStorageMedium medium) {
-        return clusterDiskBalanceStats.getOrDefault(medium, BalanceStat.BALANCED_STAT);
-    }
-
-    @Override
-    public BalanceStat getBackendDiskBalanceStat(TStorageMedium medium, long beId) {
-        return backendDiskBalanceStats.getOrDefault(Pair.create(medium, beId), BalanceStat.BALANCED_STAT);
     }
 }

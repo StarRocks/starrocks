@@ -576,10 +576,10 @@ public class DiskAndTabletLoadReBalancerTest {
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash13)));
 
         // check balance stat
-        BalanceStat stat0 = rebalancer.getBackendDiskBalanceStat(TStorageMedium.HDD, beId1);
+        BalanceStat stat0 = clusterLoadStatistic.getBackendDiskBalanceStat(TStorageMedium.HDD, beId1);
         Assertions.assertFalse(stat0.isBalanced());
         Assertions.assertEquals(BalanceType.BACKEND_DISK, stat0.getBalanceType());
-        BalanceStat stat1 = rebalancer.getBackendDiskBalanceStat(TStorageMedium.SSD, beId1);
+        BalanceStat stat1 = clusterLoadStatistic.getBackendDiskBalanceStat(TStorageMedium.SSD, beId1);
         Assertions.assertFalse(stat1.isBalanced());
         Assertions.assertEquals(BalanceType.BACKEND_DISK, stat1.getBalanceType());
 
@@ -781,7 +781,7 @@ public class DiskAndTabletLoadReBalancerTest {
         Assertions.assertEquals(4, be2SourceCnt);
 
         // check balance stat
-        BalanceStat stat = rebalancer.getClusterDiskBalanceStat(TStorageMedium.HDD);
+        BalanceStat stat = clusterLoadStatistic.getClusterDiskBalanceStat(TStorageMedium.HDD);
         Assertions.assertFalse(stat.isBalanced());
         Assertions.assertEquals(BalanceType.CLUSTER_DISK, stat.getBalanceType());
     }
