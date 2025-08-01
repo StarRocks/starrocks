@@ -1603,8 +1603,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitTableOperationClause(StarRocksParser.TableOperationClauseContext context) {
-        FunctionCallExpr fun = (FunctionCallExpr) visit(context.functionCall());
-        return new AlterTableOperationClause(createPos(context), fun.getFnName().getFunction(), fun.getParams().exprs());
+        StarRocksParser.TableOperationArgContext arg = context.tableOperationArg();
+        FunctionCallExpr fun = (FunctionCallExpr) visit(arg.functionCall());
+        Expr where = null;
+        if (arg.WHERE() != null) {
+            where = (Expr) visit(arg.expression());
+        }
+        return new AlterTableOperationClause(createPos(context), fun.getFnName().getFunction(), fun.getParams().exprs(), where);
     }
 
     @Override
