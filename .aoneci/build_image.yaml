@@ -1,0 +1,166 @@
+name: Stella Image Builder
+
+envs:
+  STARROCKS_CHART_HOME: /aoneci/runner/work/source0
+  STARROCKS_BUILDER_HOME: /aoneci/runner/work/source0/images
+
+params:
+  runs-on-resources:
+    name: 资源规格
+    description: 运行时容器资源规格
+    default: 4-16Gi
+    options:
+      - 4-16Gi
+
+  starrocks-operator-branch:
+    name: starrocks-operator 分支名
+    type: string
+    default: "master"
+  
+  starrocks-package-path:
+    name: starrocks 包所在的位置
+    type: string
+    default: "oss://olap-beijing/starrocks-develop"
+
+  starrocks-package-name:
+    name: starrocks 包名
+    type: string
+    default: ""
+
+  starrocks-image-tag:
+    name: starrocks 镜像名
+    type: string
+    default: ""
+
+  build-service:
+    name: 编译的组件
+    type: string
+    default: ALL
+    options:
+      - ALL
+      - FE
+      - BE
+
+  base-version:
+    name: 基础镜像版本号
+    type: string
+    default: "0.0.4"
+
+jobs:
+  build-options-check:
+    timeout: 10m
+    runs-on: [aone-hosted, amd64, 1-4Gi]
+    steps:
+      - id: check-options
+        continue-on-error:
+        run: |
+          if [[ -z ${{params.starrocks-package-name}} ]]; then
+            echo "没有指定 StarRocks 包名称，请在 starrocks-package-name 中设置"
+            exit 1
+          fi
+  build-fe-image:
+    needs: [build-options-check]
+    when: ${{params.build-service == "ALL" || params.build-service == "FE"}}
+    runs-on:
+      - ${{params.runs-on-resources}}
+      - aone-hosted
+    steps:
+      - id: checkout-starrocks-operator
+        uses: checkout
+        inputs:
+          ref: ${{params.starrocks-operator-branch}}
+          repository-url: "git@gitlab.alibaba-inc.com:soe/starrocks-operator.git"
+          ci-token: Td2hVpzuzehOSaYRB6JtHrqh2lQvrg
+          path: /aoneci/runner/work/source0
+          fetch-depth: 1
+      - id: download-dependency
+        continue-on-error: false
+        run: |
+          set -e
+          cd ${STARROCKS_BUILDER_HOME}
+          ossutil -i ${{secrets.access_key_id}} -k ${{secrets.access_key_secret}} --endpoint=oss-cn-beijing.aliyuncs.com cp -f "${{params.starrocks-package-path}}/${{params.starrocks-package-name}}" .
+          ossutil -i ${{secrets.access_key_id}} -k ${{secrets.access_key_secret}} --endpoint=oss-cn-beijing.aliyuncs.com cp -f oss://olap-beijing/packages/hadoop-huaweicloud-2.8.3-hw-45.jar .
+          ossutil -i ${{secrets.access_key_id}} -k ${{secrets.access_key_secret}} --endpoint=oss-cn-beijing.aliyuncs.com cp -f oss://olap-beijing/packages/auditloader.zip .
+          export PACKAGE_NAME=${{params.starrocks-package-name}}
+          PACKAGE_DIR_NAME="${PACKAGE_NAME/\.tar\.gz/}"
+          cp -f *.jar frontend
+          cp -f *.zip frontend
+          tar -zxf $PACKAGE_NAME
+          cd ${STARROCKS_BUILDER_HOME}/frontend
+          if [[ -d fe ]]; then
+            rm -rf fe
+          fi
+          cp -r ../${PACKAGE_DIR_NAME}/fe ./
+          cp ../${PACKAGE_DIR_NAME}/build.info fe/
+          sed -i 's|^FROM starrocks-base:|FROM bigdata-onecs-registry.cn-shanghai.cr.aliyuncs.com/starrocks-base/starrocks-base:|' Dockerfile
+      - id: build-image
+        timeout: 30m
+        continue-on-error: false
+        uses: build-image
+        inputs:
+          image-name: vvp-asi-registry.cn-shanghai.cr.aliyuncs.com/starrocks/fe
+          image-tag: ${{params.starrocks-image-tag}}
+          verbose: true
+          registry-username: ${{vars.image_builder_vvp_asi_user}}
+          registry-password: ${{secrets.image_builder_vvp_asi_password}}
+          dockerfile-path: /aoneci/runner/work/source0/images/frontend/Dockerfile
+          build-args: BASE_VERSION=${{params.base-version}}
+          extra-registry: >-
+            bigdata-onecs-registry.cn-shanghai.cr.aliyuncs.com=${{vars.image_builder_bigdata_onecs_user}}||${{secrets.image_builder_bigdata_onecs_password}},
+            vvp-asi-registry.cn-shanghai.cr.aliyuncs.com=${{vars.image_builder_vvp_asi_user}}||${{secrets.image_builder_vvp_asi_password}}
+          multi-targets: vvp-asi-registry.cn-shanghai.cr.aliyuncs.com/starrocks/fe,bigdata-onecs-registry.cn-shanghai.cr.aliyuncs.com/starrocks/fe
+  build-be-image:
+    needs: [build-options-check]
+    when: ${{params.build-service == "ALL" || params.build-service == "BE"}}
+    runs-on:
+      - ${{params.runs-on-resources}}
+      - aone-hosted
+    steps:
+      - id: checkout-starrocks-operator
+        uses: checkout
+        inputs:
+          ref: ${{params.starrocks-operator-branch}}
+          repository-url: "git@gitlab.alibaba-inc.com:soe/starrocks-operator.git"
+          ci-token: Td2hVpzuzehOSaYRB6JtHrqh2lQvrg
+          path: /aoneci/runner/work/source0
+          fetch-depth: 1
+      - id: download-dependency
+        continue-on-error: false
+        run: |
+          set -e
+          cd ${STARROCKS_BUILDER_HOME}
+          ossutil -i ${{secrets.access_key_id}} -k ${{secrets.access_key_secret}} --endpoint=oss-cn-beijing.aliyuncs.com cp -f "${{params.starrocks-package-path}}/${{params.starrocks-package-name}}" .
+          ossutil -i ${{secrets.access_key_id}} -k ${{secrets.access_key_secret}} --endpoint=oss-cn-beijing.aliyuncs.com cp -f oss://olap-beijing/packages/hadoop-huaweicloud-2.8.3-hw-45.jar .
+          ossutil -i ${{secrets.access_key_id}} -k ${{secrets.access_key_secret}} --endpoint=oss-cn-beijing.aliyuncs.com cp -f oss://olap-beijing/packages/auditloader.zip .
+          export PACKAGE_NAME=${{params.starrocks-package-name}}
+          PACKAGE_DIR_NAME="${PACKAGE_NAME/\.tar\.gz/}"
+          cp -f *.jar backend
+          tar -zxf $PACKAGE_NAME
+          cd ${STARROCKS_BUILDER_HOME}/backend
+          if [[ -d be ]]; then
+            rm -rf be
+          fi
+          if [[ -d apache_hdfs_broker ]]; then
+            rm -rf apache_hdfs_broker
+          fi
+          cp -r ../$PACKAGE_DIR_NAME/be ./
+          cp ../$PACKAGE_DIR_NAME/build.info be/
+          cp -r ../$PACKAGE_DIR_NAME/apache_hdfs_broker ./
+          cp ../$PACKAGE_DIR_NAME/build.info apache_hdfs_broker/
+          sed -i 's|^FROM starrocks-base:|FROM bigdata-onecs-registry.cn-shanghai.cr.aliyuncs.com/starrocks-base/starrocks-base:|' Dockerfile
+      - id: build-image
+        timeout: 30m
+        continue-on-error: false
+        uses: build-image
+        inputs:
+          image-name: vvp-asi-registry.cn-shanghai.cr.aliyuncs.com/starrocks/be
+          image-tag: ${{params.starrocks-image-tag}}
+          verbose: true
+          registry-username: ${{vars.image_builder_vvp_asi_user}}
+          registry-password: ${{secrets.image_builder_vvp_asi_password}}
+          dockerfile-path: /aoneci/runner/work/source0/images/backend/Dockerfile
+          build-args: BASE_VERSION=${{params.base-version}}
+          extra-registry: >-
+            bigdata-onecs-registry.cn-shanghai.cr.aliyuncs.com=${{vars.image_builder_bigdata_onecs_user}}||${{secrets.image_builder_bigdata_onecs_password}},
+            vvp-asi-registry.cn-shanghai.cr.aliyuncs.com=${{vars.image_builder_vvp_asi_user}}||${{secrets.image_builder_vvp_asi_password}}
+          multi-targets: vvp-asi-registry.cn-shanghai.cr.aliyuncs.com/starrocks/be,bigdata-onecs-registry.cn-shanghai.cr.aliyuncs.com/starrocks/be
