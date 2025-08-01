@@ -40,6 +40,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.clone.BackendLoadStatistic.Classification;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -49,6 +51,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /*
@@ -69,6 +72,13 @@ public class ClusterLoadStatistic {
     // storage medium -> number of backend which has this kind of medium
     private Map<TStorageMedium, Integer> backendNumMap = Maps.newHashMap();
     private List<BackendLoadStatistic> beLoadStatistics = Lists.newArrayList();
+    private Map<Long, String> pathHashToRootPath = Maps.newHashMap();
+
+    // Disk balance stats
+    // TStorageMedium -> BalanceStat
+    private final Map<TStorageMedium, BalanceStat> clusterDiskBalanceStats = new ConcurrentHashMap<>();
+    // Pair<TStorageMedium, BeId> -> BalanceStat
+    private final Map<Pair<TStorageMedium, Long>, BalanceStat> backendDiskBalanceStats = new ConcurrentHashMap<>();
 
     public ClusterLoadStatistic(SystemInfoService infoService, TabletInvertedIndex invertedIndex) {
         this.infoService = infoService;
@@ -120,6 +130,13 @@ public class ClusterLoadStatistic {
 
         // sort be stats by mix load score
         Collections.sort(beLoadStatistics, BackendLoadStatistic.MIX_COMPARATOR);
+
+        // create path hash to root path map
+        for (BackendLoadStatistic beStatistic : beLoadStatistics) {
+            for (RootPathLoadStatistic pathLoadStat : beStatistic.getPathStatistics()) {
+                pathHashToRootPath.put(pathLoadStat.getPathHash(), pathLoadStat.getPath());
+            }
+        }
     }
 
     /*
@@ -228,5 +245,55 @@ public class ClusterLoadStatistic {
             sb.append("    ").append(backendLoadStatistic).append("\n");
         }
         return sb.toString();
+    }
+
+    public String getPath(long pathHash) {
+        return pathHashToRootPath.get(pathHash);
+    }
+
+    public BalanceStat getClusterDiskBalanceStat(TStorageMedium medium) {
+        return clusterDiskBalanceStats.getOrDefault(medium, BalanceStat.BALANCED_STAT);
+    }
+
+    public Map<TStorageMedium, BalanceStat> getClusterDiskBalanceStats() {
+        return clusterDiskBalanceStats;
+    }
+
+    public void updateClusterDiskBalanceStat(TStorageMedium medium, BalanceStat balanceStat) {
+        clusterDiskBalanceStats.put(medium, balanceStat);
+    }
+
+    public void updateClusterDiskBalanceStats(Map<TStorageMedium, BalanceStat> clusterDiskBalanceStats) {
+        this.clusterDiskBalanceStats.putAll(clusterDiskBalanceStats);
+    }
+
+    public BalanceStat getBackendDiskBalanceStat(TStorageMedium medium, long beId) {
+        return backendDiskBalanceStats.getOrDefault(Pair.create(medium, beId), BalanceStat.BALANCED_STAT);
+    }
+
+    public Map<Pair<TStorageMedium, Long>, BalanceStat> getBackendDiskBalanceStats() {
+        return backendDiskBalanceStats;
+    }
+
+    public void updateBackendDiskBalanceStat(Pair<TStorageMedium, Long> mediumBeId, BalanceStat balanceStat) {
+        backendDiskBalanceStats.put(mediumBeId, balanceStat);
+    }
+
+    public void updateBackendDiskBalanceStats(Map<Pair<TStorageMedium, Long>, BalanceStat> backendDiskBalanceStats) {
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        for (BackendLoadStatistic beStat : beLoadStatistics) {
+            long beId = beStat.getBeId();
+            if (!systemInfoService.checkBackendAvailable(beId)) {
+                continue;
+            }
+
+            for (TStorageMedium medium : TStorageMedium.values()) {
+                if (beStat.getTotalCapacityB(medium) > 0) {
+                    Pair<TStorageMedium, Long> mediumBeId = Pair.create(medium, beId);
+                    this.backendDiskBalanceStats.put(
+                            mediumBeId, backendDiskBalanceStats.getOrDefault(mediumBeId, BalanceStat.BALANCED_STAT));
+                }
+            }
+        }
     }
 }
