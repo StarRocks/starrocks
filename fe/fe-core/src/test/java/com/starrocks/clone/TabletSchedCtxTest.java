@@ -143,7 +143,7 @@ public class TabletSchedCtxTest {
 
         // mock tabletScheduler
         tabletScheduler = new TabletScheduler(stat);
-        tabletScheduler.setLoadStatistic(clusterLoadStatistic);
+        tabletScheduler.setClusterLoadStatistic(clusterLoadStatistic);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().forEach(be -> {
             List<Long> pathHashes =
                     be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
@@ -159,7 +159,7 @@ public class TabletSchedCtxTest {
         clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex());
         clusterLoadStatistic.init();
-        tabletScheduler.setLoadStatistic(clusterLoadStatistic);
+        tabletScheduler.setClusterLoadStatistic(clusterLoadStatistic);
 
         LocalTablet missedTablet = new LocalTablet(TABLET_ID_1,
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(TABLET_ID_1));

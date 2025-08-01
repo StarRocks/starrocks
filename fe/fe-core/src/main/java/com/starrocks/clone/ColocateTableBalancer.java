@@ -333,7 +333,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
             if (db == null) {
                 continue;
             }
-            ClusterLoadStatistic statistic = globalStateMgr.getTabletScheduler().getLoadStatistic();
+            ClusterLoadStatistic statistic = globalStateMgr.getTabletScheduler().getClusterLoadStatistic();
             if (statistic == null) {
                 continue;
             }
