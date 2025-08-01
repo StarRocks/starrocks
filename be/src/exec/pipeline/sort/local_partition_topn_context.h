@@ -140,29 +140,6 @@ private:
     bool _enable_pre_agg;
     // only set when _enable_pre_agg=true
     std::unique_ptr<PreAggState> _pre_agg;
-<<<<<<< HEAD
-    // bool _is_first_chunk_of_current_sorter = true;
-    // const std::vector<TExpr>& _t_pre_agg_exprs;
-    // const std::vector<TSlotId>& _t_pre_agg_output_slot_id;
-
-    // // The offset of the n-th aggregate function in a row of aggregate functions.
-    // std::vector<size_t> _agg_states_offsets;
-    // // The total size of the row for the aggregate function state.
-    // size_t _agg_states_total_size = 0;
-    // // The max align size for all aggregate state
-    // size_t _max_agg_state_align_size = 1;
-    // // The followings are aggregate function information:
-    // std::vector<FunctionContext*> _agg_fn_ctxs;
-    // std::vector<const AggregateFunction*> _agg_functions;
-    // std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    // std::vector<std::vector<ColumnPtr>> _agg_input_columns;
-    // //raw pointers in order to get multi-column values
-    // std::vector<std::vector<const Column*>> _agg_input_raw_columns;
-    // std::vector<FunctionTypes> _agg_fn_types;
-    // // every partition has one Agg State
-    // std::vector<ManagedFunctionStatesPtr<LocalPartitionTopnContext>> _managed_fn_states;
-=======
->>>>>>> 94726f0973 ([BugFix] Fix UAF in local-partition preagg (#61524))
 
     // No more input chunks if after _is_sink_complete is set to true
     bool _is_sink_complete = false;
@@ -182,12 +159,6 @@ private:
     const TTopNType::type _topn_type;
 
     int32_t _sorter_index = 0;
-
-<<<<<<< HEAD
-    std::unique_ptr<MemPool> _mem_pool = nullptr;
-=======
-    PipeObservable _observable;
->>>>>>> 94726f0973 ([BugFix] Fix UAF in local-partition preagg (#61524))
 };
 
 using LocalPartitionTopnContextPtr = std::shared_ptr<LocalPartitionTopnContext>;
