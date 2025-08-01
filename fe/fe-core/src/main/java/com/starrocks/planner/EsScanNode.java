@@ -39,7 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.EsTable;
@@ -88,13 +88,6 @@ public class EsScanNode extends ScanNode {
         super(id, desc, planNodeName);
         this.table = (EsTable) (desc.getTable());
         this.computeResource = computeResource;
-    }
-
-    @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-        super.init(analyzer);
-
-        assignNodes();
     }
 
     @Override

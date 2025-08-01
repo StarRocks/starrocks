@@ -36,7 +36,6 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
@@ -57,7 +56,6 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
@@ -101,7 +99,6 @@ public class StreamLoadPlanner {
 
     private TExecPlanFragmentParams execPlanFragmentParams;
 
-    private Analyzer analyzer;
     private DescriptorTable descTable;
 
     // just for using session variable
@@ -118,8 +115,7 @@ public class StreamLoadPlanner {
     }
 
     private void resetAnalyzer() {
-        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), null);
-        descTable = analyzer.getDescTbl();
+        descTable = new DescriptorTable();
     }
 
     // can only be called after "plan()", or it will return null
@@ -196,7 +192,7 @@ public class StreamLoadPlanner {
         StreamLoadScanNode scanNode =
                 new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc, destTable, streamLoadInfo);
         scanNode.setUseVectorizedLoad(true);
-        scanNode.init(analyzer);
+        scanNode.init(descTable);
         scanNode.finalizeStats();
         scanNode.setComputeResource(computeResource);
 
@@ -246,7 +242,7 @@ public class StreamLoadPlanner {
         params.setProtocol_version(InternalServiceVersion.V1);
         params.setFragment(fragment.toThrift());
 
-        params.setDesc_tbl(analyzer.getDescTbl().toThrift());
+        params.setDesc_tbl(descTable.toThrift());
 
         TPlanFragmentExecParams execParams = new TPlanFragmentExecParams();
         // user load id (streamLoadInfo.id) as query id
