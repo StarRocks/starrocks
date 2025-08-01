@@ -18,6 +18,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
@@ -54,6 +59,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import com.starrocks.type.Type;
+import org.apache.commons.lang.math.NumberUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -551,6 +557,11 @@ public class ListPartitionPruner implements PartitionPruner {
 
         for (Map.Entry<LiteralExpr, Set<Long>> entry : partitionValueMap.entrySet()) {
             LiteralExpr key = entry.getKey();
+            if (castOperator.getType().isNumericType() && key instanceof StringLiteral &&
+                    !NumberUtils.isNumber(key.getStringValue())) {
+                //partition value (p='1','2','a'), select * from tb where p=1, cast(p as decimal),An error occurs when the value is 'a'.
+                continue;
+            }
             LiteralExpr literalExpr = castLiteralExpr(key, castOperator.getType());
             Set<Long> partitions = newPartitionValueMap.computeIfAbsent(literalExpr, k -> Sets.newHashSet());
             partitions.addAll(entry.getValue());
