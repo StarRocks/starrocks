@@ -56,6 +56,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -197,6 +198,23 @@ public class RestBaseAction extends BaseAction {
         sendResult(request, response);
     }
 
+    /**
+     * Get the protocol from the request, defaulting to "http" if scheme is null, empty, or not http/https
+     * @param request the base request
+     * @return the protocol string ("http" or "https")
+     */
+    private String getProtocolFromRequest(BaseRequest request) {
+        String scheme = request.getRequest().scheme();
+        if (StringUtils.isEmpty(scheme)) {
+            return "http";
+        }
+        scheme = scheme.toLowerCase();
+        if ("http".equals(scheme) || "https".equals(scheme)) {
+            return scheme;
+        }
+        return "http";
+    }
+
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr)
             throws DdlException {
         String urlStr = request.getRequest().uri();
@@ -204,7 +222,9 @@ public class RestBaseAction extends BaseAction {
         URI resultUriObj;
         try {
             urlObj = new URI(urlStr);
-            resultUriObj = new URI("http", null, addr.getHostname(),
+            // Detect the original protocol from the request with proper defaults
+            String originalProtocol = getProtocolFromRequest(request);
+            resultUriObj = new URI(originalProtocol, null, addr.getHostname(),
                     addr.getPort(), urlObj.getPath(), urlObj.getQuery(), null);
         } catch (URISyntaxException e) {
             LOG.warn(e.getMessage(), e);
@@ -219,7 +239,23 @@ public class RestBaseAction extends BaseAction {
         if (globalStateMgr.isLeader()) {
             return false;
         }
-        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getNodeMgr().getLeaderIpAndHttpPort();
+
+        // Detect the original protocol from the request
+        String originalProtocol = getProtocolFromRequest(request);
+
+        // Choose the appropriate port and protocol based on the original request
+        Pair<String, Integer> leaderIpAndPort;
+        String protocol;
+        if ("https".equals(originalProtocol) && Config.enable_https) {
+            // For HTTPS requests, use HTTPS port when enabled
+            leaderIpAndPort = globalStateMgr.getNodeMgr().getLeaderIpAndHttpsPort();
+            protocol = "https";
+        } else {
+            // For HTTP requests or when HTTPS is disabled, use HTTP port
+            leaderIpAndPort = globalStateMgr.getNodeMgr().getLeaderIpAndHttpPort();
+            protocol = "http";
+        }
+        
         redirectTo(request, response,
                 new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
         return true;

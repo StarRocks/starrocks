@@ -28,17 +28,28 @@ public class LeaderInfo implements Writable {
     private int httpPort;
     @SerializedName("rp")
     private int rpcPort;
+    @SerializedName("sp")
+    private int httpsPort;
 
     public LeaderInfo() {
         this.ip = "";
         this.httpPort = 0;
         this.rpcPort = 0;
+        this.httpsPort = 0;
     }
 
     public LeaderInfo(String ip, int httpPort, int rpcPort) {
         this.ip = ip;
         this.httpPort = httpPort;
         this.rpcPort = rpcPort;
+        this.httpsPort = Config.https_port;
+    }
+
+    public LeaderInfo(String ip, int httpPort, int rpcPort, int httpsPort) {
+        this.ip = ip;
+        this.httpPort = httpPort;
+        this.rpcPort = rpcPort;
+        this.httpsPort = httpsPort;
     }
 
     public String getIp() {
@@ -63,6 +74,14 @@ public class LeaderInfo implements Writable {
 
     public void setRpcPort(int rpcPort) {
         this.rpcPort = rpcPort;
+    }
+
+    public int getHttpsPort() {
+        return this.httpsPort;
+    }
+
+    public void setHttpsPort(int httpsPort) {
+        this.httpsPort = httpsPort;
     }
 
 

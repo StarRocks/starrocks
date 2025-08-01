@@ -105,6 +105,8 @@ public class NodeMgr {
     private volatile int leaderRpcPort;
     @SerializedName(value = "h")
     private volatile int leaderHttpPort;
+    @SerializedName(value = "s")
+    private volatile int leaderHttpsPort;
     @SerializedName(value = "ip")
     private volatile String leaderIp;
 
@@ -154,6 +156,7 @@ public class NodeMgr {
         this.role = FrontendNodeType.UNKNOWN;
         this.leaderRpcPort = 0;
         this.leaderHttpPort = 0;
+        this.leaderHttpsPort = 0;
         this.leaderIp = "";
         this.systemInfo = new SystemInfoService();
 
@@ -439,8 +442,10 @@ public class NodeMgr {
                     isVersionFileChanged = true;
                 }
                 try {
-                    URL idURL = new URL("http://" + NetUtils.getHostPortInAccessibleFormat(
-                            rightHelperNode.first, Config.http_port) + "/check");
+                    String protocol = Config.enable_https ? "https" : "http";
+                    int port = Config.enable_https ? Config.https_port : Config.http_port;
+                    URL idURL = new URL(protocol + "://" + NetUtils.getHostPortInAccessibleFormat(
+                            rightHelperNode.first, port) + "/check");
                     HttpURLConnection conn = null;
                     conn = (HttpURLConnection) idURL.openConnection();
                     conn.setConnectTimeout(2 * 1000);
@@ -521,10 +526,12 @@ public class NodeMgr {
         Pair<String, Integer> rightHelperNode = null;
         for (Pair<String, Integer> helperNode : helperNodes) {
             try {
-                String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
+                String protocol = Config.enable_https ? "https" : "http";
+                int port = Config.enable_https ? Config.https_port : Config.http_port;
+                String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, port);
                 String encodedAddress = URLEncoder.encode(selfNode.first,
                         StandardCharsets.UTF_8.toString());
-                URL url = new URL("http://" + accessibleHostPort + "/role?host=" + encodedAddress +
+                URL url = new URL(protocol + "://" + accessibleHostPort + "/role?host=" + encodedAddress +
                         "&port=" + selfNode.second);
                 HttpURLConnection conn = null;
                 conn = (HttpURLConnection) url.openConnection();
@@ -713,12 +720,14 @@ public class NodeMgr {
         Storage storage = new Storage(imageFileDir);
         long localImageJournalId = storage.getImageJournalId();
 
-        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
-        URL infoUrl = new URL("http://" + accessibleHostPort + "/info?subdir=" + subDir);
+        String protocol = Config.enable_https ? "https" : "http";
+        int port = Config.enable_https ? Config.https_port : Config.http_port;
+        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, port);
+        URL infoUrl = new URL(protocol + "://" + accessibleHostPort + "/info?subdir=" + subDir);
         StorageInfo remoteStorageInfo = getStorageInfo(infoUrl);
         long remoteImageJournalId = remoteStorageInfo.getImageJournalId();
         if (remoteImageJournalId > localImageJournalId) {
-            String url = "http://" + accessibleHostPort + "/image?"
+            String url = protocol + "://" + accessibleHostPort + "/image?"
                     + "version=" + remoteImageJournalId
                     + "&subdir=" + subDir
                     + "&image_format_version=" + remoteStorageInfo.getImageFormatVersion();
@@ -1110,14 +1119,22 @@ public class NodeMgr {
         return new TNetworkAddress(ipAndRpcPort.first, ipAndRpcPort.second);
     }
 
-    public Pair<String, Integer> getLeaderIpAndHttpPort() {
+    private String getLeaderIp() {
         if (GlobalStateMgr.getServingState().isReady()) {
-            return new Pair<>(this.leaderIp, this.leaderHttpPort);
+            return this.leaderIp;
         } else {
             String leaderNodeName = GlobalStateMgr.getServingState().getHaProtocol().getLeaderNodeName();
             Frontend frontend = frontends.get(leaderNodeName);
-            return new Pair<>(frontend.getHost(), Config.http_port);
+            return frontend.getHost();
         }
+    }
+
+    public Pair<String, Integer> getLeaderIpAndHttpPort() {
+        return new Pair<>(getLeaderIp(), Config.http_port);
+    }
+
+    public Pair<String, Integer> getLeaderIpAndHttpsPort() {
+        return new Pair<>(getLeaderIp(), Config.https_port);
     }
 
     public String getLeaderIp() {
@@ -1133,6 +1150,7 @@ public class NodeMgr {
         this.leaderIp = info.getIp();
         this.leaderHttpPort = info.getHttpPort();
         this.leaderRpcPort = info.getRpcPort();
+        this.leaderHttpsPort = info.getHttpsPort();
 
         leaderChangeListeners.values().forEach(listener -> listener.accept(info));
     }
@@ -1222,6 +1240,7 @@ public class NodeMgr {
 
         leaderRpcPort = nodeMgr.leaderRpcPort;
         leaderHttpPort = nodeMgr.leaderHttpPort;
+        leaderHttpsPort = nodeMgr.leaderHttpsPort;
         leaderIp = nodeMgr.leaderIp;
 
         frontends = nodeMgr.frontends;
@@ -1253,7 +1272,8 @@ public class NodeMgr {
         this.leaderIp = FrontendOptions.getLocalHostAddress();
         this.leaderRpcPort = Config.rpc_port;
         this.leaderHttpPort = Config.http_port;
-        LeaderInfo info = new LeaderInfo(this.leaderIp, this.leaderHttpPort, this.leaderRpcPort);
+        this.leaderHttpsPort = Config.https_port;
+        LeaderInfo info = new LeaderInfo(this.leaderIp, this.leaderHttpPort, this.leaderRpcPort, this.leaderHttpsPort);
         GlobalStateMgr.getCurrentState().getEditLog().logLeaderInfo(info);
 
         leaderChangeListeners.values().forEach(listener -> listener.accept(info));
