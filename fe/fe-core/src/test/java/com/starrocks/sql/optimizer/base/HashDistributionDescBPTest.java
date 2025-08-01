@@ -93,4 +93,82 @@ class HashDistributionDescBPTest {
         Assertions.assertEquals(desc.getSourceType(), strictDesc.getSourceType());
     }
 
+    @Test
+    void testCanColocateWithSameProperties() {
+        List<Integer> columns = Lists.newArrayList(1, 2);
+        List<BucketProperty> bucketProperties = createBucketProperties(2);
+        
+        HashDistributionDescBP desc1 = new HashDistributionDescBP(
+                columns, HashDistributionDesc.SourceType.LOCAL, bucketProperties);
+        HashDistributionDescBP desc2 = new HashDistributionDescBP(
+                columns, HashDistributionDesc.SourceType.LOCAL, bucketProperties);
+        
+        Assertions.assertTrue(desc1.canColocate(desc2));
+    }
+
+    @Test
+    void testCanColocateWithDifferentSizes() {
+        List<Integer> columns1 = Lists.newArrayList(1, 2);
+        List<Integer> columns2 = Lists.newArrayList(1, 2, 3);
+        
+        List<BucketProperty> bucketProperties1 = createBucketProperties(2);
+        List<BucketProperty> bucketProperties2 = createBucketProperties(3);
+        
+        HashDistributionDescBP desc1 = new HashDistributionDescBP(
+                columns1, HashDistributionDesc.SourceType.LOCAL, bucketProperties1);
+        HashDistributionDescBP desc2 = new HashDistributionDescBP(
+                columns2, HashDistributionDesc.SourceType.LOCAL, bucketProperties2);
+        
+        Assertions.assertFalse(desc1.canColocate(desc2));
+    }
+
+    @Test
+    void testCanColocateWithNonBucket() {
+        List<Integer> columns = Lists.newArrayList(1, 2);
+        List<BucketProperty> bucketProperties = createBucketProperties(2);
+        
+        HashDistributionDescBP desc1 = new HashDistributionDescBP(
+                columns, HashDistributionDesc.SourceType.LOCAL, bucketProperties);
+        
+        // Create a non-bucket local HashDistributionDesc
+        HashDistributionDesc nonBucketLocalDesc = new HashDistributionDesc(
+                columns, HashDistributionDesc.SourceType.LOCAL);
+        
+        Assertions.assertFalse(desc1.canColocate(nonBucketLocalDesc));
+        Assertions.assertFalse(nonBucketLocalDesc.canColocate(desc1));
+    }
+
+    @Test
+    void testCanColocateWithDifferentBucketProperties() {
+        List<Integer> columns = Lists.newArrayList(1, 2);
+        
+        List<BucketProperty> bucketProperties1 = createBucketProperties(2);
+        
+        // Create different bucket properties that won't satisfy
+        List<BucketProperty> bucketProperties2 = Lists.newArrayList();
+        for (int i = 0; i < 2; i++) {
+            Column column = new Column("col" + i, Type.INT);
+            // Different bucket count
+            bucketProperties2.add(new BucketProperty(TBucketFunction.MURMUR3_X86_32, 20, column));
+        }
+        
+        HashDistributionDescBP desc1 = new HashDistributionDescBP(
+                columns, HashDistributionDesc.SourceType.LOCAL, bucketProperties1);
+        HashDistributionDescBP desc2 = new HashDistributionDescBP(
+                columns, HashDistributionDesc.SourceType.LOCAL, bucketProperties2);
+        
+        Assertions.assertFalse(desc1.canColocate(desc2));
+    }
+
+    @Test
+    void testCanColocateWithSelf() {
+        List<Integer> columns = Lists.newArrayList(1, 2);
+        List<BucketProperty> bucketProperties = createBucketProperties(2);
+        
+        HashDistributionDescBP desc = new HashDistributionDescBP(
+                columns, HashDistributionDesc.SourceType.LOCAL, bucketProperties);
+        
+        Assertions.assertTrue(desc.canColocate(desc));
+    }
+
 }
