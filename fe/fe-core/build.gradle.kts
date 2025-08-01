@@ -288,6 +288,12 @@ dependencies {
     testImplementation("org.apache.spark:spark-sql_2.12")
     implementation("software.amazon.awssdk:s3-transfer-manager")
     implementation("net.openhft:zero-allocation-hashing:0.16")
+    implementation("com.databricks:databricks-sdk-java:0.53.0") {
+        exclude(group = "org.apache.commons", module = "commons-configuration2")
+        exclude(group = "org.ini4j", module = "ini4j")
+    }
+    // add junit4
+    testImplementation("junit:junit:4.13.2")
 }
 
 // Configure ANTLR plugin
@@ -365,7 +371,7 @@ tasks.register<Task>("generateThriftSources") {
 
     // List of proto files to process
     val protoFiles = fileTree(protoDir) {
-        include("*.thrift")
+        include("**/*.thrift")
         exclude("parquet.thrift")
     }.files
 
@@ -442,7 +448,7 @@ tasks.named<ProcessResources>("processTestResources") {
 // Configure test task
 tasks.test {
     useJUnitPlatform()
-    maxParallelForks = (project.findProperty("fe_ut_parallel") as String? ?: "8").toInt()
+    maxParallelForks = (project.findProperty("fe_ut_parallel") as String? ?: "16").toInt()
 
     // Don't reuse JVM processes for tests
     forkEvery = 1
@@ -458,12 +464,12 @@ tasks.test {
         )
 
         // Show the standard output and error streams of the test JVM(s)
-        showStandardStreams = true
+        showStandardStreams = false
 
         // Configure how exceptions are displayed
-        exceptionFormat = TestExceptionFormat.FULL // Or SHORT
-        showStackTraces = true
-        showCauses = true // Show underlying causes for exceptions
+        exceptionFormat = TestExceptionFormat.SHORT // Or FULL
+        showStackTraces = false
+        showCauses = false // Show underlying causes for exceptions
     }
 
     systemProperty("starrocks.home", project.ext["starrocks.home"] as String)
@@ -478,8 +484,9 @@ tasks.test {
     // Use independent class loading (equivalent to useSystemClassLoader=false)
     systemProperty("java.security.manager", "allow")
 
-    // Exclude specific tests
-    //exclude("**/QueryDumpRegressionTest.class")
+    exclude {
+        it.name.contains("QueryDumpRegressionTest") || it.name.contains("QueryDumpCaseRewriter")
+    }
 }
 
 

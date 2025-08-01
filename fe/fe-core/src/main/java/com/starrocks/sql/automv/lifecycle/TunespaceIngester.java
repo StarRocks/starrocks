@@ -31,7 +31,6 @@ import com.starrocks.sql.automv.util.MetaUtil;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.Result;
 import com.starrocks.sql.automv.util.TieredMap;
-import jline.internal.Log;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -160,7 +159,7 @@ public class TunespaceIngester {
                             .collect(Collectors.toList());
                     long numSuccess = results.stream().filter(Optional::isPresent).count();
                     LOG.info("Create MVs: total={}, success={}", results.size(), numSuccess);
-                }).ifError(ex -> Log.error("Fail to create MV", ex))
+                }).ifError(ex -> LOG.error("Fail to create MV", ex))
                 .unwrapOrThrowError();
 
     }
@@ -174,7 +173,7 @@ public class TunespaceIngester {
                     MVName name = Objects.requireNonNull(MVName.parse(mvName).orElse(null));
                     mvLifecycleManager.commitCradle(name);
                 })
-                .ifError((ex) -> Log.error("Failed to create MV '{}', schema={}", fqMvName, newMVSchema, ex))
+                .ifError((ex) -> LOG.error("Failed to create MV '{}', schema={}", fqMvName, newMVSchema, ex))
                 .unwrap();
     }
 
