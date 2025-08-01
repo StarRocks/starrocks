@@ -1402,6 +1402,16 @@ public class SchemaChangeHandler extends AlterHandler {
             hasIndexChange = true;
         }
 
+        // check gin index
+        // if there are gin index in table, set replicated_stroage to false.
+        boolean addingGINIndex = false;
+        for (Index index : indexes) {
+            if (index.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
+                addingGINIndex = true;
+                break;
+            }
+        }
+
         // property 2. bloom filter
         // eg. "bloom_filter_columns" = "k1,k2", "bloom_filter_fpp" = "0.05"
         Set<String> bfColumns = null;
@@ -1489,7 +1499,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withTimeoutInSeconds(timeoutSecond)
                 .withAlterIndexInfo(hasIndexChange, indexes)
                 .withBloomFilterColumns(bfColumnIds, bfFpp)
-                .withBloomFilterColumnsChanged(hasBfChange);
+                .withBloomFilterColumnsChanged(hasBfChange)
+                .withAddingGINIndex(addingGINIndex);
 
         if (RunMode.isSharedDataMode()) {
             // check warehouse
@@ -2850,8 +2861,18 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
+        /*
         if (newIndex.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
             throw new SemanticException("GIN does not support replicated mode");
+        }
+        */
+        // check 
+        if (newIndex.getIndexType() == IndexType.GIN) {
+            for (Column col : olapTable.getFullSchema()) {
+                if (col.isAutoIncrement()) {
+                    throw new DdlException("Table with AUTO_INCREMENT column can not add GIN Index");
+                }
+            }
         }
 
         if (newIndex.getIndexType() == IndexType.VECTOR) {
@@ -3131,6 +3152,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
                 .withNewIndexSchema(schemaChangeData.getNewIndexSchema())
                 .withComputeResource(schemaChangeData.getComputeResource())
+                .withAddingGINIndex(schemaChangeData.isAddingGINIndex())
                 .build();
     }
 }

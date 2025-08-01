@@ -1,0 +1,253 @@
+-- name: test_gin_index_table
+create database test_gin_index;
+-- result:
+-- !result
+use  test_gin_index;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t1_dup` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english")
+)
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+    "replicated_storage" = "true",
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+show create table t1_dup;
+-- result:
+t1_dup	CREATE TABLE `t1_dup` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `value` varchar(255) NOT NULL COMMENT "",
+  INDEX gin_english (`value`) USING GIN("imp_lib" = "clucene", "parser" = "english") COMMENT ''
+) ENGINE=OLAP 
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
+-- !result
+CREATE TABLE `t1_unique` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english")
+)
+UNIQUE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+    "replicated_storage" = "false",
+    "replication_num" = "1"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on DUPLICATE/PRIMARY_KEYS table..')
+-- !result
+CREATE TABLE `t1_agg` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) REPLACE NOT NULL COMMENT "",
+    `cnt` bigint(20) SUM DEFAULT "0",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english")
+)
+AGGREGATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+    "replicated_storage" = "false",
+    "replication_num" = "1"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on DUPLICATE/PRIMARY_KEYS table..')
+-- !result
+CREATE TABLE `t1_primary` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english")
+)
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+    "replicated_storage" = "true",
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+show create table t1_primary;
+-- result:
+t1_primary	CREATE TABLE `t1_primary` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `value` varchar(255) NOT NULL COMMENT "",
+  INDEX gin_english (`value`) USING GIN("imp_lib" = "clucene", "parser" = "english") COMMENT ''
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
+-- !result
+insert into t1_primary values (1, 'hello'), (2, 'world'), (3, 'hello world'), (4, 'starrocks database');
+-- result:
+-- !result
+select * from t1_primary where value match 'hello';
+-- result:
+1	hello
+3	hello world
+-- !result
+select * from t1_primary where value match 'starrocks';
+-- result:
+4	starrocks database
+-- !result
+select * from t1_primary where value match 'hello world';
+-- result:
+-- !result
+select * from t1_primary where value match 'starrocks database';
+-- result:
+-- !result
+select * from t1_primary where value match '%hello%';
+-- result:
+1	hello
+3	hello world
+-- !result
+select * from t1_primary where value match '%world%';
+-- result:
+2	world
+3	hello world
+-- !result
+select * from t1_primary where value match '%starrocks%';
+-- result:
+4	starrocks database
+-- !result
+select * from t1_primary where value match '%database%';
+-- result:
+4	starrocks database
+-- !result
+select * from t1_primary where value match '%hello';
+-- result:
+1	hello
+3	hello world
+-- !result
+select * from t1_primary where value match '%world';
+-- result:
+2	world
+3	hello world
+-- !result
+select * from t1_primary where value match 'hello%';
+-- result:
+1	hello
+3	hello world
+-- !result
+select * from t1_primary where value match 'starrocks%';
+-- result:
+4	starrocks database
+-- !result
+CREATE TABLE t2_dup (
+    id1 bigint(20) NOT NULL COMMENT "",
+    value varchar(255) COMMENT ""
+)
+DUPLICATE KEY(id1)
+DISTRIBUTED BY HASH(id1) BUCKETS 1
+PROPERTIES (
+    "replicated_storage" = "true",
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+show create table t2_dup;
+-- result:
+t2_dup	CREATE TABLE `t2_dup` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `value` varchar(255) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+insert into t2_dup values (1, 'hello', 1), (2, 'world', 2), (3, 'hello world', 3), (4, 'starrocks database', 4);
+-- result:
+E: (5604, "Getting analyzing error. Detail message: Inserted target column count: 2 doesn't match select/value column count: 3.")
+-- !result
+ALTER TABLE t2_dup ADD INDEX gin_english(value) USING GIN ("parser" = "english");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+show create table from t2_dup;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 18. Detail message: Unexpected input 'from', the most similar input is {a legal identifier}.")
+-- !result
+CREATE TABLE t2_primary (
+    id1 bigint(20) NOT NULL COMMENT "",
+    value varchar(255) NOT NULL COMMENT ""
+)
+PRIMARY KEY(id1)
+DISTRIBUTED BY HASH(id1) BUCKETS 1
+PROPERTIES (
+    "replicated_storage" = "true",
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+show create table t2_primary;
+-- result:
+t2_primary	CREATE TABLE `t2_primary` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `value` varchar(255) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+insert into t2_primary values (1, 'hello'), (2, 'world'), (3, 'hello world'), (4, 'starrocks database');
+-- result:
+-- !result
+ALTER TABLE t2_primary ADD INDEX gin_english(value) USING GIN ("parser" = "english");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+show create table t2_primary;
+-- result:
+t2_primary	CREATE TABLE `t2_primary` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `value` varchar(255) NOT NULL COMMENT "",
+  INDEX gin_english (`value`) USING GIN("imp_lib" = "clucene", "parser" = "english") COMMENT ''
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
+-- !result
+drop database test_gin_index;
+-- result:
+-- !result
