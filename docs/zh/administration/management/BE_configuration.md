@@ -3578,6 +3578,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 配置项描述: starlet filesystem 实例缓存的过期时间。
 - 引入版本: v3.3.15, 3.4.5
 
+##### starlet_write_file_with_tag
+
+- 默认值：false
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 配置项描述: 存算分离模式部署下，是否将写入到对象存储的文件打上对象存储 tag，方便自定义管理各种文件。
+- 引入版本: v3.5.3
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - 默认值：1048576
