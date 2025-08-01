@@ -57,7 +57,6 @@ public class LakeReplicationJob extends ReplicationJob {
                 storageVolumeName -> getOrCreateFakeShard(storageVolumeName, srcServiceId));
     }
 
-    // reuse storage volume id as shard id, if not existed yet, create it manually
     private long getOrCreateFakeShard(String storageVolumeName, String srcServiceId) {
         StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         StorageVolume storageVolume = storageVolumeMgr.getStorageVolumeByName(storageVolumeName);
@@ -132,8 +131,8 @@ public class LakeReplicationJob extends ReplicationJob {
                         throw new RuntimeException("Send lake replicate task failed, no compute node found for tablet: "
                                 + tabletInfo.getTabletId());
                     }
-                    ReplicateSnapshotTask task = new ReplicateSnapshotTask(computeNodeId, super.getDatabaseId(), super.getTableId(),
-                            partitionInfo.getPartitionId(), indexInfo.getIndexId(),
+                    ReplicateSnapshotTask task = new ReplicateSnapshotTask(computeNodeId, super.getDatabaseId(),
+                            super.getTableId(), partitionInfo.getPartitionId(), indexInfo.getIndexId(),
                             tabletInfo.getTabletId(), getTabletType(super.getTableType()), super.getTransactionId(),
                             indexInfo.getSchemaHash(), partitionInfo.getVersion(),
                             partitionInfo.getDataVersion(), tabletInfo.getSrcTabletId(),
