@@ -50,7 +50,7 @@ if [[ -z ${STARROCKS_GCC_HOME} ]]; then
 fi
 
 gcc_ver=`${STARROCKS_GCC_HOME}/bin/gcc -dumpfullversion -dumpversion`
-required_ver="5.3.1"
+required_ver="12.1.0"
 if [[ ! "$(printf '%s\n' "$required_ver" "$gcc_ver" | sort -V | head -n1)" = "$required_ver" ]]; then
     echo "Error: GCC version (${gcc_ver}) must be greater than or equal to ${required_ver}"
     exit 1
