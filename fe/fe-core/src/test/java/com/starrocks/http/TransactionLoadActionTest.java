@@ -649,7 +649,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     };
 
-                    streamLoadMgr.tryPrepareLoadTaskTxn(anyString, (TransactionResult) any);
+                    streamLoadMgr.tryPrepareLoadTaskTxn(anyString, anyLong, (TransactionResult) any);
                     times = 1;
                     result = new StarRocksException("try prepare load task txn error");
                 }
@@ -685,7 +685,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     };
 
-                    streamLoadMgr.tryPrepareLoadTaskTxn(anyString, (TransactionResult) any);
+                    streamLoadMgr.tryPrepareLoadTaskTxn(anyString, anyLong, (TransactionResult) any);
                     times = 1;
                     result = new Delegate<Void>() {
 
@@ -800,7 +800,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     );
 
                     globalTransactionMgr.prepareTransaction(
-                            anyLong, anyLong,
+                            anyLong, anyLong, anyLong,
                             (List<TabletCommitInfo>) any,
                             (List<TabletFailInfo>) any,
                             (TxnCommitAttachment) any, anyLong);
@@ -834,7 +834,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     );
 
                     globalTransactionMgr.prepareTransaction(
-                            anyLong, anyLong,
+                            anyLong, anyLong, anyLong,
                             (List<TabletCommitInfo>) any,
                             (List<TabletFailInfo>) any,
                             (TxnCommitAttachment) any, anyLong);
@@ -1268,7 +1268,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 result = txnId;
 
                 globalTransactionMgr.prepareTransaction(
-                        anyLong, anyLong,
+                        anyLong, anyLong, anyLong,
                         (List<TabletCommitInfo>) any,
                         (List<TabletFailInfo>) any,
                         (TxnCommitAttachment) any, anyLong);

@@ -326,6 +326,7 @@ public class DatabaseTransactionMgr {
      * @param tabletCommitInfos tabletCommitInfos
      */
     public void prepareTransaction(long transactionId,
+                                   long preparedTimeoutMs,
                                    List<TabletCommitInfo> tabletCommitInfos,
                                    List<TabletFailInfo> tabletFailInfos,
                                    TxnCommitAttachment txnCommitAttachment,
@@ -405,7 +406,7 @@ public class DatabaseTransactionMgr {
 
                 // update transaction state version
                 transactionState.setTransactionStatus(TransactionStatus.PREPARED);
-                transactionState.setPreparedTime(System.currentTimeMillis());
+                transactionState.setPreparedTimeAndTimeout(System.currentTimeMillis(), preparedTimeoutMs);
 
                 for (TransactionStateListener listener : stateListeners) {
                     listener.preWriteCommitLog(transactionState);
@@ -564,7 +565,8 @@ public class DatabaseTransactionMgr {
                                                 @NotNull List<TabletFailInfo> tabletFailInfos,
                                                 @Nullable TxnCommitAttachment txnCommitAttachment)
             throws StarRocksException {
-        prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment, false);
+        prepareTransaction(transactionId, TransactionState.DEFAULT_PREPARED_TIMEOUT_MS,
+                tabletCommitInfos, tabletFailInfos, txnCommitAttachment, false);
         return commitPreparedTransaction(transactionId);
     }
 
@@ -781,6 +783,7 @@ public class DatabaseTransactionMgr {
         info.add(txnState.getTransactionStatus().name());
         info.add(txnState.getSourceType().name());
         info.add(TimeUtils.longToTimeString(txnState.getPrepareTime()));
+        info.add(TimeUtils.longToTimeString(txnState.getPreparedTime()));
         info.add(TimeUtils.longToTimeString(txnState.getCommitTime()));
         info.add(TimeUtils.longToTimeString(txnState.getPublishVersionTime()));
         info.add(TimeUtils.longToTimeString(txnState.getFinishTime()));
@@ -788,6 +791,7 @@ public class DatabaseTransactionMgr {
         info.add(String.valueOf(txnState.getErrorReplicas().size()));
         info.add(String.valueOf(txnState.getCallbackId()));
         info.add(String.valueOf(txnState.getTimeoutMs()));
+        info.add(String.valueOf(txnState.getPreparedTimeoutMs()));
         info.add(txnState.getErrMsg());
     }
 

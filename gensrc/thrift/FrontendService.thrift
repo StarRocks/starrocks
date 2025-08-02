@@ -1062,6 +1062,8 @@ struct TLoadTxnCommitRequest {
     11: optional TTxnCommitAttachment txnCommitAttachment
     12: optional i64 thrift_rpc_timeout_ms
     13: optional list<Types.TTabletFailInfo> failInfos
+    // The timeout for prepared transaction. Only valid if this requerst is sent by rpc loadTxnPrepare
+    14: optional i32 prepared_timeout_second
 }
 
 struct TLoadTxnCommitResult {
