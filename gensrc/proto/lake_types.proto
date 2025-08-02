@@ -281,3 +281,14 @@ message MergingTabletInfoPB {
     repeated int64 old_tablet_ids = 1;
     optional int64 new_tablet_id = 2;
 }
+
+message IdenticalTabletInfoPB {
+    optional int64 old_tablet_id = 1;
+    optional int64 new_tablet_id = 2;
+}
+
+message DynamicTabletsInfoPB {
+    repeated SplittingTabletInfoPB splitting_tablet_infos = 1;
+    repeated MergingTabletInfoPB merging_tablet_infos = 2;
+    repeated IdenticalTabletInfoPB identical_tablet_infos = 3;
+}
