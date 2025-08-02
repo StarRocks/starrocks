@@ -24,16 +24,34 @@
     _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wunused-function\"") \
             ATTR static inline IMPL _Pragma("GCC diagnostic pop")
 
+#if defined(__SSE4_2__)
 #define MFV_SSE42(IMPL) MFV_IMPL(IMPL, __attribute__((target("sse4.2"))))
+#endif
+
+#if defined(__AVX2__)
 #define MFV_AVX2(IMPL) MFV_IMPL(IMPL, __attribute__((target("avx2"))))
+#endif
+
+#if defined(__AVX512F__) && defined(__AVX512BW__)
 #define MFV_AVX512(IMPL) MFV_IMPL(IMPL, __attribute__((target("avx512f,avx512bw"))))
+#endif
+
 #define MFV_DEFAULT(IMPL) MFV_IMPL(IMPL, __attribute__((target("default"))))
 
-#else
+#endif // end of defined(__GNUC__) && defined(__x86_64__)
 
+#if !defined(MFV_SSE42)
 #define MFV_SSE42(IMPL)
-#define MFV_AVX2(IMPL)
-#define MFV_AVX512(IMPL)
-#define MFV_DEFAULT(IMPL) IMPL
+#endif
 
+#if !defined(MFV_AVX2)
+#define MFV_AVX2(IMPL)
+#endif
+
+#if !defined(MFV_AVX512)
+#define MFV_AVX512(IMPL)
+#endif
+
+#if !defined(MFV_DEFAULT)
+#define MFV_DEFAULT(IMPL) IMPL
 #endif
