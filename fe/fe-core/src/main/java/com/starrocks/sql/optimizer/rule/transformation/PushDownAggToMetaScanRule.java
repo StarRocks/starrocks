@@ -69,7 +69,8 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             if (!aggFuncName.equalsIgnoreCase(FunctionSet.DICT_MERGE)
                     && !aggFuncName.equalsIgnoreCase(FunctionSet.MAX)
                     && !aggFuncName.equalsIgnoreCase(FunctionSet.MIN)
-                    && !aggFuncName.equalsIgnoreCase(FunctionSet.COUNT)) {
+                    && !aggFuncName.equalsIgnoreCase(FunctionSet.COUNT)
+                    && !aggFuncName.equalsIgnoreCase(FunctionSet.COLUMN_SIZE)) {
                 return false;
             }
         }
@@ -138,6 +139,12 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                                 List.of(metaColumn, aggCall.getChild(1)), aggFunction));
             } else if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
                 // rewrite count to sum
+                Function aggFunction = Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT},
+                        Function.CompareMode.IS_IDENTICAL);
+                newAggCalls.put(kv.getKey(),
+                        new CallOperator(FunctionSet.SUM, Type.BIGINT, List.of(metaColumn), aggFunction));
+            } else if (aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)) {
+                // rewrite column_size to sum
                 Function aggFunction = Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT},
                         Function.CompareMode.IS_IDENTICAL);
                 newAggCalls.put(kv.getKey(),
