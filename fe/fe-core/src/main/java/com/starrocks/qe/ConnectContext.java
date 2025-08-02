@@ -440,6 +440,10 @@ public class ConnectContext {
         return queryDetail;
     }
 
+    public void setAuditEventBuilder(AuditEventBuilder auditEventBuilder) {
+        this.auditEventBuilder = auditEventBuilder;
+    }
+
     public AuditEventBuilder getAuditEventBuilder() {
         return auditEventBuilder;
     }

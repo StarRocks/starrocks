@@ -2924,6 +2924,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableCacheSelect = enableCacheSelect;
     }
 
+    public boolean isEnableCacheSelect() {
+        return enableCacheSelect;
+    }
+
     public void setConnectorIoTasksPerScanOperator(int connectorIoTasksPerScanOperator) {
         this.connectorIoTasksPerScanOperator = connectorIoTasksPerScanOperator;
     }
