@@ -53,6 +53,8 @@ When you create a transaction, you can use the `timeout` field in the HTTP reque
 
 When you create a transaction, you can also use the `idle_transaction_timeout` field in the HTTP request header to specify a timeout period within which the transaction can stay idle. If no data is written within the timeout period, the transaction automatically rolls back.
 
+When you prepare a transaction, you can use the `prepared_timeout` field in the HTTP request header to specify a timeout period for the transaction from `PREPARED` to `COMMITTED` state. If the transaction is not committed within this timeout period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second). `prepared_timeout` is supported from version 4.0.0 onwards.
+
 ## Benefits
 
 The Stream Load transaction interface brings the following benefits:
@@ -274,6 +276,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
     -H "db:<database_name>" \
+    [-H "prepared_timeout:<timeout_seconds>"] \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
 
@@ -283,8 +286,13 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
     -H "Expect:100-continue" \
     -H "db:test_db" \
+    -H "prepared_timeout:300" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
+
+> **NOTE**
+>
+> The `prepared_timeout` field is optional. If not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second). It is supported from version 4.0.0 onwards.
 
 #### Return result
 
