@@ -102,7 +102,10 @@ public class TransactionLoadAction extends RestBaseAction {
     private static final long DEFAULT_TXN_TIMEOUT_MILLIS = 20000L;
 
     private static final String TXN_OP_KEY = "txn_op";
+    // The timeout for transaction from PREPARE -> PREPARED
     private static final String TIMEOUT_KEY = "timeout";
+    // The timeout for transaction from PREPARED -> COMMITTED
+    private static final String PREPARED_TIMEOUT_KEY = "prepared_timeout";
     private static final String CHANNEL_NUM_STR = "channel_num";
     private static final String CHANNEL_ID_STR = "channel_id";
     private static final String SOURCE_TYPE = "source_type";
@@ -338,6 +341,10 @@ public class TransactionLoadAction extends RestBaseAction {
                 .map(Long::parseLong)
                 .map(sec -> sec * 1000L)
                 .orElse(DEFAULT_TXN_TIMEOUT_MILLIS);
+        Long preparedTimeoutMillis = Optional.ofNullable(request.getRequest().headers().get(PREPARED_TIMEOUT_KEY))
+                .map(Long::parseLong)
+                .map(sec -> sec * 1000L)
+                .orElse(-1L);
         LoadJobSourceType sourceType = parseSourceType(request.getSingleParameter(SOURCE_TYPE));
 
         Integer channelId = Optional
@@ -389,6 +396,7 @@ public class TransactionLoadAction extends RestBaseAction {
                 label,
                 txnOperation,
                 timeoutMillis,
+                preparedTimeoutMillis,
                 channel,
                 sourceType,
                 body

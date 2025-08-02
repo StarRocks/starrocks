@@ -251,13 +251,31 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
             *resp = _build_reply(label, TXN_COMMIT, st);
             return st;
         }
+
+        bool prepare = boost::iequals(TXN_PREPARE, req->param(HTTP_TXN_OP_KEY));
+        int32_t prepared_timeout_second = -1;
+        if (prepare && !req->header(HTTP_PREPARED_TIMEOUT).empty()) {
+            StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+            const auto& timeout = req->header(HTTP_PREPARED_TIMEOUT);
+            prepared_timeout_second =
+                    StringParser::string_to_unsigned_int<int32_t>(timeout.c_str(), timeout.length(), &parse_result);
+            if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS) || prepared_timeout_second <= 0) {
+                st = Status::InvalidArgument(fmt::format("Invalid prepared_timeout: {}", timeout));
+                *resp = _build_reply(label, TXN_COMMIT, st);
+                return st;
+            }
+        }
+
         st = ctx->try_lock();
         if (!st.ok()) {
             *resp = _build_reply(label, TXN_COMMIT, st);
             return st;
         }
 
-        st = _commit_transaction(ctx, boost::iequals(TXN_PREPARE, req->param(HTTP_TXN_OP_KEY)));
+        if (prepare) {
+            ctx->prepared_timeout_second = prepared_timeout_second;
+        }
+        st = _commit_transaction(ctx, prepare);
         if (!st.ok()) {
             LOG(ERROR) << "Fail to commit txn: " << st << " " << ctx->brief();
             ctx->status = st;
