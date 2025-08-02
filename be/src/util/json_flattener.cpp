@@ -227,6 +227,7 @@ static FlatJsonHashMap<LogicalType, uint8_t> LOGICAL_TYPE_TO_JSON_BITS {
 
 static const FlatJsonHashMap<LogicalType, JsonFlatExtractFunc> JSON_EXTRACT_FUNC {
     {LogicalType::TYPE_TINYINT,         &extract_number<LogicalType::TYPE_TINYINT>},
+    {LogicalType::TYPE_INT,         &extract_number<LogicalType::TYPE_INT>},
     {LogicalType::TYPE_BIGINT,          &extract_number<LogicalType::TYPE_BIGINT>},
     {LogicalType::TYPE_LARGEINT,        &extract_number<LogicalType::TYPE_LARGEINT>},
     {LogicalType::TYPE_DOUBLE,          &extract_number<LogicalType::TYPE_DOUBLE>},
@@ -239,6 +240,7 @@ static const FlatJsonHashMap<LogicalType, JsonFlatExtractFunc> JSON_EXTRACT_FUNC
 // should match with extract function
 static const FlatJsonHashMap<LogicalType, JsonFlatMergeFunc> JSON_MERGE_FUNC {
     {LogicalType::TYPE_TINYINT,       &merge_number<LogicalType::TYPE_TINYINT>},
+    {LogicalType::TYPE_INT,           &merge_number<LogicalType::TYPE_INT>},
     {LogicalType::TYPE_BIGINT,        &merge_number<LogicalType::TYPE_BIGINT>},
     {LogicalType::TYPE_LARGEINT,      &merge_number<LogicalType::TYPE_LARGEINT>},
     {LogicalType::TYPE_DOUBLE,        &merge_number<LogicalType::TYPE_DOUBLE>},
@@ -826,6 +828,8 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
             DCHECK(_flat_columns.size() > index);
             DCHECK(_flat_columns[index]->is_nullable());
             auto* c = down_cast<NullableColumn*>(_flat_columns[index].get());
+            DCHECK(flat_json::JSON_EXTRACT_FUNC.contains(child->second->type))
+                    << "unsupported json type: " << child->second->type;
             auto func = flat_json::JSON_EXTRACT_FUNC.at(child->second->type);
             func(&v, c);
             *hit_count += 1;
