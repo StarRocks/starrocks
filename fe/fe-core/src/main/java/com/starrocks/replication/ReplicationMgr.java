@@ -28,6 +28,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.task.RemoteSnapshotTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TFinishTaskRequest;
@@ -53,6 +54,16 @@ public class ReplicationMgr extends FrontendDaemon {
     @SerializedName(value = "abortedJobs")
     private final Map<Long, ReplicationJob> abortedJobs = Maps.newConcurrentMap(); // Aborted jobs, will retry later
 
+    /**
+     * Used only in lake table replication, in that scenario, each storage volume created for src cluster should
+     * have a fake shard bind to maintain the storage info for the storage volume.
+     *
+     * This map is persisted intentionally, and will be cleared after whole process of replication finished (controlled
+     * in replication tool)
+     */
+    @SerializedName(value = "svToShardIds")
+    private final Map<String, Long> storageVolumeNameToShardIdMap = Maps.newConcurrentMap();
+
     public ReplicationMgr() {
         super("ReplicationMgr", Config.replication_interval_ms);
     }
@@ -64,7 +75,9 @@ public class ReplicationMgr extends FrontendDaemon {
     }
 
     public void addReplicationJob(TTableReplicationRequest request) throws StarRocksException {
-        ReplicationJob job = new ReplicationJob(request);
+        LOG.info("Adding replication job, request: {}", request.toString());
+        ReplicationJob job = (request.src_cluster_run_mode == RunMode.toTRunMode(RunMode.SHARED_DATA)) ?
+                new LakeReplicationJob(request) : new ReplicationJob(request);
         addReplicationJob(job);
     }
 
@@ -116,6 +129,15 @@ public class ReplicationMgr extends FrontendDaemon {
 
     public Collection<ReplicationJob> getAbortedJobs() {
         return abortedJobs.values();
+    }
+
+    public Map<String, Long> getStorageVolumeNameToShardIdMap() {
+        return storageVolumeNameToShardIdMap;
+    }
+
+    public void clearStorageVolumeNameToShardIdMap() {
+        storageVolumeNameToShardIdMap.clear();
+        LOG.info("Finish clearing storage volume name to fake shard id map");
     }
 
     public void cancelRunningJobs() {
@@ -245,5 +267,6 @@ public class ReplicationMgr extends FrontendDaemon {
         runningJobs.putAll(replicationMgr.runningJobs);
         committedJobs.putAll(replicationMgr.committedJobs);
         abortedJobs.putAll(replicationMgr.abortedJobs);
+        storageVolumeNameToShardIdMap.putAll(replicationMgr.storageVolumeNameToShardIdMap);
     }
 }
