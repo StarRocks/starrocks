@@ -305,6 +305,7 @@ public class StmtExecutor {
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
+    private boolean statisticsConsumed = false;
     private List<StmtExecutor> subStmtExecutors;
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
@@ -2282,9 +2283,14 @@ public class StmtExecutor {
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {
-        if (statisticsForAuditLog == null && coord != null) {
+        if (statisticsConsumed) {
+            // for one StmtExecutor, only consumed statistics once
+            statisticsForAuditLog = new PQueryStatistics();
+        } else if (statisticsForAuditLog == null && coord != null) {
+            // for insert stmt
             statisticsForAuditLog = coord.getAuditStatistics();
         }
+
         if (statisticsForAuditLog == null) {
             statisticsForAuditLog = new PQueryStatistics();
         }
@@ -2302,6 +2308,9 @@ public class StmtExecutor {
         }
         if (statisticsForAuditLog.spillBytes == null) {
             statisticsForAuditLog.spillBytes = 0L;
+        }
+        if (statisticsConsumed == false) {
+            statisticsConsumed = true;
         }
         return statisticsForAuditLog;
     }
