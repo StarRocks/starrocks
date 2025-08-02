@@ -1156,6 +1156,194 @@ StatusOr<ColumnPtr> JsonFunctions::_json_keys_without_path(FunctionContext* cont
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+StatusOr<ColumnPtr> JsonFunctions::json_update(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    
+    if (columns.size() != 3) {
+        return Status::InvalidArgument("json_update function requires exactly 3 arguments");
+    }
+    
+    auto json_column = down_cast<const JsonColumn*>(columns[0].get());
+    auto path_column = down_cast<const BinaryColumn*>(columns[1].get());
+    auto value_column = down_cast<const JsonColumn*>(columns[2].get());
+    
+    if (json_column == nullptr || path_column == nullptr || value_column == nullptr) {
+        return Status::InvalidArgument("Invalid column types for json_update function");
+    }
+    
+    size_t num_rows = json_column->size();
+    JsonColumn::Builder result;
+    
+    for (size_t i = 0; i < num_rows; i++) {
+        if (json_column->is_null(i) || path_column->is_null(i) || value_column->is_null(i)) {
+            result.append_null();
+            continue;
+        }
+        
+        // Get the JSON object, path, and new value
+        JsonValue json_value = json_column->get_object(i);
+        Slice path_slice = path_column->get_slice(i);
+        JsonValue new_value = value_column->get_object(i);
+        
+        std::string path_str = path_slice.to_string();
+        
+        // Parse the JSON path
+        std::vector<SimpleJsonPath> parsed_paths;
+        std::vector<std::string> path_exprs;
+        
+        // Handle JSON path parsing - support both $.a.b and a.b formats
+        if (path_str.empty()) {
+            result.append_null();
+            continue;
+        }
+        
+        // Remove leading $ if present
+        if (path_str[0] == '$') {
+            if (path_str.length() > 1 && path_str[1] == '.') {
+                path_str = path_str.substr(2);
+            } else if (path_str.length() == 1) {
+                // Just $ means root, replace entire document
+                result.append(new_value);
+                continue;
+            } else {
+                path_str = path_str.substr(1);
+            }
+        }
+        
+        // Split path by dots, but handle array indices
+        std::string current_token;
+        for (size_t j = 0; j < path_str.length(); j++) {
+            char c = path_str[j];
+            if (c == '.') {
+                if (!current_token.empty()) {
+                    path_exprs.push_back(current_token);
+                    current_token.clear();
+                }
+            } else {
+                current_token += c;
+            }
+        }
+        if (!current_token.empty()) {
+            path_exprs.push_back(current_token);
+        }
+        
+        Status parse_status = _get_parsed_paths(path_exprs, &parsed_paths);
+        if (!parse_status.ok()) {
+            result.append_null();
+            continue;
+        }
+        
+        // Update the JSON at the specified path
+        try {
+            vpack::Slice original_slice = json_value.to_vslice();
+            vpack::Builder updated_builder;
+            _update_json_at_path(original_slice, parsed_paths, 0, new_value.to_vslice(), updated_builder);
+            
+            vpack::Slice updated_slice = updated_builder.slice();
+            result.append(JsonValue(updated_slice));
+        } catch (const std::exception& e) {
+            result.append_null();
+        }
+    }
+    
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+void JsonFunctions::_update_json_at_path(const vpack::Slice& original, 
+                                        const std::vector<SimpleJsonPath>& paths,
+                                        size_t path_index,
+                                        const vpack::Slice& new_value,
+                                        vpack::Builder& builder) {
+    if (path_index >= paths.size()) {
+        // Reached the end of the path, set the new value
+        builder.add(new_value);
+        return;
+    }
+    
+    const SimpleJsonPath& current_path = paths[path_index];
+    
+    if (original.isObject()) {
+        // Handle object update
+        builder.openObject();
+        
+        bool key_found = false;
+        for (auto it : vpack::ObjectIterator(original)) {
+            std::string key = it.key.copyString();
+            
+            if (key == current_path.key) {
+                // This is the key we want to update
+                builder.add(vpack::Value(key));
+                if (path_index == paths.size() - 1) {
+                    // Last path element, set the new value
+                    builder.add(new_value);
+                } else {
+                    // Recurse deeper
+                    _update_json_at_path(it.value, paths, path_index + 1, new_value, builder);
+                }
+                key_found = true;
+            } else {
+                // Copy existing key-value pair
+                builder.add(vpack::Value(key));
+                builder.add(it.value);
+            }
+        }
+        
+        // If key wasn't found and this is the last path element, add it
+        if (!key_found && path_index == paths.size() - 1) {
+            builder.add(vpack::Value(current_path.key));
+            builder.add(new_value);
+        } else if (!key_found) {
+            // Key not found but not at end of path - create intermediate object
+            builder.add(vpack::Value(current_path.key));
+            vpack::Builder intermediate_builder;
+            intermediate_builder.openObject();
+            intermediate_builder.close();
+            _update_json_at_path(intermediate_builder.slice(), paths, path_index + 1, new_value, builder);
+        }
+        
+        builder.close();
+    } else if (original.isArray() && current_path.idx >= 0) {
+        // Handle array update
+        builder.openArray();
+        
+        vpack::ArrayIterator array_it(original);
+        size_t index = 0;
+        
+        while (array_it.valid()) {
+            if (index == static_cast<size_t>(current_path.idx)) {
+                // This is the index we want to update
+                if (path_index == paths.size() - 1) {
+                    // Last path element, set the new value
+                    builder.add(new_value);
+                } else {
+                    // Recurse deeper
+                    _update_json_at_path(array_it.value(), paths, path_index + 1, new_value, builder);
+                }
+            } else {
+                // Copy existing array element
+                builder.add(array_it.value());
+            }
+            array_it.next();
+            index++;
+        }
+        
+        // If index is beyond current array size and this is the last path element
+        if (static_cast<size_t>(current_path.idx) >= index && path_index == paths.size() - 1) {
+            // Extend array with nulls if necessary
+            while (index < static_cast<size_t>(current_path.idx)) {
+                builder.add(vpack::Value(vpack::ValueType::Null));
+                index++;
+            }
+            builder.add(new_value);
+        }
+        
+        builder.close();
+    } else {
+        // Invalid path or type mismatch, return original
+        builder.add(original);
+    }
+}
+
 StatusOr<ColumnPtr> JsonFunctions::to_json(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     return cast_nested_to_json(columns[0], context->allow_throw_exception());

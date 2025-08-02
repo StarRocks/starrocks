@@ -157,6 +157,14 @@ public:
      */
     DEFINE_VECTORIZED_FN(to_json);
 
+    /**
+     * Update a JSON object by setting the value at the specified path
+     * @param: [json_object, json_path, new_value]
+     * @paramType: [JsonColumn, BinaryColumn, JsonColumn]
+     * @return: JsonColumn
+     */
+    DEFINE_VECTORIZED_FN(json_update);
+
     static Status native_json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status native_json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
@@ -223,6 +231,12 @@ private:
 
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
                                     std::vector<SimpleJsonPath>* parsed_paths);
+                                    
+    static void _update_json_at_path(const vpack::Slice& original, 
+                                   const std::vector<SimpleJsonPath>& paths,
+                                   size_t path_index,
+                                   const vpack::Slice& new_value,
+                                   vpack::Builder& builder);
 };
 
 } // namespace starrocks
