@@ -817,6 +817,10 @@ select format_bytes(1125899906842624);
 -- result:
 1.00 PB
 -- !result
+select format_bytes(1152921504606846976);
+-- result:
+1.00 EB
+-- !result
 select format_bytes(1024 + 1);
 -- result:
 1.00 KB

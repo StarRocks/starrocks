@@ -320,6 +320,7 @@ select format_bytes(1073741824);  -- 1.00 GB
 select format_bytes(2147483648);  -- 2.00 GB
 select format_bytes(1099511627776);  -- 1.00 TB
 select format_bytes(1125899906842624);  -- 1.00 PB
+select format_bytes(1152921504606846976);  -- 1.00 EB
 
 -- Test precision and rounding
 select format_bytes(1024 + 1);  -- ~1.00 KB (rounded)

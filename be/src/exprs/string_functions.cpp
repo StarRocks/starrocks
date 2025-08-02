@@ -4863,9 +4863,10 @@ StatusOr<ColumnPtr> StringFunctions::format_bytes(FunctionContext* context, cons
     static const int64_t GB = MB * 1024L;
     static const int64_t TB = GB * 1024L;
     static const int64_t PB = TB * 1024L;
+    static const int64_t EB = PB * 1024L;
 
-    static const char* units[] = {"B", "KB", "MB", "GB", "TB", "PB"};
-    static const int64_t thresholds[] = {1, KB, MB, GB, TB, PB};
+    static const char* units[] = {"B", "KB", "MB", "GB", "TB", "PB", "EB"};
+    static const int64_t thresholds[] = {1, KB, MB, GB, TB, PB, EB};
 
     for (int row = 0; row < num_rows; ++row) {
         if (bytes_viewer.is_null(row)) {
@@ -4888,7 +4889,7 @@ StatusOr<ColumnPtr> StringFunctions::format_bytes(FunctionContext* context, cons
 
         // Find appropriate unit
         int unit_index = 0;
-        for (int i = 5; i >= 0; --i) {
+        for (int i = 6; i >= 0; --i) {
             if (bytes >= thresholds[i]) {
                 unit_index = i;
                 break;

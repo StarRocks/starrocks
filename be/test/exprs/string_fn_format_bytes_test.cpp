@@ -37,7 +37,8 @@ TEST_F(StringFunctionFormatBytesTest, formatBytesBasicTest) {
         {1048576, "1.00 MB"},
         {1073741824, "1.00 GB"},
         {1099511627776, "1.00 TB"},
-        {1125899906842624, "1.00 PB"}
+        {1125899906842624, "1.00 PB"},
+        {1152921504606846976, "1.00 EB"}
     };
 
     for (auto& test_case : test_cases) {
