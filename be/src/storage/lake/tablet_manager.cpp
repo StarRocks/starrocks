@@ -196,6 +196,12 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
         }
     }
 
+    if (req.__isset.flat_json_config) {
+        FlatJsonConfig flat_json_config;
+        flat_json_config.update(req.flat_json_config);
+        flat_json_config.to_pb(tablet_metadata_pb->mutable_flat_json_config());
+    }
+
     if (req.__isset.compaction_strategy) {
         switch (req.compaction_strategy) {
         case TCompactionStrategy::DEFAULT:
@@ -258,6 +264,7 @@ int64_t TabletManager::get_average_row_size_from_latest_metadata(int64_t tablet_
 
 Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location) {
     TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
+
     // write metadata file
     auto t0 = butil::gettimeofday_us();
 

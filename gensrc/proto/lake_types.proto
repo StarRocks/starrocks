@@ -173,6 +173,8 @@ message TabletMetadataPB {
     optional int64 gtid = 19 [default=0];
     // compaction strategy
     optional CompactionStrategyPB compaction_strategy = 20;
+    // flat json
+    optional FlatJsonConfigPB flat_json_config = 21;
 }
 
 message MetadataUpdateInfoPB {
@@ -182,6 +184,7 @@ message MetadataUpdateInfoPB {
     optional PersistentIndexTypePB persistent_index_type = 3;
     optional bool bundle_tablet_metadata = 4;
     optional CompactionStrategyPB compaction_strategy = 5;
+    optional FlatJsonConfigPB flat_json_config = 6;
 }
 
 message BundleTabletMetadataPB {
