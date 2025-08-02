@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.opencsv.CSVWriter;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -364,6 +365,7 @@ public class HiveMetastoreApiConverter {
         textFileParameters.putAll(sd.getSerdeInfo().getParameters());
         // "skip.header.line.count" is set in TBLPROPERTIES
         textFileParameters.putAll(params);
+        textFileParameters.put(HIVE_TABLE_SERDE_LIB, sd.getSerdeInfo().getSerializationLib());
         Partition.Builder partitionBuilder = Partition.builder()
                 .setParams(params)
                 .setFullPath(sd.getLocation())
@@ -609,7 +611,9 @@ public class HiveMetastoreApiConverter {
         if (fieldDelim.isEmpty()) {
             // Support for hive org.apache.hadoop.hive.serde2.OpenCSVSerde
             // https://cwiki.apache.org/confluence/display/hive/csv+serde
-            fieldDelim = parameters.getOrDefault(OpenCSVSerde.SEPARATORCHAR, "");
+            if (HiveClassNames.OPEN_CSV_SERDE_CLASS.equals(parameters.getOrDefault(HIVE_TABLE_SERDE_LIB, null))) {
+                fieldDelim = parameters.getOrDefault(OpenCSVSerde.SEPARATORCHAR, String.valueOf(CSVWriter.DEFAULT_SEPARATOR));
+            }
         }
         String lineDelim = parameters.getOrDefault(serdeConstants.LINE_DELIM, "");
         String mapkeyDelim = parameters.getOrDefault(serdeConstants.MAPKEY_DELIM, "");
