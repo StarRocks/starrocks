@@ -264,6 +264,7 @@
       "s_county":"[-Infinity, Infinity, 0.005333333333333333, 14.032666666666668, 81.0] ESTIMATE"
     }
   },
+  "histogram_statistics": {},
   "be_number":8,
   "exception":[
 

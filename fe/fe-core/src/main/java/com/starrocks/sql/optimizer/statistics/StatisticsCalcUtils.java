@@ -71,11 +71,13 @@ public class StatisticsCalcUtils {
         Map<String, Histogram> histogramStatistics =
                 GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatistics(table, columns);
 
+        boolean histogramStatistic = false;
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnStatistic columnStatistic;
             if (histogramStatistics.containsKey(requiredColumnRefs.get(i).getName())) {
                 columnStatistic = ColumnStatistic.buildFrom(columnStatisticList.get(i)).setHistogram(
                         histogramStatistics.get(requiredColumnRefs.get(i).getName())).build();
+                histogramStatistic = true;
             } else {
                 columnStatistic = columnStatisticList.get(i);
             }
@@ -83,6 +85,10 @@ public class StatisticsCalcUtils {
             if (optimizerContext != null && optimizerContext.getDumpInfo() != null) {
                 optimizerContext.getDumpInfo()
                         .addTableStatistics(table, requiredColumnRefs.get(i).getName(), columnStatisticList.get(i));
+                if (histogramStatistic) {
+                    optimizerContext.getDumpInfo()
+                            .addTableHistogramStatistics(table, requiredColumnRefs.get(i).getName(), columnStatistic);
+                }
             }
         }
         return builder;

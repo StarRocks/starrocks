@@ -120,6 +120,7 @@
       "order_id" :"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
       "dest_first_region" :"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
       "return_date" :"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN" } },
+  "histogram_statistics": {},
   "be_number" :9,
   "be_core_stat": { "numOfHardwareCoresPerBe" :"{\"10006\":40,\"10007\":40,\"10008\":40,\"10009\":32,\"10010\":32,\"10011\":32,\"10012\":32,\"10013\":32,\"10014\":32}",
     "cachedAvgNumOfHardwareCores" :34 },
