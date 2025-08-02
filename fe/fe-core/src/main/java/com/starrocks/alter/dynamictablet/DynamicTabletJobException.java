@@ -14,12 +14,16 @@
 
 package com.starrocks.alter.dynamictablet;
 
-import java.util.Map;
+/*
+ * This exception will be thrown when dynamic tablet job execution error
+ */
+public class DynamicTabletJobException extends RuntimeException {
 
-public class SplitTabletJob extends DynamicTabletJob {
+    public DynamicTabletJobException(String message) {
+        super(message);
+    }
 
-    public SplitTabletJob(long jobId, long dbId, long tableId,
-            Map<Long, PhysicalPartitionContext> physicalPartitionContexts) {
-        super(jobId, JobType.SPLIT_TABLET, dbId, tableId, physicalPartitionContexts);
+    public DynamicTabletJobException(String message, Throwable cause) {
+        super(message, cause);
     }
 }

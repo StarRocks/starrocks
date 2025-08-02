@@ -14,12 +14,25 @@
 
 package com.starrocks.alter.dynamictablet;
 
-import java.util.Map;
+/*
+ * DynamicTabletContext saves the context during tablet splitting or merging for a tablet
+ */
+public class DynamicTabletContext {
 
-public class SplitTabletJob extends DynamicTabletJob {
+    protected final DynamicTablet dynamicTablet;
 
-    public SplitTabletJob(long jobId, long dbId, long tableId,
-            Map<Long, PhysicalPartitionContext> physicalPartitionContexts) {
-        super(jobId, JobType.SPLIT_TABLET, dbId, tableId, physicalPartitionContexts);
+    protected final long visibleVersion;
+
+    public DynamicTabletContext(DynamicTablet dynamicTablet, long visibleVersion) {
+        this.dynamicTablet = dynamicTablet;
+        this.visibleVersion = visibleVersion;
+    }
+
+    public DynamicTablet getDynamicTablet() {
+        return dynamicTablet;
+    }
+
+    public long getVisibleVersion() {
+        return visibleVersion;
     }
 }

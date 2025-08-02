@@ -15,13 +15,20 @@
 package com.starrocks.alter.dynamictablet;
 
 import com.google.gson.annotations.SerializedName;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
+import java.util.concurrent.Future;
 
 /*
  * PhysicalPartitionContext saves the context during tablet splitting or merging for a physical partition
  */
 public class PhysicalPartitionContext {
+    private static final Logger LOG = LogManager.getLogger(PhysicalPartitionContext.class);
+
+    @SerializedName(value = "newPhysicalPartitionId")
+    protected long newPhysicalPartitionId;
 
     @SerializedName(value = "commitVersion")
     protected long commitVersion;
@@ -29,8 +36,18 @@ public class PhysicalPartitionContext {
     @SerializedName(value = "indexContexts")
     protected final Map<Long, MaterializedIndexContext> indexContexts;
 
+    protected Future<Boolean> publishFuture;
+
     public PhysicalPartitionContext(Map<Long, MaterializedIndexContext> indexContexts) {
         this.indexContexts = indexContexts;
+    }
+
+    public long getNewPhysicalPartitionId() {
+        return newPhysicalPartitionId;
+    }
+
+    public void setNewPhysicalPartitionId(long newPhysicalPartitionId) {
+        this.newPhysicalPartitionId = newPhysicalPartitionId;
     }
 
     public long getCommitVersion() {
@@ -43,6 +60,32 @@ public class PhysicalPartitionContext {
 
     public Map<Long, MaterializedIndexContext> getIndexContexts() {
         return indexContexts;
+    }
+
+    public void setPublishFuture(Future<Boolean> publishFuture) {
+        this.publishFuture = publishFuture;
+    }
+
+    /*
+     * < 0: Publish not start or failed
+     * > 0: Publish success
+     * = 0: Publish in progress
+     */
+    public int getPublishState() {
+        if (publishFuture == null) {
+            return -1;
+        }
+
+        if (!publishFuture.isDone()) {
+            return 0;
+        }
+
+        try {
+            return publishFuture.get() ? 1 : -1;
+        } catch (Exception e) {
+            LOG.warn("Failed to publish future get. ", e);
+            return -1;
+        }
     }
 
     public long getParallelTablets() {
