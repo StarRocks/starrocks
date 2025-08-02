@@ -103,6 +103,7 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
     case TYPE_HLL:
     case TYPE_PERCENTILE:
     case TYPE_JSON:
+    case TYPE_VARIANT:
     case TYPE_VARBINARY:
         return string_length + sizeof(get_olap_string_max_length());
     case TYPE_ARRAY:

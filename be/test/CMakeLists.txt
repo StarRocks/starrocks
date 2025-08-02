@@ -15,6 +15,7 @@ set(EXEC_FILES
         ./column/field_test.cpp
         ./column/fixed_length_column_test.cpp
         ./column/json_column_test.cpp
+        ./column/variant_column_test.cpp
         ./column/map_column_test.cpp
         ./column/struct_column_test.cpp
         ./column/nullable_column_test.cpp
@@ -533,6 +534,7 @@ set(EXEC_FILES
         ./util/stack_util_test.cpp
         ./util/byte_stream_split_test.cpp
         ./util/url_coding_test.cpp
+        ./util/variant_value_test.cpp
         ./util/url_parser_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc

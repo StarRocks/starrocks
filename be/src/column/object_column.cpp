@@ -22,6 +22,7 @@
 #include "util/mysql_row_buffer.h"
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
+#include "util/variant_value.h"
 
 namespace starrocks {
 
@@ -339,5 +340,6 @@ template class ObjectColumn<HyperLogLog>;
 template class ObjectColumn<BitmapValue>;
 template class ObjectColumn<PercentileValue>;
 template class ObjectColumn<JsonValue>;
+template class ObjectColumn<VariantValue>;
 
 } // namespace starrocks
