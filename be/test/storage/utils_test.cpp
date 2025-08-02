@@ -66,4 +66,85 @@ TEST_F(TestUtils, test_valid_datetime) {
     ASSERT_FALSE(valid_datetime("2020-01-01 00:00:00.0123456"));
 }
 
+TEST_F(TestUtils, test_parse_data_size) {
+    // Empty string should return 0
+    ASSERT_EQ(0, parse_data_size(""));
+
+    // String with only spaces should return 0
+    ASSERT_EQ(0, parse_data_size("   "));
+
+    // String with invalid unit should return 0
+    ASSERT_EQ(0, parse_data_size("10Bytes"));
+    ASSERT_EQ(0, parse_data_size("10X"));
+    ASSERT_EQ(0, parse_data_size("abc"));
+    ASSERT_EQ(0, parse_data_size("10.5XB"));
+
+    // Only number, no unit, should be treated as bytes
+    ASSERT_EQ(10, parse_data_size("10"));
+    ASSERT_EQ(123, parse_data_size("123"));
+
+    // Test with 'B' and spaces
+    ASSERT_EQ(10, parse_data_size("10B"));
+    ASSERT_EQ(10, parse_data_size("  10B  "));
+    ASSERT_EQ(10, parse_data_size("10 b"));
+    ASSERT_EQ(10, parse_data_size("10 b "));
+
+    // Test with K/k/KB/kb
+    ASSERT_EQ(10 * 1024, parse_data_size("10K"));
+    ASSERT_EQ(10 * 1024, parse_data_size("10KB"));
+    ASSERT_EQ(10 * 1024, parse_data_size("10k"));
+    ASSERT_EQ(10 * 1024, parse_data_size("10kb"));
+    ASSERT_EQ(10 * 1024, parse_data_size(" 10 KB "));
+
+    // Test with M/m/MB/mb
+    ASSERT_EQ(10 * 1024 * 1024, parse_data_size("10M"));
+    ASSERT_EQ(10 * 1024 * 1024, parse_data_size("10MB"));
+    ASSERT_EQ(10 * 1024 * 1024, parse_data_size("10m"));
+    ASSERT_EQ(10 * 1024 * 1024, parse_data_size("10mb"));
+
+    // Test with G/g/GB/gb
+    ASSERT_EQ(10LL * 1024 * 1024 * 1024, parse_data_size("10G"));
+    ASSERT_EQ(10LL * 1024 * 1024 * 1024, parse_data_size("10GB"));
+    ASSERT_EQ(10LL * 1024 * 1024 * 1024, parse_data_size("10g"));
+    ASSERT_EQ(10LL * 1024 * 1024 * 1024, parse_data_size("10gb"));
+
+    // Test with T/t/TB/tb
+    ASSERT_EQ(10LL * 1024 * 1024 * 1024 * 1024, parse_data_size("10T"));
+    ASSERT_EQ(10LL * 1024 * 1024 * 1024 * 1024, parse_data_size("10TB"));
+    ASSERT_EQ(10LL * 1024 * 1024 * 1024 * 1024, parse_data_size("10t"));
+    ASSERT_EQ(10LL * 1024 * 1024 * 1024 * 1024, parse_data_size("10tb"));
+
+    // Test with P/p/PB/pb
+    ASSERT_EQ(10LL * 1024 * 1024 * 1024 * 1024 * 1024, parse_data_size("10P"));
+    ASSERT_EQ(10LL * 1024 * 1024 * 1024 * 1024 * 1024, parse_data_size("10PB"));
+    ASSERT_EQ(10LL * 1024 * 1024 * 1024 * 1024 * 1024, parse_data_size("10p"));
+    ASSERT_EQ(10LL * 1024 * 1024 * 1024 * 1024 * 1024, parse_data_size("10pb"));
+
+    // Test with decimal numbers
+    ASSERT_EQ(1536, parse_data_size("1.5K"));
+    ASSERT_EQ(1536, parse_data_size("1.5KB"));
+    ASSERT_EQ(1572864, parse_data_size("1.5M"));
+    ASSERT_EQ(1610612736, parse_data_size("1.5G"));
+    ASSERT_EQ(0, parse_data_size("1.5X")); // invalid unit
+
+    // Test with leading/trailing spaces
+    ASSERT_EQ(10 * 1024, parse_data_size("   10K"));
+    ASSERT_EQ(10 * 1024, parse_data_size("10K   "));
+    ASSERT_EQ(10 * 1024, parse_data_size("   10K   "));
+
+    // Test with spaces between number and unit
+    ASSERT_EQ(10 * 1024, parse_data_size("10 K"));
+    ASSERT_EQ(10 * 1024, parse_data_size("10   K"));
+    ASSERT_EQ(10 * 1024, parse_data_size("  10   K  "));
+
+    // Test with negative number (should return 0)
+    ASSERT_EQ(0, parse_data_size("-10K"));
+
+    // Test with value exceeding int64_t max (should return 0)
+    ASSERT_EQ(0, parse_data_size("100000000000000000000P"));
+
+    // Test with value below int64_t min (should return 0)
+    ASSERT_EQ(0, parse_data_size("-100000000000000000000P"));
+}
+
 } // namespace starrocks
