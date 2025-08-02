@@ -406,4 +406,57 @@ int caculate_delta_writer_thread_num(int thread_num_from_config) {
     return std::max<int>(CpuInfo::num_cores() / 2, 16);
 }
 
+int64_t parse_data_size(const std::string& value_str) {
+    if (value_str.empty()) return 0;
+
+    // Trim leading/trailing spaces
+    size_t start = value_str.find_first_not_of(" \t\n\r");
+    if (start == std::string::npos) return 0;
+    size_t end = value_str.find_last_not_of(" \t\n\r");
+    std::string s = value_str.substr(start, end - start + 1);
+
+    // Find where the number ends
+    size_t idx = 0;
+    bool dot_found = false;
+    while (idx < s.size() && (std::isdigit(s[idx]) || (!dot_found && s[idx] == '.'))) {
+        if (s[idx] == '.') dot_found = true;
+        ++idx;
+    }
+
+    double num = 0;
+    try {
+        num = std::stod(s.substr(0, idx));
+    } catch (...) {
+        return 0;
+    }
+
+    // Extract and normalize unit
+    std::string unit = s.substr(idx);
+    unit.erase(std::remove_if(unit.begin(), unit.end(), ::isspace), unit.end());
+    std::transform(unit.begin(), unit.end(), unit.begin(), ::toupper);
+
+    static const std::unordered_map<std::string, int64_t> unit_map = {{"", 1LL},
+                                                                      {"B", 1LL},
+                                                                      {"K", 1024LL},
+                                                                      {"KB", 1024LL},
+                                                                      {"M", 1024LL * 1024},
+                                                                      {"MB", 1024LL * 1024},
+                                                                      {"G", 1024LL * 1024 * 1024},
+                                                                      {"GB", 1024LL * 1024 * 1024},
+                                                                      {"T", 1024LL * 1024 * 1024 * 1024},
+                                                                      {"TB", 1024LL * 1024 * 1024 * 1024},
+                                                                      {"P", 1024LL * 1024 * 1024 * 1024 * 1024},
+                                                                      {"PB", 1024LL * 1024 * 1024 * 1024 * 1024}};
+
+    auto it = unit_map.find(unit);
+    if (it == unit_map.end()) return 0;
+
+    double result = num * static_cast<double>(it->second);
+    if (result > static_cast<double>(std::numeric_limits<int64_t>::max()) ||
+        result < static_cast<double>(std::numeric_limits<int64_t>::min())) {
+        return 0;
+    }
+    return static_cast<int64_t>(result);
+}
+
 } // namespace starrocks

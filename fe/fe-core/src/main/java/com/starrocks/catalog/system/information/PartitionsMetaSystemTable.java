@@ -53,7 +53,7 @@ public class PartitionsMetaSystemTable {
                         .column("LAST_CONSISTENCY_CHECK_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("IS_IN_MEMORY", ScalarType.createType(PrimitiveType.BOOLEAN))
                         .column("IS_TEMP", ScalarType.createType(PrimitiveType.BOOLEAN))
-                        .column("DATA_SIZE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("DATA_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("ROW_COUNT", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("ENABLE_DATACACHE", ScalarType.createType(PrimitiveType.BOOLEAN))
                         .column("AVG_CS", ScalarType.createType(PrimitiveType.DOUBLE))
