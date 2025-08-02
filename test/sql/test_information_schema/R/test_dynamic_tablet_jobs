@@ -1,0 +1,4 @@
+-- name: test_dynamic_tablet_jobs
+SELECT * FROM  INFORMATION_SCHEMA.DYNAMIC_TABLET_JOBS;
+-- result:
+-- !result
