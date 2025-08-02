@@ -501,6 +501,11 @@ public:
     // Prints the counters in a name: value format.
     // Does not hold locks when it makes any function calls.
     void pretty_print(std::ostream* s, const std::string& prefix = "") const;
+    
+    // Prints counters with enhanced readability based on profile level
+    // level: "basic", "advanced", "trace" - controls which metrics to show
+    void pretty_print_enhanced(std::ostream* s, const std::string& level = "advanced", 
+                               const std::string& prefix = "") const;
 
     // Serializes profile to thrift.
     // Does not hold locks when it makes any function calls.
@@ -670,6 +675,11 @@ private:
     static void print_child_counters(const std::string& prefix, const std::string& counter_name,
                                      const CounterMap& counter_map, const ChildCounterMap& child_counter_map,
                                      std::ostream* s);
+    
+    // Print child counters with enhanced readability
+    static void print_child_counters_enhanced(const std::string& prefix, const std::string& counter_name,
+                                              const CounterMap& counter_map, const ChildCounterMap& child_counter_map,
+                                              const std::string& level, std::ostream* s);
 
 public:
     // Merge all the isomorphic sub profiles and the caller must know for sure
