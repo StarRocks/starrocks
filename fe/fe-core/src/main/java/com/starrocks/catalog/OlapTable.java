@@ -2678,6 +2678,10 @@ public class OlapTable extends Table {
         tableProperty.buildReplicatedStorage();
     }
 
+    public boolean allowBucketSizeSetting() {
+        return (defaultDistributionInfo instanceof RandomDistributionInfo) && Config.enable_automatic_bucket;
+    }
+
     public Long getAutomaticBucketSize() {
         if (!(defaultDistributionInfo instanceof RandomDistributionInfo) || !Config.enable_automatic_bucket) {
             return (long) 0;
