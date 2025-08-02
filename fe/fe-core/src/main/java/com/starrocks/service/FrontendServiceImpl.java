@@ -101,6 +101,7 @@ import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RunningProfileManager;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
@@ -215,6 +216,7 @@ import com.starrocks.thrift.TFinishCheckpointResponse;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
 import com.starrocks.thrift.TFinishSlotRequirementResponse;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TFragmentProfile;
 import com.starrocks.thrift.TGetApplicableRolesRequest;
 import com.starrocks.thrift.TGetApplicableRolesResponse;
 import com.starrocks.thrift.TGetDBPrivsParams;
@@ -3125,6 +3127,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TUpdateFailPointResponse response = new TUpdateFailPointResponse();
         response.setStatus(status);
         return response;
+    }
+
+    @Override
+    public TStatus asyncProfileReport(TFragmentProfile request) {
+        return RunningProfileManager.getInstance().asyncProfileReport(request);
     }
 
     @NotNull
