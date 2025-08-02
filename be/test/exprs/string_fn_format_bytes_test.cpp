@@ -26,20 +26,18 @@ TEST_F(StringFunctionFormatBytesTest, formatBytesBasicTest) {
     auto bytes_col = Int64Column::create();
 
     // Test basic examples from the spec
-    std::vector<std::tuple<int64_t, std::string>> test_cases = {
-        {0, "0 B"},
-        {123, "123 B"},
-        {1023, "1023 B"},
-        {1024, "1.00 KB"},
-        {4096, "4.00 KB"},
-        {123456789, "117.74 MB"},
-        {10737418240, "10.00 GB"},
-        {1048576, "1.00 MB"},
-        {1073741824, "1.00 GB"},
-        {1099511627776, "1.00 TB"},
-        {1125899906842624, "1.00 PB"},
-        {1152921504606846976, "1.00 EB"}
-    };
+    std::vector<std::tuple<int64_t, std::string>> test_cases = {{0, "0 B"},
+                                                                {123, "123 B"},
+                                                                {1023, "1023 B"},
+                                                                {1024, "1.00 KB"},
+                                                                {4096, "4.00 KB"},
+                                                                {123456789, "117.74 MB"},
+                                                                {10737418240, "10.00 GB"},
+                                                                {1048576, "1.00 MB"},
+                                                                {1073741824, "1.00 GB"},
+                                                                {1099511627776, "1.00 TB"},
+                                                                {1125899906842624, "1.00 PB"},
+                                                                {1152921504606846976, "1.00 EB"}};
 
     for (auto& test_case : test_cases) {
         bytes_col->append(std::get<0>(test_case));
@@ -55,7 +53,7 @@ TEST_F(StringFunctionFormatBytesTest, formatBytesBasicTest) {
 
     for (int i = 0; i < test_cases.size(); ++i) {
         ASSERT_EQ(std::get<1>(test_cases[i]), v->get_data()[i].to_string())
-            << "Failed for input: " << std::get<0>(test_cases[i]);
+                << "Failed for input: " << std::get<0>(test_cases[i]);
     }
 }
 
@@ -63,43 +61,43 @@ TEST_F(StringFunctionFormatBytesTest, formatBytesEdgeCasesTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
     std::vector<std::tuple<ColumnPtr, bool, std::string>> test_cases = {
-        // Test null input
-        {ColumnHelper::create_const_null_column(1), true, ""},
+            // Test null input
+            {ColumnHelper::create_const_null_column(1), true, ""},
 
-        // Test zero
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1), false, "0 B"},
+            // Test zero
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1), false, "0 B"},
 
-        // Test negative numbers (should return null)
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(-1, 1), true, ""},
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(-1024, 1), true, ""},
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(INT64_MIN, 1), true, ""},
+            // Test negative numbers (should return null)
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(-1, 1), true, ""},
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(-1024, 1), true, ""},
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(INT64_MIN, 1), true, ""},
 
-        // Test small values (bytes)
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(1, 1), false, "1 B"},
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(512, 1), false, "512 B"},
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(1023, 1), false, "1023 B"},
+            // Test small values (bytes)
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(1, 1), false, "1 B"},
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(512, 1), false, "512 B"},
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(1023, 1), false, "1023 B"},
 
-        // Test KB values
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(1024, 1), false, "1.00 KB"},
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(1536, 1), false, "1.50 KB"},
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(2048, 1), false, "2.00 KB"},
+            // Test KB values
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(1024, 1), false, "1.00 KB"},
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(1536, 1), false, "1.50 KB"},
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(2048, 1), false, "2.00 KB"},
 
-        // Test MB values
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(1048576, 1), false, "1.00 MB"},
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(1572864, 1), false, "1.50 MB"},
+            // Test MB values
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(1048576, 1), false, "1.00 MB"},
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(1572864, 1), false, "1.50 MB"},
 
-        // Test GB values
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(1073741824, 1), false, "1.00 GB"},
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(2147483648, 1), false, "2.00 GB"},
+            // Test GB values
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(1073741824, 1), false, "1.00 GB"},
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(2147483648, 1), false, "2.00 GB"},
 
-        // Test TB values
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(1099511627776, 1), false, "1.00 TB"},
+            // Test TB values
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(1099511627776, 1), false, "1.00 TB"},
 
-        // Test PB values
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(1125899906842624, 1), false, "1.00 PB"},
+            // Test PB values
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(1125899906842624, 1), false, "1.00 PB"},
 
-        // Test very large values
-        {ColumnHelper::create_const_column<TYPE_BIGINT>(INT64_MAX, 1), false, "8.00 EB"},
+            // Test very large values
+            {ColumnHelper::create_const_column<TYPE_BIGINT>(INT64_MAX, 1), false, "8.00 EB"},
     };
 
     for (auto& test_case : test_cases) {
@@ -125,16 +123,16 @@ TEST_F(StringFunctionFormatBytesTest, formatBytesNullableColumnTest) {
     auto null_col = NullColumn::create();
 
     std::vector<std::tuple<int64_t, bool, bool, std::string>> test_cases = {
-        {0, false, false, "0 B"},
-        {1024, false, false, "1.00 KB"},
-        {-1, false, true, ""},
-        {1048576, false, false, "1.00 MB"},
-        {0, true, true, ""},  // null input
-        {1073741824, false, false, "1.00 GB"},
-        {-512, false, true, ""},
-        {123, false, false, "123 B"},
-        {4096, true, true, ""},  // null input
-        {1099511627776, false, false, "1.00 TB"},
+            {0, false, false, "0 B"},
+            {1024, false, false, "1.00 KB"},
+            {-1, false, true, ""},
+            {1048576, false, false, "1.00 MB"},
+            {0, true, true, ""}, // null input
+            {1073741824, false, false, "1.00 GB"},
+            {-512, false, true, ""},
+            {123, false, false, "123 B"},
+            {4096, true, true, ""}, // null input
+            {1099511627776, false, false, "1.00 TB"},
     };
 
     for (auto& test_case : test_cases) {
@@ -159,7 +157,7 @@ TEST_F(StringFunctionFormatBytesTest, formatBytesNullableColumnTest) {
         } else {
             ASSERT_FALSE(nullable_datum.is_null()) << "Row " << i << " should not be null";
             ASSERT_EQ(nullable_datum.get_slice().to_string(), expected)
-                << "Row " << i << " input: " << std::get<0>(test_cases[i]);
+                    << "Row " << i << " input: " << std::get<0>(test_cases[i]);
         }
     }
 }
@@ -171,14 +169,14 @@ TEST_F(StringFunctionFormatBytesTest, formatBytesPrecisionTest) {
 
     // Test precision and rounding (2 decimal places)
     std::vector<std::tuple<int64_t, std::string>> precision_cases = {
-        {1024 + 512, "1.50 KB"},  // 1.5 KB
-        {1024 + 256, "1.25 KB"},  // 1.25 KB
-        {1024 + 1, "1.00 KB"},    // 1.0009765625 KB -> 1.00 KB
-        {1024 + 102, "1.10 KB"},  // ~1.0996 KB -> 1.10 KB
-        {1024 + 103, "1.10 KB"},  // ~1.1005 KB -> 1.10 KB
-        {1048576 + 524288, "1.50 MB"},  // 1.5 MB
-        {1048576 + 52429, "1.05 MB"},   // ~1.05 MB
-        {1073741824 + 536870912, "1.50 GB"},  // 1.5 GB
+            {1024 + 512, "1.50 KB"},             // 1.5 KB
+            {1024 + 256, "1.25 KB"},             // 1.25 KB
+            {1024 + 1, "1.00 KB"},               // 1.0009765625 KB -> 1.00 KB
+            {1024 + 102, "1.10 KB"},             // ~1.0996 KB -> 1.10 KB
+            {1024 + 103, "1.10 KB"},             // ~1.1005 KB -> 1.10 KB
+            {1048576 + 524288, "1.50 MB"},       // 1.5 MB
+            {1048576 + 52429, "1.05 MB"},        // ~1.05 MB
+            {1073741824 + 536870912, "1.50 GB"}, // 1.5 GB
     };
 
     for (auto& test_case : precision_cases) {
@@ -192,7 +190,7 @@ TEST_F(StringFunctionFormatBytesTest, formatBytesPrecisionTest) {
 
     for (int i = 0; i < precision_cases.size(); ++i) {
         ASSERT_EQ(std::get<1>(precision_cases[i]), v->get_data()[i].to_string())
-            << "Failed precision test for input: " << std::get<0>(precision_cases[i]);
+                << "Failed precision test for input: " << std::get<0>(precision_cases[i]);
     }
 }
 
