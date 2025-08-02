@@ -46,6 +46,7 @@ class SchemaChangeData {
     private final List<Integer> sortKeyUniqueIds;
     private final long warehouseId;
     private final ComputeResource computeResource;
+    private final boolean addingGINIndex;
 
     static Builder newBuilder() {
         return new Builder();
@@ -113,6 +114,10 @@ class SchemaChangeData {
         return computeResource;
     }
 
+    boolean isAddingGINIndex() {
+        return addingGINIndex;
+    }
+
     private SchemaChangeData(Builder builder) {
         this.database = Objects.requireNonNull(builder.database, "database is null");
         this.table = Objects.requireNonNull(builder.table, "table is null");
@@ -128,6 +133,7 @@ class SchemaChangeData {
         this.sortKeyUniqueIds = builder.sortKeyUniqueIds;
         this.warehouseId = builder.warehouseId;
         this.computeResource = builder.computeResource;
+        this.addingGINIndex = builder.addingGINIndex;
     }
 
     static class Builder {
@@ -145,6 +151,7 @@ class SchemaChangeData {
         private List<Integer> sortKeyUniqueIds;
         private long warehouseId;
         private ComputeResource computeResource;
+        private boolean addingGINIndex = false;
 
         private Builder() {
         }
@@ -204,6 +211,11 @@ class SchemaChangeData {
         Builder withComputeResource(ComputeResource computeResource) {
             this.computeResource = computeResource;
             this.warehouseId = computeResource.getWarehouseId();
+            return this;
+        }
+
+        Builder withAddingGINIndex(boolean addingGINIndex) {
+            this.addingGINIndex = addingGINIndex;
             return this;
         }
 
