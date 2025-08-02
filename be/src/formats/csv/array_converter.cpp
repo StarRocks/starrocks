@@ -66,7 +66,7 @@ bool ArrayConverter::read_string(Column* column, const Slice& s, const Options& 
         // For broker load, invalid_field_as_null is always false for array's element
         sub_options.invalid_field_as_null = false;
     }
-    sub_options.array_hive_nested_level++;
+    sub_options.hive_nested_level++;
     DCHECK_EQ(old_size, offsets->get_data().back());
     for (const auto& f : fields) {
         if (!_array_reader->read_quoted_string(_element_converter, elements, f, sub_options)) {
