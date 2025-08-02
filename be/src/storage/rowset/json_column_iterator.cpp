@@ -25,9 +25,15 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exprs/function_context.h"
+#include "exprs/json_functions.h"
+#include "exprs/jsonpath.h"
 #include "gutil/casts.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_iterator_decorator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
 #include "types/logical_type.h"
@@ -78,6 +84,8 @@ public:
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
                                       CompoundNodeType pred_relation) override;
+
+    std::string name() const override { return "JsonFlatColumnIterator"; }
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
@@ -313,6 +321,8 @@ public:
 
     ordinal_t num_rows() const override { return _json_iter->num_rows(); }
 
+    std::string name() const override { return "JsonDynamicColumnIterator"; }
+
     /// for vectorized engine
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
@@ -456,6 +466,8 @@ public:
 
     StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
                                                                         Column* dst) override;
+
+    std::string name() const override { return "JsonMergeIterator"; }
 
 private:
     template <typename FUNC>
@@ -633,6 +645,134 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> JsonMergeIterator::get_io_ran
     return res;
 }
 
+class JsonExtractIterator final : public ColumnIteratorDecorator {
+public:
+    explicit JsonExtractIterator(ColumnIteratorUPtr source_iter, JsonPath path, LogicalType type)
+            : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
+              _path(std::move(path)),
+              _type(type),
+              _state(ExecEnv::GetInstance()),
+              _mem_pool(),
+              _source_chunk() {
+        // prepare the source chunk
+        auto column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
+        _source_chunk.append_column(std::move(column), SlotId(0));
+        auto path_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(_path.to_string(), 1);
+        _source_chunk.append_column(std::move(path_column), SlotId(1));
+
+        // prepare the function
+        TypeDescriptor return_type(_type);
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::create_json_type(), TypeDescriptor(TYPE_VARCHAR)};
+        _fn_context.reset(FunctionContext::create_context(&_state, &_mem_pool, return_type, arg_types));
+    }
+
+    ~JsonExtractIterator() override {
+        auto st = JsonFunctions::native_json_path_close(_fn_context.get(),
+                                                        FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        LOG_IF(WARNING, !st.ok()) << "close json path function context failed path=" << _path.to_string()
+                                  << " status=" << st;
+    }
+
+    Status init(const ColumnIteratorOptions& opts) override {
+        RETURN_IF_ERROR(JsonFunctions::native_json_path_prepare(_fn_context.get(),
+                                                                FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+        // record the hits into stats
+        opts.stats->extract_json_hits[_path.to_string()]++;
+        return _parent->init(opts);
+    }
+
+    DISALLOW_COPY_AND_MOVE(JsonExtractIterator);
+
+    Status next_batch(size_t* n, Column* dst) override {
+        _source_chunk.reset();
+        auto source_column = _source_chunk.get_column_by_index(0);
+        RETURN_IF_ERROR(_parent->next_batch(n, source_column.get()));
+        return do_extract(dst);
+    }
+
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
+        _source_chunk.reset();
+        auto source_column = _source_chunk.get_column_by_index(0);
+        RETURN_IF_ERROR(_parent->next_batch(range, source_column.get()));
+        return do_extract(dst);
+    }
+
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
+        _source_chunk.reset();
+        auto source_column = _source_chunk.get_column_by_index(0);
+        RETURN_IF_ERROR(_parent->fetch_values_by_rowid(rowids, size, source_column.get()));
+        return do_extract(values);
+    }
+
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override {
+        auto source_column = _source_chunk.get_column_by_index(0);
+        return _parent->get_io_range_vec(range, source_column.get());
+    }
+
+    std::string name() const override { return "JsonExtractIterator"; }
+
+    // Not support various index
+    bool has_original_bloom_filter_index() const override { return false; }
+    bool has_ngram_bloom_filter_index() const override { return false; }
+
+    Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                          SparseRange<>* row_ranges) override {
+        return Status::OK();
+    }
+
+private:
+    Status do_extract(Column* target) {
+        StatusOr<ColumnPtr> output_column;
+        switch (_type) {
+        case TYPE_BOOLEAN:
+            output_column = JsonFunctions::get_native_json_bool(_fn_context.get(), _source_chunk.columns());
+            break;
+        case TYPE_INT:
+            output_column = JsonFunctions::get_native_json_int(_fn_context.get(), _source_chunk.columns());
+            break;
+        case TYPE_BIGINT:
+            output_column = JsonFunctions::get_native_json_bigint(_fn_context.get(), _source_chunk.columns());
+            break;
+        case TYPE_DOUBLE:
+            output_column = JsonFunctions::get_native_json_double(_fn_context.get(), _source_chunk.columns());
+            break;
+        case TYPE_CHAR:
+        case TYPE_VARCHAR:
+            output_column = JsonFunctions::get_native_json_string(_fn_context.get(), _source_chunk.columns());
+            break;
+        default:
+            return Status::RuntimeError(
+                    fmt::format("JsonExtractIterator not supported type: {}", logical_type_to_string(_type)));
+            break;
+        }
+        RETURN_IF_ERROR(output_column);
+
+        ColumnPtr result = output_column.value();
+        VLOG_ROW << "JsonExtractIterator extract from: " << _source_chunk.get_column_by_index(0)->debug_string();
+        VLOG_ROW << "JsonExtractIterator extract: " << result->debug_string();
+        if ((target->is_nullable() == result->is_nullable()) && (target->size() == 0)) {
+            target->swap_column(*result);
+        } else if (!target->is_nullable() && result->is_nullable()) {
+            auto sz = result->size();
+            target->append(*(down_cast<NullableColumn*>(result.get())->data_column()), 0, sz);
+        } else {
+            target->append(*result, 0, result->size());
+        }
+
+        return {};
+    }
+
+    JsonPath _path;
+    LogicalType _type;
+    RuntimeState _state;
+    MemPool _mem_pool;
+    std::unique_ptr<FunctionContext> _fn_context;
+
+    // Hold the data fetched from the parent iterator
+    Chunk _source_chunk;
+};
+
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(
         ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
         std::vector<std::unique_ptr<ColumnIterator>> iters, const std::vector<std::string>& target_paths,
@@ -660,4 +800,12 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
     return std::make_unique<JsonMergeIterator>(reader, std::move(null_iter), std::move(all_iters), merge_paths,
                                                merge_types);
 }
+
+StatusOr<ColumnIteratorUPtr> create_json_extract_iterator(ColumnIteratorUPtr source_iter, const std::string& path,
+                                                          LogicalType type) {
+    VLOG(2) << fmt::format("create_json_extract_iterator: path={} type={}", path, type);
+    ASSIGN_OR_RETURN(auto normalized_path, JsonPath::parse(path));
+    return std::make_unique<JsonExtractIterator>(std::move(source_iter), normalized_path, type);
+}
+
 } // namespace starrocks

@@ -46,6 +46,8 @@ public:
 
     Status next_batch(const SparseRange<>& range, Column* dst) override { return _parent->next_dict_codes(range, dst); }
 
+    std::string name() const override { return "DictCodeColumnIterator"; }
+
 private:
     ColumnId _cid;
 };
@@ -93,6 +95,8 @@ public:
 
     static Status build_code_convert_map(ColumnIterator* file_column_iter, GlobalDictMap* global_dict,
                                          std::vector<int16_t>* code_convert_map);
+
+    std::string name() const override { return "GlobalDictCodeColumnIterator"; }
 
 private:
     Status decode_array_dict_codes(const Column& codes, Column* words);

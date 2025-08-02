@@ -191,6 +191,7 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
 
         opts.meta->set_name(_flat_paths[i]);
         opts.need_flat = false;
+        opts.need_zone_map = config::json_flat_create_zonemap && is_zone_map_key_type(_flat_types[i]);
 
         TabletColumn col(StorageAggregateType::STORAGE_AGGREGATE_NONE, _flat_types[i], true);
         ASSIGN_OR_RETURN(auto fw, ColumnWriter::create(opts, &col, _wfile));

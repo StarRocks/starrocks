@@ -29,12 +29,18 @@
 #include "fs/fs_memory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
+#include "storage/aggregate_type.h"
 #include "storage/chunk_helper.h"
+#include "storage/chunk_iterator.h"
+#include "storage/flat_json_config.h"
+#include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/json_column_iterator.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_options.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
 #include "testutil/assert.h"
@@ -2289,6 +2295,207 @@ GROUP_SLOW_TEST_F(FlatJsonColumnRWTest, testJsonColumnCompression) {
         std::cout << "[JSON] "
                   << "compression=" << CompressionTypePB_Name(param.compression) << " need_flat=" << param.need_flat
                   << " file size: " << wfile->size() << " bytes\n";
+    }
+}
+
+TEST_F(FlatJsonColumnRWTest, testSegmentWriterIteratorWithMixedDataTypes) {
+    const std::string kJsonColumnName = "json_col";
+    TabletSchemaPB schema_pb;
+    {
+        ColumnPB* json_column = schema_pb.add_column();
+        json_column->set_unique_id(0);
+        json_column->set_name(kJsonColumnName);
+        json_column->set_type("json");
+        json_column->set_is_nullable(true);
+    }
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    std::vector<std::string> json_strings = {
+            R"({
+            "id": 1001,
+            "name": "Alice",
+            "age": 25,
+            "salary": 50000.50,
+            "is_active": true,
+            "tags": ["engineer", "python", "data"],
+            "address": {
+                "city": "Beijing",
+                "country": "China",
+                "postal_code": "100000"
+            },
+            "skills": null,
+            "projects": [
+                {"name": "Project A", "duration": 6},
+                {"name": "Project B", "duration": 12}
+            ],
+            "unique1": 123
+        })",
+            R"({
+            "id": 1002,
+            "name": "Bob",
+            "age": 30,
+            "salary": 75000.75,
+            "is_active": false,
+            "tags": ["manager", "leadership"],
+            "address": {
+                "city": "Shanghai",
+                "country": "China",
+                "postal_code": "200000"
+            },
+            "skills": ["Java", "Spring", "MySQL"],
+            "projects": [],
+            "unique2": "123"
+        })",
+            R"({
+            "id": 1003,
+            "name": "Charlie",
+            "age": 28,
+            "salary": 60000.25,
+            "is_active": true,
+            "tags": ["designer", "ui", "ux"],
+            "address": null,
+            "skills": ["Figma", "Sketch", "Photoshop"],
+            "projects": [
+                {"name": "Website Redesign", "duration": 8, "completed": true}
+            ],
+            "unique3": 123.0
+        })"};
+
+    std::string file_name = TEST_DIR + "/test_json_segment.data";
+    auto fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+
+    {
+        // write the segment data
+        SegmentWriterOptions opts;
+        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+        opts.flat_json_config->set_flat_json_enabled(true);
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
+        auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), 0, tablet_schema, opts);
+        ASSERT_OK(segment_writer->init());
+
+        auto json_column = JsonColumn::create();
+
+        for (const auto& json_str : json_strings) {
+            JsonValue json_value;
+            ASSERT_OK(JsonValue::parse(json_str, &json_value));
+            json_column->append(&json_value);
+        }
+
+        SchemaPtr chunk_schema = std::make_shared<Schema>(tablet_schema->schema());
+        auto chunk = std::make_shared<Chunk>(Columns{json_column}, chunk_schema);
+        ASSERT_OK(segment_writer->append_chunk(*chunk));
+        uint64_t index_size, segment_file_size;
+        ASSERT_OK(segment_writer->finalize_columns(&index_size));
+        ASSERT_OK(segment_writer->finalize_footer(&segment_file_size));
+    }
+
+    {
+        // read and validate the segment data
+        auto segment = *Segment::open(fs, FileInfo{file_name}, 0, tablet_schema);
+        OlapReaderStatistics stats;
+        SegmentReadOptions read_opts;
+        read_opts.fs = fs;
+        read_opts.tablet_schema = tablet_schema;
+        read_opts.stats = &stats;
+        ASSIGN_OR_ABORT(auto segment_iterator, segment->new_iterator(*tablet_schema->schema(), read_opts));
+
+        auto read_chunk = std::make_shared<Chunk>();
+        read_chunk->append_column(ColumnHelper::create_column(TypeDescriptor::create_json_type(), true), 0);
+
+        ASSERT_OK(segment_iterator->get_next(read_chunk.get()));
+        ASSERT_EQ(read_chunk->num_rows(), json_strings.size());
+
+        auto read_json_column = read_chunk->get_column_by_index(0);
+        for (size_t i = 0; i < json_strings.size(); ++i) {
+            auto json_datum = read_json_column->get(i);
+
+            const JsonValue* read_json = json_datum.get_json();
+            JsonValue expected_json;
+            ASSERT_OK(JsonValue::parse(json_strings[i], &expected_json));
+            ASSERT_EQ(read_json->to_string().value(), expected_json.to_string().value());
+        }
+
+        read_chunk->reset();
+        ASSERT_TRUE(segment_iterator->get_next(read_chunk.get()).is_end_of_file());
+    }
+
+    {
+        // read specific column
+        auto segment = *Segment::open(fs, FileInfo{file_name}, 0, tablet_schema);
+        OlapReaderStatistics stats;
+        SegmentReadOptions read_opts;
+        read_opts.fs = fs;
+        read_opts.tablet_schema = tablet_schema;
+        read_opts.stats = &stats;
+
+        OlapReaderStatistics reader_stats;
+        ColumnIteratorOptions column_opts;
+        column_opts.stats = &reader_stats;
+
+        ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(file_name));
+        column_opts.read_file = read_file.get();
+
+        // clang-format off
+        std::vector<std::tuple<std::string, LogicalType, std::string>> fields = {
+
+            // extract from the FlatJSON.remain
+            {"unique1", TYPE_BIGINT, "[123, NULL, NULL]"},
+            {"unique1", TYPE_DOUBLE, "[123, NULL, NULL]"},
+            {"unique1", TYPE_BOOLEAN, "[1, NULL, NULL]"},
+            {"unique1", TYPE_VARCHAR, "['123', NULL, NULL]"},
+            {"unique2", TYPE_BIGINT, "[NULL, 123, NULL]"},
+            {"unique3", TYPE_VARCHAR, "[NULL, NULL, '123']"},
+            {"unique3", TYPE_BIGINT, "[NULL, NULL, 123]"},
+            {"unique3", TYPE_BOOLEAN, "[NULL, NULL, 1]"},
+            // non-existent
+            {"unique4", TYPE_BIGINT, "[NULL, NULL, NULL]"},
+
+            // flatten columns
+            {"id", TYPE_BIGINT, "[1001, 1002, 1003]"},
+            {"id", TYPE_DOUBLE, "[1001, 1002, 1003]"},
+            {"id", TYPE_VARCHAR, "['1001', '1002', '1003']"},
+            
+            {"name", TYPE_VARCHAR, R"(['Alice', 'Bob', 'Charlie'])"},
+            {"name", TYPE_BIGINT, R"([NULL, NULL, NULL])"},
+            
+            {"age", TYPE_BIGINT, "[25, 30, 28]"},
+
+            {"salary", TYPE_DOUBLE, "[50000.5, 75000.8, 60000.2]"},
+            {"salary", TYPE_BIGINT, "[50000, 75000, 60000]"},
+            {"salary", TYPE_VARCHAR, "['50000.5', '75000.75', '60000.25']"},
+
+            {"is_active", TYPE_BOOLEAN, "[1, 0, 1]"},
+            {"is_active", TYPE_BIGINT, "[1, 0, 1]"},
+            {"is_active", TYPE_VARCHAR, "['true', 'false', 'true']"},
+
+            {"address.city", TYPE_VARCHAR, "['Beijing', 'Shanghai', NULL]"},
+            {"address.country", TYPE_VARCHAR, "['China', 'China', NULL]"},
+            {"address.postal_code", TYPE_BIGINT, "[100000, 200000, NULL]"},
+        };
+        // clang-format on
+
+        int index = 0;
+        for (const auto& [field_name, field_type, result] : fields) {
+            std::cerr << "running test case " << index++ << std::endl;
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::FIELD, "$", 0));
+            ColumnAccessPath::insert_json_path(path.get(), field_type, field_name);
+            // ASSERT_EQ(kJsonColumnName + "." + field_name, path->full_path());
+            ASSERT_EQ("$." + field_name, path->linear_path());
+
+            TabletColumn col(STORAGE_AGGREGATE_NONE, field_type, true);
+            col.set_unique_id(123);
+            col.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), 0));
+
+            ASSIGN_OR_ABORT(auto column_iter, segment->new_column_iterator_or_default(col, path.get()));
+            ASSERT_OK(column_iter->init(column_opts));
+            ASSERT_OK(column_iter->seek_to_first());
+            size_t count = 4096;
+            auto column = ColumnHelper::create_column(TypeDescriptor(field_type), true);
+            ASSERT_OK(column_iter->next_batch(&count, column.get()));
+            ASSERT_EQ(column->size(), json_strings.size());
+            ASSERT_EQ(result, column->debug_string()) << fmt::format("field={} type={}", field_name, field_type);
+        }
     }
 }
 
