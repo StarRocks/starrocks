@@ -2094,6 +2094,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The minimum timeout duration allowed for a load job. This limit applies to all types of load jobs.
 - Introduced in: -
 
+##### prepared_transaction_default_timeout_second
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The default timeout duration for a prepared transaction.
+- Introduced in: -
+
 ##### spark_dpp_version
 
 - Default: 1.0.0
