@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Objects;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
@@ -117,5 +118,19 @@ public class InformationFunction extends Expr {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitInformationFunction(this, context);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(super.hashCode(), funcType);
+    }
+
+    @Override
+    public boolean equalsWithoutChild(Object obj) {
+        if (!super.equalsWithoutChild(obj)) {
+            return false;
+        }
+        InformationFunction o = (InformationFunction) obj;
+        return funcType.equals(o.funcType) && intValue == o.intValue && strValue.equals(o.strValue);
     }
 }
