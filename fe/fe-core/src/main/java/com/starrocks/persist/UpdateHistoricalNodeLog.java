@@ -18,6 +18,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.io.DataInput;
 import java.io.IOException;
@@ -27,11 +28,8 @@ public class UpdateHistoricalNodeLog implements Writable {
     @SerializedName(value = "warehouse")
     private String warehouse;
 
-    @SerializedName(value = "warehouseId")
-    private long warehouseId;
-
-    @SerializedName(value = "workerGroupId")
-    private long workerGroupId;
+    @SerializedName("computeResource")
+    private ComputeResource computeResource;
 
     @SerializedName(value = "updateTime")
     private long updateTime;
@@ -42,10 +40,9 @@ public class UpdateHistoricalNodeLog implements Writable {
     @SerializedName(value = "computeNodeIds")
     private List<Long> computeNodeIds;
 
-    public UpdateHistoricalNodeLog(long warehouseId, long workerGroupId, long updateTime, List<Long> backendIds,
+    public UpdateHistoricalNodeLog(ComputeResource computeResource, long updateTime, List<Long> backendIds,
                                    List<Long> computeNodeIds) {
-        this.warehouseId = warehouseId;
-        this.workerGroupId = workerGroupId;
+        this.computeResource = computeResource;
         this.updateTime = updateTime;
         this.backendIds = backendIds;
         this.computeNodeIds = computeNodeIds;
@@ -55,12 +52,8 @@ public class UpdateHistoricalNodeLog implements Writable {
         return warehouse;
     }
 
-    public long getWarehouseId() {
-        return warehouseId;
-    }
-
-    public long getWorkerGroupId() {
-        return workerGroupId;
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     public long getUpdateTime() {

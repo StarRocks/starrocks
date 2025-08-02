@@ -54,6 +54,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
@@ -171,10 +172,10 @@ public class SystemInfoService implements GsonPostProcessable {
         idToComputeNodeRef.remove(computeNode.getId());
     }
 
-    private boolean needUpdateHistoricalNodes(long warehouseId, long workerGroupId, long currentTime) {
+    private boolean needUpdateHistoricalNodes(ComputeResource computeResource, long currentTime) {
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
         long minUpdateIntervalSec = ConnectContext.getSessionVariableOrDefault().getHistoricalNodesMinUpdateInterval();
-        if (currentTime - historicalNodeMgr.getLastUpdateTime(warehouseId, workerGroupId) < minUpdateIntervalSec * 1000L) {
+        if (currentTime - historicalNodeMgr.getLastUpdateTime(computeResource) < minUpdateIntervalSec * 1000L) {
             return false;
         }
         return true;
@@ -184,34 +185,39 @@ public class SystemInfoService implements GsonPostProcessable {
         if (!Config.enable_trace_historical_node) {
             return;
         }
-        long currentTime = System.currentTimeMillis();
-        if (needUpdateHistoricalNodes(warehouseId, workerGroupId, currentTime)) {
-            updateHistoricalComputeNodes(warehouseId, workerGroupId, currentTime);
+
+        try {
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
+            ComputeResource computeResource = computeResourceProvider.ofComputeResource(warehouseId, workerGroupId);
+            long currentTime = System.currentTimeMillis();
+            if (needUpdateHistoricalNodes(computeResource, currentTime)) {
+                updateHistoricalComputeNodes(computeResource, currentTime);
+            }
+        } catch (Exception e) {
+            LOG.warn("try to update historical compute nodes failed, msg: {}", e.getMessage());
         }
     }
 
-    private void updateHistoricalComputeNodes(long warehouseId, long workerGroupId, long updateTime) {
+    private void updateHistoricalComputeNodes(ComputeResource computeResource, long updateTime) {
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
         List<Long> computeNodeIds;
         if (RunMode.isSharedDataMode()) {
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
-            ComputeResource computeResource = computeResourceProvider.ofComputeResource(warehouseId, workerGroupId);
             try {
                 computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
-            } catch (Exception e) {
+            } catch (ErrorReportException e) {
                 computeNodeIds = new ArrayList<>();
-                LOG.warn("fail to get compute node ids when updating historical compute nodes");
+                LOG.info("fail to get compute node ids when updating historical compute nodes, msg: {}", e.getMessage());
             }
         } else {
             computeNodeIds = new ArrayList<>(idToComputeNodeRef.keySet());
         }
 
-        historicalNodeMgr.updateHistoricalComputeNodeIds(warehouseId, workerGroupId, computeNodeIds, updateTime);
+        historicalNodeMgr.updateHistoricalComputeNodeIds(computeResource, computeNodeIds, updateTime);
         GlobalStateMgr.getCurrentState().getEditLog().logUpdateHistoricalNode(
-                new UpdateHistoricalNodeLog(warehouseId, workerGroupId, updateTime, null, computeNodeIds));
-        LOG.info("update historical compute nodes, warehouseId: {}, workerGroupId: {}, nodes: {}", warehouseId, workerGroupId,
-                computeNodeIds);
+                new UpdateHistoricalNodeLog(computeResource, updateTime, null, computeNodeIds));
+        LOG.info("update historical compute nodes, computeResource: {}, nodes: {}", computeResource, computeNodeIds);
     }
 
     // Final entry of adding compute node
@@ -295,39 +301,44 @@ public class SystemInfoService implements GsonPostProcessable {
         if (!Config.enable_trace_historical_node) {
             return;
         }
-        long currentTime = System.currentTimeMillis();
-        if (needUpdateHistoricalNodes(warehouseId, workerGroupId, currentTime)) {
-            updateHistoricalBackends(warehouseId, workerGroupId, currentTime);
-        }
-    }
-
-    private void updateHistoricalBackends(long warehouseId, long workerGroupId, long updateTime) {
-        HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
-        if (RunMode.isSharedDataMode()) {
+        try {
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
             ComputeResource computeResource = computeResourceProvider.ofComputeResource(warehouseId, workerGroupId);
+            long currentTime = System.currentTimeMillis();
+            if (needUpdateHistoricalNodes(computeResource, currentTime)) {
+                updateHistoricalBackends(computeResource, currentTime);
+            }
+        } catch (Exception e) {
+            LOG.warn("try to update historical backends failed, msg: {}", e.getMessage());
+        }
+    }
+
+    private void updateHistoricalBackends(ComputeResource computeResource, long updateTime) {
+        HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
+        if (RunMode.isSharedDataMode()) {
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             List<Long> computeNodeIds;
             try {
                 computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
-            } catch (Exception e) {
+            } catch (ErrorReportException e) {
                 computeNodeIds = new ArrayList<>();
-                LOG.warn("fail to get compute node ids when updating historical backends");
+                LOG.info("fail to get compute node ids when updating historical backends, msg: {}", e.getMessage());
             }
-            historicalNodeMgr.updateHistoricalComputeNodeIds(warehouseId, workerGroupId, computeNodeIds, updateTime);
+            historicalNodeMgr.updateHistoricalComputeNodeIds(computeResource, computeNodeIds, updateTime);
 
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateHistoricalNode(
-                    new UpdateHistoricalNodeLog(warehouseId, workerGroupId, updateTime, null, computeNodeIds));
-            LOG.info("update historical compute nodes, warehouseId: {}, workerGroupId: {}, nodes: {}", warehouseId,
-                    workerGroupId, computeNodeIds.toString());
+                    new UpdateHistoricalNodeLog(computeResource, updateTime, null, computeNodeIds));
+            LOG.info("update historical compute nodes, computeResource: {}, nodes: {}", computeResource,
+                    computeNodeIds.toString());
         } else {
             List<Long> backendIds = new ArrayList<>(idToBackendRef.keySet());
-            historicalNodeMgr.updateHistoricalBackendIds(warehouseId, workerGroupId, backendIds, updateTime);
+            historicalNodeMgr.updateHistoricalBackendIds(computeResource, backendIds, updateTime);
 
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateHistoricalNode(
-                    new UpdateHistoricalNodeLog(warehouseId, workerGroupId, updateTime, backendIds, null));
-            LOG.info("update historical backend nodes, warehouseId: {}, workerGroupId: {}, nodeIds: {}", warehouseId,
-                    workerGroupId, backendIds.toString());
+                    new UpdateHistoricalNodeLog(computeResource, updateTime, backendIds, null));
+            LOG.info("update historical backend nodes, computeResource: {}, nodeIds: {}", computeResource,
+                    backendIds.toString());
         }
     }
 
@@ -1218,25 +1229,23 @@ public class SystemInfoService implements GsonPostProcessable {
                 log.getWarehouse(), log.getUpdateTime(), log.getBackendIds(), log.getComputeNodeIds());
 
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
-        long warehouseId = log.getWarehouseId();
-        long workerGroupId = log.getWorkerGroupId();
+        ComputeResource computeResource = log.getComputeResource();
 
         // To handle the old log format
-        if (log.getWarehouse() != null && log.getWarehouse().length() > 0 && warehouseId == 0 && workerGroupId == 0) {
+        if (log.getWarehouse() != null && log.getWarehouse().length() > 0 && computeResource == null) {
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             Warehouse wh = warehouseManager.getWarehouseAllowNull(log.getWarehouse());
             if (wh != null) {
-                warehouseId = wh.getId();
-                workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+                ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
+                computeResource = computeResourceProvider.ofComputeResource(wh.getId(), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             }
         }
 
         if (log.getBackendIds() != null) {
-            historicalNodeMgr.updateHistoricalBackendIds(warehouseId, workerGroupId, log.getBackendIds(), log.getUpdateTime());
+            historicalNodeMgr.updateHistoricalBackendIds(computeResource, log.getBackendIds(), log.getUpdateTime());
         }
         if (log.getComputeNodeIds() != null) {
-            historicalNodeMgr.updateHistoricalComputeNodeIds(warehouseId, workerGroupId, log.getComputeNodeIds(),
-                    log.getUpdateTime());
+            historicalNodeMgr.updateHistoricalComputeNodeIds(computeResource, log.getComputeNodeIds(), log.getUpdateTime());
         }
     }
 
