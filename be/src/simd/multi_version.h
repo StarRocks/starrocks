@@ -30,63 +30,28 @@
 
 #if defined(__AVX2__)
 #define MFV_AVX2(IMPL) MFV_IMPL(IMPL, __attribute__((target("avx2"))))
-<<<<<<< HEAD
+#endif
+
+#if defined(__AVX512F__) && defined(__AVX512BW__)
 #define MFV_AVX512(IMPL) MFV_IMPL(IMPL, __attribute__((target("avx512f,avx512bw"))))
-=======
 #endif
 
-#if defined(__AVX512F__)
-#define MFV_AVX512F(IMPL) MFV_IMPL(IMPL, __attribute__((target("avx512f"))))
-#endif
-
-#if defined(__AVX512BW__)
-#define MFV_AVX512BW(IMPL) MFV_IMPL(IMPL, __attribute__((target("avx512bw"))))
-#endif
-
-#if defined(__AVX512VL__)
-#define MFV_AVX512VL(IMPL) MFV_IMPL(IMPL, __attribute__((target("avx512vl"))))
-#endif
-
-#if defined(__AVX512F__) && defined(__AVX512BW__) && defined(__AVX512VL__)
-#define MFV_AVX512VLBW(IMPL) MFV_IMPL(IMPL, __attribute__((target("avx512f,avx512vl,avx512bw"))))
-#endif
-
->>>>>>> 45c2310372 ([BugFix] don't try to build MFV versions for the instructions turned off (#61532))
 #define MFV_DEFAULT(IMPL) MFV_IMPL(IMPL, __attribute__((target("default"))))
 
 #endif // end of defined(__GNUC__) && defined(__x86_64__)
 
 #if !defined(MFV_SSE42)
 #define MFV_SSE42(IMPL)
-<<<<<<< HEAD
-#define MFV_AVX2(IMPL)
-#define MFV_AVX512(IMPL)
-#define MFV_DEFAULT(IMPL) IMPL
-
-=======
 #endif
 
 #if !defined(MFV_AVX2)
 #define MFV_AVX2(IMPL)
 #endif
 
-#if !defined(MFV_AVX512F)
-#define MFV_AVX512F(IMPL)
-#endif
-
-#if !defined(MFV_AVX512BW)
-#define MFV_AVX512BW(IMPL)
-#endif
-
-#if !defined(MFV_AVX512VL)
-#define MFV_AVX512VL(IMPL)
-#endif
-
-#if !defined(MFV_AVX512VLBW)
-#define MFV_AVX512VLBW(IMPL)
+#if !defined(MFV_AVX512)
+#define MFV_AVX512(IMPL)
 #endif
 
 #if !defined(MFV_DEFAULT)
 #define MFV_DEFAULT(IMPL) IMPL
->>>>>>> 45c2310372 ([BugFix] don't try to build MFV versions for the instructions turned off (#61532))
 #endif
