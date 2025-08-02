@@ -109,6 +109,8 @@ public:
     StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
                                                                         Column* dst) override;
 
+    std::string name() const override { return "ScalarColumnIterator"; }
+
 private:
     static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
     Status _load_next_page(bool* eos);

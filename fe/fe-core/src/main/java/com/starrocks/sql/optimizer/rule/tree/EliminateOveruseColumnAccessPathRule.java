@@ -53,7 +53,7 @@ public class EliminateOveruseColumnAccessPathRule implements TreeRewriteRule {
         }
 
         @Override
-        public Optional<ColumnRefSet> visitPhysicalScan(OptExpression optExpression,
+        public Optional<ColumnRefSet> visitPhysicalOlapScan(OptExpression optExpression,
                                                         ColumnRefSet parentUsedColumnRefs) {
             Preconditions.checkState(parentUsedColumnRefs != null);
             PhysicalScanOperator scan = optExpression.getOp().cast();
