@@ -32,12 +32,10 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class LakeReplicationJob extends ReplicationJob {
     private static final Logger LOG = LogManager.getLogger(LakeReplicationJob.class);
     private final long fakedShardId;
-    static Map<String, Long> storageVolumeNameToShardIdMap = new ConcurrentHashMap<>();
 
     @SerializedName(value = "srcDatabaseId")
     protected final long srcDatabaseId;
@@ -53,27 +51,39 @@ public class LakeReplicationJob extends ReplicationJob {
     }
 
     private synchronized long getFakedShardId(String svName, String srcServiceId) {
-        return storageVolumeNameToShardIdMap.computeIfAbsent(svName,
-                storageVolumeName -> getOrCreateFakeShard(storageVolumeName, srcServiceId));
-    }
+        ReplicationMgr replicationMgr = GlobalStateMgr.getCurrentState().getReplicationMgr();
+        long existed = replicationMgr.getStorageVolumeNameToShardIdMap().computeIfAbsent(svName,
+                storageVolumeName -> {
+                    long uniqueId = GlobalStateMgr.getCurrentState().getNextId();
+                    createFakeShard(uniqueId, storageVolumeName, srcServiceId);
+                    return uniqueId;
+                });
 
-    private long getOrCreateFakeShard(String storageVolumeName, String srcServiceId) {
+        // double check to prevent fake shard not existed in starmgr
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        ShardInfo shardInfo = null;
+        try {
+            shardInfo = starOSAgent.getShardInfo(existed, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        } catch (StarClientException e) {
+            // skip
+        }
+        if (shardInfo != null) {
+            assert existed == shardInfo.getShardId();
+            return existed;
+        }
+        LOG.info("Fake shard {} not found, try to create it again", existed);
+        createFakeShard(existed, svName, srcServiceId);
+        return existed;
+    }
+    
+    private void createFakeShard(long fakedShardId, String storageVolumeName, String srcServiceId) {
         StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         StorageVolume storageVolume = storageVolumeMgr.getStorageVolumeByName(storageVolumeName);
-        // use global unique storage volumn id as faked shard id to prevent conflict with real shard id
-        long fakedShardId = storageVolume.getUniqueId();
+
+        LOG.info("Start creating fake shard for storage volume: {}, src service id (as root dir): {}",
+                storageVolumeName, srcServiceId);
+
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-        try {
-            ShardInfo shardInfo = starOSAgent.getShardInfo(fakedShardId, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-            if (shardInfo != null) {
-                LOG.info("Shard {} already exists, skip creating it", fakedShardId);
-                return fakedShardId;
-            }
-        } catch (StarClientException e) {
-            // skip as shard not found
-        }
-        LOG.info("Start creating shard for storage volume: {}, shard id: {}, src service id (as root dir): {}",
-                storageVolume.getName(), fakedShardId, srcServiceId);
         try {
             FilePathInfo pathInfo = starOSAgent.allocateFilePath(storageVolume.getId(), srcServiceId);
             FileCacheInfo cacheInfo =
@@ -85,7 +95,6 @@ public class LakeReplicationJob extends ReplicationJob {
                     WarehouseManager.DEFAULT_RESOURCE);
             LOG.info("Created fake shard for storage volume: {}, shard id: {}, group id: {}",
                     storageVolumeName, fakedShardId, shardGroupId);
-            return fakedShardId;
         } catch (Throwable e) {
             LOG.error("Failed to create shard for storage volume: " + storageVolume, e);
             throw new RuntimeException("Failed to create shard for storage volume: " + storageVolume, e);
@@ -121,12 +130,14 @@ public class LakeReplicationJob extends ReplicationJob {
 
     private void sendReplicateLakeRemoteStorageTasks() throws Exception {
         runningTasks.clear();
+
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         byte[] encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
         for (PartitionInfo partitionInfo : super.getPartitionInfos().values()) {
             for (IndexInfo indexInfo : partitionInfo.getIndexInfos().values()) {
                 for (TabletInfo tabletInfo : indexInfo.getTabletInfos().values()) {
-                    Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                            .getComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tabletInfo.getTabletId());
+                    Long computeNodeId = warehouseMgr.getComputeNodeId(WarehouseManager.DEFAULT_RESOURCE,
+                            tabletInfo.getTabletId());
                     if (computeNodeId == null) {
                         throw new RuntimeException("Send lake replicate task failed, no compute node found for tablet: "
                                 + tabletInfo.getTabletId());

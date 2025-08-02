@@ -64,9 +64,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     @SerializedName("i")
     private String id;
 
-    @SerializedName("ui")
-    private long uniqueId;
-
     @SerializedName("n")
     private String name;
 
@@ -97,9 +94,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public StorageVolume(String id, String name, String svt, List<String> locations,
-                         Map<String, String> params, boolean enabled, String comment, long uniqueId) throws DdlException {
+                         Map<String, String> params, boolean enabled, String comment) throws DdlException {
         this.id = id;
-        this.uniqueId = uniqueId;
         this.name = name;
         this.svt = toStorageVolumeType(svt);
         this.locations = new ArrayList<>(locations);
@@ -117,7 +113,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public StorageVolume(StorageVolume sv) throws DdlException {
         this.id = sv.id;
-        this.uniqueId = sv.uniqueId;
         this.name = sv.name;
         this.svt = sv.svt;
         this.locations = new ArrayList<>(sv.locations);
@@ -162,10 +157,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public String getId() {
         return id;
-    }
-
-    public long getUniqueId() {
-        return uniqueId;
     }
 
     public String getName() {
@@ -269,8 +260,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public static FileStoreInfo createFileStoreInfo(String name, String svt,
                                                     List<String> locations, Map<String, String> params,
                                                     boolean enabled, String comment) throws DdlException {
-        long uniqueId = GlobalStateMgr.getCurrentState().getNextId();
-        StorageVolume sv = new StorageVolume("", name, svt, locations, params, enabled, comment, uniqueId);
+        StorageVolume sv = new StorageVolume("", name, svt, locations, params, enabled, comment);
         return sv.toFileStoreInfo();
     }
 
@@ -280,8 +270,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 .setFsName(this.name)
                 .setComment(this.comment)
                 .setEnabled(this.enabled)
-                .addAllLocations(locations)
-                .setUniqueId(uniqueId);
+                .addAllLocations(locations);
         return builder.build();
     }
 
@@ -289,7 +278,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         String svt = fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
         return new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
-                fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment(), fsInfo.getUniqueId());
+                fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment());
     }
 
     public static Map<String, String> getParamsFromFileStoreInfo(FileStoreInfo fsInfo) {
