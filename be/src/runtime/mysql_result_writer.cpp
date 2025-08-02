@@ -49,11 +49,13 @@
 namespace starrocks {
 
 MysqlResultWriter::MysqlResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
-                                     bool is_binary_format, RuntimeProfile* parent_profile)
+                                     bool is_binary_format, bool is_inf_nan_convert_to_null, 
+                                     RuntimeProfile* parent_profile)
         : BufferControlResultWriter(sinker, parent_profile),
           _output_expr_ctxs(output_expr_ctxs),
           _row_buffer(nullptr),
-          _is_binary_format(is_binary_format) {}
+          _is_binary_format(is_binary_format), 
+          _is_inf_nan_convert_to_null(is_inf_nan_convert_to_null) {}
 
 MysqlResultWriter::~MysqlResultWriter() {
     delete _row_buffer;
@@ -135,7 +137,7 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
                 if (_is_binary_format && !result_column->is_nullable()) {
                     _row_buffer->update_field_pos();
                 }
-                result_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format);
+                result_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format, _is_inf_nan_convert_to_null);
             }
             size_t len = _row_buffer->length();
             _row_buffer->move_content(&result_rows[i]);
@@ -183,7 +185,7 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
                 if (_is_binary_format && !result_column->is_nullable()) {
                     _row_buffer->update_field_pos();
                 }
-                result_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format);
+                result_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format, _is_inf_nan_convert_to_null);
             }
             size_t len = _row_buffer->length();
 
