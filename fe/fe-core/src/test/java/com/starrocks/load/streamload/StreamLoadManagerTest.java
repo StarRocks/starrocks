@@ -210,7 +210,7 @@ public class StreamLoadManagerTest {
         streamLoadManager.beginLoadTaskFromFrontend(
                 dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
-        List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(labelName);
+        List<AbstractStreamLoadTask> tasks = streamLoadManager.getTaskByName(labelName);
         Assertions.assertEquals(1, tasks.size());
         Assertions.assertEquals("label1", tasks.get(0).getLabel());
         Assertions.assertEquals("test_db", tasks.get(0).getDBName());
@@ -236,7 +236,7 @@ public class StreamLoadManagerTest {
         streamLoadManager.beginLoadTaskFromFrontend(
                 dbName, tableName, labelName2, "", "", timeoutMillis, channelNum, channelId, resp);
 
-        List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(null);
+        List<AbstractStreamLoadTask> tasks = streamLoadManager.getTaskByName(null);
         Assertions.assertEquals(2, tasks.size());
         Assertions.assertEquals("label1", tasks.get(0).getLabel());
         Assertions.assertEquals("label2", tasks.get(1).getLabel());
