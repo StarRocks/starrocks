@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
@@ -79,6 +80,10 @@ public class SemanticException extends StarRocksPlannerException {
             builder.append(". Detail message: ");
             builder.append(detailMsg);
             builder.append(".");
+        }
+        if (getCause() != null) {
+            builder.append(". Cause: ");
+            builder.append(DebugUtil.getStackTrace(getCause()));
         }
         return builder.toString();
     }
