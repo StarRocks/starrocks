@@ -1,4 +1,4 @@
--- name: test_prepared_timeout
+-- name: test_prepared_timeout @slow
 create database db_prepared_timeout_normal_${uuid0};
 -- result:
 -- !result

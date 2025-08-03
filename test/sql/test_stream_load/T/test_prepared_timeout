@@ -1,4 +1,4 @@
--- name: test_prepared_timeout
+-- name: test_prepared_timeout @slow
 
 -- Scenario 1: Normal prepared_timeout setting
 create database db_prepared_timeout_normal_${uuid0};
