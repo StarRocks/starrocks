@@ -58,11 +58,11 @@ The Stream Load transaction interface carries over the labeling mechanism of Sta
 
 ### Transaction timeout management
 
-When you begin a transaction, you can use the `timeout` field in the HTTP request header to specify a timeout period for the transaction from `PREPARE` to `PREPARED` state. If do not prepare the transaction within this timeout period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`stream_load_default_timeout_second`](../administration/management/FE_configuration.md#stream_load_default_timeout_second).
+When you begin a transaction, you can use the `timeout` field in the HTTP request header to specify a timeout period (in seconds) for the transaction from `PREPARE` to `PREPARED` state. If do not prepare the transaction within this timeout period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`stream_load_default_timeout_second`](../administration/management/FE_configuration.md#stream_load_default_timeout_second).
 
-When you begin a transaction, you can also use the `idle_transaction_timeout` field in the HTTP request header to specify a timeout period within which the transaction can stay idle. If no data is written within the timeout period, the transaction automatically rolls back.
+When you begin a transaction, you can also use the `idle_transaction_timeout` field in the HTTP request header to specify a timeout period (in seconds) within which the transaction can stay idle. If no data is written within the timeout period, the transaction automatically rolls back.
 
-When you prepare a transaction, you can use the `prepared_timeout` field in the HTTP request header to specify a timeout period for the transaction from `PREPARED` to `COMMITTED` state. If do not commit the transaction within this timeout period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second). `prepared_timeout` is supported from version 4.0.0 onwards.
+When you prepare a transaction, you can use the `prepared_timeout` field in the HTTP request header to specify a timeout period (in seconds) for the transaction from `PREPARED` to `COMMITTED` state. If do not commit the transaction within this timeout period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second). `prepared_timeout` is supported from version 4.0.0 onwards.
 
 ## Benefits
 
