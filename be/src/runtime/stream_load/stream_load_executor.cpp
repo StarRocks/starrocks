@@ -36,9 +36,7 @@
 
 #include <fmt/format.h>
 
-#include <algorithm>
 #include <string_view>
-#include <utility>
 
 #include "agent/master_info.h"
 #include "common/process_exit.h"
