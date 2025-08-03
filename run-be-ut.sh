@@ -91,6 +91,7 @@ OPTS=$(getopt \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'without-starcache' \
+  -l 'without-java-ext' \
   -l 'with-brpc-keepalive' \
   -l 'without-debug-symbol-split' \
   -o 'j:' \
