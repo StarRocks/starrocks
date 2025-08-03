@@ -297,7 +297,7 @@ public:
     std::unique_ptr<ConcurrentLimiterGuard> _http_limiter_guard;
 
     // =================== transaction stream load ===================
-    
+
     // Transaction begin timestamp for timeout detection
     std::atomic<int64_t> begin_txn_ts = 0;
     // Last active timestamp for idle timeout detection
