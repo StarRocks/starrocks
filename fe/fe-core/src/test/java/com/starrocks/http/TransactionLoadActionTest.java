@@ -689,7 +689,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = new Delegate<Void>() {
 
-                        public void tryPrepareLoadTaskTxn(String label, TransactionResult resp) throws
+                        public void tryPrepareLoadTaskTxn(String label, long preparedTimeoutMs, TransactionResult resp) throws
                                 StarRocksException {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
