@@ -49,8 +49,8 @@ PreparedTimeoutMs: 86400000
 * Reason: error message
 * ErrorReplicasCount: number of replicas with errors
 * ListenerId: id of the related import job
-* TimeoutMs: transaction timeout, in milliseconds
-* PreparedTimeoutMs: timeout for the transaction from PREPARED to COMMITTED state, in milliseconds (supported from version 4.0.0)
+* TimeoutMs: timeout for the transaction from `PREPARE` to `PREPARED` state, in milliseconds
+* PreparedTimeoutMs: timeout for the transaction from `PREPARED` to `COMMITTED` state, in milliseconds (supported from version 4.0.0)
 
 ## Examples
 

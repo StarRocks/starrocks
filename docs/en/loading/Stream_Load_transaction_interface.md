@@ -25,17 +25,28 @@ The Stream Load transaction interface provides the following API operations, whi
 
 - `/api/transaction/begin`: starts a new transaction.
 
+- `/api/transaction/prepare`: pre-commits the current transaction and make data changes temporarily persistent. After you pre-commit a transaction, you can proceed to commit or roll back the transaction. If your StarRocks cluster breaks down after a transaction is pre-committed, you can still proceed to commit the transaction after your StarRocks cluster is restored to normal.
+
 - `/api/transaction/commit`: commits the current transaction to make data changes persistent.
 
 - `/api/transaction/rollback`: rolls back the current transaction to abort data changes.
 
-### Transaction pre-commit
-
-The Stream Load transaction interface provides the `/api/transaction/prepare` operation, which is used to pre-commit the current transaction and make data changes temporarily persistent. After you pre-commit a transaction, you can proceed to commit or roll back the transaction. If your StarRocks cluster breaks down after a transaction is pre-committed, you can still proceed to commit the transaction after your StarRocks cluster is restored to normal.
-
 > **NOTE**
 >
 > After the transaction is pre-committed, do not continue to write data using the transaction. If you continue to write data using the transaction, your write request returns errors.
+
+
+The following diagram shows the relationship between transaction states and operations:
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> PREPARE : begin
+    PREPARE --> PREPARED : prepare
+    PREPARE --> ABORTED : rollback
+    PREPARED --> COMMITTED : commit
+    PREPARED --> ABORTED : rollback
+```
 
 ### Data write
 
@@ -47,13 +58,11 @@ The Stream Load transaction interface carries over the labeling mechanism of Sta
 
 ### Transaction timeout management
 
-You can use the `stream_load_default_timeout_second` parameter in the configuration file of each FE to specify a default transaction timeout period for that FE.
+When you begin a transaction, you can use the `timeout` field in the HTTP request header to specify a timeout period for the transaction from `PREPARE` to `PREPARED` state. If do not prepare the transaction within this timeout period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`stream_load_default_timeout_second`](../administration/management/FE_configuration.md#stream_load_default_timeout_second).
 
-When you create a transaction, you can use the `timeout` field in the HTTP request header to specify a timeout period for the transaction.
+When you begin a transaction, you can also use the `idle_transaction_timeout` field in the HTTP request header to specify a timeout period within which the transaction can stay idle. If no data is written within the timeout period, the transaction automatically rolls back.
 
-When you create a transaction, you can also use the `idle_transaction_timeout` field in the HTTP request header to specify a timeout period within which the transaction can stay idle. If no data is written within the timeout period, the transaction automatically rolls back.
-
-When you prepare a transaction, you can use the `prepared_timeout` field in the HTTP request header to specify a timeout period for the transaction from `PREPARED` to `COMMITTED` state. If the transaction is not committed within this timeout period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second). `prepared_timeout` is supported from version 4.0.0 onwards.
+When you prepare a transaction, you can use the `prepared_timeout` field in the HTTP request header to specify a timeout period for the transaction from `PREPARED` to `COMMITTED` state. If do not commit the transaction within this timeout period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second). `prepared_timeout` is supported from version 4.0.0 onwards.
 
 ## Benefits
 
