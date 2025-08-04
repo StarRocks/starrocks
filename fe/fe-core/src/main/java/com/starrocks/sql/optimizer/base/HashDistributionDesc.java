@@ -87,8 +87,7 @@ public class HashDistributionDesc {
         } else if (this.sourceType == SourceType.SHUFFLE_JOIN && (item.sourceType == SourceType.SHUFFLE_AGG ||
                 item.sourceType == SourceType.SHUFFLE_JOIN)) {
             return distributionColsContainsAll(item.distributionCols);
-        } else if (!this.sourceType.equals(item.sourceType) &&
-                this.sourceType != HashDistributionDesc.SourceType.LOCAL) {
+        } else if (!this.sourceType.equals(item.sourceType) && this.sourceType != SourceType.LOCAL) {
             return false;
         }
 
@@ -129,10 +128,16 @@ public class HashDistributionDesc {
         return true;
     }
 
-
-
     public boolean isLocal() {
         return this.sourceType == SourceType.LOCAL;
+    }
+
+    public boolean isNativeLocal() {
+        return true;
+    }
+
+    public boolean canColocate(HashDistributionDesc o) {
+        return o.isNativeLocal();
     }
 
     public boolean isShuffle() {
