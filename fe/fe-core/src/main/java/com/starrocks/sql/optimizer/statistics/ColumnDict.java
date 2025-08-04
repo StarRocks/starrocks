@@ -28,7 +28,7 @@ public final class ColumnDict extends StatsVersion {
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long version) {
         super(version, version);
-        Preconditions.checkState(!dict.isEmpty() && dict.size() <= Config.low_cardinality_threshold,
+        Preconditions.checkState(!dict.isEmpty() && dict.size() <= Config.low_cardinality_threshold + 1,
                 "dict size %s is illegal", dict.size());
         this.dict = dict;
     }
