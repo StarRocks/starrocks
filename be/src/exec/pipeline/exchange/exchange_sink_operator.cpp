@@ -656,7 +656,8 @@ void ExchangeSinkOperator::_calc_hash_values_and_bucket_ids() {
             _round_ids[j] = (_round_hashes[j] & std::numeric_limits<int>::max()) % _bucket_properties[i].bucket_num;
         }
         if (_partitions_columns[i]->has_null()) {
-            const auto& null_data = down_cast<const NullableColumn*>(_partitions_columns[i].get())->null_column()->get_data();
+            const auto& null_data =
+                    down_cast<const NullableColumn*>(_partitions_columns[i].get())->null_column()->get_data();
             for (int j = 0; j < num_rows; j++) {
                 _round_ids[j] = null_data[j] ? _bucket_properties[i].bucket_num : _round_ids[j];
             }
