@@ -25,7 +25,10 @@ insert into user_tags values('2023-04-14', 3, 'e', 6);
 -- !result
 create materialized view user_tags_mv1  distributed by hash(user_id) 
 partition by date_trunc('day', time)
-properties('partition_refresh_strategy' = 'force')
+properties(
+    'partition_refresh_number' = '-1',
+    'partition_refresh_strategy' = 'force'
+)
 refresh deferred manual
 as select user_id, time, count(tag_id) from user_tags group by user_id, time;
 -- result:
@@ -47,7 +50,7 @@ None
 -- !result
 [UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='user_tags_mv1';
 -- result:
-mv-13163
+mv-12445
 -- !result
 SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
 -- result:
@@ -82,7 +85,9 @@ SUCCESS
 SUCCESS
 -- !result
 create materialized view user_tags_mv2  distributed by hash(user_id) 
-properties('partition_refresh_strategy' = 'force')
+properties(
+    'partition_refresh_strategy' = 'force'
+)
 refresh deferred manual
 as select user_id, time, count(tag_id) from user_tags group by user_id, time;
 -- result:
@@ -104,7 +109,7 @@ None
 -- !result
 [UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='user_tags_mv2';
 -- result:
-mv-13230
+mv-12508
 -- !result
 SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
 -- result:

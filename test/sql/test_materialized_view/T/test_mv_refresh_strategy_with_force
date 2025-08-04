@@ -14,7 +14,10 @@ insert into user_tags values('2023-04-14', 3, 'e', 6);
 
 create materialized view user_tags_mv1  distributed by hash(user_id) 
 partition by date_trunc('day', time)
-properties('partition_refresh_strategy' = 'force')
+properties(
+    'partition_refresh_number' = '-1',
+    'partition_refresh_strategy' = 'force'
+)
 refresh deferred manual
 as select user_id, time, count(tag_id) from user_tags group by user_id, time;
 
@@ -37,7 +40,9 @@ SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name
 SELECT `STATE` FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}' order by CREATE_TIME desc;
 
 create materialized view user_tags_mv2  distributed by hash(user_id) 
-properties('partition_refresh_strategy' = 'force')
+properties(
+    'partition_refresh_strategy' = 'force'
+)
 refresh deferred manual
 as select user_id, time, count(tag_id) from user_tags group by user_id, time;
 refresh materialized view user_tags_mv2 with sync mode;
