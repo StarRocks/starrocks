@@ -52,8 +52,17 @@ public:
         return Status::OK();
     }
 
+    // Disable dict encoding
+    bool all_page_dict_encoded() const override { return false; }
+    int dict_lookup(const Slice& word) override {
+        CHECK(false) << "unreachable";
+        return 0;
+    }
+
     StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
                                                                         Column* dst) override;
+
+    std::string name() const override { return "CastColumnIterator"; }
 
 private:
     void do_cast(Column* target);

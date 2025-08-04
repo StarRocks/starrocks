@@ -824,8 +824,9 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(Colum
         }
         // dynamic flattern
         // we must dynamic flat json, because we don't know other segment wasn't the paths
-        return create_json_dynamic_flat_iterator(std::move(json_iter), target_paths, target_types,
-                                                 path->is_from_compaction());
+        return create_json_dynamic_flat_iterator(
+                std::move(json_iter), target_paths, target_types,
+                path->is_from_compaction() || (column != nullptr && column->is_extended()));
     }
 
     std::vector<std::string> source_paths;

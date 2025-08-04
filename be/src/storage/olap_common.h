@@ -228,7 +228,9 @@ struct OlapReaderStatistics {
     int64_t block_seek_ns = 0;
 
     int64_t decode_dict_ns = 0;
+    int64_t decode_dict_count = 0; // rows * columns
     int64_t late_materialize_ns = 0;
+    int64_t late_materialize_rows = 0; // number of rows that are late materialized after the filter
 
     int64_t raw_rows_read = 0;
 
@@ -318,6 +320,7 @@ struct OlapReaderStatistics {
     std::unordered_map<std::string, int64_t> flat_json_hits;
     std::unordered_map<std::string, int64_t> merge_json_hits;
     std::unordered_map<std::string, int64_t> dynamic_json_hits;
+    std::unordered_map<std::string, int64_t> extract_json_hits;
 
     // Counters for data sampling
     int64_t sample_time_ns = 0;               // Records the time to prepare sample, actual IO time is not included

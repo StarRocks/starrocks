@@ -283,6 +283,10 @@ private:
 
     bool _use_segment_zone_map_filter(const SegmentReadOptions& read_options);
 
+    // Create an iterator for extended column
+    StatusOr<std::unique_ptr<ColumnIterator>> _new_extended_column_iterator(const TabletColumn& column,
+                                                                            ColumnAccessPath* path);
+
     friend class SegmentIterator;
 
     std::shared_ptr<FileSystem> _fs;

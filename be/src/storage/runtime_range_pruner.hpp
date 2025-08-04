@@ -115,7 +115,8 @@ struct RuntimeColumnPredicateBuilder {
             }
 
             for (auto& f : filters) {
-                ColumnPredicate* p = pool->add(parser->parse_thrift_cond(f));
+                ASSIGN_OR_RETURN(auto p, parser->parse_thrift_cond(f));
+                p = pool->add(p);
                 VLOG(2) << "build runtime predicate:" << p->debug_string();
                 p->set_index_filter_only(f.is_index_filter_only);
                 preds.emplace_back(p);
