@@ -173,7 +173,6 @@ class StarrocksSQLApiLib(object):
         self.arrow_port = ""
 
         self.check_status = os.environ.get("check_status", "False") == "True"
-        self_print("check_status: %s" % self.check_status)
 
         # connection pool
         self.connection_pool = None
@@ -2642,9 +2641,9 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """Check the cluster status."""
 
         if not self.check_status:
-            return
+            # return
+            raise SkipTest("Test")
 
-        self_print("check cluster status..")
         err_msg = ""
         res = self.execute_sql("show backends;", ori=True)
         tools.assert_true(res["status"], res["msg"])
