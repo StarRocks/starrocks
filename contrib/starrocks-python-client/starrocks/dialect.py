@@ -62,7 +62,9 @@ ischema_names = {
     "double": DOUBLE,
     # === Fixed-precision ===
     "decimal": DECIMAL,
+    "decimal32": DECIMAL,
     "decimal64": DECIMAL,
+    "decimal128": DECIMAL,
     # === String ===
     "varchar": VARCHAR,
     "char": CHAR,
