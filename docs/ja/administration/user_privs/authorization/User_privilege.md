@@ -6,6 +6,7 @@ sidebar_position: 30
 # ユーザー権限の管理
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
+import GrantToGroup from '../../../_assets/commonMarkdown/grant_to_group.mdx'
 
 このトピックでは、StarRocks におけるユーザー、ロール、および権限の管理方法について説明します。
 
@@ -88,6 +89,8 @@ CREATE ROLE example_role;
   ```SQL
   GRANT example_role TO ROLE test_role;
   ```
+
+<GrantToGroup />
 
 ### ユーザーのデフォルトロールを変更する
 

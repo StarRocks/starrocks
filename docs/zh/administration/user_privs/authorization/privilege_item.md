@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 20
+sidebar_label: "权限项"
 ---
 
 # 权限项
@@ -26,7 +27,8 @@ sidebar_position: 20
 | FILE                    | 创建、删除、查看文件。                                       |
 | OPERATE                 | 管理副本、配置项、变量、transaction等。                      |
 | CREATE GLOBAL FUNCTION  | 创建一个全局 UDF。                                           |
-| CREATE STORAGE VOLUME  | 为远程存储系统创建存储卷 (Storage Volume)。                     |
+| CREATE STORAGE VOLUME   | 为远程存储系统创建存储卷 (Storage Volume)。                     |
+| SECURITY                | 创建或管理安全集成以及 Group Provider。                      |
 
 ### 资源组权限 (RESOURCE GROUP)
 
