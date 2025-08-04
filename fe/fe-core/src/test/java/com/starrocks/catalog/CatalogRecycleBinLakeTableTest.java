@@ -53,6 +53,7 @@ public class CatalogRecycleBinLakeTableTest {
     public static void beforeClass() {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
+        GlobalStateMgr.getCurrentState().getRecycleBin().setStop();
     }
 
     private static Table createTable(ConnectContext connectContext, String sql) throws Exception {
