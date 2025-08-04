@@ -71,7 +71,7 @@ public interface LakeService {
     long TIMEOUT_PUBLISH_LOG_VERSION_BATCH = MILLIS_PER_MINUTE;
     long TIMEOUT_ABORT_COMPACTION = 5 * MILLIS_PER_SECOND;
     long TIMEOUT_VACUUM = MILLIS_PER_HOUR;
-    long TIMEOUT_VACUUM_FULL = MILLIS_PER_HOUR * 4;
+    long TIMEOUT_VACUUM_FULL = MILLIS_PER_HOUR * 24;
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_version", onceTalkTimeout = TIMEOUT_PUBLISH_VERSION)
     Future<PublishVersionResponse> publishVersion(PublishVersionRequest request);
