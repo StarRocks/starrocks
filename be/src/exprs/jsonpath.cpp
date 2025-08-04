@@ -305,25 +305,7 @@ std::string JsonPath::to_string() const {
             result += "." + piece.key;
         }
         if (piece.array_selector) {
-            switch (piece.array_selector->type) {
-            case ArraySelectorType::SINGLE: {
-                auto* single = down_cast<ArraySelectorSingle*>(piece.array_selector.get());
-                result += "[" + std::to_string(single->index) + "]";
-                break;
-            }
-            case ArraySelectorType::WILDCARD:
-                result += "[*]";
-                break;
-            case ArraySelectorType::SLICE: {
-                auto* slice = down_cast<ArraySelectorSlice*>(piece.array_selector.get());
-                result += "[" + std::to_string(slice->left) + ":" + std::to_string(slice->right) + "]";
-                break;
-            }
-            case ArraySelectorType::NONE:
-            case ArraySelectorType::INVALID:
-            default:
-                break;
-            }
+            result += piece.array_selector->to_string();
         }
     }
     return result;

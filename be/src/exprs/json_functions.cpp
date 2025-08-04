@@ -1156,6 +1156,15 @@ StatusOr<ColumnPtr> JsonFunctions::_json_keys_without_path(FunctionContext* cont
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+static void build_path_lookup_structures(const std::vector<JsonPath>& valid_paths,
+                                         std::unordered_set<std::string>& exact_paths_to_remove,
+                                         std::unordered_set<std::string>& prefix_paths_to_remove);
+
+static StatusOr<JsonValue> _remove_json_paths_core(JsonValue* json_value,
+                                                   const std::unordered_set<std::string>& exact_paths_to_remove,
+                                                   const std::unordered_set<std::string>& prefix_paths_to_remove,
+                                                   vpack::Builder* builder);
+
 StatusOr<ColumnPtr> JsonFunctions::json_remove(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     RETURN_IF(columns.size() < 2,
@@ -1171,6 +1180,33 @@ StatusOr<ColumnPtr> JsonFunctions::json_remove(FunctionContext* context, const C
         path_viewers.emplace_back(columns[i]);
     }
 
+    // Parse all valid paths once at the beginning to amortize parsing overhead
+    std::vector<JsonPath> valid_paths;
+    bool all_paths_constant = true;
+
+    for (size_t path_idx = 0; path_idx < path_viewers.size(); path_idx++) {
+        // Check if this path column is constant
+        bool is_constant = columns[path_idx + 1]->is_constant();
+
+        if (is_constant) {
+            // For constant paths, parse once and reuse
+            if (!path_viewers[path_idx].is_null(0)) {
+                Slice path_str = path_viewers[path_idx].value(0);
+                auto jsonpath = JsonPath::parse(path_str);
+                if (jsonpath.ok()) {
+                    valid_paths.emplace_back(jsonpath.value());
+                }
+            }
+        } else {
+            all_paths_constant = false;
+        }
+    }
+
+    // Build lookup structures once for constant paths to amortize construction overhead
+    std::unordered_set<std::string> exact_paths_to_remove;
+    std::unordered_set<std::string> prefix_paths_to_remove;
+    build_path_lookup_structures(valid_paths, exact_paths_to_remove, prefix_paths_to_remove);
+
     for (size_t row = 0; row < rows; row++) {
         if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr) {
             result.append_null();
@@ -1178,89 +1214,92 @@ StatusOr<ColumnPtr> JsonFunctions::json_remove(FunctionContext* context, const C
         }
         JsonValue* json_value = json_viewer.value(row);
 
-        // Collect all valid paths to remove
-        std::vector<Slice> paths_to_remove;
-        for (size_t path_idx = 0; path_idx < path_viewers.size(); path_idx++) {
-            if (path_viewers[path_idx].is_null(row)) {
-                continue; // Skip null paths
-            }
-
-            Slice path_str = path_viewers[path_idx].value(row);
-
-            // Parse the JSON path to validate it
-            auto jsonpath = JsonPath::parse(path_str);
-            if (jsonpath.ok()) {
-                paths_to_remove.push_back(path_str);
-            }
-            // Skip invalid paths silently (following MySQL behavior)
-        }
-
         // Create new JSON with paths removed
         vpack::Builder builder;
-        ASSIGN_OR_RETURN(auto removed_json, _remove_json_paths(json_value, paths_to_remove, &builder));
-        result.append(std::move(removed_json));
+
+        if (all_paths_constant) {
+            // All paths are constant, use pre-built lookup structures directly
+            ASSIGN_OR_RETURN(auto removed_json, _remove_json_paths_core(json_value, exact_paths_to_remove,
+                                                                        prefix_paths_to_remove, &builder));
+            result.append(std::move(removed_json));
+        } else {
+            // Some paths are non-constant, parse them for each row
+            std::vector<JsonPath> row_paths = valid_paths; // Start with pre-parsed constant paths
+
+            for (size_t path_idx = 0; path_idx < path_viewers.size(); path_idx++) {
+                bool is_constant = columns[path_idx + 1]->is_constant();
+
+                if (!is_constant) {
+                    // Parse non-constant paths for each row
+                    if (!path_viewers[path_idx].is_null(row)) {
+                        Slice path_str = path_viewers[path_idx].value(row);
+                        auto jsonpath = JsonPath::parse(path_str);
+                        if (jsonpath.ok()) {
+                            row_paths.emplace_back(jsonpath.value());
+                        }
+                    }
+                }
+            }
+
+            // Build lookup structures for this row (including non-constant paths)
+            std::unordered_set<std::string> row_exact_paths = exact_paths_to_remove;
+            std::unordered_set<std::string> row_prefix_paths = prefix_paths_to_remove;
+
+            // Add lookup structures for non-constant paths
+            std::vector<JsonPath> non_constant_paths;
+            for (size_t i = valid_paths.size(); i < row_paths.size(); i++) {
+                non_constant_paths.push_back(row_paths[i]);
+            }
+            build_path_lookup_structures(non_constant_paths, row_exact_paths, row_prefix_paths);
+
+            ASSIGN_OR_RETURN(auto removed_json,
+                             _remove_json_paths_core(json_value, row_exact_paths, row_prefix_paths, &builder));
+            result.append(std::move(removed_json));
+        }
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<JsonValue> JsonFunctions::_remove_json_paths(JsonValue* json_value, const std::vector<Slice>& paths,
-                                                      vpack::Builder* builder) {
-    namespace vpack = arangodb::velocypack;
-
-    if (paths.empty()) {
-        // No paths to remove, return original JSON
-        builder->add(json_value->to_vslice());
-        return JsonValue(builder->slice());
-    }
-
-    // Parse all valid paths first
-    std::vector<JsonPath> valid_paths;
-    for (const auto& path_str : paths) {
-        auto jsonpath = JsonPath::parse(path_str);
-        if (jsonpath.ok()) {
-            valid_paths.emplace_back(jsonpath.value());
-        }
-        // Skip invalid paths silently (following MySQL behavior)
-    }
-
-    if (valid_paths.empty()) {
-        // No valid paths to remove, return original JSON
-        builder->add(json_value->to_vslice());
-        return JsonValue(builder->slice());
-    }
-
-    vpack::Slice original_slice = json_value->to_vslice();
-
-    // Build efficient lookup structures
-    std::unordered_set<std::string> exact_paths_to_remove;  // Target level paths
-    std::unordered_set<std::string> prefix_paths_to_remove; // Non-target level path prefixes
-
+// Helper function to build lookup structures for path removal
+static void build_path_lookup_structures(const std::vector<JsonPath>& valid_paths,
+                                         std::unordered_set<std::string>& exact_paths_to_remove,
+                                         std::unordered_set<std::string>& prefix_paths_to_remove) {
     for (const auto& remove_path : valid_paths) {
         std::string path_str = remove_path.to_string();
         exact_paths_to_remove.insert(path_str);
 
-        // Build prefix paths for quick recursion decision
-        size_t pos = path_str.find('.');
-        while (pos != std::string::npos) {
-            prefix_paths_to_remove.insert(path_str.substr(0, pos));
-            pos = path_str.find('.', pos + 1);
-        }
+        // Build prefix paths for quick recursion decision by iterating JsonPath::paths
+        // instead of string operations to handle escaped dots correctly
+        std::string current_prefix = "$";
+        for (size_t i = 0; i < remove_path.paths.size(); i++) {
+            const auto& piece = remove_path.paths[i];
 
-        // Handle array index cases
-        pos = path_str.find('[');
-        while (pos != std::string::npos) {
-            // Add the path before the array index (e.g., for $.arr[2], add $.arr)
-            prefix_paths_to_remove.insert(path_str.substr(0, pos));
-            size_t end_pos = path_str.find(']', pos);
-            if (end_pos != std::string::npos) {
-                prefix_paths_to_remove.insert(path_str.substr(0, end_pos + 1));
-                pos = path_str.find('[', end_pos + 1);
-            } else {
-                break;
+            // Add the key part (skip the root "$" piece)
+            if (!piece.key.empty() && piece.key != "$") {
+                current_prefix += "." + piece.key;
+            }
+
+            // Add the path before array selector
+            prefix_paths_to_remove.insert(current_prefix);
+
+            // Add array selector if present
+            if (piece.array_selector) {
+                current_prefix += piece.array_selector->to_string();
+                prefix_paths_to_remove.insert(current_prefix);
             }
         }
     }
+}
+
+// Core function that performs the actual JSON removal work
+static StatusOr<JsonValue> _remove_json_paths_core(JsonValue* json_value,
+                                                   const std::unordered_set<std::string>& exact_paths_to_remove,
+                                                   const std::unordered_set<std::string>& prefix_paths_to_remove,
+                                                   vpack::Builder* builder) {
+    namespace vpack = arangodb::velocypack;
+
+    vpack::Slice original_slice = json_value->to_vslice();
 
     // Recursive function with optimized path checking
     std::function<vpack::Slice(vpack::Slice, const std::string&)> remove_paths_recursive =

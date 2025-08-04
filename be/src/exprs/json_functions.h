@@ -27,6 +27,9 @@
 
 namespace starrocks {
 
+// Forward declarations
+struct JsonPath;
+
 extern const re2::RE2 SIMPLE_JSONPATH_PATTERN;
 
 struct SimpleJsonPath {
@@ -230,10 +233,6 @@ private:
 
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
                                     std::vector<SimpleJsonPath>* parsed_paths);
-
-    // Helper function for json_remove to remove multiple paths from JSON
-    static StatusOr<JsonValue> _remove_json_paths(JsonValue* json_value, const std::vector<Slice>& paths,
-                                                  arangodb::velocypack::Builder* builder);
 };
 
 } // namespace starrocks

@@ -1835,7 +1835,22 @@ INSTANTIATE_TEST_SUITE_P(
                         R"({"complex": {"users": [{"id": 1}, {"id": 2}], "settings": {"theme": "dark", "lang": "en"}}})",
                         {"$.complex.users[0]", "$.complex.settings.theme"},
                         R"({"complex": {"users": [{"id": 2}], "settings": {"lang": "en"}}})", // Expected result
-                        "Remove mixed paths from complex nested structure"}
+                        "Remove mixed paths from complex nested structure"},
+                JsonRemoveTestParam{
+                        R"({"a.b": {"c": 1}, "d": 2})",
+                        {"$.\"a.b\""},
+                        R"({"d": 2})", // Expected result
+                        "Remove key from object where path contains a dot character"},
+                JsonRemoveTestParam{
+                        R"({"a.b": {"c": 1}, "d": 2})",
+                        {"$.\"a.b\".c"},
+                        R"({"a.b": {}, "d": 2})", // Expected result
+                        "Remove key from object where path contains a dot character"},
+                JsonRemoveTestParam{
+                        R"({"outer": {"a.b": {"x": 10, "y": 20}}, "other": 5})",
+                        {"$.outer.\"a.b\".y"},
+                        R"({"outer": {"a.b": {"x": 10}}, "other": 5})", // Expected result
+                        "Remove nested key where intermediate path contains a dot character"}
         ));
 // clang-format on
 
