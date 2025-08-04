@@ -21,12 +21,12 @@ Fast DECIMAL の場合、`P` の範囲は [1,38] で、`S` の範囲は [0, P] �
 
 Fast DECIMAL は可変幅の整数を使用して小数を表現します。
 
-- Decimal(P <= 18, S)
+- Decimal(P &le; 18, S)
   - LogicalType: Decimal64
   - 保存形式: int64
   - Delegate LogicalType: BIGINT
 
-- Decimal(P > 18 & P <= 38, S)
+- Decimal(P &gt; 18 & P &le; 38, S)
   - LogicalType: Decimal128
   - 保存形式: int128
   - Delegate LogicalType: LARGEINT
@@ -43,7 +43,7 @@ DECIMAL256 は精度の上限を76ビットに拡張します。その数値容�
 
 DECIMAL256 は Fast DECIMAL と同じ戦略を使用して小数を表現します。上記の2つの小数タイプに加えて、次のものをサポートします：
 
-- Decimal(P > 38 & P <= 76, S)
+- Decimal(P &gt; 38 & P &le; 76, S)
   - LogicalType: Decimal256
   - 保存形式: int256
   - Delegate LogicalType: INT_256

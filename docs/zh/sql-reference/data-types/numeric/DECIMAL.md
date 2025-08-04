@@ -21,12 +21,12 @@ DECIMAL(P[,S]) 是一种高精度定点数值。`P` 代表有效数字的总数�
 
 Fast DECIMAL 使用可变宽度整数来表示小数。
 
-- Decimal(P <= 18, S)
+- Decimal(P &le; 18, S)
   - LogicalType：Decimal64
   - 存储格式：int64
   - Delegate LogicalType：BIGINT
 
-- Decimal(P > 18 & P <= 38, S)
+- Decimal(P &gt; 18 & P &le; 38, S)
   - LogicalType：Decimal128
   - 存储格式：int128
   - Delegate LogicalType：LARGEINT
@@ -43,7 +43,7 @@ DECIMAL256 将精度的上限扩展到 76 位。其数值容量是 DECIMAL128 �
 
 DECIMAL256 使用与 Fast DECIMAL 相同的策略来表示小数。除了上述两种小数类型外，它还支持：
 
-- Decimal(P > 38 & P <= 76, S)
+- Decimal(P &gt; 38 & P &le; 76, S)
   - LogicalType：Decimal256
   - 存储格式：int256
   - Delegate LogicalType：INT_256

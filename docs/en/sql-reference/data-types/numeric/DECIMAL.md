@@ -21,12 +21,12 @@ For Fast DECIMAL, the range of `P` is [1,38] and the range of `S` is [0, P]. The
 
 Fast DECIMAL uses variable-width integers to express decimals.
 
-- Decimal(P <= 18, S)
+- Decimal(P &le; 18, S)
   - LogicalType: Decimal64
   - Stored as: int64
   - Delegate LogicalType: BIGINT
 
-- Decimal(P > 18 & P <= 38, S)
+- Decimal(P &gt; 18 & P &le; 38, S)
   - LogicalType: Decimal128
   - Stored as: int128
   - Delegate LogicalType: LARGEINT
@@ -43,7 +43,7 @@ DECIMAL256 expands the upper limit of precision to 76 bits. Its numerical capaci
 
 DECIMAL256 uses the same strategy to express decimals as that of Fast DECIMAL. In addition to the two decimal types mentioned above, it supports:
 
-- Decimal(P > 38 & P <= 76, S)
+- Decimal(P &gt; 38 & P &le; 76, S)
   - LogicalType: Decimal256
   - Stored as: int256
   - Delegate LogicalType: INT_256
