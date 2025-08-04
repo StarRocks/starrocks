@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # DECIMAL
 
-DECIMAL(P[,S]) 是一种高精度定点数值。`P` 代表有效数字的总数（精度）。`S` 代表小数点后的最大位数（刻度）。
+DECIMAL(P[,S]) 是一种高精度定点数值。`P` 代表有效数字的总数（精度，Precision）。`S` 代表小数点后的最大位数（刻度，Scale）。
 
 如果省略 `P`，则默认值为 10。如果省略 `S`，则默认值为 0。
 
@@ -31,7 +31,7 @@ Fast DECIMAL 使用可变宽度整数来表示小数。
   - 存储格式：int128
   - Delegate LogicalType：LARGEINT
 
-从 v3.1 开始，StarRocks 支持在 [ARRAY](../semi_structured/Array.md)、[MAP](../semi_structured/Map.md) 和 [STRUCT](../semi_structured/STRUCT.md) 中使用 Fast Decimal 项。
+从 v3.1 开始，StarRocks 支持在 [ARRAY](../semi_structured/Array.md)、[MAP](../semi_structured/Map.md) 和 [STRUCT](../semi_structured/STRUCT.md) 中使用 Fast Decimal 类型。
 
 ## DECIMAL256
 
