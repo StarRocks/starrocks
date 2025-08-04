@@ -1,4 +1,4 @@
--- name: test_mv_refresh_list_partitions_multi_columns_iceberg
+-- name: test_mv_refresh_list_partitions_multi_columns_iceberg @slow
 set new_planner_optimize_timeout=10000;
 -- result:
 -- !result
@@ -101,19 +101,19 @@ AS
 -- !result
 [UC] REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-0197cf60-71f9-7d20-b5ff-c416876064fb
+01986f58-1705-79ab-b855-3653fed84b99
 -- !result
 [UC] REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 -- result:
-0197cf60-7bd8-76df-883e-d333f1661a59
+01986f58-2096-72a5-8d1c-7494300c9ca8
 -- !result
 [UC] REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 -- result:
-0197cf60-83a6-72e6-9b16-a254df9a0be7
+01986f58-2801-7ea1-a315-f8224f18df3e
 -- !result
 [UC] REFRESH MATERIALIZED VIEW test_mv4 WITH SYNC MODE;
 -- result:
-0197cf60-8b59-7abb-a337-1f65b5d539c8
+01986f58-2f9a-7728-b5d5-924af6324909
 -- !result
 select * from test_mv1 order by year, month, day, province;
 -- result:
@@ -135,19 +135,10 @@ select * from test_mv4 order by year, month;
 None	None	None	shanghai	1
 2024	01	2024-01-01 00:00:00	beijing	15
 -- !result
+set query_including_mv_names = "test_mv1";
+-- result:
+-- !result
 function: print_hit_materialized_view("SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;", "test_mv1")
--- result:
-True
--- !result
-function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;", "test_mv2")
--- result:
-True
--- !result
-function: print_hit_materialized_view("SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;", "test_mv3")
--- result:
-True
--- !result
-function: print_hit_materialized_view("SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;", "test_mv4")
 -- result:
 True
 -- !result
@@ -156,15 +147,36 @@ SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.
 None	None	None	shanghai	1
 2024	01	01	beijing	15
 -- !result
+set query_including_mv_names = "test_mv2";
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;", "test_mv2")
+-- result:
+True
+-- !result
 SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;
 -- result:
 None	None	shanghai	1
 2024	01	beijing	15
 -- !result
+set query_including_mv_names = "test_mv3";
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;", "test_mv3")
+-- result:
+True
+-- !result
 SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;
 -- result:
 None	shanghai	1
 2024	beijing	15
+-- !result
+set query_including_mv_names = "test_mv4";
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;", "test_mv4")
+-- result:
+True
 -- !result
 SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;
 -- result:
@@ -178,19 +190,19 @@ E: (1064, 'Getting analyzing error. Detail message: Table t1 is not found.')
 -- !result
 [UC] REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-0197cf60-a3b5-7185-9724-8ec0bc4026b9
+01986f58-48dc-77a2-a0fa-8e780114bed5
 -- !result
 [UC] REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 -- result:
-0197cf60-a420-7dd8-a545-cd9dfc140da2
+01986f58-491b-77b5-8064-8cec2745a31e
 -- !result
 [UC] REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 -- result:
-0197cf60-a80b-7443-b81c-24ffb71300dd
+01986f58-4cff-7c14-a704-046fcada5309
 -- !result
 [UC] REFRESH MATERIALIZED VIEW test_mv4 WITH SYNC MODE;
 -- result:
-0197cf60-abf2-716e-b66a-a71ecdff09bd
+01986f58-50e8-7764-b431-9d4bd009c176
 -- !result
 select * from test_mv1 order by year, month, day, province;
 -- result:
@@ -212,19 +224,10 @@ select * from test_mv4 order by year, month;
 None	None	None	shanghai	1
 2024	01	2024-01-01 00:00:00	beijing	15
 -- !result
+set query_including_mv_names = "test_mv1";
+-- result:
+-- !result
 function: print_hit_materialized_view("SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;", "test_mv1")
--- result:
-True
--- !result
-function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;", "test_mv2")
--- result:
-True
--- !result
-function: print_hit_materialized_view("SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;", "test_mv3")
--- result:
-True
--- !result
-function: print_hit_materialized_view("SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;", "test_mv4")
 -- result:
 True
 -- !result
@@ -233,15 +236,36 @@ SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.
 None	None	None	shanghai	1
 2024	01	01	beijing	15
 -- !result
+set query_including_mv_names = "test_mv2";
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;", "test_mv2")
+-- result:
+True
+-- !result
 SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;
 -- result:
 None	None	shanghai	1
 2024	01	beijing	15
 -- !result
+set query_including_mv_names = "test_mv3";
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;", "test_mv3")
+-- result:
+True
+-- !result
 SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;
 -- result:
 None	shanghai	1
 2024	beijing	15
+-- !result
+set query_including_mv_names = "test_mv4";
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;", "test_mv4")
+-- result:
+True
 -- !result
 SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;
 -- result:

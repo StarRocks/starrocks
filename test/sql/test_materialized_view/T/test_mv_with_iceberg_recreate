@@ -1,4 +1,6 @@
--- name: test_mv_with_iceberg_recreate
+-- name: test_mv_with_iceberg_recreate @sequential @slow
+
+-- This case needs to disable auto mv checker to test mv refresh's behavior.
 create external catalog mv_iceberg_${uuid0}
 properties
 (
