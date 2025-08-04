@@ -441,7 +441,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
                 repeatAggs.add(String.format("%s as agg%s", aggFunc, i));
             }
             String agg = Joiner.on(", ").join(repeatAggs);
-            String mvName = String.format("test_mv_%s_%s", aggFunc, ID_GENERATOR.addAndGet(1));
+            String mvName = String.format("test_mv_%s", ID_GENERATOR.addAndGet(1));
             starRocksAssert.withMaterializedView(String.format("create MATERIALIZED VIEW %s\n" +
                     "PARTITION BY (dt)\n" +
                     "DISTRIBUTED BY RANDOM\n" +
