@@ -365,7 +365,11 @@ public class PaimonPredicateConverterTest {
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast8, stringTime));
         Assert.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate8 = (LeafPredicate) result;
+<<<<<<< HEAD
         Assert.assertEquals(1735660800000L, ((Timestamp) (leafPredicate8.literals().get(0))).getMillisecond());
+=======
+        Assertions.assertEquals(1735689600000L, ((Timestamp) (leafPredicate8.literals().get(0))).getMillisecond());
+>>>>>>> 16a4924ccd ([BugFix] Paimon TimeStamp timezone converter problem when the query condition has datetime (#60473))
         // smallInt to string
         ConstantOperator si = ConstantOperator.createSmallInt((short) 200);
         CastOperator cast9 = new CastOperator(Type.VARCHAR, F1);
