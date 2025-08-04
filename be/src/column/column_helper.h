@@ -280,47 +280,30 @@ public:
      */
     template <LogicalType Type>
     static inline typename RunTimeColumnType<Type>::Ptr cast_to(const ColumnPtr& value) {
-#ifdef NDEBUG
-        down_cast<const RunTimeColumnType<Type>*>(value.get());
-#else
+#ifndef NDEBUG
         auto* result = dynamic_cast<const RunTimeColumnType<Type>*>(value.get());
-        if (result == nullptr) {
-            const auto* ptr = value.get();
-            std::cerr << "Cast failed for column: "
-                      << " (expected type: " << Type << ", actual type: " << ptr->get_name() << ")" << std::endl;
-        }
-        assert(result != nullptr);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
 #endif
         return RunTimeColumnType<Type>::static_pointer_cast(value);
     }
 
     template <LogicalType Type>
     static inline typename RunTimeColumnType<Type>::Ptr cast_to(ColumnPtr&& value) {
-#ifdef NDEBUG
-        down_cast<const RunTimeColumnType<Type>*>(value.get());
-#else
+#ifndef NDEBUG
         auto* result = dynamic_cast<const RunTimeColumnType<Type>*>(value.get());
-        if (result == nullptr) {
-            const auto* ptr = value.get();
-            std::cerr << "Cast failed for column: "
-                      << " (expected type: " << Type << ", actual type: " << ptr->get_name() << ")" << std::endl;
-        }
-        assert(result != nullptr);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
 #endif
         return RunTimeColumnType<Type>::static_pointer_cast(std::move(value));
     }
 
     template <LogicalType Type>
     static inline typename RunTimeColumnType<Type>::MutablePtr cast_to(MutableColumnPtr&& value) {
-#ifdef NDEBUG
-        down_cast<const RunTimeColumnType<Type>*>(value.get());
-#else
+#ifndef NDEBUG
         auto* result = dynamic_cast<const RunTimeColumnType<Type>*>(value.get());
-        if (result == nullptr) {
-            std::cerr << "Cast failed for column: "
-                      << " (expected type: " << Type << ", actual type: " << value->get_name() << ")" << std::endl;
-        }
-        assert(result != nullptr);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
 #endif
         return RunTimeColumnType<Type>::static_pointer_cast(std::move(value));
     }
@@ -336,11 +319,8 @@ public:
         auto* raw_column_ptr = down_cast<const RunTimeColumnType<Type>*>(value.get());
 #else
         auto* raw_column_ptr = dynamic_cast<const RunTimeColumnType<Type>*>(value.get());
-        if (raw_column_ptr == nullptr) {
-            std::cerr << "Cast failed for column: "
-                      << " (expected type: " << Type << ", actual type: " << value->get_name() << ")" << std::endl;
-        }
-        assert(raw_column_ptr != nullptr);
+        DCHECK(raw_column_ptr) << "Cast failed for column: "
+                               << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
 #endif
         return const_cast<RunTimeColumnType<Type>*>(raw_column_ptr);
     }
@@ -351,11 +331,8 @@ public:
         return down_cast<RunTimeColumnType<Type>*>(value);
 #else
         auto* result = dynamic_cast<RunTimeColumnType<Type>*>(value);
-        if (result == nullptr) {
-            std::cerr << "Cast failed for column: "
-                      << " (expected type: " << Type << ", actual type: " << value->get_name() << ")" << std::endl;
-        }
-        assert(result != nullptr);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
         return result;
 #endif
     }
@@ -366,11 +343,8 @@ public:
         return down_cast<const RunTimeColumnType<Type>*>(value);
 #else
         auto* result = dynamic_cast<const RunTimeColumnType<Type>*>(value);
-        if (result == nullptr) {
-            std::cerr << "Cast failed for column: "
-                      << " (expected type: " << Type << ", actual type: " << value->get_name() << ")" << std::endl;
-        }
-        assert(result != nullptr);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
         return result;
 #endif
     }
@@ -385,12 +359,8 @@ public:
         return Type::static_pointer_cast(value);
 #else
         auto* result = dynamic_cast<const Type*>(value.get());
-        if (result == nullptr) {
-            std::cerr << "Cast failed for column: "
-                      << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")"
-                      << std::endl;
-        }
-        assert(result != nullptr);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
         return Type::static_pointer_cast(value);
 #endif
     }
@@ -401,12 +371,8 @@ public:
         return Type::static_pointer_cast(std::move(value));
 #else
         auto* result = dynamic_cast<const Type*>(value.get());
-        if (result == nullptr) {
-            std::cerr << "Cast failed for column: "
-                      << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")"
-                      << std::endl;
-        }
-        assert(result != nullptr);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
         return Type::static_pointer_cast(std::move(value));
 #endif
     }
@@ -417,12 +383,8 @@ public:
         return Type::static_pointer_cast(std::move(value));
 #else
         auto* result = dynamic_cast<const Type*>(value.get());
-        if (result == nullptr) {
-            std::cerr << "Cast failed for column: "
-                      << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")"
-                      << std::endl;
-        }
-        assert(result != nullptr);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
         return Type::static_pointer_cast(std::move(value));
 #endif
     }
@@ -433,11 +395,8 @@ public:
         return down_cast<const Type*>(value.get());
 #else
         auto* result = dynamic_cast<const Type*>(value.get());
-        if (result == nullptr) {
-            std::cerr << "Cast failed for column: "
-                      << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
-        }
-        assert(result != nullptr);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
         return result;
 #endif
     }
@@ -448,12 +407,8 @@ public:
         return down_cast<Type*>(value.get());
 #else
         auto* result = dynamic_cast<Type*>(value.get());
-        if (result == nullptr) {
-            std::cerr << "Cast failed for column: "
-                      << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")"
-                      << std::endl;
-        }
-        assert(result != nullptr);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
         return result;
 #endif
     }
@@ -464,12 +419,8 @@ public:
         return down_cast<const Type*>(value);
 #else
         auto* result = dynamic_cast<const Type*>(value);
-        if (result == nullptr) {
-            std::cerr << "Cast failed for column: "
-                      << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")"
-                      << std::endl;
-        }
-        assert(result != nullptr);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
         return result;
 #endif
     }
@@ -483,12 +434,8 @@ public:
         auto* col = down_cast<const Type*>(value.get());
 #else
         auto* col = dynamic_cast<const Type*>(value.get());
-        if (col == nullptr) {
-            std::cerr << "Cast failed for column: "
-                      << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")"
-                      << std::endl;
-        }
-        assert(col != nullptr);
+        DCHECK(col) << "Cast failed for column: "
+                    << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
 #endif
         // TODO: remove const_cast
         return const_cast<Type*>(col);
