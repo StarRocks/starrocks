@@ -69,7 +69,8 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
                                           Map<String, String> params, Optional<Boolean> enabled,
                                           String comment) throws DdlException {
         String id = UUID.randomUUID().toString();
-        StorageVolume sv = new StorageVolume(id, name, svType, locations, params, enabled.orElse(true), comment);
+        long uniqueId = GlobalStateMgr.getCurrentState().getNextId();
+        StorageVolume sv = new StorageVolume(id, name, svType, locations, params, enabled.orElse(true), comment, uniqueId);
         GlobalStateMgr.getCurrentState().getEditLog().logCreateStorageVolume(sv);
         idToSV.put(id, sv);
         return id;

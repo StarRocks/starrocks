@@ -488,7 +488,7 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shard group. error: " + e.getMessage());
         }
-        return shardGroupInfos.get(0).getGroupId();
+        return shardGroupInfos.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList()).get(0);
     }
 
     // Used only for shared-data cluster replication
@@ -507,7 +507,7 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shard group. error: " + e.getMessage());
         }
-        return shardGroupInfos.get(0).getGroupId();
+        return shardGroupInfos.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList()).get(0);
     }
 
     public void deleteShardGroup(List<Long> groupIds) {
