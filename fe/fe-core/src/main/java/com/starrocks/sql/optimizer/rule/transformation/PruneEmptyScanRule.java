@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -56,6 +57,7 @@ public class PruneEmptyScanRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        Preconditions.checkState(input.getOp().getProjection() == null);
         List<ColumnRefOperator> refs =
                 input.getOutputColumns().getColumnRefOperators(context.getColumnRefFactory());
         return Lists.newArrayList(OptExpression.create(new LogicalValuesOperator(refs, Lists.newArrayList())));

@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -47,6 +48,7 @@ public class PruneEmptyIntersectRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        Preconditions.checkState(input.getOp().getProjection() == null);
         LogicalIntersectOperator intersectOperator = (LogicalIntersectOperator) input.getOp();
         return Lists.newArrayList(OptExpression
                 .create(new LogicalValuesOperator(intersectOperator.getOutputColumnRefOp(), Collections.emptyList())));
