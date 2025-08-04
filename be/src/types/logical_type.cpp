@@ -52,6 +52,7 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "ARRAY") return TYPE_ARRAY;
     if (upper_type_str == "MAP") return TYPE_MAP;
     if (upper_type_str == "BITMAP") return TYPE_OBJECT;
+    if (upper_type_str == "OBJECT") return TYPE_OBJECT;
     if (upper_type_str == "PERCENTILE") return TYPE_PERCENTILE;
     if (upper_type_str == "DECIMAL32") return TYPE_DECIMAL32;
     if (upper_type_str == "DECIMAL64") return TYPE_DECIMAL64;
