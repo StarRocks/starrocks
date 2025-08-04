@@ -54,7 +54,8 @@ Status SchemaDynamicTabletJobsScanner::start(RuntimeState* state) {
 
 Status SchemaDynamicTabletJobsScanner::_fill_chunk(ChunkPtr* chunk) {
     if (_result.status.status_code != TStatusCode::OK) {
-        return Status::InternalError(fmt::format("get dynamic tablet jobs infos error: {}", _result.status.error_msgs[0]));
+        return Status::InternalError(
+                fmt::format("get dynamic tablet jobs infos error: {}", _result.status.error_msgs[0]));
     }
 
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
