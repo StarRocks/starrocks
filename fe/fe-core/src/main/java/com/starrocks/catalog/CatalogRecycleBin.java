@@ -683,6 +683,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
             if (finished) {
                 iterator.remove();
+                asyncDeleteForPartitions.remove(partitionInfo);
                 removeRecycleMarkers(partitionId);
 
                 GlobalStateMgr.getCurrentState().getEditLog().logErasePartition(partitionId);
