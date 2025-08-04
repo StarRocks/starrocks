@@ -2642,6 +2642,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         if not self.check_status:
             return
 
+        self_print("check cluster status..")
         err_msg = ""
         res = self.execute_sql("show backends;", ori=True)
         tools.assert_true(res["status"], res["msg"])
