@@ -28,6 +28,7 @@ public final class ColumnDict extends StatsVersion {
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long version) {
         super(version, version);
+        // TODO: The default value of low_cardinality_threshold is 255. Should we set the check size to 255 or 256?
         Preconditions.checkState(!dict.isEmpty() && dict.size() <= Config.low_cardinality_threshold + 1,
                 "dict size %s is illegal", dict.size());
         this.dict = dict;
