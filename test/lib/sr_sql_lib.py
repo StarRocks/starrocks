@@ -171,7 +171,9 @@ class StarrocksSQLApiLib(object):
         self.data_delete_lib = data_delete_lib.DataDeleteLib()
         self.arrow_sql_lib = ArrowSqlLib()
         self.arrow_port = ""
+
         self.check_status = os.environ.get("check_status", "False") == "True"
+        self_print("check_status: %s" % self.check_status)
 
         # connection pool
         self.connection_pool = None
