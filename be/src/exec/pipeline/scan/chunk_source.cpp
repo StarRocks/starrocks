@@ -68,8 +68,6 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
 
             ChunkPtr chunk;
             _status = _read_chunk(state, &chunk);
-            // notify when generate new chunk
-            auto notify = scan_defer_notify(_scan_op);
             // we always output a empty chunk instead of nullptr, because we need set tablet_id and is_last_chunk flag
             // in the chunk.
             if (chunk == nullptr) {
@@ -84,32 +82,48 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
                     chunk->append_column(std::move(col), slot_ids[k]);
                 }
             }
+
+            int actual_seq = _scan_operator_seq;
+            bool should_exit = false;
+            bool is_last = false;
             if (!_status.ok()) {
-                // end of file is normal case, need process chunk
+                // End of file is a normal case, need to process chunk
                 if (_status.is_end_of_file()) {
-                    chunk->owner_info().set_owner_id(owner_id, true);
-                    _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
-                    break;
+                    is_last = true;
+                    should_exit = true;
                 } else if (_status.is_time_out()) {
-                    chunk->owner_info().set_owner_id(owner_id, false);
-                    _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                     _status = Status::OK();
-                    break;
+                    should_exit = true;
                 } else if (_status.is_eagain()) {
                     // EAGAIN is normal case, but sleep a while to avoid busy loop
                     SleepFor(MonoDelta::FromNanoseconds(workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT));
                     _status = Status::OK();
                 } else {
+                    // For other errors, don't process the chunk and exit immediately
+                    // The token will be cleaned up when _chunk_token goes out of scope
                     break;
                 }
             }
 
             // schema won't be used by the computing layer, here we just reset it.
             chunk->reset_schema();
-            chunk->owner_info().set_owner_id(owner_id, false);
-            _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
+            chunk->owner_info().set_owner_id(owner_id, is_last);
+            _chunk_buffer.put(_scan_operator_seq, &actual_seq, std::move(chunk), std::move(_chunk_token));
+
+            if (_chunk_buffer.strategy() == kRoundRobin) {
+                // notify the specified operator in round-robin strategy
+                auto notify = scan_defer_notify(_scan_op, actual_seq);
+            } else {
+                // notify the local operator
+                auto notify = scan_defer_notify(_scan_op);
+            }
 
             FAIL_POINT_TRIGGER_EXECUTE(scan_chunk_sleep_after_read, { sleep(1); });
+
+            if (should_exit) {
+                // Exit the loop after processing the chunk for end of file or timeout
+                break;
+            }
         }
 
         if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {

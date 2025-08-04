@@ -57,6 +57,22 @@ void DynamicChunkBufferLimiter::unpin(int num_chunks) {
     DCHECK_GE(prev_value, 1);
 }
 
+bool DynamicChunkBufferLimiter::is_full() const {
+    if (_pinned_chunks_counter >= _capacity) {
+        _returned_full_event.store(true, std::memory_order_release);
+        return true;
+    }
+    return false;
+}
+
+bool DynamicChunkBufferLimiter::has_full_events() {
+    if (!_has_full_event.load(std::memory_order_acquire)) {
+        return false;
+    }
+    bool val = true;
+    return _has_full_event.compare_exchange_strong(val, false);
+}
+
 void DynamicChunkBufferLimiter::update_mem_limit(int64_t value) {
     _mem_limit.store(value);
     // No need to update capacity now, capacity will be updated in next `update_avg_row_bytes` call.
