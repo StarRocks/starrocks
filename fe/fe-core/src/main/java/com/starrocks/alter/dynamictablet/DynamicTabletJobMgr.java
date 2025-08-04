@@ -31,6 +31,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.thrift.TDynamicTabletJobsResponse;
+import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -104,14 +105,17 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
 
     public TDynamicTabletJobsResponse getAllJobsInfo() {
         TDynamicTabletJobsResponse response = new TDynamicTabletJobsResponse();
+        response.status = new TStatus();
         response.status.setStatus_code(TStatusCode.OK);
         for (DynamicTabletJob job : dynamicTabletJobs.values()) {
             try {
                 response.addToItems(job.getInfo());
             } catch (Exception e) {
-                // if encouter any unexpected exception, set error status for response
-                response.status.setStatus_code(TStatusCode.INTERNAL_ERROR);
-                response.status.addToError_msgs(Strings.nullToEmpty(e.getMessage()));
+                if (response.getStatus_code() == TStatusCode.OK) {
+                    // if encouter any unexpected exception, set error status for response
+                    response.status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+                    response.status.addToError_msgs(Strings.nullToEmpty(e.getMessage()));
+                }
             }
         }
         return response;
