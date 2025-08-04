@@ -73,7 +73,7 @@ bool BalancedChunkBuffer::try_get(int buffer_index, ChunkPtr* output_chunk) {
     return ok;
 }
 
-bool BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token) {
+bool BalancedChunkBuffer::put(int buffer_index, int* actual_buffer, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token) {
     // CRITICAL (by satanson)
     // EOS chunks may be empty and must be delivered in order to notify CacheOperator that all chunks of the tablet
     // has been processed.
@@ -81,6 +81,7 @@ bool BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferToken
     bool ret;
     size_t memory_usage = chunk->memory_usage();
     if (_strategy == BalanceStrategy::kDirect) {
+        *actual_buffer = buffer_index;
         ret = _get_sub_buffer(buffer_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else if (_strategy == BalanceStrategy::kRoundRobin) {
         // In the round-robin strategy, assign every N consecutive chunks to the same output operator,
@@ -90,6 +91,7 @@ bool BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferToken
         int64_t current = _output_index.fetch_add(1);
         int step_size = std::max(1, config::io_task_shared_scan_step_size);
         int target_index = (current / step_size) % _output_operators;
+        *actual_buffer = target_index;
         ret = _get_sub_buffer(target_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else {
         CHECK(false) << "unreachable";
