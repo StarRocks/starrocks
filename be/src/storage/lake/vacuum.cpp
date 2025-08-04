@@ -21,7 +21,6 @@
 #include <string_view>
 #include <unordered_map>
 
-#include "common/config.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gutil/stl_util.h"
@@ -134,6 +133,8 @@ Status delete_files_with_retry(FileSystem* fs, std::span<const std::string> path
     }
 }
 
+} // namespace
+
 // Batch delete files with specified FileSystem object |fs|
 Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
     if (UNLIKELY(paths.empty())) {
@@ -175,108 +176,6 @@ Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
     }
     return Status::OK();
 }
-
-// AsyncFileDeleter
-// A class for asynchronously deleting files in batches.
-//
-// The AsyncFileDeleter class provides a mechanism to delete files in batches in an asynchronous manner.
-// It allows specifying the batch size, which determines the number of files to be deleted in each batch.
-class AsyncFileDeleter {
-public:
-    using DeleteCallback = std::function<void(const std::vector<std::string>&)>;
-
-    explicit AsyncFileDeleter(int64_t batch_size) : _batch_size(batch_size) {}
-    explicit AsyncFileDeleter(int64_t batch_size, DeleteCallback cb) : _batch_size(batch_size), _cb(std::move(cb)) {}
-    virtual ~AsyncFileDeleter() = default;
-
-    virtual Status delete_file(std::string path) {
-        _batch.emplace_back(std::move(path));
-        if (_batch.size() < _batch_size) {
-            return Status::OK();
-        }
-        return submit(&_batch);
-    }
-
-    virtual Status finish() {
-        if (!_batch.empty()) {
-            RETURN_IF_ERROR(submit(&_batch));
-        }
-        return wait();
-    }
-
-    int64_t delete_count() const { return _delete_count; }
-
-private:
-    // Wait for all submitted deletion tasks to finish and return task execution results.
-    Status wait() {
-        if (_prev_task_status.valid()) {
-            try {
-                return _prev_task_status.get();
-            } catch (const std::exception& e) {
-                return Status::InternalError(e.what());
-            }
-        } else {
-            return Status::OK();
-        }
-    }
-
-    Status submit(std::vector<std::string>* files_to_delete) {
-        // Await previous task completion before submitting a new deletion.
-        RETURN_IF_ERROR(wait());
-        _delete_count += files_to_delete->size();
-        if (_cb) {
-            _cb(*files_to_delete);
-        }
-        _prev_task_status = delete_files_callable(std::move(*files_to_delete));
-        files_to_delete->clear();
-        DCHECK(_prev_task_status.valid());
-        return Status::OK();
-    }
-
-    int64_t _batch_size;
-    int64_t _delete_count = 0;
-    std::vector<std::string> _batch;
-    std::future<Status> _prev_task_status;
-    DeleteCallback _cb;
-};
-
-// Used for delete files which are shared by multiple tablets, so we can't delete them at first.
-// We need to wait for all tablets to finish and decide whether to delete them.
-class AsyncBundleFileDeleter : public AsyncFileDeleter {
-public:
-    explicit AsyncBundleFileDeleter(int64_t batch_size) : AsyncFileDeleter(batch_size) {}
-
-    Status delete_file(std::string path) override {
-        _pending_files[path]++;
-        return Status::OK();
-    }
-
-    Status delay_delete(std::string path) {
-        _delay_delete_files.insert(std::move(path));
-        return Status::OK();
-    }
-
-    Status finish() override {
-        for (auto& [path, count] : _pending_files) {
-            if (_delay_delete_files.count(path) == 0) {
-                if (config::lake_print_delete_log) {
-                    LOG(INFO) << "Deleting bundle file: " << path << " ref count: " << count;
-                }
-                RETURN_IF_ERROR(AsyncFileDeleter::delete_file(path));
-            }
-        }
-        return AsyncFileDeleter::finish();
-    }
-
-    bool is_empty() const { return _pending_files.empty(); }
-
-private:
-    // file to shared count.
-    std::unordered_map<std::string, uint32_t> _pending_files;
-    std::unordered_set<std::string> _delay_delete_files;
-};
-
-} // namespace
 
 // Batch delete files with automatically derived FileSystems.
 // REQUIRE: All files in |paths| have the same file system scheme.
@@ -601,8 +500,8 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     return Status::OK();
 }
 
-static Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files,
-                             int64_t* vacuumed_file_size) {
+Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files,
+                      int64_t* vacuumed_file_size) {
     DCHECK(vacuumed_files != nullptr);
     DCHECK(vacuumed_file_size != nullptr);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
@@ -1102,7 +1001,7 @@ static StatusOr<TabletMetadataPtr> get_tablet_metadata(const string& metadata_lo
     return metadata;
 }
 
-static StatusOr<std::pair<std::list<std::string>, std::list<std::string>>> list_meta_files(
+StatusOr<std::pair<std::list<std::string>, std::list<std::string>>> list_meta_files(
         FileSystem* fs, const std::string& metadata_root_location) {
     LOG(INFO) << "Start to list " << metadata_root_location;
     std::list<std::string> meta_files;
@@ -1165,11 +1064,10 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
     return data_files;
 }
 
-static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs, std::string_view root_location,
-                                                                        int64_t expired_seconds,
-                                                                        const std::list<std::string>& meta_files,
-                                                                        const std::list<std::string>& bundle_meta_files,
-                                                                        std::ostream* audit_ostream) {
+StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs, std::string_view root_location,
+                                                                 int64_t expired_seconds, const std::list<std::string>& meta_files,
+                                                                 const std::list<std::string>& bundle_meta_files,
+                                                                 std::ostream* audit_ostream) {
     const auto metadata_root_location = join_path(root_location, kMetadataDirectoryName);
     const auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
 
@@ -1425,256 +1323,6 @@ StatusOr<int64_t> datafile_gc(std::string_view root_location, std::string_view a
 
 StatusOr<int64_t> garbage_file_check(std::string_view root_location) {
     return datafile_gc(root_location, "", 0, false);
-}
-
-static Status vacuum_unspecified_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_loc,
-                                                 const std::set<int64_t>& tablet_ids, int64_t* vacuumed_files,
-                                                 std::list<std::string>* meta_files,
-                                                 std::list<std::string>* bundle_meta_files) {
-    DCHECK(tablet_mgr != nullptr);
-    DCHECK(vacuumed_files != nullptr);
-    DCHECK(meta_files != nullptr);
-    DCHECK(bundle_meta_files != nullptr);
-
-    auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
-        erase_tablet_metadata_from_metacache(tablet_mgr, files);
-    };
-    AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
-    std::vector<std::string> unspecified_metas;
-    std::vector<std::string> bundle_unspecified_metas;
-    const auto metadata_root_location = join_path(root_loc, kMetadataDirectoryName);
-    for (const auto& name : *meta_files) {
-        auto [tablet_id, version] = parse_tablet_metadata_filename(name);
-        const string path = join_path(metadata_root_location, name);
-        ASSIGN_OR_RETURN(auto metadata , get_tablet_metadata(path, false));
-        if (!tablet_ids.contains(tablet_id) &&
-            metadata->version() != kInitialVersion /* filtered out meta created from alter job */) {
-            LOG(INFO) << "Try delete for full vacuum: " << path;
-            RETURN_IF_ERROR(metafile_deleter.delete_file(path));
-            unspecified_metas.push_back(name);
-        }
-    }
-    for (const auto& unspecified_meta : unspecified_metas) {
-        meta_files->remove(unspecified_meta);
-    }
-
-    std::vector<int64_t> tablet_ids_vec(tablet_ids.begin(), tablet_ids.end());
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
-    for (const auto& name : *bundle_meta_files) {
-        auto path = join_path(metadata_root_location, name);
-        bool need_clear = true;
-        ASSIGN_OR_RETURN(auto metadatas, TabletManager::get_metas_from_bundle_tablet_metadata(fs.get(), path));
-        for (const auto& metadata : metadatas) {
-            DCHECK(metadata->version() != kInitialVersion);
-            // make sure all reserved tablet ids should not existed in metadata
-            if (tablet_ids.contains(metadata->id())) {
-                need_clear = false;
-                break;
-            }
-        }
-        if (need_clear) {
-            LOG(INFO) << "Try delete for full vacuum: " << path;
-            RETURN_IF_ERROR(metafile_deleter.delete_file(path));
-            bundle_unspecified_metas.push_back(name);
-        }
-    }
-    for (const auto& bundle_unspecified_meta : bundle_unspecified_metas) {
-        bundle_meta_files->remove(bundle_unspecified_meta);
-    }
-
-    RETURN_IF_ERROR(metafile_deleter.finish());
-    (*vacuumed_files) += metafile_deleter.delete_count();
-    return Status::OK();
-}
-
-static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_loc,
-                                             int64_t grace_timestamp, int64_t* vacuumed_files,
-                                             std::list<std::string>* meta_files,
-                                             std::list<std::string>* bundle_meta_files,
-                                             const std::unordered_set<int64_t>& retain_versions) {
-    DCHECK(tablet_mgr != nullptr);
-    DCHECK(meta_files != nullptr);
-    DCHECK(bundle_meta_files != nullptr);
-    if (grace_timestamp == 0) {
-        // no expired metadata to be vacuumed
-        return Status::OK();
-    }
-
-    auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
-        erase_tablet_metadata_from_metacache(tablet_mgr, files);
-    };
-    AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
-    std::vector<std::string> expired_metas;
-    std::vector<std::string> bundle_expired_metas;
-    const auto metadata_root_location = join_path(root_loc, kMetadataDirectoryName);
-    for (const auto& name : *meta_files) {
-        auto [tablet_id, version] = parse_tablet_metadata_filename(name);
-        if (retain_versions.contains(version)) {
-            continue;
-        }
-        const string path = join_path(metadata_root_location, name);
-        ASSIGN_OR_RETURN(auto metadata , get_tablet_metadata(path, false));
-        if (metadata->commit_time() <= grace_timestamp) {
-            LOG(INFO) << "Try delete for full vacuum: " << path;
-            RETURN_IF_ERROR(metafile_deleter.delete_file(path));
-            expired_metas.push_back(name);
-        }
-    }
-    for (const auto& expired_meta : expired_metas) {
-        meta_files->remove(expired_meta);
-    }
-
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
-    for (const auto& name : *bundle_meta_files) {
-        auto [tablet_id, version] = parse_tablet_metadata_filename(name);
-        if (retain_versions.contains(version)) {
-            continue;
-        }
-        auto path = join_path(metadata_root_location, name);
-        bool need_clear = true;
-        ASSIGN_OR_RETURN(auto metadatas, TabletManager::get_metas_from_bundle_tablet_metadata(fs.get(), path));
-        for (const auto& metadata : metadatas) {
-            if (metadata->commit_time() > grace_timestamp) {
-                need_clear = false;
-                break;
-            }
-        }
-        if (need_clear) {
-            LOG(INFO) << "Try delete for full vacuum: " << path;
-            RETURN_IF_ERROR(metafile_deleter.delete_file(path));
-            bundle_expired_metas.push_back(name);
-        }
-    }
-    for (const auto& bundle_expired_meta : bundle_expired_metas) {
-        bundle_meta_files->remove(bundle_expired_meta);
-    }
-
-    RETURN_IF_ERROR(metafile_deleter.finish());
-    (*vacuumed_files) += metafile_deleter.delete_count();
-    return Status::OK();
-}
-
-// Deletes orphaned data files (data files which are not referenced by "relevant" metadata files)
-// Data files written by transactions with txn_id >= min_active_txn_id will NOT be vacuumed
-// Returns the number of files vacuumed and their total size
-static StatusOr<std::pair<int64_t, int64_t>> vacuum_orphaned_datafiles(TabletManager* tablet_mgr, std::string_view root_loc,
-                                                                       int64_t min_active_txn_id,
-                                                                       const std::list<std::string>& meta_files,
-                                                                       const std::list<std::string>& bundle_meta_files) {
-    DCHECK(tablet_mgr != nullptr);
-    const auto segment_root_location = join_path(root_loc, kSegmentDirectoryName);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
-    ASSIGN_OR_RETURN(auto data_files_to_vacuum, find_orphan_data_files(fs.get(), root_loc, 0, meta_files, bundle_meta_files, nullptr));
-    const auto original_size = data_files_to_vacuum.size();
-    std::erase_if(data_files_to_vacuum, [&](const auto& elem) {
-        const auto& name = elem.first;
-        const auto txn_id = extract_txn_id_prefix(name).value_or(0);
-        return txn_id == 0 || txn_id >= min_active_txn_id;
-    });
-    LOG(INFO) << segment_root_location << ": " << "Removed " << original_size - data_files_to_vacuum.size()
-              << " data files from consideration as orphans based on txn id";
-
-    int64_t bytes_to_delete = 0;
-    std::vector<std::string> files_to_delete;
-    files_to_delete.reserve(data_files_to_vacuum.size());
-    for (const auto& [name, dir_entry] : data_files_to_vacuum) {
-        bytes_to_delete += dir_entry.size.value_or(0);
-        files_to_delete.push_back(join_path(segment_root_location, name));
-    }
-    LOG(INFO) << segment_root_location << ": " << "Start to delete orphan data files: " << data_files_to_vacuum.size()
-              << ", total size: " << bytes_to_delete;
-
-    RETURN_IF_ERROR(do_delete_files(fs.get(), files_to_delete));
-
-    return std::pair<int64_t, int64_t>(files_to_delete.size(), bytes_to_delete);
-}
-
-Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& request, VacuumFullResponse* response) {
-    if (UNLIKELY(tablet_mgr == nullptr)) {
-        return Status::InvalidArgument("tablet_mgr is null");
-    }
-    if (UNLIKELY(request.partition_id() == 0)) {
-        return Status::InvalidArgument("partition_id is unset");
-    }
-    if (UNLIKELY(request.tablet_ids_size() == 0)) {
-        return Status::InvalidArgument("tablet_ids is empty");
-    }
-    if (UNLIKELY(request.min_active_txn_id() <= 0)) {
-        return Status::InvalidArgument("value of min_active_txn_id is unset or negative");
-    }
-    if (UNLIKELY(request.grace_timestamp() < 0)) {
-        return Status::InvalidArgument("value of grace_timestamp is unset or negative");
-    }
-    if (UNLIKELY(request.min_check_version() < 0)) {
-        return Status::InvalidArgument("value of min_check_version is unset or negative");
-    }
-    if (UNLIKELY(request.max_check_version() < 0)) {
-        return Status::InvalidArgument("value of max_check_version is unset or negative");
-    }
-
-    // init all relative request context
-    std::set<int64_t> tablet_ids_set;
-    for (const auto& tablet_id : request.tablet_ids()) {
-        tablet_ids_set.insert(tablet_id);
-    }
-    const auto grace_timestamp = request.grace_timestamp();
-    const auto min_active_txn_id = request.min_active_txn_id();
-    std::unordered_set<int64_t> retain_versions;
-    if (request.retain_versions_size() > 0) {
-        retain_versions.insert(request.retain_versions().begin(), request.retain_versions().end());
-    }
-    int64_t min_check_version = request.min_check_version();
-    int64_t max_check_version = request.max_check_version();
-    // protect the max check version
-    retain_versions.insert(max_check_version);
-
-    int64_t vacuumed_files = 0;
-    int64_t vacuumed_file_size = 0;
-
-    const std::string root_loc = tablet_mgr->tablet_root_location(request.tablet_ids().at(0));
-    const auto metadata_root_location = join_path(root_loc, kMetadataDirectoryName);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
-    ASSIGN_OR_RETURN(auto meta_files_and_bundle_files, list_meta_files(fs.get(), metadata_root_location));
-    auto& meta_files = meta_files_and_bundle_files.first;
-    auto& bundle_meta_files = meta_files_and_bundle_files.second;
-    // filter metas by check version interval
-    auto meta_filter = [min_check_version, max_check_version](auto& metas) {
-        std::erase_if(metas, [&](auto& meta_file) {
-            const auto& [_, version] = parse_tablet_metadata_filename(meta_file);
-            return version < min_check_version || version > max_check_version;
-        });
-    };
-    meta_filter(meta_files);
-    meta_filter(bundle_meta_files);
-
-    // 1. Before the orphaned data file cleanup even starts, delete metadata files which satisfy the following:
-    // (tablet_id not in request.tablet_ids OR tabletmeta.commit_time < grace_timestamp)
-
-    // 1a. Delete all metadata files associated with the given partition which are not in the list of tablet_ids
-    RETURN_IF_ERROR(vacuum_unspecified_tablet_metadata(
-                    tablet_mgr, root_loc, tablet_ids_set, &vacuumed_files, &meta_files, &bundle_meta_files));
-    // 1b. Delete all metadata files associated with the given partition which have tabletmeta.commit_time < grace_timestamp
-    // and the version of tablet meta should not be found in retain_versions
-    RETURN_IF_ERROR(vacuum_expired_tablet_metadata(
-                    tablet_mgr, root_loc, grace_timestamp, &vacuumed_files, &meta_files, &bundle_meta_files, retain_versions));
-
-    // 2. Determine and delete orphaned data files. We use min_active_txn_id to filter out new data files, then we open
-    // any remaining metadata files and note that the data files referenced are not orphans.
-    ASSIGN_OR_RETURN(auto count_and_size, vacuum_orphaned_datafiles(tablet_mgr, root_loc, min_active_txn_id, meta_files, bundle_meta_files));
-    vacuumed_files += count_and_size.first;
-    vacuumed_file_size += count_and_size.second;
-
-    // 3. deleted txn log which have txn id < min_active_txn_id
-    RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
-
-    response->set_vacuumed_files(vacuumed_files);
-    response->set_vacuumed_file_size(vacuumed_file_size);
-    return Status::OK();
-}
-
-void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, VacuumFullResponse* response) {
-    auto st = vacuum_full_impl(tablet_mgr, request, response);
-    st.to_protobuf(response->mutable_status());
 }
 
 } // namespace starrocks::lake
