@@ -26,5 +26,7 @@ public interface DynamicTablet {
 
     IdenticalTablet getIdenticalTablet();
 
+    long getFirstOldTabletId();
+
     long getParallelTablets();
 }
