@@ -44,22 +44,19 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
 
         @Override
         public void run() {
-            if (cancelled) {
-                return;
-            }
-            try {
-                states = coordinator.assignIncrementalScanRangesToDeployStates(deployer, states);
-                if (states.isEmpty()) {
-                    return;
+            while (!cancelled && !states.isEmpty()) {
+                try {
+                    states = coordinator.assignIncrementalScanRangesToDeployStates(deployer, states);
+                    if (states.isEmpty()) {
+                        return;
+                    }
+                    for (DeployState state : states) {
+                        deployer.deployFragments(state);
+                    }
+                } catch (StarRocksException | RpcException e) {
+                    throw new RuntimeException(e);
                 }
-                for (DeployState state : states) {
-                    deployer.deployFragments(state);
-                }
-            } catch (StarRocksException | RpcException e) {
-                throw new RuntimeException(e);
             }
-            // jvm should use tail optimization.
-            start();
         }
 
         public void start() {
