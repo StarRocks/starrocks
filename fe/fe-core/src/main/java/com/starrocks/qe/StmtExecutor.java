@@ -532,11 +532,13 @@ public class StmtExecutor {
         context.setIsLeaderTransferred(false);
         context.setCurrentThreadId(Thread.currentThread().getId());
 
-        // set execution id.
-        // Try to use query id as execution id when execute first time.
-        UUID uuid = context.getQueryId();
-        context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
         SessionVariable sessionVariableBackup = context.getSessionVariable();
+        // set execution id.
+        // For statements other than `cache select`, try to use query id as execution id when execute first time.
+        UUID uuid = context.getQueryId();
+        if (!sessionVariableBackup.isEnableCacheSelect()) {
+            context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
+        }
 
         // if use http protocol, use httpResultSender to send result to netty channel
         if (context instanceof HttpConnectContext) {
