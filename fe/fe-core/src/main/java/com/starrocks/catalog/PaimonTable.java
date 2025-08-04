@@ -39,7 +39,6 @@ import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.CoreOptions;
-import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.table.DataTable;
 import org.apache.paimon.types.DataField;
@@ -114,11 +113,7 @@ public class PaimonTable extends Table {
     @Override
     public String getUUID() {
         if (Strings.isNullOrEmpty(this.uuid)) {
-            if (!new Identifier(databaseName, tableName).isSystemTable()) {
-                this.uuid =  String.join(".", catalogName,  paimonNativeTable.uuid());
-            } else {
-                this.uuid =  String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid());
-            }
+            this.uuid =  String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid().replace(".", "_"));
         }
         return this.uuid;
     }
