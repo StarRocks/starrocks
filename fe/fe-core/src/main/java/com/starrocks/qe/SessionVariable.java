@@ -290,7 +290,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
-    public static final String ENABLE_SHARED_SCAN_V2 = "enable_shared_scan_v2";
     public static final String PIPELINE_DOP = "pipeline_dop";
     public static final String MAX_PIPELINE_DOP = "max_pipeline_dop";
 
