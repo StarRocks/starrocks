@@ -2641,8 +2641,9 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """Check the cluster status."""
 
         if not self.check_status:
-            # return
-            raise SkipTest("Test")
+            return
+        
+        raise SkipTest("check_status is False, skip check cluster status")
 
         err_msg = ""
         res = self.execute_sql("show backends;", ori=True)
