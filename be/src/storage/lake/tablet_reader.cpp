@@ -446,13 +446,7 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
 
         ConjunctivePredicates conjunctions;
         for (const auto& cond : conds) {
-            ColumnPredicate* pred = pred_parser.parse_thrift_cond(cond);
-            if (pred == nullptr) {
-                LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
-                             << "], condition_op[" << cond.condition_op << "], condition_values["
-                             << cond.condition_values[0] << "].";
-                continue;
-            }
+            ASSIGN_OR_RETURN(ColumnPredicate * pred, pred_parser.parse_thrift_cond(cond));
             conjunctions.add(pred);
             // save for memory release.
             _predicate_free_list.emplace_back(pred);
@@ -690,7 +684,7 @@ Status TabletReader::parse_seek_range(const TabletSchema& tablet_schema,
         SeekTuple upper;
         RETURN_IF_ERROR(to_seek_tuple(tablet_schema, range_start_key[i], &lower, mempool));
         RETURN_IF_ERROR(to_seek_tuple(tablet_schema, range_end_key[i], &upper, mempool));
-        ranges->emplace_back(SeekRange{std::move(lower), std::move(upper)});
+        ranges->emplace_back(std::move(lower), std::move(upper));
         ranges->back().set_inclusive_lower(lower_inclusive);
         ranges->back().set_inclusive_upper(upper_inclusive);
     }
