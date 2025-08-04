@@ -104,7 +104,7 @@ public class LakeReplicationJob extends ReplicationJob {
                     setState(ReplicationJobState.ABORTED);
                 } else if (isCrashRecovery()) {
                     sendReplicateLakeRemoteStorageTasks();
-                    LOG.info("Lake replication job recovered, super.getState(): {}, database id: {}, table id: {}, transaction id: {}",
+                    LOG.info("Lake replication job recovered, state: {}, database id: {}, table id: {}, transaction id: {}",
                             super.getState(), super.getDatabaseId(), super.getTableId(), super.getTransactionId());
                 } else if (isAllTaskFinished()) {
                     commitTransaction();
@@ -112,7 +112,7 @@ public class LakeReplicationJob extends ReplicationJob {
                 }
             }
         } catch (Exception e) {
-            LOG.warn("Lake replication job exception, super.getState(): {}, database id: {}, table id: {}, transaction id: {}, ",
+            LOG.warn("Lake replication job exception, state(): {}, database id: {}, table id: {}, transaction id: {}, ",
                     super.getState(), super.getDatabaseId(), super.getTableId(), super.getTransactionId(), e);
             abortTransaction(e.getMessage());
             setState(ReplicationJobState.ABORTED);
