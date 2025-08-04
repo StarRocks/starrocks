@@ -15,6 +15,7 @@
 package com.starrocks.alter.dynamictablet;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
@@ -240,6 +241,14 @@ public abstract class DynamicTabletJob implements Writable {
     public TDynamicTabletJobsItem getInfo() {
         TDynamicTabletJobsItem item = new TDynamicTabletJobsItem();
         item.setJob_id(jobId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            item.setDb_name("");
+            LOG.warn("Failed to get database name for dynamic tablet job. dbId: {}, jobId: {}", dbId, jobId);
+        } else {
+            item.setDb_name(db.getFullName());
+        }
+
         try {
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
             item.setTable_name(table.getName());
@@ -252,6 +261,8 @@ public abstract class DynamicTabletJob implements Writable {
         item.setTable_id(tableId);
         item.setJob_type(jobType.name());
         item.setJob_state(jobState.name());
+        item.setTransaction_id(-1L); // override in the future pr.
+        item.setParallel_tablets(getParallelTablets());
         item.setCreated_time(createdTimeMs / 1000);
         item.setFinished_time(finishedTimeMs / 1000);
         if (errorMessage != null) {

@@ -23,11 +23,14 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaDynamicTabletJobsScanner::_s_columns[] = {
         {"JOB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"DB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
         {"TABLE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
         {"JOB_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"JOB_STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"TRANSACTION_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"PARALLEL_TABLETS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
         {"CREATED_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"FINISHED_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
@@ -54,12 +57,15 @@ Status SchemaDynamicTabletJobsScanner::_fill_chunk(ChunkPtr* chunk) {
     const TDynamicTabletJobsItem& info = _result.items[_index];
     DatumArray datum_array{
             info.job_id,
+            Slice(info.db_name),
             Slice(info.table_name),
             info.db_id,
             info.table_id,
 
             Slice(info.job_type),
             Slice(info.job_state),
+            info.transaction_id,
+            info.parallel_tablets,
 
             TimestampValue::create_from_unixtime(info.created_time, _runtime_state->timezone_obj()),
 
