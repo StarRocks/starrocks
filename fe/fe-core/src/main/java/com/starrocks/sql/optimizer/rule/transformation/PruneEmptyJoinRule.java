@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
@@ -61,6 +62,7 @@ public class PruneEmptyJoinRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        Preconditions.checkState(input.getOp().getProjection() == null);
         LogicalJoinOperator join = input.getOp().cast();
         JoinOperator type = join.getJoinType();
 
