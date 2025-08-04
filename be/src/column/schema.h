@@ -100,6 +100,27 @@ public:
 
     void init_sort_key_idxes() { _init_sort_key_idxes(); }
 
+    std::string to_string() const {
+        std::ostringstream oss;
+        oss << "{";
+        oss << "\"fields\": [";
+        for (size_t i = 0; i < _fields.size(); ++i) {
+            oss << _fields[i]->to_string();
+            if (i + 1 < _fields.size()) oss << ", ";
+        }
+        oss << "], ";
+        oss << "\"num_keys\": " << _num_keys << ", ";
+        oss << "\"sort_key_idxes\": [";
+        for (size_t i = 0; i < _sort_key_idxes.size(); ++i) {
+            oss << _sort_key_idxes[i];
+            if (i + 1 < _sort_key_idxes.size()) oss << ", ";
+        }
+        oss << "], ";
+        oss << "\"keys_type\": " << static_cast<int>(_keys_type);
+        oss << "}";
+        return oss.str();
+    }
+
 private:
     void _build_index_map(const Fields& fields);
     void _init_sort_key_idxes() {

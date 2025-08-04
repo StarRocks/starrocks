@@ -62,6 +62,8 @@ public:
 
     ordinal_t num_rows() const override { return 1 + (_stop - _start) / _step; }
 
+    std::string name() const override { return "SeriesColumnIterator"; }
+
 private:
     T _start;
     T _stop;

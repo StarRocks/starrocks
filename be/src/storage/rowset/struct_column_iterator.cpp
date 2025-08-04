@@ -61,6 +61,8 @@ public:
     StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
                                                                         Column* dst) override;
 
+    std::string name() const override { return "StructColumnIterator"; }
+
 private:
     ColumnReader* _reader;
 

@@ -826,6 +826,8 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
             DCHECK(_flat_columns.size() > index);
             DCHECK(_flat_columns[index]->is_nullable());
             auto* c = down_cast<NullableColumn*>(_flat_columns[index].get());
+            DCHECK(flat_json::JSON_EXTRACT_FUNC.contains(child->second->type))
+                    << "unsupported json type: " << child->second->type;
             auto func = flat_json::JSON_EXTRACT_FUNC.at(child->second->type);
             func(&v, c);
             *hit_count += 1;

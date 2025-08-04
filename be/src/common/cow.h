@@ -229,8 +229,8 @@ protected:
     MutablePtr try_mutate() const {
 #ifndef NDEBUG
         if (VLOG_IS_ON(1)) {
-            VLOG(1) << "[COW] trigger COW: " << this << ", use_count=" << this->use_count() << ", try to "
-                    << (this->use_count() > 1 ? "deep" : "shadow") << " clone";
+            VLOG(10) << "[COW] trigger COW: " << this << ", use_count=" << this->use_count() << ", try to "
+                     << (this->use_count() > 1 ? "deep" : "shadow") << " clone";
         }
 #endif
         if (this->use_count() > 1) {

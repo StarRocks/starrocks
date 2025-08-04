@@ -52,13 +52,16 @@
 #include "storage/rowset/cast_column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
+#include "storage/rowset/json_column_iterator.h"
 #include "storage/rowset/page_io.h"
+#include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
 #include "storage/utils.h"
 #include "util/crc32c.h"
 #include "util/failpoint/fail_point.h"
+#include "util/json_flattener.h"
 #include "util/slice.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
@@ -458,7 +461,12 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
                                                                  column.scale());
             return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
         }
-    } else if (!column.has_default_value() && !column.is_nullable()) {
+    }
+    if (column.is_extended()) {
+        return _new_extended_column_iterator(column, path);
+    }
+
+    if (!column.has_default_value() && !column.is_nullable()) {
         return Status::InternalError(
                 fmt::format("invalid nonexistent column({}) without default value.", column.name()));
     } else {
@@ -472,12 +480,61 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
     }
 }
 
+StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const TabletColumn& column,
+                                                                    ColumnAccessPath* path) {
+    auto extended_info = column.extended_info();
+    RETURN_IF(extended_info == nullptr, Status::InvalidArgument("extended info is null"));
+    auto source_index = extended_info->source_column_index;
+    RETURN_IF(source_index < 0 || static_cast<size_t>(source_index) >= _tablet_schema->num_columns(),
+              Status::InvalidArgument(fmt::format("invalid source column index: {}", source_index)));
+    auto access_path = extended_info->access_path;
+    RETURN_IF(access_path == nullptr, Status::InvalidArgument("access path is null for extended column"));
+
+    auto source_id = _tablet_schema->column(source_index).unique_id();
+    std::string full_path = access_path->linear_path();
+    auto [col_name, field_name] = JsonFlatPath::split_path(full_path);
+    auto& leaf_type = access_path->leaf_value_type();
+    RETURN_IF(!_column_readers.contains(source_id),
+              Status::RuntimeError(fmt::format("unknown root column: {}", source_id)));
+
+    // Check if it's a sub-column of FlatJSON
+    // case 1: it's not a FlatJSON
+    // case 2: it's a FlatJSON, but it's not a flatten column in the FlatJSON
+    auto sub_readers = _column_readers[source_id]->sub_readers();
+    if (sub_readers) {
+        for (auto& sub_reader : *sub_readers) {
+            if (field_name == sub_reader->name()) {
+                auto source_iter = std::make_unique<ScalarColumnIterator>(sub_reader.get());
+                LogicalType reader_type = sub_reader.get()->column_type();
+                VLOG(2) << fmt::format(
+                        "create extended_column_iterator for full_path={} field={} reader_type={}, expected_type={}",
+                        full_path, field_name, reader_type, column.type());
+
+                if (reader_type == column.type()) {
+                    return source_iter;
+                } else {
+                    auto nullable = sub_reader->is_nullable();
+                    auto source_type = TypeDescriptor::from_logical_type(reader_type);
+                    auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(),
+                                                                         column.precision(), column.scale());
+                    return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type,
+                                                                nullable);
+                }
+            }
+        }
+    }
+
+    // Build a regular ColumnIterator to read it
+    ASSIGN_OR_RETURN(auto source_iter, _column_readers[source_id]->new_iterator(path, &column));
+    return create_json_extract_iterator(std::move(source_iter), std::string(field_name), leaf_type.type);
+}
+
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const TabletColumn& column,
                                                                        ColumnAccessPath* path) {
     auto id = column.unique_id();
     auto iter = _column_readers.find(id);
     if (iter != _column_readers.end()) {
-        ASSIGN_OR_RETURN(auto source_iter, iter->second->new_iterator(path, nullptr));
+        ASSIGN_OR_RETURN(auto source_iter, iter->second->new_iterator(path, &column));
         if (iter->second->column_type() == column.type()) {
             return source_iter;
         } else {
