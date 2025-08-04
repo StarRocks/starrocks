@@ -59,8 +59,8 @@ message(STATUS "Build target arch is ${CMAKE_BUILD_TARGET_ARCH}")
 
 # Set dirs
 set(BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-set(RELATIVE_BASE_DIR "be")
-set(FILE_PREFIX_MAP_FLAG "-ffile-prefix-map=${BASE_DIR}=${RELATIVE_BASE_DIR}")
+# CMAKE_BINARY_DIR is set to be $BASE_DIR/be/build_${buildType}
+set(FILE_PREFIX_MAP_FLAG "-ffile-prefix-map=${CMAKE_BINARY_DIR}=. -ffile-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=be")
 set(BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 set(THIRDPARTY_DIR "$ENV{STARROCKS_THIRDPARTY}/installed/")
 set(STARROCKS_THIRDPARTY "$ENV{STARROCKS_THIRDPARTY}")
