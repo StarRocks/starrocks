@@ -281,7 +281,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
     return Status::OK();
 }
 
-uint8_t VariantUtil::primitiveHeader(VariantPrimitiveType primitive){
+uint8_t VariantUtil::primitiveHeader(VariantPrimitiveType primitive) {
     return static_cast<uint8_t>(primitive) << 2;
 }
 
