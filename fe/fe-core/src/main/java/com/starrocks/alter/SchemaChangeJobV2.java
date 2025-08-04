@@ -179,6 +179,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     private List<Integer> sortKeyIdxes;
     @SerializedName(value = "sortKeyUniqueIds")
     private List<Integer> sortKeyUniqueIds;
+    // If disableReplicatedStorageForGIN is true, which means this job is adding gin index and table's replicated_storage is true,
+    // and we need to disable it.
     @SerializedName(value = "disableReplicatedStorageForGIN")
     private boolean disableReplicatedStorageForGIN = false;
 
