@@ -25,6 +25,7 @@
 #include "types/hll.h"
 #include "util/json.h"
 #include "util/percentile_value.h"
+#include "util/variant_value.h"
 
 namespace starrocks {
 
