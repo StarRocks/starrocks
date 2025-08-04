@@ -222,7 +222,7 @@ Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnap
               << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
               << ", src_db_id: " << request.src_db_id << ", src_table_id: " << request.src_table_id
               << ", src_partition_id: " << request.src_partition_id << ", visible_version: " << request.visible_version
-              << ", data_version: " << request.data_version << ", faked_shard_id: " << request.faked_shard_id
+              << ", data_version: " << request.data_version << ", virtual_tablet_id: " << request.virtual_tablet_id
               << ", src_visible_version: " << request.src_visible_version;
 
     auto txn_id = request.transaction_id;
@@ -238,8 +238,8 @@ Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnap
             << ", data dir: " << src_data_dir << ", txn_id: " << txn_id << ", src_tablet_id: " << src_tablet_id
             << ", target_tablet_id: " << target_tablet_id;
 
-    // use faked_shard_id here to distinguish src starlet fs
-    ASSIGN_OR_RETURN(auto shared_src_fs, get_or_create_shared_src_fs(request.faked_shard_id));
+    // use virtual_tablet_id here to distinguish src starlet fs
+    ASSIGN_OR_RETURN(auto shared_src_fs, get_or_create_shared_src_fs(request.virtual_tablet_id));
     ASSIGN_OR_RETURN(auto last_src_tablet_meta,
                      build_source_tablet_meta(src_tablet_id, request.data_version, src_meta_dir, shared_src_fs));
     ASSIGN_OR_RETURN(auto current_src_tablet_meta,
@@ -334,25 +334,25 @@ Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnap
               << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
               << ", src_db_id: " << request.src_db_id << ", src_table_id: " << request.src_table_id
               << ", src_partition_id: " << request.src_partition_id << ", visible_version: " << request.visible_version
-              << ", data_version: " << request.data_version << ", faked_shard_id: " << request.faked_shard_id
+              << ", data_version: " << request.data_version << ", virtual_tablet_id: " << request.virtual_tablet_id
               << ", src_visible_version: " << request.src_visible_version;
 
     clean_files.cancel();
     return Status::OK();
 }
 
-StatusOr<std::shared_ptr<FileSystem>> ReplicationTxnManager::get_or_create_shared_src_fs(int64_t faked_shard_id) {
+StatusOr<std::shared_ptr<FileSystem>> ReplicationTxnManager::get_or_create_shared_src_fs(int64_t virtual_tablet_id) {
     std::shared_ptr<FileSystem> shared_src_fs;
-    auto it = _faked_starlet_fs_map.find(faked_shard_id);
+    auto it = _faked_starlet_fs_map.find(virtual_tablet_id);
     if (it != _faked_starlet_fs_map.end()) {
         shared_src_fs = it->second;
     } else {
-        shared_src_fs = new_fs_starlet_with_shard_fs(faked_shard_id);
+        shared_src_fs = new_fs_starlet_with_shard_fs(virtual_tablet_id);
         if (shared_src_fs == nullptr) {
             return Status::InternalError(
-                    fmt::format("Failed to create file system for faked shard id {}", faked_shard_id));
+                    fmt::format("Failed to create file system for virtual tablet id {}", virtual_tablet_id));
         }
-        _faked_starlet_fs_map.insert({faked_shard_id, shared_src_fs});
+        _faked_starlet_fs_map.insert({virtual_tablet_id, shared_src_fs});
     }
     return shared_src_fs;
 }
