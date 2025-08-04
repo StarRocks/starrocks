@@ -243,18 +243,25 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     if (res.ok()) {
                         auto metadata = std::move(res).value();
                         auto score = compaction_score(_tablet_mgr, metadata);
-                        std::lock_guard l(response_mtx);
-                        response->mutable_compaction_scores()->insert({tablet_id, score});
-                        if (request->base_version() == 1) {
-                            int64_t row_nums = std::accumulate(
-                                    metadata->rowsets().begin(), metadata->rowsets().end(), 0,
-                                    [](int64_t sum, const auto& rowset) { return sum + rowset.num_rows(); });
-                            // Used to collect statistics when the partition is first imported
-                            response->mutable_tablet_row_nums()->insert({tablet_id, row_nums});
+                        TabletMetadataPB* prealloc_metadata = nullptr;
+                        {
+                            std::lock_guard l(response_mtx);
+                            response->mutable_compaction_scores()->insert({tablet_id, score});
+                            if (request->base_version() == 1) {
+                                int64_t row_nums = std::accumulate(
+                                        metadata->rowsets().begin(), metadata->rowsets().end(), 0,
+                                        [](int64_t sum, const auto& rowset) { return sum + rowset.num_rows(); });
+                                // Used to collect statistics when the partition is first imported
+                                response->mutable_tablet_row_nums()->insert({tablet_id, row_nums});
+                            }
+                            if (skip_write_tablet_metadata) {
+                                auto& map = *response->mutable_tablet_metas();
+                                prealloc_metadata = &map[tablet_id];
+                            }
                         }
-                        if (skip_write_tablet_metadata) {
-                            auto& map = *response->mutable_tablet_metas();
-                            map[tablet_id].CopyFrom(*metadata);
+                        // Move copy metadata out of the lock(response_mtx), to let it execute in parallel.
+                        if (prealloc_metadata != nullptr) {
+                            prealloc_metadata->CopyFrom(*metadata);
                         }
                     } else {
                         g_publish_version_failed_tasks << 1;
@@ -350,7 +357,8 @@ struct AggregatePublishContext {
             (*response->mutable_tablet_row_nums())[tid] = row_num;
         }
         for (auto& [tid, meta] : *resp->mutable_tablet_metas()) {
-            tablet_metas.emplace(tid, std::move(meta));
+            // Use swap to avoid copy
+            tablet_metas[tid].Swap(&meta);
         }
     }
 
