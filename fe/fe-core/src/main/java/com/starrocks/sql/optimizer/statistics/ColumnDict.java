@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.common.Config;
 
 import java.nio.ByteBuffer;
 
@@ -28,7 +29,13 @@ public final class ColumnDict {
     private long version;
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long version) {
+<<<<<<< HEAD
         Preconditions.checkState(dict.size() > 0 && dict.size() <= 256,
+=======
+        super(version, version);
+        // TODO: The default value of low_cardinality_threshold is 255. Should we set the check size to 255 or 256?
+        Preconditions.checkState(!dict.isEmpty() && dict.size() <= Config.low_cardinality_threshold + 1,
+>>>>>>> 64b47d48ea ([BugFix] Fix the bug where increasing low_cardinality_threshold does not take effect (#61552))
                 "dict size %s is illegal", dict.size());
         this.dict = dict;
         this.collectedVersion = version;
