@@ -3326,7 +3326,8 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 5: v4\n" +
                 "  |  equal join conjunct: 4: count = 8: count\n" +
-                "  |  other predicates: ((1: v1 != 1) AND (if(8: count = 1, 'a', 'b') = 'b')) OR ((1: v1 = 1) AND (if(8: count = 1, 'a', 'b') = 'b')), if(8: count = 1, 'a', 'b') = 'b'\n" +
+                "  |  other predicates: ((1: v1 != 1) AND (if(8: count = 1, 'a', 'b') = 'b')) OR ((1: v1 = 1) AND " +
+                "(if(8: count = 1, 'a', 'b') = 'b')), if(8: count = 1, 'a', 'b') = 'b'\n" +
                 "  |  \n" +
                 "  |----5:EXCHANGE\n" +
                 "  |    \n" +
