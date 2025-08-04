@@ -28,16 +28,6 @@
 
 namespace starrocks::lake {
 
-static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::vector<std::string>& metafiles) {
-    auto cache = tablet_mgr->metacache();
-    DCHECK(cache != nullptr);
-    // Assuming the cache key for tablet metadata is the path to tablet metadata.
-    // TODO: Refactor the code to extract a separate function that constructs the tablet metadata cache key
-    for (const auto& path : metafiles) {
-        cache->erase(path);
-    }
-}
-
 static Status vacuum_unspecified_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_loc,
                                                  const std::set<int64_t>& tablet_ids, int64_t* vacuumed_files,
                                                  std::list<std::string>* meta_files,
@@ -48,7 +38,11 @@ static Status vacuum_unspecified_tablet_metadata(TabletManager* tablet_mgr, std:
     DCHECK(bundle_meta_files != nullptr);
 
     auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
-        erase_tablet_metadata_from_metacache(tablet_mgr, files);
+        auto cache = tablet_mgr->metacache();
+        DCHECK(cache != nullptr);
+        for (const auto& path : files) {
+            cache->erase(path);
+        }
     };
     AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
     std::vector<std::string> unspecified_metas;
@@ -112,7 +106,11 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
     }
 
     auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
-        erase_tablet_metadata_from_metacache(tablet_mgr, files);
+        auto cache = tablet_mgr->metacache();
+        DCHECK(cache != nullptr);
+        for (const auto& path : files) {
+            cache->erase(path);
+        }
     };
     AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
     std::vector<std::string> expired_metas;

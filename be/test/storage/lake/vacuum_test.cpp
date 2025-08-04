@@ -239,7 +239,7 @@ TEST_P(LakeVacuumTest, test_vacuum_full) {
     EXPECT_TRUE(file_exist(tablet_metadata_filename(66600, 3)));
 
     VacuumFullResponse response;
-    lake::vacuum_full(_tablet_mgr.get(), request, &response);
+    vacuum_full(_tablet_mgr.get(), request, &response);
 
     ASSERT_TRUE(response.has_status());
     EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
@@ -378,7 +378,7 @@ TEST_P(LakeVacuumTest, test_vacuum_full_with_bundle) {
     EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 8)));
 
     VacuumFullResponse response;
-    lake::vacuum_full(_tablet_mgr.get(), request, &response);
+    vacuum_full(_tablet_mgr.get(), request, &response);
 
     ASSERT_TRUE(response.has_status());
     EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
