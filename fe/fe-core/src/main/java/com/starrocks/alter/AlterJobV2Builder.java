@@ -47,7 +47,7 @@ public abstract class AlterJobV2Builder {
     protected List<Integer> sortKeyIdxes;
     protected List<Integer> sortKeyUniqueIds;
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
-    protected boolean addingGINIndex = false;
+    protected boolean disableReplicatedStorageForGIN = false;
 
     // -------- for roll up-----------------
     protected long baseIndexId;
@@ -193,8 +193,8 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
-    public AlterJobV2Builder withAddingGINIndex(boolean addingGINIndex) {
-        this.addingGINIndex = addingGINIndex;
+    public AlterJobV2Builder withDisableReplicatedStorageForGIN(boolean disableReplicatedStorageForGIN) {
+        this.disableReplicatedStorageForGIN = disableReplicatedStorageForGIN;
         return this;
     }
 

@@ -272,9 +272,6 @@ public class OlapTable extends Table {
     @SerializedName(value = "sessionId")
     protected UUID sessionId = null;
 
-    @SerializedName(value = "addingGINIndex")
-    protected boolean addingGINIndex = false;
-
     protected BinlogConfig curBinlogConfig;
 
     // After ensuring that all binlog config of tablets in BE have taken effect,
@@ -449,7 +446,6 @@ public class OlapTable extends Table {
             olapTable.curBinlogConfig = new BinlogConfig(this.curBinlogConfig);
         }
         olapTable.dbName = this.dbName;
-        olapTable.addingGINIndex = this.addingGINIndex;
     }
 
     public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {
@@ -1923,14 +1919,6 @@ public class OlapTable extends Table {
         return tempPartitions.getPartition(partitionId) != null;
     }
 
-    public boolean isAddingGINIndex() {
-        return addingGINIndex;
-    }
-
-    public void setAddingGINIndex(boolean addingGINIndex) {
-        this.addingGINIndex = addingGINIndex;
-    }
-
     @Override
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         TOlapTable tOlapTable = new TOlapTable(getName());
@@ -2675,7 +2663,7 @@ public class OlapTable extends Table {
 
     public Boolean enableReplicatedStorage() {
         if (tableProperty != null) {
-            return tableProperty.enableReplicatedStorage() && !addingGINIndex;
+            return tableProperty.enableReplicatedStorage();
         }
         return false;
     }

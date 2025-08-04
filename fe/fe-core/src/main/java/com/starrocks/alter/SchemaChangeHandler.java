@@ -1403,11 +1403,11 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // check gin index
-        // if there are gin index in table, set replicated_stroage to false.
-        boolean addingGINIndex = false;
+        // if there are gin index in table, set replicated_storage to false.
+        boolean disableReplicatedStorageForGIN = false;
         for (Index index : indexes) {
             if (index.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
-                addingGINIndex = true;
+                disableReplicatedStorageForGIN = true;
                 break;
             }
         }
@@ -1500,7 +1500,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withAlterIndexInfo(hasIndexChange, indexes)
                 .withBloomFilterColumns(bfColumnIds, bfFpp)
                 .withBloomFilterColumnsChanged(hasBfChange)
-                .withAddingGINIndex(addingGINIndex);
+                .withDisableReplicatedStorageForGIN(disableReplicatedStorageForGIN);
 
         if (RunMode.isSharedDataMode()) {
             // check warehouse
@@ -3146,7 +3146,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
                 .withNewIndexSchema(schemaChangeData.getNewIndexSchema())
                 .withComputeResource(schemaChangeData.getComputeResource())
-                .withAddingGINIndex(schemaChangeData.isAddingGINIndex())
+                .withDisableReplicatedStorageForGIN(schemaChangeData.isDisableReplicatedStorageForGIN())
                 .build();
     }
 }

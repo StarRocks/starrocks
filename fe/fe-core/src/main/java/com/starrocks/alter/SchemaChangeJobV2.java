@@ -179,8 +179,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     private List<Integer> sortKeyIdxes;
     @SerializedName(value = "sortKeyUniqueIds")
     private List<Integer> sortKeyUniqueIds;
-    @SerializedName(value = "addingGINIndex")
-    private boolean addingGINIndex = false;
+    @SerializedName(value = "disableReplicatedStorageForGIN")
+    private boolean disableReplicatedStorageForGIN = false;
 
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
@@ -272,8 +272,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.watershedTxnId = txnId;
     }
 
-    public void setAddingGINIndex(boolean addingGINIndex) {
-        this.addingGINIndex = addingGINIndex;
+    public void setDisableReplicatedStorageForGIN(boolean disableReplicatedStorageForGIN) {
+        this.disableReplicatedStorageForGIN = disableReplicatedStorageForGIN;
     }
 
     /**
@@ -448,8 +448,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         try {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             addShadowIndexToCatalog(tbl);
-            if (addingGINIndex && tbl.enableReplicatedStorage()) {
-                tbl.setAddingGINIndex(true);
+            if (disableReplicatedStorageForGIN) {
+                tbl.setEnableReplicatedStorage(false);
             }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
@@ -946,11 +946,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         if (indexChange) {
             tbl.setIndexes(indexes);
         }
-        // disable replicated storage if addingGINIndex is true
-        if (addingGINIndex && tbl.enableReplicatedStorage()) {
-            tbl.setEnableReplicatedStorage(false);
-            tbl.setAddingGINIndex(false);
-        }
 
         LOG.debug("fullSchema:{}, maxColUniqueId:{}", tbl.getFullSchema(), tbl.getMaxColUniqueId());
 
@@ -1027,7 +1022,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         tbl.deleteIndexInfo(shadowIndexName);
                     }
                     tbl.setState(OlapTableState.NORMAL);
-                    tbl.setAddingGINIndex(false);
+                    if (disableReplicatedStorageForGIN) {
+                        tbl.setEnableReplicatedStorage(true);
+                    }
                 } finally {
                     locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
                 }
@@ -1085,8 +1082,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
             // set table state
             tbl.setState(OlapTableState.SCHEMA_CHANGE);
-            if (addingGINIndex && tbl.enableReplicatedStorage()) {
-                tbl.setAddingGINIndex(true);
+            if (disableReplicatedStorageForGIN) {
+                tbl.setEnableReplicatedStorage(false);
             }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);

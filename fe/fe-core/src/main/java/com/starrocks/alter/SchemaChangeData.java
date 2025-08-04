@@ -46,7 +46,7 @@ class SchemaChangeData {
     private final List<Integer> sortKeyUniqueIds;
     private final long warehouseId;
     private final ComputeResource computeResource;
-    private final boolean addingGINIndex;
+    private final boolean disableReplicatedStorageForGIN;
 
     static Builder newBuilder() {
         return new Builder();
@@ -114,8 +114,8 @@ class SchemaChangeData {
         return computeResource;
     }
 
-    boolean isAddingGINIndex() {
-        return addingGINIndex;
+    boolean isDisableReplicatedStorageForGIN() {
+        return disableReplicatedStorageForGIN;
     }
 
     private SchemaChangeData(Builder builder) {
@@ -133,7 +133,7 @@ class SchemaChangeData {
         this.sortKeyUniqueIds = builder.sortKeyUniqueIds;
         this.warehouseId = builder.warehouseId;
         this.computeResource = builder.computeResource;
-        this.addingGINIndex = builder.addingGINIndex;
+        this.disableReplicatedStorageForGIN = builder.disableReplicatedStorageForGIN;
     }
 
     static class Builder {
@@ -151,7 +151,7 @@ class SchemaChangeData {
         private List<Integer> sortKeyUniqueIds;
         private long warehouseId;
         private ComputeResource computeResource;
-        private boolean addingGINIndex = false;
+        private boolean disableReplicatedStorageForGIN = false;
 
         private Builder() {
         }
@@ -214,8 +214,8 @@ class SchemaChangeData {
             return this;
         }
 
-        Builder withAddingGINIndex(boolean addingGINIndex) {
-            this.addingGINIndex = addingGINIndex;
+        Builder withDisableReplicatedStorageForGIN(boolean disableReplicatedStorageForGIN) {
+            this.disableReplicatedStorageForGIN = disableReplicatedStorageForGIN;
             return this;
         }
 
