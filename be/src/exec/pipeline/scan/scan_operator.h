@@ -115,6 +115,11 @@ public:
         });
     }
 
+    // notify the operator with the given driver sequence
+    auto defer_notify(int& driver_seq) {
+        return DeferOp([this, &driver_seq]() { _source_factory()->observes().notify_source_observer(driver_seq); });
+    }
+
 protected:
     // TODO: remove this to the base ScanContext.
     /// Shared scan
@@ -320,6 +325,11 @@ protected:
 
 inline auto scan_defer_notify(ScanOperator* scan_op) {
     return scan_op->defer_notify([scan_op]() -> bool { return scan_op->need_notify_all(); });
+}
+
+// notify the operator with the given driver sequence
+inline auto scan_defer_notify(ScanOperator* scan_op, int& seq) {
+    return scan_op->defer_notify(seq);
 }
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,

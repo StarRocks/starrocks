@@ -37,7 +37,7 @@ public:
     size_t size(int buffer_index) const;
     bool empty(int buffer_index) const;
     bool try_get(int buffer_index, ChunkPtr* output_chunk);
-    bool put(int buffer_index, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token);
+    bool put(int buffer_index, int* actual_buffer, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token);
     void close();
     // Mark that it needn't produce any chunk anymore.
     void set_finished(int buffer_index);
