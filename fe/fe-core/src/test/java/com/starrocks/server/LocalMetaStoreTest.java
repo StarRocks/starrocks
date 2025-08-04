@@ -22,6 +22,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -49,6 +51,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -120,6 +123,14 @@ public class LocalMetaStoreTest {
 
     @Test
     public void testGetPartitionIdToStorageMediumMap() throws Exception {
+        new MockUp<MaterializedViewOptimizer>() {
+            @Mock
+            public MvPlanContext optimize(MaterializedView mv,
+                                          ConnectContext connectContext) {
+                return null;
+            }
+        };
+
         starRocksAssert.withMaterializedView(
                     "CREATE MATERIALIZED VIEW test.mv1\n" +
                                 "distributed by hash(k1) buckets 3\n" +
@@ -146,7 +157,6 @@ public class LocalMetaStoreTest {
                 Assertions.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, info.getDataProperty().getCooldownTimeMs());
             }
         };
-
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         localMetastore.getPartitionIdToStorageMediumMap();
         // Clean test.mv1, avoid its refreshment affecting other cases in this testsuite.
