@@ -2615,11 +2615,19 @@ TEST_F(LakeServiceTest, test_aggregate_publish_version) {
         _lake_service.aggregate_publish_version(&cntl, &request, &response, done);
 
         EXPECT_EQ(response.status().status_code(), 0);
+        // read tablet id - 1
         auto res = _tablet_mgr->get_single_tablet_metadata(1, 2);
         ASSERT_TRUE(res.ok());
+        // check tablet id
+        ASSERT_EQ(res.value()->id(), 1);
         TabletMetadataPtr metadata3 = std::move(res).value();
         ASSERT_EQ(metadata3->schema().id(), 10);
         ASSERT_EQ(metadata3->historical_schemas_size(), 2);
+        // read tablet id - 2
+        auto res2 = _tablet_mgr->get_single_tablet_metadata(2, 2);
+        ASSERT_TRUE(res2.ok());
+        // check tablet id
+        ASSERT_EQ(res2.value()->id(), 2);
     }
 
     // publish version failed
