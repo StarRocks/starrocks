@@ -228,11 +228,11 @@ Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnap
     auto txn_id = request.transaction_id;
     auto src_tablet_id = request.src_tablet_id;
     auto target_tablet_id = request.tablet_id;
-    auto partition_path = fmt::format("db{}/{}/{}", request.src_db_id, request.src_table_id, request.src_partition_id);
-    auto src_root_loc = _tablet_manager->tablet_root_location(src_tablet_id);
-    auto src_root_full_path = join_path(src_root_loc, partition_path);
-    auto src_meta_dir = join_path(src_root_full_path, kMetadataDirectoryName);
-    auto src_data_dir = join_path(src_root_full_path, kSegmentDirectoryName);
+
+    auto src_meta_dir = _remote_location_provider->metadata_root_location(
+            src_tablet_id, request.src_db_id, request.src_table_id, request.src_partition_id);
+    auto src_data_dir = _remote_location_provider->segment_root_location(
+            src_tablet_id, request.src_db_id, request.src_table_id, request.src_partition_id);
 
     VLOG(3) << "Lake replicate storage task, built source meta and data dir, meta dir: " << src_meta_dir
             << ", data dir: " << src_data_dir << ", txn_id: " << txn_id << ", src_tablet_id: " << src_tablet_id

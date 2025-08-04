@@ -18,6 +18,7 @@
 #include "fs/encryption.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/macros.h"
+#include "storage/lake/remote_starlet_location_provider.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
@@ -100,6 +101,8 @@ private:
 
 private:
     lake::TabletManager* _tablet_manager;
+    std::unique_ptr<lake::RemoteStarletLocationProvider> _remote_location_provider =
+            std::make_unique<lake::RemoteStarletLocationProvider>();
     std::unordered_map<int64_t, std::shared_ptr<FileSystem>> _faked_starlet_fs_map;
 };
 
