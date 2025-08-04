@@ -92,6 +92,9 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.connector.iceberg.IcebergRewriteData;
 import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpResultSender;
@@ -116,6 +119,7 @@ import com.starrocks.persist.SqlBlackListPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
+import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
@@ -153,6 +157,9 @@ import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableOperationClause;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
@@ -2113,8 +2120,101 @@ public class StmtExecutor {
         return explainString;
     }
 
+    // private void reviseScanNodeRange(IcebergScanNode scanNode, double batchSize) {
+    //     IcebergConnectorScanRangeSource source = scanNode.getSourceRange();
+    //     Map<StructLikeWrapper, List<TaskGroup>> partitionedTasks = new HashMap<>();
+    //     while (source.hasMoreOutput()) {
+    //         List<FileScanTask> tasks = source.getSourceFileScanOutputs(100);
+    //         for (FileScanTask task : tasks) {
+    //             PartitionSpec spec = task.spec();
+    //             StructLikeWrapper partitionWrapper = StructLikeWrapper.forType(spec.partitionType());
+    //             StructLikeWrapper partition = partitionWrapper.copyFor(task.file().partition());
+    //             partitionedTasks.putIfAbsent(partition, new ArrayList<TaskGroup>());
+    //             List<TaskGroup> taskGroups = partitionedTasks.get(partition);
+    //             boolean put = false;
+
+    //             for (TaskGroup tg : taskGroups) {
+    //                 if (tg.getTotalSize() + task.file().fileSizeInBytes() <= batchSize) {
+    //                     tg.addTask(task);
+    //                     put = true;
+    //                     break;
+    //                 }
+    //             }
+
+    //             if (!put) {
+    //                 TaskGroup tg = new TaskGroup();
+    //                 tg.addTask(task);
+    //                 taskGroups.add(tg);
+    //             }
+    //         }
+    //     }
+
+    //     for (int i = 0; i < )
+    // }
+
+    private void handleIcebergRewrite(
+            boolean rewriteAll, long minFileSizeBytes, double batchSize, Expr partitionFilter) {
+        AlterTableStmt stmt = (AlterTableStmt) parsedStmt;
+        String catalogName = stmt.getCatalogName();
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTableName();
+        String insertSelect = String.format("INSERT INTO %s.%s.%s SELECT * from %s.%s.%s where %s;",
+                catalogName, dbName, tableName, catalogName, dbName, tableName, partitionFilter.toSql());
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parse(insertSelect, context.getSessionVariable()).get(0);
+        ((InsertStmt) statementBase).setRewrite(true);
+        ((InsertStmt) statementBase).setRewriteThreshold(minFileSizeBytes);
+        ExecPlan execPlan = StatementPlanner.plan(statementBase, context);
+        List<IcebergScanNode> scanNodes = execPlan.getFragments().stream()
+                .flatMap(fragment -> fragment.collectScanNodes().values().stream())
+                .filter(scan -> scan instanceof IcebergScanNode && "IcebergScanNode".equals(scan.getPlanNodeName()))
+                .map(scan -> (IcebergScanNode) scan)
+                .collect(Collectors.toList());
+        for (IcebergScanNode scanNode : scanNodes) {
+            IcebergRewriteData rewriteData = new IcebergRewriteData();
+            rewriteData.setSource(scanNode.getSourceRange());
+            rewriteData.setBatchSize((long) (batchSize * 1024 * 1024 * 1024));
+            rewriteData.buildNewScanNodeRange();
+            try {
+                while (rewriteData.hasMoreTaskGroup()) {
+                    scanNode.getSourceRange().clearScannedFiles();
+                    List<RemoteFileInfo> res = rewriteData.nextTaskGroup();
+                    scanNode.rebuildScanRange(res);
+                    // context.setQueryId(UUIDUtil.genUUID());
+                    // context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
+                    // If we use the same execution id, we can not handle it with async profile. 
+                    // the info may be unregisterQuery by the previous execution, and update may be stuck.
+                    handleDMLStmt(execPlan, (DmlStmt) statementBase);
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to rewrite iceberg table: {}, catalog: {}, db: {}, table: {}",
+                        e.getMessage(), catalogName, dbName, tableName);
+                context.getState().setError(e.getMessage());
+                return;
+            }
+        }
+    }
+
+    private boolean tryHandleIcebergRewriteData() {
+        if (parsedStmt instanceof AlterTableStmt) {
+            AlterTableStmt stmt = (AlterTableStmt) parsedStmt;
+            List<AlterClause> clauses = stmt.getAlterClauseList();
+            if (clauses.size() == 1 && clauses.get(0) instanceof AlterTableOperationClause) {
+                AlterTableOperationClause c = (AlterTableOperationClause) clauses.get(0);
+                if (c.getTableOperationName().equalsIgnoreCase("REWRITE_DATA_FILES")) {
+                    handleIcebergRewrite(c.isRewriteAll(), c.getMinFileSizeBytes(), c.getBatchSize(), c.getWhere());
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void handleDdlStmt() throws DdlException {
         try {
+            if (tryHandleIcebergRewriteData()) {
+                return;
+            }
             ShowResultSet resultSet = DDLStmtExecutor.execute(parsedStmt, context);
             if (resultSet == null) {
                 context.getState().setOk();
@@ -2397,7 +2497,6 @@ public class StmtExecutor {
                     parsedStmt.getExplainLevel()));
             return;
         }
-
         // special handling for delete of non-primary key table, using old handler
         if (stmt instanceof DeleteStmt && ((DeleteStmt) stmt).shouldHandledByDeleteHandler()) {
             try {
@@ -2425,7 +2524,6 @@ public class StmtExecutor {
         } else {
             targetTable = MetaUtils.getSessionAwareTable(context, database, stmt.getTableName());
         }
-
         if (isExplainAnalyze) {
             Preconditions.checkState(targetTable instanceof OlapTable,
                     "explain analyze only supports insert into olap native table");
@@ -2443,7 +2541,6 @@ public class StmtExecutor {
             TransactionStmtExecutor.loadData(database, targetTable, execPlan, stmt, originStmt, context);
             return;
         }
-
         long transactionId = stmt.getTxnId();
         TransactionState txnState = null;
         String label = DebugUtil.printId(context.getExecutionId());
@@ -2476,11 +2573,9 @@ public class StmtExecutor {
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
         boolean insertError = false;
         String trackingSql = "";
-
         try {
             coord = getCoordinatorFactory().createInsertScheduler(
-                    context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
-
+                context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
             boolean needQuery = false;
@@ -2530,10 +2625,8 @@ public class StmtExecutor {
 
             coord.setLoadJobId(jobId);
             trackingSql = "select tracking_log from information_schema.load_tracking_logs where job_id=" + jobId;
-
             QeProcessorImpl.QueryInfo queryInfo = new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord);
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
-
             if (isSchedulerExplain) {
                 coord.execWithoutDeploy();
                 handleExplainStmt(coord.getSchedulerExplain());
@@ -2591,7 +2684,6 @@ public class StmtExecutor {
                 LOG.warn("insert failed: {}", errMsg);
                 ErrorReport.reportDdlException("%s", ErrorCode.ERR_FAILED_WHEN_INSERT, errMsg);
             }
-
             LOG.debug("delta files is {}", coord.getDeltaUrls());
 
             if (coord.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL) != null) {
@@ -2634,7 +2726,6 @@ public class StmtExecutor {
                 insertError = true;
                 return;
             }
-
             if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
                     || stmt instanceof UpdateStmt)) {
                 // when the target table is not ExternalOlapTable or OlapTable
@@ -2680,9 +2771,29 @@ public class StmtExecutor {
                     }
                 }
 
+                if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isRewrite()) {
+                    for (TSinkCommitInfo commitInfo : commitInfos) {
+                        commitInfo.setIs_rewrite(true);
+                    }
+                }
+
                 IcebergTableSink sink = (IcebergTableSink) execPlan.getFragments().get(0).getSink();
+                //todo:
+                // collect files
+                IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+                for (PlanFragment fragment : execPlan.getFragments()) {
+                    for (ScanNode scan : fragment.collectScanNodes().values()) {
+                        if (scan instanceof IcebergScanNode) {
+                            if (scan.getPlanNodeName().equals("IcebergScanNode")) {
+                                System.out.println("collect scannode:" + ((IcebergScanNode) scan).getScannedDataFiles());
+                                extra.addAppliedDeleteFiles(((IcebergScanNode) scan).getAppliedDeleteFiles());
+                                extra.addScannedDataFiles(((IcebergScanNode) scan).getScannedDataFiles());
+                            }
+                        }
+                    }
+                }
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(
-                        catalogName, dbName, tableName, commitInfos, sink.getTargetBranch());
+                        catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_ICEBERG_SINK_LABEL";
             } else if (targetTable.isHiveTable()) {

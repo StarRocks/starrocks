@@ -54,6 +54,7 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.ContentFile;
+import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
@@ -109,17 +110,33 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     // index -> field pos & bucket num
     private final List<Pair<Integer, Integer>> bucketInfo = new ArrayList<>();
 
+    private final Set<DataFile> scannedDataFiles;
+    private final Set<DeleteFile> appliedPosDeleteFiles;
+    private final Set<DeleteFile> appliedEqualDeleteFiles;
+    private final boolean recordScanFiles;
+
     public IcebergConnectorScanRangeSource(IcebergTable table,
                                            RemoteFileInfoSource remoteFileInfoSource,
                                            IcebergMORParams morParams,
                                            TupleDescriptor desc,
-                                           Optional<List<BucketProperty>> bucketProperties) {
+                                           Optional<List<BucketProperty>> bucketProperties,
+                                           boolean recordScanFiles) {
         this.table = table;
         this.remoteFileInfoSource = remoteFileInfoSource;
         this.morParams = morParams;
         this.desc = desc;
         this.bucketProperties = bucketProperties;
         initBucketInfo();
+        this.recordScanFiles = recordScanFiles;
+        this.scannedDataFiles = new HashSet<>();
+        this.appliedPosDeleteFiles = new HashSet<>();
+        this.appliedEqualDeleteFiles = new HashSet<>();
+    }
+
+    public void clearScannedFiles() {
+        this.scannedDataFiles.clear();
+        this.appliedPosDeleteFiles.clear();
+        this.appliedEqualDeleteFiles.clear();
     }
 
     @Override
@@ -138,6 +155,47 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
                 FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
                 res.addAll(toScanRanges(fileScanTask));
+                if (recordScanFiles) {
+                    scannedDataFiles.add(fileScanTask.file());
+                    for (DeleteFile del : fileScanTask.deletes()) {
+                        if (del.content() == FileContent.POSITION_DELETES) {
+                            appliedPosDeleteFiles.add(del);
+                        } else if (del.content() == FileContent.EQUALITY_DELETES) {
+                            appliedEqualDeleteFiles.add(del);
+                        }
+                    }
+                }
+            }
+            return res;
+        }
+    }
+
+    public List<FileScanTask> getSourceFileScanOutputs(int maxSize, int fileSizeThreshold) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
+            List<FileScanTask> res = new ArrayList<>();
+            while (hasMoreOutput() && res.size() < maxSize) {
+                RemoteFileInfo remoteFileInfo = remoteFileInfoSource.getOutput();
+                IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
+                FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
+                if (fileScanTask.file().fileSizeInBytes() <= fileSizeThreshold) {
+                    res.add(fileScanTask);
+                } else {
+                    for (DeleteFile del : fileScanTask.deletes()) {
+                        if (del.content() == FileContent.POSITION_DELETES) {
+                            // if the pos delete is a file level pos delete, then we may skip the data file scan if 
+                            // the condition does not match. Otherwise(partition-level delete file), 
+                            // we scan the data file anyway, to make sure the pos delete can be eliminated any way
+                            int filePathId = 2147483546; //https://iceberg.apache.org/spec/#reserved-field-ids
+                            if (del.referencedDataFile() != null || 
+                                    !del.lowerBounds().get(filePathId).equals(del.upperBounds().get(filePathId))) {
+                                res.add(fileScanTask);
+                            }
+                        } else if (del.content() == FileContent.EQUALITY_DELETES) {
+                            // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure that 
+                            // we can eliminate the equality delete files.
+                        }
+                    }
+                }
             }
             return res;
         }
@@ -428,5 +486,17 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     public Set<String> getSeenEqDeleteFiles() {
         return seenEqDeleteFiles;
+    }
+
+    public Set<DataFile> getScannedDataFiles() {
+        return scannedDataFiles;
+    }
+
+    public Set<DeleteFile> getPosAppliedDeleteFiles() {
+        return appliedPosDeleteFiles;
+    }
+
+    public Set<DeleteFile> getEqaulAppliedDeleteFiles() {
+        return appliedEqualDeleteFiles;
     }
 }

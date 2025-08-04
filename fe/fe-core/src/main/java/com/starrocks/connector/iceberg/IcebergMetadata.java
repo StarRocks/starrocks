@@ -100,6 +100,7 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionSpecParser;
 import org.apache.iceberg.ReplacePartitions;
+import org.apache.iceberg.RewriteFiles;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
@@ -1175,11 +1176,19 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos, String branch) {
+        finishSink(dbName, tableName, commitInfos, branch, null);
+    }
+
+    @Override
+    public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos, String branch, Object extra) {
         boolean isOverwrite = false;
+        boolean isRewrite = false;
         if (!commitInfos.isEmpty()) {
             TSinkCommitInfo sinkCommitInfo = commitInfos.get(0);
             if (sinkCommitInfo.isSetIs_overwrite()) {
                 isOverwrite = sinkCommitInfo.is_overwrite;
+            } else if (sinkCommitInfo.isSetIs_rewrite()) {
+                isRewrite = sinkCommitInfo.is_rewrite;
             }
         }
 
@@ -1189,7 +1198,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         IcebergTable table = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
         org.apache.iceberg.Table nativeTbl = table.getNativeTable();
         Transaction transaction = nativeTbl.newTransaction();
-        BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite);
+        BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite, isRewrite);
 
         if (branch != null) {
             batchWrite.toBranch(branch);
@@ -1221,6 +1230,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                 // builder.withPartitionPath(relativePartitionLocation);
             }
             batchWrite.addFile(builder.build());
+        }
+
+        if (isRewrite && extra != null) {
+            ((IcebergSinkExtra) extra).getScannedDataFiles().forEach(batchWrite::deleteFile);
+            ((IcebergSinkExtra) extra).getAppliedDeleteFiles().forEach(batchWrite::deleteFile);
         }
 
         try {
@@ -1256,8 +1270,13 @@ public class IcebergMetadata implements ConnectorMetadata {
         });
     }
 
-    public BatchWrite getBatchWrite(Transaction transaction, boolean isOverwrite) {
-        return isOverwrite ? new DynamicOverwrite(transaction) : new Append(transaction);
+    public BatchWrite getBatchWrite(Transaction transaction, boolean isOverwrite, boolean isRewrite) {
+        if (isRewrite) {     
+            return new RewriteData(transaction);
+        } else if (isOverwrite) {
+            return new DynamicOverwrite(transaction);
+        }
+        return new Append(transaction);
     }
 
     public PartitionData partitionDataFromPath(String relativePartitionPath,
@@ -1415,6 +1434,10 @@ public class IcebergMetadata implements ConnectorMetadata {
     interface BatchWrite {
         void addFile(DataFile file);
 
+        void deleteFile(DeleteFile file);
+
+        void deleteFile(DataFile file);
+
         void commit();
 
         void toBranch(String targetBranch);
@@ -1433,6 +1456,16 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         @Override
+        public void deleteFile(DeleteFile file) {
+            //not implement
+        }
+
+        @Override
+        public void deleteFile(DataFile file) {
+            //not implement
+        }
+
+        @Override
         public void commit() {
             append.commit();
         }
@@ -1440,6 +1473,32 @@ public class IcebergMetadata implements ConnectorMetadata {
         @Override
         public void toBranch(String targetBranch) {
             append = append.toBranch(targetBranch);
+        }
+    }
+
+    public static class IcebergSinkExtra {
+        private final Set<DataFile> scannedDataFiles;
+        private final Set<DeleteFile> appliedDeleteFiles;
+        
+        public IcebergSinkExtra() {
+            this.scannedDataFiles = new HashSet<>();
+            this.appliedDeleteFiles = new HashSet<>();
+        }
+
+        public void addScannedDataFiles(Set<DataFile> o) { 
+            scannedDataFiles.addAll(o); 
+        }
+
+        public void addAppliedDeleteFiles(Set<DeleteFile> o) {
+            appliedDeleteFiles.addAll(o); 
+        }
+
+        public Set<DataFile> getScannedDataFiles() { 
+            return scannedDataFiles;   
+        }
+
+        public Set<DeleteFile> getAppliedDeleteFiles() { 
+            return appliedDeleteFiles; 
         }
     }
 
@@ -1456,6 +1515,16 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         @Override
+        public void deleteFile(DeleteFile file) {
+            //not implement
+        }
+
+        @Override
+        public void deleteFile(DataFile file) {
+            //not implement
+        }
+
+        @Override
         public void commit() {
             replace.commit();
         }
@@ -1463,6 +1532,39 @@ public class IcebergMetadata implements ConnectorMetadata {
         @Override
         public void toBranch(String targetBranch) {
             replace = replace.toBranch(targetBranch);
+        }
+    }
+
+    static class RewriteData implements BatchWrite {
+        private RewriteFiles rewriteFiles;
+
+        public RewriteData(Transaction txn) {
+            rewriteFiles = txn.newRewrite();
+        }
+
+        @Override
+        public void addFile(DataFile file) {
+            rewriteFiles.addFile(file);
+        }
+        
+        @Override
+        public void deleteFile(DeleteFile file) {
+            rewriteFiles.deleteFile(file);
+        }
+
+        @Override
+        public void deleteFile(DataFile file) {
+            rewriteFiles.deleteFile(file);
+        }
+
+        @Override
+        public void commit() {
+            rewriteFiles.commit();
+        }
+
+        @Override
+        public void toBranch(String targetBranch) {
+            rewriteFiles = rewriteFiles.toBranch(targetBranch);
         }
     }
 
