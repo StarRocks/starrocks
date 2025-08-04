@@ -48,6 +48,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/raw_container.h"
 #include "util/trace.h"
@@ -63,6 +64,10 @@ static bvar::LatencyRecorder g_put_tablet_metadata_latency("lake", "put_tablet_m
 static bvar::LatencyRecorder g_get_txn_log_latency("lake", "get_txn_log");
 static bvar::LatencyRecorder g_put_txn_log_latency("lake", "put_txn_log");
 static bvar::LatencyRecorder g_del_txn_log_latency("lake", "del_txn_log");
+static bvar::Adder<int64_t> g_read_bundle_tablet_meta_cnt("lake", "lake_read_bundle_tablet_meta_cnt");
+static bvar::Adder<int64_t> g_read_bundle_tablet_meta_real_access_cnt("lake",
+                                                                      "lake_read_bundle_tablet_meta_real_access_cnt");
+static bvar::LatencyRecorder g_read_bundle_tablet_meta_latency("lake", "lake_read_bundle_tablet_meta_latency");
 
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
                              int64_t cache_capacity)
@@ -503,6 +508,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
         return Status::NotFound("Not found expected tablet metadata");
     }
     auto path = bundle_tablet_metadata_location(tablet_id, version);
+    ASSIGN_OR_RETURN(auto real_path, _location_provider->real_location(path));
     std::shared_ptr<FileSystem> file_system;
     if (!fs) {
         ASSIGN_OR_RETURN(file_system, FileSystem::CreateSharedFromString(path));
@@ -514,8 +520,16 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     // `read_all` only need to one api call and not increase the IOPS
     // but it will incur additional IO bandwidth overhead
     // Perhaps we need to consider the additional costs of IO bandwidth and IOPS later.
-    ASSIGN_OR_RETURN(auto input_file, file_system->new_random_access_file(opts, path));
-    ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
+    g_read_bundle_tablet_meta_cnt << 1;
+    auto t0 = butil::gettimeofday_us();
+    // use real path as key, so that every tablet can share a same path of bundle tablet meta.
+    ASSIGN_OR_RETURN(auto serialized_string,
+                     _bundle_tablet_metadata_group.Do(real_path, [&]() -> StatusOr<std::string> {
+                         g_read_bundle_tablet_meta_real_access_cnt << 1;
+                         ASSIGN_OR_RETURN(auto input_file, file_system->new_random_access_file(opts, path));
+                         return input_file->read_all();
+                     }));
+    g_read_bundle_tablet_meta_latency << (butil::gettimeofday_us() - t0);
 
     auto file_size = serialized_string.size();
     ASSIGN_OR_RETURN(auto bundle_metadata, parse_bundle_tablet_metadata(path, serialized_string));
