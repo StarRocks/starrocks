@@ -111,7 +111,7 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
             try {
                 response.addToItems(job.getInfo());
             } catch (Exception e) {
-                if (response.getStatus_code() == TStatusCode.OK) {
+                if (response.status.getStatus_code() == TStatusCode.OK) {
                     // if encouter any unexpected exception, set error status for response
                     response.status.setStatus_code(TStatusCode.INTERNAL_ERROR);
                     response.status.addToError_msgs(Strings.nullToEmpty(e.getMessage()));
