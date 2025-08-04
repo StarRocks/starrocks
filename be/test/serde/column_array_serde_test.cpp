@@ -24,9 +24,11 @@
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
+#include "column/variant_column.h"
 #include "gutil/strings/substitute.h"
 #include "testutil/parallel_test.h"
 #include "util/json.h"
+#include "util/variant_util.h"
 
 namespace starrocks::serde {
 
@@ -80,6 +82,66 @@ PARALLEL_TEST(ColumnArraySerdeTest, json_column) {
             std::string str2 = datum2->to_string().value();
             ASSERT_EQ(str1, str2);
             ASSERT_EQ(0, datum1->compare(*datum2));
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, variant_column) {
+    auto c1 = VariantColumn::create();
+    ASSERT_EQ(4, ColumnArraySerde::max_serialized_size(*c1));
+
+    // Prepare 5 int8 variant values
+    const uint8_t int8_values[][2] = {
+            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x01}, // 1
+            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x02}, // 2
+            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x03}, // 3
+            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x04}, // 4
+            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x05}, // 5
+    };
+    size_t expected_max_size = sizeof(uint32_t);
+    for (size_t i = 0; i < std::size(int8_values); ++i) {
+        std::string_view value(reinterpret_cast<const char*>(int8_values[i]), sizeof(int8_values[i]));
+        VariantValue variant(VariantMetadata::kEmptyMetadata, value);
+        c1->append(&variant);
+        expected_max_size += sizeof(uint64_t) + variant.serialize_size();
+    }
+    ASSERT_EQ(expected_max_size, ColumnArraySerde::max_serialized_size(*c1));
+
+    auto c2 = VariantColumn::create();
+    std::vector<uint8_t> buffer;
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+    auto p1 = ColumnArraySerde::serialize(*c1, buffer.data());
+    auto p2 = ColumnArraySerde::deserialize(buffer.data(), c2.get());
+    ASSERT_EQ(buffer.data() + buffer.size(), p1);
+    ASSERT_EQ(buffer.data() + buffer.size(), p2);
+
+    ASSERT_EQ(5, c2->size());
+    for (size_t i = 0; i < c1->size(); i++) {
+        const VariantValue* datum1 = c1->get(i).get_variant();
+        const VariantValue* datum2 = c2->get(i).get_variant();
+        ASSERT_EQ(datum1->serialize_size(), datum2->serialize_size());
+        ASSERT_EQ(datum1->get_metadata(), datum2->get_metadata());
+        ASSERT_EQ(datum1->get_value(), datum2->get_value());
+        EXPECT_EQ(datum1->to_string(), datum2->to_string());
+    }
+
+    // no effect
+    for (auto level = -1; level < 8; ++level) {
+        buffer.resize(ColumnArraySerde::max_serialized_size(*c1), level);
+        p1 = ColumnArraySerde::serialize(*c1, buffer.data(), false, level);
+        p2 = ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level);
+        ASSERT_EQ(buffer.data() + buffer.size(), p1);
+        ASSERT_EQ(buffer.data() + buffer.size(), p2);
+
+        ASSERT_EQ(5, c2->size());
+        for (size_t i = 0; i < c1->size(); i++) {
+            const VariantValue* datum1 = c1->get(i).get_variant();
+            const VariantValue* datum2 = c2->get(i).get_variant();
+            ASSERT_EQ(datum1->serialize_size(), datum2->serialize_size());
+            ASSERT_EQ(datum1->get_metadata(), datum2->get_metadata());
+            ASSERT_EQ(datum1->get_value(), datum2->get_value());
+            EXPECT_EQ(datum1->to_string(), datum2->to_string());
         }
     }
 }

@@ -29,6 +29,8 @@ struct VariantUtil {
     static std::string decimal4_to_string(DecimalValue<int32_t> decimal);
     static std::string decimal8_to_string(DecimalValue<int64_t> decimal);
     static std::string decimal16_to_string(DecimalValue<int128_t> decimal);
+
+    static uint8_t primitiveHeader(VariantPrimitiveType primitive);
 };
 
 } // namespace starrocks
