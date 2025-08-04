@@ -53,6 +53,10 @@ Status SchemaDynamicTabletJobsScanner::start(RuntimeState* state) {
 }
 
 Status SchemaDynamicTabletJobsScanner::_fill_chunk(ChunkPtr* chunk) {
+    if (_result.status().status_code() != 0) {
+        return Status::InternalError("get dynamic tablet jobs infos error: {}", _result.status().error_msgs(0));
+    }
+
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TDynamicTabletJobsItem& info = _result.items[_index];
     DatumArray datum_array{
