@@ -41,14 +41,10 @@ message PublishVersionRequest {
     optional bool enable_aggregate_publish = 9;
     // Distribution key column physical names (column id)
     repeated string distribution_columns = 10;
-    // This field is used for 2 cases to specify the splitting tablets info (not included in tablet_ids):
-    // 1. The split tablet transaction, in which the txn type in txn_infos is TXN_SPLIT_TABLET.
-    // 2. The nornal write transaction but need cross-commit during tablet splitting.
-    repeated SplittingTabletInfoPB splitting_tablet_infos = 11;
-    // This field is used for 2 cases to specify the merging tablets info (not included in tablet_ids):
-    // 1. The merge tablet transaction, in which the txn type in txn_infos is TXN_MERGE_TABLET.
-    // 2. The nornal write transaction but need cross-commit during tablet merging.
-    repeated MergingTabletInfoPB merging_tablet_infos = 12;
+    // This field is used for 2 cases to specify the dynamic tablets info (not included in tablet_ids):
+    // 1. The split or merge tablet transaction, in which the txn type in txn_infos is TXN_DYNAMIC_TABLET.
+    // 2. The nornal write transaction but need cross-publish during tablet splitting or merging.
+    optional DynamicTabletsInfoPB dynamic_tablets_info = 11;
 }
 
 message PublishVersionResponse {

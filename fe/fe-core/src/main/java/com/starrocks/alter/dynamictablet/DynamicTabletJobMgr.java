@@ -41,6 +41,8 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
     @SerializedName(value = "dynamicTabletJobs")
     protected final Map<Long, DynamicTabletJob> dynamicTabletJobs = Maps.newConcurrentMap();
 
+    protected final Map<Long, DynamicTablet> dynamicTablets = Maps.newConcurrentMap();
+
     public DynamicTabletJobMgr() {
         super("DynamicTabletJobMgr", Config.dynamic_tablet_job_scheduler_interval_ms);
     }
@@ -51,6 +53,10 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
 
     public Map<Long, DynamicTabletJob> getDynamicTabletJobs() {
         return dynamicTabletJobs;
+    }
+
+    public DynamicTablet getDynamicTablet(long tabletId) {
+        return dynamicTablets.get(tabletId);
     }
 
     public void createDynamicTabletJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)

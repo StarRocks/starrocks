@@ -63,6 +63,11 @@ public class SplittingTablet implements DynamicTablet {
     }
 
     @Override
+    public long getFirstOldTabletId() {
+        return oldTabletId;
+    }
+
+    @Override
     public long getParallelTablets() {
         return newTabletIds.size();
     }
