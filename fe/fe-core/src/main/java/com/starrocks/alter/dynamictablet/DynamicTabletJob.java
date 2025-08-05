@@ -251,13 +251,13 @@ public abstract class DynamicTabletJob implements Writable {
         }
 
         item.setTable_id(tableId);
-        try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
-            item.setTable_name(table.getName());
-        } catch (Exception e) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
             item.setTable_name("");
             LOG.warn("Failed to get table name for dynamic tablet job. dbId: {}, tableId: {}, jobId: {}",
-                     dbId, tableId, jobId, e);
+                        dbId, tableId, jobId);
+        } else {
+            item.setTable_name(table.getName());
         }
         item.setJob_type(jobType.name());
         item.setJob_state(jobState.name());
