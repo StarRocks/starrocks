@@ -851,4 +851,90 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     }
 }
 
+<<<<<<< HEAD
+=======
+Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
+    DCHECK(!request.__isset.fragment);
+    DCHECK(request.__isset.params);
+    const TPlanFragmentExecParams& params = request.params;
+    const TUniqueId& query_id = params.query_id;
+    const TUniqueId& instance_id = params.fragment_instance_id;
+
+    QueryContextPtr query_ctx = exec_env->query_context_mgr()->get(query_id);
+    if (query_ctx == nullptr) {
+        return Status::InternalError(fmt::format("QueryContext not found for query_id: {}", print_id(query_id)));
+    }
+    FragmentContextPtr fragment_ctx = query_ctx->fragment_mgr()->get(instance_id);
+    if (fragment_ctx == nullptr) {
+        return Status::InternalError(fmt::format("FragmentContext not found for query_id: {}, instance_id: {}",
+                                                 print_id(query_id), print_id(instance_id)));
+    }
+    RuntimeState* runtime_state = fragment_ctx->runtime_state();
+
+    std::unordered_set<int> notify_ids;
+
+    for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
+        if (scan_ranges.size() == 0) continue;
+        auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
+        if (iter == fragment_ctx->morsel_queue_factories().end()) {
+            return Status::InternalError(
+                    fmt::format("MorselQueueFactory not found for node_id: {}, query_id: {}, instance_id: {}", node_id,
+                                print_id(query_id), print_id(instance_id)));
+        }
+        MorselQueueFactory* morsel_queue_factory = iter->second.get();
+        if (morsel_queue_factory == nullptr) {
+            return Status::InternalError(
+                    fmt::format("MorselQueueFactory is null for node_id: {}, query_id: {}, instance_id: {}", node_id,
+                                print_id(query_id), print_id(instance_id)));
+        }
+
+        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+        pipeline::Morsels morsels;
+        bool has_more_morsel = false;
+        pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
+        RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
+        morsel_queue_factory->set_has_more(has_more_morsel);
+        notify_ids.insert(node_id);
+    }
+
+    if (params.__isset.node_to_per_driver_seq_scan_ranges) {
+        for (const auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
+            auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
+            if (iter == fragment_ctx->morsel_queue_factories().end()) {
+                return Status::InternalError(
+                        fmt::format("MorselQueueFactory not found for node_id: {}, query_id: {}, instance_id: {}",
+                                    node_id, print_id(query_id), print_id(instance_id)));
+            }
+            MorselQueueFactory* morsel_queue_factory = iter->second.get();
+            if (morsel_queue_factory == nullptr) {
+                return Status::InternalError(
+                        fmt::format("MorselQueueFactory is null for node_id: {}, query_id: {}, instance_id: {}",
+                                    node_id, print_id(query_id), print_id(instance_id)));
+            }
+
+            bool has_more_morsel = has_more_per_driver_seq_scan_ranges(per_driver_scan_ranges);
+            for (const auto& [driver_seq, scan_ranges] : per_driver_scan_ranges) {
+                if (scan_ranges.size() == 0) continue;
+                RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+                pipeline::Morsels morsels;
+                [[maybe_unused]] bool local_has_more;
+                pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &local_has_more);
+                RETURN_IF_ERROR(morsel_queue_factory->append_morsels(driver_seq, std::move(morsels)));
+            }
+            morsel_queue_factory->set_has_more(has_more_morsel);
+            notify_ids.insert(node_id);
+        }
+    }
+
+    // notify all source
+    fragment_ctx->iterate_pipeline([&](Pipeline* pipeline) {
+        if (notify_ids.contains(pipeline->source_operator_factory()->plan_node_id())) {
+            pipeline->source_operator_factory()->observes().notify_source_observers();
+        }
+    });
+
+    return Status::OK();
+}
+
+>>>>>>> d8ff13b53b ([BugFix] fix query hang because of incorrect scan range delivery (#61562))
 } // namespace starrocks::pipeline
