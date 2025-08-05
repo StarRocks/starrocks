@@ -166,7 +166,7 @@ select * from profile_access_path;
 -- result:
 - AccessPathExtract: 1
 - AccessPathHits: 3
-- PushdownAccessPaths: 1
+- PushdownAccessPaths: 2
 -- !result
 select get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f1') = 1;
 -- result:
@@ -176,7 +176,7 @@ select * from profile_access_path;
 -- result:
 - AccessPathExtract: 2
 - AccessPathHits: 4
-- PushdownAccessPaths: 2
+- PushdownAccessPaths: 4
 -- !result
 select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f2') = 1;
 -- result:
@@ -186,7 +186,7 @@ select * from profile_access_path;
 -- result:
 - AccessPathExtract: 2
 - AccessPathHits: 4
-- PushdownAccessPaths: 2
+- PushdownAccessPaths: 4
 -- !result
 select get_json_int(j1, '$.f2'), j1 from js2 where get_json_int(j1, '$.f1') = 1;
 -- result:
@@ -215,7 +215,7 @@ select * from profile_access_path;
 -- result:
 - AccessPathExtract: 2
 - AccessPathHits: 4
-- PushdownAccessPaths: 2
+- PushdownAccessPaths: 4
 -- !result
 select count(get_json_int(j1, '$.f2')) from js2 ;
 -- result:
@@ -225,7 +225,7 @@ select * from profile_access_path;
 -- result:
 - AccessPathExtract: 1
 - AccessPathHits: 3
-- PushdownAccessPaths: 1
+- PushdownAccessPaths: 2
 -- !result
 select count(get_json_int(j1, '$.f3')) from js2 ;
 -- result:
@@ -235,7 +235,7 @@ select * from profile_access_path;
 -- result:
 - AccessPathExtract: 2
 - AccessPathHits: 4
-- PushdownAccessPaths: 1
+- PushdownAccessPaths: 2
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') = -1;
 -- result:
@@ -506,7 +506,7 @@ select * from profile_access_path;
 -- result:
 - AccessPathExtract: 1
 - AccessPathHits: 3
-- PushdownAccessPaths: 1
+- PushdownAccessPaths: 2
 -- !result
 select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
 -- result:
@@ -528,7 +528,7 @@ select * from profile_access_path;
 -- result:
 - AccessPathExtract: 1
 - AccessPathHits: 3
-- PushdownAccessPaths: 1
+- PushdownAccessPaths: 2
 -- !result
 select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
 -- result:
@@ -550,7 +550,7 @@ select * from profile_access_path;
 -- result:
 - AccessPathExtract: 1
 - AccessPathHits: 3
-- PushdownAccessPaths: 1
+- PushdownAccessPaths: 2
 -- !result
 select count(*) from js3 where get_json_int(j1, 'f_none') IS NULL;
 -- result:
@@ -580,5 +580,5 @@ select * from profile_access_path;
 -- result:
 - AccessPathExtract: 2
 - AccessPathHits: 4
-- PushdownAccessPaths: 1
+- PushdownAccessPaths: 2
 -- !result
