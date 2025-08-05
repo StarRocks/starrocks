@@ -1921,11 +1921,11 @@ public class AggregateTest extends PlanTestBase {
         // with nullable column
         sql = "select min(t1b) from test_all_type";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: min(2: t1b)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  0:OlapScanNode");
+        assertContains(plan, "AGGREGATE (update serialize)\n"
+                + "  |  output: min(min_t1b)\n"
+                + "  |  group by: \n"
+                + "  |  \n"
+                + "  0:MetaScan");
         sql = "select count(t1b) from test_all_type";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
@@ -1941,6 +1941,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
@@ -1982,6 +1983,7 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "<slot 8> : 11: bitmap_count\n" +
                 "  |  <slot 9> : 12: bitmap_count\n" +
                 "  |  <slot 10> : 11: bitmap_count - 12: bitmap_count");
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
