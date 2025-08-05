@@ -32,7 +32,6 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 // for a simple min/max/count aggregation query like
 // 'select min(c1),max(c2) from table',
@@ -82,7 +81,7 @@ public class MinMaxOptOnScanRule extends TransformationRule {
         if (groupingKeys != null && !groupingKeys.isEmpty()) {
             // all group by keys are partition keys.
             if (!scanOperator.getPartitionColumns()
-                    .containsAll(groupingKeys.stream().map(x -> x.getName()).collect(Collectors.toList()))) {
+                    .containsAll(groupingKeys.stream().map(ColumnRefOperator::getName).toList())) {
                 return false;
             }
             // must be un-partitioned table, or partition columns are identity columns.
@@ -118,10 +117,7 @@ public class MinMaxOptOnScanRule extends TransformationRule {
                 return false;
             }
             ScalarOperator arg = arguments.get(0);
-            if (!arg.isColumnRef()) {
-                return false;
-            }
-            return true;
+            return arg.isColumnRef();
         });
         return allValid;
     }

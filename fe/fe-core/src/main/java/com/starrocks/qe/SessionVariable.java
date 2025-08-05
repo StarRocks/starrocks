@@ -4780,6 +4780,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableMinMaxOptimization;
     }
 
+    public void setIsEnableMinMaxOptimization(boolean v) {
+        this.enableMinMaxOptimization = v;
+    }
+
     public boolean isEnablePartitionColumnValueOnlyOptimization() {
         return enablePartitionColumnValueOnlyOptimization;
     }
