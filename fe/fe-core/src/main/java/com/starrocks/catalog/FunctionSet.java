@@ -257,6 +257,9 @@ public class FunctionSet {
     public static final String APPROX_COUNT_DISTINCT_HLL_SKETCH = "approx_count_distinct_hll_sketch";
     public static final String DS_HLL_COUNT_DISTINCT = "ds_hll_count_distinct";
     public static final String DS_THETA_COUNT_DISTINCT = "ds_theta_count_distinct";
+    public static final String DS_HLL_ACCUMULATE = "ds_hll_accumulate";
+    public static final String DS_HLL_COMBINE = "ds_hll_combine";
+    public static final String DS_HLL_ESTIMATE = "ds_hll_estimate";
     public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
@@ -805,6 +808,10 @@ public class FunctionSet {
                     .add(FIRST_VALUE_REWRITE)
                     .add(HISTOGRAM)
                     .add(DICT_MERGE)
+                    // no need to support agg_state
+                    .add(DS_HLL_ACCUMULATE)
+                    .add(DS_HLL_COMBINE)
+                    .add(DS_HLL_ESTIMATE)
                     // Functions with constant contexts in be are not supported.
                     .add(WINDOW_FUNNEL)
                     .add(APPROX_TOP_K)
@@ -1148,6 +1155,17 @@ public class FunctionSet {
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
 
+            // DS_HLL_ACCUMULATE
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ACCUMULATE,
+                    Lists.newArrayList(t), Type.VARBINARY, Type.VARBINARY,
+                    true, false, true));
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ACCUMULATE,
+                    Lists.newArrayList(t, Type.INT), Type.VARBINARY, Type.VARBINARY,
+                    true, false, true));
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ACCUMULATE,
+                    Lists.newArrayList(t, Type.INT, Type.VARCHAR), Type.VARBINARY, Type.VARBINARY,
+                    true, false, true));
+
             // ds_hll_count_distinct(col)
             addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
@@ -1190,6 +1208,13 @@ public class FunctionSet {
                     false, true, true));
 
         }
+
+        addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COMBINE,
+                Lists.newArrayList(Type.VARBINARY), Type.VARBINARY, Type.VARBINARY,
+                true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ESTIMATE,
+                Lists.newArrayList(Type.VARBINARY), Type.BIGINT, Type.VARBINARY,
+                true, false, true));
 
         // Sum
         registerBuiltinSumAggFunction(SUM);
