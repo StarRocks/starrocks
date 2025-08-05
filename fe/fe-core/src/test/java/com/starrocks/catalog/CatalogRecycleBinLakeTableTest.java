@@ -297,6 +297,7 @@ public class CatalogRecycleBinLakeTableTest {
 
         recycleBin.replayEraseTable(Lists.newArrayList(table1.getId()));
         Assertions.assertNull(recycleBin.getTable(db.getId(), table1.getId()));
+        Assertions.assertNull(recycleBin.getAsyncDeleteForTables(table1.getId()));
     }
 
     @Test
@@ -481,7 +482,9 @@ public class CatalogRecycleBinLakeTableTest {
         waitPartitionClearFinished(recycleBin, p1.getId(), System.currentTimeMillis() + delay);
         waitPartitionClearFinished(recycleBin, p2.getId(), System.currentTimeMillis() + delay);
         Assertions.assertNull(recycleBin.getPartition(p1.getId()));
+        Assertions.assertNull(recycleBin.getAsyncDeleteForPartitions(p1.getId()));
         Assertions.assertNull(recycleBin.getPartition(p2.getId()));
+        Assertions.assertNull(recycleBin.getAsyncDeleteForPartitions(p2.getId()));
         checkPartitionTablet(p1, false);
         checkPartitionTablet(p2, false);
 
@@ -523,6 +526,7 @@ public class CatalogRecycleBinLakeTableTest {
         recycleBin.erasePartition(System.currentTimeMillis() + delay);
         waitPartitionClearFinished(recycleBin, p1.getId(), System.currentTimeMillis() + delay);
         Assertions.assertNull(recycleBin.getPartition(p1.getId()));
+        Assertions.assertNull(recycleBin.getAsyncDeleteForPartitions(p1.getId()));
         checkPartitionTablet(p1, false);
     }
 
