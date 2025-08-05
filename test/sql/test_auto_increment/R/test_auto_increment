@@ -746,7 +746,7 @@ CREATE DATABASE test_auto_increment_partial_update_column_upsert;
 -- result:
 -- !result
 ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
-USE DATABASE test_auto_increment_partial_update_column_upsert;
+USE test_auto_increment_partial_update_column_upsert;
 -- result:
 -- !result
 CREATE TABLE `t_auto_increment_partial_update_column_upsert` (
