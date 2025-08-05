@@ -176,6 +176,7 @@ ALTER MATERIALIZED VIEW <mv_name> ACTIVE;
 いくつかのパラメータを使用してリフレッシュ動作を制御できます：
 
 - `partition_refresh_number`: 各リフレッシュ操作でリフレッシュするパーティションの数。
+- `partition_refresh_strategy`: 各リフレッシュ操作で選択されたリフレッシュ戦略。
 - `partition_ttl_number`: 保持する最近のパーティションの数。
 - `excluded_trigger_tables`: データ変更を無視して自動リフレッシュをトリガーしないようにするテーブル。
 - `auto_refresh_partitions_limit`: 各自動リフレッシュ操作でリフレッシュするパーティションの数。
