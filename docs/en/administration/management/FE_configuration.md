@@ -2090,7 +2090,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: Seconds
 - Is mutable: Yes
 - Description: The default timeout duration for a prepared transaction.
-- Introduced in: v3.5
+- Introduced in: -
 
 ##### spark_dpp_version
 
