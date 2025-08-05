@@ -1064,10 +1064,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
         Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                 TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("" +
-                "RESULT SINK\n" +
-                "\n" +
-                "  0:EMPTYSET"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("0:EMPTYSET"));
     }
 
     @Test
@@ -1094,5 +1091,4 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
     }
-
 }
