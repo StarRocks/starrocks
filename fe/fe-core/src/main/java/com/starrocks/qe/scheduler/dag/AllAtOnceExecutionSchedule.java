@@ -14,13 +14,20 @@
 
 package com.starrocks.qe.scheduler.dag;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.proto.PPlanFragmentCancelReason;
+>>>>>>> d8ff13b53b ([BugFix] fix query hang because of incorrect scan range delivery (#61562))
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 
 // all at once execution schedule only schedule once.
 public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
+    private static final Logger LOG = LogManager.getLogger(AllAtOnceExecutionSchedule.class);
     private Coordinator coordinator;
     private Deployer deployer;
     private ExecutionDAG dag;
@@ -44,22 +52,29 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
 
         @Override
         public void run() {
-            if (cancelled) {
-                return;
-            }
-            try {
-                states = coordinator.assignIncrementalScanRangesToDeployStates(deployer, states);
-                if (states.isEmpty()) {
-                    return;
+            while (!cancelled && !states.isEmpty()) {
+                try {
+                    states = coordinator.assignIncrementalScanRangesToDeployStates(deployer, states);
+                    if (states.isEmpty()) {
+                        return;
+                    }
+                    for (DeployState state : states) {
+                        deployer.deployFragments(state);
+                    }
+                } catch (StarRocksException | RpcException e) {
+                    LOG.warn("Failed to assign incremental scan ranges to deploy states", e);
+                    coordinator.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
+                    throw new RuntimeException(e);
                 }
+<<<<<<< HEAD
                 for (DeployState state : states) {
                     deployer.deployFragments(state);
                 }
             } catch (UserException | RpcException e) {
                 throw new RuntimeException(e);
+=======
+>>>>>>> d8ff13b53b ([BugFix] fix query hang because of incorrect scan range delivery (#61562))
             }
-            // jvm should use tail optimization.
-            start();
         }
 
         public void start() {
