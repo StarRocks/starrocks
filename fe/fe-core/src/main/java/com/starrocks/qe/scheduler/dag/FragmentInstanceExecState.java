@@ -227,6 +227,9 @@ public class FragmentInstanceExecState {
                     return get();
                 }
             };
+        } finally {
+            serializedRequest = null; // clear serializedRequest after deploy
+            requestToDeploy = null; // clear requestToDeploy after deploy
         }
     }
 
