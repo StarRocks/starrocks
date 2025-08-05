@@ -151,7 +151,6 @@ struct JsonPath {
 
     bool is_empty() const { return paths.empty(); }
 
-    // Convert JsonPath to string representation
     std::string to_string() const;
 
     static StatusOr<JsonPath> parse(Slice path_string);
