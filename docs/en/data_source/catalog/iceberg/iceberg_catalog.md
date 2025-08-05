@@ -741,7 +741,7 @@ Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading
 
 | **Parameter**                                 | **Default**           | **Description**                                         |
 | :-------------------------------------------- | :-------------------- | :-------------------------------------------------------|
-| enable_get_stats_from_external_metadata       | false                 | Whether to to obtain statistics from Iceberg metadata. When this item is set to `true`, you can further control which type of statistics to collect through the session variable [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata).  |
+| enable_get_stats_from_external_metadata       | false                 | Whether to obtain statistics from Iceberg metadata. When this item is set to `true`, you can further control which type of statistics to collect through the session variable [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata).  |
 
 ### Examples
 
