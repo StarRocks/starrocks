@@ -92,6 +92,7 @@ public final class GlobalVariable {
 
     public static final String ENABLE_TABLE_NAME_CASE_INSENSITIVE = "enable_table_name_case_insensitive";
 
+
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
 
