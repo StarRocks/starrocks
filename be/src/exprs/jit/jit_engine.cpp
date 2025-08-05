@@ -468,7 +468,10 @@ Status JITEngine::init() {
     jit_lru_object_cache_size = 16 * 1024 * 1024;
     jit_lru_cache_size = 16 * 1024 * 1024;
 #else
-    int64_t mem_limit = GlobalEnv::GetInstance()->process_mem_limit();
+    int64_t mem_limit = MemInfo::physical_mem();
+    if (GlobalEnv::GetInstance()->process_mem_tracker()->has_limit()) {
+        mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+    }
     if (jit_lru_cache_size <= 0 && jit_lru_object_cache_size <= 0) {
         if (mem_limit < JIT_CACHE_LOWEST_LIMIT) {
             _initialized = true;
