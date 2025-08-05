@@ -115,7 +115,7 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
                     // if encouter any unexpected exception, set error status for response
                     response.status.setStatus_code(TStatusCode.INTERNAL_ERROR);
                     response.status.addToError_msgs(Strings.nullToEmpty(e.getMessage()));
-                    LOG.warn("encouter unexpected exception when getting dynamic tablet jobs info", e);
+                    LOG.warn("Encounter unexpected exception when getting dynamic tablet jobs info. ", e);
                 }
             }
         }
