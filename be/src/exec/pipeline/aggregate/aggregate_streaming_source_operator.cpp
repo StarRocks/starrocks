@@ -106,6 +106,7 @@ Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* c
 
     // TODO: notify sink here
     if (need_reset_aggregator) {
+        auto notify = _aggregator->defer_notify_sink();
         if (!_aggregator->is_sink_complete()) {
             RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr, false));
         }
