@@ -117,7 +117,13 @@ public:
 
     // notify the operator with the given driver sequence
     auto defer_notify(int& driver_seq) {
-        return DeferOp([this, &driver_seq]() { _source_factory()->observes().notify_source_observer(driver_seq); });
+        return DeferOp([this, &driver_seq]() {
+            if (driver_seq == _driver_sequence) {
+                _observable.notify_source_observers();
+            } else {
+                _source_factory()->observes().notify_source_observer(driver_seq);
+            }
+        });
     }
 
 protected:
