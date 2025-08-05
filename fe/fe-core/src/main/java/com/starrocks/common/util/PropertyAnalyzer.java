@@ -186,8 +186,7 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_LOAD_PROFILE = "enable_load_profile";
 
-    public static final String PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES =
-            "base_compaction_forbidden_time_ranges";
+    public static final String PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES = "base_compaction_forbidden_time_ranges";
 
     public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
 
@@ -407,8 +406,7 @@ public class PropertyAnalyzer {
         return partitionTimeToLive;
     }
 
-    public static Pair<String, PeriodDuration> analyzePartitionTTL(Map<String, String> properties,
-                                                                   boolean removeProperties) {
+    public static Pair<String, PeriodDuration> analyzePartitionTTL(Map<String, String> properties, boolean removeProperties) {
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL)) {
             String ttlStr = properties.get(PROPERTIES_PARTITION_TTL);
             PeriodDuration duration;
@@ -469,12 +467,10 @@ public class PropertyAnalyzer {
             }
             // validate retention condition
             TableName tableName = new TableName(db.getFullName(), olapTable.getName());
-            ConnectContext connectContext =
-                    ConnectContext.get() == null ? new ConnectContext(null) : ConnectContext.get();
+            ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext(null) : ConnectContext.get();
 
             try {
-                PartitionSelector.getPartitionIdsByExpr(connectContext, tableName, olapTable, whereExpr, false,
-                        exprToAdjustMap);
+                PartitionSelector.getPartitionIdsByExpr(connectContext, tableName, olapTable, whereExpr, false, exprToAdjustMap);
             } catch (Exception e) {
                 throw new SemanticException("Failed to validate retention condition: " + e.getMessage());
             }
@@ -760,8 +756,7 @@ public class PropertyAnalyzer {
 
         List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackendIds();
         if (RunMode.isSharedDataMode()) {
-            backendIds.addAll(
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodeIds());
+            backendIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodeIds());
             if (RunMode.defaultReplicationNum() > backendIds.size()) {
                 throw new SemanticException("Number of available CN nodes is " + backendIds.size()
                         + ", less than " + RunMode.defaultReplicationNum());
@@ -804,8 +799,7 @@ public class PropertyAnalyzer {
                 tStorageType = TStorageType.COLUMN;
             } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.ROW.name())) {
                 tStorageType = TStorageType.ROW;
-            } else if (olapTable.supportsUpdate() &&
-                    storageType.equalsIgnoreCase(TStorageType.COLUMN_WITH_ROW.name())) {
+            } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.COLUMN_WITH_ROW.name())) {
                 tStorageType = TStorageType.COLUMN_WITH_ROW;
                 if (olapTable.getColumns().stream().filter(column -> !column.isKey()).count() == 0) {
                     throw new AnalysisException("column_with_row storage type must have some non-key columns");
