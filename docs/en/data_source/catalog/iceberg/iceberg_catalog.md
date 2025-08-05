@@ -748,7 +748,7 @@ When `enable_get_stats_from_external_metadata` is enabled, it is also possible t
 #### enable_iceberg_column_statistics
 - Unit: N/A
 - Default value:  false
-- Description: Whether to obtain column statistics, such as min/max/null count/row size/ndv(if a puffin file exists). When the value is set to false, only the row count information will be obtained.
+- Description: Whether to obtain column statistics, such as min/max/null count/row size/ndv (if a puffin file exists). When the value is set to false, only the row count information will be obtained.
 
 ### Examples
 
