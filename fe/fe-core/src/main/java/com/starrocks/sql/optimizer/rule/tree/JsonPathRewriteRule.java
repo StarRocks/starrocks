@@ -31,8 +31,6 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
-import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -205,51 +203,6 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
             return OptExpression.builder().with(optExpr).setInputs(newInputs).build();
         }
 
-        /**
-         * NOTE: MetaScan doesn't embed the Projection into MetaScan node, so we have to handle the MetaScan &
-         * OlapScan separately.
-         */
-        @Override
-        public OptExpression visitLogicalProject(OptExpression optExpr, Void v) {
-            Operator child = optExpr.inputAt(0).getOp();
-            if (child instanceof LogicalMetaScanOperator) {
-                return rewriteMetaScan(optExpr, v);
-            }
-            return visit(optExpr, v);
-        }
-
-        /**
-         * Rewrites LogicalProject over LogicalMetaScan to handle JSON path access.
-         */
-        private OptExpression rewriteMetaScan(OptExpression optExpr, Void v) {
-            LogicalProjectOperator project = (LogicalProjectOperator) optExpr.getOp();
-            LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) optExpr.inputAt(0).getOp();
-
-            JsonPathRewriteContext context = new JsonPathRewriteContext(columnRefFactory);
-            JsonPathExpressionRewriter rewriter = new JsonPathExpressionRewriter(context);
-
-            // Rewrite project expressions
-            Map<ColumnRefOperator, ScalarOperator> rewrittenProjections =
-                    rewriteProjections(project.getColumnRefMap(), context, rewriter);
-
-            // Build new project operator
-            LogicalProjectOperator newProject = new LogicalProjectOperator(rewrittenProjections);
-
-            // Build new meta scan operator with extended columns
-            LogicalMetaScanOperator newMetaScan = buildExtendedMetaScan(metaScan, rewriter);
-
-            OptExpression newMetaScanExpr = OptExpression.builder()
-                    .with(optExpr.inputAt(0))
-                    .setOp(newMetaScan)
-                    .build();
-
-            return OptExpression.builder()
-                    .with(optExpr)
-                    .setOp(newProject)
-                    .setInputs(Lists.newArrayList(newMetaScanExpr))
-                    .build();
-        }
-
         private Map<ColumnRefOperator, ScalarOperator> rewriteProjections(
                 Map<ColumnRefOperator, ScalarOperator> originalProjections,
                 JsonPathRewriteContext context,
@@ -267,28 +220,6 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
             }
 
             return rewritten;
-        }
-
-        private LogicalMetaScanOperator buildExtendedMetaScan(LogicalMetaScanOperator originalMetaScan,
-                                                              JsonPathExpressionRewriter rewriter) {
-            LogicalMetaScanOperator.Builder scanBuilder =
-                    LogicalMetaScanOperator.builder().withOperator(originalMetaScan);
-
-            // Update column mappings
-            Map<ColumnRefOperator, Column> metaScanColumnMap = Maps.newHashMap();
-            metaScanColumnMap.putAll(originalMetaScan.getColRefToColumnMetaMap());
-            metaScanColumnMap.putAll(rewriter.getExtendedColumns());
-            scanBuilder.setColRefToColumnMetaMap(metaScanColumnMap);
-
-            // Add access paths
-            List<ColumnAccessPath> paths = Lists.newArrayList();
-            for (var entry : rewriter.getExtendedColumns().entrySet()) {
-                ColumnAccessPath path = JsonPathRewriteContext.pathFromColumn(entry.getValue());
-                paths.add(path);
-            }
-            scanBuilder.setColumnAccessPaths(paths);
-
-            return scanBuilder.build();
         }
 
         @Override
