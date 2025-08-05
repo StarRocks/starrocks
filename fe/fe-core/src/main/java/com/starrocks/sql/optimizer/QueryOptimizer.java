@@ -683,7 +683,7 @@ public class QueryOptimizer extends Optimizer {
 
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.META_SCAN_REWRITE_RULES);
-        scheduler.rewriteOnce(tree, rootTaskContext, new MergeTwoProjectRule());
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
         // before MergeProjectWithChildRule, after INLINE_CTE and MergeApplyWithTableFunction
         scheduler.rewriteIterative(tree, rootTaskContext, RewriteUnnestBitmapRule.getInstance());
@@ -713,7 +713,6 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
 
         scheduler.rewriteOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
-        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_EMPTY_OPERATOR_RULES);
         scheduler.rewriteOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
 
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.VECTOR_REWRITE_RULES);
