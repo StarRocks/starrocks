@@ -2057,17 +2057,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 -->
 
-<!--
-##### prepared_transaction_default_timeout_second
-
-- 默认值：86400
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### max_load_timeout_second
 
 - 默认值：259200
@@ -2085,6 +2074,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：导入作业的最小超时时间，适用于所有导入。
 - 引入版本：-
+
+##### prepared_transaction_default_timeout_second
+
+- 默认值：86400
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：预提交事务的默认超时时间。
+- 引入版本：v3.5
 
 ##### spark_dpp_version
 
