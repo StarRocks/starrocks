@@ -20,16 +20,15 @@
 
 #include "column/column_viewer.h"
 #include "column/datum.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "common/config.h"
+#include "http/http_client.h"
 #include "util/json.h"
 #include "util/json_converter.h"
 #include "util/json_flattener.h"
-#include "util/llm_query_service.h"
 #include "util/llm_cache_manager.h"
-#include "http/http_client.h"
-
+#include "util/llm_query_service.h"
 
 namespace starrocks {
 
@@ -100,9 +99,7 @@ StatusOr<ModelConfig> AiFunctions::parse_model_config(const JsonValue& json) {
 
 Status AiFunctions::init_llm_cache() {
     static std::once_flag init_flag;
-    std::call_once(init_flag, []() {
-        LLMCacheManager::instance()->init(config::llm_cache_size);
-    });
+    std::call_once(init_flag, []() { LLMCacheManager::instance()->init(config::llm_cache_size); });
     return Status::OK();
 }
 
@@ -122,19 +119,19 @@ StatusOr<ColumnPtr> AiFunctions::ai_query(FunctionContext* context, const starro
 
     std::vector<std::shared_future<StatusOr<std::string>>> futures;
     futures.reserve(num_rows);
+    std::vector<bool> is_valid_row(num_rows, false);
 
     for (int row = 0; row < num_rows; ++row) {
         if (prompt_viewer.is_null(row) || json_viewer.is_null(row)) {
-            futures.emplace_back();
+            is_valid_row[row] = false;
             continue;
         }
-        JsonValue* json_value = json_viewer.value(row);
 
+        JsonValue* json_value = json_viewer.value(row);
         auto status_or_config = parse_model_config(*json_value);
         if (!status_or_config.ok()) {
-            LOG(WARNING) << "Failed to parse config at row " << row
-                        << ": " << status_or_config.status().to_string();
-            futures.emplace_back();
+            LOG(WARNING) << "Failed to parse config at row " << row << ": " << status_or_config.status().to_string();
+            is_valid_row[row] = false;
             continue;
         }
 
@@ -144,19 +141,21 @@ StatusOr<ColumnPtr> AiFunctions::ai_query(FunctionContext* context, const starro
 
         // Asynchronously sending the large language model request
         futures.push_back(query_service->async_query(prompt_str, config));
+        is_valid_row[row] = true;
     }
+
+    size_t future_idx = 0;
     for (int row = 0; row < num_rows; ++row) {
-        if (!futures[row].valid()) {
+        if (!is_valid_row[row]) {
             result.append_null();
             continue;
         }
 
-        auto llm_result = futures[row].get();
+        auto llm_result = futures[future_idx++].get();
         if (llm_result.ok()) {
             result.append(llm_result.value());
         } else {
-            LOG(WARNING) << "LLM query failed at row " << row
-                       << ": " << llm_result.status().to_string();
+            LOG(WARNING) << "LLM query failed at row " << row << ": " << llm_result.status().to_string();
             result.append_null();
         }
     }

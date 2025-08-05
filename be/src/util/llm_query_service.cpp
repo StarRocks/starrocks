@@ -14,17 +14,18 @@
 
 #include "util/llm_query_service.h"
 
-#include <memory>
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
+
+#include <memory>
 
 #include "common/config.h"
 #include "exprs/ai_functions.h"
 #include "http/http_client.h"
 #include "util/json.h"
-#include "util/threadpool.h"
 #include "util/llm_cache_manager.h"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -48,9 +49,7 @@ Status LLMQueryService::init() {
         max_concurrent_queries = std::thread::hardware_concurrency();
     }
     ThreadPoolBuilder builder("llm_query_pool");
-    builder.set_min_threads(1)
-           .set_max_threads(max_concurrent_queries)
-           .set_max_queue_size(20);
+    builder.set_min_threads(1).set_max_threads(max_concurrent_queries).set_max_queue_size(20);
 
     RETURN_IF_ERROR(builder.build(&_thread_pool));
 
@@ -62,7 +61,8 @@ StatusOr<std::string> LLMQueryService::query(const std::string& prompt, const Mo
     return future.get();
 }
 
-std::shared_future<StatusOr<std::string>> LLMQueryService::async_query(const std::string& prompt, const ModelConfig& config) {
+std::shared_future<StatusOr<std::string>> LLMQueryService::async_query(const std::string& prompt,
+                                                                       const ModelConfig& config) {
     std::string cache_key = generate_cache_key(prompt, config);
 
     // First check cache
@@ -87,21 +87,22 @@ std::shared_future<StatusOr<std::string>> LLMQueryService::async_query(const std
 
     // Create new query task
     auto task = [this, prompt, config, cache_key]() -> StatusOr<std::string> {
-        auto result = execute_query(prompt,config);
+        auto result = execute_query(prompt, config);
 
         // Cache the result if successful
         if (result.ok()) {
             auto* cache = LLMCacheManager::instance()->get_cache();
-            auto* cache_value = new LLMCacheValue();
+            auto cache_value = std::make_unique<LLMCacheValue>();
             cache_value->response = result.value();
             cache_value->cache_key_str = cache_key;
 
             size_t charge = sizeof(LLMCacheValue) + cache_value->response.size() + cache_value->cache_key_str.size();
-            auto* new_handle = cache->insert(CacheKey(cache_key), cache_value, charge,
-                                           &llm_cache_value_deleter);
+            auto* new_handle = cache->insert(CacheKey(cache_key), cache_value.get(), charge, &llm_cache_value_deleter);
 
             if (new_handle) {
                 cache->release(new_handle);
+                // Transfer ownership to cache
+                cache_value.release();
             }
         }
 
@@ -130,9 +131,8 @@ std::shared_future<StatusOr<std::string>> LLMQueryService::async_query(const std
     }
 
     // Submit the task to thread pool
-    auto status = _thread_pool->submit_func([task = std::move(task), promise_ptr]() mutable {
-        promise_ptr->set_value(task());
-    });
+    auto status = _thread_pool->submit_func(
+            [task = std::move(task), promise_ptr]() mutable { promise_ptr->set_value(task()); });
 
     return future;
 }
