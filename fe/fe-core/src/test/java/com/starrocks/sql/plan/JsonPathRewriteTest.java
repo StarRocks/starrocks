@@ -142,7 +142,22 @@ public class JsonPathRewriteTest extends PlanTestBase {
                         "select abs(get_json_int(c2, 'f12')) from extend_predicate",
                         " <slot 3> : abs(4: c2.f12)",
                         "ExtendedColumnAccessPath: [/c2(bigint(20))/f12(bigint(20))]"
+                ),
+                // JSON path exceeding depth limit should not be rewritten
+                Arguments.of(
+                        "select get_json_string(c2, 'f1.f2.f3.f4.f5.f6.f7.f8.f9.f10.f11.f12.f13.f14.f15.f16.f17.f18" +
+                                ".f19.f20.f21') from extend_predicate",
+                        "  |  <slot 3> : get_json_string(2: c2, 'f1.f2.f3.f4.f5.f6.f7.f8.f9.f10.f11.f12.f13.f14.f1.." +
+                                ".')",
+                        ""
+                ),
+                // JSON path with mixed data types should not be rewritten
+                Arguments.of(
+                        "select get_json_string(c2, 'f2'), get_json_int(c2, 'f2') from extend_predicate",
+                        "get_json_string(2: c2, 'f2')",
+                        ""
                 )
+
         );
     }
 }

@@ -24,6 +24,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -44,6 +45,8 @@ import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNor
 import com.starrocks.sql.optimizer.task.TaskContext;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -68,6 +71,7 @@ import java.util.regex.Pattern;
  */
 public class JsonPathRewriteRule implements TreeRewriteRule {
 
+    private static final Logger LOG = LogManager.getLogger(JsonPathRewriteRule.class);
     private static final int DEFAULT_JSON_FLATTEN_DEPTH = 20;
     private static final Pattern JSON_PATH_VALID_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
 
@@ -81,13 +85,18 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         SessionVariable variables = taskContext.getOptimizerContext().getSessionVariable();
-        if (!variables.isEnableJSONV2Rewrite()) {
+        if (!variables.isEnableJSONV2Rewrite() || variables.isCboUseDBLock()) {
             return root;
         }
 
         ColumnRefFactory columnRefFactory = taskContext.getOptimizerContext().getColumnRefFactory();
-        JsonPathRewriteVisitor visitor = new JsonPathRewriteVisitor(columnRefFactory);
-        return root.getOp().accept(visitor, root, null);
+        try {
+            JsonPathRewriteVisitor visitor = new JsonPathRewriteVisitor(columnRefFactory);
+            return root.getOp().accept(visitor, root, null);
+        } catch (Exception e) {
+            LOG.warn("Failed to rewrite JSON paths in expression: {}", root, e);
+            return root;
+        }
     }
 
     /**
@@ -122,12 +131,20 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
         public Pair<Boolean, ColumnRefOperator> getOrCreateColumn(ColumnRefOperator jsonColumn,
                                                                   ColumnAccessPath jsonPath) {
             Pair<Table, Column> tableAndColumn = columnRefFactory.getTableAndColumn(jsonColumn);
+            Preconditions.checkState(tableAndColumn != null,
+                    "ColumnRefOperator %s must be attached to a table", jsonColumn);
             String path = jsonPath.getLinearPath();
             String fullPath = tableAndColumn.first.getId() + "." + path;
 
             ColumnRefOperator existingColumn = pathMap.get(fullPath);
             if (existingColumn != null) {
-                return Pair.create(true, existingColumn);
+                if (jsonPath.getValueType().equals(existingColumn.getType())) {
+                    // If the existing column matches the type, return it
+                    return Pair.create(true, existingColumn);
+                } else {
+                    throw new IllegalArgumentException("unsupported mixed json path type: "
+                            + jsonPath.getValueType() + " and  " + existingColumn.getType());
+                }
             }
 
             // Create new column in table metadata
@@ -146,8 +163,12 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
 
         private Column createExtendedColumn(Table table, String path, ColumnAccessPath jsonPath) {
             if (!table.containColumn(path)) {
-                Preconditions.checkState(table instanceof OlapTable,
+                // TODO: support LakeTable
+                Preconditions.checkState(table instanceof OlapTable && !(table instanceof LakeTable),
                         "Only OlapTable supports dynamic column addition");
+                // NOTE: The safety of adding a column dynamically is ensured by the fact that
+                // this rule is only applied during query planning, thus the Table here is already copied for the
+                // query. So this change would not affect the original table schema.
                 Column extendedColumn = new Column(path, jsonPath.getValueType(), true);
                 table.addColumn(extendedColumn);
                 return extendedColumn;
@@ -367,6 +388,10 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
             String path = ((ConstantOperator) pathArg).getVarchar();
             List<String> fields = parseJsonPath(path);
 
+            if (fields == null) {
+                return call; // Path was truncated, cannot rewrite
+            }
+
             if (!isValidJsonPath(fields)) {
                 return call;
             }
@@ -396,10 +421,16 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
 
         /**
          * Parses a JSON path like $.f1.f2 into ["f1", "f2"].
+         * Returns null if the path was truncated due to exceeding depth limit.
          */
         private static List<String> parseJsonPath(String path) {
             List<String> result = Lists.newArrayList();
-            SubfieldAccessPathNormalizer.parseSimpleJsonPath(DEFAULT_JSON_FLATTEN_DEPTH, path, result);
+            boolean wasTruncated =
+                    SubfieldAccessPathNormalizer.parseSimpleJsonPath(DEFAULT_JSON_FLATTEN_DEPTH, path, result);
+            // If the path was truncated, return null to prevent incorrect rewriting
+            if (wasTruncated) {
+                return null;
+            }
             return result;
         }
 

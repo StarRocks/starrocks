@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.api.client.util.Lists;
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.thrift.TAccessPathType;
@@ -79,6 +80,7 @@ public class ColumnAccessPath {
      * Create a linear path like a.b.c, one node has at most one child node
      */
     public static ColumnAccessPath createLinearPath(List<String> path, Type valueType) {
+        Preconditions.checkArgument(path != null && !path.isEmpty(), "Path must not be empty");
         ColumnAccessPath root = new ColumnAccessPath(TAccessPathType.ROOT, path.get(0), valueType);
         ColumnAccessPath curr = root;
         for (String field : path.subList(1, path.size())) {
@@ -92,7 +94,9 @@ public class ColumnAccessPath {
     public static ColumnAccessPath createFromLinearPath(String linearPath, Type valueType) {
         final int jsonFlattenDepth = 20;
         List<String> pieces = Lists.newArrayList();
-        SubfieldAccessPathNormalizer.parseSimpleJsonPath(jsonFlattenDepth, linearPath, pieces);
+        if (SubfieldAccessPathNormalizer.parseSimpleJsonPath(jsonFlattenDepth, linearPath, pieces)) {
+            throw new IllegalArgumentException("illegal json path: " + linearPath);
+        }
         return createLinearPath(pieces, valueType);
     }
 
