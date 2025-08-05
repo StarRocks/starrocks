@@ -132,12 +132,15 @@ public class HashDistributionDesc {
         return this.sourceType == SourceType.LOCAL;
     }
 
-    public boolean isNativeLocal() {
+    public boolean isNative() {
         return true;
     }
 
     public boolean canColocate(HashDistributionDesc o) {
-        return o.isNativeLocal();
+        if (!this.isLocal() || !o.isLocal()) {
+            return false;
+        }
+        return o.isNative();
     }
 
     public boolean isShuffle() {
