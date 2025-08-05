@@ -45,6 +45,7 @@ public:
     ChunkBufferLimiter* limiter() { return _limiter.get(); }
     void update_limiter(Chunk* chunk);
 
+    BalanceStrategy strategy() const { return _strategy; }
     int64_t memory_usage() const { return _memory_usage; }
 
 private:
