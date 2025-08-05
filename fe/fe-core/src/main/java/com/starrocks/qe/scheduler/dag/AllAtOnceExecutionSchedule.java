@@ -14,12 +14,7 @@
 
 package com.starrocks.qe.scheduler.dag;
 
-<<<<<<< HEAD
 import com.starrocks.common.UserException;
-=======
-import com.starrocks.common.StarRocksException;
-import com.starrocks.proto.PPlanFragmentCancelReason;
->>>>>>> d8ff13b53b ([BugFix] fix query hang because of incorrect scan range delivery (#61562))
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.DeployState;
@@ -66,14 +61,11 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
                     coordinator.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
                     throw new RuntimeException(e);
                 }
-<<<<<<< HEAD
                 for (DeployState state : states) {
                     deployer.deployFragments(state);
                 }
             } catch (UserException | RpcException e) {
                 throw new RuntimeException(e);
-=======
->>>>>>> d8ff13b53b ([BugFix] fix query hang because of incorrect scan range delivery (#61562))
             }
         }
 
