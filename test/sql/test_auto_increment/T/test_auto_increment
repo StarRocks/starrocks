@@ -329,6 +329,7 @@ DROP TABLE t_auto_increment_insert_partial_update force;
 -- name: test_auto_increment_partial_update_column_upsert @sequential
 CREATE DATABASE test_auto_increment_partial_update_column_upsert;
 ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+USE DATABASE test_auto_increment_partial_update_column_upsert;
 CREATE TABLE `t_auto_increment_partial_update_column_upsert` (
   `k`  BIGINT NOT NULL COMMENT "",
   `v1` BIGINT AUTO_INCREMENT,
