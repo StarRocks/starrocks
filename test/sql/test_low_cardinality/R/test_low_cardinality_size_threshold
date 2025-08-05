@@ -1,0 +1,19 @@
+-- name: test_low_cardinality
+CREATE TABLE t1(c1 int, c2 varchar(65536)) duplicate key(c1) distributed by hash(c1) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t1 SELECT generate_series, concat(repeat("1234567890", 300), generate_series) FROM TABLE(generate_series(1,  200));
+-- result:
+-- !result
+[UC] analyze table t1;
+-- result:
+test_db_d366f57af3944281a68c9468213b8a92.t1     analyze status  OK
+-- !result
+function: wait_global_dict_ready('c2', 't1')
+-- result:
+
+-- !result
+function: assert_explain_contains('select c2, count(*) from t1 group by c2;', 'Decode')
+-- result:
+None
+-- !result
