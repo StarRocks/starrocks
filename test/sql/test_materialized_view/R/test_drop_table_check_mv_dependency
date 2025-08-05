@@ -25,11 +25,17 @@ set enable_drop_table_check_mv_dependency=true;
 -- result:
 -- !result
 drop table t1;
+-- result:
 E: (1064, 'Getting analyzing error. Detail message: t1 exists mv dependencies: [db_drop_table_check_mv_dependency.mv2, db_drop_table_check_mv_dependency.mv1], drop is not allowed. See more detailed information in `sys.object_dependencies`, or `set global enable_drop_table_check_mv_dependency=false`.')
+-- !result
 drop view v1;
+-- result:
 E: (1064, 'Getting analyzing error. Detail message: v1 exists mv dependencies: [db_drop_table_check_mv_dependency.mv2], drop is not allowed. See more detailed information in `sys.object_dependencies`, or `set global enable_drop_table_check_mv_dependency=false`.')
+-- !result
 drop materialized view mv1;
+-- result:
 E: (1064, 'Getting analyzing error. Detail message: mv1 exists mv dependencies: [db_drop_table_check_mv_dependency.mv3], drop is not allowed. See more detailed information in `sys.object_dependencies`, or `set global enable_drop_table_check_mv_dependency=false`.')
+-- !result
 set enable_drop_table_check_mv_dependency=false;
 -- result:
 -- !result
