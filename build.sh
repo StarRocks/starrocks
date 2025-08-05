@@ -95,6 +95,7 @@ Usage: $0 <options>
      --without-java-ext build Backend without java-extensions(default with java-extensions)
      --without-starcache
                         build Backend without starcache library
+     --with-ut          build Backend with unit tests in the same build directory
      -j                 build Backend parallel
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
@@ -120,6 +121,7 @@ Usage: $0 <options>
     $0 --fe --be --clean                         clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                               build Spark DPP application alone
     $0 --hive-udf                                build Hive UDF
+    $0 --be --with-ut                            build Backend with unit tests in the same build directory
     $0 --be --output PATH                        build Backend that outputs results to a specified path (relative paths are supported).
     BUILD_TYPE=build_type ./build.sh --be        build Backend is different mode (build_type could be Release, Debug, or Asan. Default value is Release. To build Backend in Debug mode, you can execute: BUILD_TYPE=Debug ./build.sh --be)
     DISABLE_JAVA_CHECK_STYLE=ON ./build.sh       build with Java checkstyle disabled
@@ -154,6 +156,7 @@ OPTS=$(getopt \
   -l 'output:' \
   -l 'help' \
   -l 'disable-java-check-style' \
+  -l 'with-ut' \
   -- "$@")
 
 if [ $? != 0 ] ; then
@@ -178,6 +181,7 @@ BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
 WITH_TENANN=ON
 WITH_RELATIVE_SRC_PATH=ON
+WITH_UT=OFF
 
 # Default to OFF, turn it ON if current shell is non-interactive
 WITH_MAVEN_BATCH_MODE=OFF
@@ -292,6 +296,7 @@ else
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
             --disable-java-check-style) DISABLE_JAVA_CHECK_STYLE=ON; shift ;;
+            --with-ut) WITH_UT=ON; shift ;;
             --) shift ;  break ;;
             *) echo "Internal error" ; exit 1 ;;
         esac
@@ -349,6 +354,7 @@ echo "Get params:
     WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
     WITH_MAVEN_BATCH_MODE       -- $WITH_MAVEN_BATCH_MODE
     DISABLE_JAVA_CHECK_STYLE    -- $DISABLE_JAVA_CHECK_STYLE
+    WITH_UT                     -- $WITH_UT
 "
 
 check_tool()
@@ -423,6 +429,9 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
     if [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}_format-lib
     fi
+    if [ "${WITH_UT}" = "ON" ]; then
+        CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}_with_ut
+    fi
 
     if [ ${CLEAN} -eq 1 ]; then
         rm -rf $CMAKE_BUILD_DIR
@@ -453,13 +462,20 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
     fi
 
 
+    # Set MAKE_TEST based on WITH_UT
+    if [ "${WITH_UT}" = "ON" ]; then
+        MAKE_TEST_VALUE=ON
+    else
+        MAKE_TEST_VALUE=OFF
+    fi
+
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
                   -DSTARROCKS_HOME=${STARROCKS_HOME}                    \
                   -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
                   -DCMAKE_CXX_COMPILER_LAUNCHER=${CXX_COMPILER_LAUNCHER} \
                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
-                  -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
+                  -DMAKE_TEST=${MAKE_TEST_VALUE} -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
                   -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
@@ -475,6 +491,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON                    \
                   -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}                \
                   -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
+                  -DWITH_UT=${WITH_UT}                                  \
                   ..
 
     time ${BUILD_SYSTEM} -j${PARALLEL}
