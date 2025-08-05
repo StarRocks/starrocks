@@ -67,6 +67,7 @@ set(EXEC_FILES
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
+        ./exec/pipeline/exchange_bucket_aware_test.cpp
         ./exec/pipeline/exchange_pass_through_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
