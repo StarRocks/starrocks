@@ -241,6 +241,7 @@ public abstract class DynamicTabletJob implements Writable {
     public TDynamicTabletJobsItem getInfo() {
         TDynamicTabletJobsItem item = new TDynamicTabletJobsItem();
         item.setJob_id(jobId);
+        item.setDb_id(dbId);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             item.setDb_name("");
@@ -249,6 +250,7 @@ public abstract class DynamicTabletJob implements Writable {
             item.setDb_name(db.getFullName());
         }
 
+        item.setTable_id(tableId);
         try {
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
             item.setTable_name(table.getName());
@@ -257,8 +259,6 @@ public abstract class DynamicTabletJob implements Writable {
             LOG.warn("Failed to get table name for dynamic tablet job. dbId: {}, tableId: {}, jobId: {}",
                      dbId, tableId, jobId, e);
         }
-        item.setDb_id(dbId);
-        item.setTable_id(tableId);
         item.setJob_type(jobType.name());
         item.setJob_state(jobState.name());
         item.setTransaction_id(-1L); // override in the future pr.

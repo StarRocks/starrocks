@@ -32,10 +32,10 @@ public class DynamicTabletJobsTable {
                 Table.TableType.SCHEMA,
                 builder()
                         .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("DB_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("DB_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("DB_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TABLE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("JOB_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("JOB_STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TRANSACTION_ID", ScalarType.createType(PrimitiveType.BIGINT))

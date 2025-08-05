@@ -23,10 +23,10 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaDynamicTabletJobsScanner::_s_columns[] = {
         {"JOB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
-        {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
-        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"DB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"TABLE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"JOB_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"JOB_STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"TRANSACTION_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
@@ -62,10 +62,10 @@ Status SchemaDynamicTabletJobsScanner::_fill_chunk(ChunkPtr* chunk) {
     const TDynamicTabletJobsItem& info = _result.items[_index];
     DatumArray datum_array{
             info.job_id,
-            Slice(info.db_name),
-            Slice(info.table_name),
             info.db_id,
+            Slice(info.db_name),
             info.table_id,
+            Slice(info.table_name),
 
             Slice(info.job_type),
             Slice(info.job_state),
