@@ -450,13 +450,18 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             try {
                 long bucketSize = PropertyAnalyzer.analyzeLongProp(properties,
-                        PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, Config.default_automatic_bucket_size);
+                        PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, -1);
                 if (bucketSize >= 0) {
                     if (!table.allowBucketSizeSetting()) {
-                        throw new DdlException("Setting bucket size is not allowed: only supported for tables with RANDOM " +
-                                "distribution and when 'enable_automatic_bucket' is enabled.");
+                        throw new DdlException(
+                                "Setting bucket size is not allowed: only supported for tables with RANDOM " +
+                                        "distribution and when 'enable_automatic_bucket' is enabled.");
                     }
                     table.setAutomaticBucketSize(bucketSize);
+                } else if (bucketSize == -1) {
+                    if (table.allowBucketSizeSetting()) {
+                        table.setAutomaticBucketSize(Config.default_automatic_bucket_size);
+                    }
                 } else {
                     throw new DdlException("Illegal bucket size: " + bucketSize);
                 }
