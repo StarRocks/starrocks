@@ -2065,17 +2065,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Introduced in: -
 -->
 
-<!--
-##### prepared_transaction_default_timeout_second
-
-- Default: 86400
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ##### max_load_timeout_second
 
 - Default: 259200
@@ -2101,7 +2090,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: Seconds
 - Is mutable: Yes
 - Description: The default timeout duration for a prepared transaction.
-- Introduced in: -
+- Introduced in: v3.5
 
 ##### spark_dpp_version
 
