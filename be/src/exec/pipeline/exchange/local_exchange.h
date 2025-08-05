@@ -197,8 +197,7 @@ class PartitionExchanger final : public LocalExchanger {
 public:
     PartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
                        LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
-                       std::vector<ExprContext*> _partition_expr_ctxs,
-                       std::vector<TBucketProperty> bucket_properties);
+                       std::vector<ExprContext*> _partition_expr_ctxs, std::vector<TBucketProperty> bucket_properties);
 
     ~PartitionExchanger() override = default;
 
