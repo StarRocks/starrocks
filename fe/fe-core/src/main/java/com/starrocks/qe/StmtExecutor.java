@@ -1228,14 +1228,34 @@ public class StmtExecutor {
             if (queryDetail != null) {
                 queryDetail.setProfile(profileContent);
             }
-            QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
-            QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
-            if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
-                String jsonString = GSON.toJson(queryDetail);
-                PROFILE_LOG.info(jsonString);
+        };
+        Consumer<Boolean> taskWrapper = (Boolean isAsync) -> {
+            try {
+                task.accept(isAsync);
+            } catch (Exception e) {
+                LOG.warn("process profile async failed", e);
+            } finally {
+                QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
+                QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+
+                if (Config.enable_collect_query_detail_info && Config.enable_profile_log && queryDetail != null) {
+                    String jsonString = GSON.toJson(queryDetail);
+                    if (Config.enable_profile_log_compress) {
+                        byte[] jsonBytes;
+                        try {
+                            jsonBytes = CompressionUtils.gzipCompressString(jsonString);
+                            PROFILE_LOG.info(jsonBytes);
+                        } catch (IOException e) {
+                            LOG.warn("Compress queryDetail string failed, length: {}, reason: {}",
+                                    jsonString.length(), e.getMessage());
+                        }
+                    } else {
+                        PROFILE_LOG.info(jsonString);
+                    }
+                }
             }
         };
-        return coord.tryProcessProfileAsync(task);
+        return coord.tryProcessProfileAsync(taskWrapper);
     }
 
     public void registerSubStmtExecutor(StmtExecutor subStmtExecutor) {
