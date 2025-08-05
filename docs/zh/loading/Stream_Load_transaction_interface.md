@@ -61,7 +61,7 @@ stateDiagram-v2
 
 当开始事务时，您还可以通过HTTP请求 Header 中的 `idle_transaction_timeout` 字段指定事务可保持空闲状态的超时时间（以秒为单位）。若在此期间内未写入任何数据，该事务将被自动回滚。
 
-在预提交事务时，您可以通过 HTT P请求 Header 中的 `prepared_timeout` 字段指定事务从 `PREPARED` 状态转换为 `COMMITTED` 状态的超时时间（以秒为单位）。如果在此时间段内事务未完成提交，系统将自动取消该事务。如果未指定此字段，默认值由 FE 配置 [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) 决定（默认：86400 秒）。`prepared_timeout` 自 v4.0.0 版本起支持。
+在预提交事务时，您可以通过 HTT P请求 Header 中的 `prepared_timeout` 字段指定事务从 `PREPARED` 状态转换为 `COMMITTED` 状态的超时时间（以秒为单位）。如果在此时间段内事务未完成提交，系统将自动取消该事务。如果未指定此字段，默认值由 FE 配置 [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) 决定（默认：86400 秒）。`prepared_timeout` 自 v3.5.4 版本起支持。
 
 ## 接口优势
 
@@ -300,7 +300,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 > **说明**
 >
-> `prepared_timeout` 字段为可选。如果未指定该字段，其默认值由 FE 配置中的 [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) 决定（默认值：86400 秒）。`prepared_timeout` 自 v4.0.0 版本起支持。
+> `prepared_timeout` 字段为可选。如果未指定该字段，其默认值由 FE 配置中的 [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) 决定（默认值：86400 秒）。`prepared_timeout` 自 v3.5.4 版本起支持。
 
 #### 返回结果
 

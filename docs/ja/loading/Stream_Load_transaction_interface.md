@@ -61,7 +61,7 @@ Stream Load トランザクションインターフェースは、StarRocks の�
 
 トランザクションを開始する際、HTTP リクエストヘッダーの `idle_transaction_timeout` フィールドを使用して、トランザクションがアイドル状態のまま保持できるタイムアウト期間（秒単位）を指定できます。この期間内にデータが書き込まれない場合、トランザクションは自動的にロールバックされます。
 
-トランザクションを準備する際、HTTP リクエストヘッダーの `prepared_timeout` フィールドを使用して、トランザクションが `PREPARED` 状態から `COMMITTED` 状態に移行するまでのタイムアウト期間（秒単位）を指定できます。この期間内にトランザクションがコミットされない場合、自動的に中止されます。このフィールドが指定されていない場合、デフォルト値は FE 設定の [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) によって決定されます（デフォルト：86400秒）。`prepared_timeout` は v4.0.0 以降でサポートされています。
+トランザクションを準備する際、HTTP リクエストヘッダーの `prepared_timeout` フィールドを使用して、トランザクションが `PREPARED` 状態から `COMMITTED` 状態に移行するまでのタイムアウト期間（秒単位）を指定できます。この期間内にトランザクションがコミットされない場合、自動的に中止されます。このフィールドが指定されていない場合、デフォルト値は FE 設定の [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) によって決定されます（デフォルト：86400秒）。`prepared_timeout` は v3.5.4 以降でサポートされています。
 
 ## 利点
 
@@ -300,7 +300,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 > **NOTE**
 >
-> `prepared_timeout` フィールドはオプションです。指定されない場合、デフォルト値は FE 設定 [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) によって決定されます（デフォルト: 86400 秒）。`prepared_timeout` は v4.0.0 以降でサポートされています。
+> `prepared_timeout` フィールドはオプションです。指定されない場合、デフォルト値は FE 設定 [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) によって決定されます（デフォルト: 86400 秒）。`prepared_timeout` は v3.5.4 以降でサポートされています。
 
 #### 戻り結果
 

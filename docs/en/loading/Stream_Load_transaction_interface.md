@@ -62,7 +62,7 @@ When you begin a transaction, you can use the `timeout` field in the HTTP reques
 
 When you begin a transaction, you can also use the `idle_transaction_timeout` field in the HTTP request header to specify a timeout period (in seconds) within which the transaction can stay idle. If no data is written within this period, the transaction will be automatically rolled back.
 
-When you prepare a transaction, you can use the `prepared_timeout` field in the HTTP request header to specify a timeout period (in seconds) for the transaction from `PREPARED` to `COMMITTED` state. If the transaction has not been committed after this period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) (Default: 86400 seconds). `prepared_timeout` is supported from v4.0.0 onwards.
+When you prepare a transaction, you can use the `prepared_timeout` field in the HTTP request header to specify a timeout period (in seconds) for the transaction from `PREPARED` to `COMMITTED` state. If the transaction has not been committed after this period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) (Default: 86400 seconds). `prepared_timeout` is supported from v3.5.4 onwards.
 
 ## Benefits
 
@@ -301,7 +301,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 > **NOTE**
 >
-> The `prepared_timeout` field is optional. If it is not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) (Default: 86400 seconds). `prepared_timeout` is supported from v4.0.0 onwards.
+> The `prepared_timeout` field is optional. If it is not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) (Default: 86400 seconds). `prepared_timeout` is supported from v3.5.4 onwards.
 
 #### Return result
 

@@ -45,14 +45,14 @@ PreparedTimeoutMs: 86400000
 * ABORTED: トランザクションが失敗
 * LoadJobSourceType: インポートタスクのタイプ
 * PrepareTime: トランザクションの開始時間
-* PreparedTime: トランスアクションが正常に準備された時点（v4.0.0からサポートされています）
+* PreparedTime: トランスアクションが正常に準備された時点（v3.5.4からサポートされています）
 * CommitTime: トランザクションが正常にコミットされた時間
 * FinishTime: データが見えるようになった時間
 * Reason: エラーメッセージ
 * ErrorReplicasCount: エラーのあるレプリカの数
 * ListenerId: 関連するインポートジョブの ID
 * TimeoutMs: トランザクションが `PREPARE` 状態から `PREPARED` 状態に移行するまでのタイムアウト時間（ミリ秒単位）
-* PreparedTimeoutMs: トランザクションが `PREPARED` 状態から `COMMITTED` 状態に移行するまでのタイムアウト時間（ミリ秒単位）（v4.0.0からサポートされています）
+* PreparedTimeoutMs: トランザクションが `PREPARED` 状態から `COMMITTED` 状態に移行するまでのタイムアウト時間（ミリ秒単位）（v3.5.4からサポートされています）
 
 ## 例
 
