@@ -737,18 +737,11 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 | iceberg_manifest_cache_max_num                | 100000                | The maximum number of Manifest files that can be cached.     |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | The minimum Manifest file length that triggers a Data File Cache refresh. |
 
-Starting from version 3.4, StarRocks can obtain statistics of Iceberg tables by reading Iceberg metadata through setting the following parameters, without actively triggering the collection of Iceberg table statistics.
+Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading Iceberg metadata through setting the following parameters, without actively triggering the collection of Iceberg table statistics.
 
-| **Parameter**                                 | **Default**           | **Description**                                        |
-|:----------------------------------------------| :-------------------- |:-------------------------------------------------------|
-| enable_get_stats_from_external_metadata       | false                  | Whether to to obtain statistics from Iceberg metadata. |
-
-When `enable_get_stats_from_external_metadata` is enabled, it is also possible to further control which statistics to obtain through the FE session variable.
-
-#### enable_iceberg_column_statistics
-- Unit: N/A
-- Default value:  false
-- Description: Whether to obtain column statistics, such as min/max/null count/row size/ndv (if a puffin file exists). When the value is set to false, only the row count information will be obtained.
+| **Parameter**                                 | **Default**           | **Description**                                         |
+| :-------------------------------------------- | :-------------------- | :-------------------------------------------------------|
+| enable_get_stats_from_external_metadata       | false                 | Whether to to obtain statistics from Iceberg metadata. When this item is set to `true`, you can further control which type of statistics to collect through the session variable [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata).  |
 
 ### Examples
 
