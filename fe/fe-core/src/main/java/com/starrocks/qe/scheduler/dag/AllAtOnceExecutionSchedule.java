@@ -19,8 +19,6 @@ import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TUniqueId;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
