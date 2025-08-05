@@ -138,6 +138,44 @@ void HttpClient::set_method(HttpMethod method) {
     }
 }
 
+void HttpClient::set_header(const std::string& key, const std::string& value) {
+    _headers[key] = value;
+    _apply_headers();
+}
+
+void HttpClient::set_headers(const std::unordered_map<std::string, std::string>& headers) {
+    for (const auto& header : headers) {
+        _headers[header.first] = header.second;
+    }
+    _apply_headers();
+}
+
+void HttpClient::clear_headers() {
+    _headers.clear();
+    if (_header_list != nullptr) {
+        curl_slist_free_all(_header_list);
+        _header_list = nullptr;
+    }
+    _apply_headers();
+}
+
+void HttpClient::_apply_headers() {
+    // Clear the existing header list
+    if (_header_list) {
+        curl_slist_free_all(_header_list);
+        _header_list = nullptr;
+    }
+
+    // Append each header from the map
+    for (const auto& header : _headers) {
+        std::string header_entry = header.first + ": " + header.second;
+        _header_list = curl_slist_append(_header_list, header_entry.c_str());
+    }
+
+    // Apply the new header list
+    curl_easy_setopt(_curl, CURLOPT_HTTPHEADER, _header_list);
+}
+
 size_t HttpClient::on_response_data(const void* data, size_t length) {
     if (*_callback != nullptr) {
         bool is_continue = (*_callback)(data, length);
@@ -168,6 +206,10 @@ Status HttpClient::execute_delete_request(const std::string& payload, std::strin
 
 Status HttpClient::execute(const std::function<bool(const void* data, size_t length)>& callback) {
     _callback = &callback;
+
+    // Apply headers before executing
+    _apply_headers();
+
     auto code = curl_easy_perform(_curl);
     if (code != CURLE_OK) {
         LOG(WARNING) << "fail to execute HTTP client, errmsg=" << _to_errmsg(code);
