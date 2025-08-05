@@ -92,7 +92,7 @@ public:
                 /*dest_dop*/ 1,
                 /*sender_id*/ 0, _dest_node_id, /*partition_exprs*/ std::vector<ExprContext*>(),
                 /*enable_exchange_pass_through*/ true, /*enable_exchange_perf*/ false, _fragment_context.get(),
-                /*output_columns*/ std::vector<int32_t>());
+                /*output_columns*/ std::vector<int32_t>(), std::vector<TBucketProperty>());
         _exchange_sink_factory->set_runtime_state(_runtime_state.get());
     }
 

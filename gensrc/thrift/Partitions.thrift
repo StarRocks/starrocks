@@ -110,6 +110,7 @@ struct TDataPartition {
   1: required TPartitionType type
   2: optional list<Exprs.TExpr> partition_exprs
   3: optional list<TRangePartition> partition_infos
+  4: optional list<TBucketProperty> bucket_properties
 }
 
 
