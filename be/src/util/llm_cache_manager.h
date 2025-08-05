@@ -1,9 +1,10 @@
 #pragma once
 
-#include <mutex>
 #include <memory>
-#include "util/lru_cache.h"
+#include <mutex>
+
 #include "exprs/ai_functions.h"
+#include "util/lru_cache.h"
 
 namespace starrocks {
 

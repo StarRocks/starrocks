@@ -33,10 +33,11 @@ struct ModelConfig {
     int max_tokens;
     double top_p;
 
-    ModelConfig() : endpoint(kDefaultEndpoint),
-                   temperature(kDefaultTemperature),
-                   max_tokens(kDefaultMaxTokens),
-                   top_p(kDefaultTopP) {}
+    ModelConfig()
+            : endpoint(kDefaultEndpoint),
+              temperature(kDefaultTemperature),
+              max_tokens(kDefaultMaxTokens),
+              top_p(kDefaultTopP) {}
 };
 
 class AiFunctions {

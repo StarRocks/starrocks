@@ -18,9 +18,9 @@
 #include <gtest/gtest.h>
 
 #include "column/array_column.h"
-#include "column/json_column.h"
 #include "column/binary_column.h"
 #include "column/const_column.h"
+#include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "util/json.h"
@@ -34,18 +34,21 @@ public:
 protected:
     // Helper method to create test configuration JSON
     JsonValue createTestConfig(const std::string& endpoint = "https://api.openai.com/v1/chat/completions",
-                              const std::string& model = "gpt-3.5-turbo",
-                              const std::string& api_key = "test-api-key",
-                              double temperature = 0.7,
-                              int max_tokens = 1000,
-                              double top_p = 0.9) {
+                               const std::string& model = "gpt-3.5-turbo", const std::string& api_key = "test-api-key",
+                               double temperature = 0.7, int max_tokens = 1000, double top_p = 0.9) {
         std::string json_str = R"({
-            "endpoint": ")" + endpoint + R"(",
-            "model": ")" + model + R"(",
-            "api_key": ")" + api_key + R"(",
-            "temperature": )" + std::to_string(temperature) + R"(,
-            "max_tokens": )" + std::to_string(max_tokens) + R"(,
-            "top_p": )" + std::to_string(top_p) + R"(
+            "endpoint": ")" + endpoint +
+                               R"(",
+            "model": ")" + model +
+                               R"(",
+            "api_key": ")" + api_key +
+                               R"(",
+            "temperature": )" + std::to_string(temperature) +
+                               R"(,
+            "max_tokens": )" + std::to_string(max_tokens) +
+                               R"(,
+            "top_p": )" + std::to_string(top_p) +
+                               R"(
         })";
 
         JsonValue json;
@@ -55,10 +58,12 @@ protected:
 
     // Helper method to create minimal test configuration JSON
     JsonValue createMinimalTestConfig(const std::string& model = "gpt-3.5-turbo",
-                                     const std::string& api_key = "test-api-key") {
+                                      const std::string& api_key = "test-api-key") {
         std::string json_str = R"({
-            "model": ")" + model + R"(",
-            "api_key": ")" + api_key + R"("
+            "model": ")" + model +
+                               R"(",
+            "api_key": ")" + api_key +
+                               R"("
         })";
 
         JsonValue json;
@@ -67,9 +72,7 @@ protected:
     }
 
     // Helper method to create columns for ai_query tests
-    void createAiQueryColumns(Columns& columns,
-                             const std::vector<std::string>& prompts,
-                             const JsonValue& config) {
+    void createAiQueryColumns(Columns& columns, const std::vector<std::string>& prompts, const JsonValue& config) {
         // Create prompt column
         auto prompt_col = BinaryColumn::create();
         for (const auto& prompt : prompts) {
@@ -93,15 +96,15 @@ protected:
         for (size_t i = 0; i < expected_size; ++i) {
             std::string response = binary_column->get_data()[i].to_string();
             ASSERT_TRUE(response == "positive" || response == "negative")
-                << "Response at index " << i << " is neither 'positive' nor 'negative': " << response;
+                    << "Response at index " << i << " is neither 'positive' nor 'negative': " << response;
         }
     }
 
     // Test constants
     static constexpr const char* SENTIMENT_ANALYSIS_PROMPT_PREFIX =
-        "You are an expert in sentiment analysis. The user will provide you with a piece of text, "
-        "and you need to analyze whether the expressed sentiment is positive or negative. "
-        "Please answer directly with either \"positive\" or \"negative\". The text content is as follows: \n";
+            "You are an expert in sentiment analysis. The user will provide you with a piece of text, "
+            "and you need to analyze whether the expressed sentiment is positive or negative. "
+            "Please answer directly with either \"positive\" or \"negative\". The text content is as follows: \n";
 
     static constexpr const char* TEST_API_KEY = "sk-67cb94xxxxxxxx";
     static constexpr const char* DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
@@ -137,24 +140,23 @@ TEST_F(AiFunctionsTest, ConfigParsingWithDefaults) {
 }
 
 TEST_F(AiFunctionsTest, InvalidTemperatureConfig) {
-    auto config = createTestConfig("https://api.openai.com/v1/chat/completions",
-                                  "gpt-3.5-turbo", TEST_API_KEY, 3.0);
+    auto config = createTestConfig("https://api.openai.com/v1/chat/completions", "gpt-3.5-turbo", TEST_API_KEY, 3.0);
     auto config_result = AiFunctions::parse_model_config(config);
     ASSERT_FALSE(config_result.ok());
     ASSERT_TRUE(config_result.status().message().find("temperature must be between 0 and 2") != std::string::npos);
 }
 
 TEST_F(AiFunctionsTest, InvalidMaxTokensConfig) {
-    auto config = createTestConfig("https://api.openai.com/v1/chat/completions",
-                                  "gpt-3.5-turbo", TEST_API_KEY, 0.7, -10);
+    auto config =
+            createTestConfig("https://api.openai.com/v1/chat/completions", "gpt-3.5-turbo", TEST_API_KEY, 0.7, -10);
     auto config_result = AiFunctions::parse_model_config(config);
     ASSERT_FALSE(config_result.ok());
     ASSERT_TRUE(config_result.status().message().find("max_tokens must be positive") != std::string::npos);
 }
 
 TEST_F(AiFunctionsTest, InvalidTopPConfig) {
-    auto config = createTestConfig("https://api.openai.com/v1/chat/completions",
-                                  "gpt-3.5-turbo", TEST_API_KEY, 0.7, 1000, 1.5);
+    auto config = createTestConfig("https://api.openai.com/v1/chat/completions", "gpt-3.5-turbo", TEST_API_KEY, 0.7,
+                                   1000, 1.5);
     auto config_result = AiFunctions::parse_model_config(config);
     ASSERT_FALSE(config_result.ok());
     ASSERT_TRUE(config_result.status().message().find("top_p must be between 0 and 1") != std::string::npos);
@@ -162,7 +164,8 @@ TEST_F(AiFunctionsTest, InvalidTopPConfig) {
 
 TEST_F(AiFunctionsTest, MissingRequiredFieldsConfig) {
     std::string json_str = R"({
-        "api_key": ")" + std::string(TEST_API_KEY) + R"("
+        "api_key": ")" + std::string(TEST_API_KEY) +
+                           R"("
     })";
 
     JsonValue json;
@@ -182,7 +185,8 @@ TEST_F(AiFunctionsTest, AiQueryWrongArgumentCount) {
 
     auto result = AiFunctions::ai_query(ctx.get(), columns);
     ASSERT_FALSE(result.ok());
-    ASSERT_TRUE(result.status().message().find("Ai_query function only call by ai_query(propmt, config)") != std::string::npos);
+    ASSERT_TRUE(result.status().message().find("Ai_query function only call by ai_query(propmt, config)") !=
+                std::string::npos);
 }
 
 TEST_F(AiFunctionsTest, AiQueryWithNullValues) {
@@ -194,8 +198,8 @@ TEST_F(AiFunctionsTest, AiQueryWithNullValues) {
     auto prompt_null = NullColumn::create();
     prompt_data->append("Hello");
     prompt_data->append("World");
-    prompt_null->append(0);  // not null
-    prompt_null->append(1);  // null
+    prompt_null->append(0); // not null
+    prompt_null->append(1); // null
     auto prompt_col = NullableColumn::create(prompt_data, prompt_null);
     columns.emplace_back(prompt_col);
 
@@ -206,8 +210,8 @@ TEST_F(AiFunctionsTest, AiQueryWithNullValues) {
 
     json_data->append(&config);
     json_data->append(&config);
-    json_null->append(1);  // null
-    json_null->append(0);  // not null
+    json_null->append(1); // null
+    json_null->append(0); // not null
     auto json_col = NullableColumn::create(json_data, json_null);
     columns.emplace_back(json_col);
 
@@ -238,8 +242,8 @@ TEST_F(AiFunctionsTest, AiQueryWithNullValues) {
         for (size_t i = 0; i < 2; ++i) {
             std::string response = binary_result->get_data()[i].to_string();
             EXPECT_TRUE(response.empty() || response.find("null") != std::string::npos ||
-                       response.find("error") != std::string::npos)
-                << "Row " << i << " should handle null input appropriately, got: " << response;
+                        response.find("error") != std::string::npos)
+                    << "Row " << i << " should handle null input appropriately, got: " << response;
         }
     }
 }
@@ -248,9 +252,7 @@ TEST_F(AiFunctionsTest, DISABLED_SingleSentimentAnalysisCall) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
 
-    std::vector<std::string> prompts = {
-        std::string(SENTIMENT_ANALYSIS_PROMPT_PREFIX) + "I am very happy today!"
-    };
+    std::vector<std::string> prompts = {std::string(SENTIMENT_ANALYSIS_PROMPT_PREFIX) + "I am very happy today!"};
 
     auto config = createTestConfig(DEEPSEEK_ENDPOINT, DEEPSEEK_MODEL, TEST_API_KEY);
     createAiQueryColumns(columns, prompts, config);
@@ -301,11 +303,11 @@ TEST_F(AiFunctionsTest, DISABLED_DiverseSentimentAnalysisCalls) {
     Columns columns;
 
     std::vector<std::string> text_samples = {
-        "I am very happy today!",      // positive
-        "I am not happy!",             // negative
-        "It is a bad day",             // negative
-        "I am angry!!!",               // negative
-        "It is a good day!"            // positive
+            "I am very happy today!", // positive
+            "I am not happy!",        // negative
+            "It is a bad day",        // negative
+            "I am angry!!!",          // negative
+            "It is a good day!"       // positive
     };
 
     std::vector<std::string> prompts;

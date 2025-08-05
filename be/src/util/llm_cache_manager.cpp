@@ -1,4 +1,5 @@
 #include "llm_cache_manager.h"
+
 #include "util/lru_cache.h"
 
 namespace starrocks {
@@ -6,12 +7,8 @@ namespace starrocks {
 constexpr const char* CACHE_PREFIX = "LLM_RESP";
 
 std::string generate_cache_key(const std::string& prompt, const ModelConfig& config) {
-    std::string key_str = strings::Substitute("$0:$1:$2:$3:$4",
-        CACHE_PREFIX,
-        config.model,
-        config.temperature,
-        config.max_tokens,
-        config.top_p);
+    std::string key_str = strings::Substitute("$0:$1:$2:$3:$4", CACHE_PREFIX, config.model, config.temperature,
+                                              config.max_tokens, config.top_p);
     key_str.append("|");
     key_str.append(prompt);
     return key_str;
