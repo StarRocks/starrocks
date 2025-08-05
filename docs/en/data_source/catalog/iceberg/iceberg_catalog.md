@@ -743,7 +743,7 @@ Starting from version 3.4, StarRocks can obtain statistics of Iceberg tables by 
 |:----------------------------------------------| :-------------------- |:-------------------------------------------------------|
 | enable_get_stats_from_external_metadata       | false                  | Whether to to obtain statistics from Iceberg metadata. |
 
-When enable_get_stats_from_external_metadata is enabled, it is also possible to further control which statistics to obtain through the FE session variable.
+When `enable_get_stats_from_external_metadata` is enabled, it is also possible to further control which statistics to obtain through the FE session variable.
 
 #### enable_iceberg_column_statistics
 - Unit: N/A
