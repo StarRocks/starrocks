@@ -14,7 +14,6 @@
 
 package com.starrocks.load.streamload;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
@@ -993,7 +992,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         } finally {
             readUnlock();
         }
-        Preconditions.checkState(endTimeMs != -1, endTimeMs);
+        if (endTimeMs == -1) {
+            return false;
+        }
         if (isForce || ((currentMs - endTimeMs) > Config.stream_load_task_keep_max_second * 1000L)) {
             return true;
         }
