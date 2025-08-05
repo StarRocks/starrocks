@@ -169,7 +169,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`rowkey`) BUCKETS 64
 PROPERTIES (
     "replication_num" = "1",
-    "bucket_size" = "4294967296",
     "storage_volume" = "builtin_storage_volume",
     "enable_persistent_index" = "true",
     "compression" = "LZ4"
