@@ -18,6 +18,7 @@
 package com.starrocks.ha;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Writable;
 
 public class LeaderInfo implements Writable {

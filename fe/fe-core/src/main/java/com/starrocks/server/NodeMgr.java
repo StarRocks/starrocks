@@ -1137,15 +1137,6 @@ public class NodeMgr {
         return new Pair<>(getLeaderIp(), Config.https_port);
     }
 
-    public String getLeaderIp() {
-        if (GlobalStateMgr.getServingState().isReady()) {
-            return this.leaderIp;
-        } else {
-            String leaderNodeName = GlobalStateMgr.getServingState().getHaProtocol().getLeaderNodeName();
-            return frontends.get(leaderNodeName).getHost();
-        }
-    }
-
     public void setLeader(LeaderInfo info) {
         this.leaderIp = info.getIp();
         this.leaderHttpPort = info.getHttpPort();

@@ -39,6 +39,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
@@ -56,7 +57,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
-import org.apache.commons.lang3.StringUtils;
+import io.netty.handler.ssl.SslHandler;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -199,18 +200,15 @@ public class RestBaseAction extends BaseAction {
     }
 
     /**
-     * Get the protocol from the request, defaulting to "http" if scheme is null, empty, or not http/https
+     * Get the protocol from the request, defaulting to "http"
      * @param request the base request
      * @return the protocol string ("http" or "https")
      */
-    private String getProtocolFromRequest(BaseRequest request) {
-        String scheme = request.getRequest().scheme();
-        if (StringUtils.isEmpty(scheme)) {
-            return "http";
-        }
-        scheme = scheme.toLowerCase();
-        if ("http".equals(scheme) || "https".equals(scheme)) {
-            return scheme;
+    protected String getProtocolFromRequest(BaseRequest request) {
+        if (request.getContext() != null
+                && request.getContext().pipeline() != null
+                && request.getContext().pipeline().get(SslHandler.class) != null) {
+            return "https";
         }
         return "http";
     }

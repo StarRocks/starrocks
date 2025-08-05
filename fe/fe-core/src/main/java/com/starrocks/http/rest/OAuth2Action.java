@@ -63,8 +63,7 @@ public class OAuth2Action extends RestBaseAction {
         int fid = (int) ((connectionId >> 24) & 0xFF);
         Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontend(fid);
         if (!nodeMgr.getMySelf().getNodeName().equals(frontend.getNodeName())) {
-            // Use HTTPS only if request scheme is HTTPS and Config.enable_https is true
-            String scheme = request.getRequest().scheme();
+            String scheme = getProtocolFromRequest(request);
             boolean useHttps = "https".equals(scheme) && Config.enable_https;
             int port = useHttps ? Config.https_port : Config.http_port;
             String responseContent =
