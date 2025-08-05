@@ -237,6 +237,19 @@ public class AggStateUtils {
                 "AggState's AggFunc should have only one argument");
         Type arg0Type = argumentTypes[0];
         if (arg0Type.getAggStateDesc() == null) {
+            String functionName = inputFunc.functionName();
+            if (functionName.startsWith(FunctionSet.DS_HLL_COUNT_DISTINCT)
+                    && (functionName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)
+                    || functionName.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX))) {
+                // ds_hll_count_distinct is a special case, it has no AggStateDesc
+                // but we can still get the agg state function from its name
+                Function dsHllCountDistinctAgg = FunctionAnalyzer.getAnalyzedAggregateFunction(session,
+                        FunctionSet.DS_HLL_COUNT_DISTINCT, new FunctionParams(false, Lists.newArrayList()),
+                        new Type[] {Type.VARCHAR}, new Boolean[] {false}, pos);
+                if (dsHllCountDistinctAgg != null && dsHllCountDistinctAgg instanceof AggregateFunction) {
+                    return (AggregateFunction) dsHllCountDistinctAgg.copy();
+                }
+            }
             throw new SemanticException(String.format("AggState's AggFunc should have AggStateDesc: %s",
                     inputFunc), pos);
         }
@@ -271,5 +284,17 @@ public class AggStateUtils {
             newArgumentTypes = origArgTypes;
         }
         return newArgumentTypes;
+    }
+
+    public static String aggStateFunctionName(String aggFuncName) {
+        return aggFuncName  + FunctionSet.AGG_STATE_SUFFIX;
+    }
+
+    public static String aggStateUnionFunctionName(String aggFuncName) {
+        return aggFuncName  + FunctionSet.AGG_STATE_UNION_SUFFIX;
+    }
+
+    public static String aggStateMergeFunctionName(String aggFuncName) {
+        return aggFuncName + FunctionSet.AGG_STATE_MERGE_SUFFIX;
     }
 }

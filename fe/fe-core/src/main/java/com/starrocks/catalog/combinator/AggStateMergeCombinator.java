@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.logging.log4j.LogManager;
@@ -51,7 +50,7 @@ public final class AggStateMergeCombinator extends AggregateFunction {
     public static Optional<AggStateMergeCombinator> of(AggregateFunction aggFunc) {
         try {
             Type imtermediateType = aggFunc.getIntermediateTypeOrReturnType();
-            FunctionName functionName = new FunctionName(aggFunc.functionName() + FunctionSet.AGG_STATE_MERGE_SUFFIX);
+            FunctionName functionName = new FunctionName(AggStateUtils.aggStateMergeFunctionName(aggFunc.functionName()));
             AggStateMergeCombinator aggStateMergeFunc =
                     new AggStateMergeCombinator(functionName, imtermediateType, aggFunc.getReturnType());
             aggStateMergeFunc.setBinaryType(TFunctionBinaryType.BUILTIN);

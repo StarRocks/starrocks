@@ -155,6 +155,7 @@ public class FunctionAnalyzer {
             }
         }
         Function fn = functionCallExpr.getFn();
+        final String funcName = fnName.getFunction();
         if (fn instanceof AggStateCombinator) {
             // analyze `_state` combinator function by using its arg function
             FunctionName argFuncName = new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
@@ -169,6 +170,13 @@ public class FunctionAnalyzer {
                 throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
                         fn.functionName()), functionCallExpr.getPos());
             }
+            if (FunctionSet.DS_HLL_COUNT_DISTINCT.equalsIgnoreCase(AggStateUtils.getAggFuncNameOfCombinator(funcName))) {
+                // ds_hll_count_distinct_union's param type should be varbinary type.
+                if (!functionCallExpr.getChild(0).getType().isBinaryType()) {
+                    throw new SemanticException(String.format("Resolved function %s has no binary as argument type",
+                            fn.functionName()), functionCallExpr.getPos());
+                }
+            }
         } else if (fn instanceof AggStateMergeCombinator) {
             AggStateMergeCombinator mergeCombinator = (AggStateMergeCombinator) fn;
             if (Arrays.stream(fn.getArgs()).anyMatch(Type::isWildcardDecimal)) {
@@ -178,6 +186,13 @@ public class FunctionAnalyzer {
             if (mergeCombinator.getReturnType().isWildcardDecimal()) {
                 throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
                         fn.functionName()), functionCallExpr.getPos());
+            }
+            if (FunctionSet.DS_HLL_COUNT_DISTINCT.equalsIgnoreCase(AggStateUtils.getAggFuncNameOfCombinator(funcName))) {
+                // ds_hll_count_distinct_union's param type should be varbinary type.
+                if (!functionCallExpr.getChild(0).getType().isBinaryType()) {
+                    throw new SemanticException(String.format("Resolved function %s has no binary as argument type",
+                            fn.functionName()), functionCallExpr.getPos());
+                }
             }
         } else if (fn instanceof AggStateIf) {
             FunctionName argFuncNameWithoutIf =
