@@ -74,7 +74,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.iceberg.IcebergPartitionTransform;
 import com.starrocks.mv.analyzer.MVPartitionSlotRefResolver;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -1521,7 +1520,7 @@ public class MaterializedViewAnalyzer {
             Table mvTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, mvName.getCatalog(),
                     mvName.getDb(), mvName.getTbl());
             // Check mv dependency
-            if (GlobalVariable.isEnableDropTableCheckMvDependency()) {
+            if (context.getSessionVariable().isEnableDropTableCheckMvDependency() && mvTable != null) {
                 Set<MvId> relatedMvIds = mvTable.getRelatedMaterializedViews();
                 if (!relatedMvIds.isEmpty()) {
                     Set<String> relatedMvNames = Sets.newHashSet();

@@ -92,8 +92,6 @@ public final class GlobalVariable {
 
     public static final String ENABLE_TABLE_NAME_CASE_INSENSITIVE = "enable_table_name_case_insensitive";
 
-    public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
-
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
 
@@ -235,9 +233,6 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = SPM_CAPTURE_INCLUDE_TABLE_PATTERN, flag = VariableMgr.GLOBAL)
     public static String spmCaptureIncludeTablePattern = ".*";
 
-    @VariableMgr.VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY, flag = VariableMgr.GLOBAL)
-    public static boolean enableDropTableCheckMvDependency = false;
-
     public static boolean isEnableQueryHistory() {
         return enableQueryHistory;
     }
@@ -374,10 +369,6 @@ public final class GlobalVariable {
 
     public static void setActivateAllRolesOnLogin(boolean activateAllRolesOnLogin) {
         GlobalVariable.activateAllRolesOnLogin = activateAllRolesOnLogin;
-    }
-
-    public static boolean isEnableDropTableCheckMvDependency() {
-        return enableDropTableCheckMvDependency;
     }
 
     // Don't allow create instance.

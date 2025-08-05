@@ -21,16 +21,16 @@ create materialized view mv2 refresh async as select * from v1;
 create materialized view mv3 refresh async as select * from mv1;
 -- result:
 -- !result
-set global enable_drop_table_check_mv_dependency=true;
+set enable_drop_table_check_mv_dependency=true;
 -- result:
 -- !result
 drop table t1;
-ERROR 1064 (HY000): Getting analyzing error. Detail message: t1 exists mv dependencies: [db_drop_table_check_mv_dependency.mv2, db_drop_table_check_mv_dependency.mv1], drop is not allowed. See more detailed information in `sys.object_dependencies`, or `set global enable_drop_table_check_mv_dependency=false`.
+E: (1064, 'Getting analyzing error. Detail message: t1 exists mv dependencies: [db_drop_table_check_mv_dependency.mv2, db_drop_table_check_mv_dependency.mv1], drop is not allowed. See more detailed information in `sys.object_dependencies`, or `set global enable_drop_table_check_mv_dependency=false`.')
 drop view v1;
-ERROR 1064 (HY000): Getting analyzing error. Detail message: v1 exists mv dependencies: [db_drop_table_check_mv_dependency.mv2], drop is not allowed. See more detailed information in `sys.object_dependencies`, or `set global enable_drop_table_check_mv_dependency=false`.
+E: (1064, 'Getting analyzing error. Detail message: v1 exists mv dependencies: [db_drop_table_check_mv_dependency.mv2], drop is not allowed. See more detailed information in `sys.object_dependencies`, or `set global enable_drop_table_check_mv_dependency=false`.')
 drop materialized view mv1;
-ERROR 1064 (HY000): Getting analyzing error. Detail message: mv1 exists mv dependencies: [db_drop_table_check_mv_dependency.mv3], drop is not allowed. See more detailed information in `sys.object_dependencies`, or `set global enable_drop_table_check_mv_dependency=false`.
-set global enable_drop_table_check_mv_dependency=false;
+E: (1064, 'Getting analyzing error. Detail message: mv1 exists mv dependencies: [db_drop_table_check_mv_dependency.mv3], drop is not allowed. See more detailed information in `sys.object_dependencies`, or `set global enable_drop_table_check_mv_dependency=false`.')
+set enable_drop_table_check_mv_dependency=false;
 -- result:
 -- !result
 drop table t1;

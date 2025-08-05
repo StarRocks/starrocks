@@ -33,7 +33,6 @@ import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.TemporaryTableMgr;
@@ -115,7 +114,7 @@ public class DropStmtAnalyzer {
                 }
             }
             // Check mv dependency
-            if (GlobalVariable.isEnableDropTableCheckMvDependency()) {
+            if (context.getSessionVariable().isEnableDropTableCheckMvDependency()) {
                 Set<MvId> relatedMvIds = table.getRelatedMaterializedViews();
                 if (!relatedMvIds.isEmpty()) {
                     Set<String> relatedMvNames = Sets.newHashSet();

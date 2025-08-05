@@ -15,13 +15,13 @@ create materialized view mv2 refresh async as select * from v1;
 create materialized view mv3 refresh async as select * from mv1;
 
 -- check mv dependency
-set global enable_drop_table_check_mv_dependency=true;
+set enable_drop_table_check_mv_dependency=true;
 drop table t1;
 drop view v1;
 drop materialized view mv1;
 
 -- not check mv dependency
-set global enable_drop_table_check_mv_dependency=false;
+set enable_drop_table_check_mv_dependency=false;
 drop table t1;
 drop view v1;
 drop materialized view mv1;
