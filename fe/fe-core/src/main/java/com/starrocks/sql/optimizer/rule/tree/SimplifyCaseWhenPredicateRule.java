@@ -48,7 +48,8 @@ public class SimplifyCaseWhenPredicateRule implements TreeRewriteRule {
             if (op instanceof LogicalRepeatOperator) {
                 return true;
             }
-            if (op instanceof LogicalJoinOperator join) {
+            if (op instanceof LogicalJoinOperator) {
+                LogicalJoinOperator join = (LogicalJoinOperator) op;
                 return join.getJoinType().isOuterJoin();
             }
 
