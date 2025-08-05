@@ -160,6 +160,7 @@ set(EXEC_FILES
         ./exprs/percentile_functions_test.cpp
         ./exprs/string_fn_concat_test.cpp
         ./exprs/string_fn_field.cpp
+        ./exprs/string_fn_format_bytes_test.cpp
         ./exprs/string_fn_locate_test.cpp
         ./exprs/string_fn_pad_test.cpp
         ./exprs/string_fn_regexp_replace_test.cpp

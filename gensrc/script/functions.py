@@ -435,6 +435,8 @@ vectorized_functions = [
     [304592, 'field', True, False, 'INT', ['DECIMAL128', '...'], 'StringFunctions::field<TYPE_DECIMAL128>', 
      'StringFunctions::field_prepare<TYPE_DECIMAL128>', 'StringFunctions::field_close<TYPE_DECIMAL128>'],
 
+    [30460, 'format_bytes', True, False, 'VARCHAR', ['BIGINT'], 'StringFunctions::format_bytes'],
+
     # Binary Functions
     # to_binary
     [30600, 'to_binary', True, True, 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',
