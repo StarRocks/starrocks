@@ -621,6 +621,15 @@ public:
     template <LogicalType Type>
     static Status field_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
+    /**
+     * Format byte count as human-readable string with appropriate units
+     *
+     * @param: [bytes]
+     * @paramType: [BigIntColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(format_bytes);
+
     static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status ngram_search_case_insensitive_prepare(FunctionContext* context,
                                                         FunctionContext::FunctionStateScope scope);
