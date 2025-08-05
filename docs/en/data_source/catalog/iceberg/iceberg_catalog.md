@@ -737,7 +737,7 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 | iceberg_manifest_cache_max_num                | 100000                | The maximum number of Manifest files that can be cached.     |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | The minimum Manifest file length that triggers a Data File Cache refresh. |
 
-Starting from version 3.4, StarRocks can obtain statistics of Iceberg tables by reading Iceberg metadata through setting the following parameters, without actively or triggering the collection of Iceberg table statistics.
+Starting from version 3.4, StarRocks can obtain statistics of Iceberg tables by reading Iceberg metadata through setting the following parameters, without actively triggering the collection of Iceberg table statistics.
 
 | **Parameter**                                 | **Default**           | **Description**                                        |
 |:----------------------------------------------| :-------------------- |:-------------------------------------------------------|
