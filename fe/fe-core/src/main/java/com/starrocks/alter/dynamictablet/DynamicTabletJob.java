@@ -261,6 +261,7 @@ public abstract class DynamicTabletJob implements Writable {
         item.setJob_type(jobType.name());
         item.setJob_state(jobState.name());
         item.setTransaction_id(-1L); // override in the future pr.
+        item.setParallel_partitions(physicalPartitionContexts.size());
         item.setParallel_tablets(getParallelTablets());
         item.setCreated_time(createdTimeMs / 1000);
         item.setFinished_time(finishedTimeMs / 1000);

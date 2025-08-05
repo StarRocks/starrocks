@@ -30,6 +30,7 @@ SchemaScanner::ColumnDesc SchemaDynamicTabletJobsScanner::_s_columns[] = {
         {"JOB_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"JOB_STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"TRANSACTION_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"PARALLEL_PARTITIONS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
         {"PARALLEL_TABLETS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
         {"CREATED_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"FINISHED_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
@@ -70,6 +71,7 @@ Status SchemaDynamicTabletJobsScanner::_fill_chunk(ChunkPtr* chunk) {
             Slice(info.job_type),
             Slice(info.job_state),
             info.transaction_id,
+            info.parallel_partitions,
             info.parallel_tablets,
 
             TimestampValue::create_from_unixtime(info.created_time, _runtime_state->timezone_obj()),

@@ -39,6 +39,7 @@ public class DynamicTabletJobsTable {
                         .column("JOB_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("JOB_STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TRANSACTION_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("PARALLEL_PARTITIONS", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("PARALLEL_TABLETS", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("CREATED_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("FINISHED_TIME", ScalarType.createType(PrimitiveType.DATETIME))

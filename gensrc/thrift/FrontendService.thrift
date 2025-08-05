@@ -2143,10 +2143,11 @@ struct TDynamicTabletJobsItem {
     6: optional string job_type;
     7: optional string job_state;
     8: optional i64 transaction_id;
-    9: optional i64 parallel_tablets;
-    10: optional i64 created_time;
-    11: optional i64 finished_time;
-    12: optional string error_message;
+    9: optional i64 parallel_partitions;
+    10: optional i64 parallel_tablets;
+    11: optional i64 created_time;
+    12: optional i64 finished_time;
+    13: optional string error_message;
 }
 
 struct TDynamicTabletJobsRequest {
