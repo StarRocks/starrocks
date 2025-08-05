@@ -89,14 +89,14 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
             List<Table> tables = new ArrayList<>();
             for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                 if (table.isCloudNativeTableOrMaterializedView() &&
-                    /*
-                     * Skip full gc for tables which has schema change job after automated cluster snapshot
-                     * This is to prevent the full vacuum from deleting tablets that are still in use.
-                     * We need to skip this table completely because automated cluster snapshot does not
-                     * contains any snapshot info which means there is no enough information to distinguish
-                     * which tablet for this table need to be protected.
-                     */
-                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(table.getId())) {
+                        /*
+                        * Skip full gc for tables which has schema change job after automated cluster snapshot
+                        * This is to prevent the full vacuum from deleting tablets that are still in use.
+                        * We need to skip this table completely because automated cluster snapshot does not
+                        * contains any snapshot info which means there is no enough information to distinguish
+                        * which tablet for this table need to be protected.
+                        */
+                        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(table.getId())) {
                     tables.add(table);
                 }
             }
