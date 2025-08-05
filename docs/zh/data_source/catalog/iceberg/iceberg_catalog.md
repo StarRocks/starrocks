@@ -772,19 +772,11 @@ Google GCS 的 `StorageCredentialParams`：
 | iceberg_manifest_cache_max_num                | 100000                | 可以缓存的 Manifest 文件的最大数量。     |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发数据文件缓存刷新的最小 Manifest 文件长度。 |
 
-从 3.4 版本开始，StarRocks在没有主动/触发收集Iceberg 表统计信息的情况下，可以通过设置以下参数读取Iceberg的Metadata来获取Iceberg表的统计信息
+从 v3.4 起，StarRocks 在没有主动触发收集 Iceberg 表统计信息的情况下，可以通过设置以下参数读取 Iceberg 的元数据来获取 Iceberg 表的统计信息。
 
-| **参数**                                 | **默认值**           | **描述**                       |
-| :-------------------------------------------- | :-------------------- |:-----------------------------|
-| enable_get_stats_from_external_metadata       | false                 | 是否支持从Iceberg metadata中获取统计信息 |
-
-当开启enable_get_stats_from_external_metadata后，还可以通过FE session variable进一步控制获取哪些统计信息
-
-##### enable_iceberg_column_statistics
-
-- 单位：N/A
-- 默认值：`false`
-- 描述：是否获取列统计信息，例如min/max/null count/row size/ndv(如果存在puffin文件)，当值为false时，将只获取行数信息。
+| **参数**                                       | **默认值**             | **描述**                       |
+| :-------------------------------------------- | :-------------------- | :----------------------------- | 
+| enable_get_stats_from_external_metadata       | false                 | 是否允许系统从 Iceberg 元数据中获取统计信息。当此项设置为 `true` 时，您可以通过会话变量 [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata) 进一步控制要收集的统计信息类型。 |
 
 ### 示例
 
