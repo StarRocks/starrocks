@@ -1434,7 +1434,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: 秒
 - 変更可能: はい
 - 説明: 準備済みトランザクションのデフォルトのタイムアウト期間。
-- 導入バージョン: v3.5
+- 導入バージョン: -
 
 ##### spark_dpp_version
 
