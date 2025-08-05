@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler.dag;
 
 import com.starrocks.common.UserException;
+import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.DeployState;
@@ -56,16 +57,11 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
                     for (DeployState state : states) {
                         deployer.deployFragments(state);
                     }
-                } catch (StarRocksException | RpcException e) {
+                } catch (UserException | RpcException e) {
                     LOG.warn("Failed to assign incremental scan ranges to deploy states", e);
                     coordinator.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
                     throw new RuntimeException(e);
                 }
-                for (DeployState state : states) {
-                    deployer.deployFragments(state);
-                }
-            } catch (UserException | RpcException e) {
-                throw new RuntimeException(e);
             }
         }
 
