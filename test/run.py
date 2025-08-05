@@ -43,7 +43,7 @@ def print_help():
     """help"""
     print(
         """
-python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a ${attr}] [-C ${cluster_type}] [--file_filter=${regex}] [--case_filter=${regex}]
+python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a ${attr}] [-C ${cluster_type}] [--file_filter=${regex}] [--case_filter=${regex}] [--check-status]
               -d|--dir             Case dirname|filename, default "./sql"
               -r|--record          SQL record mode, run cases in T and generate R
               -v|--validate        [DEFAULT] SQL validate mode, run cases in R, and check the results
@@ -59,6 +59,11 @@ python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a $
               --config             Config path, default conf/sr.conf
               --keep_alive         Check cluster status before each case, only works with sequential mode(-c=1)
               --run_info           Extra info
+<<<<<<< HEAD
+=======
+              --arrow              Only run the arrow protocol
+              --check-status       Check cluster status before run cases
+>>>>>>> fb44105882 ([Tool] Add cluster status checker before SQL case (#61577))
         """
     )
 
@@ -78,6 +83,7 @@ if __name__ == "__main__":
     config = "conf/sr.conf"
     keep_alive = False
     run_info = ""
+    check_status = False
 
     args = "hld:rvc:t:x:y:pa:C:"
     detail_args = [
@@ -97,7 +103,13 @@ if __name__ == "__main__":
         "config=",
         "keep_alive",
         "run_info=",
+<<<<<<< HEAD
         "log_filtered"
+=======
+        "log_filtered",
+        "arrow",
+        "check-status",
+>>>>>>> fb44105882 ([Tool] Add cluster status checker before SQL case (#61577))
     ]
 
     case_dir = None
@@ -172,11 +184,20 @@ if __name__ == "__main__":
         if opt == "--log_filtered":
             log_filtered = True
 
+<<<<<<< HEAD
+=======
+        if opt == "--arrow":
+            arrow_mode = True
+
+        if opt == "--check-status":
+            check_status = True
+
+>>>>>>> fb44105882 ([Tool] Add cluster status checker before SQL case (#61577))
     # merge cluster info to attr
     cluster_attr = "!cloud" if cluster == "native" else "!native"
     attr = f"{attr},{cluster_attr}".strip(",")
     # check sequential mode with concurrency=1
-    if 'sequential' in attr and concurrency != 1:
+    if "sequential" in attr and concurrency != 1:
         print("In sequential mode, set concurrency=1 in default!")
         concurrency = 1
     # check alive mode with concurrency=1
@@ -185,6 +206,7 @@ if __name__ == "__main__":
         concurrency = 1
 
     # set environment
+<<<<<<< HEAD
     os.environ["record_mode"] = "true" if record else "false"
     os.environ["sql_dir"] = str(dirname)
     os.environ["file_filter"] = file_filter
@@ -194,6 +216,22 @@ if __name__ == "__main__":
     os.environ["keep_alive"] = str(keep_alive)
     os.environ['run_info'] = run_info
     os.environ['log_filtered'] = str(log_filtered)
+=======
+    os.environ.update(
+        {
+            "record_mode": "true" if record else "false",
+            "sql_dir": str(dirname),
+            "file_filter": file_filter,
+            "case_filter": case_filter,
+            "attr": attr,
+            "config_path": config,
+            "keep_alive": str(keep_alive),
+            "run_info": run_info,
+            "log_filtered": str(log_filtered),
+            "check_status": str(check_status),
+        }
+    )
+>>>>>>> fb44105882 ([Tool] Add cluster status checker before SQL case (#61577))
 
     argv = [
         "nosetests",
@@ -204,12 +242,14 @@ if __name__ == "__main__":
     ]
 
     if not skip_reruns and not record:
-        argv.extend([
-            "--with-flaky",
-            "--force-flaky",
-            "--max-runs=3",
-            "--min-passes=3",
-        ])
+        argv.extend(
+            [
+                "--with-flaky",
+                "--force-flaky",
+                "--max-runs=3",
+                "--min-passes=3",
+            ]
+        )
 
     # concurrency
     if concurrency <= 0:
