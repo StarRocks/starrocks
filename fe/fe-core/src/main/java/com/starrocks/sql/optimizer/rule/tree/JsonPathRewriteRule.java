@@ -49,16 +49,34 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * JsonPathRewriteRule rewrites a json function to a json access path
- * Example:
+ * JsonPathRewriteRule rewrites JSON function calls to column access paths for better performance.
+ *
+ * Example transformation:
  * get_json_string(c1, '$.f1') = 1
  * =>
  * c1.f1 = 1
+ *
+ * This rule supports the following JSON functions:
+ * - get_json_string
+ * - get_json_int  
+ * - get_json_double
+ * - get_json_bool
  */
 public class JsonPathRewriteRule implements TreeRewriteRule {
+
+    private static final int DEFAULT_JSON_FLATTEN_DEPTH = 20;
+    private static final Pattern JSON_PATH_VALID_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
+
+    private static final Set<String> SUPPORTED_JSON_FUNCTIONS = Set.of(
+            FunctionSet.GET_JSON_STRING,
+            FunctionSet.GET_JSON_INT,
+            FunctionSet.GET_JSON_DOUBLE,
+            FunctionSet.GET_JSON_BOOL
+    );
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
@@ -66,17 +84,20 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
         if (!variables.isEnableJSONV2Rewrite()) {
             return root;
         }
+
         ColumnRefFactory columnRefFactory = taskContext.getOptimizerContext().getColumnRefFactory();
         JsonPathRewriteVisitor visitor = new JsonPathRewriteVisitor(columnRefFactory);
         return root.getOp().accept(visitor, root, null);
     }
 
-    // Context to record mapping from original JSON function expressions to rewritten expressions
+    /**
+     * Context for managing JSON path rewrites and column mappings.
+     */
     public static class JsonPathRewriteContext {
-
-        // full path mapping: t1.c1.f1 => c1.f1
+        // Maps full paths (tableId.columnName.field) to column references
         private final Map<String, ColumnRefOperator> pathMap = Maps.newHashMap();
-
+        // Records newly created extended columns for scan operators
+        private final Map<ColumnRefOperator, Column> extendedColumns = Maps.newHashMap();
         private final ColumnRefFactory columnRefFactory;
 
         public JsonPathRewriteContext(ColumnRefFactory factory) {
@@ -87,39 +108,52 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
             return columnRefFactory;
         }
 
+        public Map<ColumnRefOperator, Column> getExtendedColumns() {
+            return extendedColumns;
+        }
+
+        /**
+         * Gets or creates a column reference for a JSON path.
+         *
+         * @param jsonColumn The base JSON column
+         * @param jsonPath   The JSON access path
+         * @return Pair of (isExisting, columnRef) where isExisting indicates if the column already existed
+         */
         public Pair<Boolean, ColumnRefOperator> getOrCreateColumn(ColumnRefOperator jsonColumn,
                                                                   ColumnAccessPath jsonPath) {
             Pair<Table, Column> tableAndColumn = columnRefFactory.getTableAndColumn(jsonColumn);
             String path = jsonPath.getLinearPath();
             String fullPath = tableAndColumn.first.getId() + "." + path;
-            ColumnRefOperator res = pathMap.get(fullPath);
-            if (res != null) {
-                return Pair.create(true, res);
+
+            ColumnRefOperator existingColumn = pathMap.get(fullPath);
+            if (existingColumn != null) {
+                return Pair.create(true, existingColumn);
             }
 
-            // create a column in the table
-            // get_json_int(c1, '$.f1') => c1.f1
-            Column extendedColumn;
-            Table table = tableAndColumn.first;
-            if (!table.containColumn(path)) {
-                // Add the column in table metadata
-                // For OlapTable, the metadata is a copied for each query, so this change will only affect current
-                // query
-                Preconditions.checkState(table instanceof OlapTable);
-                extendedColumn = new Column(path, jsonPath.getValueType(), true);
-                tableAndColumn.first.addColumn(extendedColumn);
-            } else {
-                extendedColumn = tableAndColumn.first.getColumn(path);
-            }
+            // Create new column in table metadata
+            Column extendedColumn = createExtendedColumn(tableAndColumn.first, path, jsonPath);
 
-            res = columnRefFactory.create(path, jsonPath.getValueType(), true);
-            columnRefFactory.updateColumnRefToColumns(res, extendedColumn, tableAndColumn.first);
-            pathMap.put(fullPath, res);
-            return Pair.create(false, res);
+            // Create a ref
+            ColumnRefOperator newColumnRef = columnRefFactory.create(path, jsonPath.getValueType(), true);
+            columnRefFactory.updateColumnRefToColumns(newColumnRef, extendedColumn, tableAndColumn.first);
+            pathMap.put(fullPath, newColumnRef);
+
+            // Record the newly created extended column
+            extendedColumns.put(newColumnRef, extendedColumn);
+
+            return Pair.create(false, newColumnRef);
         }
 
-        public static Column pathToColumn(ColumnAccessPath path, Type valueType) {
-            return new Column(path.getLinearPath(), valueType, true);
+        private Column createExtendedColumn(Table table, String path, ColumnAccessPath jsonPath) {
+            if (!table.containColumn(path)) {
+                Preconditions.checkState(table instanceof OlapTable,
+                        "Only OlapTable supports dynamic column addition");
+                Column extendedColumn = new Column(path, jsonPath.getValueType(), true);
+                table.addColumn(extendedColumn);
+                return extendedColumn;
+            } else {
+                return table.getColumn(path);
+            }
         }
 
         public static ColumnAccessPath pathFromColumn(Column column) {
@@ -128,11 +162,12 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
             res.setExtended(true);
             return res;
         }
-
     }
 
+    /**
+     * Visitor for traversing and rewriting OptExpressions.
+     */
     private static class JsonPathRewriteVisitor extends OptExpressionVisitor<OptExpression, Void> {
-
         private final ColumnRefFactory columnRefFactory;
 
         public JsonPathRewriteVisitor(ColumnRefFactory factory) {
@@ -146,20 +181,13 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
                 OptExpression child = input.getOp().accept(this, input, context);
                 newInputs.add(child);
             }
-
             return OptExpression.builder().with(optExpr).setInputs(newInputs).build();
         }
 
-        //        @Override
-        //        public OptExpression visitPhysicalMetaScan(OptExpression optExpr, Void v) {
-        //            return rewritePhysicalScan(optExpr, v);
-        //        }
-
-        @Override
-        public OptExpression visitPhysicalOlapScan(OptExpression optExpr, Void v) {
-            return rewritePhysicalScan(optExpr, v);
-        }
-
+        /**
+         * NOTE: MetaScan doesn't embed the Projection into MetaScan node, so we have to handle the MetaScan &
+         * OlapScan separately.
+         */
         @Override
         public OptExpression visitLogicalProject(OptExpression optExpr, Void v) {
             Operator child = optExpr.inputAt(0).getOp();
@@ -169,45 +197,69 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
             return visit(optExpr, v);
         }
 
-        // PROJECT(get_json_string(c1, 'f1')) -> META_SCAN(c1)
-        // =>
-        // PROJECT(c1.f1) -> META_SCAN(c1.f1)
+        /**
+         * Rewrites LogicalProject over LogicalMetaScan to handle JSON path access.
+         */
         private OptExpression rewriteMetaScan(OptExpression optExpr, Void v) {
             LogicalProjectOperator project = (LogicalProjectOperator) optExpr.getOp();
             LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) optExpr.inputAt(0).getOp();
-            LogicalMetaScanOperator.Builder scanBuilder =
-                    LogicalMetaScanOperator.builder().withOperator(metaScan);
 
             JsonPathRewriteContext context = new JsonPathRewriteContext(columnRefFactory);
-            JsonPathRewriter rewriter = new JsonPathRewriter(context);
+            JsonPathExpressionRewriter rewriter = new JsonPathExpressionRewriter(context);
 
-            // rewrite project
-            Map<ColumnRefOperator, ScalarOperator> changed = Maps.newHashMap();
-            for (var entry : project.getColumnRefMap().entrySet()) {
-                ScalarOperator rewritten = rewriteScalar(entry.getValue(), context, rewriter);
-                if (!rewritten.equals(entry.getValue())) {
-                    // no change, keep the original column
-                    changed.put(entry.getKey(), rewritten);
-                }
-            }
-            Map<ColumnRefOperator, ScalarOperator> projection = Maps.newHashMap();
-            projection.putAll(project.getColumnRefMap());
-            projection.putAll(changed);
-            LogicalProjectOperator newProject = new LogicalProjectOperator(changed);
+            // Rewrite project expressions
+            Map<ColumnRefOperator, ScalarOperator> rewrittenProjections =
+                    rewriteProjections(project.getColumnRefMap(), context, rewriter);
 
-            // add the columns into scan
-            Map<ColumnRefOperator, Column> metaScanColumnMap = Maps.newHashMap();
-            metaScanColumnMap.putAll(rewriter.getExtendedColumns());
-            for (var entry : metaScan.getColRefToColumnMetaMap().entrySet()) {
-                if (!changed.containsKey(entry.getKey())) {
-                    metaScanColumnMap.put(entry.getKey(), entry.getValue());
+            // Build new project operator
+            LogicalProjectOperator newProject = new LogicalProjectOperator(rewrittenProjections);
+
+            // Build new meta scan operator with extended columns
+            LogicalMetaScanOperator newMetaScan = buildExtendedMetaScan(metaScan, rewriter);
+
+            OptExpression newMetaScanExpr = OptExpression.builder()
+                    .with(optExpr.inputAt(0))
+                    .setOp(newMetaScan)
+                    .build();
+
+            return OptExpression.builder()
+                    .with(optExpr)
+                    .setOp(newProject)
+                    .setInputs(Lists.newArrayList(newMetaScanExpr))
+                    .build();
+        }
+
+        private Map<ColumnRefOperator, ScalarOperator> rewriteProjections(
+                Map<ColumnRefOperator, ScalarOperator> originalProjections,
+                JsonPathRewriteContext context,
+                JsonPathExpressionRewriter rewriter) {
+            Map<ColumnRefOperator, ScalarOperator> rewritten = Maps.newHashMap();
+
+            for (var entry : originalProjections.entrySet()) {
+                ScalarOperator rewrittenExpr = rewriteScalar(entry.getValue(), context, rewriter);
+                if (!rewrittenExpr.equals(entry.getValue())) {
+                    rewritten.put(entry.getKey(), rewrittenExpr);
                 } else {
-                    metaScanColumnMap.put(entry.getKey(), rewriter.getExtendedColumns().get(entry.getKey()));
+                    // Keep original expression if no change
+                    rewritten.put(entry.getKey(), entry.getValue());
                 }
             }
+
+            return rewritten;
+        }
+
+        private LogicalMetaScanOperator buildExtendedMetaScan(LogicalMetaScanOperator originalMetaScan,
+                                                              JsonPathExpressionRewriter rewriter) {
+            LogicalMetaScanOperator.Builder scanBuilder =
+                    LogicalMetaScanOperator.builder().withOperator(originalMetaScan);
+
+            // Update column mappings
+            Map<ColumnRefOperator, Column> metaScanColumnMap = Maps.newHashMap();
+            metaScanColumnMap.putAll(originalMetaScan.getColRefToColumnMetaMap());
+            metaScanColumnMap.putAll(rewriter.getExtendedColumns());
             scanBuilder.setColRefToColumnMetaMap(metaScanColumnMap);
 
-            // Record the access path into scan node
+            // Add access paths
             List<ColumnAccessPath> paths = Lists.newArrayList();
             for (var entry : rewriter.getExtendedColumns().entrySet()) {
                 ColumnAccessPath path = JsonPathRewriteContext.pathFromColumn(entry.getValue());
@@ -215,18 +267,17 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
             }
             scanBuilder.setColumnAccessPaths(paths);
 
-            LogicalMetaScanOperator newMetaScan = scanBuilder.build();
-            OptExpression newMetaScanExpr =
-                    OptExpression.builder()
-                            .with(optExpr.inputAt(0))
-                            .setOp(newMetaScan)
-                            .build();
-            return OptExpression.builder().with(optExpr)
-                    .setOp(newProject)
-                    .setInputs(Lists.newArrayList(newMetaScanExpr))
-                    .build();
+            return scanBuilder.build();
         }
 
+        @Override
+        public OptExpression visitPhysicalOlapScan(OptExpression optExpr, Void v) {
+            return rewritePhysicalScan(optExpr, v);
+        }
+
+        /**
+         * Rewrites PhysicalScanOperator to handle JSON path access.
+         */
         private OptExpression rewritePhysicalScan(OptExpression optExpr, Void v) {
             PhysicalScanOperator scanOperator = (PhysicalScanOperator) optExpr.getOp();
             PhysicalScanOperator.Builder builder =
@@ -234,12 +285,12 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
                             .withOperator(scanOperator);
 
             JsonPathRewriteContext context = new JsonPathRewriteContext(columnRefFactory);
-            JsonPathRewriter rewriter = new JsonPathRewriter(context);
+            JsonPathExpressionRewriter rewriter = new JsonPathExpressionRewriter(context);
 
             // Rewrite predicate
             builder.setPredicate(rewriteScalar(scanOperator.getPredicate(), context, rewriter));
 
-            // Rewrite projection
+            // Rewrite projection if exists
             if (scanOperator.getProjection() != null) {
                 Map<ColumnRefOperator, ScalarOperator> mapping = Maps.newHashMap();
                 for (var entry : scanOperator.getProjection().getColumnRefMap().entrySet()) {
@@ -248,21 +299,21 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
                 builder.getProjection().getColumnRefMap().putAll(mapping);
             }
 
-            // Add the fake columns into ScanOperator
             if (MapUtils.isNotEmpty(rewriter.getExtendedColumns())) {
+                // Add extended columns to scan operator
                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap = Maps.newHashMap();
                 colRefToColumnMetaMap.putAll(scanOperator.getColRefToColumnMetaMap());
                 colRefToColumnMetaMap.putAll(rewriter.getExtendedColumns());
                 builder.setColRefToColumnMetaMap(colRefToColumnMetaMap);
-            }
 
-            // Record the access path into scan node
-            List<ColumnAccessPath> paths = Lists.newArrayList();
-            for (var entry : rewriter.getExtendedColumns().entrySet()) {
-                ColumnAccessPath path = JsonPathRewriteContext.pathFromColumn(entry.getValue());
-                paths.add(path);
+                // Add access paths
+                List<ColumnAccessPath> paths = Lists.newArrayList();
+                for (var entry : rewriter.getExtendedColumns().entrySet()) {
+                    ColumnAccessPath path = JsonPathRewriteContext.pathFromColumn(entry.getValue());
+                    paths.add(path);
+                }
+                builder.addColumnAccessPaths(paths);
             }
-            builder.addColumnAccessPaths(paths);
 
             Operator newOp = builder.build();
             return OptExpression.builder().with(optExpr).setOp(newOp).build();
@@ -271,7 +322,7 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
 
     private static ScalarOperator rewriteScalar(ScalarOperator scalar,
                                                 JsonPathRewriteContext context,
-                                                JsonPathRewriter rewriter) {
+                                                JsonPathExpressionRewriter rewriter) {
         if (scalar == null) {
             return null;
         }
@@ -279,84 +330,89 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
         return scalarOperatorRewriter.rewrite(scalar, Arrays.asList(rewriter));
     }
 
-    // The actual rewrite rule for ScalarOperator, now takes a context
-    private static class JsonPathRewriter extends BottomUpScalarOperatorRewriteRule {
-        // only simple field access, no array, no functions, no dot in the path
-        private static final Pattern JSON_PATH_VALID_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
-
+    /**
+     * Rewrites JSON function calls to column access expressions.
+     */
+    private static class JsonPathExpressionRewriter extends BottomUpScalarOperatorRewriteRule {
         private final JsonPathRewriteContext context;
-        // record added fake columns
-        private final Map<ColumnRefOperator, Column> extendedColumns = Maps.newHashMap();
 
-        private static final List<String> SUPPORTED_JSON_FUNCTIONS = Arrays.asList(
-                FunctionSet.GET_JSON_STRING,
-                FunctionSet.GET_JSON_INT,
-                FunctionSet.GET_JSON_DOUBLE,
-                FunctionSet.GET_JSON_BOOL
-        );
-
-        public JsonPathRewriter(JsonPathRewriteContext context) {
+        public JsonPathExpressionRewriter(JsonPathRewriteContext context) {
             this.context = context;
         }
 
         public Map<ColumnRefOperator, Column> getExtendedColumns() {
-            return extendedColumns;
+            return context.getExtendedColumns();
         }
 
         @Override
         public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext rewriteContext) {
-            // Only rewrite supported JSON functions with constant path
-            if (SUPPORTED_JSON_FUNCTIONS.contains(call.getFnName()) && call.getArguments().size() == 2) {
-                return rewriteCall(call, rewriteContext);
+            if (isSupportedJsonFunction(call)) {
+                return rewriteJsonFunction(call, rewriteContext);
             }
             return call;
         }
 
-        private ScalarOperator rewriteCall(CallOperator call, ScalarOperatorRewriteContext rewriteContext) {
-            ScalarOperator arg0 = call.getArguments().get(0);
-            ScalarOperator arg1 = call.getArguments().get(1);
-            if (arg1 instanceof ConstantOperator && arg0 instanceof ColumnRefOperator) {
-                String path = ((ConstantOperator) arg1).getVarchar();
-                List<String> fields = parseJsonPath(path);
-                if (CollectionUtils.isNotEmpty(fields) && isSupported(fields)) {
-                    // full path: columnName.field
-                    List<String> fullPath = Lists.newArrayList();
-                    Pair<Table, Column> tableAndColumn =
-                            context.columnRefFactory.getTableAndColumn((ColumnRefOperator) arg0);
-                    // only rewrite the expression in scan node, so it must be attached with a table
-                    if (tableAndColumn != null) {
-                        fullPath.add(tableAndColumn.second.getName());
-                        fullPath.addAll(fields);
-                        ColumnAccessPath accessPath = ColumnAccessPath.createLinearPath(fullPath, call.getType());
-                        Pair<Boolean, ColumnRefOperator> orCreateColumn =
-                                context.getOrCreateColumn((ColumnRefOperator) arg0, accessPath);
-                        if (!orCreateColumn.first) {
-                            extendedColumns.put(orCreateColumn.second,
-                                    context.getColumnRefFactory().getColumn(orCreateColumn.second));
-                        }
-                        return orCreateColumn.second;
-                    }
-                }
-            }
-
-            return call;
+        private boolean isSupportedJsonFunction(CallOperator call) {
+            return SUPPORTED_JSON_FUNCTIONS.contains(call.getFnName()) && call.getArguments().size() == 2;
         }
 
-        // Parses a JSON path like $.f1.f2 into ["f1", "f2"]
+        private ScalarOperator rewriteJsonFunction(CallOperator call, ScalarOperatorRewriteContext rewriteContext) {
+            ScalarOperator jsonColumn = call.getArguments().get(0);
+            ScalarOperator pathArg = call.getArguments().get(1);
+
+            if (!(pathArg instanceof ConstantOperator) || !(jsonColumn instanceof ColumnRefOperator)) {
+                return call;
+            }
+
+            String path = ((ConstantOperator) pathArg).getVarchar();
+            List<String> fields = parseJsonPath(path);
+
+            if (!isValidJsonPath(fields)) {
+                return call;
+            }
+
+            return createColumnAccessExpression((ColumnRefOperator) jsonColumn, fields, call.getType());
+        }
+
+        private ScalarOperator createColumnAccessExpression(ColumnRefOperator jsonColumn,
+                                                            List<String> fields,
+                                                            Type resultType) {
+            Pair<Table, Column> tableAndColumn = context.getColumnRefFactory().getTableAndColumn(jsonColumn);
+            if (tableAndColumn == null) {
+                return jsonColumn; // Cannot rewrite if not attached to a table
+            }
+
+            // Build full path: columnName.field1.field2
+            List<String> fullPath = Lists.newArrayList();
+            fullPath.add(tableAndColumn.second.getName());
+            fullPath.addAll(fields);
+
+            ColumnAccessPath accessPath = ColumnAccessPath.createLinearPath(fullPath, resultType);
+            Pair<Boolean, ColumnRefOperator> columnResult = context.getOrCreateColumn(jsonColumn, accessPath);
+
+            // Note: extendedColumns are now automatically recorded in context.getOrCreateColumn()
+            return columnResult.second;
+        }
+
+        /**
+         * Parses a JSON path like $.f1.f2 into ["f1", "f2"].
+         */
         private static List<String> parseJsonPath(String path) {
-            final int jsonFlattenDepth = 20;
             List<String> result = Lists.newArrayList();
-            SubfieldAccessPathNormalizer.parseSimpleJsonPath(jsonFlattenDepth, path, result);
+            SubfieldAccessPathNormalizer.parseSimpleJsonPath(DEFAULT_JSON_FLATTEN_DEPTH, path, result);
             return result;
         }
 
-        private static boolean isSupported(List<String> jsonPath) {
-            for (String piece : jsonPath) {
-                if (!JSON_PATH_VALID_PATTERN.matcher(piece).matches()) {
-                    return false;
-                }
+        /**
+         * Validates if the JSON path contains only supported field names.
+         */
+        private static boolean isValidJsonPath(List<String> jsonPath) {
+            if (CollectionUtils.isEmpty(jsonPath)) {
+                return false;
             }
-            return true;
+
+            return jsonPath.stream().allMatch(field ->
+                    JSON_PATH_VALID_PATTERN.matcher(field).matches());
         }
     }
 }
