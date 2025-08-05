@@ -2082,7 +2082,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：Seconds
 - 是否动态：是
 - 描述：预提交事务的默认超时时间。
-- 引入版本：v3.5
+- 引入版本：-
 
 ##### spark_dpp_version
 
