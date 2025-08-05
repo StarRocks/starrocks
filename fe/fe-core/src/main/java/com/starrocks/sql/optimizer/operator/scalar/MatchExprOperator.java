@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Objects;
 
 public class MatchExprOperator extends ArgsScalarOperator {
-    private List<ScalarOperator> arguments;
     private MatchExpr.MatchOperator matchOperator = MatchExpr.MatchOperator.MATCH;
 
     public MatchExprOperator(MatchExpr.MatchOperator matchOperator, ScalarOperator... arguments) {
