@@ -1,4 +1,4 @@
--- name: test_normal_flat_json_predicate @system
+-- name: test_normal_flat_json_predicate @sequential
 
 CREATE TABLE js2 (
     v1 BIGINT NULL,
