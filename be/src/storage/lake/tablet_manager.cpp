@@ -264,7 +264,6 @@ int64_t TabletManager::get_average_row_size_from_latest_metadata(int64_t tablet_
 
 Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location) {
     TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
-
     // write metadata file
     auto t0 = butil::gettimeofday_us();
 

@@ -839,7 +839,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                     PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, false);
 
             if (!enableFlatJson) {
-                throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
+                throw new DdlException(
+                        "flat_json.enable must be set to true in order to set flat-json related configurations.");
             }
 
             double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
@@ -853,11 +854,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     flatJsonSparsityFactory, flatJsonColumnMax);
 
             table.setFlatJsonConfig(flatJsonConfig);
-
-            LOG.info("create table {} set flat json config, flat_json_enable = {}, flat_json_null_factor = {}, " +
-                            "flat_json_sparsity_factor = {}, flat_json_column_max = {}",
-                    tableName, enableFlatJson, flatJsonNullFactor, flatJsonSparsityFactory, flatJsonColumnMax);
-
+            LOG.info("create table {} set flat json config: {}", tableName, flatJsonConfig.toString());
         } catch (AnalysisException e) {
             throw new DdlException("Failed to process flat JSON configuration: " + e.getMessage(), e);
         }
