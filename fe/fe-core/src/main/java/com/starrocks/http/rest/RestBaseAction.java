@@ -242,10 +242,10 @@ public class RestBaseAction extends BaseAction {
         String originalProtocol = getProtocolFromRequest(request);
 
         // Choose the appropriate port and protocol based on the original request
-        Pair<String, Integer> leaderIpAndPort = ("https".equals(originalProtocol) && Config.enable_https) 
-            ? globalStateMgr.getNodeMgr().getLeaderIpAndHttpsPort()
-            : globalStateMgr.getNodeMgr().getLeaderIpAndHttpPort();
-        
+        Pair<String, Integer> leaderIpAndPort = ("https".equals(originalProtocol) && Config.enable_https)
+                ? globalStateMgr.getNodeMgr().getLeaderIpAndHttpsPort()
+                : globalStateMgr.getNodeMgr().getLeaderIpAndHttpPort();
+
         redirectTo(request, response,
                 new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
         return true;
