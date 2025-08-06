@@ -91,6 +91,37 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testRedactFSCredentials() {
+        String sql = "select * from FILES(\n" +
+                "        \"path\" = \"s3://fs/people.parquet\",\n" +
+                "        \"format\" = \"parquet\"\n" +
+                "        \"fs.s3a.access.key\" = \"aaa\",\n" +
+                "        \"fs.s3a.secret.key\" = \"bbb\",\n" +
+                "        \"fs.ks3.AccessKey\" = \"ccc\",\n" +
+                "        \"fs.ks3.AccessSecret\" = \"ddd\",\n" +
+                "        \"fs.oss.accessKeyId\" = \"eee\",\n" +
+                "        \"fs.oss.accessKeySecret\" = \"fff\",\n" +
+                "        \"fs.cosn.userinfo.secretId\" = \"ggg\",\n" +
+                "        \"fs.cosn.userinfo.secretKey\" = \"hhh\",\n" +
+                "        \"fs.obs.access.key\" = \"iii\",\n" +
+                "        \"fs.obs.secret.key\" = \"jjj\"\n" +
+                ")";
+
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assert.assertFalse("fs.s3a.access.key should be redacted", redacted.contains("aaa"));
+        Assert.assertFalse("fs.s3a.secret.key should be redacted", redacted.contains("bbb"));
+        Assert.assertFalse("fs.ks3.AccessKey should be redacted", redacted.contains("ccc"));
+        Assert.assertFalse("fs.ks3.AccessSecret should be redacted", redacted.contains("ddd"));
+        Assert.assertFalse("fs.oss.accessKeyId should be redacted", redacted.contains("eee"));
+        Assert.assertFalse("fs.oss.accessKeySecret should be redacted", redacted.contains("fff"));
+        Assert.assertFalse("fs.cosn.userinfo.secretId should be redacted", redacted.contains("ggg"));
+        Assert.assertFalse("fs.cosn.userinfo.secretKey should be redacted", redacted.contains("hhh"));
+        Assert.assertFalse("fs.obs.access.key should be redacted", redacted.contains("iii"));
+        Assert.assertFalse("fs.obs.secret.key should be redacted", redacted.contains("jjj"));
+        Assert.assertTrue("Should contain redacted marker", redacted.contains("***"));
+    }
+
+    @Test
     public void testRedactWithDifferentFormats() {
         // Test without spaces around equals
         String sql1 = "\"aws.s3.access_key\"=\"AKIAIOSFODNN7EXAMPLE\"";
