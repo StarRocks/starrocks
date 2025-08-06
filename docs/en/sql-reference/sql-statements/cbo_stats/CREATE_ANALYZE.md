@@ -25,7 +25,7 @@ CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name
 PROPERTIES (property [,property])
 
 -- Automatically collect stats of specified columns in a table.
-CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
+CREATE ANALYZE [FULL|SAMPLE] [IF NOT EXISTS] TABLE tbl_name (col_name [,col_name])
 PROPERTIES (property [,property])
 ```
 
