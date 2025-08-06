@@ -140,6 +140,11 @@ public class LakeMaterializedView extends MaterializedView {
                 properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
                         String.valueOf(storageInfo.isEnableAsyncWriteBack()));
             }
+
+            Boolean enableDynamicTablet = getEnableDynamicTablet();
+            if (enableDynamicTablet != null && enableDynamicTablet) {
+                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET, enableDynamicTablet.toString());
+            }
         }
         return properties;
     }
