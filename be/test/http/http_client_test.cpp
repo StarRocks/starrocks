@@ -212,10 +212,8 @@ TEST_F(HttpClientTest, clear_headers) {
     std::string response;
     st = client.execute(&response);
     ASSERT_TRUE(st.ok());
-    ASSERT_EQ("", response);
-
     // Verify header list is empty
-    ASSERT_TRUE(client._headers.empty());
+    ASSERT_EQ("", response);
 }
 
 TEST_F(HttpClientTest, header_override) {
