@@ -1010,6 +1010,8 @@ Status TabletManager::report_tablet_info(TTabletInfo* tablet_info) {
 Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tablets_info) {
     DCHECK(tablets_info != nullptr);
 
+    int64_t start_ms = MonotonicMillis();
+
     // build the expired txn map first, outside the tablet map lock
     std::map<TabletInfo, std::vector<int64_t>> expire_txn_map;
     StorageEngine::instance()->txn_manager()->build_expire_txn_map(&expire_txn_map);
@@ -1047,8 +1049,9 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
             }
         }
     }
-    LOG(INFO) << "Report all " << tablets_info->size()
-              << " tablets info. max_tablet_rowset_num:" << max_tablet_rowset_num << " tablet_id:" << max_tablet_id;
+    LOG(INFO) << "Report all " << tablets_info->size() << " tablets info"
+              << ". max_tablet_rowset_num:" << max_tablet_rowset_num << ", tablet_id:" << max_tablet_id
+              << ", cost:" << MonotonicMillis() - start_ms << "ms";
     StarRocksMetrics::instance()->max_tablet_rowset_num.set_value(max_tablet_rowset_num);
     return Status::OK();
 }
