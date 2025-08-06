@@ -37,7 +37,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class DataCacheSelectExecutor {
     private static final Logger LOG = LogManager.getLogger(DataCacheSelectExecutor.class);
@@ -49,8 +48,9 @@ public class DataCacheSelectExecutor {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final Warehouse wh = warehouseManager.getWarehouse(connectContext.getCurrentWarehouseName());
         List<StmtExecutor> subStmtExecutors = Lists.newArrayList();
-        for (long workerGroupId : wh.getWorkerGroupIds()) {
-            ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext);
+        for (int workerGroupIdx = 0; workerGroupIdx < wh.getWorkerGroupIds().size(); workerGroupIdx++) {
+            long workerGroupId = wh.getWorkerGroupIds().get(workerGroupIdx);
+            ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext, workerGroupIdx == 0);
             ComputeResource computeResource = warehouseManager.getComputeResourceProvider().ofComputeResource(
                     wh.getId(), workerGroupId);
             subContext.setCurrentComputeResource(computeResource);
@@ -105,7 +105,8 @@ public class DataCacheSelectExecutor {
     }
 
     public static ConnectContext buildCacheSelectConnectContext(DataCacheSelectStatement statement,
-                                                                ConnectContext connectContext) {
+                                                                ConnectContext connectContext,
+                                                                boolean isFirstSubContext) {
         // Create a new ConnectContext for the sub task of cache select.
         final ConnectContext context = new ConnectContext(null);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -114,25 +115,31 @@ public class DataCacheSelectExecutor {
         context.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
         context.setCurrentRoleIds(connectContext.getCurrentRoleIds());
         context.setAuditEventBuilder(connectContext.getAuditEventBuilder());
+        context.setResourceGroup(connectContext.getResourceGroup());
         context.setSessionId(connectContext.getSessionId());
         context.setRemoteIP(connectContext.getRemoteIP());
         context.setQueryId(connectContext.getQueryId());
         context.getState().reset();
 
-        // Generate one different execution_id here for different compute resources.
-        // We make the high part of query id unchanged to facilitate tracing problem by log.
         TUniqueId queryId = UUIDUtil.toTUniqueId(connectContext.getQueryId());
-        UUID uuid = UUIDUtil.genUUID();
-        TUniqueId executionId = new TUniqueId(queryId.hi, uuid.getLeastSignificantBits());
+        TUniqueId executionId;
+        if (isFirstSubContext) {
+            executionId = queryId;
+        } else {
+            // For compute resources except the first one, generate different execution_id here.
+            // We make the high part of query id unchanged to facilitate tracing problem by log.
+            executionId = new TUniqueId(queryId.hi, UUIDUtil.genUUID().getLeastSignificantBits());
+            LOG.debug("generate a new execution id {} for query {}", DebugUtil.printId(executionId), DebugUtil.printId(queryId));
+        }
         context.setExecutionId(executionId);
-        LOG.debug("generate a new execution id {} for query {}", DebugUtil.printId(UUIDUtil.fromTUniqueid(executionId)),
-                DebugUtil.printId(connectContext.getQueryId()));
-
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
         context.setThreadLocalInfo();
 
-        SessionVariable sessionVariable = (SessionVariable) context.getSessionVariable();
+        // clone an new session variable
+        SessionVariable sessionVariable = (SessionVariable) connectContext.getSessionVariable().clone();
+        // overwrite catalog
+        sessionVariable.setCatalog(statement.getCatalog());
         // force enable datacache and populate
         sessionVariable.setEnableScanDataCache(true);
         sessionVariable.setEnablePopulateDataCache(true);
@@ -144,6 +151,7 @@ public class DataCacheSelectExecutor {
         sessionVariable.setDataCachePriority(statement.getPriority());
         sessionVariable.setDatacacheTTLSeconds(statement.getTTLSeconds());
         sessionVariable.setEnableCacheSelect(true);
+        context.setSessionVariable(sessionVariable);
 
         return context;
     }
