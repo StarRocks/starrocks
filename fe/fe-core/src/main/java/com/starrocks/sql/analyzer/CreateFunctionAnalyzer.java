@@ -98,7 +98,7 @@ public class CreateFunctionAnalyzer {
     }
 
     private String getRealUrl(String url) {
-        if (url.contains("s3") || url.contains("hdfs")) {
+        if (!url.startsWith("http://") && !url.startsWith("file://")) {
             return getJUdfUrl(url);
         }
         return url;
