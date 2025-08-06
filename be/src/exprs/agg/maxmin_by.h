@@ -592,6 +592,7 @@ public:
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
+        dst->resize(start);
         if constexpr (State::not_filter_nulls_flag) {
             if (this->data(state).null_result) {
                 DCHECK(dst->is_nullable());
@@ -831,6 +832,7 @@ public:
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
+        dst->resize(start);
         if constexpr (State::not_filter_nulls_flag) {
             if (this->data(state).null_result) {
                 DCHECK(dst->is_nullable());
