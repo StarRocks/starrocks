@@ -15,12 +15,12 @@
 
 package com.starrocks.listener;
 
+import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.DmlType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.InsertOverwriteJobStats;
@@ -38,6 +38,7 @@ public class LoadJobHistoryLogListener implements LoadJobListener {
     public static final LoadJobHistoryLogListener INSTANCE = new LoadJobHistoryLogListener();
 
     private static final Logger LOADS_HISTORY_LOG = LogManager.getLogger("loads_history");
+    private static final Gson GSON = new Gson();
 
     @Override
     public void onStreamLoadTransactionFinish(TransactionState transactionState) {
@@ -49,7 +50,7 @@ public class LoadJobHistoryLogListener implements LoadJobListener {
                 .getTaskByName(label);
         if (streamLoadTaskList != null) {
             streamLoadTaskList.parallelStream().forEach(streamLoadTask -> {
-                String jsonString = GsonUtils.GSON.toJson(streamLoadTask.toThrift());
+                String jsonString = GSON.toJson(streamLoadTask.toThrift());
                 LOADS_HISTORY_LOG.info(jsonString);
             });
         }
@@ -64,7 +65,7 @@ public class LoadJobHistoryLogListener implements LoadJobListener {
         List<LoadJob> loadJobs = GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(label);
         if (loadJobs != null) {
             loadJobs.parallelStream().forEach(loadJob -> {
-                String jsonString = GsonUtils.GSON.toJson(loadJob.toThrift());
+                String jsonString = GSON.toJson(loadJob.toThrift());
                 LOADS_HISTORY_LOG.info(jsonString);
             });
         }
