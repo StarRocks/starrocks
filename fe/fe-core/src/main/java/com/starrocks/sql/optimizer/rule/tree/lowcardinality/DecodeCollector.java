@@ -270,6 +270,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 context.allStringColumns.add(cid);
             } else if (allExprNum > worthless && allExprNum >= worthless * 2) {
                 context.allStringColumns.add(cid);
+            } else if (allExprNum == worthless && allExprNum > 0) {
+                // It's beneficial to rewrite the extended column
+                context.allStringColumns.add(cid);
             }
         }
         // resolve depend-on relation:
@@ -690,16 +693,21 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
-            ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
-                    .getColumnStatistic(table, column.getName());
-            // Condition 2: the varchar column is low cardinality string column
+            // If it's not an extended column, we have to check the cardinality of the column.
+            // TODO(murphy) support collect cardinality of extended column
+            if (!checkExtendedColumn(scan, column)) {
+                ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                        .getColumnStatistic(table, column.getName());
+                // Condition 2: the varchar column is low cardinality string column
 
-            boolean alwaysCollectDict = sessionVariable.isAlwaysCollectDict();
-            if (!alwaysCollectDict && !column.getType().isArrayType() && !FeConstants.USE_MOCK_DICT_MANAGER &&
-                    (columnStatistic.isUnknown() ||
-                            columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
-                LOG.debug("{} isn't low cardinality string column", column.getName());
-                continue;
+                boolean alwaysCollectDict = sessionVariable.isAlwaysCollectDict();
+                if (!alwaysCollectDict && !column.getType().isArrayType() && !FeConstants.USE_MOCK_DICT_MANAGER &&
+                        (columnStatistic.isUnknown() ||
+                                columnStatistic.getDistinctValuesCount() >
+                                        CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
+                    LOG.debug("{} isn't low cardinality string column", column.getName());
+                    continue;
+                }
             }
 
             // Condition 3: the varchar column has collected global dict
@@ -872,6 +880,26 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
         }
         return true;
+    }
+
+    /**
+     * Check if the column is an extended string column, if so, it can be used for global dict optimization.
+     */
+    private boolean checkExtendedColumn(PhysicalOlapScanOperator scan, ColumnRefOperator column) {
+        if (!sessionVariable.isEnableJSONV2DictOpt()) {
+            return false;
+        }
+        String colName = scan.getColRefToColumnMetaMap().get(column).getName();
+        for (ColumnAccessPath path : scan.getColumnAccessPaths()) {
+            if (path.isExtended() &&
+                    path.getLinearPath().equals(colName) &&
+                    path.getType() == TAccessPathType.ROOT &&
+                    path.getValueType().isStringType()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void collectPredicate(Operator operator, DecodeInfo info) {
