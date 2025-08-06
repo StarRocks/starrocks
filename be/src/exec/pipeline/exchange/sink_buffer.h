@@ -195,7 +195,6 @@ private:
         TNetworkAddress dest_addrs;
 
         std::atomic_bool pass_through_blocked;
-
         // currently only used for local send. Record the id of the thread that sent it.
         std::thread::id owner_id{};
     };
