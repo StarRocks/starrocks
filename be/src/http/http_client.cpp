@@ -45,6 +45,7 @@ Status HttpClient::init(const std::string& url) {
         curl_easy_reset(_curl);
     }
 
+    _headers.clear();
     if (_header_list != nullptr) {
         curl_slist_free_all(_header_list);
         _header_list = nullptr;
@@ -156,6 +157,7 @@ void HttpClient::clear_headers() {
         curl_slist_free_all(_header_list);
         _header_list = nullptr;
     }
+    curl_easy_setopt(_curl, CURLOPT_HTTPHEADER, _header_list);
 }
 
 void HttpClient::_apply_headers() {
@@ -205,10 +207,6 @@ Status HttpClient::execute_delete_request(const std::string& payload, std::strin
 
 Status HttpClient::execute(const std::function<bool(const void* data, size_t length)>& callback) {
     _callback = &callback;
-
-    // Apply headers before executing
-    _apply_headers();
-
     auto code = curl_easy_perform(_curl);
     if (code != CURLE_OK) {
         LOG(WARNING) << "fail to execute HTTP client, errmsg=" << _to_errmsg(code);
