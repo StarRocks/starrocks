@@ -1,4 +1,7 @@
 -- name: test_normal_flat_json_predicate @sequential
+update information_schema.be_configs set value = 'true' where name = 'enable_json_flat';
+-- result:
+-- !result
 CREATE TABLE js2 (
     v1 BIGINT NULL,
     j1 JSON NULL
