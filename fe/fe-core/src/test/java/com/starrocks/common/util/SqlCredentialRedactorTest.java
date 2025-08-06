@@ -44,13 +44,21 @@ public class SqlCredentialRedactorTest {
                 "PROPERTIES (\n" +
                 "    \"path\" = \"abfs://container@account.dfs.core.windows.net/path\",\n" +
                 "    \"azure.blob.shared_key\" = \"base64encodedkey==\",\n" +
+                "    \"azure.blob.oauth2_client_secret\" = \"abcdefg\",\n" +
                 "    \"azure.blob.sas_token\" = \"?sv=2020-08-04&ss=bfqt&srt=sco&sp=rwdlacupx\"\n" +
                 ")";
 
         String redacted = SqlCredentialRedactor.redact(sql);
+<<<<<<< HEAD
         Assert.assertFalse("Shared key should be redacted", redacted.contains("base64encodedkey=="));
         Assert.assertFalse("SAS token should be redacted", redacted.contains("sv=2020-08-04"));
         Assert.assertTrue("Path should remain", redacted.contains("abfs://container@account.dfs.core.windows.net/path"));
+=======
+        Assertions.assertFalse(redacted.contains("base64encodedkey=="), "Shared key should be redacted");
+        Assertions.assertFalse(redacted.contains("abcdefg"), "oauth2_client_secret should be redacted");
+        Assertions.assertFalse(redacted.contains("sv=2020-08-04"), "SAS token should be redacted");
+        Assertions.assertTrue(redacted.contains("abfs://container@account.dfs.core.windows.net/path"), "Path should remain");
+>>>>>>> c15beda9ff ([BugFix] mask some credential info in audit log (#61609))
     }
 
     @Test
@@ -88,6 +96,37 @@ public class SqlCredentialRedactorTest {
         Assert.assertFalse("Hadoop password should be redacted", redacted.contains("hdfs_password123"));
         Assert.assertFalse("Broker password should be redacted", redacted.contains("broker_password456"));
         Assert.assertTrue("Username can remain", redacted.contains("hdfs_user"));
+    }
+
+    @Test
+    public void testRedactFSCredentials() {
+        String sql = "select * from FILES(\n" +
+                "        \"path\" = \"s3://fs/people.parquet\",\n" +
+                "        \"format\" = \"parquet\"\n" +
+                "        \"fs.s3a.access.key\" = \"aaa\",\n" +
+                "        \"fs.s3a.secret.key\" = \"bbb\",\n" +
+                "        \"fs.ks3.AccessKey\" = \"ccc\",\n" +
+                "        \"fs.ks3.AccessSecret\" = \"ddd\",\n" +
+                "        \"fs.oss.accessKeyId\" = \"eee\",\n" +
+                "        \"fs.oss.accessKeySecret\" = \"fff\",\n" +
+                "        \"fs.cosn.userinfo.secretId\" = \"ggg\",\n" +
+                "        \"fs.cosn.userinfo.secretKey\" = \"hhh\",\n" +
+                "        \"fs.obs.access.key\" = \"iii\",\n" +
+                "        \"fs.obs.secret.key\" = \"jjj\"\n" +
+                ")";
+
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("aaa"), "fs.s3a.access.key should be redacted");
+        Assertions.assertFalse(redacted.contains("bbb"), "fs.s3a.secret.key should be redacted");
+        Assertions.assertFalse(redacted.contains("ccc"), "fs.ks3.AccessKey should be redacted");
+        Assertions.assertFalse(redacted.contains("ddd"), "fs.ks3.AccessSecret should be redacted");
+        Assertions.assertFalse(redacted.contains("eee"), "fs.oss.accessKeyId should be redacted");
+        Assertions.assertFalse(redacted.contains("fff"), "fs.oss.accessKeySecret should be redacted");
+        Assertions.assertFalse(redacted.contains("ggg"), "fs.cosn.userinfo.secretId should be redacted");
+        Assertions.assertFalse(redacted.contains("hhh"), "fs.cosn.userinfo.secretKey should be redacted");
+        Assertions.assertFalse(redacted.contains("iii"), "fs.obs.access.key should be redacted");
+        Assertions.assertFalse(redacted.contains("jjj"), "fs.obs.secret.key should be redacted");
+        Assertions.assertTrue(redacted.contains("***"), "Should contain redacted marker");
     }
 
     @Test
