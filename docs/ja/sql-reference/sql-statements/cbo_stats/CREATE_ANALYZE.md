@@ -27,7 +27,7 @@ CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name
 PROPERTIES (property [,property])
 
 -- テーブル内の指定された列の統計を自動的に収集します。
-CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
+CREATE ANALYZE [FULL|SAMPLE] [IF NOT EXISTS] TABLE tbl_name (col_name [,col_name])
 PROPERTIES (property [,property])
 ```
 
