@@ -43,6 +43,7 @@ import java.util.regex.Pattern;
 import javax.naming.Context;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
+import javax.naming.PartialResultException;
 import javax.naming.directory.Attribute;
 import javax.naming.directory.Attributes;
 import javax.naming.directory.DirContext;
@@ -145,19 +146,20 @@ public class LDAPGroupProvider extends GroupProvider {
             if (getLdapGroupFilter() != null) {
                 SearchControls searchControls = new SearchControls();
                 searchControls.setSearchScope(SearchControls.SUBTREE_SCOPE);
-                NamingEnumeration<SearchResult> results =
-                        ctx.search(getLdapBaseDn(), getLdapGroupFilter(),
-                                searchControls);
-                while (results.hasMore()) {
-                    SearchResult result = results.next();
-                    Attributes attributes = result.getAttributes();
-                    matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
+                NamingEnumeration<SearchResult> results = ctx.search(getLdapBaseDn(), getLdapGroupFilter(), searchControls);
+                try {
+                    while (results.hasMore()) {
+                        SearchResult result = results.next();
+                        Attributes attributes = result.getAttributes();
+                        matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
+                    }
+                } catch (PartialResultException e) {
+                    LOG.warn("LDAP group search partial result exception", e);
                 }
             } else if (getLdapGroupDn() != null) {
                 for (String ldapGroupDN : getLdapGroupDn()) {
-                    Attributes attributes = ctx.getAttributes(ldapGroupDN,
-                            new String[] {getLdapGroupIdentifierAttr(),
-                                    getLDAPGroupMemberAttr()});
+                    Attributes attributes =
+                            ctx.getAttributes(ldapGroupDN, new String[] {getLdapGroupIdentifierAttr(), getLDAPGroupMemberAttr()});
                     matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
                 }
             } else {
@@ -168,6 +170,10 @@ public class LDAPGroupProvider extends GroupProvider {
             LOG.error("LDAP group search failed", e);
         }
 
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("LDAP group refresh completed, userToGroupCache: {}", groups);
+        }
+
         this.userToGroupCache = groups;
     }
 
@@ -176,10 +182,16 @@ public class LDAPGroupProvider extends GroupProvider {
                                           UserNameExtractInterface userNameExtractInterface)
             throws NamingException {
         Attribute ldapGroupIdentifierAttr = attributes.get(getLdapGroupIdentifierAttr());
+        if (ldapGroupIdentifierAttr == null) {
+            LOG.warn("LDAP group identifier attribute '{}' not found in attributes: {}",
+                    getLdapGroupIdentifierAttr(), attributes);
+            return;
+        }
         String groupName = (String) ldapGroupIdentifierAttr.get();
 
         Attribute memberAttribute = attributes.get(getLDAPGroupMemberAttr());
         if (memberAttribute == null) {
+            LOG.warn("LDAP group member attribute '{}' not found in attributes: {}", getLDAPGroupMemberAttr(), attributes);
             return;
         }
 
@@ -187,8 +199,17 @@ public class LDAPGroupProvider extends GroupProvider {
         while (e.hasMore()) {
             String memberDN = (String) e.next();
             String extractUserName = userNameExtractInterface.extract(memberDN);
+
+            if (extractUserName == null) {
+                LOG.debug("Failed to extract user name from member DN: '{}'", memberDN);
+                continue;
+            }
+
             groups.putIfAbsent(extractUserName, new HashSet<>());
             groups.get(extractUserName).add(groupName);
+
+            LOG.debug("Successfully extracted user '{}' from member '{}', added to group '{}'",
+                    extractUserName, memberDN, groupName);
         }
     }
 
@@ -201,7 +222,7 @@ public class LDAPGroupProvider extends GroupProvider {
         UserNameExtractInterface userNameExtractInterface;
         String ldapUserSearchAttr = getLdapUserSearchAttr();
 
-        if (getLdapUserSearchAttr() != null) {
+        if (ldapUserSearchAttr != null) {
             Pattern pattern = Pattern.compile(ldapUserSearchAttr);
             if (pattern.matcher("").groupCount() == 0) {
                 userNameExtractInterface = memberDn -> {
@@ -220,6 +241,7 @@ public class LDAPGroupProvider extends GroupProvider {
                         }
                     }
 
+                    LOG.debug("skip member '{}' because it does not match the search attr '{}'", memberDn, ldapUserSearchAttr);
                     return null;
                 };
             } else {
@@ -228,6 +250,8 @@ public class LDAPGroupProvider extends GroupProvider {
                     if (matcher.find()) {
                         return matcher.group(1);
                     } else {
+                        LOG.debug("skip member '{}' because it does not match the search attr '{}'", memberDN,
+                                ldapUserSearchAttr);
                         return null;
                     }
                 };
@@ -327,7 +351,6 @@ public class LDAPGroupProvider extends GroupProvider {
     public String getLdapSslConnTrustStorePwd() {
         return properties.getOrDefault(LDAP_SSL_CONN_TRUST_STORE_PWD, "");
     }
-
 
     public String getLdapGroupFilter() {
         return properties.get(LDAP_GROUP_FILTER);
