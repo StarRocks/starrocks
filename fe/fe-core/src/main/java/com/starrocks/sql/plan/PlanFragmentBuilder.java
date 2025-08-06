@@ -1031,6 +1031,7 @@ public class PlanFragmentBuilder {
                     scan.getSelectPartitionNames(),
                     context.getConnectContext().getCurrentComputeResource());
 
+            scanNode.setColumnAccessPaths(scan.getColumnAccessPaths());
             scanNode.computeRangeLocations(computeResource);
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
