@@ -68,7 +68,6 @@ set(EXEC_FILES
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/exchange_bucket_aware_test.cpp
-        ./exec/pipeline/exchange_pass_through_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/query_cache/query_cache_test.cpp
@@ -406,6 +405,7 @@ set(EXEC_FILES
         ./runtime/agg_state_desc_test.cpp
         ./runtime/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
+        ./runtime/data_stream_mgr_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
         ./runtime/decimalv3_test.cpp

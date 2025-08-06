@@ -123,6 +123,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         _exec_env->runtime_filter_worker()->open_query(_query_id, request.query_options, params.runtime_filter_params,
                                                        false);
     }
+    _exec_env->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
 
     // set #senders of exchange nodes before calling Prepare()
     std::vector<ExecNode*> exch_nodes;
@@ -434,6 +435,7 @@ void PlanFragmentExecutor::close() {
     if (_is_runtime_filter_merge_node) {
         _exec_env->runtime_filter_worker()->close_query(_query_id);
     }
+    _exec_env->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
 
     // Prepare may not have been called, which sets _runtime_state
     if (_runtime_state != nullptr) {
