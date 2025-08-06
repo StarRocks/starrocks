@@ -3776,6 +3776,18 @@ public class Config extends ConfigBase {
     public static long max_graceful_exit_time_second = 60;
 
     /**
+     * Whether enable dynamic tablet.
+     */
+    @ConfField(mutable = true, comment = "Whether enable dynamic tablet.")
+    public static boolean enable_dynamic_tablet = false;
+
+    /**
+     * The default scheduler interval for dynamic tablet checker.
+     */
+    @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet checker.")
+    public static long dynamic_tablet_checker_interval_ms = 1000;
+
+    /**
      * The default scheduler interval for dynamic tablet jobs.
      */
     @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
@@ -3797,13 +3809,13 @@ public class Config extends ConfigBase {
      * Tablets with size larger than this value will be considered to split.
      */
     @ConfField(mutable = true, comment = "Tablets with size larger than this value will be considered to split.")
-    public static long dynamic_tablet_split_size = 4 * 1024 * 1024 * 1024;
+    public static long dynamic_tablet_split_size = 4L * 1024L * 1024L * 1024L;
 
     /**
      * The max number of new tablets that an old tablet can be split into.
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
-    public static int dynamic_tablet_max_split_count = 1024;
+    public static int dynamic_tablet_max_split_count = 8;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale
