@@ -123,9 +123,13 @@ public abstract class SplitAggregateRule extends TransformationRule {
             return true;
         }
 
+        // 1. Only single node in the cluster
+        // 2. With GROUP-BY clause, otherwise the second-stage cannot be parallelized
+        // 3. CBO_ENABLE_SINGLE_NODE_PREFER_TWO_STAGE_AGGREGATE is enabled
         if (aggMode == AUTO.ordinal()
                 && isSingleNodeExecution(ConnectContext.get())
                 && !FeConstants.runningUnitTest
+                && CollectionUtils.isNotEmpty(operator.getGroupingKeys())
                 && ConnectContext.get().getSessionVariable().isCboEnableSingleNodePreferTwoStageAggregate()) {
             return true;
         }
