@@ -419,40 +419,29 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
     return Status::OK();
 }
 
-// cut rowid pairs by source rowid's order. E.g.
-// rowid_pairs -> <101, 2>, <202, 3>, <303, 4>, <102, 5>, <203, 6>
-// After cut, it will be:
-//  inorder_source_rowids -> <101, 202, 303>, <102, 203>
-//  inorder_upt_rowids -> <2, 3, 4>, <5, 6>
-static void cut_rowids_in_order(const std::vector<RowidPairs>& rowid_pairs,
-                                std::vector<std::vector<uint32_t>>* inorder_source_rowids,
-                                std::vector<std::vector<uint32_t>>* inorder_upt_rowids,
-                                StreamChunkContainer container) {
-    uint32_t last_source_rowid = 0;
-    std::vector<uint32_t> current_source_rowids;
-    std::vector<uint32_t> current_upt_rowids;
-    auto cut_rowids_fn = [&]() {
-        inorder_source_rowids->push_back({});
-        inorder_upt_rowids->push_back({});
-        inorder_source_rowids->back().swap(current_source_rowids);
-        inorder_upt_rowids->back().swap(current_upt_rowids);
-    };
+// This function will split rowid_pairs into two parts:
+// 1. sorted_source_rowids: sorted source rowids
+// 2. unsorted_upt_rowids: unsorted upt rowids
+// If container is not provided, we will just push back the rowids without alignment.
+void split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<uint32_t>* sorted_source_rowids,
+                       std::vector<uint32_t>* unsorted_upt_rowids, StreamChunkContainer* container) {
+    // rowid_pairs MUST be sorted already
+    DCHECK(std::is_sorted(rowid_pairs.begin(), rowid_pairs.end(), RowidPairsCompFn));
     for (const auto& each : rowid_pairs) {
-        if (!container.contains(each.first)) {
-            // skip in this round
-            continue;
+        if (container == nullptr) {
+            // If container is not provided, we just push back the rowids.
+            sorted_source_rowids->push_back(each.first);
+            unsorted_upt_rowids->push_back(each.second);
+        } else {
+            if (!container->contains(each.first)) {
+                // skip in this round
+                continue;
+            }
+            // append to sorted_source_rowids and unsorted_upt_rowids
+            // Align rowid
+            sorted_source_rowids->push_back(each.first - container->start_rowid);
+            unsorted_upt_rowids->push_back(each.second);
         }
-        if (each.first < last_source_rowid) {
-            // cut
-            cut_rowids_fn();
-        }
-        // Align rowid
-        current_source_rowids.push_back(each.first - container.start_rowid);
-        current_upt_rowids.push_back(each.second);
-        last_source_rowid = each.first;
-    }
-    if (!current_source_rowids.empty()) {
-        cut_rowids_fn();
     }
 }
 
@@ -479,16 +468,17 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
         tracker->consume(upt_chunk_size);
         DeferOp tracker_defer([&]() { tracker->release(upt_chunk_size); });
         // 2. update source chunk
-        std::vector<std::vector<uint32_t>> inorder_source_rowids;
-        std::vector<std::vector<uint32_t>> inorder_upt_rowids;
-        cut_rowids_in_order(each.second, &inorder_source_rowids, &inorder_upt_rowids, container);
-        DCHECK(inorder_source_rowids.size() == inorder_upt_rowids.size());
-        for (int i = 0; i < inorder_source_rowids.size(); i++) {
-            auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, inorder_upt_rowids[i].size());
-            TRY_CATCH_BAD_ALLOC(tmp_chunk->append_selective(*upt_chunk, inorder_upt_rowids[i].data(), 0,
-                                                            inorder_upt_rowids[i].size()));
-            RETURN_IF_EXCEPTION(container.chunk_ptr->update_rows(*tmp_chunk, inorder_source_rowids[i].data()));
-        }
+        std::vector<uint32_t> sorted_source_rowids;
+        std::vector<uint32_t> unsorted_upt_rowids;
+        // split rowid_pairs into sorted_source_rowids and unsorted_upt_rowids
+        split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, &container);
+        DCHECK(sorted_source_rowids.size() == unsorted_upt_rowids.size());
+        // fetch upt rows from upt_chunk
+        auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, unsorted_upt_rowids.size());
+        TRY_CATCH_BAD_ALLOC(
+                tmp_chunk->append_selective(*upt_chunk, unsorted_upt_rowids.data(), 0, unsorted_upt_rowids.size()));
+        // update source chunk use upt rows
+        RETURN_IF_EXCEPTION(container.chunk_ptr->update_rows(*tmp_chunk, sorted_source_rowids.data()));
     }
     return Status::OK();
 }
