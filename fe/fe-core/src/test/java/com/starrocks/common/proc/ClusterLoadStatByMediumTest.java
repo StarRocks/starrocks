@@ -63,10 +63,10 @@ public class ClusterLoadStatByMediumTest {
         // tablet inverted index
         TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
 
-        invertedIndex.addTablet(50000L, new TabletMeta(1L, 2L, 3L, 4L, TStorageMedium.HDD));
+        invertedIndex.addTablet(50000L, new TabletMeta(1L, 2L, 3L, 4L, 5L, TStorageMedium.HDD));
         invertedIndex.addReplica(50000L, new Replica(50001L, be1.getId(), 0, Replica.ReplicaState.NORMAL));
 
-        invertedIndex.addTablet(60000L, new TabletMeta(1L, 2L, 3L, 4L, TStorageMedium.SSD));
+        invertedIndex.addTablet(60000L, new TabletMeta(1L, 2L, 3L, 4L, 5L, TStorageMedium.SSD));
         invertedIndex.addReplica(60000L, new Replica(60002L, be1.getId(), 0, Replica.ReplicaState.NORMAL));
 
         // cluster load statistic
