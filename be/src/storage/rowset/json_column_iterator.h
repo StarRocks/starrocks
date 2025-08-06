@@ -79,7 +79,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
 /**
  * @brief create a ColumnIterator that extract a field from the underlying json column
  */
-StatusOr<ColumnIteratorUPtr> create_json_extract_iterator(ColumnIteratorUPtr source_iter, const std::string& path,
-                                                          LogicalType type);
+StatusOr<ColumnIteratorUPtr> create_json_extract_iterator(ColumnIteratorUPtr source_iter, bool source_nullable,
+                                                          const std::string& path, LogicalType type);
 
 } // namespace starrocks
