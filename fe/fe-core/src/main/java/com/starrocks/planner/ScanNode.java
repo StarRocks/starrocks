@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.TestOnly;
 
 import java.util.ArrayList;
@@ -167,6 +168,9 @@ public abstract class ScanNode extends PlanNode {
 
     protected String explainColumnAccessPath(String prefix) {
         String result = "";
+        if (CollectionUtils.isEmpty(columnAccessPaths)) {
+            return result;
+        }
         if (columnAccessPaths.stream().anyMatch(c -> !c.isFromPredicate() && !c.isExtended())) {
             result += prefix + "ColumnAccessPath: [" + columnAccessPaths.stream()
                     .filter(c -> !c.isFromPredicate() && !c.isExtended())
