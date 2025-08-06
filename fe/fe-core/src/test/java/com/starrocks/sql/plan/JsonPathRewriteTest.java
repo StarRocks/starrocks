@@ -122,6 +122,40 @@ public class JsonPathRewriteTest extends PlanTestBase {
                                 "  |  <slot 8> : 10: c2.f8\n",
                         "ExtendedColumnAccessPath: [/c2(varchar)/f8(varchar)]"
                 ),
+                // Join: self-join with JSON predicate pushdown
+                Arguments.of(
+                        """
+                                select t1.c2 
+                                from extend_predicate t1 
+                                join extend_predicate t2 on 
+                                    get_json_int(t1.c1, 'f1') = get_json_int(t2.c1, 'f1') 
+                                where get_json_int(t1.c2, 'f2') > 10
+                                """,
+                        "c2.f2",
+                        "ExtendedColumnAccessPath: [/c2(bigint(20))/f2(bigint(20))]"
+                ),
+                // Join: self-join with JSON projection pushdown
+                Arguments.of(
+                        """
+                                select get_json_int(t1.c2 , 'f2'), get_json_int(t2.c2, 'f2')
+                                from extend_predicate t1 
+                                join extend_predicate t2 on 
+                                    get_json_int(t1.c1, 'f1') = get_json_int(t2.c1, 'f1') 
+                                """,
+                        "c2.f2",
+                        "ExtendedColumnAccessPath: [/c2(bigint(20))/f2(bigint(20))]"
+                ),
+                // Join: self-join without JSON expression pushdown
+                Arguments.of(
+                        """
+                                select t1.c2 
+                                from extend_predicate t1 
+                                join extend_predicate t2 on 
+                                    get_json_int(t1.c1, 'f1') = get_json_int(t2.c1, 'f1') 
+                                """,
+                        "get_json_int",
+                        "equal join conjunct: [5: get_json_int, BIGINT, true] = [6: get_json_int, BIGINT, true]"
+                ),
                 // JSON expression in HAVING clause
                 Arguments.of(
                         "select get_json_int(c2, 'f9'), count(*) from extend_predicate group by get_json_int(c2, " +
