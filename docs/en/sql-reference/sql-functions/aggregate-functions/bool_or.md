@@ -4,12 +4,12 @@ displayed_sidebar: docs
 
 # bool_or
 
-Returns true if at least one row for `expr` is true. Otherwise, returns false. You can use the DISTINCT keyword, but it has no effect.
+Returns true if at least one row for `expr` is true. Otherwise, returns false. `boolor_agg` is an alias for this function.
 
 ## Syntax
 
 ```Haskell
-bool_or([DISTINCT] expr)
+bool_or(expr)
 ```
 
 ## Parameters
@@ -86,4 +86,4 @@ Returns a boolean value.
 
 ## keyword
 
-BOOL_OR, bool_or
+BOOL_OR, bool_or, boolor_agg

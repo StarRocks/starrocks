@@ -4,12 +4,12 @@ displayed_sidebar: docs
 
 # bool_or
 
-`expr` のいずれかの行が true と評価された場合に true を返します。それ以外の場合は false を返します。DISTINCT キーワードを使用できますが、効果はありません。
+`expr` のいずれかの行が true と評価された場合に true を返します。それ以外の場合は false を返します。`boolor_agg` はこの関数のエイリアスです。
 
 ## 構文
 
 ```Haskell
-bool_or([DISTINCT] expr)
+bool_or(expr)
 ```
 
 ## パラメータ
@@ -86,4 +86,4 @@ bool_or([DISTINCT] expr)
 
 ## キーワード
 
-BOOL_OR, bool_or
+BOOL_OR, bool_or, boolor_agg

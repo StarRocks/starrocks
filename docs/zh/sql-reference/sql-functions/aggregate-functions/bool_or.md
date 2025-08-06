@@ -4,12 +4,12 @@ displayed_sidebar: docs
 
 # bool_or
 
-如果 `expr` 的某一行计算结果为 true，则返回 true。否则，返回 false。您可以使用 DISTINCT 关键字，但它没有影响。
+如果 `expr` 的某一行计算结果为 true，则返回 true。否则，返回 false。`boolor_agg` 是此函数的别名。
 
 ## 语法
 
 ```Haskell
-bool_or([DISTINCT] expr)
+bool_or(expr)
 ```
 
 ## 参数
@@ -86,4 +86,4 @@ bool_or([DISTINCT] expr)
 
 ## 关键词
 
-BOOL_OR, bool_or
+BOOL_OR, bool_or, boolor_agg
