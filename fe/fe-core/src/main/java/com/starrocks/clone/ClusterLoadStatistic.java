@@ -51,6 +51,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -191,18 +193,31 @@ public class ClusterLoadStatistic {
         }
     }
 
-    public List<List<String>> getClusterStatistic(TStorageMedium medium) {
-        List<List<String>> statistics = Lists.newArrayList();
+    public Set<TStorageMedium> getStorageMediums() {
+        return beLoadStatistics.stream().flatMap(s -> s.getPathStatistics().stream()).map(RootPathLoadStatistic::getStorageMedium)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
+    public List<List<String>> getClusterLoadStats() {
+        List<List<String>> stats = Lists.newArrayList();
+        for (TStorageMedium medium : getStorageMediums()) {
+            stats.add(Lists.newArrayList(medium.name(), getClusterDiskBalanceStat(medium).toString()));
+        }
+        return stats;
+    }
+
+    public List<List<String>> getBackendLoadStats(TStorageMedium medium) {
+        List<List<String>> stats = Lists.newArrayList();
 
         for (BackendLoadStatistic beStatistic : beLoadStatistics) {
             if (!beStatistic.hasMedium(medium)) {
                 continue;
             }
-            List<String> beStat = beStatistic.getInfo(medium);
-            statistics.add(beStat);
+            List<String> beStat = beStatistic.getInfo(medium, getBackendDiskBalanceStat(medium, beStatistic.getBeId()));
+            stats.add(beStat);
         }
 
-        return statistics;
+        return stats;
     }
 
     public BackendLoadStatistic getBackendLoadStatistic(long beId) {

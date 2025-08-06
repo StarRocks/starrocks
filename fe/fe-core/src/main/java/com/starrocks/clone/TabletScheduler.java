@@ -89,6 +89,7 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TGetTabletScheduleRequest;
 import com.starrocks.thrift.TGetTabletScheduleResponse;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1979,6 +1980,21 @@ public class TabletScheduler extends FrontendDaemon {
 
             cleanedTablets.forEach(t -> releaseTabletCtx(t, TabletSchedCtx.State.CANCELLED));
         }
+    }
+
+    public Set<TStorageMedium> getStorageMediums() {
+        ClusterLoadStatistic clusterLoadStat = getClusterLoadStatistic();
+        return clusterLoadStat == null ? Sets.newHashSet() : clusterLoadStat.getStorageMediums();
+    }
+
+    public List<List<String>> getClusterLoadStats() {
+        ClusterLoadStatistic clusterLoadStat = getClusterLoadStatistic();
+        return clusterLoadStat == null ? Lists.newArrayList() : clusterLoadStat.getClusterLoadStats();
+    }
+
+    public List<List<String>> getBackendLoadStats(TStorageMedium medium) {
+        ClusterLoadStatistic clusterLoadStat = getClusterLoadStatistic();
+        return clusterLoadStat == null ? Lists.newArrayList() : clusterLoadStat.getBackendLoadStats(medium);
     }
 
     public List<List<String>> getPendingTabletsInfo(int limit) {
