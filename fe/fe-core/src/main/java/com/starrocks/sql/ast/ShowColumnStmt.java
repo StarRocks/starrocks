@@ -24,11 +24,8 @@ import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
@@ -36,30 +33,7 @@ import static com.starrocks.common.util.Util.normalizeName;
 // SHOW COLUMNS
 public class ShowColumnStmt extends ShowStmt {
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "COLUMNS");
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Field", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Null", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Key", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Default", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Extra", ScalarType.createVarchar(20)))
-                    .build();
 
-    private static final ShowResultSetMetaData META_DATA_VERBOSE =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Field", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Collation", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Null", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Key", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Default", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Extra", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Privileges", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Comment", ScalarType.createVarchar(20)))
-                    .build();
-
-    private ShowResultSetMetaData metaData;
     private final TableName tableName;
     private final String db;
     private final String pattern;
@@ -111,11 +85,6 @@ public class ShowColumnStmt extends ShowStmt {
     public void init() {
         if (!Strings.isNullOrEmpty(db)) {
             tableName.setDb(db);
-        }
-        if (isVerbose) {
-            metaData = META_DATA_VERBOSE;
-        } else {
-            metaData = META_DATA;
         }
     }
 
@@ -179,11 +148,6 @@ public class ShowColumnStmt extends ShowStmt {
                                 new StringLiteral(tableName.getDb()))));
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
                 where, null, null), this.origStmt);
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return metaData;
     }
 
     @Override
