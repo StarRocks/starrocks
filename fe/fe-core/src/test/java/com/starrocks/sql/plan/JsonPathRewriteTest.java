@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -30,6 +31,10 @@ public class JsonPathRewriteTest extends PlanTestBase {
         starRocksAssert.withTable("create table extend_predicate( c1 int, c2 json ) properties('replication_num'='1')");
         starRocksAssert.withTable("create table extend_predicate2( c1 int, c2 json ) properties" +
                 "('replication_num'='1')");
+
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
     }
 
     @ParameterizedTest
@@ -190,6 +195,107 @@ public class JsonPathRewriteTest extends PlanTestBase {
                         "select get_json_string(c2, 'f2'), get_json_int(c2, 'f2') from extend_predicate",
                         "get_json_string(2: c2, 'f2')",
                         ""
+                ),
+                // MetaScan
+                Arguments.of(
+                        "select dict_merge(get_json_string(c2, 'f1'), 255) from extend_predicate [_META_]",
+                        "0:MetaScan\n" +
+                                "     Table: extend_predicate\n" +
+                                "     <id 6> : dict_merge_c2.f1\n",
+                        "     ExtendedColumnAccessPath: [/c2(varchar)/f1(varchar)]\n"
+                )
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("globalDictRewriteCases")
+    public void testGlobalDictRewrite(String sql, String expectedPlanFragment) throws Exception {
+        String verbosePlan = getVerboseExplain(sql);
+        assertContains(verbosePlan, expectedPlanFragment);
+    }
+
+    private static Stream<Arguments> globalDictRewriteCases() {
+        return of(
+                // 1. Predicate
+                Arguments.of(
+                        "select count(*) from extend_predicate2 where get_json_string(c2, 'f1') = 'value'",
+                        "Predicates: DictDecode(7: c2.f1, [<place-holder> = 'value'])"
+                ),
+                // 2. Predicate with count on get_json_string
+                Arguments.of(
+                        "select count(get_json_string(c2, 'f1')) from extend_predicate2 where get_json_string(c2, " +
+                                "'f1') = 'value'",
+                        "Predicates: DictDecode(6: c2.f1, [<place-holder> = 'value'])"
+                ),
+
+                // 3. Aggregation with group by JSON path
+                Arguments.of(
+                        "select get_json_string(c2, 'f1') k1, count(*) from extend_predicate2 group by k1",
+                        "7 <-> DictDefine(6: c2.f1, [<place-holder>])"
+                ),
+                // 4. Aggregation with min on JSON path
+                Arguments.of(
+                        "select min(get_json_string(c2, 'f1')) from extend_predicate2",
+                        " 7 <-> DictDefine(6: c2.f1, [<place-holder>])"
+                ),
+
+                // 5. Multiple JSON path accesses in select and where clause
+                Arguments.of(
+                        "select get_json_string(c2, 'f1'), get_json_string(c2, 'f2') from extend_predicate2 where " +
+                                "get_json_string(c2, 'f1') = 'value' and get_json_string(c2, 'f2') = 'other'",
+                        "Predicates: DictDecode(7: c2.f1, [<place-holder> = 'value']), DictDecode(8: c2.f2, " +
+                                "[<place-holder> = 'other'])"
+                ),
+                // 6. Aggregation on JSON path
+                Arguments.of(
+                        "select get_json_string(c2, 'f3'), sum(c1) from extend_predicate2 group by get_json_string" +
+                                "(c2, 'f3')",
+                        " 7 <-> DictDefine(6: c2.f3, [<place-holder>])"
+                ),
+                // 7. Nested function using JSON path
+                Arguments.of(
+                        "select upper(get_json_string(c2, 'f4')) from extend_predicate2",
+                        " 3 <-> DictDecode(5: c2.f4, [upper(<place-holder>)])"
+                ),
+                // 8. JSON path in having clause
+                Arguments.of(
+                        "select get_json_string(c2, 'f5'), count(*) from extend_predicate2 group by get_json_string" +
+                                "(c2, 'f5') having get_json_string(c2, 'f5') = 'foo'",
+                        "7 <-> DictDefine(6: c2.f5, [<place-holder>])"
+                ),
+                // 9. JSON path in order by
+                Arguments.of(
+                        "select get_json_string(c2, 'f6') from extend_predicate2 order by get_json_string(c2, 'f6')",
+                        " 6: DictDefine(5: c2.f6, [<place-holder>])"
+                ),
+                // 10. JSON path in both select and where, different fields
+                Arguments.of(
+                        "select get_json_string(c2, 'f7') from extend_predicate2 where get_json_string(c2, 'f8') = " +
+                                "'bar'",
+                        "3 <-> DictDecode(6: c2.f7, [<place-holder>])"
+                ),
+                // 11. JSON path in a function argument
+                Arguments.of(
+                        "select length(get_json_string(c2, 'f9')) from extend_predicate2",
+                        "3 <-> DictDecode(5: c2.f9, [length(<place-holder>)])"
+                ),
+                // 12. JSON path in a filter with OR
+                Arguments.of(
+                        "select count(*) from extend_predicate2 where get_json_string(c2, 'f10') = 'a' or " +
+                                "get_json_string(c2, 'f11') = 'b'",
+                        " Predicates: (DictDecode(8: c2.f10, [<place-holder> = 'a'])) OR (DictDecode(9: c2.f11, " +
+                                "[<place-holder> = 'b']))"
+                ),
+                // 13. JSON path in a subquery
+                Arguments.of(
+                        "select * from extend_predicate2 where c1 in (select c1 from extend_predicate2 where " +
+                                "get_json_string(c2, 'f12') = 'baz')",
+                        "Predicates: 3: c1 IS NOT NULL, DictDecode(7: c2.f12, [<place-holder> = 'baz'])"
+                ),
+                // 14. JSON path in a case expression
+                Arguments.of(
+                        "select case when get_json_string(c2, 'f13') = 'x' then 1 else 0 end from extend_predicate2",
+                        "3 <-> DictDecode(5: c2.f13, [if(<place-holder> = 'x', 1, 0)])"
                 )
 
         );
