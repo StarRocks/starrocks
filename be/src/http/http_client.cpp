@@ -139,7 +139,7 @@ void HttpClient::set_method(HttpMethod method) {
 }
 
 void HttpClient::set_header(const std::string& key, const std::string& value) {
-    _headers[key] = value;
+    _headers.insert_or_assign(key, value);
     _apply_headers();
 }
 
@@ -156,7 +156,6 @@ void HttpClient::clear_headers() {
         curl_slist_free_all(_header_list);
         _header_list = nullptr;
     }
-    _apply_headers();
 }
 
 void HttpClient::_apply_headers() {

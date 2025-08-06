@@ -81,11 +81,7 @@ public:
 
         // Check authentication header type
         const auto& auth_header = req->header(HttpHeaders::AUTHORIZATION);
-        if (auth_header.find("Bearer ") == 0) {
-            HttpChannel::send_reply(req, "bearer_ok");
-        } else {
-            HttpChannel::send_reply(req, "no_header");
-        }
+        HttpChannel::send_reply(req, auth_header);
     }
 };
 
@@ -181,7 +177,7 @@ TEST_F(HttpClientTest, set_bearer_token) {
     std::string response;
     st = client.execute(&response);
     ASSERT_TRUE(st.ok());
-    ASSERT_EQ("bearer_ok", response);
+    ASSERT_EQ("Bearer test_token_123", response);
 }
 
 TEST_F(HttpClientTest, set_multiple_headers) {
@@ -216,7 +212,7 @@ TEST_F(HttpClientTest, clear_headers) {
     std::string response;
     st = client.execute(&response);
     ASSERT_TRUE(st.ok());
-    ASSERT_EQ("no_header", response);
+    ASSERT_EQ("", response);
 
     // Verify header list is empty
     ASSERT_TRUE(client._headers.empty());
