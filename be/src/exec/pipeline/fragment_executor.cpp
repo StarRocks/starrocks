@@ -981,9 +981,14 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     const TUniqueId& instance_id = params.fragment_instance_id;
 
     QueryContextPtr query_ctx = exec_env->query_context_mgr()->get(query_id);
-    if (query_ctx == nullptr) return Status::OK();
+    if (query_ctx == nullptr) {
+        return Status::InternalError(fmt::format("QueryContext not found for query_id: {}", print_id(query_id)));
+    }
     FragmentContextPtr fragment_ctx = query_ctx->fragment_mgr()->get(instance_id);
-    if (fragment_ctx == nullptr) return Status::OK();
+    if (fragment_ctx == nullptr) {
+        return Status::InternalError(fmt::format("FragmentContext not found for query_id: {}, instance_id: {}",
+                                                 print_id(query_id), print_id(instance_id)));
+    }
     RuntimeState* runtime_state = fragment_ctx->runtime_state();
 
     std::unordered_set<int> notify_ids;
@@ -992,11 +997,15 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         if (scan_ranges.size() == 0) continue;
         auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
         if (iter == fragment_ctx->morsel_queue_factories().end()) {
-            continue;
+            return Status::InternalError(
+                    fmt::format("MorselQueueFactory not found for node_id: {}, query_id: {}, instance_id: {}", node_id,
+                                print_id(query_id), print_id(instance_id)));
         }
         MorselQueueFactory* morsel_queue_factory = iter->second.get();
         if (morsel_queue_factory == nullptr) {
-            continue;
+            return Status::InternalError(
+                    fmt::format("MorselQueueFactory is null for node_id: {}, query_id: {}, instance_id: {}", node_id,
+                                print_id(query_id), print_id(instance_id)));
         }
 
         RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
@@ -1012,11 +1021,15 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         for (const auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
             auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
             if (iter == fragment_ctx->morsel_queue_factories().end()) {
-                continue;
+                return Status::InternalError(
+                        fmt::format("MorselQueueFactory not found for node_id: {}, query_id: {}, instance_id: {}",
+                                    node_id, print_id(query_id), print_id(instance_id)));
             }
             MorselQueueFactory* morsel_queue_factory = iter->second.get();
             if (morsel_queue_factory == nullptr) {
-                continue;
+                return Status::InternalError(
+                        fmt::format("MorselQueueFactory is null for node_id: {}, query_id: {}, instance_id: {}",
+                                    node_id, print_id(query_id), print_id(instance_id)));
             }
 
             bool has_more_morsel = has_more_per_driver_seq_scan_ranges(per_driver_scan_ranges);

@@ -83,6 +83,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -449,21 +450,21 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
 
             try {
-                long bucketSize = PropertyAnalyzer.analyzeLongProp(properties,
-                        PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, -1);
-                if (bucketSize >= 0) {
+                Optional<Long> bucketSize = PropertyAnalyzer.analyzeLongProp(properties,
+                        PropertyAnalyzer.PROPERTIES_BUCKET_SIZE);
+                if (bucketSize.isPresent() && bucketSize.get() >= 0) {
                     if (!table.allowBucketSizeSetting()) {
                         throw new DdlException(
                                 "Setting bucket size is not allowed: only supported for tables with RANDOM " +
                                         "distribution and when 'enable_automatic_bucket' is enabled.");
                     }
-                    table.setAutomaticBucketSize(bucketSize);
-                } else if (bucketSize == -1) {
+                    table.setAutomaticBucketSize(bucketSize.get());
+                } else if (bucketSize.isEmpty()) {
                     if (table.allowBucketSizeSetting()) {
                         table.setAutomaticBucketSize(Config.default_automatic_bucket_size);
                     }
                 } else {
-                    throw new DdlException("Illegal bucket size: " + bucketSize);
+                    throw new DdlException("Illegal bucket size: " + bucketSize.get());
                 }
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
