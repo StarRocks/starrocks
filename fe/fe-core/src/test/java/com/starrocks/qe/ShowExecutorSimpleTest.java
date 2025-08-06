@@ -456,7 +456,7 @@ public class ShowExecutorSimpleTest {
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
         Assertions.assertTrue(resultSet.next());
-        Assertions.assertEquals("Database", resultSet.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("Database", resultSet.getMetaData().getColumn(0));
         Assertions.assertEquals(resultSet.getResultRows().get(0).get(0), "testDb");
     }
 
@@ -521,10 +521,10 @@ public class ShowExecutorSimpleTest {
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals(4, resultSet.getMetaData().getColumnCount());
-        Assertions.assertEquals("Variable_name", resultSet.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("Value", resultSet.getMetaData().getColumn(1).getName());
-        Assertions.assertEquals("Default_value", resultSet.getMetaData().getColumn(2).getName());
-        Assertions.assertEquals("Is_changed", resultSet.getMetaData().getColumn(3).getName());
+        Assertions.assertEquals("Variable_name", resultSet.getMetaData().getColumn(0));
+        Assertions.assertEquals("Value", resultSet.getMetaData().getColumn(1));
+        Assertions.assertEquals("Default_value", resultSet.getMetaData().getColumn(2));
+        Assertions.assertEquals("Is_changed", resultSet.getMetaData().getColumn(3));
 
         Assertions.assertTrue(resultSet.getResultRows().size() > 0);
         Assertions.assertEquals(4, resultSet.getResultRows().get(0).size());
@@ -627,16 +627,16 @@ public class ShowExecutorSimpleTest {
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
         Assertions.assertEquals(33, resultSet.getMetaData().getColumnCount());
-        Assertions.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("CpuCores", resultSet.getMetaData().getColumn(22).getName());
-        Assertions.assertEquals("MemLimit", resultSet.getMetaData().getColumn(23).getName());
-        Assertions.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(24).getName());
-        Assertions.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(25).getName());
-        Assertions.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(26).getName());
-        Assertions.assertEquals("DataCacheMetrics", resultSet.getMetaData().getColumn(27).getName());
-        Assertions.assertEquals("StatusCode", resultSet.getMetaData().getColumn(29).getName());
-        Assertions.assertEquals("StarletPort", resultSet.getMetaData().getColumn(30).getName());
-        Assertions.assertEquals("WorkerId", resultSet.getMetaData().getColumn(31).getName());
+        Assertions.assertEquals("BackendId", resultSet.getMetaData().getColumn(0));
+        Assertions.assertEquals("CpuCores", resultSet.getMetaData().getColumn(22));
+        Assertions.assertEquals("MemLimit", resultSet.getMetaData().getColumn(23));
+        Assertions.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(24));
+        Assertions.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(25));
+        Assertions.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(26));
+        Assertions.assertEquals("DataCacheMetrics", resultSet.getMetaData().getColumn(27));
+        Assertions.assertEquals("StatusCode", resultSet.getMetaData().getColumn(29));
+        Assertions.assertEquals("StarletPort", resultSet.getMetaData().getColumn(30));
+        Assertions.assertEquals("WorkerId", resultSet.getMetaData().getColumn(31));
 
         Assertions.assertTrue(resultSet.next());
         Assertions.assertEquals("1", resultSet.getString(0));
@@ -717,7 +717,7 @@ public class ShowExecutorSimpleTest {
                 resultSet.getMetaData().getColumnCount());
         for (int i = 0; i < ComputeNodeProcDir.TITLE_NAMES_SHARED_DATA.size(); ++i) {
             Assertions.assertEquals(ComputeNodeProcDir.TITLE_NAMES_SHARED_DATA.get(i),
-                    resultSet.getMetaData().getColumn(i).getName());
+                    resultSet.getMetaData().getColumn(i));
         }
 
         Assertions.assertTrue(resultSet.next());
@@ -738,9 +738,9 @@ public class ShowExecutorSimpleTest {
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
         Assertions.assertEquals(3, resultSet.getMetaData().getColumnCount());
-        Assertions.assertEquals("Name", resultSet.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("Location", resultSet.getMetaData().getColumn(1).getName());
-        Assertions.assertEquals("Comment", resultSet.getMetaData().getColumn(2).getName());
+        Assertions.assertEquals("Name", resultSet.getMetaData().getColumn(0));
+        Assertions.assertEquals("Location", resultSet.getMetaData().getColumn(1));
+        Assertions.assertEquals("Comment", resultSet.getMetaData().getColumn(2));
     }
 
     @Test

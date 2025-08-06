@@ -47,7 +47,7 @@ public class ShowRoutineLoadStmtTest {
         Assertions.assertEquals("testDb", stmt.getDbFullName());
         Assertions.assertFalse(stmt.isIncludeHistory());
         Assertions.assertEquals(22, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("Id", stmt.getMetaData().getColumn(0));
     }
 
     @Test
@@ -68,7 +68,7 @@ public class ShowRoutineLoadStmtTest {
 
         ShowRoutineLoadStmt stmt = (ShowRoutineLoadStmt) stmts.get(0);
         Assertions.assertEquals("db_test", stmt.getDbFullName());
-        Assertions.assertEquals("rl_test", stmt.getName());
+        Assertions.assertEquals("rl_test", stmt);
     }
 
     @Test

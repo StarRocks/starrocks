@@ -15,7 +15,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -36,12 +36,12 @@ public class ShowBrokerStmtTest {
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assertions.assertNotNull(metaData);
         Assertions.assertEquals(7, metaData.getColumnCount());
-        Assertions.assertEquals("Name", metaData.getColumn(0).getName());
-        Assertions.assertEquals("IP", metaData.getColumn(1).getName());
-        Assertions.assertEquals("Port", metaData.getColumn(2).getName());
-        Assertions.assertEquals("Alive", metaData.getColumn(3).getName());
-        Assertions.assertEquals("LastStartTime", metaData.getColumn(4).getName());
-        Assertions.assertEquals("LastUpdateTime", metaData.getColumn(5).getName());
-        Assertions.assertEquals("ErrMsg", metaData.getColumn(6).getName());
+        Assertions.assertEquals("Name", metaData.getColumn(0));
+        Assertions.assertEquals("IP", metaData.getColumn(1));
+        Assertions.assertEquals("Port", metaData.getColumn(2));
+        Assertions.assertEquals("Alive", metaData.getColumn(3));
+        Assertions.assertEquals("LastStartTime", metaData.getColumn(4));
+        Assertions.assertEquals("LastUpdateTime", metaData.getColumn(5));
+        Assertions.assertEquals("ErrMsg", metaData.getColumn(6));
     }
 }

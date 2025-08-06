@@ -16,9 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // SHOW CREATE TABLE statement.
@@ -40,28 +37,28 @@ public class ShowCreateTableStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Table", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Create Table", ScalarType.createVarchar(30)))
+                    .addColumn("Table")
+                    .addColumn("Create Table")
                     .build();
 
     private static final ShowResultSetMetaData VIEW_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("View", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Create View", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("character_set_client", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("collation_connection", ScalarType.createVarchar(30)))
+                    .addColumn("View")
+                    .addColumn("Create View")
+                    .addColumn("character_set_client")
+                    .addColumn("collation_connection")
                     .build();
 
     private static final ShowResultSetMetaData CONNECTOR_VIEW_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("View", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Create View", ScalarType.createVarchar(30)))
+                    .addColumn("View")
+                    .addColumn("Create View")
                     .build();
 
     private static final ShowResultSetMetaData MATERIALIZED_VIEW_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Materialized View", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Create Materialized View", ScalarType.createVarchar(30)))
+                    .addColumn("Materialized View")
+                    .addColumn("Create Materialized View")
                     .build();
 
     private final TableName tbl;

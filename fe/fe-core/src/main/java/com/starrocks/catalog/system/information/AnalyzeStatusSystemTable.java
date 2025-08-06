@@ -39,6 +39,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * | Id | Database| Table| Columns| Type| Schedule | Status  | StartTime| EndTime| Properties | Reason |
@@ -49,7 +50,8 @@ public class AnalyzeStatusSystemTable extends SystemTable {
     private static final List<Column> COLUMNS;
 
     static {
-        COLUMNS = Lists.newArrayList(ShowAnalyzeStatusStmt.META_DATA.getColumns());
+        COLUMNS = ShowAnalyzeStatusStmt.META_DATA.columns().stream().map(c -> new Column(c, createNameType()))
+                .collect(Collectors.toList());
         COLUMNS.add(1, new Column("Catalog", createNameType()));
     }
 

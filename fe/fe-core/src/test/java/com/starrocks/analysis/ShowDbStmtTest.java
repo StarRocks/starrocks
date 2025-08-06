@@ -23,7 +23,7 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.UserIdentity;
@@ -72,18 +72,18 @@ public class ShowDbStmtTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertNull(stmt.getPattern());
         Assertions.assertEquals(1, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("Database", stmt.getMetaData().getColumn(0));
 
         stmt = new ShowDbStmt("abc");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertEquals("abc", stmt.getPattern());
         Assertions.assertEquals(1, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("Database", stmt.getMetaData().getColumn(0));
 
         stmt = new ShowDbStmt(null, null, null);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         ShowResultSetMetaData metaData = resultSet.getMetaData();
-        Assertions.assertEquals(metaData.getColumn(0).getName(), "Database");
+        Assertions.assertEquals(metaData.getColumn(0), "Database");
 
         String sql = "show databases where `database` = 't1'";
         stmt = (ShowDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);

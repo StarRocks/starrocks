@@ -15,9 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.LinkedList;
@@ -26,18 +23,18 @@ import java.util.List;
 public class ShowDataStmt extends ShowStmt {
     private static final ShowResultSetMetaData SHOW_TABLE_DATA_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("TableName", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Size", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("ReplicaCount", ScalarType.createVarchar(20)))
+                    .addColumn("TableName")
+                    .addColumn("Size")
+                    .addColumn("ReplicaCount")
                     .build();
 
     private static final ShowResultSetMetaData SHOW_INDEX_DATA_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("TableName", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("IndexName", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Size", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("ReplicaCount", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("RowCount", ScalarType.createVarchar(20)))
+                    .addColumn("TableName")
+                    .addColumn("IndexName")
+                    .addColumn("Size")
+                    .addColumn("ReplicaCount")
+                    .addColumn("RowCount")
                     .build();
 
     private String dbName;
@@ -90,4 +87,3 @@ public class ShowDataStmt extends ShowStmt {
         return visitor.visitShowDataStatement(this, context);
     }
 }
-

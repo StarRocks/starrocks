@@ -57,7 +57,6 @@ import org.apache.logging.log4j.Logger;
 import org.owasp.encoder.Encode;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class SystemAction extends WebBaseAction {
     private static final Logger LOG = LogManager.getLogger(SystemAction.class);
@@ -121,8 +120,7 @@ public class SystemAction extends WebBaseAction {
                 return;
             }
 
-            columnNames = resultSet.getMetaData().getColumns().stream().map(c -> c.getName()).collect(
-                    Collectors.toList());
+            columnNames = resultSet.getMetaData().columns();
             rows = resultSet.getResultRows();
         } else {
             ProcResult result;

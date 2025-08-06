@@ -15,25 +15,22 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowPluginsStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Name", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(10)))
-                    .addColumn(new Column("Description", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Version", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("JavaVersion", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("ClassName", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("SoName", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("Sources", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Status", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Properties", ScalarType.createVarchar(250)))
+                    .addColumn("Name")
+                    .addColumn("Type")
+                    .addColumn("Description")
+                    .addColumn("Version")
+                    .addColumn("JavaVersion")
+                    .addColumn("ClassName")
+                    .addColumn("SoName")
+                    .addColumn("Sources")
+                    .addColumn("Status")
+                    .addColumn("Properties")
                     .build();
 
     public ShowPluginsStmt() {

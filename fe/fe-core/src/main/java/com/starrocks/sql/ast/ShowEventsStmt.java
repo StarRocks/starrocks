@@ -15,30 +15,27 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // Show Events statement
 public class ShowEventsStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Db", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Name", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Definer", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Time", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Execute at", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Interval value", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Interval field", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Status", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Ends", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Status", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Originator", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("character_set_client", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("collation_connection", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Database Collation", ScalarType.createVarchar(30)))
+                    .addColumn("Db")
+                    .addColumn("Name")
+                    .addColumn("Definer")
+                    .addColumn("Time")
+                    .addColumn("Type")
+                    .addColumn("Execute at")
+                    .addColumn("Interval value")
+                    .addColumn("Interval field")
+                    .addColumn("Status")
+                    .addColumn("Ends")
+                    .addColumn("Status")
+                    .addColumn("Originator")
+                    .addColumn("character_set_client")
+                    .addColumn("collation_connection")
+                    .addColumn("Database Collation")
                     .build();
 
     public ShowEventsStmt() {

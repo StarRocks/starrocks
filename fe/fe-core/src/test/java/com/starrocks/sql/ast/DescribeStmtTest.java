@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Column;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -89,14 +88,14 @@ public class DescribeStmtTest {
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
         ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
-        List<Column> columns = execute.getMetaData().getColumns();
+        List<String> columns = execute.getMetaData().columns();
         Assertions.assertEquals(6, columns.size());
-        Assertions.assertEquals("Field", columns.get(0).getName());
-        Assertions.assertEquals("Type", columns.get(1).getName());
-        Assertions.assertEquals("Null", columns.get(2).getName());
-        Assertions.assertEquals("Key", columns.get(3).getName());
-        Assertions.assertEquals("Default", columns.get(4).getName());
-        Assertions.assertEquals("Extra", columns.get(5).getName());
+        Assertions.assertEquals("Field", columns.get(0));
+        Assertions.assertEquals("Type", columns.get(1));
+        Assertions.assertEquals("Null", columns.get(2));
+        Assertions.assertEquals("Key", columns.get(3));
+        Assertions.assertEquals("Default", columns.get(4));
+        Assertions.assertEquals("Extra", columns.get(5));
 
         List<List<String>> resultRows = execute.getResultRows();
         Assertions.assertEquals("record_id", resultRows.get(0).get(0));
@@ -115,16 +114,16 @@ public class DescribeStmtTest {
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
         ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
-        List<Column> columns = execute.getMetaData().getColumns();
+        List<String> columns = execute.getMetaData().columns();
         Assertions.assertEquals(8, columns.size());
-        Assertions.assertEquals("IndexName", columns.get(0).getName());
-        Assertions.assertEquals("IndexKeysType", columns.get(1).getName());
-        Assertions.assertEquals("Field", columns.get(2).getName());
-        Assertions.assertEquals("Type", columns.get(3).getName());
-        Assertions.assertEquals("Null", columns.get(4).getName());
-        Assertions.assertEquals("Key", columns.get(5).getName());
-        Assertions.assertEquals("Default", columns.get(6).getName());
-        Assertions.assertEquals("Extra", columns.get(7).getName());
+        Assertions.assertEquals("IndexName", columns.get(0));
+        Assertions.assertEquals("IndexKeysType", columns.get(1));
+        Assertions.assertEquals("Field", columns.get(2));
+        Assertions.assertEquals("Type", columns.get(3));
+        Assertions.assertEquals("Null", columns.get(4));
+        Assertions.assertEquals("Key", columns.get(5));
+        Assertions.assertEquals("Default", columns.get(6));
+        Assertions.assertEquals("Extra", columns.get(7));
 
         List<List<String>> resultRows = execute.getResultRows();
         Assertions.assertEquals("record_id", resultRows.get(0).get(2));
@@ -142,14 +141,14 @@ public class DescribeStmtTest {
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
         ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
-        List<Column> columns = execute.getMetaData().getColumns();
+        List<String> columns = execute.getMetaData().columns();
         Assertions.assertEquals(6, columns.size());
-        Assertions.assertEquals("Field", columns.get(0).getName());
-        Assertions.assertEquals("Type", columns.get(1).getName());
-        Assertions.assertEquals("Null", columns.get(2).getName());
-        Assertions.assertEquals("Key", columns.get(3).getName());
-        Assertions.assertEquals("Default", columns.get(4).getName());
-        Assertions.assertEquals("Extra", columns.get(5).getName());
+        Assertions.assertEquals("Field", columns.get(0));
+        Assertions.assertEquals("Type", columns.get(1));
+        Assertions.assertEquals("Null", columns.get(2));
+        Assertions.assertEquals("Key", columns.get(3));
+        Assertions.assertEquals("Default", columns.get(4));
+        Assertions.assertEquals("Extra", columns.get(5));
 
         List<List<String>> resultRows = execute.getResultRows();
         Assertions.assertEquals("store_id", resultRows.get(0).get(0));
@@ -167,14 +166,14 @@ public class DescribeStmtTest {
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
         ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
-        List<Column> columns = execute.getMetaData().getColumns();
+        List<String> columns = execute.getMetaData().columns();
         Assertions.assertEquals(6, columns.size());
-        Assertions.assertEquals("Field", columns.get(0).getName());
-        Assertions.assertEquals("Type", columns.get(1).getName());
-        Assertions.assertEquals("Null", columns.get(2).getName());
-        Assertions.assertEquals("Key", columns.get(3).getName());
-        Assertions.assertEquals("Default", columns.get(4).getName());
-        Assertions.assertEquals("Extra", columns.get(5).getName());
+        Assertions.assertEquals("Field", columns.get(0));
+        Assertions.assertEquals("Type", columns.get(1));
+        Assertions.assertEquals("Null", columns.get(2));
+        Assertions.assertEquals("Key", columns.get(3));
+        Assertions.assertEquals("Default", columns.get(4));
+        Assertions.assertEquals("Extra", columns.get(5));
 
         List<List<String>> resultRows = execute.getResultRows();
         Assertions.assertEquals("store_id", resultRows.get(0).get(0));
@@ -192,14 +191,14 @@ public class DescribeStmtTest {
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
         ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
-        List<Column> columns = execute.getMetaData().getColumns();
+        List<String> columns = execute.getMetaData().columns();
         Assertions.assertEquals(6, columns.size());
-        Assertions.assertEquals("Field", columns.get(0).getName());
-        Assertions.assertEquals("Type", columns.get(1).getName());
-        Assertions.assertEquals("Null", columns.get(2).getName());
-        Assertions.assertEquals("Key", columns.get(3).getName());
-        Assertions.assertEquals("Default", columns.get(4).getName());
-        Assertions.assertEquals("Extra", columns.get(5).getName());
+        Assertions.assertEquals("Field", columns.get(0));
+        Assertions.assertEquals("Type", columns.get(1));
+        Assertions.assertEquals("Null", columns.get(2));
+        Assertions.assertEquals("Key", columns.get(3));
+        Assertions.assertEquals("Default", columns.get(4));
+        Assertions.assertEquals("Extra", columns.get(5));
 
         List<List<String>> resultRows = execute.getResultRows();
         Assertions.assertEquals("store_id", resultRows.get(0).get(0));
@@ -217,16 +216,16 @@ public class DescribeStmtTest {
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
         ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
-        List<Column> columns = execute.getMetaData().getColumns();
+        List<String> columns = execute.getMetaData().columns();
         Assertions.assertEquals(8, columns.size());
-        Assertions.assertEquals("IndexName", columns.get(0).getName());
-        Assertions.assertEquals("IndexKeysType", columns.get(1).getName());
-        Assertions.assertEquals("Field", columns.get(2).getName());
-        Assertions.assertEquals("Type", columns.get(3).getName());
-        Assertions.assertEquals("Null", columns.get(4).getName());
-        Assertions.assertEquals("Key", columns.get(5).getName());
-        Assertions.assertEquals("Default", columns.get(6).getName());
-        Assertions.assertEquals("Extra", columns.get(7).getName());
+        Assertions.assertEquals("IndexName", columns.get(0));
+        Assertions.assertEquals("IndexKeysType", columns.get(1));
+        Assertions.assertEquals("Field", columns.get(2));
+        Assertions.assertEquals("Type", columns.get(3));
+        Assertions.assertEquals("Null", columns.get(4));
+        Assertions.assertEquals("Key", columns.get(5));
+        Assertions.assertEquals("Default", columns.get(6));
+        Assertions.assertEquals("Extra", columns.get(7));
 
         List<List<String>> resultRows = execute.getResultRows();
         Assertions.assertEquals("store_id", resultRows.get(0).get(2));

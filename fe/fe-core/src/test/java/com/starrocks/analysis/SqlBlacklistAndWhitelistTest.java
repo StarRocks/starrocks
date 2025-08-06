@@ -49,8 +49,8 @@ public class SqlBlacklistAndWhitelistTest {
     public void testShowSqlBlacklist() {
         ShowSqlBlackListStmt stmt = (ShowSqlBlackListStmt) analyzeSuccess("show sqlblacklist");
         Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("Forbidden SQL", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals("Id", stmt.getMetaData().getColumn(0));
+        Assertions.assertEquals("Forbidden SQL", stmt.getMetaData().getColumn(1));
 
         // bad cases
         analyzeFail("show blacklist");
@@ -60,7 +60,7 @@ public class SqlBlacklistAndWhitelistTest {
     public void testShowWhiteBlacklist() {
         ShowWhiteListStmt stmt = (ShowWhiteListStmt) analyzeSuccess("show whitelist");
         Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("user_name", stmt.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("white_list", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals("user_name", stmt.getMetaData().getColumn(0));
+        Assertions.assertEquals("white_list", stmt.getMetaData().getColumn(1));
     }
 }

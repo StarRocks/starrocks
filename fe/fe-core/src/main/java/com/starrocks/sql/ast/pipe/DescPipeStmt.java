@@ -16,11 +16,9 @@ package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.load.pipe.Pipe;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -31,14 +29,14 @@ public class DescPipeStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("DATABASE_ID", ScalarType.BIGINT))
-                    .addColumn(new Column("ID", ScalarType.BIGINT))
-                    .addColumn(new Column("NAME", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("TYPE", ScalarType.createVarchar(8)))
-                    .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("SOURCE", ScalarType.createVarcharType(128)))
-                    .addColumn(new Column("SQL", ScalarType.createVarcharType(128)))
-                    .addColumn(new Column("PROPERTIES", ScalarType.createVarchar(512)))
+                    .addColumn("DATABASE_ID")
+                    .addColumn("ID")
+                    .addColumn("NAME")
+                    .addColumn("TYPE")
+                    .addColumn("TABLE_NAME")
+                    .addColumn("SOURCE")
+                    .addColumn("SQL")
+                    .addColumn("PROPERTIES")
                     .build();
 
     private final PipeName name;

@@ -16,10 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 /**
@@ -31,12 +27,12 @@ import com.starrocks.sql.parser.NodePosition;
 public class ShowCollationStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Collation", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Charset", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Id", ScalarType.createType(PrimitiveType.BIGINT)))
-                    .addColumn(new Column("Default", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Compiled", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Sortlen", ScalarType.createType(PrimitiveType.BIGINT)))
+                    .addColumn("Collation")
+                    .addColumn("Charset")
+                    .addColumn("Id")
+                    .addColumn("Default")
+                    .addColumn("Compiled")
+                    .addColumn("Sortlen")
                     .build();
 
     private String pattern;

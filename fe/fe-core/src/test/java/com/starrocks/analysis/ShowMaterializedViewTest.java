@@ -136,17 +136,17 @@ public class ShowMaterializedViewTest {
         List<Column> schemaCols = schemaMVTable.getFullSchema();
         for (int i = 0; i < schemaCols.size(); i++) {
             if (schemaCols.get(i).getName().equalsIgnoreCase("MATERIALIZED_VIEW_ID")) {
-                Assertions.assertEquals("id", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("id", stmt.getMetaData().getColumn(i));
             } else if (schemaCols.get(i).getName().equalsIgnoreCase("TABLE_SCHEMA")) {
-                Assertions.assertEquals("database_name", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("database_name", stmt.getMetaData().getColumn(i));
             } else if (schemaCols.get(i).getName().equalsIgnoreCase("TABLE_NAME")) {
-                Assertions.assertEquals("name", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("name", stmt.getMetaData().getColumn(i));
             } else if (schemaCols.get(i).getName().equalsIgnoreCase("MATERIALIZED_VIEW_DEFINITION")) {
-                Assertions.assertEquals("text", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("text", stmt.getMetaData().getColumn(i));
             } else if (schemaCols.get(i).getName().equalsIgnoreCase("TABLE_ROWS")) {
-                Assertions.assertEquals("rows", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("rows", stmt.getMetaData().getColumn(i));
             } else {
-                Assertions.assertEquals(schemaCols.get(i).getName().toLowerCase(), stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals(schemaCols.get(i).getName().toLowerCase(), stmt.getMetaData().getColumn(i));
             }
         }
     }

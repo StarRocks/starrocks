@@ -18,6 +18,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;

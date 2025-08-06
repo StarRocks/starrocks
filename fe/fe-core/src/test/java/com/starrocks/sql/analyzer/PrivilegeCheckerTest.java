@@ -3037,10 +3037,10 @@ public class PrivilegeCheckerTest {
         ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
 
         Assertions.assertEquals(4, resultSet.getMetaData().getColumnCount());
-        Assertions.assertEquals("UserIdentity", resultSet.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("Password", resultSet.getMetaData().getColumn(1).getName());
-        Assertions.assertEquals("AuthPlugin", resultSet.getMetaData().getColumn(2).getName());
-        Assertions.assertEquals("UserForAuthPlugin", resultSet.getMetaData().getColumn(3).getName());
+        Assertions.assertEquals("UserIdentity", resultSet.getMetaData().getColumn(0));
+        Assertions.assertEquals("Password", resultSet.getMetaData().getColumn(1));
+        Assertions.assertEquals("AuthPlugin", resultSet.getMetaData().getColumn(2));
+        Assertions.assertEquals("UserForAuthPlugin", resultSet.getMetaData().getColumn(3));
         Assertions.assertEquals("[['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
                 resultSet.getResultRows().toString());
 

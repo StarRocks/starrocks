@@ -459,9 +459,9 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
         // Ready to Assert
-        String partitionKeyTitle = resultSet.getMetaData().getColumn(6).getName();
+        String partitionKeyTitle = resultSet.getMetaData().getColumn(6);
         Assertions.assertEquals(partitionKeyTitle, "PartitionKey");
-        String valuesTitle = resultSet.getMetaData().getColumn(7).getName();
+        String valuesTitle = resultSet.getMetaData().getColumn(7);
         Assertions.assertEquals(valuesTitle, "List");
 
         String partitionKey1 = resultSet.getResultRows().get(0).get(6);

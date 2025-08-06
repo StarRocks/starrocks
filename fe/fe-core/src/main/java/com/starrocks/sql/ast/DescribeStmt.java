@@ -17,12 +17,9 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -34,41 +31,41 @@ public class DescribeStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData DESC_OLAP_TABLE_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Field", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Null", ScalarType.createVarchar(10)))
-                    .addColumn(new Column("Key", ScalarType.createVarchar(10)))
-                    .addColumn(new Column("Default", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Extra", ScalarType.createVarchar(30)))
+                    .addColumn("Field")
+                    .addColumn("Type")
+                    .addColumn("Null")
+                    .addColumn("Key")
+                    .addColumn("Default")
+                    .addColumn("Extra")
                     .build();
 
     private static final ShowResultSetMetaData DESC_OLAP_TABLE_ALL_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("IndexName", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("IndexKeysType", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Field", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Null", ScalarType.createVarchar(10)))
-                    .addColumn(new Column("Key", ScalarType.createVarchar(10)))
-                    .addColumn(new Column("Default", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Extra", ScalarType.createVarchar(30)))
+                    .addColumn("IndexName")
+                    .addColumn("IndexKeysType")
+                    .addColumn("Field")
+                    .addColumn("Type")
+                    .addColumn("Null")
+                    .addColumn("Key")
+                    .addColumn("Default")
+                    .addColumn("Extra")
                     .build();
 
     private static final ShowResultSetMetaData DESC_MYSQL_TABLE_ALL_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Host", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Port", ScalarType.createVarchar(10)))
-                    .addColumn(new Column("User", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Password", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Database", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Table", ScalarType.createVarchar(30)))
+                    .addColumn("Host")
+                    .addColumn("Port")
+                    .addColumn("User")
+                    .addColumn("Password")
+                    .addColumn("Database")
+                    .addColumn("Table")
                     .build();
 
     private static final ShowResultSetMetaData DESC_TABLE_FUNCTION_TABLE_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Field", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Null", ScalarType.createVarchar(10)))
+                    .addColumn("Field")
+                    .addColumn("Type")
+                    .addColumn("Null")
                     .build();
 
     // empty col num equals to DESC_OLAP_TABLE_ALL_META_DATA.size()
@@ -182,7 +179,7 @@ public class DescribeStmt extends ShowStmt {
                 }
 
                 for (String col : result.getColumnNames()) {
-                    builder.addColumn(new Column(col, ScalarType.createVarchar(30)));
+                    builder.addColumn(col);
                 }
                 return builder.build();
             }
@@ -198,8 +195,8 @@ public class DescribeStmt extends ShowStmt {
     }
 
     private static List<String> initEmptyRow() {
-        List<String> emptyRow = new ArrayList<>(DESC_OLAP_TABLE_ALL_META_DATA.getColumns().size());
-        for (int i = 0; i < DESC_OLAP_TABLE_ALL_META_DATA.getColumns().size(); i++) {
+        List<String> emptyRow = new ArrayList<>(DESC_OLAP_TABLE_ALL_META_DATA.columns().size());
+        for (int i = 0; i < DESC_OLAP_TABLE_ALL_META_DATA.columns().size(); i++) {
             emptyRow.add("");
         }
         return emptyRow;

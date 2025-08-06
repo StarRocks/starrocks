@@ -75,20 +75,20 @@ public class ShowTableStmtTest {
         Assertions.assertEquals("testDb", stmt.getDb());
         Assertions.assertFalse(stmt.isVerbose());
         Assertions.assertEquals(1, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Tables_in_testDb", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("Tables_in_testDb", stmt.getMetaData().getColumn(0));
 
         stmt = new ShowTableStmt("abc", true, null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0));
+        Assertions.assertEquals("Table_type", stmt.getMetaData().getColumn(1));
 
         stmt = new ShowTableStmt("abc", true, "bcd");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertEquals("bcd", stmt.getPattern());
         Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0));
+        Assertions.assertEquals("Table_type", stmt.getMetaData().getColumn(1));
         Assertions.assertEquals("bcd", stmt.getPattern());
 
         String sql = "show full tables where table_type !='VIEW'";

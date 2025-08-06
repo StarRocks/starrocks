@@ -14,18 +14,15 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowBackendBlackListStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("BackendId", ScalarType.createVarchar(20)))
-            .addColumn(new Column("AddBlackListType", ScalarType.createVarchar(20)))
-            .addColumn(new Column("LostConnectionTime", ScalarType.createVarchar(20)))
-            .addColumn(new Column("LostConnectionNumberInPeriod", ScalarType.createVarchar(10)))
-            .addColumn(new Column("CheckTimePeriod(s)", ScalarType.createVarchar(10)))
+            .addColumn("BackendId")
+            .addColumn("AddBlackListType")
+            .addColumn("LostConnectionTime")
+            .addColumn("LostConnectionNumberInPeriod")
+            .addColumn("CheckTimePeriod(s)")
             .build();
 
     public ShowBackendBlackListStmt(NodePosition pos) {

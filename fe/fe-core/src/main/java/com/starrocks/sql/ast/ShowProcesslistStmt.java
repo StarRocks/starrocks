@@ -14,10 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // SHOW PROCESSLIST statement.
@@ -25,19 +21,19 @@ import com.starrocks.sql.parser.NodePosition;
 public class ShowProcesslistStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("ServerName", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("Id", ScalarType.createType(PrimitiveType.BIGINT)))
-                    .addColumn(new Column("User", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("Host", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("Db", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("Command", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("ConnectionStartTime", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("Time", ScalarType.createType(PrimitiveType.INT)))
-                    .addColumn(new Column("State", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("Info", ScalarType.createVarchar(32 * 1024)))
-                    .addColumn(new Column("IsPending", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("Warehouse", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("CNGroup", ScalarType.createVarchar(64)))
+                    .addColumn("ServerName")
+                    .addColumn("Id")
+                    .addColumn("User")
+                    .addColumn("Host")
+                    .addColumn("Db")
+                    .addColumn("Command")
+                    .addColumn("ConnectionStartTime")
+                    .addColumn("Time")
+                    .addColumn("State")
+                    .addColumn("Info")
+                    .addColumn("IsPending")
+                    .addColumn("Warehouse")
+                    .addColumn("CNGroup")
                     .build();
     private final boolean isShowFull;
     private final String forUser;

@@ -16,7 +16,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
 import org.junit.jupiter.api.Assertions;
@@ -49,9 +49,9 @@ public class ShowLoadWarningsStmtTest {
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assertions.assertNotNull(metaData);
         Assertions.assertEquals(3, metaData.getColumnCount());
-        Assertions.assertEquals("JobId", metaData.getColumn(0).getName());
-        Assertions.assertEquals("Label", metaData.getColumn(1).getName());
-        Assertions.assertEquals("ErrorMsgDetail", metaData.getColumn(2).getName());
+        Assertions.assertEquals("JobId", metaData.getColumn(0));
+        Assertions.assertEquals("Label", metaData.getColumn(1));
+        Assertions.assertEquals("ErrorMsgDetail", metaData.getColumn(2));
     }
 
     @Test

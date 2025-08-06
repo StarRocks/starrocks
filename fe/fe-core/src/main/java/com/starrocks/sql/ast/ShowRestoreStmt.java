@@ -18,9 +18,6 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
@@ -64,7 +61,7 @@ public class ShowRestoreStmt extends ShowStmt {
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(title);
         }
         return builder.build();
     }
@@ -79,4 +76,3 @@ public class ShowRestoreStmt extends ShowStmt {
         return visitor.visitShowRestoreStatement(this, context);
     }
 }
-

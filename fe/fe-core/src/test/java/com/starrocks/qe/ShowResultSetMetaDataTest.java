@@ -17,9 +17,7 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -32,13 +30,13 @@ public class ShowResultSetMetaDataTest {
         Assertions.assertEquals(0, metaData.getColumnCount());
 
         metaData = ShowResultSetMetaData.builder()
-                .addColumn(new Column("col1", ScalarType.createType(PrimitiveType.INT)))
-                .addColumn(new Column("col2", ScalarType.createType(PrimitiveType.INT)))
+                .addColumn("col1")
+                .addColumn("col2")
                 .build();
 
         Assertions.assertEquals(2, metaData.getColumnCount());
-        Assertions.assertEquals("col1", metaData.getColumn(0).getName());
-        Assertions.assertEquals("col2", metaData.getColumn(1).getName());
+        Assertions.assertEquals("col1", metaData.getColumn(0));
+        Assertions.assertEquals("col2", metaData.getColumn(1));
     }
 
     @Test

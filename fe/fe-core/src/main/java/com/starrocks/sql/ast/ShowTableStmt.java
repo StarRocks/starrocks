@@ -23,10 +23,7 @@ import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
@@ -116,10 +113,9 @@ public class ShowTableStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(
-                new Column(NAME_COL_PREFIX + db, ScalarType.createVarchar(20)));
+        builder.addColumn(NAME_COL_PREFIX + db);
         if (isVerbose) {
-            builder.addColumn(new Column(TYPE_COL, ScalarType.createVarchar(20)));
+            builder.addColumn(TYPE_COL);
         }
         return builder.build();
     }

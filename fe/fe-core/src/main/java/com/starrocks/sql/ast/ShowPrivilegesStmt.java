@@ -14,9 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowPrivilegesStmt extends ShowStmt {
@@ -26,9 +23,9 @@ public class ShowPrivilegesStmt extends ShowStmt {
     static {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
 
-        builder.addColumn(new Column("Privilege", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Context", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Comment", ScalarType.createVarchar(300)));
+        builder.addColumn("Privilege")
+                .addColumn("Context")
+                .addColumn("Comment");
 
         META_DATA = builder.build();
     }

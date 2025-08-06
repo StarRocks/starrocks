@@ -15,9 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 //SHOW WHITELIST;
@@ -26,8 +23,8 @@ import com.starrocks.sql.parser.NodePosition;
 public class ShowWhiteListStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("user_name", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("white_list", ScalarType.createVarchar(1000)))
+                    .addColumn("user_name")
+                    .addColumn("white_list")
                     .build();
 
     public ShowWhiteListStmt() {

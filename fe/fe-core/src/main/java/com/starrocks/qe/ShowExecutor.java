@@ -87,7 +87,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -221,6 +220,7 @@ import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowResourceGroupUsageStmt;
 import com.starrocks.sql.ast.ShowResourcesStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
@@ -932,6 +932,7 @@ public class ShowExecutor {
 
             return new ShowResultSet(statement.getMetaData(), rows);
         }
+
         @Override
         public ShowResultSet visitShowResourceGroupUsageStatement(ShowResourceGroupUsageStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
@@ -1026,8 +1027,7 @@ public class ShowExecutor {
 
             // Only success
             ShowResultSetMetaData showMetaData = statement.getIsVerbose() ? statement.getMetaData() :
-                    ShowResultSetMetaData.builder()
-                            .addColumn(new Column("Function Name", ScalarType.createVarchar(256))).build();
+                    ShowResultSetMetaData.builder().addColumn("Function Name").build();
             return new ShowResultSet(showMetaData, resultRowSet);
         }
 
@@ -2938,7 +2938,7 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowComputeNodeBlackListStatement(ShowComputeNodeBlackListStmt statement,
-                ConnectContext context) {
+                                                                    ConnectContext context) {
             List<List<String>> rows = SimpleScheduler.getHostBlacklist().getShowData(true /* isComputeNode */);
             return new ShowResultSet(statement.getMetaData(), rows);
         }

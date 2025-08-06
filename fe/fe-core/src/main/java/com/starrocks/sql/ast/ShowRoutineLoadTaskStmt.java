@@ -22,10 +22,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -140,7 +137,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
 
         for (String title : TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(title);
         }
         return builder.build();
     }

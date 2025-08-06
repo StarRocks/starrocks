@@ -17,17 +17,16 @@ package com.starrocks.service.arrow.flight.sql;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
-import com.starrocks.catalog.Column;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.sql.ast.StatementBase;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
@@ -197,9 +196,9 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         List<List<String>> resultData = showResultSet.getResultRows();
         ShowResultSetMetaData metaData = showResultSet.getMetaData();
 
-        for (Column col : metaData.getColumns()) {
-            schemaFields.add(new Field(col.getName(), FieldType.nullable(new Utf8()), null));
-            VarCharVector varCharVector = ArrowUtil.createVarCharVector(col.getName(), allocator, resultData.size());
+        for (String col : metaData.columns()) {
+            schemaFields.add(new Field(col, FieldType.nullable(new Utf8()), null));
+            VarCharVector varCharVector = ArrowUtil.createVarCharVector(col, allocator, resultData.size());
             dataFields.add(varCharVector);
         }
 

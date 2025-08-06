@@ -19,7 +19,6 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Pair;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.ComputeNode;
 import org.jetbrains.annotations.NotNull;
@@ -53,7 +52,7 @@ public class ShowResourceGroupUsageStmt extends ShowStmt {
 
     static {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        META_DATA.forEach(item -> builder.addColumn(item.first));
+        META_DATA.forEach(item -> builder.addColumn(item.first.getName()));
         COLUMN_META_DATA = builder.build();
     }
 

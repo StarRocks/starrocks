@@ -15,18 +15,15 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // Used to test show executor.
 public class ShowAuthorStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Name", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Location", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Comment", ScalarType.createVarchar(30)))
+                    .addColumn("Name")
+                    .addColumn("Location")
+                    .addColumn("Comment")
                     .build();
 
     public ShowAuthorStmt() {

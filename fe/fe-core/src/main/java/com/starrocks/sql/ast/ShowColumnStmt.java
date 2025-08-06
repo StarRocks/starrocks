@@ -24,11 +24,8 @@ import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
@@ -38,25 +35,25 @@ public class ShowColumnStmt extends ShowStmt {
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "COLUMNS");
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Field", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Null", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Key", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Default", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Extra", ScalarType.createVarchar(20)))
+                    .addColumn("Field")
+                    .addColumn("Type")
+                    .addColumn("Null")
+                    .addColumn("Key")
+                    .addColumn("Default")
+                    .addColumn("Extra")
                     .build();
 
     private static final ShowResultSetMetaData META_DATA_VERBOSE =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Field", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Collation", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Null", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Key", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Default", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Extra", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Privileges", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Comment", ScalarType.createVarchar(20)))
+                    .addColumn("Field")
+                    .addColumn("Type")
+                    .addColumn("Collation")
+                    .addColumn("Null")
+                    .addColumn("Key")
+                    .addColumn("Default")
+                    .addColumn("Extra")
+                    .addColumn("Privileges")
+                    .addColumn("Comment")
                     .build();
 
     private ShowResultSetMetaData metaData;

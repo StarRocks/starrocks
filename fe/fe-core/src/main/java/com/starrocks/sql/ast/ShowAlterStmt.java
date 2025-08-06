@@ -20,14 +20,11 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.OrderByPair;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -138,8 +135,10 @@ public class ShowAlterStmt extends ShowStmt {
             titleNames = OptimizeProcDir.TITLE_NAMES;
         }
 
-        for (String title : titleNames) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+        if (titleNames != null) {
+            for (String title : titleNames) {
+                builder.addColumn(title);
+            }
         }
 
         return builder.build();

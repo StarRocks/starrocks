@@ -16,9 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowStorageVolumesStmt extends ShowStmt {
@@ -27,7 +24,7 @@ public class ShowStorageVolumesStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column(SV_COL, ScalarType.createVarchar(256)))
+                    .addColumn(SV_COL)
                     .build();
 
     public ShowStorageVolumesStmt(String pattern, NodePosition pos) {

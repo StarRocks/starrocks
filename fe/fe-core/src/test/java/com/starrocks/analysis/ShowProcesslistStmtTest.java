@@ -19,7 +19,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -59,18 +59,18 @@ public class ShowProcesslistStmtTest {
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assertions.assertNotNull(metaData);
         Assertions.assertEquals(13, metaData.getColumnCount());
-        Assertions.assertEquals("ServerName", metaData.getColumn(0).getName());
-        Assertions.assertEquals("Id", metaData.getColumn(1).getName());
-        Assertions.assertEquals("User", metaData.getColumn(2).getName());
-        Assertions.assertEquals("Host", metaData.getColumn(3).getName());
-        Assertions.assertEquals("Db", metaData.getColumn(4).getName());
-        Assertions.assertEquals("Command", metaData.getColumn(5).getName());
-        Assertions.assertEquals("ConnectionStartTime", metaData.getColumn(6).getName());
-        Assertions.assertEquals("Time", metaData.getColumn(7).getName());
-        Assertions.assertEquals("State", metaData.getColumn(8).getName());
-        Assertions.assertEquals("Info", metaData.getColumn(9).getName());
-        Assertions.assertEquals("IsPending", metaData.getColumn(10).getName());
-        Assertions.assertEquals("Warehouse", metaData.getColumn(11).getName());
+        Assertions.assertEquals("ServerName", metaData.getColumn(0));
+        Assertions.assertEquals("Id", metaData.getColumn(1));
+        Assertions.assertEquals("User", metaData.getColumn(2));
+        Assertions.assertEquals("Host", metaData.getColumn(3));
+        Assertions.assertEquals("Db", metaData.getColumn(4));
+        Assertions.assertEquals("Command", metaData.getColumn(5));
+        Assertions.assertEquals("ConnectionStartTime", metaData.getColumn(6));
+        Assertions.assertEquals("Time", metaData.getColumn(7));
+        Assertions.assertEquals("State", metaData.getColumn(8));
+        Assertions.assertEquals("Info", metaData.getColumn(9));
+        Assertions.assertEquals("IsPending", metaData.getColumn(10));
+        Assertions.assertEquals("Warehouse", metaData.getColumn(11));
     }
 
     @Test

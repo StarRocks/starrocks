@@ -17,11 +17,11 @@ package com.starrocks.http;
 import com.google.gson.JsonObject;
 import com.google.gson.stream.JsonWriter;
 import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Type;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.logging.log4j.LogManager;
@@ -57,10 +57,10 @@ public class JsonSerializer {
         final ShowResultSetMetaData metaData = showResultSet.getMetaData();
         // serialize metadata
         jsonWriter.name(META_OBJ_NAME).beginArray();
-        for (Column column : metaData.getColumns()) {
+        for (String column : metaData.columns()) {
             jsonWriter.beginObject();
-            jsonWriter.name(META_FIELD_NAME).value(column.getName());
-            jsonWriter.name(META_FIELD_TYPE).value(column.getType().toSql());
+            jsonWriter.name(META_FIELD_NAME).value(column);
+            jsonWriter.name(META_FIELD_TYPE).value(Type.STRING.toSql());
             jsonWriter.endObject();
         }
         jsonWriter.endArray();
@@ -70,7 +70,7 @@ public class JsonSerializer {
         for (List<String> resultRow : showResultSet.getResultRows()) {
             jsonWriter.beginObject();
             for (int i = 0; i < metaData.getColumnCount(); i++) {
-                jsonWriter.name(metaData.getColumn(i).getName()).value(resultRow.get(i));
+                jsonWriter.name(metaData.getColumn(i)).value(resultRow.get(i));
             }
             jsonWriter.endObject();
         }

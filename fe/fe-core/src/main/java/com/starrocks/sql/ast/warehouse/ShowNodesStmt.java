@@ -13,10 +13,8 @@
 
 package com.starrocks.sql.ast.warehouse;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -24,26 +22,26 @@ import com.starrocks.sql.parser.NodePosition;
 public class ShowNodesStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("WarehouseName", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("CNGroupId", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("WorkerGroupId", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("NodeId", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("WorkerId", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("IP", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("HeartbeatPort", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("BePort", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("HttpPort", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("BrpcPort", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("StarletPort", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("LastStartTime", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("LastUpdateMs", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("Alive", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("ErrMsg", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("Version", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("NumRunningQueries", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("CpuCores", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("MemUsedPct", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("CpuUsedPct", ScalarType.createVarchar(20)))
+                    .addColumn("WarehouseName")
+                    .addColumn("CNGroupId")
+                    .addColumn("WorkerGroupId")
+                    .addColumn("NodeId")
+                    .addColumn("WorkerId")
+                    .addColumn("IP")
+                    .addColumn("HeartbeatPort")
+                    .addColumn("BePort")
+                    .addColumn("HttpPort")
+                    .addColumn("BrpcPort")
+                    .addColumn("StarletPort")
+                    .addColumn("LastStartTime")
+                    .addColumn("LastUpdateMs")
+                    .addColumn("Alive")
+                    .addColumn("ErrMsg")
+                    .addColumn("Version")
+                    .addColumn("NumRunningQueries")
+                    .addColumn("CpuCores")
+                    .addColumn("MemUsedPct")
+                    .addColumn("CpuUsedPct")
                     .build();
 
     private final String pattern;

@@ -13,19 +13,16 @@
 // limitations under the License.
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowProfilelistStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("QueryId", ScalarType.createVarchar(48)))
-                    .addColumn(new Column("StartTime", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("Time", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("State", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("Statement", ScalarType.createVarchar(128)))
+                    .addColumn("QueryId")
+                    .addColumn("StartTime")
+                    .addColumn("Time")
+                    .addColumn("State")
+                    .addColumn("Statement")
                     .build();
     private final int limit;
 

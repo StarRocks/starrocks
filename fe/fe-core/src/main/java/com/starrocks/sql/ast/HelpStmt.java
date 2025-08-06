@@ -17,28 +17,25 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class HelpStmt extends ShowStmt {
     private static final ShowResultSetMetaData TOPIC_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("name", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("description", ScalarType.createVarchar(1000)))
-                    .addColumn(new Column("example", ScalarType.createVarchar(1000)))
+                    .addColumn("name")
+                    .addColumn("description")
+                    .addColumn("example")
                     .build();
     private static final ShowResultSetMetaData CATEGORY_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("source_category_name", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("name", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("is_it_category", ScalarType.createVarchar(1)))
+                    .addColumn("source_category_name")
+                    .addColumn("name")
+                    .addColumn("is_it_category")
                     .build();
     private static final ShowResultSetMetaData KEYWORD_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("name", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("is_it_category", ScalarType.createVarchar(1)))
+                    .addColumn("name")
+                    .addColumn("is_it_category")
                     .build();
     private String mask;
 

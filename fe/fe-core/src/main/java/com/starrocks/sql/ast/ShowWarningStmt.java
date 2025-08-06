@@ -16,18 +16,15 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.LimitElement;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // Show Warning stmt
 public class ShowWarningStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Level", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Code", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Message", ScalarType.createVarchar(20)))
+                    .addColumn("Level")
+                    .addColumn("Code")
+                    .addColumn("Message")
                     .build();
 
 

@@ -35,9 +35,8 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.thrift.TColumnDefinition;
 import com.starrocks.thrift.TShowResultSet;
 import com.starrocks.thrift.TShowResultSetMetaData;
@@ -65,13 +64,10 @@ public class ShowResultSet {
     }
 
     public ShowResultSet(TShowResultSet resultSet) {
-        List<Column> columns = Lists.newArrayList();
+        List<String> columns = Lists.newArrayList();
         for (int i = 0; i < resultSet.getMetaData().getColumnsSize(); i++) {
-            TColumnDefinition definition = (TColumnDefinition) resultSet.getMetaData().getColumns().get(i);
-            columns.add(new Column(
-                    definition.getColumnName(),
-                    ScalarType.createType(PrimitiveType.fromThrift(definition.getColumnType().getType())))
-            );
+            TColumnDefinition definition = resultSet.getMetaData().getColumns().get(i);
+            columns.add(definition.getColumnName());
         }
         this.metaData = new ShowResultSetMetaData(columns);
         this.resultRows = resultSet.getResultRows();
@@ -123,10 +119,8 @@ public class ShowResultSet {
         TShowResultSet set = new TShowResultSet();
         set.metaData = new TShowResultSetMetaData();
         for (int i = 0; i < metaData.getColumnCount(); i++) {
-            Column definition = metaData.getColumn(i);
-            set.metaData.addToColumns(new TColumnDefinition(
-                    definition.getName(), definition.getType().toColumnTypeThrift())
-            );
+            String colName = metaData.getColumn(i);
+            set.metaData.addToColumns(new TColumnDefinition(colName, Type.STRING.toColumnTypeThrift()));
         }
 
         set.resultRows = Lists.newArrayList();
@@ -137,3 +131,4 @@ public class ShowResultSet {
         return set;
     }
 }
+

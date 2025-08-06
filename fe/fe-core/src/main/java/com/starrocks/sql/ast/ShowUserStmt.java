@@ -15,9 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowUserStmt extends ShowStmt {
@@ -25,7 +22,7 @@ public class ShowUserStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("User", ScalarType.createVarchar(50)))
+                    .addColumn("User")
                     .build();
 
     public ShowUserStmt(boolean isAll) {
@@ -51,4 +48,3 @@ public class ShowUserStmt extends ShowStmt {
         return visitor.visitShowUserStatement(this, context);
     }
 }
-

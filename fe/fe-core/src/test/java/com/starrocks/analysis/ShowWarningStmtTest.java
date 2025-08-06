@@ -25,7 +25,7 @@ public class ShowWarningStmtTest {
         Assertions.assertEquals(10L, stmt.getLimitNum());
 
         Assertions.assertEquals( 3, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Message", stmt.getMetaData().getColumn(2).getName());
+        Assertions.assertEquals("Message", stmt.getMetaData().getColumn(2));
 
         // show Error cases
         ShowWarningStmt stmt_e = (ShowWarningStmt) UtFrameUtils.parseStmtWithNewParser("SHOW ERRORS limit 10", ctx);

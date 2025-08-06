@@ -1437,7 +1437,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         String sql = "show running queries;";
         ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowResultSet res = ShowExecutor.execute(showStmt, ctx);
-        Assertions.assertEquals(showStmt.getMetaData().getColumns(), res.getMetaData().getColumns());
+        Assertions.assertEquals(showStmt.getMetaData().columns(), res.getMetaData().columns());
         Assertions.assertTrue(res.getResultRows().isEmpty());
     }
 
@@ -1494,7 +1494,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             String sql = "show running queries;";
             ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             ShowResultSet res = ShowExecutor.execute(showStmt, ctx);
-            Assertions.assertEquals(showStmt.getMetaData().getColumns(), res.getMetaData().getColumns());
+            Assertions.assertEquals(showStmt.getMetaData().columns(), res.getMetaData().columns());
 
             final int groupIndex = 2;
             final int stateIndex = 6;
@@ -1520,7 +1520,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             String sql = "show running queries limit 4;";
             ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             ShowResultSet res = ShowExecutor.execute(showStmt, ctx);
-            Assertions.assertEquals(showStmt.getMetaData().getColumns(), res.getMetaData().getColumns());
+            Assertions.assertEquals(showStmt.getMetaData().columns(), res.getMetaData().columns());
             Assertions.assertEquals(4, res.getResultRows().size());
         }
 

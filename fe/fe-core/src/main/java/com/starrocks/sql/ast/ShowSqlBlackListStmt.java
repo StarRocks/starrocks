@@ -15,9 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // used to show sql's blacklist
@@ -35,8 +32,8 @@ public class ShowSqlBlackListStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Id", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Forbidden SQL", ScalarType.createVarchar(100)))
+                    .addColumn("Id")
+                    .addColumn("Forbidden SQL")
                     .build();
 
     public ShowSqlBlackListStmt() {

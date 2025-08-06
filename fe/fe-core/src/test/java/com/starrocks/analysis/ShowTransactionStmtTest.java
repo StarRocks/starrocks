@@ -2,7 +2,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import org.junit.jupiter.api.Assertions;
@@ -28,20 +28,20 @@ public class ShowTransactionStmtTest {
 
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assertions.assertNotNull(metaData);
-        Assertions.assertEquals("TransactionId", metaData.getColumn(0).getName());
-        Assertions.assertEquals("Label", metaData.getColumn(1).getName());
-        Assertions.assertEquals("Coordinator", metaData.getColumn(2).getName());
-        Assertions.assertEquals("TransactionStatus", metaData.getColumn(3).getName());
-        Assertions.assertEquals("LoadJobSourceType", metaData.getColumn(4).getName());
-        Assertions.assertEquals("PrepareTime", metaData.getColumn(5).getName());
-        Assertions.assertEquals("CommitTime", metaData.getColumn(6).getName());
-        Assertions.assertEquals("PublishTime", metaData.getColumn(7).getName());
-        Assertions.assertEquals("FinishTime", metaData.getColumn(8).getName());
-        Assertions.assertEquals("Reason", metaData.getColumn(9).getName());
-        Assertions.assertEquals("ErrorReplicasCount", metaData.getColumn(10).getName());
-        Assertions.assertEquals("ListenerId", metaData.getColumn(11).getName());
-        Assertions.assertEquals("TimeoutMs", metaData.getColumn(12).getName());
-        Assertions.assertEquals("ErrMsg", metaData.getColumn(13).getName());
+        Assertions.assertEquals("TransactionId", metaData.getColumn(0));
+        Assertions.assertEquals("Label", metaData.getColumn(1));
+        Assertions.assertEquals("Coordinator", metaData.getColumn(2));
+        Assertions.assertEquals("TransactionStatus", metaData.getColumn(3));
+        Assertions.assertEquals("LoadJobSourceType", metaData.getColumn(4));
+        Assertions.assertEquals("PrepareTime", metaData.getColumn(5));
+        Assertions.assertEquals("CommitTime", metaData.getColumn(6));
+        Assertions.assertEquals("PublishTime", metaData.getColumn(7));
+        Assertions.assertEquals("FinishTime", metaData.getColumn(8));
+        Assertions.assertEquals("Reason", metaData.getColumn(9));
+        Assertions.assertEquals("ErrorReplicasCount", metaData.getColumn(10));
+        Assertions.assertEquals("ListenerId", metaData.getColumn(11));
+        Assertions.assertEquals("TimeoutMs", metaData.getColumn(12));
+        Assertions.assertEquals("ErrMsg", metaData.getColumn(13));
     }
 
     @Test

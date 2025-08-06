@@ -90,8 +90,8 @@ public class ShowCreateTableStmtTest {
         Assertions.assertEquals("testDb", stmt.getDb());
         Assertions.assertEquals("testTbl", stmt.getTable());
         Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Table", stmt.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("Create Table", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals("Table", stmt.getMetaData().getColumn(0));
+        Assertions.assertEquals("Create Table", stmt.getMetaData().getColumn(1));
     }
 
     @Test
@@ -131,7 +131,7 @@ public class ShowCreateTableStmtTest {
         props.put("COLUMN_STATS_ACCURATE", "{\"BASIC_STATS\":\"true\"}");
 
         HiveTable table = new HiveTable(100, "test", fullSchema, "aa", "bb", "cc", "dd", "hdfs://xxx", "",
-                0, new ArrayList<>(), fullSchema.stream().map(x -> x.getName()).collect(Collectors.toList()),
+                0, new ArrayList<>(), fullSchema.stream().map(Column::getName).collect(Collectors.toList()),
                 props, new HashMap<>(),  HiveStorageFormat.ORC, HiveTable.HiveTableType.MANAGED_TABLE);
         List<String> result = new ArrayList<>();
         AstToStringBuilder.getDdlStmt(table, result, null, null, false, true);

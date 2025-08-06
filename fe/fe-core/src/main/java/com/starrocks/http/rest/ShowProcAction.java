@@ -39,7 +39,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -60,7 +59,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 // Format:
 //   http://username:password@192.168.1.1:8030/api/show_proc?path=/
@@ -113,8 +111,7 @@ public class ShowProcAction extends RestBaseAction {
                 return;
             }
 
-            List<String> columnNames = resultSet.getMetaData().getColumns()
-                    .stream().map(Column::getName).collect(Collectors.toList());
+            List<String> columnNames = resultSet.getMetaData().columns();
             List<List<String>> rows = resultSet.getResultRows();
 
             response.setContentType("application/json");

@@ -15,18 +15,14 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowCatalogsStmt extends ShowStmt {
-
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Catalog", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Comment", ScalarType.createVarchar(30)))
+                    .addColumn("Catalog")
+                    .addColumn("Type")
+                    .addColumn("Comment")
                     .build();
 
     private final String pattern;

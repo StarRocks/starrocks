@@ -14,12 +14,10 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowDeleteStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -68,6 +66,6 @@ public class ShowDeleteTest {
         ShowDeleteStmt stmt = (ShowDeleteStmt) UtFrameUtils.parseStmtWithNewParser(showSQL, ctx);
         Assertions.assertEquals("testDb", stmt.getDbName());
         Assertions.assertEquals(5, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("TableName", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("TableName", stmt.getMetaData().getColumn(0));
     }
 }

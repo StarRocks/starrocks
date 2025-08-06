@@ -17,8 +17,8 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupType;
 
@@ -133,11 +133,11 @@ public class ResourceGroup {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         COLUMN_METAS.stream()
                 .filter(meta -> meta.visible)
-                .forEach(item -> builder.addColumn(item.column));
+                .forEach(item -> builder.addColumn(item.column.getName()));
         META_DATA = builder.build();
 
         ShowResultSetMetaData.Builder verboseBuilder = ShowResultSetMetaData.builder();
-        COLUMN_METAS.forEach(item -> verboseBuilder.addColumn(item.column));
+        COLUMN_METAS.forEach(item -> verboseBuilder.addColumn(item.column.getName()));
         VERBOSE_META_DATA = verboseBuilder.build();
     }
 

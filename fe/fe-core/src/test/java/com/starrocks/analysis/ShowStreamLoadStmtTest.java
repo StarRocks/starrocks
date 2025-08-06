@@ -47,7 +47,7 @@ public class ShowStreamLoadStmtTest {
         Assertions.assertEquals("testDb", stmt.getDbFullName());
         Assertions.assertFalse(stmt.isIncludeHistory());
         Assertions.assertEquals(25, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Label", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("Label", stmt.getMetaData().getColumn(0));
     }
 
     @Test

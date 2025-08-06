@@ -18,11 +18,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // Show variables statement.
@@ -33,16 +29,16 @@ public class ShowVariablesStmt extends ShowStmt {
     private static final String IS_CHANGED = "Is_changed";
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column(NAME_COL, ScalarType.createVarchar(20)))
-                    .addColumn(new Column(VALUE_COL, ScalarType.createVarchar(20)))
+                    .addColumn(NAME_COL)
+                    .addColumn(VALUE_COL)
                     .build();
 
     private static final ShowResultSetMetaData VERBOSE_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column(NAME_COL, ScalarType.createVarchar(20)))
-                    .addColumn(new Column(VALUE_COL, ScalarType.createVarchar(20)))
-                    .addColumn(new Column(DEFAULT_VALUE, ScalarType.createVarchar(20)))
-                    .addColumn(new Column(IS_CHANGED, ScalarType.createType(PrimitiveType.BOOLEAN)))
+                    .addColumn(NAME_COL)
+                    .addColumn(VALUE_COL)
+                    .addColumn(DEFAULT_VALUE)
+                    .addColumn(IS_CHANGED)
                     .build();
 
     private SetType type;

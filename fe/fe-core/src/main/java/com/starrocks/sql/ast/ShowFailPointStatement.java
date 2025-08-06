@@ -16,9 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -26,10 +23,10 @@ import java.util.List;
 public class ShowFailPointStatement extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Name", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("TriggerMode", ScalarType.createVarchar(32)))
-                    .addColumn(new Column("Times/Probability", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("Host", ScalarType.createVarchar(64)))
+                    .addColumn("Name")
+                    .addColumn("TriggerMode")
+                    .addColumn("Times/Probability")
+                    .addColumn("Host")
                     .build();
 
     private String pattern;

@@ -15,51 +15,34 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.qe;
+package com.starrocks.sql.ast;
 
-// Meta data to describe result set of show statement.
-// Because ResultSetMetaData is complicated, redefine it.
-
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 
 import java.util.List;
 
-public class ShowResultSetMetaData {
-    private List<Column> columns;
-
+public record ShowResultSetMetaData(List<String> columns) {
     public int getColumnCount() {
         return columns.size();
     }
 
-    public List<Column> getColumns() {
+    public List<String> getColumns() {
         return columns;
     }
 
-    public Column getColumn(int idx) {
+    public String getColumn(int idx) {
         return columns.get(idx);
     }
 
     public int getColumnIdx(String colName) {
         for (int idx = 0; idx < columns.size(); ++idx) {
-            if (columns.get(idx).getName().equalsIgnoreCase(colName)) {
+            if (columns.get(idx).equalsIgnoreCase(colName)) {
                 return idx;
             }
         }
         throw new StarRocksPlannerException("Can't get column " + colName, ErrorType.INTERNAL_ERROR);
-    }
-
-    public void removeColumn(int idx) {
-        Preconditions.checkArgument(idx < columns.size());
-        columns.remove(idx);
-    }
-
-    public ShowResultSetMetaData(List<Column> columns) {
-        this.columns = columns;
     }
 
     public static Builder builder() {
@@ -67,7 +50,7 @@ public class ShowResultSetMetaData {
     }
 
     public static class Builder {
-        private List<Column> columns;
+        private final List<String> columns;
 
         public Builder() {
             columns = Lists.newArrayList();
@@ -77,14 +60,9 @@ public class ShowResultSetMetaData {
             return new ShowResultSetMetaData(columns);
         }
 
-        public Builder addColumn(Column col) {
-            columns.add(col);
+        public Builder addColumn(String columnName) {
+            columns.add(columnName);
             return this;
         }
-        public Builder column(String name, ScalarType type) {
-            columns.add(new Column(name, type, false, null, true, null, ""));
-            return this;
-        }
-
     }
 }

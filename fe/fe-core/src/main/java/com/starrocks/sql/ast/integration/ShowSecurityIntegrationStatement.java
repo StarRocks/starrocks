@@ -14,10 +14,8 @@
 
 package com.starrocks.sql.ast.integration;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -26,11 +24,9 @@ public class ShowSecurityIntegrationStatement extends ShowStmt {
 
     static {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-
-        builder.addColumn(new Column("Name", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Type", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Comment", ScalarType.createVarchar(300)));
-
+        builder.addColumn("Name")
+                .addColumn("Type")
+                .addColumn("Comment");
         META_DATA = builder.build();
     }
 

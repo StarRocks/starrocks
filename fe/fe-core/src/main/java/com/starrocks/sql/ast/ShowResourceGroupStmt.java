@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // Show ResourceGroups

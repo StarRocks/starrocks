@@ -19,9 +19,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -88,11 +85,11 @@ public class ShowSnapshotStmt extends ShowStmt {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         if (!Strings.isNullOrEmpty(snapshotName) && !Strings.isNullOrEmpty(timestamp)) {
             for (String title : SNAPSHOT_DETAIL) {
-                builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+                builder.addColumn(title);
             }
         } else {
             for (String title : SNAPSHOT_ALL) {
-                builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+                builder.addColumn(title);
             }
         }
         return builder.build();
@@ -103,4 +100,3 @@ public class ShowSnapshotStmt extends ShowStmt {
         return visitor.visitShowSnapshotStatement(this, context);
     }
 }
-

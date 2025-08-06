@@ -35,10 +35,9 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowOpenTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,9 +62,9 @@ public class ShowOpenTableStmtTest {
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assertions.assertNotNull(metaData);
         Assertions.assertEquals(4, metaData.getColumnCount());
-        Assertions.assertEquals("Database", metaData.getColumn(0).getName());
-        Assertions.assertEquals("Table", metaData.getColumn(1).getName());
-        Assertions.assertEquals("In_use", metaData.getColumn(2).getName());
-        Assertions.assertEquals("Name_locked", metaData.getColumn(3).getName());
+        Assertions.assertEquals("Database", metaData.getColumn(0));
+        Assertions.assertEquals("Table", metaData.getColumn(1));
+        Assertions.assertEquals("In_use", metaData.getColumn(2));
+        Assertions.assertEquals("Name_locked", metaData.getColumn(3));
     }
 }

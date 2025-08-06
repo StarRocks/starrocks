@@ -14,14 +14,12 @@
 
 package com.starrocks.qe.feedback;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
@@ -36,17 +34,17 @@ public class PlanAdvisorExecutor {
     private static final PlanAdvisorExecutorVisitor INSTANCE = new PlanAdvisorExecutorVisitor();
 
     private static final ShowResultSetMetaData COLUMN_META =
-            ShowResultSetMetaData.builder().addColumn(new Column("message", Type.STRING)).build();
+            ShowResultSetMetaData.builder().addColumn("message").build();
 
     private static final ShowResultSetMetaData SHOW_RESULT_COLUMN_META =
-            ShowResultSetMetaData.builder().addColumn(new Column("query_id", Type.STRING))
-                    .addColumn(new Column("query", Type.STRING))
-                    .addColumn(new Column("query_time", Type.STRING))
-                    .addColumn(new Column("tuning_guides", Type.STRING))
-                    .addColumn(new Column("avg_tuned_query_time", Type.STRING))
-                    .addColumn(new Column("optimized_query_count", Type.STRING))
-                    .addColumn(new Column("is_useful", Type.STRING))
-                    .addColumn(new Column("fe_node", Type.STRING))
+            ShowResultSetMetaData.builder().addColumn("query_id")
+                    .addColumn("query")
+                    .addColumn("query_time")
+                    .addColumn("tuning_guides")
+                    .addColumn("avg_tuned_query_time")
+                    .addColumn("optimized_query_count")
+                    .addColumn("is_useful")
+                    .addColumn("fe_node")
                     .build();
 
 

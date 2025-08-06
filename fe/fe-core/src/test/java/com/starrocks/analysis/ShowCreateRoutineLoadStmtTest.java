@@ -43,8 +43,8 @@ public class ShowCreateRoutineLoadStmtTest {
         Assertions.assertEquals("testJob", stmt.getName());
         Assertions.assertEquals("testDb", stmt.getDbFullName());
         Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Job", stmt.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("Create Job", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals("Job", stmt.getMetaData().getColumn(0));
+        Assertions.assertEquals("Create Job", stmt.getMetaData().getColumn(1));
     }
 
     @Test

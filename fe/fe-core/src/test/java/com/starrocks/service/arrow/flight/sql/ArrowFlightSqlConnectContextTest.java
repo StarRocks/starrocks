@@ -14,17 +14,15 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.sql.ast.StatementBase;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.VarCharVector;
@@ -111,8 +109,7 @@ public class ArrowFlightSqlConnectContextTest {
     public void testAddShowResultAndGetResult() {
         String queryId = "query-2";
 
-        Column column = new Column("col1", ScalarType.createVarchar(20));
-        ShowResultSetMetaData metaData = new ShowResultSetMetaData(Collections.singletonList(column));
+        ShowResultSetMetaData metaData = new ShowResultSetMetaData(Collections.singletonList("col1"));
         ShowResultSet showResultSet = new ShowResultSet(metaData, List.of(Collections.singletonList("value1")));
 
         try (MockedStatic<ArrowUtil> mocked = mockStatic(ArrowUtil.class)) {

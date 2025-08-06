@@ -15,9 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
@@ -25,13 +22,13 @@ import static com.starrocks.common.util.Util.normalizeName;
 public class ShowSmallFilesStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Id", ScalarType.createVarchar(32)))
-                    .addColumn(new Column("DbName", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("GlobalStateMgr", ScalarType.createVarchar(32)))
-                    .addColumn(new Column("FileName", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("FileSize", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("IsContent", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("MD5", ScalarType.createVarchar(16)))
+                    .addColumn("Id")
+                    .addColumn("DbName")
+                    .addColumn("GlobalStateMgr")
+                    .addColumn("FileName")
+                    .addColumn("FileSize")
+                    .addColumn("IsContent")
+                    .addColumn("MD5")
                     .build();
 
     private String dbName;

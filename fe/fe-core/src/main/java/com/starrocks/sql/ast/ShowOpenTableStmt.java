@@ -15,19 +15,16 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // SHOW OPEN TABLES
 public class ShowOpenTableStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Database", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("Table", ScalarType.createVarchar(10)))
-                    .addColumn(new Column("In_use", ScalarType.createVarchar(80)))
-                    .addColumn(new Column("Name_locked", ScalarType.createVarchar(64)))
+                    .addColumn("Database")
+                    .addColumn("Table")
+                    .addColumn("In_use")
+                    .addColumn("Name_locked")
                     .build();
 
     public ShowOpenTableStmt() {

@@ -12,12 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowAuthenticationStmt extends ShowStmt {
@@ -25,10 +21,10 @@ public class ShowAuthenticationStmt extends ShowStmt {
 
     static {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("UserIdentity", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Password", ScalarType.createVarchar(20)));
-        builder.addColumn(new Column("AuthPlugin", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("UserForAuthPlugin", ScalarType.createVarchar(100)));
+        builder.addColumn("UserIdentity")
+                .addColumn("Password")
+                .addColumn("AuthPlugin")
+                .addColumn("UserForAuthPlugin");
         META_DATA = builder.build();
     }
 

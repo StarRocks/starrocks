@@ -16,9 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.sql.ast.SetType.SESSION;
@@ -34,8 +31,8 @@ public class ShowStatusStmt extends ShowStmt {
     private static final String VALUE_COL = "Value";
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column(NAME_COL, ScalarType.createVarchar(20)))
-                    .addColumn(new Column(VALUE_COL, ScalarType.createVarchar(20)))
+                    .addColumn(NAME_COL)
+                    .addColumn(VALUE_COL)
                     .build();
 
     private final SetType type;

@@ -15,9 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.util.EitherOr;
@@ -34,7 +31,7 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("QUERY_ID", ScalarType.createVarchar(60)))
+                    .addColumn("QUERY_ID")
                     .build();
 
     public RefreshMaterializedViewStatement(TableName mvName,

@@ -15,11 +15,9 @@
 
 package com.starrocks.statistic;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,10 +26,10 @@ import java.util.Map;
 public interface AnalyzeStatus {
 
     ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("Table", ScalarType.createVarchar(20)))
-            .addColumn(new Column("Op", ScalarType.createVarchar(20)))
-            .addColumn(new Column("Msg_type", ScalarType.createVarchar(20)))
-            .addColumn(new Column("Msg_text", ScalarType.createVarchar(200)))
+            .addColumn("Table")
+            .addColumn("Op")
+            .addColumn("Msg_type")
+            .addColumn("Msg_text")
             .build();
 
     long getId();

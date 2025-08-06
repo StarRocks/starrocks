@@ -12,12 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowRolesStmt extends ShowStmt {
@@ -25,11 +21,9 @@ public class ShowRolesStmt extends ShowStmt {
 
     static {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-
-        builder.addColumn(new Column("Name", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Builtin", ScalarType.createVarchar(30)));
-        builder.addColumn(new Column("Comment", ScalarType.createVarchar(300)));
-
+        builder.addColumn("Name")
+                .addColumn("Builtin")
+                .addColumn("Comment");
         META_DATA = builder.build();
     }
 

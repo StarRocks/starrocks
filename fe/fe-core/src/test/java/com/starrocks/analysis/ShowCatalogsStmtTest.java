@@ -24,7 +24,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -70,9 +70,9 @@ public class ShowCatalogsStmtTest {
         ShowCatalogsStmt stmt = new ShowCatalogsStmt(null);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         ShowResultSetMetaData metaData = resultSet.getMetaData();
-        Assertions.assertEquals("Catalog", metaData.getColumn(0).getName());
-        Assertions.assertEquals("Type", metaData.getColumn(1).getName());
-        Assertions.assertEquals("Comment", metaData.getColumn(2).getName());
+        Assertions.assertEquals("Catalog", metaData.getColumn(0));
+        Assertions.assertEquals("Type", metaData.getColumn(1));
+        Assertions.assertEquals("Comment", metaData.getColumn(2));
         Assertions.assertEquals("[default_catalog, Internal, An internal catalog contains this cluster's self-managed tables.]",
                 resultSet.getResultRows().get(0).toString());
         Assertions.assertEquals("[hive_catalog_1, Hive, hive_catalog]", resultSet.getResultRows().get(1).toString());

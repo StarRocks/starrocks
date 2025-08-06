@@ -12,23 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowEnginesStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Engine", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("Support", ScalarType.createVarchar(8)))
-                    .addColumn(new Column("Comment", ScalarType.createVarchar(80)))
-                    .addColumn(new Column("Transactions", ScalarType.createVarchar(3)))
-                    .addColumn(new Column("XA", ScalarType.createVarchar(3)))
-                    .addColumn(new Column("Savepoints", ScalarType.createVarchar(3)))
+                    .addColumn("Engine")
+                    .addColumn("Support")
+                    .addColumn("Comment")
+                    .addColumn("Transactions")
+                    .addColumn("XA")
+                    .addColumn("Savepoints")
                     .build();
 
     public ShowEnginesStmt() {

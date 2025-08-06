@@ -17,9 +17,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
@@ -28,21 +25,21 @@ public class ShowDynamicPartitionStmt extends ShowStmt {
     private String db;
     private static final ShowResultSetMetaData SHOW_DYNAMIC_PARTITION_META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("TableName", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Enable", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("TimeUnit", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Start", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("End", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Prefix", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Buckets", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("ReplicationNum", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("StartOf", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("LastUpdateTime", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("LastSchedulerTime", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("State", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("LastCreatePartitionMsg", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("LastDropPartitionMsg", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("InScheduler", ScalarType.createVarchar(20)))
+                    .addColumn("TableName")
+                    .addColumn("Enable")
+                    .addColumn("TimeUnit")
+                    .addColumn("Start")
+                    .addColumn("End")
+                    .addColumn("Prefix")
+                    .addColumn("Buckets")
+                    .addColumn("ReplicationNum")
+                    .addColumn("StartOf")
+                    .addColumn("LastUpdateTime")
+                    .addColumn("LastSchedulerTime")
+                    .addColumn("State")
+                    .addColumn("LastCreatePartitionMsg")
+                    .addColumn("LastDropPartitionMsg")
+                    .addColumn("InScheduler")
                     .build();
 
     public ShowDynamicPartitionStmt(String db) {

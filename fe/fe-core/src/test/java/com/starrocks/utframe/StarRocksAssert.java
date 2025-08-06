@@ -43,7 +43,6 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.LocalTablet;
@@ -1130,7 +1129,7 @@ public class StarRocksAssert {
         Analyzer.analyze(stmt, ctx);
 
         ShowResultSet res = ShowExecutor.execute((ShowStmt) stmt, ctx);
-        String header = res.getMetaData().getColumns().stream().map(Column::getName).collect(Collectors.joining("|"));
+        String header = String.join("|", res.getMetaData().columns());
         String body = res.getResultRows().stream()
                     .map(row -> String.join("|", row))
                     .collect(Collectors.joining("\n"));

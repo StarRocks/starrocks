@@ -16,12 +16,9 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.parser.NodePosition;
@@ -35,31 +32,31 @@ import java.util.stream.Collectors;
  * <p> Note that it only shows the queries managed by the slot manager, that is, enabling query queue.
  */
 public class ShowRunningQueriesStmt extends ShowStmt {
-    private static final List<Pair<Column, Function<LogicalSlot, String>>> META_DATA = ImmutableList.of(
-            Pair.create(new Column("QueryId", ScalarType.createVarchar(64)),
+    private static final List<Pair<String, Function<LogicalSlot, String>>> META_DATA = ImmutableList.of(
+            Pair.create("QueryId",
                     slot -> DebugUtil.printId(slot.getSlotId())),
-            Pair.create(new Column("WarehouseId", ScalarType.createVarchar(64)),
-                    slot -> slot.getWarehouseId() == WarehouseManager.DEFAULT_WAREHOUSE_ID  ? "-" :
+            Pair.create("WarehouseId",
+                    slot -> slot.getWarehouseId() == WarehouseManager.DEFAULT_WAREHOUSE_ID ? "-" :
                             Long.toString(slot.getWarehouseId())),
-            Pair.create(new Column("ResourceGroupId", ScalarType.createVarchar(64)),
+            Pair.create("ResourceGroupId",
                     slot -> slot.getGroupId() == LogicalSlot.ABSENT_GROUP_ID ? "-" : Long.toString(slot.getGroupId())),
-            Pair.create(new Column("StartTime", ScalarType.createVarchar(64)),
+            Pair.create("StartTime",
                     slot -> TimeUtils.longToTimeString(slot.getStartTimeMs())),
-            Pair.create(new Column("PendingTimeout", ScalarType.createVarchar(64)),
+            Pair.create("PendingTimeout",
                     slot -> TimeUtils.longToTimeString(slot.getExpiredPendingTimeMs())),
-            Pair.create(new Column("QueryTimeout", ScalarType.createVarchar(64)),
+            Pair.create("QueryTimeout",
                     slot -> TimeUtils.longToTimeString(slot.getExpiredAllocatedTimeMs())),
-            Pair.create(new Column("State", ScalarType.createVarchar(64)),
+            Pair.create("State",
                     slot -> slot.getState().toQueryStateString()),
-            Pair.create(new Column("Slots", ScalarType.createVarchar(64)),
+            Pair.create("Slots",
                     slot -> Integer.toString(slot.getNumPhysicalSlots())),
-            Pair.create(new Column("Fragments", ScalarType.createVarchar(64)),
+            Pair.create("Fragments",
                     slot -> Integer.toString(slot.getNumFragments())),
-            Pair.create(new Column("DOP", ScalarType.createVarchar(64)),
+            Pair.create("DOP",
                     slot -> Integer.toString(slot.getPipelineDop())),
-            Pair.create(new Column("Frontend", ScalarType.createVarchar(64)),
+            Pair.create("Frontend",
                     LogicalSlot::getRequestFeName),
-            Pair.create(new Column("FeStartTime", ScalarType.createVarchar(64)),
+            Pair.create("FeStartTime",
                     slot -> TimeUtils.longToTimeString(slot.getFeStartTimeMs()))
     );
 
