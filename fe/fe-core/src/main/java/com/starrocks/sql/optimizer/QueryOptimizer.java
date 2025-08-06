@@ -683,6 +683,8 @@ public class QueryOptimizer extends Optimizer {
             CTEUtils.collectCteOperators(tree, context);
         }
 
+        tree = new JsonPathRewriteRule().rewrite(tree, rootTaskContext);
+
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.META_SCAN_REWRITE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
