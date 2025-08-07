@@ -4,6 +4,7 @@ package com.starrocks.epack.connector.delta;
 
 import com.databricks.sdk.WorkspaceClient;
 import com.databricks.sdk.service.catalog.AwsCredentials;
+import com.databricks.sdk.service.catalog.AzureUserDelegationSas;
 import com.databricks.sdk.service.catalog.GcpOauthToken;
 import com.databricks.sdk.service.catalog.GenerateTemporaryTableCredentialRequest;
 import com.databricks.sdk.service.catalog.GenerateTemporaryTableCredentialResponse;
@@ -209,5 +210,50 @@ public class DatabricksUnityMetastoreTest {
                 "cred=GCPCloudCredential{endpoint='', useComputeEngineServiceAccount=false, serviceAccountEmail='', " +
                 "serviceAccountPrivateKeyId='', serviceAccountPrivateKey='', impersonationServiceAccount='', " +
                 "accessToken='access_token', accessTokenExpiresAt='1234567890'}}", conf.toConfString());
+    }
+
+    @Test
+    public void testAzureVendingCredentials(@Mocked WorkspaceClient workspaceClient,
+                                            @Mocked TableInfo tableInfo,
+                                            @Mocked GenerateTemporaryTableCredentialResponse response,
+                                            @Mocked AzureUserDelegationSas azureUserDelegationSas) {
+        HashMap<String, String> props = new HashMap<>();
+        props.put(DatabricksUnityMetastore.DATABRICKS_VENDED_CREDENTIALS_ENABLED, "true");
+        DeltaLakeCatalogProperties properties = new DeltaLakeCatalogProperties(props);
+        // Mock TableInfo
+        new Expectations() {
+            {
+                workspaceClient.tables().get(anyString);
+                result = tableInfo;
+                tableInfo.getDataSourceFormat();
+                result = com.databricks.sdk.service.catalog.DataSourceFormat.DELTA;
+                tableInfo.getTableId();
+                result = "tableId";
+                workspaceClient.temporaryTableCredentials().
+                        generateTemporaryTableCredentials((GenerateTemporaryTableCredentialRequest) any);
+                result = response;
+                response.getAwsTempCredentials();
+                result = null;
+                response.getGcpOauthToken();
+                result = null;
+                response.getAzureUserDelegationSas();
+                result = azureUserDelegationSas;
+                azureUserDelegationSas.getSasToken();
+                result = "sas_token";
+                response.getUrl();
+                result = "abfss://container@storage_account.dfs.core.windows.net/table";
+            }
+        };
+        DatabricksUnityMetastore metastore = new DatabricksUnityMetastore("delta0", "databricks0",
+                workspaceClient, null, properties);
+        MetastoreTable table = metastore.getMetastoreTable("db", "tbl");
+        Assert.assertNotNull(table);
+        CloudConfiguration conf = table.getCloudConfiguration();
+        Assert.assertNotNull(conf);
+        Assert.assertEquals("AzureCloudConfiguration{resources='', jars='', hdpuser='', " +
+                "cred=AzureADLS2CloudCredential{oauth2ManagedIdentity=false, oauth2TenantId='', oauth2ClientId='', " +
+                "endpoint='storage_account.dfs.core.windows.net', storageAccount='', sharedKey='', sasToken='sas_token', " +
+                "oauth2ClientSecret='', oauth2ClientEndpoint=''}}", conf.toConfString());
+
     }
 }

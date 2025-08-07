@@ -28,6 +28,7 @@ import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
+import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -165,6 +166,16 @@ public class DatabricksUnityMetastore implements IMetastore {
             builder.put(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN, gcpOauthToken.getOauthToken())
                     .put(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT,
                             String.valueOf(response.getExpirationTime()));
+        } else if (response.getAzureUserDelegationSas() != null) {
+            // if the vended credentials is Azure, we can use the user delegation SAS token
+            Path path = new Path(response.getUrl());
+            String authority = path.toUri().getAuthority();
+            if (authority == null || !authority.contains("@")) {
+                throw new StarRocksConnectorException("Invalid Azure authority: %s", authority);
+            }
+            String endPoint = authority.split("@")[1];
+            builder.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, endPoint)
+                    .put(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, response.getAzureUserDelegationSas().getSasToken());
         }
         cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(builder.build());
         return cloudConfiguration;
