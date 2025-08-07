@@ -939,60 +939,8 @@ SELECT
 FROM
  `hive_catalog`.`ssb_1g_orc`.`part_dates` ;
 ```
-<<<<<<< HEAD
-=======
 
-Example 5: Create a partitioned materialized view with multi-column partition expression upon the base table from Iceberg Catalog (Spark).
-
-The definition of the base table in Spark:
-
-```SQL
--- The partition expression of the base table contains multiple columns and a `days` transform.
-CREATE TABLE lineitem_days (
-      l_orderkey    BIGINT,
-      l_partkey     INT,
-      l_suppkey     INT,
-      l_linenumber  INT,
-      l_quantity    DECIMAL(15, 2),
-      l_extendedprice  DECIMAL(15, 2),
-      l_discount    DECIMAL(15, 2),
-      l_tax         DECIMAL(15, 2),
-      l_returnflag  VARCHAR(1),
-      l_linestatus  VARCHAR(1),
-      l_shipdate    TIMESTAMP,
-      l_commitdate  TIMESTAMP,
-      l_receiptdate TIMESTAMP,
-      l_shipinstruct VARCHAR(25),
-      l_shipmode     VARCHAR(10),
-      l_comment      VARCHAR(44)
-) USING ICEBERG
-PARTITIONED BY (l_returnflag, l_linestatus, days(l_shipdate));
-```
-
-Create a materialized view with its partition columns mapped one-to-one with those of the base table:
-
-```SQL
-CREATE MATERIALIZED VIEW test_days
-PARTITION BY (l_returnflag, l_linestatus, date_trunc('day', l_shipdate))
-REFRESH DEFERRED MANUAL
-AS 
-SELECT * FROM iceberg_catalog.test_db.lineitem_days;
-```
-
-Example 6: Create a partitioned materialized view, define Common Partition Expression TTL for it, and enable the `force_mv` semantic for query rewrite.
-
-```SQL
-CREATE MATERIALIZED VIEW test_mv1 
-PARTITION BY (dt, province)
-REFRESH MANUAL 
-PROPERTIES (
-    "partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH",
-    "query_rewrite_consistency" = "force_mv"
-)
-AS SELECT * from t1;
-```
-
-Example 7: Create a partition materialized view with a specific sort key:
+Example 5: Create a partition materialized view with a specific sort key:
 ```SQL
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
@@ -1010,4 +958,3 @@ select
 from lineorder 
 group by lo_orderkey, lo_orderdate, lo_custkey;
 ```
->>>>>>> 97db7e7e94 ([Doc] Update docs about async materialized views (#61639))
