@@ -75,6 +75,8 @@ DataStreamMgr::~DataStreamMgr() {
             }
         }
     }
+    // explicitly call close to release PassThroughChunkBufferManager resources
+    _pass_through_chunk_buffer_manager.close();
 }
 
 inline uint32_t DataStreamMgr::get_bucket(const TUniqueId& fragment_instance_id) {
@@ -89,9 +91,12 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
         std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline,
         int32_t degree_of_parallelism, bool keep_order) {
     VLOG_FILE << "creating receiver for fragment=" << fragment_instance_id << ", node=" << dest_node_id;
-    std::shared_ptr<DataStreamRecvr> recvr(new DataStreamRecvr(
-            this, state, row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging, buffer_size,
-            std::move(sub_plan_query_statistics_recvr), is_pipeline, degree_of_parallelism, keep_order));
+    PassThroughChunkBuffer* pass_through_chunk_buffer = get_pass_through_chunk_buffer(state->query_id());
+    DCHECK(pass_through_chunk_buffer != nullptr);
+    std::shared_ptr<DataStreamRecvr> recvr(
+            new DataStreamRecvr(this, state, row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging,
+                                buffer_size, std::move(sub_plan_query_statistics_recvr), is_pipeline,
+                                degree_of_parallelism, keep_order, pass_through_chunk_buffer));
 
     uint32_t bucket = get_bucket(fragment_instance_id);
     auto& receiver_map = _receiver_map[bucket];
@@ -131,12 +136,8 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     TUniqueId t_finst_id;
     t_finst_id.hi = finst_id.hi();
     t_finst_id.lo = finst_id.lo();
-    return transmit_chunk(t_finst_id, request, nullptr, done);
-}
-
-Status DataStreamMgr::transmit_chunk(const TUniqueId& fragment_instance_id, const PTransmitChunkParams& request,
-                                     ChunkPassThroughVectorPtr chunks, ::google::protobuf::Closure** done) {
-    std::shared_ptr<DataStreamRecvr> recvr = find_recvr(fragment_instance_id, request.node_id());
+    SCOPED_SET_TRACE_INFO({}, {}, t_finst_id)
+    std::shared_ptr<DataStreamRecvr> recvr = find_recvr(t_finst_id, request.node_id());
     if (recvr == nullptr) {
         // The receiver may remove itself from the receiver map via deregister_recvr()
         // at any time without considering the remaining number of senders.
@@ -163,8 +164,8 @@ Status DataStreamMgr::transmit_chunk(const TUniqueId& fragment_instance_id, cons
             recvr->remove_sender(request.sender_id(), request.be_number());
         }
     });
-    if (request.chunks_size() > 0 || (request.has_use_pass_through() && request.use_pass_through())) {
-        RETURN_IF_ERROR(recvr->add_chunks(request, std::move(chunks), eos ? nullptr : done));
+    if (request.chunks_size() > 0 || request.use_pass_through()) {
+        RETURN_IF_ERROR(recvr->add_chunks(request, eos ? nullptr : done));
     }
 
     return Status::OK();
@@ -212,6 +213,9 @@ void DataStreamMgr::close() {
             }
         }
     }
+    // NOTE: delay _pass_through_chunk_buffer_manager's close action until DataStreamMgr is destroyed
+    // Let all the fragments take chances to cancel/close its PassThroughChunkBuffer asynchronously
+    // from other threads.
 }
 
 void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {
@@ -234,6 +238,18 @@ void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {
     for (auto& it : recvrs) {
         it->cancel_stream();
     }
+}
+
+void DataStreamMgr::prepare_pass_through_chunk_buffer(const TUniqueId& query_id) {
+    _pass_through_chunk_buffer_manager.open_fragment_instance(query_id);
+}
+
+void DataStreamMgr::destroy_pass_through_chunk_buffer(const TUniqueId& query_id) {
+    _pass_through_chunk_buffer_manager.close_fragment_instance(query_id);
+}
+
+PassThroughChunkBuffer* DataStreamMgr::get_pass_through_chunk_buffer(const TUniqueId& query_id) {
+    return _pass_through_chunk_buffer_manager.get(query_id);
 }
 
 } // namespace starrocks

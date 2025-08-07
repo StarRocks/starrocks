@@ -70,29 +70,4 @@ private:
     FailedFunc _failed_handler;
     SuccessFunc _success_handler;
 };
-
-// Simplified call back for pass through chunks between sink/sources in the same process.
-class DisposablePassThroughClosure : public google::protobuf::Closure {
-public:
-    DisposablePassThroughClosure(const std::function<void()>& handler) : _handler(handler) {}
-    ~DisposablePassThroughClosure() override = default;
-    // Disallow copy and assignment.
-    DisposablePassThroughClosure(const DisposablePassThroughClosure& other) = delete;
-    DisposablePassThroughClosure& operator=(const DisposablePassThroughClosure& other) = delete;
-
-    void Run() noexcept override {
-        std::unique_ptr<DisposablePassThroughClosure> self_guard(this);
-
-        try {
-            _handler();
-        } catch (const std::exception& exp) {
-            LOG(FATAL) << "[ExchangeSinkOperator] Pass through callback error: " << exp.what();
-        } catch (...) {
-            LOG(FATAL) << "[ExchangeSinkOperator] Pass through callback error: Unknown";
-        }
-    }
-
-private:
-    std::function<void()> _handler;
-};
 } // namespace starrocks
