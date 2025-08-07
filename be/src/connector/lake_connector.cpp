@@ -411,7 +411,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 // Extend the schema fields based on the column access paths.
 // This ensures that only the necessary subfields required by the query are retained in the schema.
 Status LakeDataSource::_extend_schema_by_access_paths() {
-    auto access_paths = _column_access_paths;
+    auto& access_paths = _column_access_paths;
     bool need_extend =
             std::any_of(access_paths.begin(), access_paths.end(), [](auto& path) { return path->is_extended(); });
     if (!need_extend) {
