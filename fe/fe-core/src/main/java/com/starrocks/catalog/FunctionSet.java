@@ -236,6 +236,7 @@ public class FunctionSet {
     public static final String GET_JSON_STRING = "get_json_string";
     public static final String GET_JSON_OBJECT = "get_json_object";
     public static final String JSON_LENGTH = "json_length";
+    public static final String JSON_REMOVE = "json_remove";
 
     // Matching functions:
     public static final String ILIKE = "ilike";
