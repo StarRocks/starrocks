@@ -59,10 +59,7 @@ import java.util.List;
 public class IndicesProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("IndexId").add("IndexName").add("State").add("LastConsistencyCheckTime")
-<<<<<<< HEAD
-=======
-            .add("VirtualBuckets").add("Tablets").add("TabletBalanceStat")
->>>>>>> 3caf4c6f5d ([Enhancement] Show tablet distribution balance statistic (#61549))
+            .add("TabletBalanceStat")
             .build();
 
     private Database db;
@@ -93,12 +90,7 @@ public class IndicesProcDir implements ProcDirInterface {
                 indexInfo.add(olapTable.getIndexNameById(materializedIndex.getId()));
                 indexInfo.add(materializedIndex.getState());
                 indexInfo.add(TimeUtils.longToTimeString(materializedIndex.getLastCheckTime()));
-<<<<<<< HEAD
-=======
-                indexInfo.add(materializedIndex.getVirtualBuckets().size());
-                indexInfo.add(materializedIndex.getTablets().size());
                 indexInfo.add(materializedIndex.getBalanceStat().toString());
->>>>>>> 3caf4c6f5d ([Enhancement] Show tablet distribution balance statistic (#61549))
 
                 indexInfos.add(indexInfo);
             }

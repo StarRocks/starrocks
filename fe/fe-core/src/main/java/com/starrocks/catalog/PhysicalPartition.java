@@ -345,16 +345,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.versionTxnType = versionTxnType;
     }
 
-<<<<<<< HEAD
-=======
-    public long getMetadataSwitchVersion() {
-        return metadataSwitchVersion;
-    }
-
-    public void setMetadataSwitchVersion(long metadataSwitchVersion) {
-        this.metadataSwitchVersion = metadataSwitchVersion;
-    }
-
     public boolean isTabletBalanced() {
         for (MaterializedIndex index : getMaterializedIndices(IndexExtState.VISIBLE)) {
             if (!index.isTabletBalanced()) {
@@ -364,7 +354,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return true;
     }
 
->>>>>>> 3caf4c6f5d ([Enhancement] Show tablet distribution balance statistic (#61549))
     public MaterializedIndex getIndex(long indexId) {
         if (baseIndex.getId() == indexId) {
             return baseIndex;

@@ -1514,11 +1514,7 @@ struct TPartitionMetaInfo {
     27: optional i64 version_epoch
     28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
     29: optional i64 storage_size
-<<<<<<< HEAD
-=======
-    30: optional i64 metadata_switch_version
-    31: optional bool tablet_balanced
->>>>>>> 3caf4c6f5d ([Enhancement] Show tablet distribution balance statistic (#61549))
+    30: optional bool tablet_balanced
 }
 
 struct TGetPartitionsMetaResponse {

@@ -61,11 +61,7 @@ public class PartitionsMetaSystemTable {
                         .column("MAX_CS", ScalarType.createType(PrimitiveType.DOUBLE))
                         .column("STORAGE_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("STORAGE_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
-<<<<<<< HEAD
-=======
-                        .column("METADATA_SWITCH_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("TABLET_BALANCED", ScalarType.createType(PrimitiveType.BOOLEAN))
->>>>>>> 3caf4c6f5d ([Enhancement] Show tablet distribution balance statistic (#61549))
                         .build(), TSchemaTableType.SCH_PARTITIONS_META);
     }
 }
