@@ -1434,69 +1434,125 @@ bool JsonFunctions::json_value_contains(JsonValue* target, JsonValue* candidate)
     return json_slice_contains(target_slice, candidate_slice);
 }
 
-// Helper function to recursively check if target slice contains candidate slice
-static bool json_slice_contains(const arangodb::velocypack::Slice& target,
-                                const arangodb::velocypack::Slice& candidate) {
-    // If candidate is null, target always contains it
-    if (candidate.isNull()) {
-        return true;
-    }
+/**
+ * Class to handle JSON containment logic with recursive helper methods.
+ * 
+ * This class implements the JSON_CONTAINS function logic, which checks if a target JSON
+ * document contains a candidate JSON value or subdocument. The containment rules are:
+ * 
+ * 1. For scalar values: exact equality
+ * 2. For objects: target must contain all key-value pairs from candidate
+ * 3. For arrays: 
+ *    - If candidate is array: target must contain all elements from candidate
+ *    - If candidate is object: target must contain all key-value pairs from candidate
+ *      (distributed across array elements)
+ *    - If candidate is scalar: target must contain the scalar value
+ * 4. For nested structures: recursive containment checking
+ */
+class JsonContainmentChecker {
+public:
+    // Main recursive function to check if target slice contains candidate slice
+    static bool contains(const arangodb::velocypack::Slice& target, const arangodb::velocypack::Slice& candidate) {
+        // Handle null cases
+        if (candidate.isNull()) {
+            return true;
+        }
+        if (target.isNull()) {
+            return false;
+        }
 
-    // If target is null but candidate is not, target doesn't contain candidate
-    if (target.isNull()) {
+        // Direct equality check
+        if (JsonValue::compare(target, candidate) == 0) {
+            return true;
+        }
+
+        // Handle different type combinations using recursion
+        if (target.isObject() && candidate.isObject()) {
+            return check_object_contains_object(target, candidate);
+        }
+
+        if (target.isArray()) {
+            if (candidate.isArray()) {
+                return check_array_contains_array(target, candidate);
+            } else if (candidate.isObject()) {
+                return check_array_contains_distributed_object(target, candidate);
+            } else {
+                return check_array_contains_value(target, candidate);
+            }
+        }
+
+        // For scalar values, they must be equal (already checked above)
         return false;
     }
 
-    // If both are the same type and equal, target contains candidate
-    if (JsonValue::compare(target, candidate) == 0) {
-        return true;
-    }
-
-    // If target is an object
-    if (target.isObject() && candidate.isObject()) {
-        // Check if target object contains all key-value pairs from candidate object
+private:
+    // Check if an object contains all key-value pairs from another object
+    static bool check_object_contains_object(const arangodb::velocypack::Slice& target,
+                                             const arangodb::velocypack::Slice& candidate) {
         for (auto const& item : arangodb::velocypack::ObjectIterator(candidate)) {
             std::string key = item.key.copyString();
-            if (!target.hasKey(key)) {
-                return false;
-            }
-            if (JsonValue::compare(target.get(key), item.value) != 0) {
+            if (!target.hasKey(key) || JsonValue::compare(target.get(key), item.value) != 0) {
                 return false;
             }
         }
         return true;
     }
 
-    // If target is an array
-    if (target.isArray()) {
-        // If candidate is also an array, check if target contains all elements of candidate
-        if (candidate.isArray()) {
-            for (auto const& cand_item : arangodb::velocypack::ArrayIterator(candidate)) {
-                bool found = false;
-                for (auto const& target_item : arangodb::velocypack::ArrayIterator(target)) {
-                    if (json_slice_contains(target_item, cand_item)) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    return false;
-                }
-            }
-            return true;
-        } else {
-            // If candidate is not an array, check if any element in target contains candidate
+    // Check if an array contains all elements from another array
+    static bool check_array_contains_array(const arangodb::velocypack::Slice& target,
+                                           const arangodb::velocypack::Slice& candidate) {
+        for (auto const& cand_item : arangodb::velocypack::ArrayIterator(candidate)) {
+            bool found = false;
             for (auto const& target_item : arangodb::velocypack::ArrayIterator(target)) {
-                if (json_slice_contains(target_item, candidate)) {
-                    return true;
+                if (contains(target_item, cand_item)) {
+                    found = true;
+                    break;
                 }
             }
-            return false;
+            if (!found) {
+                return false;
+            }
         }
+        return true;
     }
 
-    // For scalar values, they must be equal (already checked above)
-    return false;
+    // Check if an array contains a single value (scalar or object)
+    static bool check_array_contains_value(const arangodb::velocypack::Slice& target,
+                                           const arangodb::velocypack::Slice& candidate) {
+        for (auto const& target_item : arangodb::velocypack::ArrayIterator(target)) {
+            if (contains(target_item, candidate)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Check distributed containment: if all key-value pairs from candidate object
+    // can be found somewhere in the target array
+    static bool check_array_contains_distributed_object(const arangodb::velocypack::Slice& target,
+                                                        const arangodb::velocypack::Slice& candidate) {
+        for (auto const& cand_item : arangodb::velocypack::ObjectIterator(candidate)) {
+            std::string key = cand_item.key.copyString();
+            bool found = false;
+            for (auto const& target_item : arangodb::velocypack::ArrayIterator(target)) {
+                if (target_item.isObject() && target_item.hasKey(key) &&
+                    JsonValue::compare(target_item.get(key), cand_item.value) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+// Main recursive function to check if target slice contains candidate slice
+static bool json_slice_contains(const arangodb::velocypack::Slice& target,
+                                const arangodb::velocypack::Slice& candidate) {
+    return JsonContainmentChecker::contains(target, candidate);
 }
 
 } // namespace starrocks

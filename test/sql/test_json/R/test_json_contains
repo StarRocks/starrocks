@@ -97,6 +97,10 @@ SELECT json_contains(parse_json('[{"a": 1}, {"b": 2}]'), parse_json('{"a": 1}'))
 -- result:
 1
 -- !result
+SELECT json_contains(parse_json('[{"a": 1}, {"b": 2}]'), parse_json('{"a": 1, "b": 2}')) as array_contains_distributed_object;
+-- result:
+1
+-- !result
 -- Test edge cases
 SELECT json_contains(parse_json('{}'), parse_json('{}')) as empty_object_contains_empty;
 -- result:

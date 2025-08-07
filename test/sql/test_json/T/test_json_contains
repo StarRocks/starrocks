@@ -31,6 +31,7 @@ SELECT json_contains(parse_json('{"a": [1, 2], "b": {"c": 3}}'), parse_json('{"b
 SELECT json_contains(parse_json('{"a": [1, 2], "b": {"c": 3}}'), parse_json('{"a": [1, 2]}')) as nested_array_contains;
 SELECT json_contains(parse_json('[{"a": 1}, {"b": 2}]'), parse_json('[{"a": 1}]')) as array_of_objects_contains;
 SELECT json_contains(parse_json('[{"a": 1}, {"b": 2}]'), parse_json('{"a": 1}')) as array_contains_object;
+SELECT json_contains(parse_json('[{"a": 1}, {"b": 2}]'), parse_json('{"a": 1, "b": 2}')) as array_contains_distributed_object;
 
 -- Test edge cases
 SELECT json_contains(parse_json('{}'), parse_json('{}')) as empty_object_contains_empty;
