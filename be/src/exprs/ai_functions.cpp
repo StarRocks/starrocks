@@ -108,9 +108,9 @@ StatusOr<ColumnPtr> AiFunctions::ai_query(FunctionContext* context, const starro
         return Status::InvalidArgument("Ai_query function only call by ai_query(propmt, config)");
     }
 
-    init_llm_cache();
+    RETURN_IF_ERROR(init_llm_cache());
     auto* query_service = LLMQueryService::instance();
-    query_service->init();
+    RETURN_IF_ERROR(query_service->init());
 
     auto num_rows = columns[0]->size();
     auto prompt_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
