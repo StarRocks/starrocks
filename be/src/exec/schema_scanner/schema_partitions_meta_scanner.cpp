@@ -55,6 +55,7 @@ SchemaScanner::ColumnDesc SchemaPartitionsMetaScanner::_s_columns[] = {
         {"MAX_CS", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
         {"STORAGE_PATH", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"STORAGE_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TABLET_BALANCED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
 };
 
 SchemaPartitionsMetaScanner::SchemaPartitionsMetaScanner()
@@ -299,6 +300,11 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
         case 29: {
             // STORAGE_SIZE
             fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.storage_size);
+            break;
+        }
+        case 30: {
+            // TABLET_BALANCED
+            fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.tablet_balanced);
             break;
         }
 
