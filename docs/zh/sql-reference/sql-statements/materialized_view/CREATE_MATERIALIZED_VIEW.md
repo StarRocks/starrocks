@@ -927,59 +927,7 @@ FROM
 `hive_catalog`.`ssb_1g_orc`.`part_dates` ;
 ```
 
-<<<<<<< HEAD
-=======
-示例五：使用多列分区表达式基于 Iceberg Catalog（Spark）基表创建分区物化视图。
-
-Spark 中的基表定义如下：
-
-```SQL
--- 分区表达式包含多个分区列以及 `days` Transform。
-CREATE TABLE lineitem_days (
-      l_orderkey    BIGINT,
-      l_partkey     INT,
-      l_suppkey     INT,
-      l_linenumber  INT,
-      l_quantity    DECIMAL(15, 2),
-      l_extendedprice  DECIMAL(15, 2),
-      l_discount    DECIMAL(15, 2),
-      l_tax         DECIMAL(15, 2),
-      l_returnflag  VARCHAR(1),
-      l_linestatus  VARCHAR(1),
-      l_shipdate    TIMESTAMP,
-      l_commitdate  TIMESTAMP,
-      l_receiptdate TIMESTAMP,
-      l_shipinstruct VARCHAR(25),
-      l_shipmode     VARCHAR(10),
-      l_comment      VARCHAR(44)
-) USING ICEBERG
-PARTITIONED BY (l_returnflag, l_linestatus, days(l_shipdate));
-```
-
-创建多列分区一一映射物化视图：
-
-```SQL
-CREATE MATERIALIZED VIEW test_days
-PARTITION BY (l_returnflag, l_linestatus, date_trunc('day', l_shipdate))
-REFRESH DEFERRED MANUAL
-AS 
-SELECT * FROM iceberg_catalog.test_db.lineitem_days;
-```
-
-示例六：创建分区物化视图，指定通用分区表达式 TTL，并启用 `force_mv` 查询改写语义。
-
-```SQL
-CREATE MATERIALIZED VIEW test_mv1 
-PARTITION BY (dt, province)
-REFRESH MANUAL 
-PROPERTIES (
-    "partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH",
-    "query_rewrite_consistency" = "force_mv"
-)
-AS SELECT * from t1;
-```
-
-示例七：创建具有特定排序键的分区物化视图：
+示例五：创建具有特定排序键的分区物化视图：
 ```SQL
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
@@ -998,8 +946,6 @@ from lineorder
 group by lo_orderkey, lo_orderdate, lo_custkey;
 ```
 
-
->>>>>>> 97db7e7e94 ([Doc] Update docs about async materialized views (#61639))
 ## 更多操作
 
 如要创建逻辑视图，请参见 [CREATE VIEW](../View/CREATE_VIEW.md)。
