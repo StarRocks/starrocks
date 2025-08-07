@@ -201,6 +201,12 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
         }
     }
 
+    if (req.__isset.flat_json_config) {
+        FlatJsonConfig flat_json_config;
+        flat_json_config.update(req.flat_json_config);
+        flat_json_config.to_pb(tablet_metadata_pb->mutable_flat_json_config());
+    }
+
     if (req.__isset.compaction_strategy) {
         switch (req.compaction_strategy) {
         case TCompactionStrategy::DEFAULT:
