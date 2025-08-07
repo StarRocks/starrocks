@@ -40,7 +40,12 @@ public:
         }
 
         const auto variant = std::string_view(variant_raw + sizeof(uint32_t), variant_size);
-        _metadata = load_metadata(variant).value();
+        auto metadata_status = load_metadata(variant);
+        if (!metadata_status.ok()) {
+            throw std::runtime_error("Failed to load metadata: " + metadata_status.status().to_string());
+        }
+
+        _metadata = metadata_status.value();
         _value = std::string_view(variant_raw + sizeof(uint32_t) + _metadata.size(), variant_size - _metadata.size());
     }
 

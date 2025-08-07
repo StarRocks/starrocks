@@ -19,7 +19,7 @@
 #include "formats/parquet/variant.h"
 #include "testutil/parallel_test.h"
 #include "types/logical_type.h"
-#include "util/variant_value.h"
+#include "types/variant_value.h"
 
 namespace starrocks {
 

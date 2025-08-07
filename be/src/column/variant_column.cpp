@@ -14,8 +14,8 @@
 
 #include "variant_column.h"
 
+#include "types/variant_value.h"
 #include "util/mysql_row_buffer.h"
-#include "util/variant_value.h"
 
 namespace starrocks {
 

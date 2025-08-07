@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/variant_value.h"
+#include "types/variant_value.h"
 
 #include <fs/fs.h>
 #include <gtest/gtest.h>
@@ -20,7 +20,7 @@
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-#include "cctz/time_zone.h" // Include cctz for timezone handling
+#include "cctz/time_zone.h"
 #include "formats/parquet/variant.h"
 #include "runtime/decimalv3.h"
 #include "types/timestamp_value.h"

@@ -19,7 +19,7 @@
 #include "column/column.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
-#include "util/variant_value.h"
+#include "types/variant_value.h"
 
 namespace starrocks {
 

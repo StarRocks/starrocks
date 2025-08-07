@@ -16,7 +16,7 @@
 #include <cctz/time_zone.h>
 
 #include "formats/parquet/variant.h"
-#include "variant_value.h"
+#include "types/variant_value.h"
 
 namespace starrocks {
 struct VariantUtil {

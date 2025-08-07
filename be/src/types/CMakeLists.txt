@@ -28,4 +28,5 @@ add_library(Types STATIC
     checker/type_checker.cpp
     type_checker_manager.cpp
     int256.cpp
+    variant_value.cpp
 )

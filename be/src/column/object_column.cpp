@@ -18,11 +18,11 @@
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
+#include "types/variant_value.h"
 #include "util/json.h"
 #include "util/mysql_row_buffer.h"
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
-#include "util/variant_value.h"
 
 namespace starrocks {
 

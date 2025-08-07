@@ -19,9 +19,9 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <cstring>
 
+#include "../util/url_coding.h"
+#include "../util/variant_util.h"
 #include "formats/parquet/variant.h"
-#include "url_coding.h"
-#include "variant_util.h"
 
 namespace starrocks {
 
