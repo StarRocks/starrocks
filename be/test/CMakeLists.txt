@@ -451,6 +451,7 @@ set(EXEC_FILES
         ./types/int256_test.cpp
         ./types/int256_arithmetic_test.cpp
         ./types/type_checker_test.cpp
+        ./types/variant_value_test.cpp
         ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
@@ -533,7 +534,6 @@ set(EXEC_FILES
         ./util/stack_util_test.cpp
         ./util/byte_stream_split_test.cpp
         ./util/url_coding_test.cpp
-        ./util/variant_value_test.cpp
         ./util/url_parser_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
