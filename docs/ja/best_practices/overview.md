@@ -4,11 +4,7 @@ sidebar_label: '概要'
 keywords: ['S3 API', 'reduce cost', 'efficiency', 'efficient', 'performance']
 ---
 
-<<<<<<< HEAD
-# 概要
-=======
 # ベストプラクティス
->>>>>>> a3bc15a06a ([Doc] Update best practice overview (#61623))
 
 これらのベストプラクティスは、経験豊富なデータベースエンジニアによって書かれています。効率的な設計はクエリ速度を向上させるだけでなく、ストレージ、CPU、およびオブジェクトストレージ（例: S3）のAPIコストを削減することでコストを削減します。
 
@@ -36,14 +32,11 @@ keywords: ['S3 API', 'reduce cost', 'efficiency', 'efficient', 'performance']
 - 主キーインデックスの種類の選択
 - 主キーの選択
 - メモリ使用量の監視と管理
-<<<<<<< HEAD
-- チューニング
-=======
 - チューニング
 
 ## クエリチューニング
 
-[ Query tuning](./query_tuning/query_plan_intro.md) は、StarRocks で高いパフォーマンスと信頼性を達成するために不可欠です。このディレクトリでは、実用的なガイド、参考資料、実行可能なレシピを集め、SQL の記述から実行詳細の解釈に至るまで、クエリパフォーマンスを分析、診断、最適化する方法を提供します。
+[Query tuning](./query_tuning/query_plan_intro.md) は、StarRocks で高いパフォーマンスと信頼性を達成するために不可欠です。このディレクトリでは、実用的なガイド、参考資料、実行可能なレシピを集め、SQL の記述から実行詳細の解釈に至るまで、クエリパフォーマンスを分析、診断、最適化する方法を提供します。
 
 StarRocks での効果的なクエリチューニングは、通常、トップダウンのプロセスに従います：
 
@@ -59,4 +52,3 @@ DBA、開発者、データエンジニアのいずれであっても、これ�
 - ベストプラクティスと高度なチューニング戦略の適用
 
 [ overview](./query_tuning/query_plan_intro.md) から始め、必要に応じて参考資料に進み、レシピやヒントを使って StarRocks の実際のパフォーマンス課題を解決してください。
->>>>>>> a3bc15a06a ([Doc] Update best practice overview (#61623))
