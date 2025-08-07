@@ -690,7 +690,7 @@ PROPERTIES (
 
   :::note
   - File Bundling 功能仅适用于使用 StarRocks v4.0 或更高版本的存算分离集群。
-  - File Bundling 功能在 v4.0 或更高版本中创建的表格中默认启用。
+  - File Bundling 功能在 v4.0 或更高版本中创建的表格中默认启用，由 FE 配置项 `enable_file_bundling` (默认值：true) 控制。
   - 启用 File Bundling 功能后，您只能将集群降级到 v3.5.2 或更高版本。如果您想降级到 v3.5.2 之前的版本，必须先删除已启用 File Bundling 功能的表。
   - 对集群中已有的表，在集群升级至 v4.0 后，File Bundling 功能仍默认处于禁用状态。
   - 您可以通过 [ALTER TABLE](ALTER_TABLE.md) 语句手动为已有的表启用 File Bundling 功能，但仍存在以下限制：

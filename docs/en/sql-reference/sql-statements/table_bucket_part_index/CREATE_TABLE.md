@@ -693,7 +693,7 @@ PROPERTIES (
 
   :::note
   - File Bundling is available only for shared-data clusters with StarRocks v4.0 or later.
-  - File Bundling is enabled by default for tables created in v4.0 or later.
+  - File Bundling is enabled by default for tables created in v4.0 or later, controlled by FE configuration `enable_file_bundling` (Default: true).
   - After File Bundling is enabled, you can only downgrade the cluster to v3.5.2 or later. If you want to downgrade to versions earlier than v3.5.2, you must first drop the tables that have enabled File Bundling.
   - File Bundling remains disabled by default for the existing tables after the cluster is upgraded to v4.0.
   - You can manually enable File Bundling for existing tables using the [ALTER TABLE](ALTER_TABLE.md) statement with the following restrictions:
