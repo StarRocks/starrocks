@@ -10,7 +10,7 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
-## v3.3.17
+## 3.3.17
 
 Release Date: July 30, 2025
 
