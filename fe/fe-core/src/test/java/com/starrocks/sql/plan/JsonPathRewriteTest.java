@@ -41,6 +41,9 @@ public class JsonPathRewriteTest extends PlanTestBase {
     @MethodSource("jsonPathRewriteTestCases")
     public void testExtendPredicateParameterized(String sql, String expectedPlanFragment, String expectedColumnPath)
             throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2DictOpt(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
         String plan = getFragmentPlan(sql);
         assertContains(plan, expectedPlanFragment);
 
@@ -210,6 +213,9 @@ public class JsonPathRewriteTest extends PlanTestBase {
     @ParameterizedTest
     @MethodSource("globalDictRewriteCases")
     public void testGlobalDictRewrite(String sql, String expectedPlanFragment) throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2DictOpt(true);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         String verbosePlan = getVerboseExplain(sql);
         assertContains(verbosePlan, expectedPlanFragment);
     }

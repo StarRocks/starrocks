@@ -1247,15 +1247,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean cboJSONV2Rewrite = true;
 
     @VarAttr(name = CBO_JSON_V2_DICT_OPT)
-    private boolean cboJSONV2DictOPt = true;
+    private boolean cboJSONV2DictOpt = true;
 
-    public boolean isEnableJSONV2Rewrite() {
-        return cboJSONV2Rewrite;
-    }
-
-    public boolean isEnableJSONV2DictOpt() {
-        return cboJSONV2DictOPt;
-    }
 
     /*
      * the parallel exec instance num for one Fragment in one BE
@@ -5178,6 +5171,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableJSONV2Rewrite(boolean enableJSONV2Rewrite) {
         this.cboJSONV2Rewrite = enableJSONV2Rewrite;
+    }
+
+    public boolean isEnableJSONV2DictOpt() {
+        return cboJSONV2DictOpt;
+    }
+
+    public void setEnableJSONV2DictOpt(boolean value) {
+        this.cboJSONV2DictOpt = value;
     }
 
     // Serialize to thrift object
