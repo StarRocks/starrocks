@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import org.junit.jupiter.api.Assertions;
@@ -94,7 +95,7 @@ public class FlatJsonConfigValidationTest {
     }
 
     @Test
-    public void testPropertyAnalyzerMethods() {
+    public void testPropertyAnalyzerMethods() throws AnalysisException {
         // Test PropertyAnalyzer methods that were affected by the fix
         
         // Test 1: analyzeFlatJsonEnabled with false
@@ -207,13 +208,23 @@ public class FlatJsonConfigValidationTest {
     @Test
     public void testFlatJsonConfigToProperties() {
         // Test FlatJsonConfig.toProperties method
-        
-        FlatJsonConfig config = new FlatJsonConfig(true, 0.1, 0.8, 50);
-        Map<String, String> properties = config.toProperties();
-        
-        Assertions.assertEquals("true", properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
-        Assertions.assertEquals("0.1", properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
-        Assertions.assertEquals("0.8", properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
-        Assertions.assertEquals("50", properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+
+        // Test 1: When flat_json.enable is true, all properties should be present
+        FlatJsonConfig config1 = new FlatJsonConfig(true, 0.1, 0.8, 50);
+        Map<String, String> properties1 = config1.toProperties();
+
+        Assertions.assertEquals("true", properties1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+        Assertions.assertEquals("0.1", properties1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertEquals("0.8", properties1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertEquals("50", properties1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+
+        // Test 2: When flat_json.enable is false, only the enable property should be present
+        FlatJsonConfig config2 = new FlatJsonConfig(false, 0.1, 0.8, 50);
+        Map<String, String> properties2 = config2.toProperties();
+
+        Assertions.assertEquals("false", properties2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+        Assertions.assertNull(properties2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertNull(properties2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertNull(properties2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
     }
 }
