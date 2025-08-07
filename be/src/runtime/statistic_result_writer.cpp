@@ -189,9 +189,6 @@ Status StatisticResultWriter::_fill_dict_statistic_data(int version, const Colum
             TGlobalDict dict;
             thrift_from_json_string(&dict, std::string(dictColumnViewer.value(i).data, dictColumnViewer.value(i).size));
             data_list[i].__set_dict(dict);
-
-            std::string dict_data(dictColumnViewer.value(i).data, dictColumnViewer.value(i).size);
-            VLOG(2) << "thrift_from_json: " << dict_data;
         }
     }
 
