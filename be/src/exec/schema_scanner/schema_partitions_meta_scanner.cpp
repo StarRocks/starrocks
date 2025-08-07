@@ -55,6 +55,11 @@ SchemaScanner::ColumnDesc SchemaPartitionsMetaScanner::_s_columns[] = {
         {"MAX_CS", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
         {"STORAGE_PATH", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"STORAGE_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+<<<<<<< HEAD
+=======
+        {"METADATA_SWITCH_VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TABLET_BALANCED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
+>>>>>>> 3caf4c6f5d ([Enhancement] Show tablet distribution balance statistic (#61549))
 };
 
 SchemaPartitionsMetaScanner::SchemaPartitionsMetaScanner()
@@ -301,6 +306,19 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.storage_size);
             break;
         }
+<<<<<<< HEAD
+=======
+        case 30: {
+            // METADATA_SWITCH_VERSION
+            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.metadata_switch_version);
+            break;
+        }
+        case 31: {
+            // TABLET_BALANCED
+            fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.tablet_balanced);
+            break;
+        }
+>>>>>>> 3caf4c6f5d ([Enhancement] Show tablet distribution balance statistic (#61549))
 
         default:
             break;

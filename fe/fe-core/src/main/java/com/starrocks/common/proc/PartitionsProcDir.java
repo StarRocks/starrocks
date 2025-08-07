@@ -154,7 +154,8 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("RowCount")
                     .add("DataVersion")
                     .add("VersionEpoch")
-                    .add("VersionTxnType");
+                    .add("VersionTxnType")
+                    .add("TabletBalanced");
             this.titleNames = builder.build();
         }
     }
@@ -379,6 +380,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(physicalPartition.getVersionEpoch()); // VersionEpoch
         partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
 
+        partitionInfo.add(physicalPartition.isTabletBalanced());
         return partitionInfo;
     }
 
