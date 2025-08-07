@@ -14,53 +14,36 @@
 
 package com.starrocks.server;
 
-import com.google.common.collect.Lists;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
-import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.StarRocksException;
-import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarOSAgent;
-import com.starrocks.planner.OlapScanNode;
-import com.starrocks.planner.PlanNodeId;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
-import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
-import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
-import com.starrocks.warehouse.cngroup.ComputeResource;
-import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
-import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
-import mockit.Mocked;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class MultiWarehouseTest {
+
+    private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+    }
+
+    @AfterEach
+    public void after() throws Exception {
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().clearWarehouse();
     }
 
     @Test
@@ -102,6 +85,29 @@ public class MultiWarehouseTest {
         // drop with if exists
         DropWarehouseStmt dropStmtExists = new DropWarehouseStmt(true, warehouseName);
         ExceptionChecker.expectThrowsNoException(() -> warehouseMgr.dropWarehouse(dropStmtExists));
+
+    }
+
+    @Test
+    public void testWarehouseImage() throws Exception {
+        String warehouseName = "wh1";
+        String sql = String.format("CREATE WAREHOUSE IF NOT EXISTS %s;", warehouseName);
+        connectContext.executeSql(sql);
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = warehouseMgr.getWarehouse(warehouseName);
+        Assertions.assertNotNull(warehouse);
+
+        UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+        warehouseMgr.save(initialImage.getImageWriter());
+
+        warehouseMgr.clearWarehouse();
+        warehouseMgr.load(initialImage.getMetaBlockReader());
+        List<Warehouse> allWarehouses = warehouseMgr.getAllWarehouses();
+        Assertions.assertEquals(2, allWarehouses.size());
+        warehouse = warehouseMgr.getWarehouse(warehouseName);
+        Assertions.assertNotNull(warehouse);
+        Warehouse defaultWh = warehouseMgr.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        Assertions.assertNotNull(defaultWh);
 
     }
 }

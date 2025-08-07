@@ -50,6 +50,7 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
+import org.apache.arrow.util.VisibleForTesting;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -579,7 +580,7 @@ public class WarehouseManager implements Writable {
         // postImageLoad actions may depend on default_warehouse to perform actions.
         // The default_warehouse must be ready before postImageLoad.
         initDefaultWarehouse();
-        reader.readCollection(MultipleWarehouse.class, this::replayCreateWarehouse);
+        reader.readCollection(Warehouse.class, this::replayCreateWarehouse);
     }
 
     public void addWarehouse(Warehouse warehouse) {
@@ -605,5 +606,14 @@ public class WarehouseManager implements Writable {
             }
         }
         return cnt;
+    }
+
+    @VisibleForTesting
+    public void clearWarehouse() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            // only clean nameToWh where name is not default warehouse
+            nameToWh.entrySet().removeIf(entry -> !entry.getKey().equals(DEFAULT_WAREHOUSE_NAME));
+            idToWh.entrySet().removeIf(entry -> !entry.getKey().equals(DEFAULT_WAREHOUSE_ID));
+        }
     }
 }
