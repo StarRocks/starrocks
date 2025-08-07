@@ -44,7 +44,11 @@ std::unique_ptr<ConnectorChunkSinkProvider> HiveConnector::create_data_sink_prov
 // ================================
 
 HiveDataSourceProvider::HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
-        : _scan_node(scan_node), _hdfs_scan_node(plan_node.hdfs_scan_node) {}
+        : _scan_node(scan_node), _hdfs_scan_node(plan_node.hdfs_scan_node) {
+    if (_hdfs_scan_node.__isset.bucket_properties) {
+        _bucket_properties = _hdfs_scan_node.bucket_properties;
+    }
+}
 
 DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<HiveDataSource>(this, scan_range);

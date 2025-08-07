@@ -194,7 +194,8 @@ private:
     OpFactories _do_maybe_interpolate_local_shuffle_exchange(
             RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators,
             const std::vector<ExprContext*>& partition_expr_ctxs,
-            const TPartitionType::type part_type = TPartitionType::type::HASH_PARTITIONED);
+            const TPartitionType::type part_type = TPartitionType::type::HASH_PARTITIONED,
+            const std::vector<TBucketProperty>& bucket_properties = std::vector<TBucketProperty>());
 
     static constexpr int kLocalExchangeBufferChunks = 8;
 
