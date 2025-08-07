@@ -1631,7 +1631,7 @@ public class StmtExecutor {
                 planNodeIds, context.getSessionVariable().getColorExplainOutput()));
     }
 
-    private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db,
+    protected void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db,
                                 Table table, long warehouseId) {
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContextWithWarehouse(warehouseId);
         if (table.isTemporaryTable()) {

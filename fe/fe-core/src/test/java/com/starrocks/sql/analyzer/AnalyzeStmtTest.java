@@ -804,7 +804,7 @@ public class AnalyzeStmtTest {
         new MockUp<StmtExecutor>() {
             @Mock
             private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus,
-                                        Database db, Table table) throws InterruptedException {
+                                        Database db, Table table, long warehouseId) throws InterruptedException {
                 Thread.sleep(100000);
             }
         };
