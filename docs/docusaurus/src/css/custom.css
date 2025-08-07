@@ -85,6 +85,10 @@ a {
     var(--ifm-transition-timing-default);
 }
 
+div[class^='announcementBar_'] {
+  font-size: 20px;
+}
+
 /* When we generate PDF files:
  
  - avoid breaks in the middle of:
