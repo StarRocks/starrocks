@@ -135,6 +135,9 @@ public:
     static Status get_warehouse_queries(const SchemaScannerState& state, const TGetWarehouseQueriesRequest& request,
                                         TGetWarehouseQueriesResponse* response);
 
+    static Status get_dynamic_tablet_jobs_info(const SchemaScannerState& state, const TDynamicTabletJobsRequest& req,
+                                               TDynamicTabletJobsResponse* res);
+
 private:
     static Status _call_rpc(const SchemaScannerState& state,
                             std::function<void(ClientConnection<FrontendServiceClient>&)> callback);

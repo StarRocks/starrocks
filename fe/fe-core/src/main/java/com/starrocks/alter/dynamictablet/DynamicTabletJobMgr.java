@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.dynamictablet;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
@@ -29,6 +30,9 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SplitTabletClause;
+import com.starrocks.thrift.TDynamicTabletJobsResponse;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -103,6 +107,25 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
                     dynamicTabletJobId);
 
         }
+    }
+
+    public TDynamicTabletJobsResponse getAllJobsInfo() {
+        TDynamicTabletJobsResponse response = new TDynamicTabletJobsResponse();
+        response.status = new TStatus();
+        response.status.setStatus_code(TStatusCode.OK);
+        for (DynamicTabletJob job : dynamicTabletJobs.values()) {
+            try {
+                response.addToItems(job.getInfo());
+            } catch (Exception e) {
+                if (response.status.getStatus_code() == TStatusCode.OK) {
+                    // if encouter any unexpected exception, set error status for response
+                    response.status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+                    response.status.addToError_msgs(Strings.nullToEmpty(e.getMessage()));
+                    LOG.warn("Encounter unexpected exception when getting dynamic tablet jobs info. ", e);
+                }
+            }
+        }
+        return response;
     }
 
     @Override
