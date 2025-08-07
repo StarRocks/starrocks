@@ -1665,4 +1665,125 @@ TEST_F(JsonFunctionsTest, query_json_obj) {
 
     ASSERT_EQ(result->debug_string(), "[0]");
 }
+
+// Test cases for json_update function
+TEST_F(JsonFunctionsTest, json_update_basic) {
+    // Test basic object update
+    auto json_col = JsonColumn::create();
+    auto path_col = BinaryColumn::create();
+    auto value_col = JsonColumn::create();
+    
+    json_col->append(JsonValue::parse(R"({"a": 1, "b": 2})").value());
+    path_col->append("a");
+    value_col->append(JsonValue::parse("42").value());
+    
+    auto result = JsonFunctions::json_update(_ctx.get(), {json_col, path_col, value_col});
+    ASSERT_TRUE(result.ok());
+    
+    auto result_col = std::static_pointer_cast<JsonColumn>(result.value());
+    ASSERT_EQ(result_col->size(), 1);
+    
+    auto result_json = result_col->get_object(0);
+    EXPECT_EQ(result_json.to_string(), R"({"a":42,"b":2})");
+}
+
+TEST_F(JsonFunctionsTest, json_update_nested_object) {
+    // Test nested object update
+    auto json_col = JsonColumn::create();
+    auto path_col = BinaryColumn::create();
+    auto value_col = JsonColumn::create();
+    
+    json_col->append(JsonValue::parse(R"({"a": {"b": 1, "c": 2}, "d": 3})").value());
+    path_col->append("a.b");
+    value_col->append(JsonValue::parse("99").value());
+    
+    auto result = JsonFunctions::json_update(_ctx.get(), {json_col, path_col, value_col});
+    ASSERT_TRUE(result.ok());
+    
+    auto result_col = std::static_pointer_cast<JsonColumn>(result.value());
+    ASSERT_EQ(result_col->size(), 1);
+    
+    auto result_json = result_col->get_object(0);
+    EXPECT_EQ(result_json.to_string(), R"({"a":{"b":99,"c":2},"d":3})");
+}
+
+TEST_F(JsonFunctionsTest, json_update_array) {
+    // Test array element update
+    auto json_col = JsonColumn::create();
+    auto path_col = BinaryColumn::create();
+    auto value_col = JsonColumn::create();
+    
+    json_col->append(JsonValue::parse(R"({"arr": [1, 2, 3]})").value());
+    path_col->append("arr[1]");
+    value_col->append(JsonValue::parse("99").value());
+    
+    auto result = JsonFunctions::json_update(_ctx.get(), {json_col, path_col, value_col});
+    ASSERT_TRUE(result.ok());
+    
+    auto result_col = std::static_pointer_cast<JsonColumn>(result.value());
+    ASSERT_EQ(result_col->size(), 1);
+    
+    auto result_json = result_col->get_object(0);
+    EXPECT_EQ(result_json.to_string(), R"({"arr":[1,99,3]})");
+}
+
+TEST_F(JsonFunctionsTest, json_update_new_key) {
+    // Test adding new key to object
+    auto json_col = JsonColumn::create();
+    auto path_col = BinaryColumn::create();
+    auto value_col = JsonColumn::create();
+    
+    json_col->append(JsonValue::parse(R"({"a": 1})").value());
+    path_col->append("b");
+    value_col->append(JsonValue::parse("\"new_value\"").value());
+    
+    auto result = JsonFunctions::json_update(_ctx.get(), {json_col, path_col, value_col});
+    ASSERT_TRUE(result.ok());
+    
+    auto result_col = std::static_pointer_cast<JsonColumn>(result.value());
+    ASSERT_EQ(result_col->size(), 1);
+    
+    auto result_json = result_col->get_object(0);
+    EXPECT_EQ(result_json.to_string(), R"({"a":1,"b":"new_value"})");
+}
+
+TEST_F(JsonFunctionsTest, json_update_null_handling) {
+    // Test null handling
+    auto json_col = JsonColumn::create();
+    auto path_col = BinaryColumn::create();
+    auto value_col = JsonColumn::create();
+    
+    json_col->append_null();
+    path_col->append("a");
+    value_col->append(JsonValue::parse("1").value());
+    
+    auto result = JsonFunctions::json_update(_ctx.get(), {json_col, path_col, value_col});
+    ASSERT_TRUE(result.ok());
+    
+    auto result_col = std::static_pointer_cast<JsonColumn>(result.value());
+    ASSERT_EQ(result_col->size(), 1);
+    ASSERT_TRUE(result_col->is_null(0));
+}
+
+TEST_F(JsonFunctionsTest, json_update_invalid_path) {
+    // Test invalid path handling
+    auto json_col = JsonColumn::create();
+    auto path_col = BinaryColumn::create();
+    auto value_col = JsonColumn::create();
+    
+    json_col->append(JsonValue::parse(R"({"a": 1})").value());
+    path_col->append("b.c.d");  // Path doesn't exist
+    value_col->append(JsonValue::parse("99").value());
+    
+    auto result = JsonFunctions::json_update(_ctx.get(), {json_col, path_col, value_col});
+    ASSERT_TRUE(result.ok());
+    
+    auto result_col = std::static_pointer_cast<JsonColumn>(result.value());
+    ASSERT_EQ(result_col->size(), 1);
+    
+    // Should return original JSON when path is invalid
+    auto result_json = result_col->get_object(0);
+    EXPECT_EQ(result_json.to_string(), R"({"a":1})");
+}
+
 } // namespace starrocks
