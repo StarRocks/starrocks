@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -58,12 +59,20 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
         if (CollectionUtils.isNotEmpty(agg.getGroupingKeys())) {
             return false;
         }
-        //        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOperator.getColumnRefMap()
-        //        .entrySet()) {
-        //            if (!entry.getKey().equals(entry.getValue())) {
-        //                return false;
-        //            }
-        //        }
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOperator.getColumnRefMap().entrySet()) {
+            // select min(c1) from tbl [_META_]
+            if (entry.getKey().equals(entry.getValue())) {
+                continue;
+            }
+            // select dict_merge(get_json_string(c1)) from tbl [_META_]
+            if (entry.getValue() instanceof CallOperator call &&
+                    !call.getArguments().isEmpty() &&
+                    call.getArguments().get(0).equals(entry.getKey())) {
+                continue;
+            }
+
+            break;
+        }
 
         for (CallOperator aggCall : agg.getAggregations().values()) {
             String aggFuncName = aggCall.getFnName();

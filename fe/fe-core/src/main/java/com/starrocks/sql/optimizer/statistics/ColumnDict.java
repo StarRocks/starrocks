@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
+import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.nio.ByteBuffer;

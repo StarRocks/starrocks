@@ -32,6 +32,7 @@ import java.util.List;
 
 public class MergeProjectWithChildRule extends TransformationRule {
     boolean eliminateUselessProject = true;
+
     public MergeProjectWithChildRule() {
         super(RuleType.TF_MERGE_PROJECT_WITH_CHILD,
                 Pattern.create(OperatorType.LOGICAL_PROJECT).
@@ -46,15 +47,15 @@ public class MergeProjectWithChildRule extends TransformationRule {
         this.eliminateUselessProject = eliminateUselessProject;
     }
 
-    //    @Override
-    //    public boolean check(OptExpression input, OptimizerContext context) {
-    //        if (!input.getInputs().isEmpty() &&
-    //                input.getInputs().get(0).getOp().getOpType() == OperatorType.LOGICAL_META_SCAN) {
-    //            return false;
-    //        } else {
-    //            return true;
-    //        }
-    //    }
+    @Override
+    public boolean check(OptExpression input, OptimizerContext context) {
+        if (!input.getInputs().isEmpty() &&
+                input.getInputs().get(0).getOp().getOpType() == OperatorType.LOGICAL_META_SCAN) {
+            return false;
+        } else {
+            return true;
+        }
+    }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
@@ -71,7 +72,6 @@ public class MergeProjectWithChildRule extends TransformationRule {
         if (logicalProjectOperator.getColumnRefMap().isEmpty()) {
             return Lists.newArrayList(OptExpression.create(builder.build(), input.inputAt(0).getInputs()));
         }
-
 
         ColumnRefSet projectColumns = logicalProjectOperator.getOutputColumns(
                 new ExpressionContext(input));
