@@ -984,7 +984,9 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
 
     QueryContextPtr query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (query_ctx == nullptr) {
-        return Status::InternalError(fmt::format("QueryContext not found for query_id: {}", print_id(query_id)));
+        // query can be cancelled because of timeout or short-circuited query like `limit`.
+        // return Status::InternalError(fmt::format("QueryContext not found for query_id: {}", print_id(query_id)));
+        return Status::OK();
     }
     FragmentContextPtr fragment_ctx = query_ctx->fragment_mgr()->get(instance_id);
     if (fragment_ctx == nullptr) {
