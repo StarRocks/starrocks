@@ -500,6 +500,8 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setVersion_txn_type(physicalPartition.getVersionTxnType().toThrift());
         // STORAGE_SIZE
         partitionMetaInfo.setStorage_size(physicalPartition.storageDataSize() + physicalPartition.getExtraFileSize());
+        // TABLET_BALANCED
+        partitionMetaInfo.setTablet_balanced(physicalPartition.isTabletBalanced());
     }
 
     // tables
