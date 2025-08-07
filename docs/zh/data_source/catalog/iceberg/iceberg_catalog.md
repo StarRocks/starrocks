@@ -524,11 +524,7 @@ Iceberg Catalog 从 3.0 版本起支持 Google GCS。
 
 #### MetadataRelatedParams
 
-<<<<<<< HEAD
-指定元数据缓存更新策略的一组参数。StarRocks 根据该策略更新缓存的 Iceberg 元数据。此组参数为可选。
-=======
 关于 StarRocks Iceberg 元数据缓存的一组参数。此参数集是可选的。
->>>>>>> a887afcc5b ([Doc] add parameter "enable_get_stats_from_external_metadata" doc (#61573))
 
 从 v3.3.3 开始，StarRocks 支持 [周期性元数据刷新策略](#附录-a-周期性元数据刷新策略)。在大多数情况下，您可以忽略设置以下参数，不需要调整其中的策略参数，因为这些参数的默认值已经为您提供了开箱即用的性能。您可以使用系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg 元数据解析模式。
 
