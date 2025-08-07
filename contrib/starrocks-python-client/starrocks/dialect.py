@@ -241,7 +241,9 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         # ToDo - Partition
         # ToDo - Distribution
-        # ToDo - Order by
+
+        if "ORDER_BY" in opts:
+            table_opts.append(f"ORDER BY ({opts['ORDER_BY']})")
 
         if "PROPERTIES" in opts:
             props = ",\n".join([f'\t"{k}"="{v}"' for k, v in opts["PROPERTIES"]])
