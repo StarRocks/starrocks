@@ -1012,7 +1012,12 @@ public final class MetricRepo {
                 continue;
             }
             Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getWarehouse(computeNode.getWarehouseId());
+                    .getWarehouseIgnoreError(computeNode.getWarehouseId());
+            if (warehouse == null) {
+                LOG.warn("Get warehouse failed while updating warehouse metrics, warehouse id: {}, node host: {}",
+                        computeNode.getWarehouseId(), computeNode.getHost());
+                continue;
+            }
             GaugeMetric<Long> gauge = new GaugeMetric<Long>("warehouse",
                     MetricUnit.NOUNIT, "warehouse to compute node mapping") {
                 @Override

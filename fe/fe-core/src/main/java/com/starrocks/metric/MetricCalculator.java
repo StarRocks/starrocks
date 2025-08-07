@@ -38,6 +38,8 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -49,6 +51,8 @@ import java.util.TimerTask;
  * such QPS, and save the result for users to get.
  */
 public class MetricCalculator extends TimerTask {
+    private static final Logger LOG = LogManager.getLogger(MetricCalculator.class);
+
     private long lastTs = -1;
     private long lastQueryCounter = -1;
     private long lastRequestCounter = -1;
@@ -193,7 +197,11 @@ public class MetricCalculator extends TimerTask {
         }
 
         if (Config.emr_serverless_warehouse_mapping_metrics_enable) {
-            MetricRepo.updateWarehouseMetrics();
+            try {
+                MetricRepo.updateWarehouseMetrics();
+            } catch (Exception e) {
+                LOG.warn("update warehouse metric calculator failed", e);
+            }
         }
 
         MetricRepo.GAUGE_SAFE_MODE.setValue(GlobalStateMgr.getCurrentState().isSafeMode() ? 1 : 0);
