@@ -553,6 +553,66 @@ SELECT
 FROM order_list WHERE order_date='2023-07-03';
 ```
 
+除了上述函数外，从 StarRocks v3.4.0 开始，异步物化视图还支持通用聚合函数，这些函数也可用于查询改写。有关通用聚合函数的更多信息，请参见[通用聚合函数状态](../../../table_design/table_types/aggregate_table.md#generic-aggregate-states-in-asynchronous-materialized-views)。
+
+```SQL
+-- Create an asynchronous materialized view test_mv2 to store aggregate states.
+CREATE MATERIALIZED VIEW test_mv2
+PARTITION BY (dt)
+DISTRIBUTED BY RANDOM
+AS
+SELECT 
+    dt,
+    -- Original aggregate functions.
+    min(id) AS min_id,
+    max(id) AS max_id,
+    sum(id) AS sum_id,
+    bitmap_union(to_bitmap(id)) AS bitmap_union_id,
+    hll_union(hll_hash(id)) AS hll_union_id,
+    percentile_union(percentile_hash(id)) AS percentile_union_id,
+    -- Generic aggregate state functions.
+    ds_hll_count_distinct_union(ds_hll_count_distinct_state(id)) AS hll_id,
+    avg_union(avg_state(id)) AS avg_id,
+    array_agg_union(array_agg_state(id)) AS array_agg_id,
+    min_by_union(min_by_state(province, id)) AS min_by_province_id
+FROM t1
+GROUP BY dt;
+
+-- Refresh the materialized view.
+REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+
+-- Direct queries against the aggregate function will be transparently accelerated by test_mv2.
+SELECT 
+    dt,
+    min(id),
+    max(id),
+    sum(id),
+    bitmap_union_count(to_bitmap(id)), -- count(distinct id)
+    hll_union_agg(hll_hash(id)), -- approx_count_distinct(id)
+    percentile_approx(id, 0.5),
+    ds_hll_count_distinct(id),
+    avg(id),
+    array_agg(id),
+    min_by(province, id)
+FROM t1
+WHERE dt >= '2024-01-01'
+GROUP BY dt;
+
+SELECT 
+    min(id),
+    max(id),
+    sum(id),
+    bitmap_union_count(to_bitmap(id)), -- count(distinct id)
+    hll_union_agg(hll_hash(id)), -- approx_count_distinct(id)
+    percentile_approx(id, 0.5),
+    ds_hll_count_distinct(id),
+    avg(id),
+    array_agg(id),
+    min_by(province, id)
+FROM t1
+WHERE dt >= '2024-01-01';
+```
+
 ### 聚合下推
 
 从 v3.3.0 版本开始，StarRocks 支持物化视图查询改写的聚合下推功能。启用此功能后，聚合函数将在查询执行期间下推至 Scan Operator，并在执行 Join Operator 之前被物化视图改写。此举可以缓解 Join 操作导致的数据膨胀，从而提高查询性能。
