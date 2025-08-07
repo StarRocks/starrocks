@@ -61,8 +61,8 @@ public class PartitionsMetaSystemTable {
                         .column("MAX_CS", ScalarType.createType(PrimitiveType.DOUBLE))
                         .column("STORAGE_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("STORAGE_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("METADATA_SWITCH_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("TABLET_BALANCED", ScalarType.createType(PrimitiveType.BOOLEAN))
+                        .column("METADATA_SWITCH_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
                         .build(), TSchemaTableType.SCH_PARTITIONS_META);
     }
 }
