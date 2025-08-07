@@ -120,6 +120,8 @@ public class ClusterLoadStatisticProcDirTest {
                         row.get(11));
             } else if (beId.equals("10002")) {
                 Assertions.assertEquals("{\"balanced\":true}", row.get(11));
+            } else {
+                Assertions.fail(String.format("Unknown backend id: %s", beId));
             }
         }
     }
