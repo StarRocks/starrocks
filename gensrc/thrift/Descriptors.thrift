@@ -187,6 +187,8 @@ enum TSchemaTableType {
 
     SCH_WAREHOUSE_METRICS,
     SCH_WAREHOUSE_QUERIES,
+
+    SCH_DYNAMIC_TABLET_JOBS,
 }
 
 enum THdfsCompression {

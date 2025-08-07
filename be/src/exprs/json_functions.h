@@ -27,6 +27,9 @@
 
 namespace starrocks {
 
+// Forward declarations
+struct JsonPath;
+
 extern const re2::RE2 SIMPLE_JSONPATH_PATTERN;
 
 struct SimpleJsonPath {
@@ -151,6 +154,13 @@ public:
      * 
      */
     DEFINE_VECTORIZED_FN(json_keys);
+
+    /**
+     * Remove data from a JSON document at one or more specified JSON paths
+     * @param JSON, JSONPath, [JSONPath, ...]
+     * @return JSON with specified paths removed
+     */
+    DEFINE_VECTORIZED_FN(json_remove);
 
     /**
      * Return json built from struct/map

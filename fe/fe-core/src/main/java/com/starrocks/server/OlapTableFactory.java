@@ -83,6 +83,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -233,13 +234,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("Cannot create table " +
                             "without persistent volume in current run mode \"" + runMode + "\"");
                 }
-                if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)
-                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)
-                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
-                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR))) {
-                    throw new DdlException("Cannot create table " +
-                            "with flat json config in current run mode \"" + runMode + "\"");
-                }
+
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
                 StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
                 if (table.isCloudNativeTable() && !svm.bindTableToStorageVolume(volume, db.getId(), tableId)) {
@@ -247,6 +242,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
                 String storageVolumeId = svm.getStorageVolumeIdOfTable(tableId);
                 metastore.setLakeStorageInfo(db, table, storageVolumeId, properties);
+
+                processFlatJsonConfig(properties, table, tableName);
+
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }
@@ -421,40 +419,24 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
             }
 
-            if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE) ||
-                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
-                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
-                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
-                try {
-                    boolean enableFlatJson = PropertyAnalyzer.analyzeBooleanProp(properties,
-                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, false);
-                    if (!enableFlatJson) {
-                        throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
-                    }
-                    double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
-                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, Config.flat_json_null_factor);
-                    double flatJsonSparsityFactory = PropertyAnalyzer.analyzerDoubleProp(properties,
-                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, Config.flat_json_sparsity_factory);
-                    int flatJsonColumnMax = PropertyAnalyzer.analyzeIntProp(properties,
-                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, Config.flat_json_column_max);
-                    FlatJsonConfig flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
-                            flatJsonSparsityFactory, flatJsonColumnMax);
-                    table.setFlatJsonConfig(flatJsonConfig);
-                    LOG.info("create table {} set flat json config, flat_json_enable = {}, flat_json_null_factor = {}, " +
-                            "flat_json_sparsity_factor = {}, flat_json_column_max = {}",
-                            tableName, enableFlatJson, flatJsonNullFactor, flatJsonSparsityFactory, flatJsonColumnMax);
-                } catch (AnalysisException e) {
-                    throw new RuntimeException(e);
-                }
-            }
+            processFlatJsonConfig(properties, table, tableName);
 
             try {
-                long bucketSize = PropertyAnalyzer.analyzeLongProp(properties,
-                        PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, Config.default_automatic_bucket_size);
-                if (bucketSize >= 0) {
-                    table.setAutomaticBucketSize(bucketSize);
+                Optional<Long> bucketSize = PropertyAnalyzer.analyzeLongProp(properties,
+                        PropertyAnalyzer.PROPERTIES_BUCKET_SIZE);
+                if (bucketSize.isPresent() && bucketSize.get() >= 0) {
+                    if (!table.allowBucketSizeSetting()) {
+                        throw new DdlException(
+                                "Setting bucket size is not allowed: only supported for tables with RANDOM " +
+                                        "distribution and when 'enable_automatic_bucket' is enabled.");
+                    }
+                    table.setAutomaticBucketSize(bucketSize.get());
+                } else if (bucketSize.isEmpty()) {
+                    if (table.allowBucketSizeSetting()) {
+                        table.setAutomaticBucketSize(Config.default_automatic_bucket_size);
+                    }
                 } else {
-                    throw new DdlException("Illegal bucket size: " + bucketSize);
+                    throw new DdlException("Illegal bucket size: " + bucketSize.get());
                 }
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
@@ -518,18 +500,22 @@ public class OlapTableFactory implements AbstractTableFactory {
                             properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
                             Config.enable_replicated_storage_as_default_engine));
 
+
+            boolean hasGin = table.getIndexes().stream()
+                            .anyMatch(index -> index.getIndexType() == IndexType.GIN);
+            if (hasGin && table.enableReplicatedStorage()) {
+                // GIN indexes are incompatible with replicated_storage right now and we will disable replicated_storage
+                // if table contains GIN Index.
+                table.setEnableReplicatedStorage(false);
+            }
+
             if (table.enableReplicatedStorage().equals(false)) {
                 for (Column col : baseSchema) {
                     if (col.isAutoIncrement()) {
-                        throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage");
+                        throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage " +
+                                " and not compatible with GIN Index");
                     }
                 }
-            }
-
-            boolean hasGin = table.getIndexes().stream()
-                    .anyMatch(index -> index.getIndexType() == IndexType.GIN);
-            if (hasGin && table.enableReplicatedStorage()) {
-                throw new SemanticException("GIN does not support replicated mode");
             }
 
             TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
@@ -856,4 +842,42 @@ public class OlapTableFactory implements AbstractTableFactory {
         olapTable.setForeignKeyConstraints(foreignKeyConstraints);
     }
 
+    private void processFlatJsonConfig(Map<String, String> properties, OlapTable table, String tableName)
+            throws DdlException {
+        if (properties == null || !hasFlatJsonProperties(properties)) {
+            return;
+        }
+
+        try {
+            boolean enableFlatJson = PropertyAnalyzer.analyzeBooleanProp(properties,
+                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, false);
+
+            if (!enableFlatJson) {
+                throw new DdlException(
+                        "flat_json.enable must be set to true in order to set flat-json related configurations.");
+            }
+
+            double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
+                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, Config.flat_json_null_factor);
+            double flatJsonSparsityFactory = PropertyAnalyzer.analyzerDoubleProp(properties,
+                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, Config.flat_json_sparsity_factory);
+            int flatJsonColumnMax = PropertyAnalyzer.analyzeIntProp(properties,
+                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, Config.flat_json_column_max);
+
+            FlatJsonConfig flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
+                    flatJsonSparsityFactory, flatJsonColumnMax);
+
+            table.setFlatJsonConfig(flatJsonConfig);
+            LOG.info("create table {} set flat json config: {}", tableName, flatJsonConfig.toString());
+        } catch (AnalysisException e) {
+            throw new DdlException("Failed to process flat JSON configuration: " + e.getMessage(), e);
+        }
+    }
+
+    private boolean hasFlatJsonProperties(Map<String, String> properties) {
+        return properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
+    }
 }

@@ -63,6 +63,11 @@ public class MergingTablet implements DynamicTablet {
     }
 
     @Override
+    public long getFirstOldTabletId() {
+        return oldTabletIds.get(0);
+    }
+
+    @Override
     public long getParallelTablets() {
         return oldTabletIds.size();
     }

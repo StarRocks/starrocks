@@ -93,6 +93,7 @@ OPTS=$(getopt \
   -l 'without-starcache' \
   -l 'with-brpc-keepalive' \
   -l 'without-debug-symbol-split' \
+  -l 'without-java-ext' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \

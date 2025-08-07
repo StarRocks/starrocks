@@ -435,6 +435,8 @@ vectorized_functions = [
     [304592, 'field', True, False, 'INT', ['DECIMAL128', '...'], 'StringFunctions::field<TYPE_DECIMAL128>', 
      'StringFunctions::field_prepare<TYPE_DECIMAL128>', 'StringFunctions::field_close<TYPE_DECIMAL128>'],
 
+    [30460, 'format_bytes', True, False, 'VARCHAR', ['BIGINT'], 'StringFunctions::format_bytes'],
+
     # Binary Functions
     # to_binary
     [30600, 'to_binary', True, True, 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',
@@ -869,6 +871,8 @@ vectorized_functions = [
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110018, "json_keys", False, False, "JSON", ["JSON"], "JsonFunctions::json_keys"],
     [110019, "json_keys", False, False, "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    [110024, "json_remove", False, False, "JSON", ["JSON", "VARCHAR", "..."], "JsonFunctions::json_remove",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110100, "to_json", False, False, "JSON", ["ANY_MAP"], "JsonFunctions::to_json"],
     [110101, "to_json", False, False, "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json"],
