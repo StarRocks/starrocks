@@ -2121,7 +2121,7 @@ public class StmtExecutor {
         return explainString;
     }
 
-    private void handleIcebergRewrite(
+    public void handleIcebergRewrite(
             boolean rewriteAll, long minFileSizeBytes, long batchSize, Expr partitionFilter) {
         AlterTableStmt stmt = (AlterTableStmt) parsedStmt;
         String catalogName = stmt.getCatalogName();
@@ -2181,7 +2181,7 @@ public class StmtExecutor {
         }
     }
 
-    private boolean tryHandleIcebergRewriteData() {
+    public boolean tryHandleIcebergRewriteData() {
         if (parsedStmt instanceof AlterTableStmt) {
             AlterTableStmt stmt = (AlterTableStmt) parsedStmt;
             List<AlterClause> clauses = stmt.getAlterClauseList();
@@ -2458,6 +2458,29 @@ public class StmtExecutor {
                             context.getSessionVariable().getProfileTimeout() * 1000L);
                 } else {
                     QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                }
+            }
+        }
+    }
+
+    public void fillRewriteFiles(DmlStmt stmt, ExecPlan execPlan, 
+            List<TSinkCommitInfo> commitInfos, IcebergMetadata.IcebergSinkExtra extra) {
+        if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isRewrite()) {
+            for (TSinkCommitInfo commitInfo : commitInfos) {
+                commitInfo.setIs_rewrite(true);
+            }
+            if (extra == null) {
+                extra = new IcebergMetadata.IcebergSinkExtra();
+            }
+            for (PlanFragment fragment : execPlan.getFragments()) {
+                for (ScanNode scan : fragment.collectScanNodes().values()) {
+                    if (scan instanceof IcebergScanNode && scan.getPlanNodeName().equals("IcebergScanNode")) {
+                        extra.addAppliedDeleteFiles(((IcebergScanNode) scan).getPosAppliedDeleteFiles());
+                        extra.addScannedDataFiles(((IcebergScanNode) scan).getScannedDataFiles());
+                        if (((InsertStmt) stmt).rewriteAll()) {
+                            extra.addAppliedDeleteFiles(((IcebergScanNode) scan).getEqualAppliedDeleteFiles());
+                        }
+                    }
                 }
             }
         }
@@ -2758,25 +2781,7 @@ public class StmtExecutor {
                 }
                 IcebergTableSink sink = (IcebergTableSink) execPlan.getFragments().get(0).getSink();
                 IcebergMetadata.IcebergSinkExtra extra = null;
-                if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isRewrite()) {
-                    for (TSinkCommitInfo commitInfo : commitInfos) {
-                        commitInfo.setIs_rewrite(true);
-                    }
-                    extra = new IcebergMetadata.IcebergSinkExtra();
-                    for (PlanFragment fragment : execPlan.getFragments()) {
-                        for (ScanNode scan : fragment.collectScanNodes().values()) {
-                            if (scan instanceof IcebergScanNode) {
-                                if (scan.getPlanNodeName().equals("IcebergScanNode")) {
-                                    extra.addAppliedDeleteFiles(((IcebergScanNode) scan).getPosAppliedDeleteFiles());
-                                    extra.addScannedDataFiles(((IcebergScanNode) scan).getScannedDataFiles());
-                                    if (((InsertStmt) stmt).rewriteAll()) {
-                                        extra.addAppliedDeleteFiles(((IcebergScanNode) scan).getEqualAppliedDeleteFiles());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                fillRewriteFiles(stmt, execPlan, commitInfos, extra);
 
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(
                         catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);

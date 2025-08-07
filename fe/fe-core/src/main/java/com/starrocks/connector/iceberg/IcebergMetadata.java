@@ -1432,7 +1432,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         metricsReporter.clear();
     }
 
-    interface BatchWrite {
+    public interface BatchWrite {
         void addFile(DataFile file);
 
         void deleteFile(DeleteFile file);
@@ -1444,7 +1444,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         void toBranch(String targetBranch);
     }
 
-    static class Append implements BatchWrite {
+    public static class Append implements BatchWrite {
         private AppendFiles append;
 
         public Append(Transaction txn) {
@@ -1503,7 +1503,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    static class DynamicOverwrite implements BatchWrite {
+    public static class DynamicOverwrite implements BatchWrite {
         private ReplacePartitions replace;
 
         public DynamicOverwrite(Transaction txn) {
@@ -1536,7 +1536,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    static class RewriteData implements BatchWrite {
+    public static class RewriteData implements BatchWrite {
         private RewriteFiles rewriteFiles;
 
         public RewriteData(Transaction txn) {

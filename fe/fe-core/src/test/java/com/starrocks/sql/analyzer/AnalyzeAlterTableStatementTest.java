@@ -206,9 +206,4 @@ public class AnalyzeAlterTableStatementTest {
         analyzeSuccess(sql);
     }
 
-    @Test
-    public void testAlterIcebergTableRewrite() {
-        String sql = "alter table t0 execute rewrite_date_files()";
-    }
-
 }
