@@ -69,6 +69,7 @@ public:
     void set_partition_type(TPartitionType::type partition_type) { _partition_type = partition_type; }
     virtual const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
     void set_partition_exprs(const std::vector<ExprContext*>& partition_exprs) { _partition_exprs = partition_exprs; }
+    virtual const std::vector<TBucketProperty>& get_bucket_properties() const { return _bucket_properties; }
 
     /// The pipelines of a fragment instance are organized by groups.
     /// - The operator tree is broken into several groups by CollectStatsSourceOperator (CsSource)
@@ -128,6 +129,7 @@ protected:
     MorselQueueFactory* _morsel_queue_factory = nullptr;
 
     std::vector<ExprContext*> _partition_exprs;
+    std::vector<TBucketProperty> _bucket_properties;
 
     std::vector<SourceOperatorFactory*> _upstream_sources;
     mutable SourceOperatorFactory* _group_parent = this;

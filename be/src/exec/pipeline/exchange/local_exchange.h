@@ -77,8 +77,12 @@ protected:
 class ShufflePartitioner final : public Partitioner {
 public:
     ShufflePartitioner(LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
-                       const std::vector<ExprContext*>& partition_expr_ctxs)
-            : Partitioner(source), _part_type(part_type), _partition_expr_ctxs(partition_expr_ctxs) {
+                       const std::vector<ExprContext*>& partition_expr_ctxs,
+                       const std::vector<TBucketProperty>& bucket_properties)
+            : Partitioner(source),
+              _part_type(part_type),
+              _partition_expr_ctxs(partition_expr_ctxs),
+              _bucket_properties(bucket_properties) {
         _partitions_columns.resize(partition_expr_ctxs.size());
         _hash_values.reserve(source->runtime_state()->chunk_size());
     }
@@ -90,8 +94,10 @@ private:
     const TPartitionType::type _part_type;
     // Compute per-row partition values.
     const std::vector<ExprContext*>& _partition_expr_ctxs;
+    const std::vector<TBucketProperty>& _bucket_properties;
     Columns _partitions_columns;
     std::vector<uint32_t> _hash_values;
+    std::vector<uint32_t> _round_hashes;
     std::unique_ptr<Shuffler> _shuffler;
 };
 
@@ -191,7 +197,7 @@ class PartitionExchanger final : public LocalExchanger {
 public:
     PartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
                        LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
-                       std::vector<ExprContext*> _partition_expr_ctxs);
+                       std::vector<ExprContext*> _partition_expr_ctxs, std::vector<TBucketProperty> bucket_properties);
 
     ~PartitionExchanger() override = default;
 
@@ -208,6 +214,7 @@ private:
     // TODO(lzh): limit the size of _partitioners, because it will cost too much memory when dop is high.
     TPartitionType::type _part_type;
     std::vector<ExprContext*> _partition_exprs;
+    std::vector<TBucketProperty> _bucket_properties;
     std::vector<std::unique_ptr<ShufflePartitioner>> _partitioners;
 };
 
