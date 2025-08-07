@@ -107,7 +107,7 @@ Status BitmapIndexIterator::seek_dictionary(const void* value, bool* exact_match
 
 StatusOr<Buffer<rowid_t>> BitmapIndexIterator::seek_all_dictionary(const DictPredicate& predicate) {
     auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
-    size_t iter_size = 4096;
+    size_t iter_size = std::numeric_limits<size_t>::max();
     bool exact_match;
     RETURN_IF_ERROR(_dict_column_iter->seek_at_or_after(&Slice::min_value(), &exact_match));
     RETURN_IF_ERROR(_dict_column_iter->next_batch(&iter_size, column.get()));

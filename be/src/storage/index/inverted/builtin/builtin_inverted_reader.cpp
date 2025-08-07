@@ -16,12 +16,8 @@
 
 #include <fmt/format.h>
 
-#include <boost/locale/encoding_utf.hpp>
-#include <memory>
-
-#include "exprs/function_context.h"
-#include "exprs/like_predicate.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/builtin/builtin_inverted_index_iterator.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -31,9 +27,9 @@ Status BuiltinInvertedReader::new_iterator(const std::shared_ptr<TabletIndex> in
                                            const IndexReadOptions& index_opt) {
     BitmapIndexIterator* iter;
     RETURN_IF_ERROR(_bitmap_index->new_iterator(index_opt, &iter));
-    _bitmap_itr.reset(iter);
-
-    *iterator = new InvertedIndexIterator(index_meta, this);
+    std::unique_ptr<BitmapIndexIterator> bitmap_itr;
+    bitmap_itr.reset(iter);
+    *iterator = new BuiltinInvertedIndexIterator(index_meta, this, bitmap_itr);
     return Status::OK();
 }
 
@@ -58,65 +54,7 @@ Status BuiltinInvertedReader::load(const IndexReadOptions& opt, void* meta) {
     if (!first_load) {
         return Status::InternalError("loading builtin inverted index more than once");
     }
-    _like_context = std::make_unique<FunctionContext>();
     return Status::OK();
-}
-
-Status BuiltinInvertedReader::_init_like_context(const Slice& s) {
-    DCHECK(_like_context != nullptr);
-    auto ptr = BinaryColumn::create();
-    ptr->append_datum(Datum(s));
-    ptr->get_data();
-    Columns cols;
-    cols.push_back(nullptr);
-    cols.push_back(std::move(ConstColumn::create(std::move(ptr), 1)));
-    _like_context->set_constant_columns(cols);
-    return LikePredicate::like_prepare(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
-}
-
-Status BuiltinInvertedReader::query(OlapReaderStatistics* stats, const std::string& column_name,
-                                    const void* query_value, InvertedIndexQueryType query_type,
-                                    roaring::Roaring* bit_map) {
-    const auto* search_query = reinterpret_cast<const Slice*>(query_value);
-    auto act_len = strnlen(search_query->data, search_query->size);
-    std::string search_str(search_query->data, act_len);
-    std::wstring search_wstr = boost::locale::conv::utf_to_utf<TCHAR>(search_str);
-    constexpr auto mul = sizeof(TCHAR) / sizeof(char);
-    Slice s((char*) search_wstr.data(), search_wstr.size() * mul);
-
-    switch (query_type) {
-    case InvertedIndexQueryType::EQUAL_QUERY: {
-        bool exact_match = false;
-        Status st = _bitmap_itr->seek_dictionary(&s, &exact_match);
-        if (st.ok() && exact_match) {
-            rowid_t ordinal = _bitmap_itr->current_ordinal();
-            RETURN_IF_ERROR(_bitmap_itr->read_bitmap(ordinal, bit_map));
-        } else if (!st.is_not_found()) {
-            return st;
-        }
-        break;
-    }
-    case InvertedIndexQueryType::MATCH_WILDCARD_QUERY: {
-        RETURN_IF_ERROR(_init_like_context(s));
-        auto predicate = [this](const Column& value_column) -> StatusOr<ColumnPtr> {
-            Columns cols;
-            cols.push_back(&value_column);
-            cols.push_back(this->_like_context->get_constant_column(1));
-            return LikePredicate::like(this->_like_context.get(), cols);
-        };
-        ASSIGN_OR_RETURN(auto hit_rowids, _bitmap_itr->seek_all_dictionary(predicate));
-        RETURN_IF_ERROR(_bitmap_itr->read_union_bitmap(hit_rowids, bit_map));
-        break;
-    }
-    default:
-        return Status::InvalidArgument("do not support query type");
-    }
-    return Status::OK();
-}
-
-Status BuiltinInvertedReader::query_null(OlapReaderStatistics* stats, const std::string& column_name,
-                                         roaring::Roaring* bit_map) {
-    return Status::InternalError("Unsupported");
 }
 
 } // namespace starrocks
