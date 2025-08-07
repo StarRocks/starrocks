@@ -57,7 +57,8 @@
 namespace starrocks {
 
 // Forward declaration for helper function
-static bool json_slice_contains(const arangodb::velocypack::Slice& target, const arangodb::velocypack::Slice& candidate);
+static bool json_slice_contains(const arangodb::velocypack::Slice& target,
+                                const arangodb::velocypack::Slice& candidate);
 
 // static const re2::RE2 JSON_PATTERN("^([a-zA-Z0-9_\\-\\:\\s#\\|\\.]*)(?:\\[([0-9]+)\\])?");
 // json path cannot contains: ", [, ]
@@ -785,22 +786,22 @@ StatusOr<ColumnPtr> JsonFunctions::_full_json_exists(FunctionContext* context, c
 
 StatusOr<ColumnPtr> JsonFunctions::json_contains(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    
+
     auto num_rows = columns[0]->size();
     auto target_viewer = ColumnViewer<TYPE_JSON>(columns[0]);
     auto candidate_viewer = ColumnViewer<TYPE_JSON>(columns[1]);
     ColumnBuilder<TYPE_BOOLEAN> result(num_rows);
 
     for (int row = 0; row < num_rows; row++) {
-        if (target_viewer.is_null(row) || target_viewer.value(row) == nullptr ||
-            candidate_viewer.is_null(row) || candidate_viewer.value(row) == nullptr) {
+        if (target_viewer.is_null(row) || target_viewer.value(row) == nullptr || candidate_viewer.is_null(row) ||
+            candidate_viewer.value(row) == nullptr) {
             result.append_null();
             continue;
         }
 
         JsonValue* target_json = target_viewer.value(row);
         JsonValue* candidate_json = candidate_viewer.value(row);
-        
+
         // Check if target contains candidate
         bool contains = json_value_contains(target_json, candidate_json);
         result.append(contains);
@@ -1434,17 +1435,18 @@ bool JsonFunctions::json_value_contains(JsonValue* target, JsonValue* candidate)
 }
 
 // Helper function to recursively check if target slice contains candidate slice
-static bool json_slice_contains(const arangodb::velocypack::Slice& target, const arangodb::velocypack::Slice& candidate) {
+static bool json_slice_contains(const arangodb::velocypack::Slice& target,
+                                const arangodb::velocypack::Slice& candidate) {
     // If candidate is null, target always contains it
     if (candidate.isNull()) {
         return true;
     }
-    
+
     // If target is null but candidate is not, target doesn't contain candidate
     if (target.isNull()) {
         return false;
     }
-    
+
     // If both are the same type and equal, target contains candidate
     if (JsonValue::compare(target, candidate) == 0) {
         return true;
@@ -1464,7 +1466,7 @@ static bool json_slice_contains(const arangodb::velocypack::Slice& target, const
         }
         return true;
     }
-    
+
     // If target is an array
     if (target.isArray()) {
         // If candidate is also an array, check if target contains all elements of candidate
@@ -1492,7 +1494,7 @@ static bool json_slice_contains(const arangodb::velocypack::Slice& target, const
             return false;
         }
     }
-    
+
     // For scalar values, they must be equal (already checked above)
     return false;
 }

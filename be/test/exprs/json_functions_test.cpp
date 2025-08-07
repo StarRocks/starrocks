@@ -1853,6 +1853,7 @@ INSTANTIATE_TEST_SUITE_P(
                         "Remove nested key where intermediate path contains a dot character"}
         ));
 // clang-format on
+
 // Test cases for json_contains function
 class JsonContainsTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, bool>> {};
 
