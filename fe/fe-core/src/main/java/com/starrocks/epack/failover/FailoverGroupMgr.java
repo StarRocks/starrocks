@@ -276,22 +276,40 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
 
     public void replayCreateFailoverGroup(FailoverGroup failoverGroup) {
         FailoverGroup previous = idToFailoverGroup.putIfAbsent(failoverGroup.getId(), failoverGroup);
-        Preconditions.checkState(previous == null);
+        if (previous != null) {
+            LOG.warn("Failover group {} already exist", failoverGroup.getId());
+            return;
+        }
         previous = nameToFailoverGroup.putIfAbsent(failoverGroup.getName(), failoverGroup);
-        Preconditions.checkState(previous == null);
+        if (previous != null) {
+            LOG.warn("Failover group {} already exist", failoverGroup.getName());
+            return;
+        }
     }
 
     public void replayDropFailoverGroup(long failoverGroupId) {
-        FailoverGroup failoverGroup = idToFailoverGroup.remove(failoverGroupId);
-        Preconditions.checkState(failoverGroup != null);
-        boolean result = nameToFailoverGroup.remove(failoverGroup.getName(), failoverGroup);
-        Preconditions.checkState(result);
+        FailoverGroup failoverGroupInIdMap = idToFailoverGroup.remove(failoverGroupId);
+        if (failoverGroupInIdMap == null) {
+            LOG.warn("Failover group {} not exist", failoverGroupId);
+            return;
+        }
+        FailoverGroup failoverGroupInNameMap = nameToFailoverGroup.remove(failoverGroupInIdMap.getName());
+        if (failoverGroupInNameMap == null) {
+            LOG.warn("Failover group {} not exist", failoverGroupInIdMap.getName());
+            return;
+        }
     }
 
     public void replayUpdateFailoverGroup(FailoverGroup failoverGroup) {
-        FailoverGroup previous = idToFailoverGroup.put(failoverGroup.getId(), failoverGroup);
-        Preconditions.checkState(previous != null);
-        previous = nameToFailoverGroup.put(failoverGroup.getName(), failoverGroup);
-        Preconditions.checkState(previous != null);
+        FailoverGroup previous = idToFailoverGroup.replace(failoverGroup.getId(), failoverGroup);
+        if (previous == null) {
+            LOG.warn("Failover group {} not exist", failoverGroup.getId());
+            return;
+        }
+        previous = nameToFailoverGroup.replace(failoverGroup.getName(), failoverGroup);
+        if (previous == null) {
+            LOG.warn("Failover group {} not exist", failoverGroup.getName());
+            return;
+        }
     }
 }
