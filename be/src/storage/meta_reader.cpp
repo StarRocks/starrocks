@@ -305,10 +305,12 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
     auto& schema = _params->tablet_schema;
     RETURN_IF(cid < 0 || cid >= schema->num_columns(), Status::InvalidArgument("Invalid cid: " + std::to_string(cid)));
     auto& tablet_column = schema->column(cid);
-    if (tablet_column.type() == TYPE_VARCHAR) {
+    if (tablet_column.type() == TYPE_VARCHAR || tablet_column.type() == TYPE_ARRAY) {
         RETURN_IF_ERROR(_collect_dict_for_column(_column_iterators[cid].get(), cid, column));
-    } else {
+    } else if (tablet_column.type() == TYPE_JSON) {
         RETURN_IF_ERROR(_collect_dict_for_flatjson(cid, column, type));
+    } else {
+        return Status::InvalidArgument("unsupported column type: " + type_to_string(tablet_column.type()));
     }
     return {};
 }
