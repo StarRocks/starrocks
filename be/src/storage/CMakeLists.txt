@@ -278,7 +278,8 @@ set(STORAGE_FILES
     record_predicate/column_hash_is_congruent.cpp
     index/inverted/builtin/builtin_plugin.cpp
     index/inverted/builtin/builtin_inverted_writer.cpp
-    index/inverted/builtin/builtin_inverted_reader.cpp)
+    index/inverted/builtin/builtin_inverted_reader.cpp
+    index/inverted/builtin/builtin_inverted_index_iterator.cpp)
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)

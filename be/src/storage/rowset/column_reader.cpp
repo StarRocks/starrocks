@@ -115,6 +115,9 @@ ColumnReader::~ColumnReader() {
                                  _bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset(nullptr);
     }
+    if (_builtin_inverted_index_meta != nullptr) {
+        _builtin_inverted_index_meta.reset(nullptr);
+    }
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
@@ -510,8 +513,7 @@ Status ColumnReader::new_inverted_index_iterator(const std::shared_ptr<TabletInd
 
 Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta,
                                           const SegmentReadOptions& opts, const IndexReadOptions& index_opt) {
-    if (_inverted_index && index_meta && _inverted_index->get_index_id() == index_meta->index_id() &&
-        _inverted_index_loaded()) {
+    if (index_meta == nullptr || _inverted_index_loaded()) {
         return Status::OK();
     }
 

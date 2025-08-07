@@ -31,8 +31,6 @@
 
 namespace starrocks {
 
-constexpr uint8_t mul = sizeof(wchar_t) / sizeof(char);
-
 template <LogicalType field_type>
 class BuiltinInvertedWriterImpl : public BuiltinInvertedWriter {
 public:
@@ -102,13 +100,14 @@ void BuiltinInvertedWriterImpl<field_type>::add_values(const void* values, size_
         lucene::analysis::Token token;
         while (stream->next(&token)) {
             if (token.termLength() != 0) {
-                Slice s((char*) token.termBuffer(), token.termLength() * mul);
-                _builtin_writer->add_value_with_rowid((void*) &s, *_builtin_writer->mutable_rowid());
+                std::string str = boost::locale::conv::utf_to_utf<char>(token.termBuffer(), token.termBuffer() + token.termLength());
+                Slice s(str);
+                _builtin_writer->add_value_with_current_rowid((void*) &s);
             }
         }
 
         ++val;
-        (*_builtin_writer->mutable_rowid())++;
+        _builtin_writer->incre_rowid();
     }
 }
 

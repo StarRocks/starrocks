@@ -127,11 +127,11 @@ public:
     BitmapUpdateContextRefOrSingleValue& operator=(const BitmapUpdateContextRefOrSingleValue& rhs) = delete;
     BitmapUpdateContextRefOrSingleValue(BitmapUpdateContextRefOrSingleValue&& rhs) noexcept {
         _value = rhs._value;
-        rhs._value = (1 << 1) | 1; // reset
+        rhs._value = 1; // reset
     }
     BitmapUpdateContextRefOrSingleValue& operator=(BitmapUpdateContextRefOrSingleValue&& rhs) noexcept {
         this->_value = rhs._value;
-        rhs._value = (1 << 1) | 1; // reset
+        rhs._value = 1; // reset
         return *this;
     }
     BitmapUpdateContextRefOrSingleValue(uint32_t value) { _value = (value << 1) | 1; }
@@ -222,13 +222,13 @@ public:
     void add_values(const void* values, size_t count) override {
         auto p = reinterpret_cast<const CppType*>(values);
         for (size_t i = 0; i < count; ++i) {
-            add_value_with_rowid(p, _rid);
+            add_value_with_current_rowid(p);
             _rid++;
             p++;
         }
     }
 
-    inline void add_value_with_rowid(const void* vptr, uint32_t rid) override {
+    inline void add_value_with_current_rowid(const void* vptr) override {
         const CppType& value = unaligned_load<CppType>(vptr);
         auto it = _mem_index.find(value);
         if (it != _mem_index.end()) {
@@ -283,7 +283,7 @@ public:
             options.write_ordinal_index = false;
             options.write_value_index = true;
             options.encoding = EncodingInfo::get_default_encoding(_typeinfo->type(), true);
-            options.compression = CompressionTypePB::LZ4;
+            options.compression = CompressionTypePB::ZSTD;
 
             IndexedColumnWriter dict_column_writer(options, _typeinfo, wfile);
             RETURN_IF_ERROR(dict_column_writer.init());
@@ -352,7 +352,7 @@ public:
         return Status::OK();
     }
 
-    uint32_t* mutable_rowid() override { return &_rid; }
+    inline void incre_rowid() override { _rid++; }
 
 private:
     TypeInfoPtr _typeinfo;
