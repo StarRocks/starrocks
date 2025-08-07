@@ -642,11 +642,7 @@ Google GCS 用の `StorageCredentialParams`:
 
 #### MetadataRelatedParams
 
-<<<<<<< HEAD
-Iceberg メタデータのキャッシュを StarRocks がどのように更新するかに関する一連のパラメータ。このパラメータセットはオプションです。
-=======
 StarRocks における Iceberg メタデータのキャッシュに関するパラメーターのセットです。このパラメーターセットはオプションです。
->>>>>>> a887afcc5b ([Doc] add parameter "enable_get_stats_from_external_metadata" doc (#61573))
 
 v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦略](#付録-a-定期的なメタデータリフレッシュ戦略) をサポートしています。ほとんどの場合、以下のパラメーターを無視し、そのポリシーパラメーターを調整する必要はありません。これらのパラメーターのデフォルト値は、すぐに使用できるパフォーマンスを提供します。システム変数 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) を使用して Iceberg メタデータパースモードを調整できます。
 
