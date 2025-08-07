@@ -31,8 +31,9 @@ class FunctionContext;
 
 class BuiltinInvertedReader : public InvertedReader {
 public:
-    explicit BuiltinInvertedReader(const uint32_t index_id)
-            : InvertedReader("", index_id), _bitmap_index(nullptr), _bitmap_itr(nullptr), _like_context(nullptr) {}
+    explicit BuiltinInvertedReader(const uint32_t index_id) : InvertedReader("", index_id), _bitmap_index(nullptr) {}
+
+    ~BuiltinInvertedReader() override {}
 
     static Status create(const std::shared_ptr<TabletIndex>& tablet_index,
                          LogicalType field_type, std::unique_ptr<InvertedReader>* res);
@@ -43,18 +44,14 @@ public:
     Status load(const IndexReadOptions& opt, void* meta) override;
 
     Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
-                 InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override;
+                 InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override { return Status::InternalError("Unreachable"); }
 
-    Status query_null(OlapReaderStatistics* stats, const std::string& column_name, roaring::Roaring* bit_map) override;
+    Status query_null(OlapReaderStatistics* stats, const std::string& column_name, roaring::Roaring* bit_map) override { return Status::InternalError("Unreachable"); }
 
     InvertedIndexReaderType get_inverted_index_reader_type() override { return InvertedIndexReaderType::TEXT; }
 
 private:
-    Status _init_like_context(const Slice& s);
-
     std::unique_ptr<BitmapIndexReader> _bitmap_index;
-    std::unique_ptr<BitmapIndexIterator> _bitmap_itr;
-    std::unique_ptr<FunctionContext> _like_context;
 };
 
 } // namespace starrocks
