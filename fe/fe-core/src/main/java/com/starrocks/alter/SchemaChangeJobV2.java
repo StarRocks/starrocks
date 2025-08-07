@@ -179,6 +179,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     private List<Integer> sortKeyIdxes;
     @SerializedName(value = "sortKeyUniqueIds")
     private List<Integer> sortKeyUniqueIds;
+    // If disableReplicatedStorageForGIN is true, which means this job is adding gin index and table's replicated_storage is true,
+    // and we need to disable it.
+    @SerializedName(value = "disableReplicatedStorageForGIN")
+    private boolean disableReplicatedStorageForGIN = false;
 
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
@@ -268,6 +272,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     public void setWatershedTxnId(long txnId) {
         this.watershedTxnId = txnId;
+    }
+
+    public void setDisableReplicatedStorageForGIN(boolean disableReplicatedStorageForGIN) {
+        this.disableReplicatedStorageForGIN = disableReplicatedStorageForGIN;
     }
 
     /**
@@ -442,6 +450,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         try {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             addShadowIndexToCatalog(tbl);
+            if (disableReplicatedStorageForGIN) {
+                tbl.setEnableReplicatedStorage(false);
+            }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
@@ -1013,6 +1024,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         tbl.deleteIndexInfo(shadowIndexName);
                     }
                     tbl.setState(OlapTableState.NORMAL);
+                    if (disableReplicatedStorageForGIN) {
+                        tbl.setEnableReplicatedStorage(true);
+                    }
                 } finally {
                     locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
                 }
@@ -1070,6 +1084,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
             // set table state
             tbl.setState(OlapTableState.SCHEMA_CHANGE);
+            if (disableReplicatedStorageForGIN) {
+                tbl.setEnableReplicatedStorage(false);
+            }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }

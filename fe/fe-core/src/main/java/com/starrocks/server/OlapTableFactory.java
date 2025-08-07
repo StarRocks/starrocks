@@ -500,18 +500,22 @@ public class OlapTableFactory implements AbstractTableFactory {
                             properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
                             Config.enable_replicated_storage_as_default_engine));
 
+
+            boolean hasGin = table.getIndexes().stream()
+                            .anyMatch(index -> index.getIndexType() == IndexType.GIN);
+            if (hasGin && table.enableReplicatedStorage()) {
+                // GIN indexes are incompatible with replicated_storage right now and we will disable replicated_storage
+                // if table contains GIN Index.
+                table.setEnableReplicatedStorage(false);
+            }
+
             if (table.enableReplicatedStorage().equals(false)) {
                 for (Column col : baseSchema) {
                     if (col.isAutoIncrement()) {
-                        throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage");
+                        throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage " +
+                                " and not compatible with GIN Index");
                     }
                 }
-            }
-
-            boolean hasGin = table.getIndexes().stream()
-                    .anyMatch(index -> index.getIndexType() == IndexType.GIN);
-            if (hasGin && table.enableReplicatedStorage()) {
-                throw new SemanticException("GIN does not support replicated mode");
             }
 
             TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
