@@ -29,6 +29,7 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/local_pass_through_buffer.h"
 #include "runtime/runtime_state.h"
 #include "serde/compress_strategy.h"
 #include "serde/protobuf_serde.h"
@@ -46,13 +47,15 @@ public:
     // how much tuple data is getting accumulated before being sent; it only applies
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(ExchangeSinkOperator* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
-            PlanNodeId dest_node_id, int32_t num_shuffles, bool enable_exchange_pass_through, bool enable_exchange_perf)
+            PlanNodeId dest_node_id, int32_t num_shuffles, bool enable_exchange_pass_through, bool enable_exchange_perf,
+            PassThroughChunkBuffer* pass_through_chunk_buffer)
             : _parent(parent),
               _brpc_dest_addr(brpc_dest),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
               _enable_exchange_pass_through(enable_exchange_pass_through),
               _enable_exchange_perf(enable_exchange_perf),
+              _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id),
               _chunks(num_shuffles) {}
 
     // Initialize channel.
@@ -114,6 +117,7 @@ private:
     // enable it to profile exchange's performance, which ignores computing local data for exchange_speed/_bytes,
     // because local data isn't accessed by remote network.
     const bool _enable_exchange_perf;
+    PassThroughContext _pass_through_context;
 
     bool _is_first_chunk = true;
     std::shared_ptr<PInternalService_RecoverableStub> _brpc_stub = nullptr;
@@ -123,8 +127,6 @@ private:
     // If pipeline level shuffle is disable, the size of _chunks
     // always be 1
     std::vector<std::unique_ptr<Chunk>> _chunks;
-    ChunkPassThroughVectorPtr _pass_through_chunks;
-    int64_t _pass_through_physical_bytes = 0;
     PTransmitChunkParamsPtr _chunk_request;
     size_t _current_request_bytes = 0;
 
@@ -152,6 +154,7 @@ bool ExchangeSinkOperator::Channel::_check_use_pass_through() {
 }
 
 void ExchangeSinkOperator::Channel::_prepare_pass_through() {
+    _pass_through_context.init();
     _use_pass_through = _check_use_pass_through();
 }
 
@@ -226,8 +229,6 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         _chunk_request->set_node_id(_dest_node_id);
         _chunk_request->set_sender_id(_parent->_sender_id);
         _chunk_request->set_be_number(_parent->_be_number);
-        _pass_through_chunks = std::make_unique<ChunkPassThroughVector>();
-        _pass_through_physical_bytes = 0;
         if (_parent->_is_pipeline_level_shuffle) {
             _chunk_request->set_is_pipeline_level_shuffle(true);
         }
@@ -236,19 +237,18 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     // If chunk is not null, append it to request
     if (chunk != nullptr) {
         if (_use_pass_through) {
-            int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
-            auto clone = chunk->clone_unique();
-            int64_t physical_bytes = CurrentThread::current().get_consumed_bytes() - before_bytes;
-            _pass_through_physical_bytes += physical_bytes;
             size_t chunk_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
-            _pass_through_chunks->emplace_back(std::move(clone), driver_sequence, chunk_size, physical_bytes);
-            COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
+            // -1 means disable pipeline level shuffle
+            TRY_CATCH_BAD_ALLOC(
+                    _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size,
+                                                       _parent->_is_pipeline_level_shuffle ? driver_sequence : -1));
             _current_request_bytes += chunk_size;
+            COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
+            COUNTER_SET(_parent->_pass_through_buffer_peak_mem_usage, _pass_through_context.total_bytes());
         } else {
             if (_parent->_is_pipeline_level_shuffle) {
                 _chunk_request->add_driver_sequences(driver_sequence);
             }
-
             auto pchunk = _chunk_request->add_chunks();
             TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk)));
             _current_request_bytes += pchunk->data().size();
@@ -261,21 +261,12 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
         butil::IOBuf attachment;
-        int64_t physical_bytes = _use_pass_through ? _pass_through_physical_bytes
-                                                   : _parent->construct_brpc_attachment(_chunk_request, attachment);
-        TransmitChunkInfo info = {this->_fragment_instance_id,
-                                  _brpc_stub,
-                                  std::move(_chunk_request),
-                                  std::move(_pass_through_chunks),
-                                  state->exec_env()->stream_mgr(),
-                                  attachment,
-                                  physical_bytes,
-                                  _brpc_dest_addr};
+        int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
+        TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(_chunk_request), attachment,
+                                  attachment_physical_bytes,   _brpc_dest_addr};
         RETURN_IF_ERROR(_parent->_buffer->add_request(info));
         _current_request_bytes = 0;
         _chunk_request.reset();
-        _pass_through_chunks = std::make_unique<ChunkPassThroughVector>();
-        _pass_through_physical_bytes = 0;
         *is_real_sent = true;
     }
 
@@ -293,8 +284,8 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
     chunk_request->set_be_number(_parent->_be_number);
     chunk_request->set_eos(false);
     chunk_request->set_use_pass_through(_use_pass_through);
-    TransmitChunkInfo info = {this->_fragment_instance_id,     _brpc_stub, std::move(chunk_request),  nullptr,
-                              state->exec_env()->stream_mgr(), attachment, attachment_physical_bytes, _brpc_dest_addr};
+    TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(chunk_request), attachment,
+                              attachment_physical_bytes,   _brpc_dest_addr};
     RETURN_IF_ERROR(_parent->_buffer->add_request(info));
 
     return Status::OK();
@@ -320,7 +311,6 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
                 RETURN_IF_ERROR(res = send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
             }
         }
-
         RETURN_IF_ERROR(res = send_one_chunk(state, nullptr, ExchangeSinkOperator::DEFAULT_DRIVER_SEQUENCE, true));
     }
 
@@ -352,6 +342,10 @@ ExchangeSinkOperator::ExchangeSinkOperator(
           _bucket_properties(bucket_properties),
           _num_sinkers(num_sinkers) {
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
+    RuntimeState* state = fragment_ctx->runtime_state();
+
+    PassThroughChunkBuffer* pass_through_chunk_buffer =
+            state->exec_env()->stream_mgr()->get_pass_through_chunk_buffer(state->query_id());
 
     _channels.reserve(destinations.size());
     std::vector<int> driver_sequence_per_channel(destinations.size(), 0);
@@ -365,7 +359,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(
         } else {
             std::unique_ptr<Channel> channel = std::make_unique<Channel>(
                     this, destination.brpc_server, fragment_instance_id, dest_node_id, _num_shuffles_per_channel,
-                    enable_exchange_pass_through, enable_exchange_perf);
+                    enable_exchange_pass_through, enable_exchange_perf, pass_through_chunk_buffer);
             _channels.emplace_back(channel.get());
             _instance_id2channel.emplace(fragment_instance_id.lo, std::move(channel));
         }
@@ -461,6 +455,9 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _shuffle_chunk_append_counter = ADD_COUNTER(_unique_metrics, "ShuffleChunkAppendCounter", TUnit::UNIT);
     _shuffle_chunk_append_timer = ADD_TIMER(_unique_metrics, "ShuffleChunkAppendTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
+    _pass_through_buffer_peak_mem_usage = _unique_metrics->AddHighWaterMarkCounter(
+            "PassThroughBufferPeakMemoryUsage", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
 
     for (auto& [_, channel] : _instance_id2channel) {
         RETURN_IF_ERROR(channel->init(state));
@@ -687,12 +684,10 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
 
     if (_chunk_request != nullptr) {
         butil::IOBuf attachment;
-        const int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
+        int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& [_, channel] : _instance_id2channel) {
-            if (!channel->use_pass_through()) {
-                PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-                RETURN_IF_ERROR(channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes));
-            }
+            PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
+            RETURN_IF_ERROR(channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes));
         }
         _current_request_bytes = 0;
         _chunk_request.reset();
