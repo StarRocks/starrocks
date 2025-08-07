@@ -1,0 +1,136 @@
+-- name: test_gin_index_table
+create database test_gin_index;
+use  test_gin_index;
+
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+-- DUPLICATE KEY table with GIN index
+CREATE TABLE `t1_dup` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english")
+)
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+    "replicated_storage" = "true",
+    "replication_num" = "1"
+);
+
+show create table t1_dup;
+
+-- UNIQUE KEY table with GIN index
+CREATE TABLE `t1_unique` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english")
+)
+UNIQUE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+    "replicated_storage" = "false",
+    "replication_num" = "1"
+);
+
+-- AGGREGATE KEY table with GIN index
+CREATE TABLE `t1_agg` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) REPLACE NOT NULL COMMENT "",
+    `cnt` bigint(20) SUM DEFAULT "0",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english")
+)
+AGGREGATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+    "replicated_storage" = "false",
+    "replication_num" = "1"
+);
+
+-- PRIMARY KEY table with GIN index
+CREATE TABLE `t1_primary` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english")
+)
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+    "replicated_storage" = "true",
+    "replication_num" = "1"
+);
+
+show create table t1_primary;
+insert into t1_primary values (1, 'hello'), (2, 'world'), (3, 'hello world'), (4, 'starrocks database');
+
+-- exact match
+select * from t1_primary where value match 'hello';
+select * from t1_primary where value match 'starrocks';
+select * from t1_primary where value match 'hello world';
+select * from t1_primary where value match 'starrocks database';
+
+-- wildcard match with leading and trailing %
+select * from t1_primary where value match '%hello%';
+select * from t1_primary where value match '%world%';
+select * from t1_primary where value match '%starrocks%';
+select * from t1_primary where value match '%database%';
+
+-- wildcard match with leading %
+select * from t1_primary where value match '%hello';
+select * from t1_primary where value match '%world';
+
+-- wildcard match with trailing %
+select * from t1_primary where value match 'hello%';
+select * from t1_primary where value match 'starrocks%';
+
+
+--name: add_GIN_index
+-- DUPLICATE KEY table without GIN index, then add GIN index after data load
+CREATE TABLE t2_dup (
+    id1 bigint(20) NOT NULL COMMENT "",
+    value varchar(255) COMMENT ""
+)
+DUPLICATE KEY(id1)
+DISTRIBUTED BY HASH(id1) BUCKETS 1
+PROPERTIES (
+    "replicated_storage" = "true",
+    "replication_num" = "1"
+);
+
+show create table t2_dup;
+
+insert into t2_dup values (1, 'hello', 1), (2, 'world', 2), (3, 'hello world', 3), (4, 'starrocks database', 4);
+
+ALTER TABLE t2_dup ADD INDEX gin_english(value) USING GIN ("parser" = "english");
+-- wait for index creation to finish
+function: wait_alter_table_finish()
+show create table from t2_dup;
+
+-- PRIMARY KEY table without GIN index, then add GIN index after data load
+CREATE TABLE t2_primary (
+    id1 bigint(20) NOT NULL COMMENT "",
+    value varchar(255) NOT NULL COMMENT ""
+)
+PRIMARY KEY(id1)
+DISTRIBUTED BY HASH(id1) BUCKETS 1
+PROPERTIES (
+    "replicated_storage" = "true",
+    "replication_num" = "1"
+);
+show create table t2_primary;
+
+insert into t2_primary values (1, 'hello'), (2, 'world'), (3, 'hello world'), (4, 'starrocks database');
+
+ALTER TABLE t2_primary ADD INDEX gin_english(value) USING GIN ("parser" = "english");
+-- wait for index creation to finish
+function: wait_alter_table_finish()
+show create table t2_primary;
+
+drop database test_gin_index;
+
+
+
+
+
+
+
+
+
