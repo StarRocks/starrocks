@@ -130,6 +130,8 @@ void FragmentContext::count_down_execution_group(size_t val) {
         (void)state->exec_env()->streaming_load_thread_pool()->submit(runnable);
     }
 
+    destroy_pass_through_chunk_buffer();
+
     query_ctx->count_down_fragments();
 }
 
@@ -331,6 +333,14 @@ void FragmentContextManager::cancel(const Status& status) {
     std::lock_guard<std::mutex> lock(_lock);
     for (auto& _fragment_context : _fragment_contexts) {
         _fragment_context.second->cancel(status);
+    }
+}
+void FragmentContext::prepare_pass_through_chunk_buffer() {
+    _runtime_state->exec_env()->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
+}
+void FragmentContext::destroy_pass_through_chunk_buffer() {
+    if (_runtime_state) {
+        _runtime_state->exec_env()->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
     }
 }
 

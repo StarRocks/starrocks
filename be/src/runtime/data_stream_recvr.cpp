@@ -47,6 +47,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/chunk_cursor.h"
 #include "runtime/current_thread.h"
+#include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/sender_queue.h"
 #include "runtime/sorted_chunks_merger.h"
@@ -151,7 +152,8 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
                                  const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
                                  bool is_merging, int total_buffer_limit,
                                  std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
-                                 bool is_pipeline, int32_t degree_of_parallelism, bool keep_order)
+                                 bool is_pipeline, int32_t degree_of_parallelism, bool keep_order,
+                                 PassThroughChunkBuffer* pass_through_chunk_buffer)
         : _mgr(stream_mgr),
           _fragment_instance_id(fragment_instance_id),
           _dest_node_id(dest_node_id),
@@ -164,7 +166,8 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
           _instance_mem_tracker(runtime_state->instance_mem_tracker_ptr()),
           _sub_plan_query_statistics_recvr(std::move(sub_plan_query_statistics_recvr)),
           _is_pipeline(is_pipeline),
-          _keep_order(keep_order) {
+          _keep_order(keep_order),
+          _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id) {
     // Create one queue per sender if is_merging is true.
     int num_queues = is_merging ? num_senders : 1;
     _sender_queues.reserve(num_queues);
@@ -183,6 +186,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
 
     _metrics.resize(degree_of_parallelism);
 
+    _pass_through_context.init();
     if (runtime_state->query_options().__isset.transmission_encode_level) {
         _encode_level = runtime_state->query_options().transmission_encode_level;
     }
@@ -237,8 +241,7 @@ bool DataStreamRecvr::is_data_ready() {
     return false;
 }
 
-Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ChunkPassThroughVectorPtr chunks,
-                                   ::google::protobuf::Closure** done) {
+Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_instance_mem_tracker.get());
     DeferOp op([&] {
         tls_thread_status.set_mem_tracker(prev_tracker);
@@ -254,11 +257,10 @@ Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ChunkPas
     // Add all batches to the same queue if _is_merging is false.
 
     if (_keep_order) {
-        DCHECK(!chunks);
         DCHECK(_is_pipeline);
         return _sender_queues[use_sender_id]->add_chunks_and_keep_order(request, metrics, done);
     } else {
-        return _sender_queues[use_sender_id]->add_chunks(request, std::move(chunks), metrics, done);
+        return _sender_queues[use_sender_id]->add_chunks(request, metrics, done);
     }
 }
 
