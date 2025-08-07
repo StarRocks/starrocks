@@ -19,6 +19,7 @@
 
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
@@ -381,9 +382,14 @@ public:
             return;
         }
 
-        auto* data_col1 = ColumnHelper::get_data_column(columns[1]);
-        auto column1_value = down_cast<const InputColumnType*>(data_col1)->get_data()[row_num];
-        OP()(this->data(state), (Column*)columns[0], row_num, column1_value);
+        RunTimeCppType<LT> rhs;
+        auto* data_col1 = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(columns[1]));
+        if (columns[1]->is_constant()) {
+            rhs = data_col1->get_data()[0];
+        } else {
+            rhs = data_col1->get_data()[row_num];
+        }
+        OP()(this->data(state), (Column*)columns[0], row_num, rhs);
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -642,8 +648,14 @@ public:
         if (columns[1]->only_null() || columns[1]->is_null(row_num)) {
             return;
         }
-        Slice column1_value = ColumnHelper::get_data_column(columns[1])->get(row_num).get_slice();
-        OP()(this->data(state), (Column*)columns[0], row_num, column1_value);
+        Slice rhs;
+        auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[1]));
+        if (columns[1]->is_constant()) {
+            rhs = binary_column->get_slice(0);
+        } else {
+            rhs = binary_column->get_slice(row_num);
+        }
+        OP()(this->data(state), (Column*)columns[0], row_num, rhs);
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
