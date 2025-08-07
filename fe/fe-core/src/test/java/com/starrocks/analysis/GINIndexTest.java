@@ -67,8 +67,8 @@ public class GINIndexTest extends PlanTestBase {
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> InvertedIndexUtil.checkInvertedIndexValid(c1, null, KeysType.PRIMARY_KEYS),
-                "The inverted index can only be build on DUPLICATE table.");
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c1, null, KeysType.UNIQUE_KEYS),
+                "The inverted index can only be build on DUPLICATE/PRIMARY_KEYS table.");
 
         Assertions.assertThrows(
                 SemanticException.class,
