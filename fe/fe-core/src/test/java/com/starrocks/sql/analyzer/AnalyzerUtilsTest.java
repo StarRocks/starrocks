@@ -104,6 +104,8 @@ public class AnalyzerUtilsTest {
             AnalyzerUtils.copyOlapTable(stmt, tables);
             Assertions.assertEquals(1, tables.size());
             Assertions.assertInstanceOf(LakeTable.class, tables.iterator().next());
+            Assertions.assertSame(starRocksAssert.getTable("test", "bill_detail"), tables.iterator().next());
+            Assertions.assertTrue(AnalyzerUtils.areTablesCopySafe(stmt));
         }
 
         {
@@ -113,6 +115,8 @@ public class AnalyzerUtilsTest {
             AnalyzerUtils.copyOlapTable(stmt, tables);
             Assertions.assertEquals(1, tables.size());
             Assertions.assertInstanceOf(LakeMaterializedView.class, tables.iterator().next());
+            Assertions.assertSame(starRocksAssert.getTable("test", "mv1"), tables.iterator().next());
+            Assertions.assertTrue(AnalyzerUtils.areTablesCopySafe(stmt));
         }
     }
 }
