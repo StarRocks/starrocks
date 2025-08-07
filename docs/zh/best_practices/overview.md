@@ -32,9 +32,6 @@ keywords: ['S3 API', 'reduce cost', 'efficiency', 'efficient', 'performance']
 - 选择主键索引的类型
 - 选择主键
 - 监控和管理内存使用
-<<<<<<< HEAD
-- 调优
-=======
 - 调优
 
 ## 查询调优
@@ -55,4 +52,3 @@ keywords: ['S3 API', 'reduce cost', 'efficiency', 'efficient', 'performance']
 - 应用最佳实践和高级调优策略
 
 从[概述](./query_tuning/query_plan_intro.md)开始，根据需要深入参考资料，并使用方案和技巧解决StarRocks中的实际性能挑战。
->>>>>>> a3bc15a06a ([Doc] Update best practice overview (#61623))
