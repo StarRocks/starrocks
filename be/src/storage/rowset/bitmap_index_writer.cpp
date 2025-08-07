@@ -229,7 +229,7 @@ public:
     }
 
     inline void add_value_with_current_rowid(const void* vptr) override {
-        const CppType& value = unaligned_load<CppType>(vptr);
+        const CppType& value = *(reinterpret_cast<const CppType*>(vptr));
         auto it = _mem_index.find(value);
         if (it != _mem_index.end()) {
             it->second.add(_rid);
