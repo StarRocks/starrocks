@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -137,6 +138,7 @@ public class Statistics {
 
     /**
      * Gets the largest subset of the target columns that has multi-column statistics
+     *
      * @param targetColumns The target column set
      * @return The largest subset and its corresponding statistics, or null if no match found
      */
@@ -201,7 +203,7 @@ public class Statistics {
     }
 
     public static Builder builder() {
-        return new Builder();
+        return new Builder().setOutputRowCount(Config.default_statistics_output_row_count);
     }
 
     public static final class Builder {
@@ -212,7 +214,6 @@ public class Statistics {
         // which is used by mv rewrite to make the cost accurate
         private Collection<ColumnRefOperator> shadowColumns;
         private final Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats;
-
 
         public Builder() {
             this(NaN, new HashMap<>(), false);
@@ -297,7 +298,6 @@ public class Statistics {
             });
             return this;
         }
-
 
         public Builder setShadowColumns(Collection<ColumnRefOperator> shadowColumns) {
             this.shadowColumns = shadowColumns;
