@@ -14,6 +14,8 @@
 
 #include "exec/olap_meta_scanner.h"
 
+#include <memory>
+
 #include "exec/olap_meta_scan_node.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -70,9 +72,7 @@ Status OlapMetaScanner::_init_meta_reader_params() {
             column.set_type(path->value_type().type);
             column.set_length(path->value_type().len);
             column.set_is_nullable(true);
-            column.set_extended(true);
-            column.set_access_path(path.get());
-            column.set_source_column_index(root_column_index);
+            column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_column_index));
 
             tmp_schema->append_column(column);
             VLOG(2) << "extend the tablet-schema: " << column.debug_string();
