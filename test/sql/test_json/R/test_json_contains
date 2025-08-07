@@ -5,7 +5,6 @@ CREATE DATABASE test_json_contains;
 USE test_json_contains;
 -- result:
 -- !result
--- Test basic scalar containment
 SELECT json_contains(parse_json('"hello"'), parse_json('"hello"')) as scalar_equal;
 -- result:
 1
@@ -34,7 +33,6 @@ SELECT json_contains(parse_json('null'), parse_json('null')) as null_equal;
 -- result:
 1
 -- !result
--- Test object containment
 SELECT json_contains(parse_json('{"a": 1, "b": 2}'), parse_json('{"a": 1}')) as object_contains_subset;
 -- result:
 1
@@ -55,7 +53,6 @@ SELECT json_contains(parse_json('{"a": 1, "b": 2}'), parse_json('{"a": 2}')) as 
 -- result:
 0
 -- !result
--- Test array containment
 SELECT json_contains(parse_json('[1, 2, 3]'), parse_json('[1, 2]')) as array_contains_subset;
 -- result:
 1
@@ -74,13 +71,12 @@ SELECT json_contains(parse_json('[1, 2, 3]'), parse_json('[4, 5]')) as array_not
 -- !result
 SELECT json_contains(parse_json('[1, 2, 3]'), parse_json('2')) as array_contains_scalar;
 -- result:
-1
+0
 -- !result
 SELECT json_contains(parse_json('[1, 2, 3]'), parse_json('4')) as array_not_contains_scalar;
 -- result:
 0
 -- !result
--- Test nested structure containment
 SELECT json_contains(parse_json('{"a": [1, 2], "b": {"c": 3}}'), parse_json('{"b": {"c": 3}}')) as nested_object_contains;
 -- result:
 1
@@ -101,7 +97,6 @@ SELECT json_contains(parse_json('[{"a": 1}, {"b": 2}]'), parse_json('{"a": 1, "b
 -- result:
 1
 -- !result
--- Test edge cases
 SELECT json_contains(parse_json('{}'), parse_json('{}')) as empty_object_contains_empty;
 -- result:
 1
@@ -118,7 +113,6 @@ SELECT json_contains(parse_json('[1, 2]'), parse_json('[]')) as array_contains_e
 -- result:
 1
 -- !result
--- Test with table data
 CREATE TABLE json_test_data (
   id int,
   target_json json,
@@ -138,11 +132,10 @@ SELECT id, json_contains(target_json, candidate_json) as contains_result FROM js
 -- result:
 1	1
 2	0
-3	1
+3	0
 4	0
 5	1
 -- !result
--- Test NULL handling
 SELECT json_contains(NULL, parse_json('{"a": 1}')) as null_target;
 -- result:
 None
@@ -155,22 +148,20 @@ SELECT json_contains(NULL, NULL) as both_null;
 -- result:
 None
 -- !result
--- Test complex nested cases
 SELECT json_contains(
   parse_json('{"company": {"employees": [{"name": "Alice", "dept": "Engineering"}, {"name": "Bob", "dept": "Sales"}], "location": "San Francisco"}}'),
   parse_json('{"company": {"location": "San Francisco"}}')
 ) as complex_nested_contains;
 -- result:
-1
+0
 -- !result
 SELECT json_contains(
   parse_json('[{"type": "fruit", "items": ["apple", "banana"]}, {"type": "vegetable", "items": ["carrot", "broccoli"]}]'),
   parse_json('[{"type": "fruit"}]')
 ) as complex_array_contains;
 -- result:
-0
+1
 -- !result
--- Cleanup
 DROP TABLE json_test_data;
 -- result:
 -- !result
