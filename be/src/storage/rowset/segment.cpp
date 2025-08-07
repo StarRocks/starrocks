@@ -525,8 +525,10 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
     }
 
     // Build a regular ColumnIterator to read it
-    ASSIGN_OR_RETURN(auto source_iter, _column_readers[source_id]->new_iterator(path, &column));
-    return create_json_extract_iterator(std::move(source_iter), std::string(field_name), leaf_type.type);
+    auto& source_reader = _column_readers[source_id];
+    ASSIGN_OR_RETURN(auto source_iter, source_reader->new_iterator(path, &column));
+    return create_json_extract_iterator(std::move(source_iter), source_reader->is_nullable(), std::string(field_name),
+                                        leaf_type.type);
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const TabletColumn& column,

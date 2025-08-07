@@ -647,7 +647,7 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> JsonMergeIterator::get_io_ran
 
 class JsonExtractIterator final : public ColumnIteratorDecorator {
 public:
-    explicit JsonExtractIterator(ColumnIteratorUPtr source_iter, JsonPath path, LogicalType type)
+    explicit JsonExtractIterator(ColumnIteratorUPtr source_iter, bool source_nullable, JsonPath path, LogicalType type)
             : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
               _path(std::move(path)),
               _type(type),
@@ -655,7 +655,7 @@ public:
               _mem_pool(),
               _source_chunk() {
         // prepare the source chunk
-        auto column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
+        auto column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), source_nullable);
         _source_chunk.append_column(std::move(column), SlotId(0));
         auto path_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(_path.to_string(), 1);
         _source_chunk.append_column(std::move(path_column), SlotId(1));
@@ -796,16 +796,17 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
         ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
         std::vector<std::unique_ptr<ColumnIterator>> all_iters, const std::vector<std::string>& merge_paths,
         const std::vector<LogicalType>& merge_types) {
-    VLOG(2) << fmt::format("create_json_merge_iterator: merge_paths={}", fmt::join(merge_paths, ","));
+    VLOG(2) << fmt::format("create_json_merge_iterator: null={} merge_paths={}", null_iter != nullptr,
+                           fmt::join(merge_paths, ","));
     return std::make_unique<JsonMergeIterator>(reader, std::move(null_iter), std::move(all_iters), merge_paths,
                                                merge_types);
 }
 
-StatusOr<ColumnIteratorUPtr> create_json_extract_iterator(ColumnIteratorUPtr source_iter, const std::string& path,
-                                                          LogicalType type) {
+StatusOr<ColumnIteratorUPtr> create_json_extract_iterator(ColumnIteratorUPtr source_iter, bool source_nullable,
+                                                          const std::string& path, LogicalType type) {
     VLOG(2) << fmt::format("create_json_extract_iterator: path={} type={}", path, type);
     ASSIGN_OR_RETURN(auto normalized_path, JsonPath::parse(path));
-    return std::make_unique<JsonExtractIterator>(std::move(source_iter), normalized_path, type);
+    return std::make_unique<JsonExtractIterator>(std::move(source_iter), source_nullable, normalized_path, type);
 }
 
 } // namespace starrocks
