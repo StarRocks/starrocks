@@ -127,7 +127,6 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
@@ -1229,7 +1228,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             // check colocation
             checkColocation(db, olapTable, distributionInfo, partitionDescs);
-            copiedTable = getShadowCopyTable(olapTable);
+            copiedTable = AnalyzerUtils.getShadowCopyTable(olapTable);
             copiedTable.setDefaultDistributionInfo(distributionInfo);
             checkExistPartitionName = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
         } finally {
@@ -1615,7 +1614,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     throw new DdlException("Only support adding physical partition to random distributed table");
                 }
 
-                copiedTable = getShadowCopyTable(olapTable);
+                copiedTable = AnalyzerUtils.getShadowCopyTable(olapTable);
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);
             }
@@ -4434,7 +4433,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
             }
 
-            copiedTbl = getShadowCopyTable(olapTable);
+            copiedTbl = AnalyzerUtils.getShadowCopyTable(olapTable);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -4982,7 +4981,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             for (Long id : sourcePartitionIds) {
                 origPartitions.put(id, olapTable.getPartition(id).getName());
             }
-            copiedTbl = getShadowCopyTable(olapTable);
+            copiedTbl = AnalyzerUtils.getShadowCopyTable(olapTable);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -4993,22 +4992,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public OlapTable getCopiedTable(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
                                     Map<Long, String> origPartitions) {
         return getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions, false);
-    }
-
-    private OlapTable getShadowCopyTable(OlapTable olapTable) {
-        OlapTable copiedTable;
-        if (olapTable instanceof LakeMaterializedView) {
-            copiedTable = new LakeMaterializedView();
-        } else if (olapTable instanceof MaterializedView) {
-            copiedTable = new MaterializedView();
-        } else if (olapTable instanceof LakeTable) {
-            copiedTable = new LakeTable();
-        } else {
-            copiedTable = new OlapTable();
-        }
-
-        olapTable.copyOnlyForQuery(copiedTable);
-        return copiedTable;
     }
 
     @VisibleForTesting
