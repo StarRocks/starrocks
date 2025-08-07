@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 :::
 
-## v3.5.2
+## 3.5.2
 
 发布日期： 2025 年 7 月 18 日
 
@@ -42,7 +42,7 @@ displayed_sidebar: docs
 
 - `lake_compaction_allow_partial_success`  默认值变更为 `true`。Compaction 操作在部分成功后可以标记为成功，避免阻塞后续的 Compaction 任务。 [#60643](https://github.com/StarRocks/starrocks/pull/60643)
 
-## v3.5.1
+## 3.5.1
 
 发布日期：2025 年 7 月 1 日
 
@@ -83,7 +83,7 @@ displayed_sidebar: docs
 
 - 部分 FE 指标新增 `is_leader` 标签。[#59883](https://github.com/StarRocks/starrocks/pull/59883)
 
-## v3.5.0
+## 3.5.0
 
 发布日期：2025 年 6 月 13 日
 

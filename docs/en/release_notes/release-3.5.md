@@ -10,7 +10,7 @@ After upgrading StarRocks to v3.5, DO NOT downgrade it directly to v3.4.0 ～ v3
 
 :::
 
-## v3.5.2
+## 3.5.2
 
 Release Date: July 18, 2025
 
@@ -42,7 +42,7 @@ Fixed the following issues:
 
 - The default value of `lake_compaction_allow_partial_success` is set to `true`. Compaction operations can now be marked as successful even if partially completed, preventing blockage of subsequent compaction tasks. [#60643](https://github.com/StarRocks/starrocks/pull/60643)
 
-## v3.5.1
+## 3.5.1
 
 Release Date: July 1, 2025
 
@@ -83,7 +83,7 @@ Fixed the following issues:
 
 - Some FE metrics include the `is_leader` label. [#59883](https://github.com/StarRocks/starrocks/pull/59883)
 
-## v3.5.0
+## 3.5.0
 
 Release Date: June 13, 2025
 

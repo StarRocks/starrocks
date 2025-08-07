@@ -10,7 +10,7 @@ StarRocks を v3.5 にアップグレードした後、直接 v3.4.0 ~ v3.4.4 �
 
 :::
 
-## v3.5.2
+## 3.5.2
 
 リリース日: 2025年7月18日
 
@@ -42,7 +42,7 @@ StarRocks を v3.5 にアップグレードした後、直接 v3.4.0 ~ v3.4.4 �
 
 - `lake_compaction_allow_partial_success` のデフォルト値を `true` に変更。Compaction タスクが一部のみ成功しても成功とみなされ、後続のタスクがブロックされるのを回避可能に。[#60643](https://github.com/StarRocks/starrocks/pull/60643)
 
-## v3.5.1
+## 3.5.1
 
 リリース日：2025年7月1日
 
@@ -83,7 +83,7 @@ StarRocks を v3.5 にアップグレードした後、直接 v3.4.0 ~ v3.4.4 �
 
 - 一部の FE メトリクスに `is_leader` ラベルを追加。 [#59883](https://github.com/StarRocks/starrocks/pull/59883)
 
-## v3.5.0
+## 3.5.0
 
 リリース日： 2025 年 6 月 13 日
 
