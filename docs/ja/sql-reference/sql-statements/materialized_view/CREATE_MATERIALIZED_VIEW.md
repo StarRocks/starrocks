@@ -941,60 +941,8 @@ SELECT
 FROM
  `hive_catalog`.`ssb_1g_orc`.`part_dates` ;
 ```
-<<<<<<< HEAD
-=======
 
-例5: 複数列パーティション式を使用してIceberg Catalog（Spark）のベーステーブルに基づいてパーティション化されたマテリアライズドビューを作成します。
-
-Sparkでのベーステーブルの定義は以下の通りです：
-
-```SQL
--- パーティション式には複数のパーティション列と`days` Transformが含まれています。
-CREATE TABLE lineitem_days (
-      l_orderkey    BIGINT,
-      l_partkey     INT,
-      l_suppkey     INT,
-      l_linenumber  INT,
-      l_quantity    DECIMAL(15, 2),
-      l_extendedprice  DECIMAL(15, 2),
-      l_discount    DECIMAL(15, 2),
-      l_tax         DECIMAL(15, 2),
-      l_returnflag  VARCHAR(1),
-      l_linestatus  VARCHAR(1),
-      l_shipdate    TIMESTAMP,
-      l_commitdate  TIMESTAMP,
-      l_receiptdate TIMESTAMP,
-      l_shipinstruct VARCHAR(25),
-      l_shipmode     VARCHAR(10),
-      l_comment      VARCHAR(44)
-) USING ICEBERG
-PARTITIONED BY (l_returnflag, l_linestatus, days(l_shipdate));
-```
-
-複数列パーティション1対1マッピングマテリアライズドビューを作成します：
-
-```SQL
-CREATE MATERIALIZED VIEW test_days
-PARTITION BY (l_returnflag, l_linestatus, date_trunc('day', l_shipdate))
-REFRESH DEFERRED MANUAL
-AS 
-SELECT * FROM iceberg_catalog.test_db.lineitem_days;
-```
-
-例6: 共通パーティション式TTLを指定し、`force_mv`クエリの書き換えセマンティクスを有効にしてパーティション化されたマテリアライズドビューを作成します。
-
-```SQL
-CREATE MATERIALIZED VIEW test_mv1 
-PARTITION BY (dt, province)
-REFRESH MANUAL 
-PROPERTIES (
-    "partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH",
-    "query_rewrite_consistency" = "force_mv"
-)
-AS SELECT * from t1;
-```
-
-例7: 特定のソートキーを持つパーティション化されたマテリアライズドビューを作成します：
+例5: 特定のソートキーを持つパーティション化されたマテリアライズドビューを作成します：
 ```SQL
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
@@ -1012,4 +960,3 @@ select
 from lineorder 
 group by lo_orderkey, lo_orderdate, lo_custkey;
 ```
->>>>>>> 97db7e7e94 ([Doc] Update docs about async materialized views (#61639))
