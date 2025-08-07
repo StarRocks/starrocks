@@ -141,31 +141,34 @@ public class BalanceStatProcNodeTest {
         Database db = new Database(10000L, "BalanceStatProcTestDB");
         localMetastore.unprotectCreateDb(db);
 
-        List<Column> col = Lists.newArrayList(new Column("province", Type.VARCHAR));
-        PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
-        long partitionId = 1025;
-        listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-        listPartition.setIsInMemory(partitionId, false);
-        listPartition.setReplicationNum(partitionId, (short) 1);
-        OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
-        MaterializedIndex index = new MaterializedIndex(1000L, MaterializedIndex.IndexState.NORMAL);
-        index.setBalanceStat(BalanceStat.createClusterTabletBalanceStat(10001L, 10002L, 9L, 1L));
-        Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
-        indexNameToId.put("index1", index.getId());
-        TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), TStorageMedium.HDD);
-        index.addTablet(new LocalTablet(1010L), tabletMeta);
-        index.addTablet(new LocalTablet(1011L), tabletMeta);
-        Partition partition = new Partition(partitionId, 1035, "p1", index, new RandomDistributionInfo(2));
-        olapTable.addPartition(partition);
+        {
+            List<Column> cols = Lists.newArrayList(new Column("province", Type.VARCHAR));
+            PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
+            long partitionId = 1025L;
+            listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+            listPartition.setIsInMemory(partitionId, false);
+            listPartition.setReplicationNum(partitionId, (short) 1);
+            OlapTable olapTable = new OlapTable(1024L, "olap_table", cols, null, listPartition, null);
+            MaterializedIndex index = new MaterializedIndex(1000L, MaterializedIndex.IndexState.NORMAL);
+            index.setBalanceStat(BalanceStat.createClusterTabletBalanceStat(10001L, 10002L, 9L, 1L));
+            Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
+            indexNameToId.put("index1", index.getId());
+            TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), TStorageMedium.HDD);
+            index.addTablet(new LocalTablet(1010L), tabletMeta);
+            index.addTablet(new LocalTablet(1011L), tabletMeta);
+            Partition partition = new Partition(partitionId, partitionId, "p1", index, new RandomDistributionInfo(2));
+            olapTable.addPartition(partition);
 
-        db.registerTableUnlocked(olapTable);
+            db.registerTableUnlocked(olapTable);
 
-        // 1 running tablet
-        TabletSchedCtx ctx3 = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, 1L, 2L, 3L, 4L, 1002L, System.currentTimeMillis());
-        ctx3.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
-        ctx3.setBalanceType(BalanceType.CLUSTER_TABLET);
-        ctx3.setStorageMedium(TStorageMedium.HDD);
-        Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx3);
+            // 1 running tablet
+            TabletSchedCtx ctx3 = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, db.getId(), olapTable.getId(), partitionId,
+                    index.getId(), 1010L, System.currentTimeMillis());
+            ctx3.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
+            ctx3.setBalanceType(BalanceType.CLUSTER_TABLET);
+            ctx3.setStorageMedium(TStorageMedium.HDD);
+            Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx3);
+        }
 
         new Expectations() {
             {
@@ -181,12 +184,12 @@ public class BalanceStatProcNodeTest {
         Assertions.assertEquals(4, rows.size());
 
         // cluster disk balanced
-        Assertions.assertEquals("[HDD, cluster disk, true, 0, 0]", rows.get(0).toString());
+        Assertions.assertEquals("[HDD, inter-node disk usage, true, 0, 0]", rows.get(0).toString());
         // cluster tablet not balanced, 1 running tablet
-        Assertions.assertEquals("[HDD, cluster tablet, false, 0, 1]", rows.get(1).toString());
+        Assertions.assertEquals("[HDD, inter-node tablet distribution, false, 0, 1]", rows.get(1).toString());
         // backend disk not balanced, 2 pending tablets
-        Assertions.assertEquals("[HDD, backend disk, false, 2, 0]", rows.get(2).toString());
+        Assertions.assertEquals("[HDD, intra-node disk usage, false, 2, 0]", rows.get(2).toString());
         // backend tablet balanced
-        Assertions.assertEquals("[HDD, backend tablet, true, 0, 0]", rows.get(3).toString());
+        Assertions.assertEquals("[HDD, intra-node tablet distribution, true, 0, 0]", rows.get(3).toString());
     }
 }
