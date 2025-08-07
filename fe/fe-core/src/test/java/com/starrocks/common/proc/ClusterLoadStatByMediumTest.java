@@ -85,16 +85,21 @@ public class ClusterLoadStatByMediumTest {
         List<List<String>> rows = result.getRows();
         Assertions.assertEquals(2, rows.size());
 
-        List<String> row0 = rows.get(0);
-        Assertions.assertEquals(2, row0.size());
-        Assertions.assertEquals("HDD", row0.get(0));
-        Assertions.assertEquals(
-                "{\"maxUsedPercent\":0.9,\"minUsedPercent\":0.1,\"maxBeId\":1,\"minBeId\":2,\"type\":\"CLUSTER_DISK\"," +
-                        "\"balanced\":false}",
-                row0.get(1));
-
-        List<String> row1 = rows.get(1);
-        Assertions.assertEquals("SSD", row1.get(0));
-        Assertions.assertEquals("{\"balanced\":true}", row1.get(1));
+        for (int i = 0; i < rows.size(); ++i) {
+            List<String> row = rows.get(i);
+            Assertions.assertEquals(2, row.size());
+            String medium = row.get(0);
+            String balanceStat = row.get(1);
+            if (medium.equals("HDD")) {
+                Assertions.assertEquals(
+                        "{\"maxUsedPercent\":0.9,\"minUsedPercent\":0.1,\"maxBeId\":1,\"minBeId\":2,\"type\":\"CLUSTER_DISK\"," +
+                                "\"balanced\":false}",
+                        balanceStat);
+            } else if (medium.equals("SSD")) {
+                Assertions.assertEquals("{\"balanced\":true}", balanceStat);
+            } else {
+                Assertions.fail(String.format("Unknown storage medium: %s", medium));
+            }
+        }
     }
 }
