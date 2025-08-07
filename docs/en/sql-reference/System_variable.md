@@ -630,7 +630,7 @@ Default value: `true`.
 
 ### enable_file_pagecache
 
-* **Description**: Whether to enable page cache for files in remote storage. Setting this to `true` enables the feature. Page cache stores decompressed Parquet page data in memory. When the same page is accessed in subsequent queries, the data can be obtained directly from the cache, avoiding repetitive I/O operations and decompression. This feature works together with the Data Cache and uses the same memory module. When enabled, it can significantly improve query performance for workloads with repetitive page access patterns.
+* **Description**: Whether to enable Page Cache for files in remote storage. Setting this to `true` enables the feature. Page Cache stores decompressed Parquet page data in memory. When the same page is accessed in subsequent queries, the data can be obtained directly from the cache, avoiding repetitive I/O operations and decompression. This feature works together with the Data Cache and uses the same memory module. When enabled, Page Caache can significantly improve query performance for workloads with repetitive page access patterns.
 * **Default**: true
 * **Introduced in**: v4.0
 
