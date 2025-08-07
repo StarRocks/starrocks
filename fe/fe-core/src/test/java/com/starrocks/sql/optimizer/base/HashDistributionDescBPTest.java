@@ -46,7 +46,7 @@ class HashDistributionDescBPTest {
         Assertions.assertNotNull(desc);
         Assertions.assertEquals(bucketProperties, desc.getBucketProperties());
         Assertions.assertEquals(columns.size(), desc.getBucketProperties().size());
-        Assertions.assertFalse(desc.isNativeLocal());
+        Assertions.assertFalse(desc.isNative());
     }
 
     @Test
@@ -71,7 +71,7 @@ class HashDistributionDescBPTest {
 
         Assertions.assertNotNull(relaxDesc);
         Assertions.assertEquals(bucketProperties, relaxDesc.getBucketProperties());
-        Assertions.assertFalse(relaxDesc.isNativeLocal());
+        Assertions.assertFalse(relaxDesc.isNative());
         // The relaxed description should have the same source type
         Assertions.assertEquals(desc.getSourceType(), relaxDesc.getSourceType());
     }
@@ -88,7 +88,7 @@ class HashDistributionDescBPTest {
 
         Assertions.assertNotNull(strictDesc);
         Assertions.assertEquals(bucketProperties, strictDesc.getBucketProperties());
-        Assertions.assertFalse(strictDesc.isNativeLocal());
+        Assertions.assertFalse(strictDesc.isNative());
         // The strict description should have the same source type
         Assertions.assertEquals(desc.getSourceType(), strictDesc.getSourceType());
     }

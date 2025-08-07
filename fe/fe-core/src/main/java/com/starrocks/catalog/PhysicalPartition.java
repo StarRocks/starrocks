@@ -375,6 +375,15 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.metadataSwitchVersion = metadataSwitchVersion;
     }
 
+    public boolean isTabletBalanced() {
+        for (MaterializedIndex index : getMaterializedIndices(IndexExtState.VISIBLE)) {
+            if (!index.isTabletBalanced()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public MaterializedIndex getIndex(long indexId) {
         if (baseIndex.getId() == indexId) {
             return baseIndex;

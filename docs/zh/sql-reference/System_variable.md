@@ -477,6 +477,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：auto
 * 引入版本：v3.3.3
 
+#### enable_iceberg_column_statistics
+
+* 描述：是否获取列统计信息，例如 `min`、`max`、`null count`、`row size` 和 `ndv`（如果存在 puffin 文件）。当此项设置为 `false` 时，仅收集行数信息。
+* 默认值：false
+* 引入版本：v3.4
+
 ### metadata_collect_query_timeout
 
 * 描述：Iceberg Catalog 元数据收集阶段的超时时间。

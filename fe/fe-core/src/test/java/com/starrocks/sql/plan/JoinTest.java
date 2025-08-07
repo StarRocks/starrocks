@@ -3301,4 +3301,37 @@ public class JoinTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: coalesce('cccc', CAST(1: v1 AS VARCHAR)) = '1'");
     }
+
+    @Test
+    public void testPredicatePushDown() throws Exception {
+        String query = "with j1 as (\n" +
+                "    select * from \n" +
+                "    (\n" +
+                "        select v1, count(distinct v2) c1 from t0 group by v1\n" +
+                "    ) t0\n" +
+                "    left join [shuffle]\n" +
+                "    (\n" +
+                "        select v4, count(distinct v5) c3 from t1 group by v4\n" +
+                "    ) t1\n" +
+                "    on t0.v1 = t1.v4 and  t0.c1 = t1.c3\n" +
+                ")\n" +
+                "select * from j1 where v1 = 1 and if (c3 = 1, 'a', 'b') = 'b'\n" +
+                "union all \n" +
+                "select * from j1 where v1 != 1 and if (c3 = 1, 'a', 'b') = 'b'";
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        String plan = getFragmentPlan(query);
+        assertContains(plan, "  6:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 5: v4\n" +
+                "  |  equal join conjunct: 4: count = 8: count\n" +
+                "  |  other predicates: ((1: v1 != 1) AND (if(8: count = 1, 'a', 'b') = 'b')) OR ((1: v1 = 1) AND " +
+                "(if(8: count = 1, 'a', 'b') = 'b')), if(8: count = 1, 'a', 'b') = 'b'\n" +
+                "  |  \n" +
+                "  |----5:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE");
+    }
+
 }

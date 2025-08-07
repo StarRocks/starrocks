@@ -171,6 +171,7 @@ Schema Change 遵循以下原则：
 您可以使用多个参数来控制刷新行为：
 
 - `partition_refresh_number`：每次刷新操作中要刷新的分区数。
+- `partition_refresh_strategy`：每次刷新操作中选择的刷新策略。
 - `partition_ttl_number`：要保留的最近分区的数量。
 - `excluded_trigger_tables`：为避免触发自动刷新而需要忽略的表。
 - `auto_refresh_partitions_limit`：每次自动刷新操作中要刷新的分区数。

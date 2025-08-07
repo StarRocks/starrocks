@@ -14,6 +14,8 @@
 
 package com.starrocks.clone;
 
+import com.google.gson.Gson;
+
 public abstract class BalanceStat {
     public enum BalanceType {
         CLUSTER_DISK("cluster disk"),
@@ -32,6 +34,8 @@ public abstract class BalanceStat {
         }
     }
 
+    private static final Gson GSON = new Gson();
+
     // Singleton instance indicating that everything is balanced
     public static final BalanceStat BALANCED_STAT = new BalancedStat();
 
@@ -46,6 +50,11 @@ public abstract class BalanceStat {
     }
 
     public abstract BalanceType getBalanceType();
+
+    @Override
+    public String toString() {
+        return GSON.toJson(this);
+    }
 
     // Factory methods for different balance stat types
     public static BalanceStat createClusterDiskBalanceStat(long maxBeId, long minBeId, double maxDiskUsage, double minDiskUsage) {

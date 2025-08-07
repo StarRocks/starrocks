@@ -35,34 +35,33 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.clone.ClusterLoadStatistic;
+import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 
-// show proc "/cluster_balance/cluster_load_stat";
+// SHOW PROC "/cluster_balance/cluster_load_stat/medium";
 public class ClusterLoadStatisticProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("BeId").add("Cluster").add("Available").add("UsedCapacity").add("Capacity")
             .add("UsedPercent").add("ReplicaNum").add("CapCoeff").add("ReplCoeff").add("Score")
-            .add("Class")
+            .add("Class").add("BackendDiskBalanceStat")
             .build();
 
-    private TStorageMedium medium;
+    private final TStorageMedium medium;
+    private final TabletScheduler tabletScheduler;
 
-    public ClusterLoadStatisticProcDir(TStorageMedium medium) {
+    public ClusterLoadStatisticProcDir(TStorageMedium medium, TabletScheduler tabletScheduler) {
         this.medium = medium;
+        this.tabletScheduler = tabletScheduler;
     }
 
     @Override
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
-
-        ClusterLoadStatistic statistic = GlobalStateMgr.getCurrentState().getTabletScheduler().getClusterLoadStatistic();
-        statistic.getClusterStatistic(medium).forEach(result::addRow);
-
+        result.setRows(tabletScheduler.getBackendLoadStats(medium));
         return result;
     }
 

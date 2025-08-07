@@ -204,11 +204,13 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
 
     if (!source_op->partition_exprs().empty()) {
         return _do_maybe_interpolate_local_shuffle_exchange(state, plan_node_id, pred_operators,
-                                                            source_op->partition_exprs(), source_op->partition_type());
+                                                            source_op->partition_exprs(), source_op->partition_type(),
+                                                            source_op->get_bucket_properties());
     }
 
     return _do_maybe_interpolate_local_shuffle_exchange(state, plan_node_id, pred_operators,
-                                                        self_partition_exprs_generator(), source_op->partition_type());
+                                                        self_partition_exprs_generator(), source_op->partition_type(),
+                                                        source_op->get_bucket_properties());
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_bucket_shuffle_exchange(
@@ -219,12 +221,14 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_bucket_shuffle_excha
         return pred_operators;
     }
     return _do_maybe_interpolate_local_shuffle_exchange(state, plan_node_id, pred_operators, partition_expr_ctxs,
-                                                        TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED);
+                                                        TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED,
+                                                        source_op->get_bucket_properties());
 }
 
 OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange(
         RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators,
-        const std::vector<ExprContext*>& partition_expr_ctxs, const TPartitionType::type part_type) {
+        const std::vector<ExprContext*>& partition_expr_ctxs, const TPartitionType::type part_type,
+        const std::vector<TBucketProperty>& bucket_properties) {
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
 
     // interpolate grouped exchange if needed
@@ -247,11 +251,12 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), plan_node_id, mem_mgr);
     local_shuffle_source->set_runtime_state(state);
     inherit_upstream_source_properties(local_shuffle_source.get(), pred_source_op);
-    local_shuffle_source->set_could_local_shuffle(pred_source_op->partition_exprs().empty());
+    local_shuffle_source->set_could_local_shuffle(pred_source_op->partition_exprs().empty() &&
+                                                  bucket_properties.empty());
     local_shuffle_source->set_degree_of_parallelism(shuffle_partitions_num);
 
-    auto local_shuffle =
-            std::make_shared<PartitionExchanger>(mem_mgr, local_shuffle_source.get(), part_type, partition_expr_ctxs);
+    auto local_shuffle = std::make_shared<PartitionExchanger>(mem_mgr, local_shuffle_source.get(), part_type,
+                                                              partition_expr_ctxs, bucket_properties);
     auto local_shuffle_sink =
             std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), plan_node_id, local_shuffle);
     pred_operators.emplace_back(std::move(local_shuffle_sink));
