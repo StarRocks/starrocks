@@ -4,6 +4,28 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.6
+
+发布日期：2025 年 8 月 7 日
+
+### 功能优化
+
+- INSERT INTO FILES 导出数据到 Parquet 文件时，可以使用 [`parquet.version`](../sql-reference/sql-functions/table-functions/files.md#parquetversion) 来指定导出 Parquet 文件的版本，以能让其他工具读取导出的 Parquet 文件更好地兼容。[#60843](https://github.com/StarRocks/starrocks/pull/60843)
+
+### 问题修复
+
+修复了如下问题：
+
+- TableMetricsManager 中使用的锁粒度过大导致导入作业失败。[#58911](https://github.com/StarRocks/starrocks/pull/58911)
+- 通过 `FILES()` 导入 Parquet 数据时列名大小写敏感的问题。[#61059](https://github.com/StarRocks/starrocks/pull/61059)
+- 存算分离集群从 v3.3 升级至 v3.4 或更新版本后缓存不生效。[#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- 分区 ID 为空时，业务触发除零错误导致 BE Crash。[#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- BE 扩容过程中 Broker Load 作业报错。[#60224](https://github.com/StarRocks/starrocks/pull/60224)
+
+### 行为变更
+
+- `information_schema.keywords` 视图中的 `keyword` 列改名为 `word` ，以兼容 MySQL 中的定义。[#60863](https://github.com/StarRocks/starrocks/pull/60863)
+
 ## 3.4.5
 
 发布日期：2025 年 7 月 10 日

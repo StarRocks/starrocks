@@ -4,6 +4,28 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.6
+
+リリース日：2025年8月7日
+
+### 改善点
+
+- `INSERT INTO FILES` でデータを Parquet ファイルにエクスポートする際に、[`parquet.version`](../sql-reference/sql-functions/table-functions/files.md#parquetversion) を指定してエクスポートする Parquet ファイルのバージョンを選べるようになりました。他のツールでエクスポートされた Parquet ファイルを読み取る際の互換性が向上します。 [#60843](https://github.com/StarRocks/starrocks/pull/60843)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- `TableMetricsManager` におけるロックの粒度が大きすぎて、インポートジョブが失敗する問題。 [#58911](https://github.com/StarRocks/starrocks/pull/58911)
+- `FILES()` を使用して Parquet データをインポートする際、列名が大文字小文字を区別していた問題。 [#61059](https://github.com/StarRocks/starrocks/pull/61059)
+- ストレージとコンピュートが分離されたクラスタを v3.3 から v3.4 以降にアップグレードした後、キャッシュが有効にならない問題。 [#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- パーティション ID が null の場合にゼロ除算エラーが発生し、BE がクラッシュする問題。 [#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- BE 拡張中に Broker Load ジョブがエラーになる問題。 [#60224](https://github.com/StarRocks/starrocks/pull/60224)
+
+### 動作の変更
+
+- `information_schema.keywords` ビュー内の `keyword` 列は `word` にリネームされ、MySQL の定義と互換性を持たせました。 [#60863](https://github.com/StarRocks/starrocks/pull/60863)
+
 ## 3.4.5
 
 リリース日: 2025年7月10日
