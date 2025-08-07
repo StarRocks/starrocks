@@ -38,5 +38,7 @@ public class MultipleWarehouse extends DefaultWarehouse {
         return this.workerGroupId;
     }
 
-
+    public long getWorkerGroupId() {
+        return workerGroupId;
+    }
 }

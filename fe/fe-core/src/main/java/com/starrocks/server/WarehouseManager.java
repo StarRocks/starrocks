@@ -426,7 +426,7 @@ public class WarehouseManager implements Writable {
         long warehouseId = GlobalStateMgr.getCurrentState().getNextId();
 
         long workerGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().createWorkerGroup("x1");
-        // Create warehouse instance (using MultipleWarehouse for now)
+        // Create warehouse instance
         Warehouse warehouse = new MultipleWarehouse(warehouseId, warehouseName, workerGroupId);
 
         // Add to manager
@@ -467,6 +467,11 @@ public class WarehouseManager implements Writable {
         if (!aliveComputeNodes.isEmpty()) {
             throw new DdlException("Cannot drop warehouse '" + warehouseName + "' while there are alive compute nodes: "
                     + aliveComputeNodes);
+        }
+
+        // Clean up associated worker groups
+        if (warehouse instanceof MultipleWarehouse multipleWarehouse) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().deleteWorkerGroup(multipleWarehouse.getWorkerGroupId());
         }
 
         // Remove from manager
