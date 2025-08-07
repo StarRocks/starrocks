@@ -109,7 +109,7 @@ PROPERTIES
     "type" = "iceberg",
     MetastoreParams,
     StorageCredentialParams,
-    MetadataUpdateParams
+    MetadataRelatedParams
 )
 ```
 
@@ -724,11 +724,11 @@ Description: The service account that you want to impersonate.
 
 ---
 
-#### MetadataUpdateParams
+#### MetadataRelatedParams
 
-A set of parameters about how StarRocks update the cache of the Iceberg metadata. This parameter set is optional.
+A set of parameters about cache of the Iceberg metadata in StarRocks. This parameter set is optional.
 
-From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-a-periodic-metadata-refresh-strategy). In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance. You can adjust the Iceberg metadata parsing mode using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
+From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-a-periodic-metadata-refresh-strategy). In most cases, you can ignore the parameters below and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with performance out-of-the-box. You can adjust the Iceberg metadata parsing mode using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
 
 | **Parameter**                                 | **Default**           | **Description**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
@@ -736,6 +736,12 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 | iceberg_manifest_cache_with_column_statistics | false                 | Whether to cache the statistics of columns.                  |
 | iceberg_manifest_cache_max_num                | 100000                | The maximum number of Manifest files that can be cached.     |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | The minimum Manifest file length that triggers a Data File Cache refresh. |
+
+Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading Iceberg metadata through setting the following parameters, without actively triggering the collection of Iceberg table statistics.
+
+| **Parameter**                                 | **Default**           | **Description**                                         |
+| :-------------------------------------------- | :-------------------- | :-------------------------------------------------------|
+| enable_get_stats_from_external_metadata       | false                 | Whether to obtain statistics from Iceberg metadata. When this item is set to `true`, you can further control which type of statistics to collect through the session variable [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata).  |
 
 ### Examples
 

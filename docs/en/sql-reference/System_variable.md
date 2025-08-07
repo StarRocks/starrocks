@@ -475,7 +475,7 @@ Default value: `true`.
 
 ### enable_metadata_profile
 
-* **Description**: 是否为 Iceberg Catalog 的元数据收集查询开启 Profile。
+* **Description**: Whether to enabled Profile for Iceberg Catalog metadata.
 * **Default**: true
 * **Introduced in**: v3.3.3
 
@@ -487,6 +487,12 @@ Default value: `true`.
   * `distributed`: Use the distributed plan.
 * **Default**: auto
 * **Introduced in**: v3.3.3
+
+#### enable_iceberg_column_statistics
+
+* **Description**: Whether to obtain column statistics, such as `min`, `max`, `null count`, `row size`, and `ndv` (if a puffin file exists). When this item is set to `false`, only the row count information will be collected.
+* **Default**: false
+* **Introduced in**: v3.4
 
 ### metadata_collect_query_timeout
 
