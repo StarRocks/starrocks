@@ -474,6 +474,7 @@ public class StatisticExecutor {
         try {
             Stopwatch watch = Stopwatch.createStarted();
             statsConnectCtx.getSessionVariable().setEnableProfile(Config.enable_statistics_collect_profile);
+            statsConnectCtx.getSessionVariable().setEnableQueryProfile(Config.enable_statistics_collect_profile);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
             // Only update running status without edit log, make restart job status is failed
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);

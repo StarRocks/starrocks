@@ -364,7 +364,7 @@ public class MergeCommitTask implements Runnable {
         }
         profile.addChild(summaryProfile);
         if (collectProfileSuccess) {
-            profile.addChild(coordinator.buildQueryProfile(true));
+            profile.addChild(coordinator.buildExecutionProfile(true));
         }
         ProfileManager.getInstance().pushProfile(
                 loadPlanner == null ? null : loadPlanner.getExecPlan().getProfilingPlan(), profile);

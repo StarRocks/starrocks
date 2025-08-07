@@ -15,7 +15,6 @@
 #pragma once
 
 #include <memory>
-#include <unordered_map>
 
 #include "exec/pipeline/audit_statistics_reporter.h"
 #include "exec/pipeline/exec_state_reporter.h"
@@ -24,13 +23,14 @@
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
-#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/profile_manager.h"
 #include "runtime/runtime_state.h"
 #include "util/factory_method.h"
 #include "util/limit_setter.h"
 #include "util/threadpool.h"
 
 namespace starrocks::pipeline {
+class ProfileManager;
 
 class DriverExecutor;
 using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
@@ -100,8 +100,6 @@ private:
     void _worker_thread();
     StatusOr<DriverRawPtr> _get_next_driver(std::queue<DriverRawPtr>& local_driver_queue);
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
-    RuntimeProfile* _build_merged_instance_profile(QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                                                   ObjectPool* obj_pool);
 
     void _finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
 
@@ -116,6 +114,7 @@ private:
     PipelineDriverPollerPtr _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
     std::unique_ptr<AuditStatisticsReporter> _audit_statistics_reporter;
+    std::unique_ptr<ProfileManager> _profile_manager;
 
     std::atomic<int> _next_id = 0;
     std::atomic_int64_t _schedule_count = 0;

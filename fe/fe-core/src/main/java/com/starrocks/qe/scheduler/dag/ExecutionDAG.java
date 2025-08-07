@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.RunningProfileManager;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
@@ -354,6 +355,13 @@ public class ExecutionDAG {
             instance.setExecution(execution);
         }
         indexInJobToExecState.put(execution.getIndexInJob(), execution);
+        if (jobSpec.isNeedReport()) {
+            RunningProfileManager.RunningProfile runningProfile =
+                    RunningProfileManager.getInstance().getRunningProfile(jobSpec.getQueryId());
+            if (runningProfile != null) {
+                runningProfile.addInstanceProfile(execution.getInstanceId(), execution.getProfile());
+            }
+        }
     }
 
     public void addNeedCheckExecution(FragmentInstanceExecState execution) {

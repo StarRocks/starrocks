@@ -74,7 +74,7 @@ public class PrepareStmtPlanner {
                         physicalPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
                         colNames,
                         resultSinkType,
-                        !session.getSessionVariable().isSingleNodeExecPlan());
+                        !session.getSessionVariable().isSingleNodeExecPlan(), execPlan.isShortCircuit());
             }
         }
     }

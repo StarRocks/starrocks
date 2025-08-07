@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RunningProfileManager;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.persist.gson.GsonUtils;
@@ -77,6 +78,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
 
         registerMemoryTracker("Query", new QueryTracker());
         registerMemoryTracker("Profile", ProfileManager.getInstance());
+        registerMemoryTracker("RunningProfile", RunningProfileManager.getInstance());
         registerMemoryTracker("Agent", new AgentTaskTracker());
         if (currentState.getStatisticStorage() instanceof CachedStatisticStorage) {
             registerMemoryTracker("Statistics", (CachedStatisticStorage) currentState.getStatisticStorage());

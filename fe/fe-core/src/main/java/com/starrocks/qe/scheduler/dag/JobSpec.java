@@ -127,6 +127,7 @@ public class JobSpec {
                     .enableStreamPipeline(false)
                     .isBlockQuery(false)
                     .needReport(context.getSessionVariable().isEnableProfile() ||
+                            context.getSessionVariable().isEnableQueryProfile() && queryType == TQueryType.SELECT ||
                             context.getSessionVariable().isEnableBigQueryProfile() || queryType == TQueryType.LOAD)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)

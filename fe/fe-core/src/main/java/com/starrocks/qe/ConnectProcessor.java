@@ -112,6 +112,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Process one mysql connection, receive one pakcet, process, send one packet.
@@ -123,6 +124,26 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     protected StmtExecutor executor = null;
+
+    private static class QpsStat {
+        final long lastQpsCheckTime;
+        final long lastQueryCount;
+        final double lastQps;
+
+        QpsStat(long lastQpsCheckTime, long lastQueryCount, double lastQps) {
+            this.lastQpsCheckTime = lastQpsCheckTime;
+            this.lastQueryCount = lastQueryCount;
+            this.lastQps = lastQps;
+        }
+    }
+
+    private static final AtomicReference<QpsStat> QPS_STAT =
+            new AtomicReference<>(new QpsStat(System.currentTimeMillis(), 0, 0.0)
+            );
+
+    public static double getCurrentQps() {
+        return QPS_STAT.get().lastQps;
+    }
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -265,6 +286,9 @@ public class ConnectProcessor {
                 ctx.getAuditEventBuilder().setBigQueryLogScanRowsThreshold(
                         ctx.getSessionVariable().getBigQueryLogScanRowsThreshold());
             }
+
+            // calculate qps if necessary
+            updateQpsIfNecessary();
         } else {
             ctx.getAuditEventBuilder().setIsQuery(false);
         }
@@ -1014,5 +1038,19 @@ public class ConnectProcessor {
 
     public StmtExecutor getExecutor() {
         return executor;
+    }
+
+    private void updateQpsIfNecessary() {
+        QpsStat oldStat = QPS_STAT.get();
+        long now = System.currentTimeMillis();
+        long currentQueryCount = MetricRepo.COUNTER_QUERY_ALL.getValue();
+        long intervalMs = now - oldStat.lastQpsCheckTime;
+        long intervalCount = currentQueryCount - oldStat.lastQueryCount;
+        if (intervalMs < 1000 && intervalCount < 50) {
+            return;
+        }
+        double qps = intervalMs > 0 ? intervalCount * 1000.0 / intervalMs : 0.0;
+        QpsStat newStat = new QpsStat(now, currentQueryCount, qps);
+        QPS_STAT.compareAndSet(oldStat, newStat);
     }
 }

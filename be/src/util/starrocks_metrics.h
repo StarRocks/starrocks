@@ -397,6 +397,9 @@ public:
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
 
+    METRICS_DEFINE_THREAD_POOL(async_profile_merge);
+    METRICS_DEFINE_THREAD_POOL(async_profile_report);
+
     static StarRocksMetrics* instance() {
         static StarRocksMetrics instance;
         return &instance;

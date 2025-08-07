@@ -91,6 +91,8 @@ public class PlanTestNoneDBBase {
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         connectContext.getSessionVariable().setCboEqBaseType(SessionVariableConstants.VARCHAR);
         connectContext.getSessionVariable().setUseCorrelatedPredicateEstimate(false);
+        // disable query profile in default in UT, avoid generating too many profiles in RunningProfileManager
+        connectContext.getSessionVariable().setEnableQueryProfile(false);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
         FeConstants.showFragmentCost = false;

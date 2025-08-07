@@ -33,7 +33,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 
-public class QueryRuntimeProfileTest {
+public class QueryRuntimeProfileTest extends SchedulerTestBase {
 
     private ConnectContext connectContext;
 
@@ -95,7 +95,7 @@ public class QueryRuntimeProfileTest {
         profile.initFragmentProfiles(1);
         TReportExecStatusParams reportExecStatusParams = buildReportStatus(1L);
         profile.updateLoadChannelProfile(reportExecStatusParams);
-        RuntimeProfile runtimeProfile = profile.buildQueryProfile(true);
+        RuntimeProfile runtimeProfile = profile.buildExecutionProfile(true);
         Assertions.assertNotNull(runtimeProfile);
         Assertions.assertEquals(2, runtimeProfile.getChildMap().size());
         Assertions.assertSame(profile.getFragmentProfiles().get(0), runtimeProfile.getChild("Fragment 0"));

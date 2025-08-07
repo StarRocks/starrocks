@@ -85,6 +85,7 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
+import com.starrocks.common.util.RunningProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.RuntimeProfileParser;
 import com.starrocks.common.util.SqlUtils;
@@ -337,7 +338,12 @@ public class StmtExecutor {
         return this.coord;
     }
 
-    private RuntimeProfile buildTopLevelProfile() {
+    @VisibleForTesting
+    public void setCoord(Coordinator coord) {
+        this.coord = coord;
+    }
+
+    public RuntimeProfile buildTopLevelProfile() {
         RuntimeProfile profile = new RuntimeProfile("Query");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
@@ -354,14 +360,18 @@ public class StmtExecutor {
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
-        if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
-            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
-                    AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt));
+        String sql = "";
+        if (originStmt == null) {
+            sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, sql);
+        } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
+            sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt);
         } else {
-            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+            sql = originStmt.originStmt;
         }
         summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP, GlobalStateMgr.getCurrentState().getWarehouseMgr()
                         .getWarehouseComputeResourceName(context.getCurrentComputeResource()));
+
+        summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, sql);
 
         // Add some import variables in profile
         SessionVariable variables = context.getSessionVariable();
@@ -749,13 +759,7 @@ public class StmtExecutor {
                                         context.getQueryId().toString(), plannerProfile);
                             }
                         } finally {
-                            if (isAsync) {
-                                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(),
-                                        System.currentTimeMillis() +
-                                                context.getSessionVariable().getProfileTimeout() * 1000L);
-                            } else {
-                                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
-                            }
+                            monitorQueryOrUnregister(isAsync);
                         }
                     }
                 }
@@ -1059,16 +1063,17 @@ public class StmtExecutor {
     /**
      * Try to process profile async without exception.
      */
-    private boolean tryProcessProfileAsync(ExecPlan plan, int retryIndex) {
+    public boolean tryProcessProfileAsync(ExecPlan plan, int retryIndex) {
         try {
             return processProfileAsync(plan, retryIndex);
         } catch (Exception e) {
             LOG.warn("process profile async failed", e);
+            RunningProfileManager.getInstance().removeProfile(context.getExecutionId());
             return false;
         }
     }
 
-    private boolean processProfileAsync(ExecPlan plan, int retryIndex) {
+    private boolean processProfileAsync(ExecPlan plan, final int retryIndex) {
         if (coord == null) {
             return false;
         }
@@ -1080,46 +1085,66 @@ public class StmtExecutor {
             return false;
         }
 
+        final long profileCollectStartTime = System.currentTimeMillis();
+        final long startTime = context.getStartTime();
+        final TUniqueId executionId = context.getExecutionId();
+        final QueryDetail queryDetail = context.getQueryDetail();
+        boolean needMerge = context.needMergeProfile();
+        final boolean isShortCircuit = coord.isShortCircuit();
+        final boolean enableAsyncProfileInBe = coord.enableAsyncProfileInBe();
+        final ProfilingExecPlan profilingPlan;
+        if (isShortCircuit) {
+            profilingPlan = null;
+        } else {
+            profilingPlan = plan == null ? null : plan.getProfilingPlan();
+        }
+
+        long now = System.currentTimeMillis();
+        // totalTime should not include profile collect time
+        // since sometimes the profile collect time is very long.
+        long totalTimeMs = now - startTime;
+
+        if (ConnectProcessor.getCurrentQps() > 50 && totalTimeMs < context.sessionVariable.getProfileThresHold()) {
+            if (enableAsyncProfileInBe) {
+                RunningProfileManager.getInstance().removeProfile(executionId);
+            }
+            // return false so monitorQuery() will not be called.
+            return false;
+        }
+
         // This process will get information from the context, so it must be executed synchronously.
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
 
-        long profileCollectStartTime = System.currentTimeMillis();
-        long startTime = context.getStartTime();
-        TUniqueId executionId = context.getExecutionId();
-        QueryDetail queryDetail = context.getQueryDetail();
-        boolean needMerge = context.needMergeProfile();
+        final RuntimeProfile profileCopy = profile;
 
         // DO NOT use context int the async task, because the context is shared among consecutive queries.
         // profile of query1 maybe executed when query2 is under execution.
         Consumer<Boolean> task = (Boolean isAsync) -> {
-            RuntimeProfile summaryProfile = profile.getChild("Summary");
+            RuntimeProfile summaryProfile = profileCopy.getChild("Summary");
             summaryProfile.addInfoString(ProfileManager.PROFILE_COLLECT_TIME,
                     DebugUtil.getPrettyStringMs(System.currentTimeMillis() - profileCollectStartTime));
             summaryProfile.addInfoString("IsProfileAsync", String.valueOf(isAsync));
-            profile.addChild(coord.buildQueryProfile(needMerge));
+            if (enableAsyncProfileInBe) {
+                RunningProfileManager.RunningProfile runningProfile =
+                        RunningProfileManager.getInstance().getRunningProfile(executionId);
+                profileCopy.addChild(runningProfile.buildExecutionProfile());
+            } else {
+                profileCopy.addChild(coord.buildExecutionProfile(needMerge));
+            }
 
-            // Update TotalTime to include the Profile Collect Time and the time to build the profile.
-            long now = System.currentTimeMillis();
-            long totalTimeMs = now - startTime;
-            summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(now));
-            summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
             if (retryIndex > 0) {
                 summaryProfile.addInfoString(ProfileManager.RETRY_TIMES, Integer.toString(retryIndex + 1));
             }
 
-            ProfilingExecPlan profilingPlan;
-            if (coord.isShortCircuit()) {
-                profilingPlan = null;
-            } else {
-                profilingPlan = plan == null ? null : plan.getProfilingPlan();
-            }
-            String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profile);
+            String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profileCopy);
             if (queryDetail != null) {
                 queryDetail.setProfile(profileContent);
             }
             QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
             QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+            LOG.debug("removeProfile in profile task: queryId: {}", DebugUtil.printId(executionId));
+            RunningProfileManager.getInstance().removeProfile(executionId);
             if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
                 String jsonString = GSON.toJson(queryDetail);
                 if (Config.enable_profile_log_compress) {
@@ -1366,9 +1391,9 @@ public class StmtExecutor {
             return;
         }
 
-        coord.execWithQueryDeployExecutor();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
         coord.setExecPlan(execPlan);
+        coord.execWithQueryDeployExecutor();
 
         RowBatch batch = null;
         if (context instanceof HttpConnectContext) {
@@ -2367,12 +2392,7 @@ public class StmtExecutor {
             } catch (Exception e) {
                 LOG.warn("Failed to process profile async", e);
             } finally {
-                if (isAsync) {
-                    QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                            context.getSessionVariable().getProfileTimeout() * 1000L);
-                } else {
-                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
-                }
+                monitorQueryOrUnregister(isAsync);
             }
         }
     }
@@ -2540,9 +2560,9 @@ public class StmtExecutor {
                 return;
             }
 
-            coord.exec();
             coord.setTopProfileSupplier(this::buildTopLevelProfile);
             coord.setExecPlan(execPlan);
+            coord.exec();
 
             int timeout = getExecTimeout();
             long jobDeadLineMs = System.currentTimeMillis() + timeout * 1000;
@@ -2908,6 +2928,8 @@ public class StmtExecutor {
             coord = getCoordinatorFactory().createQueryScheduler(
                     context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+            coord.setTopProfileSupplier(this::buildTopLevelProfile);
+            coord.setExecPlan(plan);
 
             coord.exec();
             RowBatch batch;
@@ -2922,8 +2944,17 @@ public class StmtExecutor {
             LOG.warn("Failed to execute executeStmtWithExecPlan", e);
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
-            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
-            recordExecStatsIntoContext();
+            boolean isAsync = false;
+            try {
+                if (context.isProfileEnabled()) {
+                    isAsync = tryProcessProfileAsync(plan, 0);
+                }
+                recordExecStatsIntoContext();
+            } catch (Exception e) {
+                LOG.warn("Failed to unregister query", e);
+            } finally {
+                monitorQueryOrUnregister(isAsync);
+            }
         }
         return Pair.create(sqlResult, coord.getExecStatus());
     }
@@ -2986,17 +3017,17 @@ public class StmtExecutor {
             }
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
+            boolean isAsync = false;
             try {
                 if (context.isProfileEnabled()) {
-                    tryProcessProfileAsync(plan, 0);
-                    QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                            context.getSessionVariable().getProfileTimeout() * 1000L);
-                } else {
-                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                    isAsync = tryProcessProfileAsync(plan, 0);
                 }
                 recordExecStatsIntoContext();
+
             } catch (Exception e) {
                 LOG.warn("Failed to unregister query", e);
+            } finally {
+                monitorQueryOrUnregister(isAsync);
             }
         }
     }
@@ -3099,5 +3130,20 @@ public class StmtExecutor {
                 && !isPreQuerySQL
                 && !(parsedStmt instanceof ShowStmt)
                 && !(parsedStmt instanceof AdminSetConfigStmt);
+    }
+
+    private void monitorQueryOrUnregister(boolean isAsyncInFe) {
+        if (isAsyncInFe) {
+            QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(),
+                    System.currentTimeMillis() +
+                            context.getSessionVariable().getProfileTimeout() * 1000L);
+            // when profile report in BE is async, we don't use reportExecState, so we can unregister in here
+            if (coord.enableAsyncProfileInBe()) {
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            }
+        } else {
+            // when profile report in FE is sync, right now profile report is done, so we can unregister in here
+            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+        }
     }
 }

@@ -343,7 +343,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
                     result = new Status();
                     coordinator.getCommitInfos();
                     result = buildCommitInfos();
-                    coordinator.buildQueryProfile(true);
+                    coordinator.buildExecutionProfile(true);
                     result = new RuntimeProfile("Execution");
                 }
             };

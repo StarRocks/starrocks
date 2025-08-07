@@ -158,6 +158,7 @@ public:
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
     MemTracker* poco_connection_pool_mem_tracker() { return _poco_connection_pool_mem_tracker.get(); }
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
+    MemTracker* profile_mem_tracker() { return _profile_mem_tracker.get(); }
     std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
     std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
@@ -235,6 +236,8 @@ private:
     std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
 
     std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
+
+    std::shared_ptr<MemTracker> _profile_mem_tracker;
 };
 
 // Execution environment for queries/plan fragments.
