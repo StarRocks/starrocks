@@ -472,6 +472,12 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: auto
 * **導入バージョン**: v3.3.3
 
+### enable_iceberg_column_statistics
+
+* **説明**: 列の統計情報（`min`、`max`、`null count`、`row size`、および`ndv`（puffin ファイルが存在する場合））を取得するかどうか。この項目を `false` に設定すると、行数情報のみが収集されます。
+* **デフォルト**: false
+* **導入バージョン**: v3.4
+
 ### metadata_collect_query_timeout
 
 * **説明**: Iceberg Catalog メタデータ収集クエリのタイムアウト時間。
