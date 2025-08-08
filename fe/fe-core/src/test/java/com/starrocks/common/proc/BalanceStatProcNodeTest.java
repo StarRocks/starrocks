@@ -153,7 +153,8 @@ public class BalanceStatProcNodeTest {
             index.setBalanceStat(BalanceStat.createClusterTabletBalanceStat(10001L, 10002L, 9L, 1L));
             Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
             indexNameToId.put("index1", index.getId());
-            TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), 0, TStorageMedium.HDD);
+            TabletMeta tabletMeta =
+                    new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), 0, TStorageMedium.HDD);
             index.addTablet(new LocalTablet(1010L), tabletMeta);
             index.addTablet(new LocalTablet(1011L), tabletMeta);
             Partition partition = new Partition(partitionId, partitionId, "p1", index, new RandomDistributionInfo(2));
