@@ -31,6 +31,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -289,6 +290,8 @@ public class SystemInfoServiceTest {
         };
 
         HistoricalNodeMgr historicalNodeMgr = new HistoricalNodeMgr();
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
 
         new Expectations() {
             {
@@ -297,20 +300,24 @@ public class SystemInfoServiceTest {
 
                 globalStateMgr.getHistoricalNodeMgr();
                 result = historicalNodeMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
             }
         };
+
+        ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
+        ComputeResource computeResource = computeResourceProvider.ofComputeResource(
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
 
         List<Long> backendIds = Arrays.asList(101L, 102L);
         List<Long> computeNodeIds = Arrays.asList(201L, 202L, 203L);
         long updateTime = System.currentTimeMillis();
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-        long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
-        UpdateHistoricalNodeLog log = new UpdateHistoricalNodeLog(warehouseId, workerGroupId, updateTime, backendIds,
-                computeNodeIds);
+        UpdateHistoricalNodeLog log = new UpdateHistoricalNodeLog(computeResource, updateTime, backendIds, computeNodeIds);
 
         service.replayUpdateHistoricalNode(log);
-        Assertions.assertEquals(historicalNodeMgr.getHistoricalBackendIds(warehouseId, workerGroupId).size(), 2);
-        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouseId, workerGroupId).size(), 3);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalBackendIds(computeResource).size(), 2);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(computeResource).size(), 3);
     }
 
     @Test
@@ -330,6 +337,9 @@ public class SystemInfoServiceTest {
         };
 
         HistoricalNodeMgr historicalNodeMgr = new HistoricalNodeMgr();
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
@@ -337,20 +347,24 @@ public class SystemInfoServiceTest {
 
                 globalStateMgr.getHistoricalNodeMgr();
                 result = historicalNodeMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
             }
         };
+
+        ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
+        ComputeResource computeResource = computeResourceProvider.ofComputeResource(
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
 
         List<Long> backendIds = Arrays.asList(101L, 102L);
         List<Long> computeNodeIds = Arrays.asList(201L, 202L, 203L);
         long updateTime = System.currentTimeMillis();
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-        long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
-        UpdateHistoricalNodeLog log = new UpdateHistoricalNodeLog(warehouseId, workerGroupId, updateTime, backendIds,
-                computeNodeIds);
+        UpdateHistoricalNodeLog log = new UpdateHistoricalNodeLog(null, updateTime, backendIds, computeNodeIds);
 
         service.replayUpdateHistoricalNode(log);
-        Assertions.assertEquals(historicalNodeMgr.getHistoricalBackendIds(warehouseId, workerGroupId).size(), 2);
-        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouseId, workerGroupId).size(), 3);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalBackendIds(computeResource).size(), 2);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(computeResource).size(), 3);
     }
 
     @Test
