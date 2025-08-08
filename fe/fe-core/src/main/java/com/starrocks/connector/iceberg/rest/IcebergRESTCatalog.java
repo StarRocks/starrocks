@@ -27,6 +27,7 @@ import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -76,6 +77,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public static final String KEY_VENDED_CREDENTIALS_ENABLED = "vended-credentials-enabled";
     public static final String ICEBERG_CATALOG_SECURITY = "iceberg.catalog.security";
     public static final String KEY_NESTED_NAMESPACE_ENABLED = "rest.nested-namespace-enabled";
+    public static final String USER_AGENT = "header.User-Agent";
 
     private String catalogName = null;
     private final Configuration conf;
@@ -105,6 +107,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             restCatalogProperties.put("header.X-Iceberg-Access-Delegation", "vended-credentials");
         }
         restCatalogProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
+        restCatalogProperties.put(USER_AGENT, "StarRocks-Iceberg-Connector/" +
+                GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
 
         nestedNamespaceEnabled = PropertyUtil.propertyAsBoolean(restCatalogProperties, KEY_NESTED_NAMESPACE_ENABLED, false);
         // setup oauth2
