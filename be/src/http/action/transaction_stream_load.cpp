@@ -236,12 +236,21 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
         return -1;
     }
 
+    const auto& table_name = req->header(HTTP_TABLE_KEY);
+    if (table_name.empty()) {
+        _send_error_reply(req, Status::InvalidArgument(fmt::format("Invalid table {}", req->header(HTTP_TABLE_KEY))));
+        return -1;
+    }
+
     StreamLoadContext* ctx = nullptr;
     if (!req->header(HTTP_CHANNEL_ID).empty()) {
         int channel_id = std::stoi(req->header(HTTP_CHANNEL_ID));
-        ctx = _exec_env->stream_context_mgr()->get_channel_context(label, channel_id);
+        ctx = _exec_env->stream_context_mgr()->get_channel_context(label, table_name, channel_id);
     } else {
         ctx = _exec_env->stream_context_mgr()->get(label);
+        if (ctx == nullptr) {
+            ctx = _exec_env->stream_context_mgr()->get_channel_context(label, table_name, 0);
+        }
     }
     if (ctx == nullptr) {
         _send_error_reply(req, Status::TransactionNotExists(fmt::format("Transaction with label {} not exists",
