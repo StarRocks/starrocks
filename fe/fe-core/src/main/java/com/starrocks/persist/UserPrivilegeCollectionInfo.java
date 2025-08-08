@@ -64,10 +64,4 @@ public class UserPrivilegeCollectionInfo implements Writable {
         return pluginVersion;
     }
 
-
-
-    public static UserPrivilegeCollectionInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, UserPrivilegeCollectionInfo.class);
-    }
 }

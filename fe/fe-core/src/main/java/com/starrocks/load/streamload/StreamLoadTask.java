@@ -1521,20 +1521,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         out.writeLong(loadId.getLo());
     }
 
-    public static StreamLoadTask read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        StreamLoadTask task = GsonUtils.GSON.fromJson(json, StreamLoadTask.class);
-        long hi = in.readLong();
-        long lo = in.readLong();
-        TUniqueId loadId = new TUniqueId(hi, lo);
-        task.init();
-        task.setTUniqueId(loadId);
-        // Only task which type is PARALLEL will be persisted
-        // just set type to PARALLEL
-        task.setType(Type.PARALLEL_STREAM_LOAD);
-        return task;
-    }
-
     @Override
     public void gsonPostProcess() throws IOException {
         loadId = new TUniqueId(loadIdHi, loadIdLo);

@@ -1023,10 +1023,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
     }
 
-    public static MaterializedView read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, MaterializedView.class);
-    }
+
 
     @Override
     public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {

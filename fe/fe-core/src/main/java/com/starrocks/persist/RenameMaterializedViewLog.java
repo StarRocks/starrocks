@@ -52,11 +52,4 @@ public class RenameMaterializedViewLog implements Writable {
         return newMaterializedViewName;
     }
 
-
-
-    public static RenameMaterializedViewLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, RenameMaterializedViewLog.class);
-    }
-
 }

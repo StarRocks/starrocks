@@ -173,11 +173,6 @@ public class LakeTablet extends Tablet {
         }
     }
 
-    public static LakeTablet read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeTablet.class);
-    }
-
     @Override
     public int hashCode() {
         return Long.hashCode(id);

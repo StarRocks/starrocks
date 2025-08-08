@@ -86,8 +86,4 @@ public class ExternalHistogramStatsMeta implements Writable {
         return properties;
     }
 
-    public static ExternalHistogramStatsMeta read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        return GsonUtils.GSON.fromJson(s, ExternalHistogramStatsMeta.class);
-    }
 }

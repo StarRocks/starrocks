@@ -420,25 +420,6 @@ public class AggregateFunction extends Function {
         output.writeBoolean(returnsNonNullOnEmpty);
     }
 
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-
-        if (input.readBoolean()) {
-            intermediateType = ColumnType.read(input);
-        }
-        symbolName = readOptionStringOrNull(input);
-        readOptionStringOrNull(input);
-        readOptionStringOrNull(input);
-        readOptionStringOrNull(input);
-        readOptionStringOrNull(input);
-        readOptionStringOrNull(input);
-        readOptionStringOrNull(input);
-        ignoresDistinct = input.readBoolean();
-        isAnalyticFn = input.readBoolean();
-        isAggregateFn = input.readBoolean();
-        returnsNonNullOnEmpty = input.readBoolean();
-    }
-
     @Override
     public String getProperties() {
         Map<String, String> properties = Maps.newHashMap();

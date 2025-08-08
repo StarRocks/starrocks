@@ -677,12 +677,6 @@ public class BackupJobInfo implements Writable {
         return Joiner.on(", ").join(objs);
     }
 
-    public static BackupJobInfo read(DataInput in) throws IOException {
-        BackupJobInfo jobInfo = new BackupJobInfo();
-        jobInfo.readFields(in);
-        return jobInfo;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, toJson(true).toString());
@@ -690,17 +684,6 @@ public class BackupJobInfo implements Writable {
         for (Map.Entry<String, String> entry : tblAlias.entrySet()) {
             Text.writeString(out, entry.getKey());
             Text.writeString(out, entry.getValue());
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        genFromJson(json, this);
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String tbl = Text.readString(in);
-            String alias = Text.readString(in);
-            tblAlias.put(tbl, alias);
         }
     }
 

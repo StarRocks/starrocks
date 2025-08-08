@@ -92,10 +92,4 @@ public class ReplacePartitionOperationLog implements Writable {
         return unPartitionedTable;
     }
 
-    public static ReplacePartitionOperationLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ReplacePartitionOperationLog.class);
-    }
-
-
 }

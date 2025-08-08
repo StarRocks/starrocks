@@ -71,13 +71,6 @@ public class DropDbInfo implements Writable {
         return forceDrop;
     }
 
-    public static DropDbInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DropDbInfo.class);
-    }
-
-
-
     @Override
     public int hashCode() {
         return Objects.hashCode(dbName, forceDrop);

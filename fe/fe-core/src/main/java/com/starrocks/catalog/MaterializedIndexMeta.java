@@ -346,13 +346,6 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return true;
     }
 
-
-
-    public static MaterializedIndexMeta read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, MaterializedIndexMeta.class);
-    }
-
     @Override
     public void gsonPostProcess() throws IOException {
         if (schemaId <= 0) {

@@ -44,13 +44,6 @@ public class BackendIdsUpdateInfo implements Writable {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        int backendCount = in.readInt();
-        while (backendCount-- > 0) {
-            backendIds.add(in.readLong());
-        }
-    }
-
     public List<Long> getBackendList() {
         return backendIds;
     }

@@ -27,13 +27,13 @@ import com.starrocks.transaction.TabletFailInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import javax.validation.constraints.NotNull;
 import java.io.DataInput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.validation.constraints.NotNull;
 
 /**
  * The incremental maintenance of MV consists of epochs, whose lifetime is defined as:
@@ -146,12 +146,6 @@ public class MVEpoch implements Writable {
         this.numEpochFinished.incrementAndGet();
         LOG.info("onEpochReport done: {}", this);
     }
-
-    public static MVEpoch read(DataInput input) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(input), MVEpoch.class);
-    }
-
-
 
     public TMVEpoch toThrift() {
         TMVEpoch res = new TMVEpoch();

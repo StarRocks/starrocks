@@ -34,7 +34,4 @@ public class RemoveDynamicTabletJobLog implements Writable {
         return jobId;
     }
 
-    public static RemoveDynamicTabletJobLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), RemoveDynamicTabletJobLog.class);
-    }
 }

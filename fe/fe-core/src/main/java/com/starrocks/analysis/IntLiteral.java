@@ -385,11 +385,6 @@ public class IntLiteral extends LiteralExpr {
         out.writeLong(value);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = in.readLong();
-    }
-
     @Override
     public int hashCode() {
         // IntLiteral(0) equals to LargeIntLiteral(0), so their hash codes must equal.

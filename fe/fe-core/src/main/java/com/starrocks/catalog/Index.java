@@ -154,13 +154,6 @@ public class Index implements Writable {
         this.properties = properties;
     }
 
-
-
-    public static Index read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Index.class);
-    }
-
     @Override
     public int hashCode() {
         return 31 * (Long.hashCode(indexId) + indexName.hashCode()

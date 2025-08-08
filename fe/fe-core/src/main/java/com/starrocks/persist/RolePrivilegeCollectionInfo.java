@@ -54,10 +54,4 @@ public class RolePrivilegeCollectionInfo implements Writable {
         return pluginVersion;
     }
 
-
-
-    public static RolePrivilegeCollectionInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, RolePrivilegeCollectionInfo.class);
-    }
 }

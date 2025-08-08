@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.alter;
 
 import com.google.gson.annotations.SerializedName;
@@ -96,13 +95,6 @@ public class OptimizeTask extends Task {
     public void setOptimizeTaskState(Constants.TaskRunState state) {
         this.optimizeTaskState = state;
     }
-
-    public static Task read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, OptimizeTask.class);
-    }
-
-
 
     @Override
     public String toString() {

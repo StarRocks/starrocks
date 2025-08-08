@@ -34,10 +34,4 @@ public class DisablePartitionRecoveryInfo implements Writable {
         return partitionId;
     }
 
-    public static DisablePartitionRecoveryInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DisablePartitionRecoveryInfo.class);
-    }
-
-
 }

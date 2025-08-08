@@ -41,13 +41,6 @@ public class PhysicalPartitionPersistInfoV2 implements Writable {
         this.partition = partition;
     }
 
-
-
-    public static PhysicalPartitionPersistInfoV2 read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, PhysicalPartitionPersistInfoV2.class);
-    }
-
     public Long getDbId() {
         return this.dbId;
     }

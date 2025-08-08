@@ -423,8 +423,5 @@ public class Dictionary implements Writable {
         return info;
     }
 
-    public static Dictionary read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Dictionary.class);
-    }
+
 }

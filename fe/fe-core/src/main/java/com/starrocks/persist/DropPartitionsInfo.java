@@ -104,13 +104,6 @@ public class DropPartitionsInfo implements Writable {
         this.partitionNames = partitionNames;
     }
 
-    public static DropPartitionsInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DropPartitionsInfo.class);
-    }
-
-
-
     @Override
     public boolean equals(Object o) {
         if (this == o) {

@@ -97,13 +97,6 @@ public class ExternalBasicStatsMeta implements Writable {
         return properties;
     }
 
-
-
-    public static ExternalBasicStatsMeta read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        return GsonUtils.GSON.fromJson(s, ExternalBasicStatsMeta.class);
-    }
-
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
     }

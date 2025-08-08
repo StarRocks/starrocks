@@ -116,12 +116,6 @@ public class SnapshotInfo implements Writable {
         return basePath;
     }
 
-    public static SnapshotInfo read(DataInput in) throws IOException {
-        SnapshotInfo info = new SnapshotInfo();
-        info.readFields(in);
-        return info;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeLong(dbId);
@@ -136,22 +130,6 @@ public class SnapshotInfo implements Writable {
         out.writeInt(files.size());
         for (String file : files) {
             Text.writeString(out, file);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        dbId = in.readLong();
-        tblId = in.readLong();
-        partitionId = in.readLong();
-        indexId = in.readLong();
-        tabletId = in.readLong();
-        beId = in.readLong();
-        schemaHash = in.readInt();
-        path = Text.readString(in);
-
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            files.add(Text.readString(in));
         }
     }
 

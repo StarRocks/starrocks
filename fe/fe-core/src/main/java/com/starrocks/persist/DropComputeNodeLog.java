@@ -36,9 +36,4 @@ public class DropComputeNodeLog implements Writable {
         return computeNodeId;
     }
 
-
-
-    public static DropComputeNodeLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), DropComputeNodeLog.class);
-    }
 }

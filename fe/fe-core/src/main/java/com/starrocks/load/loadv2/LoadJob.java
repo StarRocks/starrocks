@@ -1259,8 +1259,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 && this.jobType.equals(other.jobType);
     }
 
-
-
     public void replayUpdateStateInfo(LoadJobStateUpdateInfo info) {
         state = info.getState();
         transactionId = info.getTransactionId();
@@ -1315,10 +1313,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             Text.writeString(out, json);
         }
 
-        public static LoadJobStateUpdateInfo read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, LoadJobStateUpdateInfo.class);
-        }
     }
 
     public static class JSONOptions {

@@ -47,13 +47,6 @@ public class OriginStatement implements Writable {
         this(singleOriginStmt, 0);
     }
 
-    public static OriginStatement read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, OriginStatement.class);
-    }
-
-
-
     @Override
     public String toString() {
         return "OriginStatement{" +

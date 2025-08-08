@@ -1095,21 +1095,6 @@ public class ExportJob implements Writable, GsonPostProcessable {
             }
         }
 
-        public static ExportUpdateInfo read(DataInput input) throws IOException {
-            ExportUpdateInfo info = GsonUtils.GSON.fromJson(Text.readString(input), ExportUpdateInfo.class);
-
-            int snapshotPathsLen = input.readInt();
-            for (int i = 0; i < snapshotPathsLen; i++) {
-                String hostName = Text.readString(input);
-                int port = input.readInt();
-                String path = Text.readString(input);
-                Pair<NetworkAddress, String> entry = Pair.create(new NetworkAddress(hostName, port), path);
-                info.snapshotPaths.set(i, entry);
-            }
-
-            return info;
-        }
-
         public List<Pair<NetworkAddress, String>> serialize(List<Pair<TNetworkAddress, String>> snapshotPaths) {
             return snapshotPaths
                         .stream()

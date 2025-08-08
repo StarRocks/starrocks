@@ -34,10 +34,4 @@ public class SetDefaultStorageVolumeLog implements Writable {
         return id;
     }
 
-
-
-    public static SetDefaultStorageVolumeLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, SetDefaultStorageVolumeLog.class);
-    }
 }

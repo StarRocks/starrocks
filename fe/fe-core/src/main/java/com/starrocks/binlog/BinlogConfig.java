@@ -133,11 +133,6 @@ public class BinlogConfig implements Writable {
         return tBinlogConfig;
     }
 
-
-
-    public static BinlogConfig read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), BinlogConfig.class);
-    }
     @Override
     public String toString() {
         return String.format("{ binlog version : %d,\n " +

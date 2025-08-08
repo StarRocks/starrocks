@@ -147,12 +147,5 @@ public class PulsarProgress extends RoutineLoadProgress {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        int size = in.readInt();
-        partitionToBacklogNum = new HashMap<>();
-        for (int i = 0; i < size; i++) {
-            partitionToBacklogNum.put(Text.readString(in), in.readLong());
-        }
-    }
+
 }

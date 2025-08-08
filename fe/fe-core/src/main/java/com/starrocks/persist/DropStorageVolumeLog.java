@@ -34,10 +34,4 @@ public class DropStorageVolumeLog implements Writable {
         return id;
     }
 
-
-
-    public static DropStorageVolumeLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DropStorageVolumeLog.class);
-    }
 }

@@ -55,7 +55,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.File;
 import java.io.FileInputStream;
@@ -684,12 +683,6 @@ public class Repository implements Writable, GsonPostProcessable {
         return info;
     }
 
-    public static Repository read(DataInput in) throws IOException {
-        Repository repo = new Repository();
-        repo.readFields(in);
-        return repo;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeLong(id);
@@ -698,19 +691,6 @@ public class Repository implements Writable, GsonPostProcessable {
         Text.writeString(out, location);
         storage.write(out);
         out.writeLong(createTime);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        id = in.readLong();
-        name = Text.readString(in);
-        isReadOnly = in.readBoolean();
-        location = Text.readString(in);
-        storage = BlobStorage.read(in);
-        createTime = in.readLong();
-
-        if (!GlobalStateMgr.isCheckpointThread()) {
-            genPrefixRepo();
-        }
     }
 
     @Override

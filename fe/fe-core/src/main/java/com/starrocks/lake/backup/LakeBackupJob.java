@@ -211,11 +211,6 @@ public class LakeBackupJob extends BackupJob {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static LakeBackupJob read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeBackupJob.class);
-    }
-
     @Override
     @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
     protected void waitingAllSnapshotsFinished() {

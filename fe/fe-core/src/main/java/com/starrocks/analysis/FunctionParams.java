@@ -223,24 +223,6 @@ public class FunctionParams implements Writable {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        isStar = in.readBoolean();
-        isDistinct = in.readBoolean();
-        if (in.readBoolean()) {
-            exprs = Lists.newArrayList();
-            int size = in.readInt();
-            for (int i = 0; i < size; ++i) {
-                exprs.add(Expr.readIn(in));
-            }
-        }
-    }
-
-    public static FunctionParams read(DataInput in) throws IOException {
-        FunctionParams params = new FunctionParams();
-        params.readFields(in);
-        return params;
-    }
-
     @Override
     public int hashCode() {
         int result = 31 * Boolean.hashCode(isStar) + Boolean.hashCode(isDistinct);

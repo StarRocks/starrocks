@@ -94,11 +94,6 @@ public class GsonDerivedClassSerializationTest {
             Text.writeString(out, json);
         }
 
-        public static ParentClass read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            System.out.println("read: " + json);
-            return TEST_GSON.fromJson(json, ParentClass.class);
-        }
     }
 
     public static class ChildClassA extends ParentClass implements GsonPostProcessable {
@@ -145,11 +140,6 @@ public class GsonDerivedClassSerializationTest {
             Text.writeString(out, json);
         }
 
-        public static WrapperClass read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            System.out.println("read: " + json);
-            return TEST_GSON.fromJson(json, WrapperClass.class);
-        }
     }
 
     // Class A = ParentClass + ChildClassA
@@ -173,11 +163,6 @@ public class GsonDerivedClassSerializationTest {
             Text.writeString(out, json);
         }
 
-        public static ClassA read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            System.out.println("read ClassA: " + json);
-            return TEST_GSON.fromJson(json, ClassA.class);
-        }
     }
 
     private static RuntimeTypeAdapterFactory<ParentClass> runtimeTypeAdapterFactory = RuntimeTypeAdapterFactory

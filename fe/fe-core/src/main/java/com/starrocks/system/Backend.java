@@ -399,12 +399,6 @@ public class Backend extends ComputeNode {
         return true;
     }
 
-    public static Backend read(DataInput in) throws IOException {
-        Backend backend = new Backend();
-        backend.readFields(in);
-        return backend;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeLong(getId());
@@ -430,37 +424,6 @@ public class Backend extends ComputeNode {
         out.writeInt(getDecommissionType().ordinal());
 
         out.writeInt(getBrpcPort());
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        setId(in.readLong());
-        setHost(Text.readString(in));
-        setHeartbeatPort(in.readInt());
-        setBePort(in.readInt());
-        setHttpPort(in.readInt());
-        setBeRpcPort(in.readInt());
-        setAlive(in.readBoolean());
-        setDecommissioned(in.readBoolean());
-
-        setLastUpdateMs(in.readLong());
-
-        setLastStartTime(in.readLong());
-
-        Map<String, DiskInfo> disks = Maps.newHashMap();
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String rootPath = Text.readString(in);
-            DiskInfo diskInfo = DiskInfo.read(in);
-            disks.put(rootPath, diskInfo);
-        }
-
-        disksRef = new ConcurrentHashMap<>(disks);
-        // ignore clusterName
-        Text.readString(in);
-        setBackendState(in.readInt());
-        setDecommissionType(in.readInt());
-
-        setBrpcPort(in.readInt());
     }
 
     @Override

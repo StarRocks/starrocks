@@ -195,30 +195,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        int isWritable = in.readInt();
-        if (isWritable == 0) {
-            return;
-        }
-
-        // read op
-        BinaryType op = BinaryType.valueOf(Text.readString(in));
-        // read left
-        SlotRef left = new SlotRef(null, Text.readString(in));
-        // read right
-        StringLiteral right = new StringLiteral(Text.readString(in));
-
-        this.op = op;
-        this.addChild(left);
-        this.addChild(right);
-    }
-
-    public static BinaryPredicate read(DataInput in) throws IOException {
-        BinaryPredicate binaryPredicate = new BinaryPredicate();
-        binaryPredicate.readFields(in);
-        return binaryPredicate;
-    }
-
     public Pair<SlotRef, Expr> createSlotAndLiteralPair() {
         Expr leftExpr = getChild(0);
         Expr rightExpr = getChild(1);

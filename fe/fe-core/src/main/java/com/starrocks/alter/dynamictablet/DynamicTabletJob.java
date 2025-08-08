@@ -273,8 +273,5 @@ public abstract class DynamicTabletJob implements Writable {
         return item;
     }
 
-    public static DynamicTabletJob read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DynamicTabletJob.class);
-    }
+
 }

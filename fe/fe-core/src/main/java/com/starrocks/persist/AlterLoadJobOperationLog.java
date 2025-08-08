@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
@@ -43,11 +42,5 @@ public class AlterLoadJobOperationLog implements Writable {
     public Map<String, String> getJobProperties() {
         return jobProperties;
     }
-
-    public static AlterLoadJobOperationLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, AlterLoadJobOperationLog.class);
-    }
-
 
 }

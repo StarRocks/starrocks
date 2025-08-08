@@ -35,10 +35,4 @@ public class ReplicationJobLog implements Writable {
         return replicationJob;
     }
 
-
-
-    public static ReplicationJobLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ReplicationJobLog.class);
-    }
 }

@@ -40,9 +40,4 @@ public class DropResourceOperationLog implements Writable {
         return name;
     }
 
-
-
-    public static DropResourceOperationLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), DropResourceOperationLog.class);
-    }
 }

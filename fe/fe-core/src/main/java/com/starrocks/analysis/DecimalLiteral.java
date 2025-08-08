@@ -425,17 +425,6 @@ public class DecimalLiteral extends LiteralExpr {
         Text.writeString(out, value.toString());
     }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = new BigDecimal(Text.readString(in));
-    }
-
-    public static DecimalLiteral read(DataInput in) throws IOException {
-        DecimalLiteral dec = new DecimalLiteral();
-        dec.readFields(in);
-        return dec;
-    }
-
     // To be compatible with OLAP, only need 9 digits.
     // Note: the return value is negative if value is negative.
     public int getFracValue() {

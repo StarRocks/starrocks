@@ -47,8 +47,4 @@ public class EtlJobInfo implements Writable {
     public void write(DataOutput out) throws IOException {
         jobStatus.write(out);
     }
-
-    public void readFields(DataInput in) throws IOException {
-        jobStatus.readFields(in);
-    }
 }

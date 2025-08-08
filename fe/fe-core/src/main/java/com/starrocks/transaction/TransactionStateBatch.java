@@ -166,11 +166,6 @@ public class TransactionStateBatch implements Writable {
         }
     }
 
-
-    public static TransactionStateBatch read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), TransactionStateBatch.class);
-    }
-
     @Override
     public String toString() {
         return transactionStates.toString();

@@ -392,17 +392,4 @@ public class TableRef implements ParseNode, Writable {
             out.writeBoolean(false);
         }
     }
-
-    public void readFields(DataInput in) throws IOException {
-        name = new TableName();
-        name.readFields(in);
-        if (in.readBoolean()) {
-            partitionNames = PartitionNames.read(in);
-        }
-
-        if (in.readBoolean()) {
-            String alias = Text.readString(in);
-            aliases_ = new String[] {alias};
-        }
-    }
 }

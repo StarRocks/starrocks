@@ -60,10 +60,4 @@ public class DictionaryMgrInfo implements Writable {
         return this.dictionaries;
     }
 
-    public static DictionaryMgrInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DictionaryMgrInfo.class);
-    }
-
-
 }

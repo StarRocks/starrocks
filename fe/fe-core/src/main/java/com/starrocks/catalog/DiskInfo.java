@@ -212,17 +212,4 @@ public class DiskInfo implements Writable {
         Text.writeString(out, state.name());
     }
 
-    public void readFields(DataInput in) throws IOException {
-        this.rootPath = Text.readString(in);
-        this.totalCapacityB = in.readLong();
-        this.dataUsedCapacityB = in.readLong();
-        this.diskAvailableCapacityB = in.readLong();
-        this.state = DiskState.valueOf(Text.readString(in));
-    }
-
-    public static DiskInfo read(DataInput in) throws IOException {
-        DiskInfo diskInfo = new DiskInfo();
-        diskInfo.readFields(in);
-        return diskInfo;
-    }
 }

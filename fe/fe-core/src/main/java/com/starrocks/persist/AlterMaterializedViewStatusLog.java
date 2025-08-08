@@ -70,8 +70,4 @@ public class AlterMaterializedViewStatusLog implements Writable {
     public String getReason() {
         return reason;
     }
-
-    public static AlterMaterializedViewStatusLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), AlterMaterializedViewStatusLog.class);
-    }
 }

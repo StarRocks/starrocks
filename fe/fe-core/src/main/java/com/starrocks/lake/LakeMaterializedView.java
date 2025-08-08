@@ -109,12 +109,6 @@ public class LakeMaterializedView extends MaterializedView {
         return (MaterializedView) selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
     }
 
-    public static LakeMaterializedView read(DataInput in) throws IOException {
-        // type is already read in Table
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeMaterializedView.class);
-    }
-
     @Override
     public boolean isDeleteRetryable() {
         return true;

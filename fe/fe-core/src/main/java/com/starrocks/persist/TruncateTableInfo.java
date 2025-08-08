@@ -83,10 +83,4 @@ public class TruncateTableInfo implements Writable {
         return isEntireTable;
     }
 
-    public static TruncateTableInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, TruncateTableInfo.class);
-    }
-
-
 }

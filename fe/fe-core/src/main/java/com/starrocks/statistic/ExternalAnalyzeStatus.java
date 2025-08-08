@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
@@ -217,8 +216,4 @@ public class ExternalAnalyzeStatus implements AnalyzeStatus, Writable {
         return new ShowResultSet(META_DATA, rows);
     }
 
-    public static ExternalAnalyzeStatus read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        return GsonUtils.GSON.fromJson(s, ExternalAnalyzeStatus.class);
-    }
 }

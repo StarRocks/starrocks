@@ -224,10 +224,4 @@ public class SparkLoadAppHandle implements Writable {
         }
     }
 
-
-
-    public static SparkLoadAppHandle read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, SparkLoadAppHandle.class);
-    }
 }

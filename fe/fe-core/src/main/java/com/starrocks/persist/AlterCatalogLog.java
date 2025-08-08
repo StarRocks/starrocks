@@ -43,9 +43,4 @@ public class AlterCatalogLog implements Writable {
         return properties;
     }
 
-
-
-    public static AlterCatalogLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), AlterCatalogLog.class);
-    }
 }

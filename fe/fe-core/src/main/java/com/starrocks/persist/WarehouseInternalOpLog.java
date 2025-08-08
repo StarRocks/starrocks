@@ -46,8 +46,4 @@ public class WarehouseInternalOpLog implements Writable {
         return payload;
     }
 
-    public static WarehouseInternalOpLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, WarehouseInternalOpLog.class);
-    }
 }

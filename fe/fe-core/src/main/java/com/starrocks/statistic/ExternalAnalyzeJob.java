@@ -223,13 +223,6 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
         }
     }
 
-
-
-    public static ExternalAnalyzeJob read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        return GsonUtils.GSON.fromJson(s, ExternalAnalyzeJob.class);
-    }
-
     @Override
     public String toString() {
         return "ExternalAnalyzeJob{" +

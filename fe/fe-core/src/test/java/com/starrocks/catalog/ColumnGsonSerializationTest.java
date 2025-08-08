@@ -76,10 +76,6 @@ public class ColumnGsonSerializationTest {
             Text.writeString(out, json);
         }
 
-        public static ColumnList read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, ColumnList.class);
-        }
     }
 
     @Test

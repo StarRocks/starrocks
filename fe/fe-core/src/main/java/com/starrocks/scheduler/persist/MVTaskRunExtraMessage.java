@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler.persist;
 
 import com.google.common.base.Joiner;
@@ -118,7 +117,6 @@ public class MVTaskRunExtraMessage implements Writable {
         return refBasePartitionsToRefreshMap;
     }
 
-
     public void setRefBasePartitionsToRefreshMap(Map<String, Set<String>> refBasePartitionsToRefreshMap) {
         this.refBasePartitionsToRefreshMap = MvUtils.shrinkToSize(refBasePartitionsToRefreshMap,
                 Config.max_mv_task_run_meta_message_values_length);
@@ -145,11 +143,6 @@ public class MVTaskRunExtraMessage implements Writable {
     public void setBasePartitionsToRefreshMap(Map<String, Set<String>> basePartitionsToRefreshMap) {
         this.basePartitionsToRefreshMap = MvUtils.shrinkToSize(basePartitionsToRefreshMap,
                 Config.max_mv_task_run_meta_message_values_length);
-    }
-
-    public static MVTaskRunExtraMessage read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, MVTaskRunExtraMessage.class);
     }
 
     public ExecuteOption getExecuteOption() {
@@ -196,8 +189,6 @@ public class MVTaskRunExtraMessage implements Writable {
         this.planBuilderMessage = MvUtils.shrinkToSize(planBuilderMessage,
                 Config.max_mv_task_run_meta_message_values_length);
     }
-
-
 
     @Override
     public String toString() {

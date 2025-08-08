@@ -88,26 +88,12 @@ public class BrokerHbResponse extends HeartbeatResponse implements Writable {
         return port;
     }
 
-    public static BrokerHbResponse read(DataInput in) throws IOException {
-        BrokerHbResponse result = new BrokerHbResponse();
-        result.readFields(in);
-        return result;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
         Text.writeString(out, name);
         Text.writeString(out, host);
         out.writeInt(port);
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        name = Text.readString(in);
-        host = Text.readString(in);
-        port = in.readInt();
     }
 
     @Override

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load;
 
 import com.google.common.collect.ImmutableMap;
@@ -228,14 +227,6 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
         } finally {
             lock.readLock().unlock();
         }
-    }
-
-
-
-    public static InsertOverwriteJobMgr read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        InsertOverwriteJobMgr jobManager = GsonUtils.GSON.fromJson(json, InsertOverwriteJobMgr.class);
-        return jobManager;
     }
 
     @Override

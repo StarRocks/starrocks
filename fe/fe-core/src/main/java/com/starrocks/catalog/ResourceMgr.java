@@ -311,13 +311,6 @@ public class ResourceMgr implements Writable {
         return procNode;
     }
 
-
-
-    public static ResourceMgr read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ResourceMgr.class);
-    }
-
     public class ResourceProcNode implements ProcNodeInterface {
         @Override
         public ProcResult fetchResult() {

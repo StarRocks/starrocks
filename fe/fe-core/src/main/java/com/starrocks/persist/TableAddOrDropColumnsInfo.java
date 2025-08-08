@@ -108,12 +108,6 @@ public class TableAddOrDropColumnsInfo implements Writable {
         return indexToNewSchemaId;
     }
 
-
-
-    public static TableAddOrDropColumnsInfo read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), TableAddOrDropColumnsInfo.class);
-    }
-
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {

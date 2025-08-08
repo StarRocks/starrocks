@@ -73,18 +73,7 @@ public class TableCommitInfo implements Writable {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        tableId = in.readLong();
-        boolean hasPartitionInfo = in.readBoolean();
-        idToPartitionCommitInfo = Maps.newHashMap();
-        if (hasPartitionInfo) {
-            int elementNum = in.readInt();
-            for (int i = 0; i < elementNum; ++i) {
-                PartitionCommitInfo partitionCommitInfo = PartitionCommitInfo.read(in);
-                idToPartitionCommitInfo.put(partitionCommitInfo.getPhysicalPartitionId(), partitionCommitInfo);
-            }
-        }
-    }
+
 
     public long getTableId() {
         return tableId;

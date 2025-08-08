@@ -506,20 +506,6 @@ public class SlotRef extends Expr {
         Text.writeString(out, colName);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        if (in.readBoolean()) {
-            tblName = new TableName();
-            tblName.readFields(in);
-        }
-        colName = Text.readString(in);
-    }
-
-    public static SlotRef read(DataInput in) throws IOException {
-        SlotRef slotRef = new SlotRef();
-        slotRef.readFields(in);
-        return slotRef;
-    }
-
     /**
      * Below function is added by new analyzer
      */

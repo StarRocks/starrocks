@@ -1202,12 +1202,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return useFastSchemaEvolution;
     }
 
-
-
-    public static TableProperty read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), TableProperty.class);
-    }
-
     @Override
     public void gsonPostProcess() throws IOException {
         try {

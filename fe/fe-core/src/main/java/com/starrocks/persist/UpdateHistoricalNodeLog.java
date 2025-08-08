@@ -75,7 +75,4 @@ public class UpdateHistoricalNodeLog implements Writable {
         return computeNodeIds;
     }
 
-    public static UpdateHistoricalNodeLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), UpdateHistoricalNodeLog.class);
-    }
 }

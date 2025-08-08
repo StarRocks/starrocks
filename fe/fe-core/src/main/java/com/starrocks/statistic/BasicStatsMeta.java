@@ -120,11 +120,6 @@ public class BasicStatsMeta implements Writable {
         this.totalRows = totalRows;
     }
 
-    public static BasicStatsMeta read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        return GsonUtils.GSON.fromJson(s, BasicStatsMeta.class);
-    }
-
     public long getDbId() {
         return dbId;
     }

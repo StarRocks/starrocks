@@ -62,13 +62,6 @@ public class BatchDropInfo implements Writable {
                 && this.indexIdSet.equals(otherBatchDropInfo.indexIdSet);
     }
 
-
-
-    public static BatchDropInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, BatchDropInfo.class);
-    }
-
     public Set<Long> getIndexIdSet() {
         return indexIdSet;
     }

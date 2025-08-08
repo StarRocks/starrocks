@@ -92,11 +92,6 @@ public class GsonSerializationTest {
             Text.writeString(out, json);
         }
 
-        public static OrigClassA read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            System.out.println(json);
-            return GsonUtils.GSON.fromJson(json, OrigClassA.class);
-        }
     }
 
     public static class InnerClassA implements Writable {
@@ -132,9 +127,6 @@ public class GsonSerializationTest {
             Text.writeString(out, GsonUtils.GSON.toJson(this));
         }
 
-        public static InnerClassA read(DataInput in) throws IOException {
-            return GsonUtils.GSON.fromJson(Text.readString(in), InnerClassA.class);
-        }
     }
 
     public static class InnerClassB implements Writable {
@@ -170,9 +162,6 @@ public class GsonSerializationTest {
             Text.writeString(out, GsonUtils.GSON.toJson(this));
         }
 
-        public static InnerClassB read(DataInput in) throws IOException {
-            return GsonUtils.GSON.fromJson(Text.readString(in), InnerClassB.class);
-        }
     }
 
     // same as OriginClassA, but:
@@ -198,11 +187,6 @@ public class GsonSerializationTest {
             Text.writeString(out, json);
         }
 
-        public static OriginClassADifferentMembers read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            System.out.println(json);
-            return GsonUtils.GSON.fromJson(json, OriginClassADifferentMembers.class);
-        }
     }
 
     // same as OriginClassA, but:
@@ -229,11 +213,6 @@ public class GsonSerializationTest {
             Text.writeString(out, json);
         }
 
-        public static OriginClassADifferentMemberName read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            System.out.println(json);
-            return GsonUtils.GSON.fromJson(json, OriginClassADifferentMemberName.class);
-        }
     }
 
     @AfterEach
@@ -369,11 +348,6 @@ public class GsonSerializationTest {
             Text.writeString(out, json);
         }
 
-        public static MultiMapClassA read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            MultiMapClassA classA = GsonUtils.GSON.fromJson(json, MultiMapClassA.class);
-            return classA;
-        }
     }
 
     public static class Key {
@@ -463,11 +437,6 @@ public class GsonSerializationTest {
             Text.writeString(out, json);
         }
 
-        public static GsonPrePostProcessTest read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            System.out.println("read: " + json);
-            return GsonUtils.GSON.fromJson(json, GsonPrePostProcessTest.class);
-        }
     }
 
     @Test

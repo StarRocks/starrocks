@@ -461,11 +461,6 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
 
 
-    public static ComputeNode read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ComputeNode.class);
-    }
-
     @Override
     public int hashCode() {
         return Objects.hashCode(id);

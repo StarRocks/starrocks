@@ -96,22 +96,6 @@ public class TablePropertyInfo implements Writable {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        tableId = in.readLong();
-
-        if (in.readBoolean()) {
-            groupId = GroupId.read(in);
-        }
-
-        int size = in.readInt();
-        propertyMap = Maps.newHashMap();
-        for (int i = 0; i < size; i++) {
-            String key = Text.readString(in);
-            String value = Text.readString(in);
-            propertyMap.put(key, value);
-        }
-    }
-
     @Override
     public int hashCode() {
         return Objects.hashCode(tableId, groupId);

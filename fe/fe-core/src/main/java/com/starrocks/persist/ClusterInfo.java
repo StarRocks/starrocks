@@ -77,16 +77,6 @@ public class ClusterInfo implements Writable {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        clusterName = Text.readString(in);
-        clusterId = in.readLong();
-        instanceNum = in.readInt();
-        int count = in.readInt();
-        while (count-- > 0) {
-            expandBackendIds.add(in.readLong());
-        }
-    }
-
     public String getClusterName() {
         return clusterName;
     }

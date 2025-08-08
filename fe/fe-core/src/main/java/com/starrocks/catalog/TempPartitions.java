@@ -132,13 +132,6 @@ public class TempPartitions implements Writable, GsonPostProcessable {
         }
     }
 
-
-
-    public static TempPartitions read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, TempPartitions.class);
-    }
-
     @Override
     public void gsonPostProcess() {
         for (Partition partition : idToPartition.values()) {

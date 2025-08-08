@@ -62,11 +62,4 @@ public class ImpersonatePrivInfo implements Writable {
         return authorizedRoleName;
     }
 
-    public static ImpersonatePrivInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ImpersonatePrivInfo.class);
-    }
-
-
-
 }

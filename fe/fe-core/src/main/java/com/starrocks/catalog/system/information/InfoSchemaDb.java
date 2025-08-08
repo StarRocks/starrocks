@@ -110,9 +110,7 @@ public class InfoSchemaDb extends Database {
         // Do nothing
     }
 
-    public void readFields(DataInput in) throws IOException {
-        throw new IOException("Not support.");
-    }
+
 
     @Override
     public Table getTable(String name) {

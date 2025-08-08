@@ -48,10 +48,4 @@ public class SwapTableOperationLog implements Writable {
         return newTblId;
     }
 
-
-
-    public static SwapTableOperationLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, SwapTableOperationLog.class);
-    }
 }

@@ -138,21 +138,10 @@ public class DataProperty implements Writable {
         return cooldownTimeMs;
     }
 
-    public static DataProperty read(DataInput in) throws IOException {
-        DataProperty dataProperty = new DataProperty();
-        dataProperty.readFields(in);
-        return dataProperty;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, storageMedium.name());
         out.writeLong(cooldownTimeMs);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        storageMedium = TStorageMedium.valueOf(Text.readString(in));
-        cooldownTimeMs = in.readLong();
     }
 
     @Override

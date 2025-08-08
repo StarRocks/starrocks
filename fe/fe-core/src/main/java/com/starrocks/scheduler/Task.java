@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler;
 
 import com.google.gson.annotations.SerializedName;
@@ -214,11 +213,6 @@ public class Task implements Writable {
 
     public void setPostRun(String postRun) {
         this.postRun = postRun;
-    }
-
-    public static Task read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Task.class);
     }
 
     @Override

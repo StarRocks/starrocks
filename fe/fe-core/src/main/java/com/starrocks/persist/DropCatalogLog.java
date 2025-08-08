@@ -35,9 +35,4 @@ public class DropCatalogLog implements Writable {
         return catalogName;
     }
 
-
-
-    public static DropCatalogLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), DropCatalogLog.class);
-    }
 }

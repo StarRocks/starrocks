@@ -864,13 +864,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return true;
     }
 
-
-
-    public static Column read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Column.class);
-    }
-
     public String generatedColumnExprToString() {
         if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.getExpressionSql() != null) {
             return generatedColumnExprSerialized.deserialize().toSql();

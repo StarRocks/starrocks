@@ -162,14 +162,4 @@ public class NullLiteral extends LiteralExpr {
     public void write(DataOutput out) throws IOException {
         super.write(out);
     }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-    }
-
-    public static NullLiteral read(DataInput in) throws IOException {
-        NullLiteral literal = new NullLiteral();
-        literal.readFields(in);
-        return literal;
-    }
 }

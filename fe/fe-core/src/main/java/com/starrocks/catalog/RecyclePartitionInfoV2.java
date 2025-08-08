@@ -51,11 +51,6 @@ public class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
         RecyclePartitionInfo.recoverRangePartition(table, this);
     }
 
-    public static RecyclePartitionInfoV2 read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, RecyclePartitionInfoV2.class);
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeLong(-1L);

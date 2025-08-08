@@ -130,14 +130,7 @@ public class MysqlLoadErrorHub extends LoadErrorHub {
             Text.writeString(out, table);
         }
 
-        public void readFields(DataInput in) throws IOException {
-            host = Text.readString(in);
-            port = in.readInt();
-            user = Text.readString(in);
-            passwd = Text.readString(in);
-            db = Text.readString(in);
-            table = Text.readString(in);
-        }
+
 
         public TMysqlErrorHubInfo toThrift() {
             TMysqlErrorHubInfo info = new TMysqlErrorHubInfo(host, port, user, passwd, db, table);

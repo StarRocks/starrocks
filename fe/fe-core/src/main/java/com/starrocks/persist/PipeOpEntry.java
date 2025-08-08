@@ -45,13 +45,6 @@ public class PipeOpEntry implements Writable {
         this.pipeOp = pipeOp;
     }
 
-    public static PipeOpEntry read(DataInput input) throws IOException {
-        String json = Text.readString(input);
-        return GsonUtils.GSON.fromJson(json, PipeOpEntry.class);
-    }
-
-
-
     public enum PipeOpType {
         PIPE_OP_CREATE(0),
         PIPE_OP_ALTER(1),

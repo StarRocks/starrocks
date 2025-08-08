@@ -78,11 +78,6 @@ public class ExportFailMsg implements Writable {
         Text.writeString(out, msg);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        cancelType = CancelType.valueOf(Text.readString(in));
-        msg = Text.readString(in);
-    }
-
     @Override
     public int hashCode() {
         return Objects.hashCode(cancelType, msg);

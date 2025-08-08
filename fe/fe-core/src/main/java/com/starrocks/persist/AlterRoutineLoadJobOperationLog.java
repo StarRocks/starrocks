@@ -81,10 +81,4 @@ public class AlterRoutineLoadJobOperationLog implements Writable {
         return originStatement;
     }
 
-    public static AlterRoutineLoadJobOperationLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, AlterRoutineLoadJobOperationLog.class);
-    }
-
-
 }

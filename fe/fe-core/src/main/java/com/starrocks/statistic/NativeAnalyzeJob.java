@@ -258,11 +258,6 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
         }
     }
 
-    public static NativeAnalyzeJob read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        return GsonUtils.GSON.fromJson(s, NativeAnalyzeJob.class);
-    }
-
     @Override
     public String toString() {
         return "NativeAnalyzeJob{" +

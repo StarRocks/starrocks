@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
@@ -115,10 +114,6 @@ public class OptimizeClause extends AlterTableClause {
 
     public void setTableOptimize(boolean tableOptimize) {
         isTableOptimize = tableOptimize;
-    }
-
-    public static OptimizeClause read(DataInput in) throws IOException {
-        throw new RuntimeException("OptimizeClause serialization is not supported anymore.");
     }
 
     @Override

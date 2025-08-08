@@ -63,7 +63,4 @@ public class TableStorageInfo implements Writable, GsonPreProcessable, GsonPostP
         }
     }
 
-    public static TableStorageInfo read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), TableStorageInfo.class);
-    }
 }

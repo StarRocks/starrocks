@@ -272,11 +272,6 @@ public class LakeRestoreJob extends RestoreJob {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static LakeRestoreJob read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeRestoreJob.class);
-    }
-
     @Override
     protected void modifyInvertedIndex(OlapTable restoreTbl, Partition restorePart) {
         for (MaterializedIndex restoredIdx : restorePart.getDefaultPhysicalPartition()

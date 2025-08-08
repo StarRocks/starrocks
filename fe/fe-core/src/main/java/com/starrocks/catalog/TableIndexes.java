@@ -115,8 +115,5 @@ public class TableIndexes implements Writable {
     }
 
 
-    public static TableIndexes read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, TableIndexes.class);
-    }
+
 }

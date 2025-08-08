@@ -57,7 +57,4 @@ public class ModifyColumnCommentLog implements Writable {
         return comment;
     }
 
-    public static ModifyColumnCommentLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), ModifyColumnCommentLog.class);
-    }
 }

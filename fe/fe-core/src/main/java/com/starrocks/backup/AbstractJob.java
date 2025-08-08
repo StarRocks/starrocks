@@ -40,11 +40,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.backup.LakeBackupJob;
-import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.server.GlobalStateMgr;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
@@ -185,30 +182,6 @@ public abstract class AbstractJob implements Writable {
 
     public abstract boolean isCancelled();
 
-    public static AbstractJob read(DataInput in) throws IOException {
-        AbstractJob job = null;
-        JobType type = JobType.valueOf(Text.readString(in));
-        if (type == JobType.BACKUP) {
-            job = new BackupJob();
-        } else if (type == JobType.RESTORE) {
-            job = new RestoreJob();
-        } else if (type == JobType.LAKE_BACKUP) {
-            job = LakeBackupJob.read(in);
-            job.setTypeRead(true);
-            return job;
-        } else if (type == JobType.LAKE_RESTORE) {
-            job = LakeRestoreJob.read(in);
-            job.setTypeRead(true);
-            return job;
-        } else {
-            throw new IOException("Unknown job type: " + type.name());
-        }
-
-        job.setTypeRead(true);
-        job.readFields(in);
-        return job;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         // ATTN: must write type first
@@ -240,32 +213,6 @@ public abstract class AbstractJob implements Writable {
             Preconditions.checkState(savedNum == 0, savedNum);
         } else {
             out.writeBoolean(false);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        if (!isTypeRead) {
-            type = JobType.valueOf(Text.readString(in));
-            isTypeRead = true;
-        }
-
-        repoId = in.readLong();
-        label = Text.readString(in);
-        jobId = in.readLong();
-        dbId = in.readLong();
-        dbName = Text.readString(in);
-
-        createTime = in.readLong();
-        finishedTime = in.readLong();
-        timeoutMs = in.readLong();
-
-        if (in.readBoolean()) {
-            int size = in.readInt();
-            for (int i = 0; i < size; i++) {
-                long taskId = in.readLong();
-                String msg = Text.readString(in);
-                taskErrMsg.put(taskId, msg);
-            }
         }
     }
 

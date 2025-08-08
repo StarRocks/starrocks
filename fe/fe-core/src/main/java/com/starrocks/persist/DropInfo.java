@@ -91,24 +91,6 @@ public class DropInfo implements Writable {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        dbId = in.readLong();
-        tableId = in.readLong();
-        forceDrop = in.readBoolean();
-        boolean hasIndexId = in.readBoolean();
-        if (hasIndexId) {
-            indexId = in.readLong();
-        } else {
-            indexId = -1L;
-        }
-    }
-
-    public static DropInfo read(DataInput in) throws IOException {
-        DropInfo dropInfo = new DropInfo();
-        dropInfo.readFields(in);
-        return dropInfo;
-    }
-
     @Override
     public int hashCode() {
         return Objects.hashCode(dbId, tableId);

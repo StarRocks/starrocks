@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
@@ -142,10 +141,4 @@ public class PartitionNames implements ParseNode, Writable {
         return sb.toString();
     }
 
-
-
-    public static PartitionNames read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, PartitionNames.class);
-    }
 }

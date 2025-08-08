@@ -47,11 +47,4 @@ public class RemoveAlterJobV2OperationLog implements Writable {
         return type;
     }
 
-
-
-    public static RemoveAlterJobV2OperationLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, RemoveAlterJobV2OperationLog.class);
-    }
-
 }

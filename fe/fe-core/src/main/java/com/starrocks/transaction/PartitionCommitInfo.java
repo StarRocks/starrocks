@@ -115,13 +115,6 @@ public class PartitionCommitInfo implements Writable {
         this.dictCollectedVersions = dictCollectedVersions;
     }
 
-
-
-    public static PartitionCommitInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, PartitionCommitInfo.class);
-    }
-
     public void setVersionTime(long time) {
         this.versionTime = time;
     }

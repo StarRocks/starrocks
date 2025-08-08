@@ -67,11 +67,7 @@ public class TransactionIdGenerator implements GsonPostProcessable {
         out.writeLong(batchEndId);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        batchEndId = in.readLong();
-        // maybe a little rough
-        nextId = batchEndId;
-    }
+
 
     @Override
     public void gsonPostProcess() throws IOException {

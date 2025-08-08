@@ -55,9 +55,4 @@ public class ModifyTableColumnOperationLog implements Writable {
         return columns;
     }
 
-
-
-    public static ModifyTableColumnOperationLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), ModifyTableColumnOperationLog.class);
-    }
 }

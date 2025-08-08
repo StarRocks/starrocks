@@ -216,11 +216,6 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
         Text.writeString(out, tbl);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        db = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        tbl = Text.readString(in);
-    }
-
     @Override
     public void gsonPostProcess() throws IOException {
         db = ClusterNamespace.getNameFromFullName(fullDb);

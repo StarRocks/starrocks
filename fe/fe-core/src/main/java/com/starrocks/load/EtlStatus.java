@@ -259,34 +259,6 @@ public class EtlStatus implements Writable {
         // Text.writeString(out, GsonUtils.GSON.toJson(tableCounters));
     }
 
-    @SuppressWarnings("unchecked")
-    public void readFields(DataInput in) throws IOException {
-        state = TEtlState.valueOf(Text.readString(in));
-        trackingUrl = Text.readString(in);
-
-        int statsCount = in.readInt();
-        for (int i = 0; i < statsCount; ++i) {
-            String key = Text.readString(in);
-            String value = Text.readString(in);
-            stats.put(key, value);
-        }
-        // restore load statics from stat counter
-        if (stats.containsKey(LOAD_STATISTIC)) {
-            loadStatistic = LoadStatistic.fromJson(stats.get(LOAD_STATISTIC));
-        }
-
-        int countersCount = in.readInt();
-        for (int i = 0; i < countersCount; ++i) {
-            String key = Text.readString(in);
-            String value = Text.readString(in);
-            counters.put(key, value);
-        }
-        // TODO: Persist `tableCounters`
-        // if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_93) {
-        //     tableCounters = GsonUtils.GSON.fromJson(Text.readString(in), tableCounters.getClass());
-        // }
-    }
-
     public void setLoadFileInfo(int filenum, long filesize) {
         this.loadStatistic.fileNum = filenum;
         this.loadStatistic.totalFileSizeB = filesize;

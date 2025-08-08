@@ -144,13 +144,6 @@ public abstract class Resource implements Writable {
         return GsonUtils.GSON.toJson(this);
     }
 
-
-
-    public static Resource read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Resource.class);
-    }
-
     public String getDdlStmt() {
         return "";
     }

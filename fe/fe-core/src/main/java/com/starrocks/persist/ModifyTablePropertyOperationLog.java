@@ -69,9 +69,4 @@ public class ModifyTablePropertyOperationLog implements Writable {
         this.comment = comment;
     }
 
-
-
-    public static ModifyTablePropertyOperationLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), ModifyTablePropertyOperationLog.class);
-    }
 }

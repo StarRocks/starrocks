@@ -113,12 +113,6 @@ public class LakeTable extends OlapTable {
         return selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
     }
 
-    public static LakeTable read(DataInput in) throws IOException {
-        // type is already read in Table
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeTable.class);
-    }
-
     @Override
     public boolean isDeleteRetryable() {
         return true;

@@ -141,24 +141,6 @@ public abstract class LoadErrorHub {
                     Preconditions.checkState(false, "unknown hub type");
             }
         }
-
-        public void readFields(DataInput in) throws IOException {
-            type = HubType.valueOf(Text.readString(in));
-            switch (type) {
-                case MYSQL_TYPE:
-                    mysqlParam = new MysqlLoadErrorHub.MysqlParam();
-                    mysqlParam.readFields(in);
-                    break;
-                case BROKER_TYPE:
-                    brokerParam = new BrokerLoadErrorHub.BrokerParam();
-                    brokerParam.readFields(in);
-                    break;
-                case NULL_TYPE:
-                    break;
-                default:
-                    Preconditions.checkState(false, "unknown hub type");
-            }
-        }
     }
 
     public abstract boolean prepare();

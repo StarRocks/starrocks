@@ -118,22 +118,6 @@ public class ColocatePersistInfo implements Writable {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        tableId = in.readLong();
-        groupId = GroupId.read(in);
-
-        int size = in.readInt();
-        backendsPerBucketSeq = new ArrayList<>();
-        for (int i = 0; i < size; i++) {
-            int beListSize = in.readInt();
-            List<Long> beLists = new ArrayList<>();
-            for (int j = 0; j < beListSize; j++) {
-                beLists.add(in.readLong());
-            }
-            backendsPerBucketSeq.add(beLists);
-        }
-    }
-
     @Override
     public int hashCode() {
         return Objects.hashCode(groupId, tableId);

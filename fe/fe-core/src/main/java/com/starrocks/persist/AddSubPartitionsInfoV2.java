@@ -35,11 +35,6 @@ public class AddSubPartitionsInfoV2 implements Writable {
 
 
 
-    public static AddSubPartitionsInfoV2 read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, AddSubPartitionsInfoV2.class);
-    }
-
     public List<PhysicalPartitionPersistInfoV2> getAddSubPartitionInfos() {
         return infos;
     }

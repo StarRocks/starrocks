@@ -87,11 +87,6 @@ public class FailMsg implements Writable {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        cancelType = CancelType.valueOf(Text.readString(in));
-        msg = Text.readString(in);
-    }
-
     @Override
     public int hashCode() {
         return Objects.hashCode(cancelType, msg);

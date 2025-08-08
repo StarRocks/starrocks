@@ -116,11 +116,6 @@ public class LabelName implements ParseNode, Writable {
         Text.writeString(out, labelName);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        labelName = Text.readString(in);
-    }
-
     @Override
     public NodePosition getPos() {
         return pos;

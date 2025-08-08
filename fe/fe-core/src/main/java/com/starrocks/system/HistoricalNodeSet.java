@@ -79,7 +79,4 @@ public class HistoricalNodeSet implements Writable {
         }
     }
 
-    public static HistoricalNodeSet read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), HistoricalNodeSet.class);
-    }
 }

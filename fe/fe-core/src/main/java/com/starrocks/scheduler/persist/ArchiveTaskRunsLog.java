@@ -36,9 +36,4 @@ public class ArchiveTaskRunsLog implements Writable {
         return taskRuns;
     }
 
-    public static ArchiveTaskRunsLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), ArchiveTaskRunsLog.class);
-    }
-
-
 }

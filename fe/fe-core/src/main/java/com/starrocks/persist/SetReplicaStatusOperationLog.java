@@ -53,10 +53,4 @@ public class SetReplicaStatusOperationLog implements Writable {
         return replicaStatus;
     }
 
-    public static SetReplicaStatusOperationLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, SetReplicaStatusOperationLog.class);
-    }
-
-
 }

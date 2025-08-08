@@ -65,11 +65,4 @@ public final class MaxLiteral extends LiteralExpr {
     @Override
     public void write(DataOutput out) throws IOException {
     }
-
-    public void readFields(DataInput in) throws IOException {
-    }
-
-    public static MaxLiteral read(DataInput in) throws IOException {
-        return MAX_VALUE;
-    }
 }

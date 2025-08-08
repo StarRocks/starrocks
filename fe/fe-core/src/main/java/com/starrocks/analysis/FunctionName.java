@@ -146,20 +146,6 @@ public class FunctionName implements Writable {
         Text.writeString(out, fn_);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        if (in.readBoolean()) {
-            // compatible with old version
-            db_ = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        }
-        fn_ = Text.readString(in);
-    }
-
-    public static FunctionName read(DataInput in) throws IOException {
-        FunctionName functionName = new FunctionName();
-        functionName.readFields(in);
-        return functionName;
-    }
-
     @Override
     public int hashCode() {
         return 31 * Objects.hashCode(db_) + Objects.hashCode(fn_);

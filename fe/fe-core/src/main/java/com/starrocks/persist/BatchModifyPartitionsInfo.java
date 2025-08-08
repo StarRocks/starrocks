@@ -39,13 +39,6 @@ public class BatchModifyPartitionsInfo implements Writable {
         this.infos = infos;
     }
 
-
-
-    public static BatchModifyPartitionsInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, BatchModifyPartitionsInfo.class);
-    }
-
     public List<ModifyPartitionInfo> getModifyPartitionInfos() {
         return infos;
     }

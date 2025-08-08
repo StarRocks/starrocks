@@ -34,10 +34,4 @@ public class DropWarehouseLog implements Writable {
         return warehouseName;
     }
 
-
-
-    public static DropWarehouseLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DropWarehouseLog.class);
-    }
 }

@@ -35,11 +35,5 @@ public class OpWarehouseLog implements Writable {
         this.name = name;
     }
 
-
-
-    public static OpWarehouseLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), OpWarehouseLog.class);
-    }
-
 }
 

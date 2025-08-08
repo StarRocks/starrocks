@@ -54,7 +54,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -113,14 +112,6 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         this.serializedState = JobState.INIT;
         this.state.set(JobState.INIT);
         this.plan = Preconditions.checkNotNull(view.getMaintenancePlan());
-    }
-
-    public static MVMaintenanceJob read(DataInput input) throws IOException {
-        MVMaintenanceJob job = GsonUtils.GSON.fromJson(Text.readString(input), MVMaintenanceJob.class);
-        job.state = new AtomicReference<>();
-        job.inSchedule = new AtomicBoolean();
-        job.state.set(job.getSerializedState());
-        return job;
     }
 
     // TODO recover the entire job state, include execution plan

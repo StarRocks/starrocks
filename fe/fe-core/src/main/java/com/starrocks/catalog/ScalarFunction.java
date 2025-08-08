@@ -279,17 +279,6 @@ public class ScalarFunction extends Function {
         writeOptionString(output, closeFnSymbol);
     }
 
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        symbolName = Text.readString(input);
-        if (input.readBoolean()) {
-            prepareFnSymbol = Text.readString(input);
-        }
-        if (input.readBoolean()) {
-            closeFnSymbol = Text.readString(input);
-        }
-    }
-
     @Override
     public String getProperties() {
         Map<String, String> properties = Maps.newHashMap();

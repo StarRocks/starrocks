@@ -63,10 +63,4 @@ public class ColumnRenameInfo implements Writable {
         this.newColumnName = newColumnName;
     }
 
-
-
-    public static ColumnRenameInfo read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), ColumnRenameInfo.class);
-    }
-
 }

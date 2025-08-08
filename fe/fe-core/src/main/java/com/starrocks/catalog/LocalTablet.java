@@ -448,12 +448,6 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         isConsistent = in.readBoolean();
     }
 
-    public static LocalTablet read(DataInput in) throws IOException {
-        LocalTablet tablet = new LocalTablet();
-        tablet.readFields(in);
-        return tablet;
-    }
-
     @Override
     public void gsonPostProcess() {
         // we need to update immutableReplicas, because replicas after deserialization from a json string

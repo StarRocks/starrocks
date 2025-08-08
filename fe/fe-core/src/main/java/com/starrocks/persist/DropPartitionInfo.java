@@ -86,13 +86,6 @@ public class DropPartitionInfo implements Writable {
         return forceDrop;
     }
 
-    public static DropPartitionInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DropPartitionInfo.class);
-    }
-
-
-
     @Override
     public int hashCode() {
         return Objects.hashCode(dbId, tableId, partitionName);

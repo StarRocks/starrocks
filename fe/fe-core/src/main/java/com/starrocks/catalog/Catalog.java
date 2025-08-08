@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
@@ -92,11 +91,5 @@ public class Catalog implements Writable {
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(this.getName(), StringUtils.capitalize(config.get(CATALOG_TYPE)), this.getComment()));
     }
-
-    public static Catalog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Catalog.class);
-    }
-
 
 }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler.persist;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -464,11 +463,6 @@ public class TaskRunStatus implements Writable {
 
     public void setDefinition(String definition) {
         this.definition = definition;
-    }
-
-    public static TaskRunStatus read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
     }
 
     @Override

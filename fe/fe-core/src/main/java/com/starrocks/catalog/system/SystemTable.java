@@ -139,9 +139,7 @@ public class SystemTable extends Table {
         throw new UnsupportedOperationException("Do not allow to write SchemaTable to image.");
     }
 
-    public void readFields(DataInput in) throws IOException {
-        throw new UnsupportedOperationException("Do not allow read SchemaTable from image.");
-    }
+
 
     public static Builder builder() {
         return new Builder();

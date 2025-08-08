@@ -35,13 +35,6 @@ public class ShardInfo implements Writable {
         this.shardIds = Sets.newHashSet();
     }
 
-
-
-    public static ShardInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ShardInfo.class);
-    }
-
 }
 
 

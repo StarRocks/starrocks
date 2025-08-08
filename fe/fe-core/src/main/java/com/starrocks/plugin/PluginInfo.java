@@ -261,10 +261,4 @@ public class PluginInfo implements Writable {
         return Objects.hash(name);
     }
 
-
-
-    public static PluginInfo read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        return GsonUtils.GSON.fromJson(s, PluginInfo.class);
-    }
 }

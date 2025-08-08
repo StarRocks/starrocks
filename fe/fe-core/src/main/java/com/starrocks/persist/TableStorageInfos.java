@@ -43,7 +43,4 @@ public class TableStorageInfos implements Writable {
         return dbToTableStorageInfos;
     }
 
-    public static TableStorageInfos read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), TableStorageInfos.class);
-    }
 }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler.persist;
 
 import com.google.gson.annotations.SerializedName;
@@ -36,10 +35,5 @@ public class DropTaskRunsLog implements Writable {
     public List<String> getQueryIdList() {
         return queryIdList;
     }
-
-    public static DropTaskRunsLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), DropTaskRunsLog.class);
-    }
-
 
 }

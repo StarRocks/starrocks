@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.gson.annotations.SerializedName;
@@ -131,17 +130,5 @@ public class OptimizeRange implements ParseNode, Writable {
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
-    }
-
-    /**
-     * Read OptimizeRange from input stream
-     * 
-     * @param in DataInput to read from
-     * @return New OptimizeRange object
-     * @throws IOException if an I/O error occurs
-     */
-    public static OptimizeRange read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, OptimizeRange.class);
     }
 }

@@ -74,10 +74,7 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         this.partitionExprs = partitionExprs;
     }
 
-    public static PartitionInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ExpressionRangePartitionInfoV2.class);
-    }
+
 
     @Override
     public void gsonPreProcess() throws IOException {

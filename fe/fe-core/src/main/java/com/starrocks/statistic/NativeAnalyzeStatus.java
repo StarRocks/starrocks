@@ -259,10 +259,4 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
         return new ShowResultSet(META_DATA, rows);
     }
 
-
-
-    public static NativeAnalyzeStatus read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        return GsonUtils.GSON.fromJson(s, NativeAnalyzeStatus.class);
-    }
 }

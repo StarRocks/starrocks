@@ -106,23 +106,6 @@ public class BrokerDesc implements ParseNode, Writable {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        name = Text.readString(in);
-        int size = in.readInt();
-        properties = Maps.newHashMap();
-        for (int i = 0; i < size; ++i) {
-            final String key = Text.readString(in);
-            final String val = Text.readString(in);
-            properties.put(key, val);
-        }
-    }
-
-    public static BrokerDesc read(DataInput in) throws IOException {
-        BrokerDesc desc = new BrokerDesc();
-        desc.readFields(in);
-        return desc;
-    }
-
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append(" WITH BROKER ").append(name);

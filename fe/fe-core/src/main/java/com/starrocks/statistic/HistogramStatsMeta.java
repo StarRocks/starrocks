@@ -57,12 +57,6 @@ public class HistogramStatsMeta implements Writable {
         this.properties = properties;
     }
 
-    public static HistogramStatsMeta read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        HistogramStatsMeta histogramStatsMeta = GsonUtils.GSON.fromJson(s, HistogramStatsMeta.class);
-        return histogramStatsMeta;
-    }
-
     public long getDbId() {
         return dbId;
     }

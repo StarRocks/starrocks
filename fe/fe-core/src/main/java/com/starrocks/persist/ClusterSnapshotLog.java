@@ -61,9 +61,4 @@ public class ClusterSnapshotLog implements Writable {
         return this.snapshotJob;
     }
 
-    public static ClusterSnapshotLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ClusterSnapshotLog.class);
-    }
-
 }

@@ -75,10 +75,7 @@ public class TabletFailInfo implements Writable {
         out.writeLong(backendId);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        tabletId = in.readLong();
-        backendId = in.readLong();
-    }
+
 
     @Override
     public String toString() {

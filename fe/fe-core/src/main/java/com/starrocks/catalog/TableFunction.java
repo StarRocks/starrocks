@@ -164,14 +164,6 @@ public class TableFunction extends Function {
         Text.writeString(output, GsonUtils.GSON.toJson(this));
     }
 
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        final TableFunction tableFunction = GsonUtils.GSON.fromJson(Text.readString(input), TableFunction.class);
-        this.symbolName = tableFunction.symbolName;
-        this.tableFnReturnTypes = tableFunction.getTableFnReturnTypes();
-        this.defaultColumnNames = tableFunction.getDefaultColumnNames();
-    }
-
     @Override
     public TFunction toThrift() {
         TFunction fn = super.toThrift();

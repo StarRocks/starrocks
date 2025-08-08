@@ -340,10 +340,6 @@ public class CreateTableStmt extends DdlStmt {
         return hasGeneratedColumn;
     }
 
-    public static CreateTableStmt read(DataInput in) throws IOException {
-        throw new RuntimeException("CreateTableStmt serialization is not supported anymore.");
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateTableStatement(this, context);

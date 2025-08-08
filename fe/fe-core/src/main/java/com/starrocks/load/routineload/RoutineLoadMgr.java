@@ -759,18 +759,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            RoutineLoadJob routineLoadJob = RoutineLoadJob.read(in);
-            if (routineLoadJob.needRemove()) {
-                LOG.info("discard expired job [{}]", routineLoadJob.getId());
-                continue;
-            }
 
-            putJob(routineLoadJob);
-        }
-    }
 
     private void putJob(RoutineLoadJob routineLoadJob) {
         idToRoutineLoadJob.put(routineLoadJob.getId(), routineLoadJob);

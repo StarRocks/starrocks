@@ -386,13 +386,7 @@ public abstract class AlterJobV2 implements Writable {
         }
     }
 
-    public static AlterJobV2 read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, AlterJobV2.class);
-    }
-
     public abstract Optional<Long> getTransactionId();
-
 
     /**
      * Schema change will build a new MaterializedIndexMeta, we need rebuild it(add extra original meta)

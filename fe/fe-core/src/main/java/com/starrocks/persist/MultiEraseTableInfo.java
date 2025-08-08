@@ -32,13 +32,6 @@ public class MultiEraseTableInfo implements Writable {
         this.tableIds = tableIds;
     }
 
-
-
-    public static MultiEraseTableInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, MultiEraseTableInfo.class);
-    }
-
     public List<Long> getTableIds() {
         return tableIds;
     }

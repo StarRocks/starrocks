@@ -407,13 +407,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         }
     }
 
-
-
-    public static StorageVolume read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, StorageVolume.class);
-    }
-
     @Override
     public void gsonPostProcess() throws IOException {
         cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);

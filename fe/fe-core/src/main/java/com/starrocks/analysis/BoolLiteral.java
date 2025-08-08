@@ -162,17 +162,6 @@ public class BoolLiteral extends LiteralExpr {
         out.writeBoolean(value);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = in.readBoolean();
-    }
-
-    public static BoolLiteral read(DataInput in) throws IOException {
-        BoolLiteral literal = new BoolLiteral();
-        literal.readFields(in);
-        return literal;
-    }
-
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), value);

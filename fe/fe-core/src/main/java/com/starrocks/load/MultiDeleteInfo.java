@@ -116,10 +116,6 @@ public class MultiDeleteInfo implements Writable {
         return partitionNames;
     }
 
-    public static MultiDeleteInfo read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), MultiDeleteInfo.class);
-    }
-
     public static MultiDeleteInfo upgrade(DeleteInfo deleteInfo) {
         MultiDeleteInfo multiDeleteInfo = new MultiDeleteInfo(deleteInfo.getDbId(), deleteInfo.getTableId(),
                 deleteInfo.getTableName(), Lists.newArrayList(deleteInfo.getDeleteConditions()));
@@ -127,7 +123,5 @@ public class MultiDeleteInfo implements Writable {
                 Lists.newArrayList(deleteInfo.getPartitionName()));
         return multiDeleteInfo;
     }
-
-
 
 }

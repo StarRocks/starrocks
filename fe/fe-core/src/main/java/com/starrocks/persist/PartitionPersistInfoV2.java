@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
@@ -79,13 +78,6 @@ public abstract class PartitionPersistInfoV2 implements Writable {
 
     public final RangePartitionPersistInfo asRangePartitionPersistInfo() {
         return (RangePartitionPersistInfo) this;
-    }
-
-
-
-    public static PartitionPersistInfoV2 read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, PartitionPersistInfoV2.class);
     }
 
     public Long getDbId() {

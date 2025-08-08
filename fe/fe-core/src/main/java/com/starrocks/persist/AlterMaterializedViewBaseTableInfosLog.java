@@ -82,9 +82,4 @@ public class AlterMaterializedViewBaseTableInfosLog implements Writable {
         return baseTableVisibleVersionMap;
     }
 
-
-
-    public static AlterMaterializedViewBaseTableInfosLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), AlterMaterializedViewBaseTableInfosLog.class);
-    }
 }

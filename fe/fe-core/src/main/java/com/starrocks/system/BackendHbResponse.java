@@ -167,12 +167,6 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         this.statusCode = statusCode;
     }
 
-    public static BackendHbResponse read(DataInput in) throws IOException {
-        BackendHbResponse result = new BackendHbResponse();
-        result.readFields(in);
-        return result;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
@@ -180,15 +174,6 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         out.writeInt(bePort);
         out.writeInt(httpPort);
         out.writeInt(brpcPort);
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        beId = in.readLong();
-        bePort = in.readInt();
-        httpPort = in.readInt();
-        brpcPort = in.readInt();
     }
 
 }

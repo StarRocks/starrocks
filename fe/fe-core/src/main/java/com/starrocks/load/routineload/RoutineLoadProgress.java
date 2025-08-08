@@ -38,7 +38,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -60,32 +59,9 @@ public abstract class RoutineLoadProgress implements Writable {
 
     abstract String toJsonString();
 
-    public static RoutineLoadProgress read(DataInput in) throws IOException {
-        RoutineLoadProgress progress = null;
-        LoadDataSourceType type = LoadDataSourceType.valueOf(Text.readString(in));
-        if (type == LoadDataSourceType.KAFKA) {
-            progress = new KafkaProgress();
-        } else if (type == LoadDataSourceType.PULSAR) {
-            progress = new PulsarProgress();
-        } else {
-            throw new IOException("Unknown load data source type: " + type.name());
-        }
-
-        progress.setTypeRead(true);
-        progress.readFields(in);
-        return progress;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         // ATTN: must write type first
         Text.writeString(out, loadDataSourceType.name());
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        if (!isTypeRead) {
-            loadDataSourceType = LoadDataSourceType.valueOf(Text.readString(in));
-            isTypeRead = true;
-        }
     }
 }

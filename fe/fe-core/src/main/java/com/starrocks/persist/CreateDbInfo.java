@@ -53,10 +53,4 @@ public class CreateDbInfo implements Writable {
         return storageVolumeId;
     }
 
-
-
-    public static CreateDbInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, CreateDbInfo.class);
-    }
 }

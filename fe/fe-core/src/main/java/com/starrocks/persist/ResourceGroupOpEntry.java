@@ -37,11 +37,6 @@ public class ResourceGroupOpEntry implements Writable {
         this.resourceGroup = resourceGroup;
     }
 
-    public static ResourceGroupOpEntry read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ResourceGroupOpEntry.class);
-    }
-
     public ResourceGroup getResourceGroup() {
         return resourceGroup;
     }
@@ -57,8 +52,6 @@ public class ResourceGroupOpEntry implements Writable {
     public void setOpType(TWorkGroupOpType opType) {
         this.opType = opType;
     }
-
-
 
     public TWorkGroupOp toThrift() {
         TWorkGroupOp op = new TWorkGroupOp();

@@ -217,13 +217,6 @@ public class KafkaProgress extends RoutineLoadProgress {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        int size = in.readInt();
-        partitionIdToOffset = new HashMap<>();
-        for (int i = 0; i < size; i++) {
-            partitionIdToOffset.put(in.readInt(), in.readLong());
-        }
-    }
+
 
 }

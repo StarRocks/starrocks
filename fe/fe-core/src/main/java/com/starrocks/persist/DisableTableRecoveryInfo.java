@@ -31,13 +31,6 @@ public class DisableTableRecoveryInfo implements Writable {
         this.tableIds = tableIds;
     }
 
-
-
-    public static DisableTableRecoveryInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DisableTableRecoveryInfo.class);
-    }
-
     public List<Long> getTableIds() {
         return tableIds;
     }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.mysql.privilege;
 
 import com.google.gson.annotations.SerializedName;
@@ -61,8 +60,4 @@ public class Password implements Writable {
         Text.writeString(out, jsonStr);
     }
 
-    public static Password read(DataInput in) throws IOException {
-        String jsonStr = Text.readString(in);
-        return GsonUtils.GSON.fromJson(jsonStr, Password.class);
-    }
 }
