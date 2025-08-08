@@ -34,6 +34,11 @@ public class SplitTabletClause extends AlterTableClause {
 
     private long dynamicTabletSplitSize;
 
+    public SplitTabletClause() {
+        this(null, null, null);
+        this.dynamicTabletSplitSize = Config.dynamic_tablet_split_size;
+    }
+
     public SplitTabletClause(
             PartitionNames partitionNames,
             TabletList tabletList,
@@ -86,20 +91,9 @@ public class SplitTabletClause extends AlterTableClause {
             throw new StarRocksException("Empty tablets");
         }
 
-        if (properties == null) {
-            dynamicTabletSplitSize = Config.dynamic_tablet_split_size;
-            return;
-        }
+        Map<String, String> copiedProperties = properties == null ? Maps.newHashMap() : Maps.newHashMap(properties);
+        dynamicTabletSplitSize = PropertyAnalyzer.analyzeDynamicTabletSplitSize(copiedProperties, true);
 
-        String splitSize = properties.get(PropertyAnalyzer.PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE);
-        try {
-            dynamicTabletSplitSize = Long.parseLong(splitSize);
-        } catch (Exception e) {
-            throw new StarRocksException("Invalid property value: " + splitSize);
-        }
-
-        Map<String, String> copiedProperties = Maps.newHashMap(properties);
-        copiedProperties.remove(PropertyAnalyzer.PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE);
         if (!copiedProperties.isEmpty()) {
             throw new StarRocksException("Unknown properties: " + copiedProperties);
         }

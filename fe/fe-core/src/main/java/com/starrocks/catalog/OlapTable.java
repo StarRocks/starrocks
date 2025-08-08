@@ -3234,6 +3234,30 @@ public class OlapTable extends Table {
         tableProperty.buildUseFastSchemaEvolution();
     }
 
+    public Boolean getEnableDynamicTablet() {
+        if (tableProperty != null) {
+            return tableProperty.getEnableDynamicTablet();
+        }
+        return null; // default null
+    }
+
+    public boolean isEnableDynamicTablet() {
+        Boolean enableDynamicTablet = getEnableDynamicTablet();
+        if (enableDynamicTablet != null) {
+            return enableDynamicTablet;
+        }
+        return Config.enable_dynamic_tablet;
+    }
+
+    public void setEnableDynamicTablet(Boolean enableDynamicTablet) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET,
+                enableDynamicTablet != null ? enableDynamicTablet.toString() : "");
+        tableProperty.buildEnableDynamicTablet();
+    }
+
     public void setSessionId(UUID sessionId) {
         this.sessionId = sessionId;
     }
@@ -3516,6 +3540,11 @@ public class OlapTable extends Table {
         if (getCompactionStrategy() != TCompactionStrategy.DEFAULT) {
             properties.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, 
                                 TableProperty.compactionStrategyToString(getCompactionStrategy()));
+        }
+
+        Boolean enableDynamicTablet = getEnableDynamicTablet();
+        if (enableDynamicTablet != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET, enableDynamicTablet.toString());
         }
 
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();

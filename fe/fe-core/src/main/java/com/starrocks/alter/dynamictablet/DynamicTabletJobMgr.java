@@ -47,6 +47,8 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
 
     protected final Map<Long, DynamicTablet> dynamicTablets = Maps.newConcurrentMap();
 
+    protected final DynamicTabletChecker dynamicTabletChecker = new DynamicTabletChecker();
+
     public DynamicTabletJobMgr() {
         super("DynamicTabletJobMgr", Config.dynamic_tablet_job_scheduler_interval_ms);
     }
@@ -126,6 +128,18 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
             }
         }
         return response;
+    }
+
+    @Override
+    public synchronized void start() {
+        super.start();
+        this.dynamicTabletChecker.start();
+    }
+
+    @Override
+    public void setStop() {
+        super.setStop();
+        this.dynamicTabletChecker.setStop();
     }
 
     @Override

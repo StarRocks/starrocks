@@ -330,6 +330,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
+    private Boolean enableDynamicTablet = null;
+
     public TableProperty() {
         this(Maps.newLinkedHashMap());
     }
@@ -416,6 +418,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildDataCachePartitionDuration();
                 buildLocation();
                 buildStorageCoolDownTTL();
+                buildEnableDynamicTablet();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -906,6 +909,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
+    public TableProperty buildEnableDynamicTablet() {
+        String value = properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET);
+        if (value == null) {
+            enableDynamicTablet = null;
+        } else if (value.isEmpty()) {
+            enableDynamicTablet = null;
+            properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET);
+        } else {
+            enableDynamicTablet = Boolean.parseBoolean(value);
+        }
+        return this;
+    }
+
     public void modifyTableProperties(Map<String, String> modifyProperties) {
         properties.putAll(modifyProperties);
     }
@@ -1202,7 +1218,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return useFastSchemaEvolution;
     }
 
-
+    public Boolean getEnableDynamicTablet() {
+        return enableDynamicTablet;
+    }
 
     public static TableProperty read(DataInput in) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(in), TableProperty.class);
@@ -1242,5 +1260,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildFileBundling();
         buildMutableBucketNum();
         buildCompactionStrategy();
+        buildEnableDynamicTablet();
     }
 }
