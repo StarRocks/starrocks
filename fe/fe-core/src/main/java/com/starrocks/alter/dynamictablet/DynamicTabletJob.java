@@ -15,12 +15,15 @@
 package com.starrocks.alter.dynamictablet;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TDynamicTabletJobsItem;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -233,6 +236,41 @@ public abstract class DynamicTabletJob implements Writable {
         }
         sb.append("}");
         return sb.toString();
+    }
+
+    public TDynamicTabletJobsItem getInfo() {
+        TDynamicTabletJobsItem item = new TDynamicTabletJobsItem();
+        item.setJob_id(jobId);
+        item.setDb_id(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            item.setDb_name("");
+            LOG.warn("Failed to get database name for dynamic tablet job. {}", this);
+        } else {
+            item.setDb_name(db.getFullName());
+        }
+
+        item.setTable_id(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            item.setTable_name("");
+            LOG.warn("Failed to get table name for dynamic tablet job. {}", this);
+        } else {
+            item.setTable_name(table.getName());
+        }
+        item.setJob_type(jobType.name());
+        item.setJob_state(jobState.name());
+        item.setTransaction_id(-1L); // override in the future pr.
+        item.setParallel_partitions(physicalPartitionContexts.size());
+        item.setParallel_tablets(getParallelTablets());
+        item.setCreated_time(createdTimeMs / 1000);
+        item.setFinished_time(finishedTimeMs / 1000);
+        if (errorMessage != null) {
+            item.setError_message(errorMessage);
+        } else {
+            item.setError_message("");
+        }
+        return item;
     }
 
     public static DynamicTabletJob read(DataInput in) throws IOException {

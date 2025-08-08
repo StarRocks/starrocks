@@ -133,4 +133,7 @@ public class SystemId {
     // ==================  Cluster Snapshot  ======================= //
     public static final long CLUSTER_SNAPSHOTS_ID = 160L;
     public static final long CLUSTER_SNAPSHOT_JOBS_ID = 161L;
+
+    // ==================  Dynamic Tablet  ======================= //
+    public static final long DYNAMIC_TABLET_JOBS_ID = 170L;
 }
