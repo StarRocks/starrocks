@@ -1142,7 +1142,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowTransactionStmt() {
         ShowTransactionStmt stmt = new ShowTransactionStmt("test_db", null, NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(16, metaData.getColumnCount());
         Assertions.assertEquals("TransactionId", metaData.getColumn(0).getName());
         Assertions.assertEquals("Label", metaData.getColumn(1).getName());
