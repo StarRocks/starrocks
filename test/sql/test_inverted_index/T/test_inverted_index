@@ -80,6 +80,8 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
+show create table t_test_basic_create_index_replicated;
+
 DROP TABLE t_test_basic_create_index_pk;
 DROP TABLE t_test_basic_create_index_dup;
 
@@ -551,6 +553,7 @@ PROPERTIES (
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
+
 
 INSERT INTO t_complex_predicate_for_gin_none VALUES (1, "abc cbd");
 INSERT INTO t_complex_predicate_for_gin_none VALUES (2, "cbd edf");
