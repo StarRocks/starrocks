@@ -105,13 +105,10 @@ public:
         auto& data = dst->get_data();
         size_t output = data.size();
         data.resize(output + _perm.size());
-        std::vector<const Container*> srcs;
-        for (auto& column : _columns) {
-            srcs.push_back(&(down_cast<const ColumnType*>(column.get())->get_data()));
-        }
 
         for (auto& p : _perm) {
-            data[output++] = (*srcs[p.chunk_index])[p.index_in_chunk];
+            const Container& container = (down_cast<const ColumnType*>(_columns[p.chunk_index].get())->get_data());
+            data[output++] = container[p.index_in_chunk];
         }
 
         return Status::OK();
@@ -125,13 +122,10 @@ public:
         auto& data = dst->get_data();
         size_t output = data.size();
         data.resize(output + _perm.size());
-        std::vector<const Container*> srcs;
-        for (auto& column : _columns) {
-            srcs.push_back(&(down_cast<const ColumnType*>(column.get())->get_data()));
-        }
 
         for (auto& p : _perm) {
-            data[output++] = (*srcs[p.chunk_index])[p.index_in_chunk];
+            const Container& container = (down_cast<const ColumnType*>(_columns[p.chunk_index].get())->get_data());
+            data[output++] = container[p.index_in_chunk];
         }
 
         return Status::OK();
@@ -188,10 +182,6 @@ public:
     template <typename T>
     Status do_visit(BinaryColumnBase<T>* dst) {
         using Container = typename BinaryColumnBase<T>::BinaryDataProxyContainer;
-        std::vector<const Container*> srcs;
-        for (auto& column : _columns) {
-            srcs.push_back(&(down_cast<const BinaryColumnBase<T>*>(column.get())->get_proxy_data()));
-        }
 
         auto& offsets = dst->get_offset();
         auto& bytes = dst->get_bytes();
@@ -200,7 +190,9 @@ public:
         size_t num_bytes = bytes.size();
         offsets.resize(num_offsets + _perm.size());
         for (auto& p : _perm) {
-            Slice slice = (*srcs[p.chunk_index])[p.index_in_chunk];
+            const Container& container =
+                    (down_cast<const BinaryColumnBase<T>*>(_columns[p.chunk_index].get())->get_proxy_data());
+            Slice slice = container[p.index_in_chunk];
             offsets[num_offsets] = offsets[num_offsets - 1] + slice.get_size();
             ++num_offsets;
             num_bytes += slice.get_size();
@@ -208,7 +200,9 @@ public:
 
         bytes.resize(num_bytes);
         for (size_t i = 0; i < _perm.size(); i++) {
-            Slice slice = (*srcs[_perm[i].chunk_index])[_perm[i].index_in_chunk];
+            const Container& container =
+                    (down_cast<const BinaryColumnBase<T>*>(_columns[_perm[i].chunk_index].get())->get_proxy_data());
+            Slice slice = container[_perm[i].index_in_chunk];
             strings::memcpy_inlined(bytes.data() + offsets[old_rows + i], slice.get_data(), slice.get_size());
         }
 
