@@ -859,6 +859,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitDropSnapshotStatement(DropSnapshotStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitCreateRepositoryStatement(CreateRepositoryStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
