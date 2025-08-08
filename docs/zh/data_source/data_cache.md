@@ -194,6 +194,20 @@ SET GLOBAL enable_file_metacache=true;
 >
 > Footer Cache 基于 Data Cache 的内存模块进行数据缓存，因此需要保证 BE 参数 `datacache_enable` 为 `true` 且为 `datacache_mem_size` 配置一个合理值。
 
+## Page Cache
+
+除了支持对数据湖查询中涉及到的远端文件数据进行缓存外，StarRocks 还支持对解压缩后的 Parquet 页面数据进行缓存。Page Cache 将解压缩后的 Parquet 页面数据存储在内存中。在后续查询中访问相同页面时，可以直接从缓存中获取数据，避免重复的 I/O 操作和解压缩。
+
+您可通过设置以下系统变量启用 Page Cache：
+
+```SQL
+SET GLOBAL enable_file_pagecache=true;
+```
+
+> **注意**
+>
+> Page Cache 基于 Data Cache 的内存模块进行数据缓存，因此需要保证 BE 参数 `datacache_enable` 为 `true` 且为 `datacache_mem_size` 配置一个合理值。
+
 ## I/O 自适应
 
 为了避免当缓存磁盘 I/O 负载过高时，磁盘访问出现明显长尾，导致访问缓存系统出现负优化，Data Cache 提供 I/O 自适应功能，用于在磁盘负载过高时将一部分缓存请求路由到远端存储，同时利用本地缓存和远端存储来提升 I/O 吞吐。该功能默认开启。
