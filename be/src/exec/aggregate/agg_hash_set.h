@@ -756,7 +756,6 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     uint8_t* buffer;
     ResultVector results;
     Buffer<Slice> tmp_slices;
-    // std::vector<Slice> tmp_slices;
 
     int32_t _chunk_size;
     std::vector<size_t> hashes;
@@ -793,8 +792,27 @@ struct AggHashSetCompressedFixedSize : public AggHashSet<HashSet, AggHashSetComp
         auto* buffer = reinterpret_cast<uint8_t*>(fixed_keys.data());
         memset(buffer, 0x0, sizeof(FixedSizeSliceKey) * chunk_size);
         bitcompress_serialize(key_columns, bases, offsets, chunk_size, sizeof(FixedSizeSliceKey), fixed_keys.data());
-        // auto* key = reinterpret_cast<FixedSizeSliceKey*>(buffer);
-        this->template build_set_noprefetch<compute_and_allocate>(chunk_size, pool, not_founds);
+
+        if (this->hash_set.bucket_count() < prefetch_threhold) {
+            this->template build_set_noprefetch<compute_and_allocate>(chunk_size, pool, not_founds);
+        } else {
+            this->template build_set_prefetch<compute_and_allocate>(chunk_size, pool, not_founds);
+        }
+    }
+
+    template <bool compute_and_allocate>
+    ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, MemPool* pool, Filter* not_founds) {
+        auto* keys = reinterpret_cast<FixedSizeSliceKey*>(fixed_keys.data());
+        AGG_HASH_SET_PRECOMPUTE_HASH_VALS();
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            AGG_HASH_SET_PREFETCH_HASH_VAL();
+            if constexpr (compute_and_allocate) {
+                this->hash_set.emplace_with_hash(hashes[i], keys[i]);
+            } else {
+                (*not_founds)[i] = this->hash_set.find(keys[i], hashes[i]) == this->hash_set.end();
+            }
+        }
     }
 
     template <bool compute_and_allocate>
@@ -820,6 +838,7 @@ struct AggHashSetCompressedFixedSize : public AggHashSet<HashSet, AggHashSetComp
     std::vector<int> offsets;
     std::vector<std::any> bases;
     std::vector<FixedSizeSliceKey> fixed_keys;
+    std::vector<size_t> hashes;
     ResultVector results;
 
     int32_t _chunk_size;

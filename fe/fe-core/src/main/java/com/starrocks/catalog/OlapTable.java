@@ -1519,6 +1519,9 @@ public class OlapTable extends Table {
 
     // check input partition has temporary partition
     public boolean inputHasTempPartition(List<Long> partitionIds) {
+        if (partitionIds == null) {
+            return false;
+        }
         for (Long pid : partitionIds) {
             if (tempPartitions.getPartition(pid) != null) {
                 return true;

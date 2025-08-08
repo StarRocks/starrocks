@@ -21,13 +21,28 @@
 
 namespace starrocks {
 class VectorizedLiteral;
-
+/**
+ * Calculates the number of bits used between a given range for a specified logical type.
+ * 
+ * This function calculates the number of bits required for a given logical type and a specified range
+ * of start and end values. The result is an optional integer representing the calculated number of bits.
+ * 
+ * If we input a column that does not support bit compress, we will return an empty optional.
+ */
 std::optional<int> get_used_bits(LogicalType ltype, const VectorizedLiteral& begin, const VectorizedLiteral& end,
                                  std::any& base);
 
+/**
+ * serialize column data into a bit-compressed format.
+ */
 void bitcompress_serialize(const Columns& columns, const std::vector<std::any>& bases, const std::vector<int>& offsets,
                            size_t num_rows, size_t fixed_key_size, void* buffer);
 
+/**
+ * deserialize column data from a bit-compressed format.
+ * 
+ */
 void bitcompress_deserialize(Columns& columns, const std::vector<std::any>& bases, const std::vector<int>& offsets,
                              const std::vector<int>& used_bits, size_t num_rows, size_t fixed_key_size, void* buffer);
+
 } // namespace starrocks
