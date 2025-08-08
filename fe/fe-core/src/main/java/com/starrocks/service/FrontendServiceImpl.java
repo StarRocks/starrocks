@@ -1395,9 +1395,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new StarRocksException("unknown database, database=" + dbName);
         }
 
+        long preparedTimeoutMs = TransactionState.DEFAULT_PREPARED_TIMEOUT_MS;
+        if (request.isSetPrepared_timeout_second() && request.getPrepared_timeout_second() > 0) {
+            preparedTimeoutMs = request.getPrepared_timeout_second() * 1000L;
+        }
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
-                db.getId(), request.getTxnId(),
+                db.getId(), request.getTxnId(), preparedTimeoutMs,
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
                 TabletFailInfo.fromThrift(request.getFailInfos()),
                 attachment);

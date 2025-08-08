@@ -23,12 +23,14 @@ Coordinator: FE: 10.74.167.16
 TransactionStatus: VISIBLE
 LoadJobSourceType: INSERT_STREAMING
 PrepareTime: 2020-01-09 14:59:07
+PreparedTime: 2020-01-09 14:59:08
 CommitTime: 2020-01-09 14:59:09
 FinishTime: 2020-01-09 14:59:09
 Reason:
 ErrorReplicasCount: 0
 ListenerId: -1
 TimeoutMs: 300000
+PreparedTimeoutMs: 86400000
 ```
 
 * TransactionId: transaction id
@@ -41,12 +43,14 @@ TimeoutMs: 300000
 * ABORTED: transaction failed
 * LoadJobSourceType: type of import task.
 * PrepareTime: transaction start time
+* PreparedTime: the time when the transaction is successfully prepared (supported from v3.5.4)
 * CommitTime: the time when the transaction is successfully committed
 * FinishTime: the time when the data is visible
 * Reason: error message
 * ErrorReplicasCount: number of replicas with errors
 * ListenerId: id of the related import job
-* TimeoutMs: transaction timeout, in milliseconds
+* TimeoutMs: timeout for the transaction from `PREPARE` to `PREPARED` state, in milliseconds
+* PreparedTimeoutMs: timeout for the transaction from `PREPARED` to `COMMITTED` state, in milliseconds (supported from v3.5.4)
 
 ## Examples
 

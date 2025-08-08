@@ -1427,6 +1427,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: ロードジョブに許可される最小タイムアウト期間。この制限はすべてのタイプのロードジョブに適用されます。
 - 導入バージョン: -
 
+##### prepared_transaction_default_timeout_second
+
+- デフォルト: 86400
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 準備済みトランザクションのデフォルトのタイムアウト期間。
+- 導入バージョン: -
+
 ##### spark_dpp_version
 
 - デフォルト: 1.0.0
