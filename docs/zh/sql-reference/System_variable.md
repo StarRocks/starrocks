@@ -619,6 +619,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v3.3.0
 
+### enable_file_pagecache
+
+* 描述：是否启用远端文件页面缓存。`true` 表示开启。页面缓存将解压缩后的 Parquet 页面数据存储在内存中。在后续查询中访问相同页面时，可以直接从缓存中获取数据，避免重复的 I/O 操作和解压缩。此功能与数据缓存协同工作并使用相同的内存模块。启用后，对于具有重复页面访问模式的工作负载，可以显著提高查询性能。
+* 默认值：true
+* 引入版本：v4.0
+
 ### enable_datacache_sharing
 
 - 描述：是否启用 Cache Sharing。设置为 `true` 可启用该功能。Cache Sharing 能够在本地缓存未命中时通过网络访问其他节点上的缓存数据，这有助于减少集群扩展过程中缓存失效造成的性能抖动。只有当 FE 参数 `enable_trace_historical_node` 设置为 `true` 时，此变量才会生效。
