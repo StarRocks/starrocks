@@ -327,8 +327,7 @@ public class LoadTest {
             }
         };
 
-        String columnsSQL =
-                "COLUMNS (" +
+        String columnsSQL = "COLUMNS (" +
                 "   c0,t0,c1,t1," +
                 "   c2=get_json_string(" +
                 "           array_filter(" +
@@ -346,8 +345,8 @@ public class LoadTest {
                 "       '$.id')" +
                 " )";
         columnsFromPath.add("c1");
-        ImportColumnsStmt columnsStmt =
-                com.starrocks.sql.parser.SqlParser.parseImportColumns(columnsSQL, SqlModeHelper.MODE_DEFAULT);
+        ImportColumnsStmt columnsStmt = com.starrocks.sql.parser.SqlParser.parseImportColumns(columnsSQL,
+                SqlModeHelper.MODE_DEFAULT);
         columnExprs.addAll(columnsStmt.getColumns());
         Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
                 slotDescByName, params, true, true, columnsFromPath);
@@ -384,5 +383,43 @@ public class LoadTest {
                 "result: VARCHAR; args nullable: true; result nullable: true]",
                 t1SlotId, kSlotId, vSlotId, kSlotId, vSlotId, t1SlotId);
         Assertions.assertEquals(c3ExprExplain, exprsByName.get("c3").explain());
+    }
+    
+    @Test
+    public void testNowPrecision() throws Exception {
+        String c0Name = "c0";
+        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        String c1Name = "c1";
+        columns.add(new Column(c1Name, Type.DATETIME, false, null, true, null, ""));
+        String c2Name = "c2";
+        columns.add(new Column(c2Name, Type.DATETIME, false, null, true, null, ""));
+        new Expectations() {
+            {
+                table.getBaseSchema();
+                result = columns;
+                table.getColumn(c0Name);
+                result = columns.get(0);
+                table.getColumn(c1Name);
+                result = columns.get(1);
+                table.getColumn(c2Name);
+                result = columns.get(2);
+            }
+        };
+
+        String columnsSQL = "COLUMNS(c0,c1=now(),c2=now(6))";
+        ImportColumnsStmt columnsStmt =
+                com.starrocks.sql.parser.SqlParser.parseImportColumns(columnsSQL, SqlModeHelper.MODE_DEFAULT);
+        columnExprs.addAll(columnsStmt.getColumns());
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
+                slotDescByName, params, true, true, columnsFromPath);
+        Expr c1Expr = exprsByName.get("c1");
+        Assertions.assertNotNull(c1Expr);
+        Assertions.assertEquals(
+                "now[(); args: ; result: DATETIME; args nullable: false; result nullable: false]", c1Expr.explain());
+
+        Expr c2Expr = exprsByName.get("c2");
+        Assertions.assertNotNull(c2Expr);
+        Assertions.assertEquals(
+                "now[(6); args: INT; result: DATETIME; args nullable: false; result nullable: false]", c2Expr.explain());
     }
 }
