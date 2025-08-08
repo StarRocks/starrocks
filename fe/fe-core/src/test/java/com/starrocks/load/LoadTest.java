@@ -420,16 +420,16 @@ public class LoadTest {
         ImportColumnsStmt columnsStmt =
                 com.starrocks.sql.parser.SqlParser.parseImportColumns(columnsSQL, SqlModeHelper.MODE_DEFAULT);
         columnExprs.addAll(columnsStmt.getColumns());
-        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
+        Load.initColumns(table, columnExprs, null, exprsByName, analyzer, srcTupleDesc,
                 slotDescByName, params, true, true, columnsFromPath);
         Expr c1Expr = exprsByName.get("c1");
-        Assertions.assertNotNull(c1Expr);
-        Assertions.assertEquals(
+        Assert.assertNotNull(c1Expr);
+        Assert.assertEquals(
                 "now[(); args: ; result: DATETIME; args nullable: false; result nullable: false]", c1Expr.explain());
 
         Expr c2Expr = exprsByName.get("c2");
-        Assertions.assertNotNull(c2Expr);
-        Assertions.assertEquals(
+        Assert.assertNotNull(c2Expr);
+        Assert.assertEquals(
                 "now[(6); args: INT; result: DATETIME; args nullable: false; result nullable: false]", c2Expr.explain());
     }
 }
