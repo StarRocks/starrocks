@@ -703,6 +703,8 @@ enum TStreamingPreaggregationMode {
 enum TJoinOp {
   INNER_JOIN,
   LEFT_OUTER_JOIN,
+  ASOF_INNER_JOIN,
+  ASOF_LEFT_OUTER_JOIN,
   LEFT_SEMI_JOIN,
   RIGHT_OUTER_JOIN,
   FULL_OUTER_JOIN,

@@ -426,7 +426,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
         // currently only support inner join and left outer join
         private boolean isValidJoinType(PhysicalHashJoinOperator joinOp) {
-            return joinOp.getJoinType().isInnerJoin() || joinOp.getJoinType().isLeftOuterJoin();
+            return joinOp.getJoinType().isInnerOrAsofJoin() || joinOp.getJoinType().isLeftOuterOrAsofJoin();
         }
 
         private boolean isShuffleJoin(OptExpression opt) {

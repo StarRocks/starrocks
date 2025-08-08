@@ -87,7 +87,7 @@ public class JoinHelper {
         leftOnCols = Lists.newArrayList();
         rightOnCols = Lists.newArrayList();
 
-        boolean leftTableAggStrict = type.isLeftOuterJoin() || type.isFullOuterJoin();
+        boolean leftTableAggStrict = type.isLeftOuterOrAsofJoin() || type.isFullOuterJoin();
         boolean rightTableAggStrict = type.isRightOuterJoin() || type.isFullOuterJoin();
 
         for (BinaryPredicateOperator binaryPredicate : equalsPredicate) {

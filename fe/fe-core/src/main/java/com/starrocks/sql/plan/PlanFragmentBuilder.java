@@ -2647,7 +2647,7 @@ public class PlanFragmentBuilder {
             // Push down the predicates constructed by the right child when the
             // join op is inner join or left semi join or right join(semi, outer, anti)
             node.setIsPushDown(ConnectContext.get().getSessionVariable().isHashJoinPushDownRightTable()
-                    && (node.getJoinOp().isInnerJoin() || node.getJoinOp().isLeftSemiJoin() ||
+                    && (node.getJoinOp().isInnerOrAsofJoin() || node.getJoinOp().isLeftSemiJoin() ||
                     node.getJoinOp().isRightJoin()));
         }
 
@@ -2686,7 +2686,7 @@ public class PlanFragmentBuilder {
             Set<TupleId> nullableTupleIds = new HashSet<>();
             nullableTupleIds.addAll(leftFragment.getPlanRoot().getNullableTupleIds());
             nullableTupleIds.addAll(rightFragment.getPlanRoot().getNullableTupleIds());
-            if (joinOperator.isLeftOuterJoin()) {
+            if (joinOperator.isLeftOuterOrAsofJoin()) {
                 nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
             } else if (joinOperator.isRightOuterJoin()) {
                 nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());

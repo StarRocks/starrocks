@@ -188,13 +188,13 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         EquivalentDescriptor equivDesc = distributionSpec.getEquivDesc();
 
         JoinOperator joinOperator = node.getJoinType();
-        if (joinOperator.isInnerJoin()) {
+        if (joinOperator.isInnerOrAsofJoin()) {
             for (int i = 0; i < leftOnPredicateColumns.size(); i++) {
                 DistributionCol leftCol = leftOnPredicateColumns.get(i);
                 DistributionCol rightCol = rightOnPredicateColumns.get(i);
                 equivDesc.unionDistributionCols(leftCol, rightCol);
             }
-        } else if (joinOperator.isLeftOuterJoin() || joinOperator.isRightOuterJoin()) {
+        } else if (joinOperator.isLeftOuterOrAsofJoin() || joinOperator.isRightOuterJoin()) {
             for (int i = 0; i < leftOnPredicateColumns.size(); i++) {
                 DistributionCol leftCol = leftOnPredicateColumns.get(i);
                 DistributionCol rightCol = rightOnPredicateColumns.get(i);

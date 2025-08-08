@@ -1203,7 +1203,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         //  We need to extract the equivalence conditions to meet query analysis and
         //  avoid hash joins without equivalence conditions
         if (scalarOperator.isConstant() && scalarOperator.getType().isBoolean()
-                && !node.getJoinOp().isCrossJoin() && !node.getJoinOp().isInnerJoin()) {
+                && !node.getJoinOp().isCrossJoin() && !node.getJoinOp().isInnerOrAsofJoin()) {
             ScalarOperator scalarOperatorWithoutRewrite = Utils.compoundAnd(scalarConjuncts);
             List<BinaryPredicateOperator> eqPredicate = JoinHelper.getEqualsPredicate(
                     new ColumnRefSet(leftOutputColumns),
@@ -1372,7 +1372,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             Map<ColumnRefOperator, ScalarOperator> leftConstMap, Map<ColumnRefOperator, ScalarOperator> rightConstMap,
             JoinOperator joinOperator) {
         // outJoin may generate null values, so it may not safe to use const value
-        if (joinOperator.isLeftOuterJoin()) {
+        if (joinOperator.isLeftOuterOrAsofJoin()) {
             rightConstMap = new HashMap<>();
         } else if (joinOperator.isRightJoin()) {
             leftConstMap = new HashMap<>();
