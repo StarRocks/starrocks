@@ -19,6 +19,8 @@ public enum IcebergTableOperation {
     FAST_FORWARD,
     CHERRYPICK_SNAPSHOT,
     REMOVE_ORPHAN_FILES,
+    ROLLBACK_TO_SNAPSHOT,
+    REWRITE_DATA_FILES,
     UNKNOWN;
 
     public static IcebergTableOperation fromString(String opStr) {
