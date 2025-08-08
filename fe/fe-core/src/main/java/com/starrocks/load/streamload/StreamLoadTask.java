@@ -665,7 +665,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return;
     }
 
-    public void waitCoordFinishAndPrepareTxn(TransactionResult resp) {
+    public void waitCoordFinishAndPrepareTxn(long preparedTimeoutMs, TransactionResult resp) {
         long startTimeMs = System.currentTimeMillis();
         boolean exception = false;
         writeLock();
@@ -710,7 +710,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
 
         try {
-            unprotectedPrepareTxn();
+            unprotectedPrepareTxn(preparedTimeoutMs);
         } catch (Exception e) {
             this.errorMsg = new LogBuilder(LogKey.STREAM_LOAD_TASK, id, ':').add("label", label)
                     .add("error_msg", "cancel stream task for exception: " + e.getMessage()).build_http_log();
@@ -972,7 +972,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 sourceType, id, timeoutMs / 1000, warehouseId);
     }
 
-    public void unprotectedPrepareTxn() throws StarRocksException, LockTimeoutException {
+    public void unprotectedPrepareTxn(long preparedTimeoutMs) throws StarRocksException, LockTimeoutException {
         List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(coord.getCommitInfos());
         List<TabletFailInfo> failInfos = TabletFailInfo.fromThrift(coord.getFailInfos());
         finishPreparingTimeMs = System.currentTimeMillis();
@@ -981,7 +981,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 endTimeMs, numRowsNormal, numRowsAbnormal, numRowsUnselected, numLoadBytesTotal,
                 trackingUrl);
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
-                dbId, txnId, commitInfos, failInfos, txnCommitAttachment, timeoutMs);
+                dbId, txnId, preparedTimeoutMs, commitInfos, failInfos, txnCommitAttachment, timeoutMs);
     }
 
     public boolean checkNeedRemove(long currentMs, boolean isForce) {
