@@ -190,7 +190,7 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
 
 External Catalog については、外部サービス (Hive Service など) を再利用してアクセス制御を行うことができます。StarRocks は、異なる Catalog に対して異なる Ranger 外部サービスを一致させることをサポートしています。ユーザーが外部テーブルにアクセスする際、システムは対応する外部テーブルの Ranger サービスのアクセス ポリシーに基づいてアクセス制御を実施します。ユーザーの権限は、同じ名前の Ranger ユーザーと一致します。
 
-1. Hive の Ranger 設定ファイル [ranger-hive-security.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-security.xml) と [ranger-hive-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) をすべての FE マシンの `fe/conf` ファイルにコピーします。Ranger の IP とポートが正しいことを確認してください。
+1. Hive の Ranger 設定ファイル [ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml) と [ranger-hive-audit.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml) をすべての FE マシンの `fe/conf` ファイルにコピーします。Ranger の IP とポートが正しいことを確認してください。
 2. すべての FE マシンを再起動します。
 3. External Catalog を設定します。
 
