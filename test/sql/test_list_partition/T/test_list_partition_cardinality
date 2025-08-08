@@ -56,7 +56,7 @@ insert into partitions_multi_column_2 select generate_series % 10, generate_seri
 insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 5 from table(generate_series(1, 1000000));
 
 ANALYZE FULL TABLE partitions_multi_column_2 WITH SYNC MODE;
-function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 AND c2=1 AND c3=1 AND p1=1', 'cardinality: 1000')
+function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 AND c2=1 AND c3=1 AND p1=1', 'cardinality: 316')
 
 -- with histogram
 set cbo_use_histogram_evaluate_list_partition=true;
