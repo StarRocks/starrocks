@@ -308,7 +308,7 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
     if (tablet_column.type() == TYPE_VARCHAR || tablet_column.type() == TYPE_ARRAY) {
         RETURN_IF_ERROR(_collect_dict_for_column(_column_iterators[cid].get(), cid, column));
     } else if (tablet_column.type() == TYPE_JSON) {
-        RETURN_IF_ERROR(_collect_dict_for_flatjson(cid, column, type));
+        RETURN_IF_ERROR(_collect_dict_for_flatjson(cid, column));
     } else {
         return Status::InvalidArgument("unsupported column type: " + type_to_string(tablet_column.type()));
     }
@@ -320,7 +320,7 @@ Status SegmentMetaCollecter::_collect_dict_for_column(ColumnIterator* column_ite
     if (!column_iter->all_page_dict_encoded()) {
         return Status::GlobalDictError("no global dict");
     } else {
-        RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
+        RETURN_IF_ERROR(column_iter->fetch_all_dict_words(&words));
     }
 
     if (words.size() > _params->low_cardinality_threshold) {
@@ -360,19 +360,24 @@ Status SegmentMetaCollecter::_collect_dict_for_column(ColumnIterator* column_ite
     return Status::OK();
 }
 
-Status SegmentMetaCollecter::_collect_dict_for_flatjson(ColumnId cid, Column* column, LogicalType type) {
+Status SegmentMetaCollecter::_collect_dict_for_flatjson(ColumnId cid, Column* column) {
     auto& tablet_column = _segment->tablet_schema().column(cid);
     if (tablet_column.type() != TYPE_JSON) {
         return Status::InvalidArgument("not a flat json column");
     }
     auto column_reader = _segment->column(cid);
-    if (column_reader == nullptr) {
-        return Status::NotFound(fmt::format("column not found: {}", tablet_column.name()));
-    }
+    RETURN_IF(column_reader == nullptr, Status::NotFound(fmt::format("column not found: {}", tablet_column.name())));
+
     auto& sub_readers = *column_reader->sub_readers();
     for (auto& sub_reader : sub_readers) {
         if (sub_reader->column_type() == TYPE_VARCHAR) {
             ASSIGN_OR_RETURN(auto source_iter, sub_reader->new_iterator());
+            ColumnIteratorOptions iter_opts;
+            iter_opts.check_dict_encoding = true;
+            iter_opts.read_file = _read_file.get();
+            iter_opts.stats = &_stats;
+            RETURN_IF_ERROR(source_iter->init(iter_opts));
+
             Status st = (_collect_dict_for_column(source_iter.get(), cid, column));
             if (st.is_global_dict_error()) {
                 // ignore
