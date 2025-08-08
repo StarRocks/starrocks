@@ -337,7 +337,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         }
     }
 
-    public void tryPrepareLoadTaskTxn(String label, TransactionResult resp)
+    public void tryPrepareLoadTaskTxn(String label, long preparedTimeoutMs, TransactionResult resp)
             throws StarRocksException {
         boolean needUnLock = true;
         readLock();
@@ -349,7 +349,7 @@ public class StreamLoadMgr implements MemoryTrackable {
             readUnlock();
             needUnLock = false;
             if (task.checkNeedPrepareTxn()) {
-                task.waitCoordFinishAndPrepareTxn(resp);
+                task.waitCoordFinishAndPrepareTxn(preparedTimeoutMs, resp);
             }
         } finally {
             if (needUnLock) {

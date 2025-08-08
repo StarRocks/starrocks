@@ -74,7 +74,8 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                 if (!result.stateOK() || result.containMsg()) {
                     return new ResultWrapper(result);
                 }
-                GlobalStateMgr.getCurrentState().getStreamLoadMgr().tryPrepareLoadTaskTxn(label, result);
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().tryPrepareLoadTaskTxn(label,
+                        txnOperationParams.getPreparedTimeoutMillis(), result);
                 return new ResultWrapper(result);
             case TXN_COMMIT:
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().commitLoadTask(label, result);

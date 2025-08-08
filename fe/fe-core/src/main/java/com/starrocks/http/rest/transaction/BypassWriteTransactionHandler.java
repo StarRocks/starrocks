@@ -82,7 +82,7 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                 break;
             case TXN_PREPARE:
                 result = handlePrepareTransaction(
-                        db, label,
+                        db, label, txnOperationParams.getPreparedTimeoutMillis(),
                         Optional.ofNullable(requestBody.getCommittedTablets()).orElse(new ArrayList<>(0)),
                         Optional.ofNullable(requestBody.getFailedTablets()).orElse(new ArrayList<>(0)),
                         timeoutMillis
@@ -124,6 +124,7 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
 
     private TransactionResult handlePrepareTransaction(Database db,
                                                        String label,
+                                                       long preparedTimeoutMs,
                                                        List<TabletCommitInfo> committedTablets,
                                                        List<TabletFailInfo> failedTablets,
                                                        long timeoutMillis) throws StarRocksException {
@@ -135,7 +136,8 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
         switch (txnStatus) {
             case PREPARE:
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
-                        dbId, txnId, committedTablets, failedTablets, new MiniLoadTxnCommitAttachment(), timeoutMillis);
+                        dbId, txnId, preparedTimeoutMs, committedTablets, failedTablets,
+                        new MiniLoadTxnCommitAttachment(), timeoutMillis);
                 result.addResultEntry(TransactionResult.TXN_ID_KEY, txnId);
                 result.addResultEntry(TransactionResult.LABEL_KEY, label);
                 break;

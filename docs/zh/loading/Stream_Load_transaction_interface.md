@@ -25,17 +25,27 @@ Stream Load 支持导入 CSV 和 JSON 格式的数据，并且建议在导入的
 
 - `/api/transaction/begin`：开启一个新事务。
 
+- `/api/transaction/prepare`: 预提交当前事务并使数据更改暂时持久化。预提交事务后，您可以继续提交或回滚该事务。如果集群在事务预提交后发生故障，您仍可在集群恢复后继续提交该事务。
+
 - `/api/transaction/commit`：提交当前事务，持久化变更。
 
 - `/api/transaction/rollback`：回滚当前事务，回滚变更。
 
-### 事务预提交
-
-提供 `/api/transaction/prepare` 接口，用于预提交当前事务，临时持久化变更。预提交一个事务后，您可以继续提交或者回滚该事务。这种机制下，如果在事务预提交成功以后 StarRocks 发生宕机，您仍然可以在系统恢复后继续执行提交。
-
 > **说明**
 >
 > 在事务预提交以后，请勿继续写入数据。继续写入数据的话，写入请求会报错。
+
+下图展示了事务状态与操作之间的关系：
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> PREPARE : begin
+    PREPARE --> PREPARED : prepare
+    PREPARE --> ABORTED : rollback
+    PREPARED --> COMMITTED : commit
+    PREPARED --> ABORTED : rollback
+```
 
 ### 数据写入
 
@@ -47,11 +57,11 @@ Stream Load 支持导入 CSV 和 JSON 格式的数据，并且建议在导入的
 
 ### 超时管理
 
-支持通过 FE 配置中的 `stream_load_default_timeout_second` 参数设置默认的事务超时时间。
+当开始事务时，您可以使用 HTTP 请求 Header 中的 `timeout` 字段来指定从 `PREPARE` 状态到 `PREPARED` 状态的超时时间（以秒为单位）。如果在此时间段内事务未完成准备，将自动取消该事务。如果未指定此字段，默认值由 FE 配置 [`stream_load_default_timeout_second`](../administration/management/FE_configuration.md#stream_load_default_timeout_second) 决定（默认：600 秒）。
 
-开启事务时，可以通过 HTTP 请求头中的 `timeout` 字段来指定当前事务的超时时间。
+当开始事务时，您还可以通过HTTP请求 Header 中的 `idle_transaction_timeout` 字段指定事务可保持空闲状态的超时时间（以秒为单位）。若在此期间内未写入任何数据，该事务将被自动回滚。
 
-开启事务时，还可以通过 HTTP 请求头中的 `idle_transaction_timeout` 字段来指定空闲事务超时时间。当事务超过 `idle_transaction_timeout` 所设置的超时时间而没有数据写入时，事务将自动回滚。
+在预提交事务时，您可以通过 HTT P请求 Header 中的 `prepared_timeout` 字段指定事务从 `PREPARED` 状态转换为 `COMMITTED` 状态的超时时间（以秒为单位）。如果在此时间段内事务未完成提交，系统将自动取消该事务。如果未指定此字段，默认值由 FE 配置 [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) 决定（默认：86400 秒）。`prepared_timeout` 自 v3.5.4 版本起支持。
 
 ## 接口优势
 
@@ -274,6 +284,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
     -H "db:<database_name>" \
+    [-H "prepared_timeout:<timeout_seconds>"] \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
 
@@ -283,8 +294,13 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
     -H "Expect:100-continue" \
     -H "db:test_db" \
+    -H "prepared_timeout:300" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
+
+> **说明**
+>
+> `prepared_timeout` 字段为可选。如果未指定该字段，其默认值由 FE 配置中的 [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) 决定（默认值：86400 秒）。`prepared_timeout` 自 v3.5.4 版本起支持。
 
 #### 返回结果
 
