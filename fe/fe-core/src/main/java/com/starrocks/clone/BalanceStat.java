@@ -16,12 +16,15 @@ package com.starrocks.clone;
 
 import com.google.gson.Gson;
 
+import java.util.Set;
+
 public abstract class BalanceStat {
     public enum BalanceType {
         CLUSTER_DISK("inter-node disk usage"),
         CLUSTER_TABLET("inter-node tablet distribution"),
         BACKEND_DISK("intra-node disk usage"),
-        BACKEND_TABLET("intra-node tablet distribution");
+        BACKEND_TABLET("intra-node tablet distribution"),
+        COLOCATION_GROUP("colocation group");
 
         private final String label;
 
@@ -74,6 +77,10 @@ public abstract class BalanceStat {
     public static BalanceStat createBackendTabletBalanceStat(long beId, String maxPath, String minPath, long maxTabletCount,
                                                              long minTabletCount) {
         return new BackendTabletBalanceStat(beId, maxPath, minPath, maxTabletCount, minTabletCount);
+    }
+
+    public static BalanceStat createColocationGroupBalanceStat(long tabletId, Set<Long> currentBes, Set<Long> bucketSeq) {
+        return new ColocationGroupBalanceStat(tabletId, currentBes, bucketSeq);
     }
 
     /**
@@ -189,6 +196,22 @@ public abstract class BalanceStat {
             super(BalanceType.BACKEND_TABLET, beId, maxPath, minPath);
             this.maxTabletNum = maxTabletNum;
             this.minTabletNum = minTabletNum;
+        }
+    }
+
+    /**
+     * Balance stat for colocate group bucket seq mismatch
+     */
+    private static class ColocationGroupBalanceStat extends UnbalancedStat {
+        private long tabletId;
+        private Set<Long> currentBes;
+        private Set<Long> expectedBes;
+
+        public ColocationGroupBalanceStat(long tabletId, Set<Long> currentBes, Set<Long> expectedBes) {
+            super(BalanceType.COLOCATION_GROUP);
+            this.tabletId = tabletId;
+            this.currentBes = currentBes;
+            this.expectedBes = expectedBes;
         }
     }
 }
