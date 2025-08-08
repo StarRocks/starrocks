@@ -15,32 +15,12 @@
 package com.starrocks.sql.ast.warehouse;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
 // Show warehouse statement.
 public class ShowWarehousesStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Id", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Name", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("State", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("NodeCount", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("CurrentClusterCount", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("MaxClusterCount", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("StartedClusters", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("RunningSql", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("QueuedSql", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("CreatedOn", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("ResumedOn", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("UpdatedOn", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Property", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("Comment", ScalarType.createVarchar(256)))
-                    .build();
     private final String pattern;
 
     public ShowWarehousesStmt(String pattern) {
@@ -64,11 +44,6 @@ public class ShowWarehousesStmt extends ShowStmt {
             sb.append(" LIKE '").append(pattern).append("'");
         }
         return sb.toString();
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
     }
 
     @Override

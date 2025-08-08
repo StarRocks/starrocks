@@ -119,7 +119,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowRolesStmt() {
         ShowRolesStmt stmt = new ShowRolesStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(3, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Builtin", metaData.getColumn(1).getName());
@@ -129,7 +129,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowDbStmt() {
         ShowDbStmt stmt = new ShowDbStmt(null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(1, metaData.getColumnCount());
         Assertions.assertEquals("Database", metaData.getColumn(0).getName());
     }
@@ -137,7 +137,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowTableStmt() {
         ShowTableStmt stmt = new ShowTableStmt("test_db", false, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(1, metaData.getColumnCount());
         Assertions.assertEquals("Tables_in_test_db", metaData.getColumn(0).getName());
     }
@@ -145,7 +145,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowTableStmtVerbose() {
         ShowTableStmt stmt = new ShowTableStmt("test_db", true, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Tables_in_test_db", metaData.getColumn(0).getName());
         Assertions.assertEquals("Table_type", metaData.getColumn(1).getName());
@@ -154,7 +154,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowVariablesStmt() {
         ShowVariablesStmt stmt = new ShowVariablesStmt(SetType.SESSION, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Variable_name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Value", metaData.getColumn(1).getName());
@@ -163,7 +163,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowVariablesStmtVerbose() {
         ShowVariablesStmt stmt = new ShowVariablesStmt(SetType.VERBOSE, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(4, metaData.getColumnCount());
         Assertions.assertEquals("Variable_name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Value", metaData.getColumn(1).getName());
@@ -176,7 +176,7 @@ public class ShowStmtMetaTest {
         TableName tableName = new TableName("test_db", "test_table");
         ShowColumnStmt stmt = new ShowColumnStmt(tableName, "test_db", null, false);
         stmt.init();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("Field", metaData.getColumn(0).getName());
         Assertions.assertEquals("Type", metaData.getColumn(1).getName());
@@ -191,7 +191,7 @@ public class ShowStmtMetaTest {
         TableName tableName = new TableName("test_db", "test_table");
         ShowColumnStmt stmt = new ShowColumnStmt(tableName, "test_db", null, true);
         stmt.init();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(9, metaData.getColumnCount());
         Assertions.assertEquals("Field", metaData.getColumn(0).getName());
         Assertions.assertEquals("Type", metaData.getColumn(1).getName());
@@ -207,7 +207,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowEnginesStmt() {
         ShowEnginesStmt stmt = new ShowEnginesStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("Engine", metaData.getColumn(0).getName());
         Assertions.assertEquals("Support", metaData.getColumn(1).getName());
@@ -220,7 +220,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowPrivilegesStmt() {
         ShowPrivilegesStmt stmt = new ShowPrivilegesStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(3, metaData.getColumnCount());
         Assertions.assertEquals("Privilege", metaData.getColumn(0).getName());
         Assertions.assertEquals("Context", metaData.getColumn(1).getName());
@@ -230,7 +230,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowBackendsStmt() {
         ShowBackendsStmt stmt = new ShowBackendsStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         // BackendsProcDir.getMetadata() returns different column counts based on RunMode
         // For now, we'll just check that it has columns
         Assertions.assertEquals(30, metaData.getColumnCount());
@@ -246,7 +246,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowFrontendsStmt() {
         ShowFrontendsStmt stmt = new ShowFrontendsStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(17, metaData.getColumnCount());
         Assertions.assertEquals("Id", metaData.getColumn(0).getName());
         Assertions.assertEquals("Name", metaData.getColumn(1).getName());
@@ -270,7 +270,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowBrokerStmt() {
         ShowBrokerStmt stmt = new ShowBrokerStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(7, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("IP", metaData.getColumn(1).getName());
@@ -284,7 +284,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowCharsetStmt() {
         ShowCharsetStmt stmt = new ShowCharsetStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(4, metaData.getColumnCount());
         Assertions.assertEquals("Charset", metaData.getColumn(0).getName());
         Assertions.assertEquals("Description", metaData.getColumn(1).getName());
@@ -295,7 +295,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowCreateDbStmt() {
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("test_db");
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Database", metaData.getColumn(0).getName());
         Assertions.assertEquals("Create Database", metaData.getColumn(1).getName());
@@ -305,7 +305,7 @@ public class ShowStmtMetaTest {
     public void testShowCreateTableStmt() {
         TableName tableName = new TableName("test_db", "test_table");
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableName, ShowCreateTableStmt.CreateTableType.TABLE);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
         Assertions.assertEquals("Create Table", metaData.getColumn(1).getName());
@@ -315,7 +315,7 @@ public class ShowStmtMetaTest {
     public void testShowCreateTableStmtView() {
         TableName tableName = new TableName("test_db", "test_view");
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableName, ShowCreateTableStmt.CreateTableType.VIEW);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
         Assertions.assertEquals("Create Table", metaData.getColumn(1).getName());
@@ -325,7 +325,7 @@ public class ShowStmtMetaTest {
     public void testShowCreateTableStmtMaterializedView() {
         TableName tableName = new TableName("test_db", "test_mv");
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableName, ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
         Assertions.assertEquals("Create Table", metaData.getColumn(1).getName());
@@ -334,7 +334,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowCollationStmt() {
         ShowCollationStmt stmt = new ShowCollationStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("Collation", metaData.getColumn(0).getName());
         Assertions.assertEquals("Charset", metaData.getColumn(1).getName());
@@ -347,7 +347,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowUserStmt() {
         ShowUserStmt stmt = new ShowUserStmt(false);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(1, metaData.getColumnCount());
         Assertions.assertEquals("User", metaData.getColumn(0).getName());
     }
@@ -355,7 +355,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowUserStmtAll() {
         ShowUserStmt stmt = new ShowUserStmt(true);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(1, metaData.getColumnCount());
         Assertions.assertEquals("User", metaData.getColumn(0).getName());
     }
@@ -363,7 +363,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowStatusStmt() {
         ShowStatusStmt stmt = new ShowStatusStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Variable_name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Value", metaData.getColumn(1).getName());
@@ -372,7 +372,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowProcesslistStmt() {
         ShowProcesslistStmt stmt = new ShowProcesslistStmt(false);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(13, metaData.getColumnCount());
         Assertions.assertEquals("ServerName", metaData.getColumn(0).getName());
         Assertions.assertEquals("Id", metaData.getColumn(1).getName());
@@ -392,7 +392,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowFunctionsStmt() {
         ShowFunctionsStmt stmt = new ShowFunctionsStmt("test_db", false, false, false, null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(5, metaData.getColumnCount());
         Assertions.assertEquals("Signature", metaData.getColumn(0).getName());
         Assertions.assertEquals("Return Type", metaData.getColumn(1).getName());
@@ -404,7 +404,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowGrantsStmt() {
         ShowGrantsStmt stmt = new ShowGrantsStmt(null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(3, metaData.getColumnCount());
         Assertions.assertEquals("UserIdentity", metaData.getColumn(0).getName());
         Assertions.assertEquals("Catalog", metaData.getColumn(1).getName());
@@ -415,7 +415,7 @@ public class ShowStmtMetaTest {
     public void testShowIndexStmt() {
         TableName tableName = new TableName("test_db", "test_table");
         ShowIndexStmt stmt = new ShowIndexStmt("test_db", tableName);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(12, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
         Assertions.assertEquals("Non_unique", metaData.getColumn(1).getName());
@@ -434,7 +434,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowTableStatusStmt() {
         ShowTableStatusStmt stmt = new ShowTableStatusStmt("test_db", null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(18, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Engine", metaData.getColumn(1).getName());
@@ -459,7 +459,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowCatalogsStmt() {
         ShowCatalogsStmt stmt = new ShowCatalogsStmt(null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(3, metaData.getColumnCount());
         Assertions.assertEquals("Catalog", metaData.getColumn(0).getName());
         Assertions.assertEquals("Type", metaData.getColumn(1).getName());
@@ -469,7 +469,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowResourcesStmt() {
         ShowResourcesStmt stmt = new ShowResourcesStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(4, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("ResourceType", metaData.getColumn(1).getName());
@@ -480,7 +480,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowDeleteStmt() {
         ShowDeleteStmt stmt = new ShowDeleteStmt("test_db");
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(5, metaData.getColumnCount());
         Assertions.assertEquals("TableName", metaData.getColumn(0).getName());
         Assertions.assertEquals("PartitionName", metaData.getColumn(1).getName());
@@ -492,7 +492,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowLoadWarningsStmt() {
         ShowLoadWarningsStmt stmt = new ShowLoadWarningsStmt("test_db", null, null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(3, metaData.getColumnCount());
         Assertions.assertEquals("JobId", metaData.getColumn(0).getName());
         Assertions.assertEquals("Label", metaData.getColumn(1).getName());
@@ -502,7 +502,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowSmallFilesStmt() {
         ShowSmallFilesStmt stmt = new ShowSmallFilesStmt("test_db");
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(7, metaData.getColumnCount());
         Assertions.assertEquals("Id", metaData.getColumn(0).getName());
         Assertions.assertEquals("DbName", metaData.getColumn(1).getName());
@@ -516,7 +516,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowComputeNodeBlackListStmt() {
         ShowComputeNodeBlackListStmt stmt = new ShowComputeNodeBlackListStmt(null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(5, metaData.getColumnCount());
         Assertions.assertEquals("ComputeNodeId", metaData.getColumn(0).getName());
         Assertions.assertEquals("AddBlackListType", metaData.getColumn(1).getName());
@@ -528,7 +528,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testAdminShowConfigStmt() {
         AdminShowConfigStmt stmt = new AdminShowConfigStmt(null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("Key", metaData.getColumn(0).getName());
         Assertions.assertEquals("AliasNames", metaData.getColumn(1).getName());
@@ -541,7 +541,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowWhiteListStmt() {
         ShowWhiteListStmt stmt = new ShowWhiteListStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("user_name", metaData.getColumn(0).getName());
         Assertions.assertEquals("white_list", metaData.getColumn(1).getName());
@@ -550,7 +550,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowAnalyzeJobStmt() {
         ShowAnalyzeJobStmt stmt = new ShowAnalyzeJobStmt(null, null, null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(11, metaData.getColumnCount());
         Assertions.assertEquals("Id", metaData.getColumn(0).getName());
         Assertions.assertEquals("Catalog", metaData.getColumn(1).getName());
@@ -568,7 +568,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowAnalyzeStatusStmt() {
         ShowAnalyzeStatusStmt stmt = new ShowAnalyzeStatusStmt(null, null, null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(11, metaData.getColumnCount());
         Assertions.assertEquals("Id", metaData.getColumn(0).getName());
         Assertions.assertEquals("Database", metaData.getColumn(1).getName());
@@ -586,7 +586,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowBackupStmt() {
         ShowBackupStmt stmt = new ShowBackupStmt("test_db");
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(14, metaData.getColumnCount());
         Assertions.assertEquals("JobId", metaData.getColumn(0).getName());
         Assertions.assertEquals("SnapshotName", metaData.getColumn(1).getName());
@@ -607,7 +607,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowRestoreStmt() {
         ShowRestoreStmt stmt = new ShowRestoreStmt("test_db", null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(18, metaData.getColumnCount());
         Assertions.assertEquals("JobId", metaData.getColumn(0).getName());
         Assertions.assertEquals("Label", metaData.getColumn(1).getName());
@@ -632,7 +632,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowDynamicPartitionStmt() {
         ShowDynamicPartitionStmt stmt = new ShowDynamicPartitionStmt("test_db");
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(15, metaData.getColumnCount());
         Assertions.assertEquals("TableName", metaData.getColumn(0).getName());
         Assertions.assertEquals("Enable", metaData.getColumn(1).getName());
@@ -654,7 +654,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowRoutineLoadStmt() {
         ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(null, false);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         // TITLE_NAMES has different lengths based on RunMode
         Assertions.assertEquals(22, metaData.getColumnCount());
         // Check some common column names
@@ -680,7 +680,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowDataCacheRulesStmt() {
         ShowDataCacheRulesStmt stmt = new ShowDataCacheRulesStmt(null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(7, metaData.getColumnCount());
         Assertions.assertEquals("Rule Id", metaData.getColumn(0).getName());
         Assertions.assertEquals("Catalog", metaData.getColumn(1).getName());
@@ -694,7 +694,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowWarningStmt() {
         ShowWarningStmt stmt = new ShowWarningStmt(null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(3, metaData.getColumnCount());
         Assertions.assertEquals("Level", metaData.getColumn(0).getName());
         Assertions.assertEquals("Code", metaData.getColumn(1).getName());
@@ -704,7 +704,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowCreateRoutineLoadStmt() {
         ShowCreateRoutineLoadStmt stmt = new ShowCreateRoutineLoadStmt(null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Job", metaData.getColumn(0).getName());
         Assertions.assertEquals("Create Job", metaData.getColumn(1).getName());
@@ -713,7 +713,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowLoadStmt() {
         ShowLoadStmt stmt = new ShowLoadStmt("test_db", null, null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(21, metaData.getColumnCount());
         Assertions.assertEquals("JobId", metaData.getColumn(0).getName());
         Assertions.assertEquals("Label", metaData.getColumn(1).getName());
@@ -770,7 +770,7 @@ public class ShowStmtMetaTest {
         stmt.setNode(mockNode);
 
         // Now test getMetaData() method
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(22, metaData.getColumnCount());
 
         // Verify the column names match what we expect from PartitionsProcDir
@@ -801,7 +801,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowAuthorStmt() {
         ShowAuthorStmt stmt = new ShowAuthorStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(3, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Location", metaData.getColumn(1).getName());
@@ -811,7 +811,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowAuthenticationStmt() {
         ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(null, false);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(4, metaData.getColumnCount());
         Assertions.assertEquals("UserIdentity", metaData.getColumn(0).getName());
         Assertions.assertEquals("Password", metaData.getColumn(1).getName());
@@ -822,7 +822,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowRoutineLoadTaskStmt() {
         ShowRoutineLoadTaskStmt stmt = new ShowRoutineLoadTaskStmt("test_db", null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         // TITLE_NAMES has different lengths based on RunMode
         Assertions.assertEquals(11, metaData.getColumnCount());
         // Check some common column names
@@ -842,7 +842,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowResourceGroupUsageStmt() {
         ShowResourceGroupUsageStmt stmt = new ShowResourceGroupUsageStmt("test_group", null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Id", metaData.getColumn(1).getName());
@@ -854,8 +854,8 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowEventsStmt() {
-        ShowEventsStmt stmt = new ShowEventsStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowEventsStmt stmt = new ShowEventsStmt(NodePosition.ZERO);
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(15, metaData.getColumnCount());
         Assertions.assertEquals("Db", metaData.getColumn(0).getName());
         Assertions.assertEquals("Name", metaData.getColumn(1).getName());
@@ -877,7 +877,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowBasicStatsMetaStmt() {
         ShowBasicStatsMetaStmt stmt = new ShowBasicStatsMetaStmt(null, null, null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(11, metaData.getColumnCount());
         Assertions.assertEquals("Database", metaData.getColumn(0).getName());
         Assertions.assertEquals("Table", metaData.getColumn(1).getName());
@@ -895,7 +895,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowDataStmt() {
         ShowDataStmt stmt = new ShowDataStmt("test_db", "test_table");
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         // ShowDataStmt uses different metadata based on whether it has a table name
         // For table data, it should have 5 columns
         Assertions.assertEquals(5, metaData.getColumnCount());
@@ -909,7 +909,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowDictionaryStmt() {
         ShowDictionaryStmt stmt = new ShowDictionaryStmt("test_db", NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(13, metaData.getColumnCount());
         Assertions.assertEquals("DictionaryId", metaData.getColumn(0).getName());
         Assertions.assertEquals("DictionaryName", metaData.getColumn(1).getName());
@@ -929,7 +929,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowSqlBlackListStmt() {
         ShowSqlBlackListStmt stmt = new ShowSqlBlackListStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Id", metaData.getColumn(0).getName());
         Assertions.assertEquals("Forbidden SQL", metaData.getColumn(1).getName());
@@ -940,7 +940,7 @@ public class ShowStmtMetaTest {
         TableName tableName = new TableName("test_db", "test_table");
         TableRef tableRef = new TableRef(tableName, null, null, NodePosition.ZERO);
         ShowDataDistributionStmt stmt = new ShowDataDistributionStmt(tableRef);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(8, metaData.getColumnCount());
         Assertions.assertEquals("PartitionName", metaData.getColumn(0).getName());
         Assertions.assertEquals("SubPartitionId", metaData.getColumn(1).getName());
@@ -957,7 +957,7 @@ public class ShowStmtMetaTest {
         TableName tableName = new TableName("test_db", "test_table");
         TableRef tableRef = new TableRef(tableName, null, null, NodePosition.ZERO);
         AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(13, metaData.getColumnCount());
         Assertions.assertEquals("TabletId", metaData.getColumn(0).getName());
         Assertions.assertEquals("ReplicaId", metaData.getColumn(1).getName());
@@ -977,7 +977,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowAlterStmt() {
         ShowAlterStmt stmt = new ShowAlterStmt(ShowAlterStmt.AlterType.COLUMN, "test_db", null, null, null, NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         // SchemaChangeProcDir.TITLE_NAMES has different lengths based on RunMode
         Assertions.assertEquals(13, metaData.getColumnCount());
         // Check some common column names
@@ -991,7 +991,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowTriggersStmt() {
         ShowTriggersStmt stmt = new ShowTriggersStmt(NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(11, metaData.getColumnCount());
         Assertions.assertEquals("Trigger", metaData.getColumn(0).getName());
         Assertions.assertEquals("Event", metaData.getColumn(1).getName());
@@ -1009,7 +1009,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowMaterializedViewsStmt() {
         ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("test_db", null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(27, metaData.getColumnCount());
         Assertions.assertEquals("id", metaData.getColumn(0).getName());
         Assertions.assertEquals("database_name", metaData.getColumn(1).getName());
@@ -1043,7 +1043,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowResourceGroupStmt() {
         ShowResourceGroupStmt stmt = new ShowResourceGroupStmt("test_group", false, false, NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(11, metaData.getColumnCount());
         Assertions.assertEquals("name", metaData.getColumn(0).getName());
         Assertions.assertEquals("id", metaData.getColumn(1).getName());
@@ -1061,7 +1061,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowStorageVolumesStmt() {
         ShowStorageVolumesStmt stmt = new ShowStorageVolumesStmt("test_volume", NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(1, metaData.getColumnCount());
         Assertions.assertEquals("Storage Volume", metaData.getColumn(0).getName());
     }
@@ -1069,7 +1069,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowExportStmt() {
         ShowExportStmt stmt = new ShowExportStmt("test_db", null, null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(11, metaData.getColumnCount());
         Assertions.assertEquals("JobId", metaData.getColumn(0).getName());
         Assertions.assertEquals("QueryId", metaData.getColumn(1).getName());
@@ -1087,7 +1087,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowUserPropertyStmt() {
         ShowUserPropertyStmt stmt = new ShowUserPropertyStmt(null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Key", metaData.getColumn(0).getName());
         Assertions.assertEquals("Value", metaData.getColumn(1).getName());
@@ -1096,7 +1096,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowRepositoriesStmt() {
         ShowRepositoriesStmt stmt = new ShowRepositoriesStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(7, metaData.getColumnCount());
         Assertions.assertEquals("RepoId", metaData.getColumn(0).getName());
         Assertions.assertEquals("RepoName", metaData.getColumn(1).getName());
@@ -1110,7 +1110,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowCreateExternalCatalogStmt() {
         ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("test_catalog");
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Catalog", metaData.getColumn(0).getName());
         Assertions.assertEquals("Create Catalog", metaData.getColumn(1).getName());
@@ -1121,7 +1121,7 @@ public class ShowStmtMetaTest {
         TableName tableName = new TableName("test_db", "test_table");
         TableRef tableRef = new TableRef(tableName, null, null, NodePosition.ZERO);
         AdminShowReplicaDistributionStmt stmt = new AdminShowReplicaDistributionStmt(tableRef);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(4, metaData.getColumnCount());
         Assertions.assertEquals("BackendId", metaData.getColumn(0).getName());
         Assertions.assertEquals("ReplicaNum", metaData.getColumn(1).getName());
@@ -1132,7 +1132,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowGroupProvidersStmt() {
         ShowGroupProvidersStmt stmt = new ShowGroupProvidersStmt(NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(3, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Type", metaData.getColumn(1).getName());
@@ -1142,7 +1142,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowTransactionStmt() {
         ShowTransactionStmt stmt = new ShowTransactionStmt("test_db", null, NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(16, metaData.getColumnCount());
         Assertions.assertEquals("TransactionId", metaData.getColumn(0).getName());
         Assertions.assertEquals("Label", metaData.getColumn(1).getName());
@@ -1165,7 +1165,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowOpenTableStmt() {
         ShowOpenTableStmt stmt = new ShowOpenTableStmt(NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(4, metaData.getColumnCount());
         Assertions.assertEquals("Database", metaData.getColumn(0).getName());
         Assertions.assertEquals("Table", metaData.getColumn(1).getName());
@@ -1176,7 +1176,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowComputeNodesStmt() {
         ShowComputeNodesStmt stmt = new ShowComputeNodesStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         // ComputeNodeProcDir.getMetadata() returns different column counts based on RunMode
         Assertions.assertEquals(21, metaData.getColumnCount());
         // Check some common column names
@@ -1215,7 +1215,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowProcedureStmt() {
         ShowProcedureStmt stmt = new ShowProcedureStmt("test_db", null, NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(11, metaData.getColumnCount());
         Assertions.assertEquals("Db", metaData.getColumn(0).getName());
         Assertions.assertEquals("Name", metaData.getColumn(1).getName());
@@ -1233,7 +1233,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowStreamLoadStmt() {
         ShowStreamLoadStmt stmt = new ShowStreamLoadStmt(new LabelName("test_db", "test_label"), false);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(25, metaData.getColumnCount());
         Assertions.assertEquals("Label", metaData.getColumn(0).getName());
         Assertions.assertEquals("Id", metaData.getColumn(1).getName());
@@ -1266,7 +1266,7 @@ public class ShowStmtMetaTest {
     public void testShowTabletStmt() {
         // Test single tablet mode (isShowSingleTablet = true)
         ShowTabletStmt stmt = new ShowTabletStmt(null, 12345L, NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(10, metaData.getColumnCount());
         Assertions.assertEquals("DbName", metaData.getColumn(0).getName());
         Assertions.assertEquals("TableName", metaData.getColumn(1).getName());
@@ -1282,7 +1282,7 @@ public class ShowStmtMetaTest {
         // Test with table name but no table set (should return empty list)
         TableName tableName = new TableName("test_db", "test_table");
         ShowTabletStmt stmt2 = new ShowTabletStmt(tableName, 12345L, NodePosition.ZERO);
-        ShowResultSetMetaData metaData2 = stmt2.getMetaData();
+        ShowResultSetMetaData metaData2 = new ShowResultMetaFactory().getMetadata(stmt2);
         Assertions.assertEquals(0, metaData2.getColumnCount());
 
         // Test basic statement properties
@@ -1296,7 +1296,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowPluginsStmt() {
         ShowPluginsStmt stmt = new ShowPluginsStmt();
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(10, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Type", metaData.getColumn(1).getName());
@@ -1313,7 +1313,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowMultiColumnStatsMetaStmt() {
         ShowMultiColumnStatsMetaStmt stmt = new ShowMultiColumnStatsMetaStmt(null, null, null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(7, metaData.getColumnCount());
         Assertions.assertEquals("Database", metaData.getColumn(0).getName());
         Assertions.assertEquals("Table", metaData.getColumn(1).getName());
@@ -1327,7 +1327,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowProfilelistStmt() {
         ShowProfilelistStmt stmt = new ShowProfilelistStmt(10, NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(5, metaData.getColumnCount());
         Assertions.assertEquals("QueryId", metaData.getColumn(0).getName());
         Assertions.assertEquals("StartTime", metaData.getColumn(1).getName());
@@ -1339,7 +1339,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowSnapshotStmt() {
         ShowSnapshotStmt stmt = new ShowSnapshotStmt("test_db", null, NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(3, metaData.getColumnCount());
         Assertions.assertEquals("Snapshot", metaData.getColumn(0).getName());
         Assertions.assertEquals("Timestamp", metaData.getColumn(1).getName());
@@ -1349,7 +1349,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowHistogramStatsMetaStmt() {
         ShowHistogramStatsMetaStmt stmt = new ShowHistogramStatsMetaStmt(null, null, null, null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("Database", metaData.getColumn(0).getName());
         Assertions.assertEquals("Table", metaData.getColumn(1).getName());
@@ -1362,7 +1362,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowRunningQueriesStmt() {
         ShowRunningQueriesStmt stmt = new ShowRunningQueriesStmt(10, NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(12, metaData.getColumnCount());
         Assertions.assertEquals("QueryId", metaData.getColumn(0).getName());
         Assertions.assertEquals("WarehouseId", metaData.getColumn(1).getName());
@@ -1381,7 +1381,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowBackendBlackListStmt() {
         ShowBackendBlackListStmt stmt = new ShowBackendBlackListStmt(null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(5, metaData.getColumnCount());
         Assertions.assertEquals("BackendId", metaData.getColumn(0).getName());
         Assertions.assertEquals("AddBlackListType", metaData.getColumn(1).getName());
@@ -1393,7 +1393,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowClustersStmt() {
         ShowClustersStmt stmt = new ShowClustersStmt("test_cluster", NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(8, metaData.getColumnCount());
         Assertions.assertEquals("CNGroupId", metaData.getColumn(0).getName());
         Assertions.assertEquals("CNGroupName", metaData.getColumn(1).getName());
@@ -1408,7 +1408,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowNodesStmt() {
         ShowNodesStmt stmt = new ShowNodesStmt("test_cluster", "test_warehouse", "test_node", NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(20, metaData.getColumnCount());
         Assertions.assertEquals("WarehouseName", metaData.getColumn(0).getName());
         Assertions.assertEquals("CNGroupId", metaData.getColumn(1).getName());
@@ -1435,7 +1435,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowWarehousesStmt() {
         ShowWarehousesStmt stmt = new ShowWarehousesStmt("test_warehouse", NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(14, metaData.getColumnCount());
         Assertions.assertEquals("Id", metaData.getColumn(0).getName());
         Assertions.assertEquals("Name", metaData.getColumn(1).getName());
@@ -1456,7 +1456,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowCreateGroupProviderStmt() {
         ShowCreateGroupProviderStmt stmt = new ShowCreateGroupProviderStmt("test_provider", NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Group Provider", metaData.getColumn(0).getName());
         Assertions.assertEquals("Create Group Provider", metaData.getColumn(1).getName());
@@ -1465,7 +1465,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowPipeStmt() {
         ShowPipeStmt stmt = new ShowPipeStmt("test_db", "test_pipe", null, null, null, NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(8, metaData.getColumnCount());
         Assertions.assertEquals("DATABASE_NAME", metaData.getColumn(0).getName());
         Assertions.assertEquals("PIPE_ID", metaData.getColumn(1).getName());
@@ -1480,7 +1480,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowBaselinePlanStmt() {
         ShowBaselinePlanStmt stmt = new ShowBaselinePlanStmt(NodePosition.ZERO, (Expr) null);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(11, metaData.getColumnCount());
         Assertions.assertEquals("Id", metaData.getColumn(0).getName());
         Assertions.assertEquals("global", metaData.getColumn(1).getName());
@@ -1498,7 +1498,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowFailPointStatement() {
         ShowFailPointStatement stmt = new ShowFailPointStatement(null, null, NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(4, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("TriggerMode", metaData.getColumn(1).getName());
@@ -1509,7 +1509,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowTemporaryTableStmt() {
         ShowTemporaryTableStmt stmt = new ShowTemporaryTableStmt("test_db", null, null, null, NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(1, metaData.getColumnCount());
         Assertions.assertEquals("Tables_in_test_db", metaData.getColumn(0).getName());
     }
@@ -1518,7 +1518,7 @@ public class ShowStmtMetaTest {
     public void testShowCreateSecurityIntegrationStatement() {
         ShowCreateSecurityIntegrationStatement stmt =
                 new ShowCreateSecurityIntegrationStatement("test_integration", NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Security Integration", metaData.getColumn(0).getName());
         Assertions.assertEquals("Create Security Integration", metaData.getColumn(1).getName());
@@ -1527,7 +1527,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowSecurityIntegrationStatement() {
         ShowSecurityIntegrationStatement stmt = new ShowSecurityIntegrationStatement(NodePosition.ZERO);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(3, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Type", metaData.getColumn(1).getName());

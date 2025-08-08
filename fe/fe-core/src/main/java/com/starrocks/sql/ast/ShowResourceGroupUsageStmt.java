@@ -19,7 +19,6 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Pair;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.ComputeNode;
 import org.jetbrains.annotations.NotNull;
@@ -46,16 +45,8 @@ public class ShowResourceGroupUsageStmt extends ShowStmt {
                             item -> Integer.toString(item.usage.getNumRunningQueries()))
             );
 
-    private static final ShowResultSetMetaData COLUMN_META_DATA;
-
     private static final List<Function<ShowItem, String>> COLUMN_SUPPLIERS = META_DATA.stream()
             .map(item -> item.second).collect(Collectors.toList());
-
-    static {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        META_DATA.forEach(item -> builder.addColumn(item.first));
-        COLUMN_META_DATA = builder.build();
-    }
 
     private final String groupName;
 
@@ -71,11 +62,6 @@ public class ShowResourceGroupUsageStmt extends ShowStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowResourceGroupUsageStatement(this, context);
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return COLUMN_META_DATA;
     }
 
     @Override

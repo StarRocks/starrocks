@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
@@ -56,7 +57,7 @@ public class ShowProcesslistStmtTest {
 
     private void testSuccess(String originStmt) throws Exception {
         ShowProcesslistStmt stmt = (ShowProcesslistStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertNotNull(metaData);
         Assertions.assertEquals(13, metaData.getColumnCount());
         Assertions.assertEquals("ServerName", metaData.getColumn(0).getName());

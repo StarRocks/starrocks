@@ -16,11 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ResourceMgr;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowResourcesStmt extends ShowStmt {
@@ -31,15 +27,6 @@ public class ShowResourcesStmt extends ShowStmt {
 
     public ShowResourcesStmt(NodePosition pos) {
         super(pos);
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : ResourceMgr.RESOURCE_PROC_NODE_TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
     }
 
     @Override
