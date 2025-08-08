@@ -21,13 +21,10 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.parser.NodePosition;
@@ -46,16 +43,6 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
         this.limitElement = limitElement;
         this.orderByElements = orderByElements;
     }
-
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Database", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Table", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Column", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("UpdateTime", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
-                    .build();
 
     public static List<String> showHistogramStatsMeta(ConnectContext context,
                                                       HistogramStatsMeta histogramStatsMeta) throws MetaNotFoundException {
@@ -119,11 +106,6 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
         row.set(5, histogramStatsMeta.getProperties() == null ? "{}" : histogramStatsMeta.getProperties().toString());
 
         return row;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
     }
 
     @Override

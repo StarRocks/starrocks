@@ -1,6 +1,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
@@ -48,9 +49,9 @@ public class SqlBlacklistAndWhitelistTest {
     @Test
     public void testShowSqlBlacklist() {
         ShowSqlBlackListStmt stmt = (ShowSqlBlackListStmt) analyzeSuccess("show sqlblacklist");
-        Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("Forbidden SQL", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals(2, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Id", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
+        Assertions.assertEquals("Forbidden SQL", new ShowResultMetaFactory().getMetadata(stmt).getColumn(1).getName());
 
         // bad cases
         analyzeFail("show blacklist");
@@ -59,8 +60,8 @@ public class SqlBlacklistAndWhitelistTest {
     @Test
     public void testShowWhiteBlacklist() {
         ShowWhiteListStmt stmt = (ShowWhiteListStmt) analyzeSuccess("show whitelist");
-        Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("user_name", stmt.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("white_list", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals(2, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("user_name", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
+        Assertions.assertEquals("white_list", new ShowResultMetaFactory().getMetadata(stmt).getColumn(1).getName());
     }
 }

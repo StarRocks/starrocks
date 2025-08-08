@@ -17,10 +17,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.proc.TransProcDir;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
@@ -61,15 +57,6 @@ public class ShowTransactionStmt extends ShowStmt {
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : TransProcDir.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
     }
 
     @Override

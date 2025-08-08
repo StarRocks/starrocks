@@ -30,6 +30,8 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
@@ -220,6 +222,7 @@ public class PipeAnalyzer {
             stmt.setDbName(context.getDatabase());
         }
 
+        ShowResultSetMetaData showResultSetMetaData = new ShowResultMetaFactory().getMetadata(stmt);
         // Analyze order by
         if (CollectionUtils.isNotEmpty(stmt.getOrderBy())) {
             List<OrderByPair> orderByPairs = new ArrayList<>();
@@ -229,7 +232,7 @@ public class PipeAnalyzer {
                             "only support order by specific column");
                 }
                 SlotRef slot = (SlotRef) element.getExpr();
-                int index = ShowPipeStmt.findSlotIndex(slot.getColumnName());
+                int index = showResultSetMetaData.getColumnIdx(slot.getColumnName());
                 orderByPairs.add(new OrderByPair(index, !element.getIsAsc()));
             }
             stmt.setOrderByPairs(orderByPairs);

@@ -22,15 +22,12 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -203,6 +200,10 @@ public class ShowTabletStmt extends ShowStmt {
         return limitElement;
     }
 
+    public Table getTable() {
+        return table;
+    }
+
     public void setTable(Table table) {
         this.table = table;
     }
@@ -212,7 +213,7 @@ public class ShowTabletStmt extends ShowStmt {
         return visitor.visitShowTabletStatement(this, context);
     }
 
-    private ImmutableList<String> getTitleNames() {
+    public ImmutableList<String> getTitleNames() {
         if (isShowSingleTablet) {
             return SINGLE_TABLET_TITLE_NAMES;
         }
@@ -225,15 +226,6 @@ public class ShowTabletStmt extends ShowStmt {
         } else {
             return LocalTabletsProcDir.TITLE_NAMES;
         }
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : getTitleNames()) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
     }
 
     @Override

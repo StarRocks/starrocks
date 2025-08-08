@@ -22,10 +22,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -42,7 +39,7 @@ import static com.starrocks.common.util.Util.normalizeName;
  */
 public class ShowRoutineLoadTaskStmt extends ShowStmt {
     private static final List<String> SUPPORT_COLUMN = Arrays.asList("jobname");
-    private static final ImmutableList<String> TITLE_NAMES;
+    public static final ImmutableList<String> TITLE_NAMES;
 
     static {
         ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
@@ -133,16 +130,6 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
             throw new AnalysisException(
                     "show routine load job only support one equal expr which is sames like JobName=\"ILoveStarRocks\"");
         }
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-
-        for (String title : TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
     }
 
     @Override

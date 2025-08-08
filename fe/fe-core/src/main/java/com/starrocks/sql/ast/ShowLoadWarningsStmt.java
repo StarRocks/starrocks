@@ -17,12 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LimitElement;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.net.URL;
 
@@ -30,15 +25,6 @@ import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW LOAD WARNINGS statement used to get error detail of src data.
 public class ShowLoadWarningsStmt extends ShowStmt {
-    private static final Logger LOG = LogManager.getLogger(ShowLoadWarningsStmt.class);
-
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("JobId", ScalarType.createVarchar(15)))
-                    .addColumn(new Column("Label", ScalarType.createVarchar(15)))
-                    .addColumn(new Column("ErrorMsgDetail", ScalarType.createVarchar(100)))
-                    .build();
-
     private String dbName;
     private final String rawUrl;
     private URL url;
@@ -117,10 +103,5 @@ public class ShowLoadWarningsStmt extends ShowStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowLoadWarningsStatement(this, context);
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
     }
 }

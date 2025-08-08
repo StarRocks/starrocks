@@ -2,6 +2,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ShowTransactionStmt;
@@ -26,7 +27,7 @@ public class ShowTransactionStmtTest {
         ShowTransactionStmt stmt = (ShowTransactionStmt) analyzeSuccess("SHOW TRANSACTION FROM test WHERE `id` = 123");
         Assertions.assertEquals(123, stmt.getTxnId());
 
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertNotNull(metaData);
         Assertions.assertEquals("TransactionId", metaData.getColumn(0).getName());
         Assertions.assertEquals("Label", metaData.getColumn(1).getName());
