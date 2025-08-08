@@ -132,6 +132,10 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
                     if (column == null || (!column.getType().isNumericType() && !column.getType().isDate())) {
                         return Optional.empty();
                     }
+                    // We need the aggregated result, so this constraint is not satisfied.
+                    if (column.isAggregated()) {
+                        return Optional.empty();
+                    }
 
                     long version = olapTable.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
                             PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
