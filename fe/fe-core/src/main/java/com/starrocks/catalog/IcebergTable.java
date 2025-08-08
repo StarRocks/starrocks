@@ -378,70 +378,71 @@ public class IcebergTable extends Table {
 
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
-
-        List<String> exprStr = IcebergApiConverter.toPartitionFields(nativeTable.spec(), true);
-
-        List<Expr> partitionExprs = exprStr.stream()
-                .map(expr -> {
-                    if (expr.startsWith(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "void")) {
-                        return (Expr) new NullLiteral();
-                    } else {
-                        return ColumnIdExpr.fromSql(expr).getExpr();
-                    }
-                }).collect(Collectors.toList());
-
-        for (Expr expr : partitionExprs) {
-            List<SlotRef> slotRefs = Lists.newArrayList();
-            expr.collect(SlotRef.class, slotRefs);
-            for (SlotRef slotRef : slotRefs) {
-                Boolean found = false;
-                for (int i = 0; !found && i < fullSchema.size(); i++) {
-                    Column column = fullSchema.get(i);
-                    if (column.getName().equalsIgnoreCase(slotRef.getColumnName())) {
-                        found = true;
-                        if (expr instanceof FunctionCallExpr) {
-                            Type[] args;
-                            if (((FunctionCallExpr) expr).getParams().exprs().size() == 2) {
-                                args = new Type[] {column.getType(), Type.INT};
-                                if (expr.getChild(1) instanceof IntLiteral) {
-                                    expr.getChild(1).setType(Type.INT);
+        if (comment == null || !comment.equals(EQUALITY_DELETE_TABLE_COMMENT)) {
+            List<String> exprStr = IcebergApiConverter.toPartitionFields(nativeTable.spec(), true);
+            List<Expr> partitionExprs = exprStr.stream()
+                    .map(expr -> {
+                        if (expr.startsWith(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "void")) {
+                            return (Expr) new NullLiteral();
+                        } else {
+                            return ColumnIdExpr.fromSql(expr).getExpr();
+                        }
+                    }).collect(Collectors.toList());
+            for (Expr expr : partitionExprs) {
+                List<SlotRef> slotRefs = Lists.newArrayList();
+                expr.collect(SlotRef.class, slotRefs);
+                for (SlotRef slotRef : slotRefs) {
+                    Boolean found = false;
+                    for (int i = 0; !found && i < fullSchema.size(); i++) {
+                        Column column = fullSchema.get(i);
+                        if (column.getName().equalsIgnoreCase(slotRef.getColumnName())) {
+                            found = true;
+                            if (expr instanceof FunctionCallExpr) {
+                                Type[] args;
+                                if (((FunctionCallExpr) expr).getParams().exprs().size() == 2) {
+                                    args = new Type[] {column.getType(), Type.INT};
+                                    if (expr.getChild(1) instanceof IntLiteral) {
+                                        expr.getChild(1).setType(Type.INT);
+                                    } else {
+                                        throw new SemanticException("Unsupported function call %s", expr.toString());
+                                    }
+                                } else if (((FunctionCallExpr) expr).getParams().exprs().size() == 1) {
+                                    args = new Type[] {column.getType()};
                                 } else {
                                     throw new SemanticException("Unsupported function call %s", expr.toString());
                                 }
-                            } else if (((FunctionCallExpr) expr).getParams().exprs().size() == 1) {
-                                args = new Type[] {column.getType()};
-                            } else {
-                                throw new SemanticException("Unsupported function call %s", expr.toString());
-                            }
-                            Function builtinFunction = Expr.getBuiltinFunction(
-                                    ((FunctionCallExpr) expr).getFnName().getFunction(), args, Function.CompareMode.IS_IDENTICAL);
-                            ((FunctionCallExpr) expr).setFn(builtinFunction);
-                            
-                            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(
-                                    FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "truncate")) {
-                                ((FunctionCallExpr) expr).setType(column.getType());
-                            } else {
-                                ((FunctionCallExpr) expr).setType(builtinFunction.getReturnType());
+                                Function builtinFunction = Expr.getBuiltinFunction(
+                                        ((FunctionCallExpr) expr).getFnName().getFunction(), 
+                                                args, Function.CompareMode.IS_IDENTICAL);
+                                ((FunctionCallExpr) expr).setFn(builtinFunction);
+                                
+                                if (((FunctionCallExpr) expr).getFnName().getFunction().equals(
+                                        FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "truncate")) {
+                                    ((FunctionCallExpr) expr).setType(column.getType());
+                                } else {
+                                    ((FunctionCallExpr) expr).setType(builtinFunction.getReturnType());
+                                }
                             }
                         }
                     }
-                }
-                if (!found) {
-                    throw new StarRocksConnectorException("Cannot find column %s in table %s",
-                            slotRef.getColumnName(), getTableIdentifier());
+                    if (!found) {
+                        throw new StarRocksConnectorException("Cannot find column %s in table %s",
+                                slotRef.getColumnName(), getTableIdentifier());
+                    }
                 }
             }
+            List<TIcebergPartitionInfo> partitionInfos = Lists.newArrayList();
+            for (int i = 0; i < partitionExprs.size(); i++) {
+                TIcebergPartitionInfo partInfo = new TIcebergPartitionInfo();
+                partInfo.setSource_column_name(nativeTable.schema()
+                        .findColumnName(nativeTable.spec().fields().get(i).sourceId()));
+                partInfo.setPartition_column_name(nativeTable.spec().fields().get(i).name());
+                partInfo.setTransform_expr(nativeTable.spec().fields().get(i).transform().toString());
+                partInfo.setPartition_expr(partitionExprs.get(i).treeToThrift());
+                partitionInfos.add(partInfo);
+            }
+            tIcebergTable.setPartition_info(partitionInfos);
         }
-        List<TIcebergPartitionInfo> partitionInfos = Lists.newArrayList();
-        for (int i = 0; i < partitionExprs.size(); i++) {
-            TIcebergPartitionInfo partInfo = new TIcebergPartitionInfo();
-            partInfo.setSource_column_name(nativeTable.schema().findColumnName(nativeTable.spec().fields().get(i).sourceId()));
-            partInfo.setPartition_column_name(nativeTable.spec().fields().get(i).name());
-            partInfo.setTransform_expr(nativeTable.spec().fields().get(i).transform().toString());
-            partInfo.setPartition_expr(partitionExprs.get(i).treeToThrift());
-            partitionInfos.add(partInfo);
-        }
-        tIcebergTable.setPartition_info(partitionInfos);
 
         if (!partitions.isEmpty()) {
             TPartitionMap tPartitionMap = new TPartitionMap();
