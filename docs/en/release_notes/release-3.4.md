@@ -10,7 +10,7 @@ Release Date: August 7, 2025
 
 ### Improvements
 
-- When exporting data to Parquet files using `INSERT INTO FILES`, you can now specify the Parquet version via the [`parquet.version`](../sql-reference/sql-functions/table-functions/files.md#parquetversion) property to improve compatibility with other tools when reading the exported files. [#60843](https://github.com/StarRocks/starrocks/pull/60843)
+- When exporting data to Parquet files using `INSERT INTO FILES`, you can now specify the Parquet version via the [`parquet.version`](https://docs.starrocks.io/docs/sql-reference/sql-functions/table-functions/files.md#parquetversion) property to improve compatibility with other tools when reading the exported files. [#60843](https://github.com/StarRocks/starrocks/pull/60843)
 
 ### Bug Fixes
 
