@@ -84,6 +84,9 @@ DEFINE_TYPE_CHECKER(TimeTypeChecker)
 // Define type checker for java.time.LocalDateTime
 DEFINE_TYPE_CHECKER(LocalDateTimeTypeChecker)
 
+// Define type checker for java.time.LocalDate
+DEFINE_TYPE_CHECKER(LocalDateTypeChecker)
+
 // Define type checker for java.math.BigDecimal
 DEFINE_TYPE_CHECKER(BigDecimalTypeChecker)
 
