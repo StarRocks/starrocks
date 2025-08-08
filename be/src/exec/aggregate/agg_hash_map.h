@@ -243,9 +243,10 @@ struct AggHashMapWithOneNumberKeyWithNullable
         DCHECK(!key_column->is_nullable());
         const auto column = down_cast<const ColumnType*>(key_column);
 
-        size_t bucket_count = this->hash_map.bucket_count();
-
-        if (bucket_count < prefetch_threhold) {
+        if constexpr (is_no_prefetch_map<HashMap>) {
+            this->template compute_agg_noprefetch<Func, HTBuildOp>(column, agg_states,
+                                                                   std::forward<Func>(allocate_func), extra);
+        } else if (this->hash_map.bucket_count() < prefetch_threhold) {
             this->template compute_agg_noprefetch<Func, HTBuildOp>(column, agg_states,
                                                                    std::forward<Func>(allocate_func), extra);
         } else {
@@ -1136,8 +1137,8 @@ struct AggHashMapWithCompressedKeyFixedSize
     }
 
     template <AllocFunc<Self> Func, typename HTBuildOp>
-    ALWAYS_NOINLINE void compute_agg_prefetch(size_t chunk_size, const Columns& key_columns,
-                                              Buffer<AggDataPtr>* agg_states, Func&& allocate_func,
+    ALWAYS_NOINLINE void compute_agg_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                              Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
                                               ExtraAggParam* extra) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
@@ -1174,12 +1175,16 @@ struct AggHashMapWithCompressedKeyFixedSize
                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
         auto* buffer = reinterpret_cast<uint8_t*>(fixed_keys.data());
         memset(buffer, 0x0, sizeof(FixedSizeSliceKey) * chunk_size);
-        if (this->hash_map.bucket_count() < prefetch_threhold) {
-            this->template compute_agg_noprefetch<Func, HTBuildOp>(chunk_size, key_columns, agg_states, pool,
-                                                                   std::forward<Func>(allocate_func), extra);
+
+        if constexpr (is_no_prefetch_map<HashMap>) {
+            this->template compute_agg_noprefetch<Func, HTBuildOp>(
+                    chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, extra);
+        } else if (this->hash_map.bucket_count() < prefetch_threhold) {
+            this->template compute_agg_noprefetch<Func, HTBuildOp>(
+                    chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, extra);
         } else {
-            this->template compute_agg_prefetch<Func, HTBuildOp>(chunk_size, key_columns, agg_states, pool,
-                                                                 std::forward<Func>(allocate_func), extra);
+            this->template compute_agg_prefetch<Func, HTBuildOp>(chunk_size, key_columns, pool,
+                                                                 std::forward<Func>(allocate_func), agg_states, extra);
         }
     }
 

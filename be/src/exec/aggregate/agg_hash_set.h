@@ -17,18 +17,14 @@
 #include <any>
 
 #include "column/column_hash.h"
-#include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/aggregate/agg_profile.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "runtime/runtime_state.h"
 #include "util/fixed_hash_map.h"
-#include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -113,14 +109,6 @@ struct AggHashSet {
     }
 };
 
-template <typename T>
-struct no_prefetch_set : std::false_type {};
-template <PhmapSeed seed>
-struct no_prefetch_set<Int8AggHashSet<seed>> : std::true_type {};
-
-template <class T>
-constexpr bool is_no_prefetch_set = no_prefetch_set<T>::value;
-
 // handle one number hash key
 template <LogicalType logical_type, typename HashSet>
 struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumberKey<logical_type, HashSet>> {
@@ -149,12 +137,10 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
 
         if constexpr (is_no_prefetch_set<HashSet>) {
             this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
+        } else if (this->hash_set.bucket_count() < prefetch_threhold) {
+            this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
         } else {
-            if (this->hash_set.bucket_count() < prefetch_threhold) {
-                this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
-            } else {
-                this->template build_set_prefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
-            }
+            this->template build_set_prefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
         }
     }
 
@@ -793,7 +779,9 @@ struct AggHashSetCompressedFixedSize : public AggHashSet<HashSet, AggHashSetComp
         memset(buffer, 0x0, sizeof(FixedSizeSliceKey) * chunk_size);
         bitcompress_serialize(key_columns, bases, offsets, chunk_size, sizeof(FixedSizeSliceKey), fixed_keys.data());
 
-        if (this->hash_set.bucket_count() < prefetch_threhold) {
+        if constexpr (is_no_prefetch_set<HashSet>) {
+            this->template build_set_noprefetch<compute_and_allocate>(chunk_size, pool, not_founds);
+        } else if (this->hash_set.bucket_count() < prefetch_threhold) {
             this->template build_set_noprefetch<compute_and_allocate>(chunk_size, pool, not_founds);
         } else {
             this->template build_set_prefetch<compute_and_allocate>(chunk_size, pool, not_founds);

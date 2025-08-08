@@ -15,9 +15,9 @@
 #include "exec/aggregate/agg_hash_variant.h"
 
 #include <tuple>
-#include <type_traits>
 #include <variant>
 
+#include "runtime/runtime_state.h"
 #include "util/phmap/phmap.h"
 
 #define APPLY_FOR_AGG_VARIANT_ALL(M) \
