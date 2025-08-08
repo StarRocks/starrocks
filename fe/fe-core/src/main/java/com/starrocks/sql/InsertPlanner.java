@@ -148,6 +148,22 @@ public class InsertPlanner {
         this.useOptimisticLock = false;
     }
 
+    /**
+     * Convert session variable partial_update_mode string to TPartialUpdateMode enum
+     */
+    private static TPartialUpdateMode getPartialUpdateModeFromSession(ConnectContext session) {
+        String partialUpdateModeStr = session.getSessionVariable().getPartialUpdateMode();
+        switch (partialUpdateModeStr.toLowerCase()) {
+            case "column":
+                return TPartialUpdateMode.COLUMN_UPSERT_MODE;
+            case "row":
+                return TPartialUpdateMode.ROW_MODE;
+            case "auto":
+            default:
+                return TPartialUpdateMode.AUTO_MODE;
+        }
+    }
+
     public InsertPlanner(PlannerMetaLocker plannerMetaLocker, boolean optimisticLock) {
         this.useOptimisticLock = optimisticLock;
         this.plannerMetaLocker = plannerMetaLocker;
@@ -384,7 +400,9 @@ public class InsertPlanner {
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentComputeResource());
                 if (insertStmt.usePartialUpdate()) {
-                    ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.AUTO_MODE);
+                    // Get partial update mode from session variable and convert to TPartialUpdateMode
+                    TPartialUpdateMode partialUpdateMode = getPartialUpdateModeFromSession(session);
+                    ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
                     if (insertStmt.autoIncrementPartialUpdate()) {
                         ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
                     }

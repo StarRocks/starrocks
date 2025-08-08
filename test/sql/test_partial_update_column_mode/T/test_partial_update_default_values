@@ -1,0 +1,44 @@
+-- name: test_partial_update_default_values
+show backends;
+
+-- Create table with DEFAULT CURRENT_TIMESTAMP columns like in GitHub issue #61710
+CREATE TABLE test_default_columns (
+  id BIGINT,
+  name STRING,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP 
+) ENGINE=OLAP
+PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+-- Insert initial row with partial columns (should apply DEFAULT values)
+insert into test_default_columns (id, name) values (1, 'initial');
+select count(*) from test_default_columns where create_time is not null and update_time is not null;
+
+-- Test with partial_update_mode = "column" - DEFAULT values should be preserved
+set partial_update_mode = "column";
+insert into test_default_columns (id, name) values (1, 'updated_column_mode');
+select count(*) from test_default_columns where create_time is not null and update_time is not null;
+
+-- Insert another row to verify DEFAULT values still work
+insert into test_default_columns (id, name) values (2, 'new_row_column_mode');
+select count(*) from test_default_columns where create_time is not null and update_time is not null;
+
+-- Test with partial_update_mode = "auto" - should also work
+set partial_update_mode = "auto";
+insert into test_default_columns (id, name) values (3, 'new_row_auto_mode');
+select count(*) from test_default_columns where create_time is not null and update_time is not null;
+
+-- Test with partial_update_mode = "row" 
+set partial_update_mode = "row";
+insert into test_default_columns (id, name) values (4, 'new_row_row_mode');
+select count(*) from test_default_columns where create_time is not null and update_time is not null;
+
+-- Test using SET_VAR hint with column mode
+insert /*+ SET_VAR(partial_update_mode = "column") */ into test_default_columns (id, name) values (5, 'hint_column_mode');
+select count(*) from test_default_columns where create_time is not null and update_time is not null;
+
+select * from test_default_columns order by id;

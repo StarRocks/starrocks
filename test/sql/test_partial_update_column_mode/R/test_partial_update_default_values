@@ -1,0 +1,84 @@
+-- name: test_partial_update_default_values
+show backends;
+-- result:
+[]
+-- !result
+-- Create table with DEFAULT CURRENT_TIMESTAMP columns like in GitHub issue #61710
+CREATE TABLE test_default_columns (
+  id BIGINT,
+  name STRING,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP 
+) ENGINE=OLAP
+PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+-- Insert initial row with partial columns (should apply DEFAULT values)
+insert into test_default_columns (id, name) values (1, 'initial');
+-- result:
+-- !result
+select count(*) from test_default_columns where create_time is not null and update_time is not null;
+-- result:
+1
+-- !result
+-- Test with partial_update_mode = "column" - DEFAULT values should be preserved
+set partial_update_mode = "column";
+-- result:
+-- !result
+insert into test_default_columns (id, name) values (1, 'updated_column_mode');
+-- result:
+-- !result
+select count(*) from test_default_columns where create_time is not null and update_time is not null;
+-- result:
+1
+-- !result
+-- Insert another row to verify DEFAULT values still work
+insert into test_default_columns (id, name) values (2, 'new_row_column_mode');
+-- result:
+-- !result
+select count(*) from test_default_columns where create_time is not null and update_time is not null;
+-- result:
+2
+-- !result
+-- Test with partial_update_mode = "auto" - should also work
+set partial_update_mode = "auto";
+-- result:
+-- !result
+insert into test_default_columns (id, name) values (3, 'new_row_auto_mode');
+-- result:
+-- !result
+select count(*) from test_default_columns where create_time is not null and update_time is not null;
+-- result:
+3
+-- !result
+-- Test with partial_update_mode = "row" 
+set partial_update_mode = "row";
+-- result:
+-- !result
+insert into test_default_columns (id, name) values (4, 'new_row_row_mode');
+-- result:
+-- !result
+select count(*) from test_default_columns where create_time is not null and update_time is not null;
+-- result:
+4
+-- !result
+-- Test using SET_VAR hint with column mode
+insert /*+ SET_VAR(partial_update_mode = "column") */ into test_default_columns (id, name) values (5, 'hint_column_mode');
+-- result:
+-- !result
+select count(*) from test_default_columns where create_time is not null and update_time is not null;
+-- result:
+5
+-- !result
+select * from test_default_columns order by id;
+-- result:
+[REGEX]1\s+updated_column_mode\s+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\s+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}
+[REGEX]2\s+new_row_column_mode\s+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\s+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}
+[REGEX]3\s+new_row_auto_mode\s+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\s+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}
+[REGEX]4\s+new_row_row_mode\s+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\s+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}
+[REGEX]5\s+hint_column_mode\s+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\s+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}
+-- !result
