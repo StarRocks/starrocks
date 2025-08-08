@@ -1,4 +1,4 @@
--- name: test_parameterized
+-- name: test_parameterized @slow
 DROP DATABASE IF EXISTS test_feedback;
 -- result:
 -- !result
