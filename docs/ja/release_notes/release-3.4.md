@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ### 改善点
 
-- `INSERT INTO FILES` でデータを Parquet ファイルにエクスポートする際に、[`parquet.version`](../sql-reference/sql-functions/table-functions/files.md#parquetversion) を指定してエクスポートする Parquet ファイルのバージョンを選べるようになりました。他のツールでエクスポートされた Parquet ファイルを読み取る際の互換性が向上します。 [#60843](https://github.com/StarRocks/starrocks/pull/60843)
+- `INSERT INTO FILES` でデータを Parquet ファイルにエクスポートする際に、[`parquet.version`](https://docs.starrocks.io/docs/ja/sql-reference/sql-functions/table-functions/files.md#parquetversion) を指定してエクスポートする Parquet ファイルのバージョンを選べるようになりました。他のツールでエクスポートされた Parquet ファイルを読み取る際の互換性が向上します。 [#60843](https://github.com/StarRocks/starrocks/pull/60843)
 
 ### バグ修正
 

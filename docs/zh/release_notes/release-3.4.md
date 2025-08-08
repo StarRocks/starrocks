@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ### 功能优化
 
-- INSERT INTO FILES 导出数据到 Parquet 文件时，可以使用 [`parquet.version`](../sql-reference/sql-functions/table-functions/files.md#parquetversion) 来指定导出 Parquet 文件的版本，以能让其他工具读取导出的 Parquet 文件更好地兼容。[#60843](https://github.com/StarRocks/starrocks/pull/60843)
+- INSERT INTO FILES 导出数据到 Parquet 文件时，可以使用 [`parquet.version`](https://docs.starrocks.io/docs/zh/sql-reference/sql-functions/table-functions/files.md#parquetversion) 来指定导出 Parquet 文件的版本，以能让其他工具读取导出的 Parquet 文件更好地兼容。[#60843](https://github.com/StarRocks/starrocks/pull/60843)
 
 ### 问题修复
 
