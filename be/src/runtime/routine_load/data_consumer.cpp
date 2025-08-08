@@ -107,8 +107,6 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
     // TODO: set it larger than 0 after we set rd_kafka_conf_set_stats_cb()
     RETURN_IF_ERROR(set_conf("statistics.interval.ms", "0"));
     RETURN_IF_ERROR(set_conf("auto.offset.reset", "error"));
-    RETURN_IF_ERROR(set_conf("api.version.request", "true"));
-    RETURN_IF_ERROR(set_conf("api.version.fallback.ms", "0"));
     if (config::dependency_librdkafka_debug_enable) {
         RETURN_IF_ERROR(set_conf("debug", config::dependency_librdkafka_debug));
     }
