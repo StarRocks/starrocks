@@ -273,6 +273,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         _query_ctx->set_is_runtime_filter_coordinator(true);
         exec_env->runtime_filter_worker()->open_query(query_id, query_options, *runtime_filter_params, true);
     }
+    _fragment_ctx->prepare_pass_through_chunk_buffer();
     _fragment_ctx->set_report_when_finish(request.unique().params.__isset.report_when_finish &&
                                           request.unique().params.report_when_finish);
 
@@ -967,6 +968,7 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
             if (fragment_has_registed) {
                 _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
             }
+            _fragment_ctx->destroy_pass_through_chunk_buffer();
             _fragment_ctx.reset();
         }
         _query_ctx->count_down_fragments();
