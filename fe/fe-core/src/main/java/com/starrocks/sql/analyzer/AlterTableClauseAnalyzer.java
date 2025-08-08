@@ -396,6 +396,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)) {
+            // Allow setting flat_json.enable to true or false
             PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
@@ -412,7 +413,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                     }
                 } else {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            "Property " + PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE +
+                            "Property " + PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE +
                                     " haven't been enabled");
                 }
             }

@@ -852,9 +852,11 @@ public class OlapTableFactory implements AbstractTableFactory {
             boolean enableFlatJson = PropertyAnalyzer.analyzeBooleanProp(properties,
                     PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, false);
 
-            if (!enableFlatJson) {
-                throw new DdlException(
-                        "flat_json.enable must be set to true in order to set flat-json related configurations.");
+            // Check if other flat JSON properties are set when flat_json.enable is false
+            if (!enableFlatJson && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
             }
 
             double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
