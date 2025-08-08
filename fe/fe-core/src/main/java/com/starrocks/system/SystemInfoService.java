@@ -62,6 +62,7 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
+import com.starrocks.epack.system.InvalidLicenseException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.CancelDecommissionDiskInfo;
@@ -216,6 +217,12 @@ public class SystemInfoService implements GsonPostProcessable {
 
     // Final entry of adding compute node
     public void addComputeNode(String host, int heartbeatPort, String warehouse, String cnGroupName) throws DdlException {
+        try {
+            GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddBackend();
+        } catch (InvalidLicenseException e) {
+            LOG.warn("failed to add compute node: {}:{}, {}", host, heartbeatPort, e.getMessage());
+            throw new DdlException(e.getMessage());
+        }
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         setComputeNodeOwner(newComputeNode);
         addComputeNodeToWarehouse(newComputeNode, warehouse, cnGroupName);
@@ -333,6 +340,13 @@ public class SystemInfoService implements GsonPostProcessable {
 
     // Final entry of adding backend
     private void addBackend(String host, int heartbeatPort, String warehouse, String cnGroupName) throws DdlException {
+        try {
+            GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddBackend();
+        } catch (InvalidLicenseException e) {
+            LOG.warn("failed to add backend: {}:{}, {}", host, heartbeatPort, e.getMessage());
+            throw new DdlException(e.getMessage());
+        }
+
         Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         // add backend to DEFAULT_CLUSTER
         setBackendOwner(newBackend);
@@ -1364,6 +1378,15 @@ public class SystemInfoService implements GsonPostProcessable {
                 )
                 .mapToLong(ComputeNode::getCpuCores)
                 .sum();
+    }
+
+    public int getAnyComputeNodeCpuCores() {
+        return Stream.concat(
+                        idToBackendRef.values().stream(),
+                        idToComputeNodeRef.values().stream()
+                ).findAny()
+                .map(ComputeNode::getCpuCores)
+                .orElse(0);
     }
 
     @Override

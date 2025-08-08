@@ -49,6 +49,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.epack.authentication.LDAPGroupCacheMgr;
 import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
+import com.starrocks.epack.system.InvalidLicenseException;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
@@ -743,6 +744,13 @@ public class NodeMgr {
     }
 
     public void addFrontend(FrontendNodeType role, String host, int editLogPort) throws DdlException {
+        try {
+            GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddFrontend();
+        } catch (InvalidLicenseException e) {
+            LOG.warn("failed to add frontend: {}:{}, {}", host, editLogPort, e.getMessage());
+            throw new DdlException(e.getMessage());
+        }
+
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
@@ -1366,5 +1374,17 @@ public class NodeMgr {
                 .stream()
                 .mapToLong(Frontend::getCpuCores)
                 .sum() + systemInfo.getTotalCpuCores();
+    }
+
+    public long getAnyFrontendCpuCores() {
+        return frontends.values()
+                .stream()
+                .mapToInt(Frontend::getCpuCores)
+                .findAny()
+                .orElse(0);
+    }
+
+    public long getAnyComputeNodeCpuCores() {
+        return systemInfo.getAnyComputeNodeCpuCores();
     }
 }

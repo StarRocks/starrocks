@@ -114,6 +114,7 @@ Usage: $0 <options>
      --output           specify the output directory (default: $STARROCKS_HOME/output)
      --disable-java-check-style
                         disable Java checkstyle checks during build (default: $DISABLE_JAVA_CHECK_STYLE)
+     --disable-license   disable license limitation (default: ON)
      -h,--help          Show this help message
 
   Eg.
@@ -160,6 +161,7 @@ OPTS=$(getopt \
   -l 'output:' \
   -l 'help' \
   -l 'disable-java-check-style' \
+  -l 'disable-license' \
   -- "$@")
 
 if [ $? != 0 ] ; then
@@ -249,6 +251,10 @@ if [[ -z ${ENABLE_FAULT_INJECTION} ]]; then
     ENABLE_FAULT_INJECTION=OFF
 fi
 
+if [[ -z ${ENABLE_LICENSE} ]]; then
+    ENABLE_LICENSE=ON
+fi
+
 HELP=0
 if [ $# == 1 ] ; then
     # default. `sh build.sh``
@@ -302,6 +308,7 @@ else
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
             --disable-java-check-style) DISABLE_JAVA_CHECK_STYLE=ON; shift ;;
+            --disable-license) ENABLE_LICENSE=OFF; shift ;;
             --) shift ;  break ;;
             *) echo "Internal error" ; exit 1 ;;
         esac
@@ -329,6 +336,15 @@ fi
 if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
     echo "do not build java extensions when build format-lib."
     BUILD_JAVA_EXT=OFF
+fi
+
+# Set license toggle environment variable
+if [ "${ENABLE_LICENSE}" = "ON" ]; then
+    export STARROCKS_LICENSE_TOGGLE=true
+    echo "License limitation enabled: STARROCKS_LICENSE_TOGGLE=true"
+else
+    export STARROCKS_LICENSE_TOGGLE=false
+    echo "License limitation disabled: STARROCKS_LICENSE_TOGGLE=false"
 fi
 
 echo "Get params:
@@ -361,6 +377,7 @@ echo "Get params:
     WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
     WITH_MAVEN_BATCH_MODE       -- $WITH_MAVEN_BATCH_MODE
     DISABLE_JAVA_CHECK_STYLE    -- $DISABLE_JAVA_CHECK_STYLE
+    ENABLE_LICENSE              -- $ENABLE_LICENSE
 "
 
 check_tool()

@@ -140,6 +140,7 @@ import com.starrocks.epack.qe.ShowExecutorVisitorEPack;
 import com.starrocks.epack.sql.analyzer.AnalyzerVisitorEPack;
 import com.starrocks.epack.sql.analyzer.AuthorizerStmtVisitorEPack;
 import com.starrocks.epack.sql.parser.AstBuilderEPack;
+import com.starrocks.epack.system.LicenseMgr;
 import com.starrocks.epack.system.PortConnectivityCheckerEPack;
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.epack.warehouse.WarehouseSlotManager;
@@ -575,6 +576,8 @@ public class GlobalStateMgr {
 
     private final DynamicTabletJobMgr dynamicTabletJobMgr;
 
+    private final LicenseMgr licenseMgr;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -906,6 +909,8 @@ public class GlobalStateMgr {
         this.jwkMgr = new JwkMgr();
 
         this.dynamicTabletJobMgr = new DynamicTabletJobMgr();
+
+        this.licenseMgr = new LicenseMgr();
     }
 
     public static void destroyCheckpoint() {
@@ -1601,6 +1606,8 @@ public class GlobalStateMgr {
         if (RunMode.isSharedDataMode()) {
             dynamicTabletJobMgr.start();
         }
+
+        licenseMgr.start();
     }
 
     // start threads that should run on all FE
@@ -1748,6 +1755,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockIDEPack.RECOMMENDATIONS_TASK_MGR, recommendationsTaskMgr::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .put(SRMetaBlockID.DYNAMIC_TABLET_JOB_MGR, dynamicTabletJobMgr::load)
+                .put(SRMetaBlockIDEPack.LICENSE_MGR, licenseMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1971,6 +1979,7 @@ public class GlobalStateMgr {
                 recommendationsTaskMgr.save(imageWriter);
                 historicalNodeMgr.save(imageWriter);
                 dynamicTabletJobMgr.save(imageWriter);
+                licenseMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -2972,5 +2981,9 @@ public class GlobalStateMgr {
 
     public void setJwkMgr(JwkMgr jwkMgr) {
         this.jwkMgr = jwkMgr;
+    }
+
+    public LicenseMgr getLicenseMgr() {
+        return licenseMgr;
     }
 }

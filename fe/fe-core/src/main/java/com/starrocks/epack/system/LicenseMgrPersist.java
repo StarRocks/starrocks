@@ -11,19 +11,26 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+package com.starrocks.epack.system;
 
-package com.starrocks.feature;
-
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+import com.google.gson.annotations.SerializedName;
 
 import java.util.List;
 
-public class ProductFeatureTest {
+public class LicenseMgrPersist {
 
-    @Test
-    public void testProductFeature() {
-        List<ProductFeature> features = ProductFeature.getFeatures();
-        Assertions.assertEquals(4, features.size());
+    @SerializedName("licenses")
+    List<String> licenses;
+
+    @SerializedName("isEncrypted")
+    boolean isEncrypted;
+
+    @SerializedName("systemInfoStr")
+    String systemInfoStr;
+
+    public LicenseMgrPersist(List<String> licenses, boolean isEncrypted, String systemInfoStr) {
+        this.licenses = licenses;
+        this.isEncrypted = isEncrypted;
+        this.systemInfoStr = systemInfoStr;
     }
 }

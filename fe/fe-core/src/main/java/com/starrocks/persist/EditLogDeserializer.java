@@ -43,10 +43,12 @@ import com.starrocks.epack.persist.DropPasswordPolicyLog;
 import com.starrocks.epack.persist.DropPolicyLog;
 import com.starrocks.epack.persist.ManualClusterSnapshotLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
+import com.starrocks.epack.persist.RegisterLicenseLog;
 import com.starrocks.epack.persist.RoleMappingPersistInfo;
 import com.starrocks.epack.persist.SetPasswordPolicyLog;
 import com.starrocks.epack.persist.UnsetPasswordPolicyLog;
 import com.starrocks.epack.persist.UpdateFailoverGroupLog;
+import com.starrocks.epack.system.SystemInfo;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.ExportJob;
@@ -120,6 +122,8 @@ public class EditLogDeserializer {
             .put(OperationTypeEPack.OP_MV_CHANGE, MVChangeLog.class)
             .put(OperationTypeEPack.OP_RECOMMENDATIONS_TASK_STATUS_CHANGE, RecommendationsTaskStatus.class)
             .put(OperationTypeEPack.OP_MANUAL_CLUSTER_SNAPSHOT_LOG, ManualClusterSnapshotLog.class)
+            .put(OperationTypeEPack.OP_INIT_SYSTEM_INFO, SystemInfo.class)
+            .put(OperationTypeEPack.OP_REGISTER_LICENSE, RegisterLicenseLog.class)
 
             .put(OperationType.OP_SAVE_TRANSACTION_ID_V2, TransactionIdInfo.class)
             .put(OperationType.OP_SAVE_AUTO_INCREMENT_ID, AutoIncrementInfo.class)

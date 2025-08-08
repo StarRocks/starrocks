@@ -11,19 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+package com.starrocks.epack.persist;
 
-package com.starrocks.feature;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.JsonWriter;
 
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+public class RegisterLicenseLog extends JsonWriter {
+    @SerializedName("license")
+    private String license;
 
-import java.util.List;
+    public RegisterLicenseLog(String license) {
+        this.license = license;
+    }
 
-public class ProductFeatureTest {
-
-    @Test
-    public void testProductFeature() {
-        List<ProductFeature> features = ProductFeature.getFeatures();
-        Assertions.assertEquals(4, features.size());
+    public String getLicense() {
+        return license;
     }
 }

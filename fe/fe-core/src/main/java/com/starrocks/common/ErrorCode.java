@@ -418,7 +418,13 @@ public enum ErrorCode {
             "missing key columns:%s for primary key table"),
 
     ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN(6015, new byte[] {'4', '2', '0', '0', '0'},
-            "missing dependency column for generated column %s")
+            "missing dependency column for generated column %s"),
+
+    /**
+     * 6101 - 6110: License
+     */
+    ERR_INVALID_LICENSE(6101, new byte[] {'4', '2', '0', '0', '0'},
+            "Invalid license, please add a valid license"),
     ;
 
     public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +

@@ -1070,7 +1070,7 @@ public class ShowStmtMetaTest {
     public void testShowExportStmt() {
         ShowExportStmt stmt = new ShowExportStmt("test_db", null, null, null);
         ShowResultSetMetaData metaData = stmt.getMetaData();
-        Assertions.assertEquals(11, metaData.getColumnCount());
+        Assertions.assertEquals(12, metaData.getColumnCount());
         Assertions.assertEquals("JobId", metaData.getColumn(0).getName());
         Assertions.assertEquals("QueryId", metaData.getColumn(1).getName());
         Assertions.assertEquals("State", metaData.getColumn(2).getName());
@@ -1082,6 +1082,7 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("FinishTime", metaData.getColumn(8).getName());
         Assertions.assertEquals("Timeout", metaData.getColumn(9).getName());
         Assertions.assertEquals("ErrorMsg", metaData.getColumn(10).getName());
+        Assertions.assertEquals("Warehouse", metaData.getColumn(11).getName());
     }
 
     @Test

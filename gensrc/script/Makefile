@@ -21,7 +21,7 @@ BUILD_DIR = ${CURDIR}/../build/
 FE_TARGET_DIR = ${CURDIR}/../../fe/fe-core/target/generated-sources/build
 
 # Prerequisites on the right side of '|' is only order
-all: gen_version gen_functions
+all: gen_version gen_functions gen_license_toggle
 .PHONY: all
 
 # generated vectorized engine function
@@ -58,5 +58,10 @@ gen_functions: ${GEN_FUNCTIONS_OUTPUT}
 gen_version:
 	${PYTHON} ${CURDIR}/../../build-support/gen_build_version.py --cpp ${BUILD_DIR}/gen_cpp --java ${FE_TARGET_DIR}
 .PHONY: gen_version
+
+# generate license toggle
+gen_license_toggle:
+	${PYTHON} ${CURDIR}/../../build-support/gen_license_toggle.py --java ${FE_TARGET_DIR}
+.PHONY: gen_license_toggle
 
 

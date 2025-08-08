@@ -1117,6 +1117,11 @@ under the License.
                                     <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
                                 </exec>
                                 <exec executable="${ant.python}">
+                                    <arg value="${starrocks.home}/build-support/gen_license_toggle.py"/>
+                                    <arg value="--java"/>
+                                    <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
+                                </exec>
+                                <exec executable="${ant.python}">
                                     <arg value="${starrocks.home}/gensrc/script/gen_functions.py"/>
                                     <arg value="--cpp"/>
                                     <arg value="${starrocks.home}/gensrc/build/gen_cpp"/>

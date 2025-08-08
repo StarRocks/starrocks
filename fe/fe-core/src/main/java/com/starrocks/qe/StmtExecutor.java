@@ -671,6 +671,8 @@ public class StmtExecutor {
                 LOG.debug("no need to transfer to Leader. stmt: {}", context.getStmtId());
             }
 
+            GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicense(parsedStmt);
+
             if (parsedStmt instanceof QueryStatement) {
                 context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
                 final boolean isStatisticsJob = context.isStatisticsJob();

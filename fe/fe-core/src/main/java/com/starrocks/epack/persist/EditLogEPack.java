@@ -14,11 +14,13 @@
 
 package com.starrocks.epack.persist;
 
+import com.starrocks.epack.system.SystemInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.automv.lifecycle.MVChangeLog;
 import com.starrocks.sql.automv.qe.RecommendationsTaskStatus;
@@ -74,6 +76,14 @@ public class EditLogEPack extends EditLog {
         logEdit(OperationTypeEPack.OP_MANUAL_CLUSTER_SNAPSHOT_LOG, info);
     }
 
+    public void logInitSystemInfo(SystemInfo info, WALApplier applier) {
+        logEdit(OperationTypeEPack.OP_INIT_SYSTEM_INFO, info, applier);
+    }
+
+    public void logRegisterLicense(RegisterLicenseLog log, WALApplier applier) {
+        logEdit(OperationTypeEPack.OP_REGISTER_LICENSE, log, applier);
+    }
+
     @Override
     public void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
             throws JournalInconsistentException {
@@ -122,6 +132,15 @@ public class EditLogEPack extends EditLog {
                     ClusterSnapshotMgrEPack clusterSnapshotMgrEpack =
                                     (ClusterSnapshotMgrEPack) globalStateMgr.getClusterSnapshotMgr();
                     clusterSnapshotMgrEpack.replayManualLog(log);
+                    break;
+                }
+                case OperationTypeEPack.OP_INIT_SYSTEM_INFO: {
+                    globalStateMgr.getLicenseMgr().applyInitSystemInfo((SystemInfo) journal.data());
+                    break;
+                }
+                case OperationTypeEPack.OP_REGISTER_LICENSE: {
+                    RegisterLicenseLog log = (RegisterLicenseLog) journal.data();
+                    globalStateMgr.getLicenseMgr().applyRegisterLicense(log);
                     break;
                 }
                 default: {

@@ -12,18 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.feature;
+package com.starrocks.epack.system;
 
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.JsonWriter;
 
-import java.util.List;
+public class SystemInfo extends JsonWriter {
 
-public class ProductFeatureTest {
+    @SerializedName("systemID")
+    private final String systemID;
+    @SerializedName("buildTime")
+    private final long buildTime;
 
-    @Test
-    public void testProductFeature() {
-        List<ProductFeature> features = ProductFeature.getFeatures();
-        Assertions.assertEquals(4, features.size());
+    public SystemInfo(String systemID, long buildTime) {
+        this.systemID = systemID;
+        this.buildTime = buildTime;
+    }
+
+    public String getSystemID() {
+        return systemID;
+    }
+
+    public long getBuildTime() {
+        return buildTime;
     }
 }

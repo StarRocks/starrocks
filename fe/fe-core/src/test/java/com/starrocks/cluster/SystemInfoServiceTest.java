@@ -40,6 +40,9 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.epack.system.LicenseMgr;
+import com.starrocks.epack.system.SystemInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -97,6 +100,9 @@ public class SystemInfoServiceTest {
         WarehouseManager warehouseManager = new WarehouseManager();
         warehouseManager.initDefaultWarehouse();
 
+        LicenseMgr licenseMgr = new LicenseMgr();
+        licenseMgr.applyInitSystemInfo(new SystemInfo(UUIDUtil.genUUID().toString(), System.currentTimeMillis()));
+
         new Expectations() {
             {
                 editLog.logAddBackend((Backend) any);
@@ -145,6 +151,10 @@ public class SystemInfoServiceTest {
                 globalStateMgr.getWarehouseMgr();
                 minTimes = 0;
                 result = warehouseManager;
+
+                globalStateMgr.getLicenseMgr();
+                minTimes = 0;
+                result = licenseMgr;
             }
         };
 

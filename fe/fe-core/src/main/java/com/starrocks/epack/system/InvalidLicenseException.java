@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.feature;
+package com.starrocks.epack.system;
 
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+import com.starrocks.common.StarRocksException;
 
-import java.util.List;
+public class InvalidLicenseException extends StarRocksException {
 
-public class ProductFeatureTest {
+    public InvalidLicenseException(String msg) {
+        super(msg);
+    }
 
-    @Test
-    public void testProductFeature() {
-        List<ProductFeature> features = ProductFeature.getFeatures();
-        Assertions.assertEquals(4, features.size());
+    public InvalidLicenseException(String msg, Object... args) {
+        super(String.format(msg, args));
     }
 }

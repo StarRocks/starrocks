@@ -70,6 +70,7 @@ public class ProductFeature {
                         "scaling compute resources based on real-time workload, ensuring performance while optimizing costs.",
                 ""
         ));
+        features.add(new ProductFeature("license", "license limitation", ""));
         FEATURES = ImmutableList.copyOf(features);
     }
 

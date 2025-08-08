@@ -37,6 +37,9 @@ package com.starrocks.http;
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.epack.http.rest.LicenseListAction;
+import com.starrocks.epack.http.rest.LicenseRegisterAction;
+import com.starrocks.epack.http.rest.LicenseSystemInfoAction;
 import com.starrocks.epack.http.rest.WarehouseAction;
 import com.starrocks.http.action.BackendAction;
 import com.starrocks.http.action.HaAction;
@@ -191,6 +194,9 @@ public class HttpServer {
         CancelStreamLoadAction.registerAction(controller);
         GetStreamLoadState.registerAction(controller);
         WarehouseAction.registerAction(controller);
+        LicenseListAction.registerAction(controller);
+        LicenseRegisterAction.registerAction(controller);
+        LicenseSystemInfoAction.registerAction(controller);
 
         // add web action
         IndexAction.registerAction(controller);
