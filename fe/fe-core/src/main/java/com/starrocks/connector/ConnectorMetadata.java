@@ -261,6 +261,10 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support sink");
     }
 
+    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch, Object extra) {
+        throw new StarRocksConnectorException("This connector doesn't support sink");
+    }
+
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 

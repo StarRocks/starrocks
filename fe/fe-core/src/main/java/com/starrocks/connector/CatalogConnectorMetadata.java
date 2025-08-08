@@ -258,6 +258,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch, Object extra) {
+        normal.finishSink(dbName, table, commitInfos, branch, extra);
+    }
+
+    @Override
     public void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
         normal.abortSink(dbName, table, commitInfos);
     }

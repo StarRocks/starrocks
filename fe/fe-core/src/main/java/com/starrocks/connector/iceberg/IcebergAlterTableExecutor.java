@@ -467,6 +467,11 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             case REMOVE_ORPHAN_FILES:
                 removeOrphanFiles(args);
                 break;
+            case ROLLBACK_TO_SNAPSHOT:
+                rollbackToSnapshot(args);
+                break;
+            case REWRITE_DATA_FILES:
+                break;
             default:
                 throw new StarRocksConnectorException("Unsupported table operation %s", op);
         }
@@ -506,6 +511,21 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
 
         actions.add(() -> {
             transaction.manageSnapshots().cherrypick(snapshotId).commit();
+        });
+    }
+
+    private void rollbackToSnapshot(List<ConstantOperator> args) {
+        if (args.size() != 1) {
+            throw new StarRocksConnectorException("invalid args. rollback snapshot must contain `snapshot id`");
+        }
+        
+        long snapshotId = args.get(0)
+                .castTo(Type.BIGINT)
+                .map(ConstantOperator::getBigint)
+                .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
+
+        actions.add(() -> {
+            transaction.manageSnapshots().rollbackTo(snapshotId).commit();
         });
     }
 

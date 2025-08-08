@@ -265,6 +265,12 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch, Object extra) {
+        ConnectorMetadata metadata = metadataOfTable(dbName, table);
+        metadata.finishSink(dbName, table, commitInfos, branch, extra);
+    }
+
+    @Override
     public CloudConfiguration getCloudConfiguration() {
         return hiveMetadata.getCloudConfiguration();
     }
