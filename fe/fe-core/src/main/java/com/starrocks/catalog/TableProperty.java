@@ -46,6 +46,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
@@ -461,11 +462,26 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
             boolean enableFlatJson = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
-            double flatJsonNullFactor = PropertyAnalyzer.analyzeFlatJsonNullFactor(properties);
-            double flatJsonSparsityFactory = PropertyAnalyzer.analyzeFlatJsonSparsityFactor(properties);
-            int flatJsonColumnMax = PropertyAnalyzer.analyzeFlatJsonColumnMax(properties);
-            flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
-                    flatJsonSparsityFactory, flatJsonColumnMax);
+            
+            // If flat_json.enable is false, only allow setting the enable property
+            if (!enableFlatJson && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                throw new RuntimeException("flat JSON configuration must be set after enabling flat JSON.");
+            }
+            
+            try {
+                double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
+                        PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, Config.flat_json_null_factor);
+                double flatJsonSparsityFactory = PropertyAnalyzer.analyzerDoubleProp(properties,
+                        PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, Config.flat_json_sparsity_factory);
+                int flatJsonColumnMax = PropertyAnalyzer.analyzeIntProp(properties,
+                        PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, Config.flat_json_column_max);
+                flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
+                        flatJsonSparsityFactory, flatJsonColumnMax);
+            } catch (AnalysisException e) {
+                throw new RuntimeException("Failed to analyze flat JSON properties: " + e.getMessage(), e);
+            }
         }
         return this;
     }

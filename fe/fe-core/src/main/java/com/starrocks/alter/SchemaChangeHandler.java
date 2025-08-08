@@ -2357,13 +2357,23 @@ public class SchemaChangeHandler extends AlterHandler {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
+        // First check if flat_json.enable is being set to false
+        boolean flatJsonEnabled = newFlatJsonConfig.getFlatJsonEnable();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)) {
-            boolean flatJsonEnabled = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
+            flatJsonEnabled = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
             if (flatJsonEnabled != newFlatJsonConfig.getFlatJsonEnable()) {
                 newFlatJsonConfig.setFlatJsonEnable(flatJsonEnabled);
                 hasChanged = true;
             }
         }
+        
+        // Check if other flat JSON properties are set when flat_json.enable is false
+        if (!flatJsonEnabled && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+            throw new RuntimeException("flat JSON configuration must be set after enabling flat JSON.");
+        }
+        
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)) {
             double flatJsonNullFactor = PropertyAnalyzer.analyzeFlatJsonNullFactor(properties);
             if (flatJsonNullFactor != newFlatJsonConfig.getFlatJsonNullFactor()) {
