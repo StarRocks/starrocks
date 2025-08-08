@@ -16,14 +16,10 @@ package com.starrocks.binlog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TBinlogConfig;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 

@@ -29,7 +29,6 @@ import com.starrocks.thrift.TTableFunctionNode;
 import com.starrocks.thrift.TTypeDesc;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class TableFunctionNode extends PlanNode {
     private final TableFunction tableFunction;

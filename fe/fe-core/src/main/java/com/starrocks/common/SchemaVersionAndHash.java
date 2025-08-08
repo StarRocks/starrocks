@@ -18,12 +18,7 @@
 package com.starrocks.common;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 /*
  * Currently just used for persisting schema version and schema hash pair

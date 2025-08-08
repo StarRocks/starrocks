@@ -19,8 +19,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.List;
 
 public class OptimizeClause extends AlterTableClause {

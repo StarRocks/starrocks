@@ -38,7 +38,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TStatusCode;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 

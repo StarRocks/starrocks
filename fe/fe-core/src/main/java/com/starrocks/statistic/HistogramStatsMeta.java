@@ -16,13 +16,9 @@
 package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import org.apache.commons.collections4.MapUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Map;
 

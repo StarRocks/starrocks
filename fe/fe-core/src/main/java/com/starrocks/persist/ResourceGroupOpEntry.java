@@ -16,14 +16,9 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TWorkGroupOp;
 import com.starrocks.thrift.TWorkGroupOpType;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 // ResourceGroupEntry is used by EditLog to persist ResourceGroupOp in replicated log
 public class ResourceGroupOpEntry implements Writable {

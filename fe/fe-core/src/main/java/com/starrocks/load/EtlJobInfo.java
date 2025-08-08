@@ -19,7 +19,6 @@ package com.starrocks.load;
 
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 

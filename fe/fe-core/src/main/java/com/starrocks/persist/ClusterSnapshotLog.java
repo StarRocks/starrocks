@@ -15,13 +15,8 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class ClusterSnapshotLog implements Writable {
     public enum ClusterSnapshotLogType { NONE, AUTOMATED_SNAPSHOT_ON, AUTOMATED_SNAPSHOT_OFF, UPDATE_SNAPSHOT_JOB }

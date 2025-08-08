@@ -40,7 +40,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TTabletCommitInfo;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;

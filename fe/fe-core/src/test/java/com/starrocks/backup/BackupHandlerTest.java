@@ -59,6 +59,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
@@ -93,11 +94,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
@@ -343,23 +340,6 @@ public class BackupHandlerTest {
         request.setTask_status(new TStatus(TStatusCode.OK));
         handler.handleFinishedSnapshotUploadTask(uploadTask, request);
 
-        // test file persist
-        File tmpFile = new File("./tmp" + System.currentTimeMillis());
-        try {
-            DataOutputStream out = new DataOutputStream(new FileOutputStream(tmpFile));
-            handler.write(out);
-            out.flush();
-            out.close();
-            DataInputStream in = new DataInputStream(new FileInputStream(tmpFile));
-            BackupHandler.read(in);
-            in.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-            Assertions.fail();
-        } finally {
-            tmpFile.delete();
-        }
-
         // cancel backup
         try {
             handler.cancel(new CancelBackupStmt(CatalogMocker.TEST_DB_NAME, false));
@@ -401,23 +381,6 @@ public class BackupHandlerTest {
         request1.setTablet_files(tabletFiles1);
         request1.setTask_status(new TStatus(TStatusCode.OK));
         handler.handleFinishedSnapshotUploadTask(uploadTask1, request1);
-
-        // test file persist
-        File tmpFile1 = new File("./tmp1" + System.currentTimeMillis());
-        try {
-            DataOutputStream out = new DataOutputStream(new FileOutputStream(tmpFile1));
-            handler.write(out);
-            out.flush();
-            out.close();
-            DataInputStream in = new DataInputStream(new FileInputStream(tmpFile1));
-            BackupHandler.read(in);
-            in.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-            Assertions.fail();
-        } finally {
-            tmpFile1.delete();
-        }
 
         // cancel backup
         try {
@@ -472,23 +435,6 @@ public class BackupHandlerTest {
         request = new TFinishTaskRequest();
         request.setTask_status(new TStatus(TStatusCode.OK));
         handler.handleDirMoveTask(dirMoveTask, request);
-
-        // test file persist
-        tmpFile = new File("./tmp" + System.currentTimeMillis());
-        try {
-            DataOutputStream out = new DataOutputStream(new FileOutputStream(tmpFile));
-            handler.write(out);
-            out.flush();
-            out.close();
-            DataInputStream in = new DataInputStream(new FileInputStream(tmpFile));
-            BackupHandler.read(in);
-            in.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-            Assertions.fail();
-        } finally {
-            tmpFile.delete();
-        }
 
         new MockUp<ConnectContext>() {
             @Mock
@@ -550,23 +496,6 @@ public class BackupHandlerTest {
         request1 = new TFinishTaskRequest();
         request1.setTask_status(new TStatus(TStatusCode.OK));
         handler.handleDirMoveTask(dirMoveTask1, request1);
-
-        // test file persist
-        tmpFile1 = new File("./tmp1" + System.currentTimeMillis());
-        try {
-            DataOutputStream out = new DataOutputStream(new FileOutputStream(tmpFile1));
-            handler.write(out);
-            out.flush();
-            out.close();
-            DataInputStream in = new DataInputStream(new FileInputStream(tmpFile1));
-            BackupHandler.read(in);
-            in.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-            Assertions.fail();
-        } finally {
-            tmpFile1.delete();
-        }
 
         // cancel restore
         try {
@@ -652,8 +581,14 @@ public class BackupHandlerTest {
 
         // 2. save image & reload
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
-        handler.write(pseudoImage.getDataOutputStream());
-        BackupHandler reloadHandler = BackupHandler.read(pseudoImage.getDataInputStream());
+        ImageWriter imageWriter = new ImageWriter("", 0);
+        imageWriter.setOutputStream(pseudoImage.getDataOutputStream());
+        handler.saveBackupHandlerV2(imageWriter);
+
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(pseudoImage.getJsonReader());
+        BackupHandler reloadHandler = new BackupHandler();
+        reloadHandler.loadBackupHandlerV2(reader);
+
         // discard expired job
         Assertions.assertEquals(2, reloadHandler.dbIdToBackupOrRestoreJob.size());
         Assertions.assertNotNull(reloadHandler.getJob(1));

@@ -21,7 +21,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;

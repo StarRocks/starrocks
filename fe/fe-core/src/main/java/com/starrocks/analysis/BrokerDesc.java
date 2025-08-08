@@ -26,7 +26,6 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;

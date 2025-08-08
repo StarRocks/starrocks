@@ -73,7 +73,6 @@ import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunction;
 import org.roaringbitmap.RoaringBitmap;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.Method;

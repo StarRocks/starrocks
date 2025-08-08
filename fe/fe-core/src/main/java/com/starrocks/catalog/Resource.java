@@ -37,14 +37,11 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateResourceStmt;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.Map;
 
 public abstract class Resource implements Writable {

@@ -19,7 +19,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.thrift.TExprNode;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 

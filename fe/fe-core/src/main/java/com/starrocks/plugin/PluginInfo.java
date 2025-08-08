@@ -37,15 +37,12 @@ package com.starrocks.plugin;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DigitalVersion;
-import com.starrocks.persist.gson.GsonUtils;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;

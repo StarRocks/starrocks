@@ -17,17 +17,13 @@ package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants.AnalyzeType;
 import com.starrocks.statistic.StatsConstants.ScheduleStatus;
 import com.starrocks.statistic.StatsConstants.ScheduleType;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;

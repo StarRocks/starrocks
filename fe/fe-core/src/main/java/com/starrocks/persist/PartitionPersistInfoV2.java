@@ -17,13 +17,8 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.DataCacheInfo;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public abstract class PartitionPersistInfoV2 implements Writable {
 

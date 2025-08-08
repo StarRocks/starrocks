@@ -17,12 +17,8 @@ package com.starrocks.system;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;

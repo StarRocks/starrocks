@@ -21,7 +21,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 

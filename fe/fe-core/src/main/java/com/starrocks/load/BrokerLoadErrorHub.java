@@ -43,7 +43,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerErrorHubInfo;
 import com.starrocks.thrift.TNetworkAddress;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;

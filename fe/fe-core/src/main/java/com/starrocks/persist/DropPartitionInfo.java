@@ -35,12 +35,7 @@ package com.starrocks.persist;
 
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class DropPartitionInfo implements Writable {
     @SerializedName(value = "dbId")

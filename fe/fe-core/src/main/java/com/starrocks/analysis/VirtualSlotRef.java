@@ -18,13 +18,10 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import org.apache.commons.collections.CollectionUtils;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 /**

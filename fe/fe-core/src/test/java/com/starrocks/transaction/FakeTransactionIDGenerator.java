@@ -21,7 +21,6 @@ import com.starrocks.persist.EditLog;
 import mockit.Mock;
 import mockit.MockUp;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 

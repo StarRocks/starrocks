@@ -20,7 +20,6 @@ package com.starrocks.persist;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 

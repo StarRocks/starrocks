@@ -42,11 +42,11 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.builder.HashCodeBuilder;
-import static com.starrocks.common.util.Util.normalizeName;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 // label name used to identify a load job
 public class LabelName implements ParseNode, Writable {

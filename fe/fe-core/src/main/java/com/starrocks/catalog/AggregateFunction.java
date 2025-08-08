@@ -46,14 +46,12 @@ import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.logging.log4j.util.Strings;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static com.starrocks.common.io.IOUtils.readOptionStringOrNull;
 import static com.starrocks.common.io.IOUtils.writeOptionString;
 
 /**

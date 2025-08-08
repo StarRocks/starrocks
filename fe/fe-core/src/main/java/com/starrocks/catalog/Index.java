@@ -37,18 +37,14 @@ package com.starrocks.catalog;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.IndexParams.IndexParamItem;
 import com.starrocks.catalog.IndexParams.IndexParamType;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;

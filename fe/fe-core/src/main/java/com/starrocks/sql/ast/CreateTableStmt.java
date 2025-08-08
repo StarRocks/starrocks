@@ -22,8 +22,6 @@ import com.starrocks.catalog.Index;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;

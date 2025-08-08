@@ -18,7 +18,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 

@@ -35,11 +35,7 @@
 package com.starrocks.system;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 /**
  * This the superclass of all kinds of heartbeat response
