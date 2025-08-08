@@ -64,6 +64,10 @@ public class JoinCommutativityRule extends TransformationRule {
 
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = input.getOp().cast();
+        if (joinOperator.getJoinType().isAsofJoin()) {
+            return false;
+        }
+
         return joinOperator.getJoinHint().isEmpty() &&
                 (joinOperator.getTransformMask() != JoinReorderProperty.COMMUTATIVITY_MASK);
     }

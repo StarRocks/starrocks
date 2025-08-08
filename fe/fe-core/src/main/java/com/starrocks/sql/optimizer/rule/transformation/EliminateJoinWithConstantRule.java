@@ -94,7 +94,7 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
         JoinOperator joinType = joinOperator.getJoinType();
         // anti/full outer join cannot be eliminated.
         // semi join needs to distinct output which cannot be eliminated.
-        if (joinType.isAntiJoin() || joinType.isFullOuterJoin() || joinType.isSemiJoin()) {
+        if (joinType.isAntiJoin() || joinType.isFullOuterJoin() || joinType.isSemiJoin() || joinType.isAsofJoin()) {
             return false;
         }
         if (constantIndex == 0) {

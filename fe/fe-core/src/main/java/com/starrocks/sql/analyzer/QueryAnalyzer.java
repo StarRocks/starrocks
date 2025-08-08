@@ -802,6 +802,9 @@ public class QueryAnalyzer {
             Scope leftScope = process(join.getLeft(), parentScope);
             Scope rightScope;
             if (join.getRight() instanceof TableFunctionRelation || join.isLateral()) {
+                if (join.getJoinOp().isAsofJoin()) {
+                    throw new SemanticException("AsOf join is not supported in lateral join operations");
+                }
                 if (!(join.getRight() instanceof TableFunctionRelation)) {
                     throw new SemanticException("Only support lateral join with UDTF");
                 } else if (!join.getJoinOp().isInnerJoin() && !join.getJoinOp().isCrossJoin() &&
@@ -856,6 +859,11 @@ public class QueryAnalyzer {
                 AnalyzerUtils.verifyNoWindowFunctions(joinEqual, "JOIN");
                 AnalyzerUtils.verifyNoGroupingFunctions(joinEqual, "JOIN");
 
+                // Validate ASOF JOIN conditions
+                if (join.getJoinOp().isAsofJoin()) {
+                    validateAsofJoinConditions(joinEqual);
+                }
+
                 if (!joinEqual.getType().matchesType(Type.BOOLEAN) && !joinEqual.getType().matchesType(Type.NULL)) {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
@@ -867,7 +875,7 @@ public class QueryAnalyzer {
                 // and table_a.col_struct.a = table_b.col_struct.a
                 checkJoinEqual(joinEqual);
             } else {
-                if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {
+                if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin() || join.getJoinOp().isAsofJoin()) {
                     throw new SemanticException(join.getJoinOp() + " requires an ON or USING clause.");
                 }
             }
@@ -880,7 +888,7 @@ public class QueryAnalyzer {
                 scope = new Scope(RelationId.of(join), leftScope.getRelationFields());
             } else if (join.getJoinOp().isRightSemiAntiJoin()) {
                 scope = new Scope(RelationId.of(join), rightScope.getRelationFields());
-            } else if (join.getJoinOp().isLeftOuterJoin()) {
+            } else if (join.getJoinOp().isLeftOuterOrAsofJoin()) {
                 List<Field> rightFields = getFieldsWithNullable(rightScope);
                 scope = new Scope(RelationId.of(join),
                         leftScope.getRelationFields().joinWith(new RelationFields(rightFields)));
@@ -984,6 +992,68 @@ public class QueryAnalyzer {
                 }
             } else if (!HintNode.HINT_JOIN_UNREORDER.equals(join.getJoinHint())) {
                 throw new SemanticException("JOIN hint not recognized: " + join.getJoinHint());
+            }
+        }
+
+        private void validateAsofJoinConditions(Expr joinPredicate) {
+            if (joinPredicate == null) {
+                throw new SemanticException("ASOF JOIN requires join conditions");
+            }
+
+            AsofJoinConditionValidator validator = new AsofJoinConditionValidator();
+            validator.validate(joinPredicate);
+        }
+
+        private static class AsofJoinConditionValidator {
+            private int equalityCount = 0;
+            private int nonEqualityCount = 0;
+            private boolean hasOrOperator = false;
+
+            public void validate(Expr expr) {
+                visit(expr);
+                
+                if (equalityCount == 0) {
+                    throw new SemanticException("ASOF JOIN requires at least one equality predicate");
+                }
+                if (nonEqualityCount != 1) {
+                    throw new SemanticException("ASOF JOIN requires exactly one non-equality predicate, found: " + nonEqualityCount);
+                }
+                if (hasOrOperator) {
+                    throw new SemanticException("ASOF JOIN conditions cannot contain OR operators");
+                }
+            }
+
+            private void visit(Expr expr) {
+                if (expr instanceof CompoundPredicate compound) {
+                    if (compound.getOp() == CompoundPredicate.Operator.OR) {
+                        hasOrOperator = true;
+                    }
+                    visit(compound.getChild(0));
+                    visit(compound.getChild(1));
+               } else if (expr instanceof BinaryPredicate binary) {
+                    if (binary.getOp() == BinaryType.EQ) {
+                        equalityCount++;
+                    } else if (binary.getOp() == BinaryType.LT ||
+                               binary.getOp() == BinaryType.LE ||
+                               binary.getOp() == BinaryType.GT ||
+                               binary.getOp() == BinaryType.GE) {
+                        nonEqualityCount++;
+                        validateAsofConditionTypes(binary);
+                    }
+                }
+            }
+
+            private void validateAsofConditionTypes(BinaryPredicate predicate) {
+                Type leftType = predicate.getChild(0).getType();
+                Type rightType = predicate.getChild(1).getType();
+
+                if (!isSupportedAsofType(leftType) || !isSupportedAsofType(rightType)) {
+                    throw new SemanticException("ASOF JOIN non-equality condition only supports BIGINT, DATE, or DATETIME types");
+                }
+            }
+
+            private boolean isSupportedAsofType(Type type) {
+                return type.isBigint() || type.isDate() || type.isDatetime();
             }
         }
 

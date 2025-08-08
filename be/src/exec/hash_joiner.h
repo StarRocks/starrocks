@@ -72,7 +72,8 @@ struct HashJoinerParam {
                     bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
                     std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
                     const TJoinDistributionMode::type distribution_mode, bool enable_late_materialization,
-                    bool enable_partition_hash_join, bool is_skew_join)
+                    bool enable_partition_hash_join, bool is_skew_join, ExprContext* asof_join_conjunct_ctx,
+                    ExprContext* _asof_build_expr_ctx, ExprContext* _asof_probe_expr_ctx)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _is_null_safes(std::move(is_null_safes)),
@@ -91,7 +92,10 @@ struct HashJoinerParam {
               _distribution_mode(distribution_mode),
               _enable_late_materialization(enable_late_materialization),
               _enable_partition_hash_join(enable_partition_hash_join),
-              _is_skew_join(is_skew_join) {}
+              _is_skew_join(is_skew_join),
+              _asof_join_conjunct_ctx(asof_join_conjunct_ctx),
+              _asof_build_expr_ctx(_asof_build_expr_ctx),
+              _asof_probe_expr_ctx(_asof_probe_expr_ctx){}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -117,6 +121,9 @@ struct HashJoinerParam {
     const bool _enable_late_materialization;
     const bool _enable_partition_hash_join;
     const bool _is_skew_join;
+    ExprContext* _asof_join_conjunct_ctx;
+    ExprContext* _asof_build_expr_ctx;
+    ExprContext* _asof_probe_expr_ctx;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -431,6 +438,7 @@ private:
     const std::vector<ExprContext*>& _probe_expr_ctxs;
     // Conjuncts in Join On except equal conjuncts.
     const std::vector<ExprContext*>& _other_join_conjunct_ctxs;
+    // AsOf Join conjunct.
     // Conjuncts in Join followed by a filter predicate, usually in Where and Having.
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const RowDescriptor& _build_row_descriptor;
@@ -484,6 +492,9 @@ private:
     pipeline::Observable _probe_observable;
 
     bool _is_skew_join = false;
+    ExprContext* _asof_join_conjunct_ctx = nullptr;
+    ExprContext* _asof_join_build_ctx = nullptr;
+    ExprContext* _asof_join_probe_ctx = nullptr;
 };
 
 } // namespace starrocks

@@ -82,7 +82,10 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _probe_output_slots(param._probe_output_slots),
           _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
           _enable_late_materialization(param._enable_late_materialization),
-          _is_skew_join(param._is_skew_join) {
+          _is_skew_join(param._is_skew_join),
+          _asof_join_conjunct_ctx(param._asof_join_conjunct_ctx),
+          _asof_join_build_ctx(param._asof_build_expr_ctx),
+          _asof_join_probe_ctx(param._asof_probe_expr_ctx) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -148,6 +151,8 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
 
 void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* state) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
+
+    param->asof_conjunct_ctx = _asof_join_conjunct_ctx;
     param->join_type = _join_type;
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
@@ -167,7 +172,33 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* sta
         expr_context->root()->get_slot_ids(&expr_slots);
         predicate_slots.insert(expr_slots.begin(), expr_slots.end());
     }
+    if (_asof_join_conjunct_ctx != nullptr) {
+        std::vector<SlotId> expr_slots;
+        _asof_join_conjunct_ctx->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+    }
     param->predicate_slots = std::move(predicate_slots);
+
+    param->asof_build_ctx = _asof_join_build_ctx;
+    param->asof_probe_ctx = _asof_join_probe_ctx;
+    // Extract AsOf slot IDs for efficient column access
+    if (_asof_join_build_ctx != nullptr) {
+        std::vector<SlotId> asof_build_slots;
+        _asof_join_build_ctx->root()->get_slot_ids(&asof_build_slots);
+        if (!asof_build_slots.empty()) {
+            param->asof_build_slot_id = asof_build_slots[0];
+        }
+        LOG(ERROR) << "=========[build id]======" << asof_build_slots[0];
+    }
+
+    if (_asof_join_probe_ctx != nullptr) {
+        std::vector<SlotId> asof_probe_slots;
+        _asof_join_probe_ctx->root()->get_slot_ids(&asof_probe_slots);
+        if (!asof_probe_slots.empty()) {
+            param->asof_probe_slot_id = asof_probe_slots[0];
+        }
+        LOG(ERROR) << "=========[probe id]======" << asof_probe_slots[0];
+    }
 
     for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
         Expr* expr = _build_expr_ctxs[i]->root();

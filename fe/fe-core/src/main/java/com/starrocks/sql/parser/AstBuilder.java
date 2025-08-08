@@ -115,6 +115,7 @@ import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
+
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
@@ -6069,7 +6070,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Relation right = (Relation) visit(context.rightRelation);
 
         JoinOperator joinType = JoinOperator.INNER_JOIN;
-        if (context.crossOrInnerJoinType() != null) {
+        if (context.asofJoinType() != null) {
+            if (context.asofJoinType().LEFT() != null) {
+                joinType = JoinOperator.ASOF_LEFT_OUTER_JOIN;
+            } else {
+                joinType = JoinOperator.ASOF_INNER_JOIN;
+            }
+        } else if (context.crossOrInnerJoinType() != null) {
             if (context.crossOrInnerJoinType().CROSS() != null) {
                 joinType = JoinOperator.CROSS_JOIN;
             } else {

@@ -2647,7 +2647,7 @@ public class PlanFragmentBuilder {
             // Push down the predicates constructed by the right child when the
             // join op is inner join or left semi join or right join(semi, outer, anti)
             node.setIsPushDown(ConnectContext.get().getSessionVariable().isHashJoinPushDownRightTable()
-                    && (node.getJoinOp().isInnerJoin() || node.getJoinOp().isLeftSemiJoin() ||
+                    && (node.getJoinOp().isInnerOrAsofJoin() || node.getJoinOp().isLeftSemiJoin() ||
                     node.getJoinOp().isRightJoin()));
         }
 
@@ -2686,7 +2686,7 @@ public class PlanFragmentBuilder {
             Set<TupleId> nullableTupleIds = new HashSet<>();
             nullableTupleIds.addAll(leftFragment.getPlanRoot().getNullableTupleIds());
             nullableTupleIds.addAll(rightFragment.getPlanRoot().getNullableTupleIds());
-            if (joinOperator.isLeftOuterJoin()) {
+            if (joinOperator.isLeftOuterOrAsofJoin()) {
                 nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
             } else if (joinOperator.isRightOuterJoin()) {
                 nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
@@ -3626,10 +3626,13 @@ public class PlanFragmentBuilder {
         private JoinExprInfo buildJoinExpr(OptExpression optExpr, ExecPlan context) {
             ScalarOperator predicate = optExpr.getOp().getPredicate();
             ScalarOperator onPredicate;
-            if (optExpr.getOp() instanceof PhysicalJoinOperator) {
-                onPredicate = ((PhysicalJoinOperator) optExpr.getOp()).getOnPredicate();
-            } else if (optExpr.getOp() instanceof PhysicalStreamJoinOperator) {
+            JoinOperator joinOperator;
+            if (optExpr.getOp() instanceof PhysicalJoinOperator op) {
+                onPredicate = op.getOnPredicate();
+                joinOperator = op.getJoinType();
+            } else if (optExpr.getOp() instanceof PhysicalStreamJoinOperator op) {
                 onPredicate = ((PhysicalStreamJoinOperator) optExpr.getOp()).getOnPredicate();
+                joinOperator = op.getJoinType();
             } else {
                 throw new IllegalStateException("not supported join " + optExpr.getOp());
             }
@@ -3663,6 +3666,13 @@ public class PlanFragmentBuilder {
 
             List<ScalarOperator> otherJoin = Utils.extractConjuncts(onPredicate);
             otherJoin.removeAll(eqOnPredicates);
+
+            if (joinOperator.isAsofJoin()) {
+                ColumnRefSet leftColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
+                ColumnRefSet rightColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
+                otherJoin = JoinHelper.applyCommutativeToPredicates(otherJoin, leftColumns, rightColumns);
+            }
+
             List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());

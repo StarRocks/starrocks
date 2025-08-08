@@ -61,7 +61,7 @@ public class PushDownLimitJoinRule extends TransformationRule {
         // the matched rows first.
         if (joinType.isSemiAntiJoin() || joinType.isFullOuterJoin()) {
             return Lists.newArrayList(result);
-        } else if (joinType.isInnerJoin() && newJoin.getOnPredicate() != null) {
+        } else if (joinType.isInnerOrAsofJoin() && newJoin.getOnPredicate() != null) {
             return Lists.newArrayList(result);
         } else if (joinType.isCrossJoin() && newJoin.getOnPredicate() != null) {
             return Lists.newArrayList(result);
@@ -71,7 +71,7 @@ public class PushDownLimitJoinRule extends TransformationRule {
         int[] pushDownChildIdx = {0, 1};
 
         // push down all child
-        if (joinType.isLeftOuterJoin()) {
+        if (joinType.isLeftOuterOrAsofJoin()) {
             pushDownChildIdx = new int[] {0};
         } else if (joinType.isRightOuterJoin()) {
             pushDownChildIdx = new int[] {1};

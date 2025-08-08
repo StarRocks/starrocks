@@ -93,6 +93,216 @@ struct JoinHashTableItems {
     bool right_to_nullable = false;
     bool has_large_column = false;
     float keys_per_bucket = 0;
+    SlotId asof_build_slot_id = -1;
+    SlotId asof_probe_slot_id = -1;
+
+    struct AsofBucketData {
+        std::vector<std::pair<int64_t, uint32_t>> sorted_pairs;  // {asof_value, row_index}
+
+        void add_row(int64_t asof_value, uint32_t row_index) {
+            sorted_pairs.emplace_back(asof_value, row_index);
+        }
+
+        void sort_by_asof_value() {
+            std::sort(sorted_pairs.begin(), sorted_pairs.end(),
+                     [](const std::pair<int64_t, uint32_t>& a, const std::pair<int64_t, uint32_t>& b) {
+                         return a.first < b.first;  // Sort by AsOf value (timestamp/datetime/long)
+                     });
+        }
+
+        uint32_t find_asof_match(int64_t left_asof_value) const {
+            LOG(INFO) << "=== Entering find_asof_match ===";
+            LOG(INFO) << "left_asof_value: " << left_asof_value;
+            LOG(INFO) << "sorted_pairs.size(): " << sorted_pairs.size();
+
+            if (sorted_pairs.empty()) {
+                LOG(WARNING) << "sorted_pairs is empty! No match can be found.";
+                return 0;
+            }
+
+            for (size_t i = 0; i < sorted_pairs.size(); i++) {
+                LOG(INFO) << "  sorted_pairs[" << i << "]: value=" << sorted_pairs[i].first 
+                          << ", row=" << sorted_pairs[i].second;
+            }
+
+            LOG(INFO) << "Performing upper_bound search to find first value > left_asof_value...";
+            auto it = std::upper_bound(sorted_pairs.begin(), sorted_pairs.end(),
+                                       std::make_pair(left_asof_value, 0),
+                                       [](const std::pair<int64_t, uint32_t>& a, const std::pair<int64_t, uint32_t>& b) {
+                                           return a.first < b.first;
+                                       });
+
+            if (it == sorted_pairs.begin()) {
+                LOG(INFO) << "No match found: left_asof_value " << left_asof_value 
+                          << " is less than smallest right value " << sorted_pairs[0].first;
+                return 0;
+            }
+
+            --it;
+            LOG(INFO) << "Match found!";
+            LOG(INFO) << "Matched value: " << it->first << ", Row index: " << it->second;
+            LOG(INFO) << "AsOf logic: max(right_value) where right_value <= " << left_asof_value 
+                      << " is " << it->first;
+
+            LOG(INFO) << "=== Exiting find_asof_match ===";
+            return it->second;
+        }
+
+
+    };
+    Buffer<AsofBucketData> asof_buckets;
+
+    ExprContext* asof_conjunct_ctx = nullptr;
+    ExprContext* asof_build_ctx = nullptr;
+    ExprContext* asof_probe_ctx = nullptr;
+
+    int64_t extract_build_asof_value(uint32_t row_index) const {
+        LOG(INFO) << "=== extract_build_asof_value ===";
+        LOG(INFO) << "row_index: " << row_index << " (1-based)";
+
+        if (build_chunk == nullptr || row_index == 0 || asof_build_slot_id == -1) {
+            LOG(INFO) << "Invalid parameters: build_chunk=" << (build_chunk ? "valid" : "null") 
+                      << ", row_index=" << row_index << ", asof_build_slot_id=" << asof_build_slot_id;
+            return INT64_MIN;
+        }
+
+        size_t chunk_row_index = row_index;
+        LOG(INFO) << "chunk_row_index: " << chunk_row_index << " (0-based)";
+        LOG(INFO) << "build_chunk->num_rows(): " << build_chunk->num_rows();
+        
+        if (chunk_row_index > build_chunk->num_rows()) {
+            LOG(INFO) << "Invalid row index: " << chunk_row_index << " >= " << build_chunk->num_rows();
+            return INT64_MIN;
+        }
+
+        try {
+            const ColumnPtr& asof_column = build_chunk->get_column_by_slot_id(asof_build_slot_id);
+            LOG(INFO) << "asof_column type: " << asof_column->get_name();
+            LOG(INFO) << "asof_column size: " << asof_column->size();
+            
+            if (asof_column->is_null(chunk_row_index)) {
+                LOG(INFO) << "AsOf value is null at row " << chunk_row_index;
+                return INT64_MIN;
+            }
+            
+            int64_t result = extract_asof_value_from_column(asof_column.get(), chunk_row_index);
+            LOG(INFO) << "Final extracted value: " << result;
+            return result;
+        } catch (const std::exception& e) {
+            LOG(INFO) << "Exception in extract_build_asof_value: " << e.what();
+            return INT64_MIN;
+        } catch (...) {
+            LOG(INFO) << "Unknown exception in extract_build_asof_value";
+            return INT64_MIN;
+        }
+    }
+
+private:
+    int64_t extract_asof_value_from_column(const Column* column, size_t row_index) const {
+        LOG(INFO) << "  === extract_asof_value_from_column ===";
+        LOG(INFO) << "  column: " << (column ? "valid" : "null");
+        LOG(INFO) << "  row_index: " << row_index;
+        
+        if (column == nullptr || row_index >= column->size()) {
+            LOG(INFO) << "  Invalid column or row_index: column_size=" 
+                      << (column ? column->size() : 0) << ", row_index=" << row_index;
+            return INT64_MIN;
+        }
+
+        LOG(INFO) << "  column->get_name(): " << column->get_name();
+        LOG(INFO) << "  column->is_nullable(): " << column->is_nullable();
+
+        const Column* data_column = column;
+        if (column->is_nullable()) {
+            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
+            data_column = nullable_column->data_column().get();
+            LOG(INFO) << "  Using data_column from NullableColumn";
+        }
+
+        LOG(INFO) << "  data_column->get_name(): " << data_column->get_name();
+
+        try {
+            Datum datum = data_column->get(row_index);
+            LOG(INFO) << "  Datum extracted successfully";
+            
+            if (datum.is_null()) {
+                LOG(INFO) << "  Datum is null";
+                return INT64_MIN;
+            }
+
+            LOG(INFO) << "  Calling convert_datum_to_int64_safely...";
+            int64_t result = convert_datum_to_int64_safely(datum);
+            LOG(INFO) << "  Conversion result: " << result;
+            return result;
+        } catch (const std::exception& e) {
+            LOG(INFO) << "  Exception in extract_asof_value_from_column: " << e.what();
+            return INT64_MIN;
+        } catch (...) {
+            LOG(INFO) << "  Unknown exception in extract_asof_value_from_column";
+            return INT64_MIN;
+        }
+    }
+
+    int64_t convert_datum_to_int64_safely(const Datum& datum) const {
+        LOG(INFO) << "    === convert_datum_to_int64_safely ===";
+        LOG(INFO) << "    datum.is_null(): " << datum.is_null();
+        
+        try {
+            // For TimestampValue (DateTime/Timestamp columns)
+            if (!datum.is_null()) {
+                LOG(INFO) << "    Datum is not null, trying type conversions...";
+                
+                try {
+                    TimestampValue ts = datum.get_timestamp();
+                    int64_t timestamp_value = ts.timestamp();
+                    LOG(INFO) << "    TimestampValue conversion: " << ts.to_string() << " -> " << timestamp_value;
+                    return timestamp_value;
+                } catch (const std::bad_variant_access&) {
+                    LOG(INFO) << "    Not a TimestampValue, trying other types...";
+                }
+
+                // Try to get as DateValue
+                try {
+                    DateValue date = datum.get_date();
+                    int64_t date_value = static_cast<int64_t>(date.julian());
+                    LOG(INFO) << "  DateValue conversion: " << date.to_string() << " -> " << date_value;
+                    return date_value;
+                } catch (const std::bad_variant_access&) {
+                    LOG(INFO) << "  Not a DateValue, trying other types...";
+                }
+
+                // Try to get as int64_t directly (for Long/BigInt columns)
+                try {
+                    int64_t int64_value = datum.get_int64();
+                    LOG(INFO) << "  Int64 direct conversion: " << int64_value;
+                    return int64_value;
+                } catch (const std::bad_variant_access&) {
+                    LOG(INFO) << "  Not int64_t, trying other numeric types...";
+                }
+
+                // Try to get as int32_t and convert
+                try {
+                    int32_t int32_value = datum.get_int32();
+                    int64_t converted_value = static_cast<int64_t>(int32_value);
+                    LOG(INFO) << "  Int32 conversion: " << int32_value << " -> " << converted_value;
+                    return converted_value;
+                } catch (const std::bad_variant_access&) {
+                    LOG(INFO) << "  Not int32_t either, exhausted type attempts";
+                }
+            } else {
+                LOG(INFO) << "    Datum is null, returning INT64_MIN";
+            }
+        } catch (const std::exception& e) {
+            LOG(INFO) << "    Exception in convert_datum_to_int64_safely: " << e.what();
+        } catch (...) {
+            LOG(INFO) << "    Unknown exception in convert_datum_to_int64_safely";
+        }
+
+        LOG(INFO) << "    Fallback: returning INT64_MIN for unsupported types or errors";
+        return INT64_MIN;  // Fallback for unsupported types or errors
+    }
+
+public:
     size_t used_buckets = 0;
     bool cache_miss_serious = false;
     bool enable_late_materialization = false;
@@ -152,6 +362,8 @@ struct HashTableProbeState {
     // the rows of src probe chunk
     size_t probe_row_count = 0;
 
+    Buffer<uint32_t> probe_bucket_ids;
+
     // 0: normal
     // 1: all match one
     JoinMatchFlag match_flag = JoinMatchFlag::NORMAL; // all match one
@@ -173,6 +385,8 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
+    SlotId asof_probe_slot_id = -1;
+    Buffer<int64_t> probe_asof_values;
 
     HashTableProbeState()
             : build_index_column(UInt32Column::create()),
@@ -261,6 +475,13 @@ struct HashTableParam {
     long column_view_concat_bytes_limit = -1L;
 
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
+
+    // AsOf Join support
+    ExprContext* asof_conjunct_ctx = nullptr;
+    ExprContext* asof_build_ctx = nullptr;
+    ExprContext* asof_probe_ctx = nullptr;
+    SlotId asof_build_slot_id = -1;
+    SlotId asof_probe_slot_id = -1;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;
     std::set<SlotId> build_output_slots;
