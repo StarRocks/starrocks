@@ -204,6 +204,7 @@ import com.starrocks.system.HeartbeatResponse;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.MultipleWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
@@ -374,7 +375,9 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
             .of(Warehouse.class, "clazz")
-            .registerSubtype(DefaultWarehouse.class, "DefaultWarehouse");
+            .registerSubtype(DefaultWarehouse.class, "DefaultWarehouse")
+            .registerSubtype(MultipleWarehouse.class, "MultipleWarehouse")
+            ;
 
     public static final RuntimeTypeAdapterFactory<LoadJob> LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(LoadJob.class, "clazz")
