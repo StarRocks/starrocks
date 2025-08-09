@@ -147,9 +147,6 @@ std::function<StatusOr<ChunkPtr>()> SpillableChunksSorterFullSort::_spill_proces
         if (_process_staging_unsorted_chunk_idx != _staging_unsorted_chunks.size()) {
             return std::move(_staging_unsorted_chunks[_process_staging_unsorted_chunk_idx++]);
         }
-        if (_process_early_materialized_chunks_idx != _early_materialized_chunks.size()) {
-            return _late_materialize(std::move(_early_materialized_chunks[_process_early_materialized_chunks_idx++]));
-        }
         if (_process_sorted_chunk_idx != _sorted_chunks.size()) {
             return std::move(_sorted_chunks[_process_sorted_chunk_idx++]);
         }
