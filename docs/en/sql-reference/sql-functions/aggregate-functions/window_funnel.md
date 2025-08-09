@@ -28,11 +28,11 @@ BIGINT window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, c
 
 - `time`: The column containing timestamps. DATE and DATETIME types are supported.
 
-- `mode`: The mode in which the event chain is filtered. The supported data type is INT. Value range: 0, 1, 2.
+- `mode`: The mode in which the event chain is filtered. The supported data type is INT. Value range: 0-7.
   - `0` is the default value, which indicates common funnel calculation.
-  - `1` indicates the `DEDUPLICATION` mode, that is, the filtered event chain cannot have repeated events. Suppose the `array` parameter is `[event_type = 'A', event_type = 'B', event_type = 'C', event_type = 'D']` and the original event chain is "A-B-C-B-D". Event B is repeated and the filtered event chain is "A-B-C".
-  - `2` indicates the `FIXED` mode, that is, the filtered event chain cannot have events that disrupt the specified sequence. Suppose the previous `array` parameter is used and the original event chain is "A-B-D-C". Event D interrupts the sequence and the filtered event chain is "A-B".
-  - `4` indicates the `INCREASE` mode, which means the filtered events must have strictly increasing timestamps. Duplicate timestamp disrupts the event chain. This mode is supported since version 2.5.
+  - `1` (Set the 1st bit of mode) indicates the `DEDUPLICATION` mode, that is, the filtered event chain cannot have repeated events. Suppose the `array` parameter is `[event_type = 'A', event_type = 'B', event_type = 'C', event_type = 'D']` and the original event chain is "A-B-C-B-D". Event B is repeated and the filtered event chain is "A-B-C".
+  - `2` (Set the 2nd bit of mode) indicates the `FIXED` mode, that is, the filtered event chain cannot have events that disrupt the specified sequence. Suppose the previous `array` parameter is used and the original event chain is "A-B-D-C". Event D interrupts the sequence and the filtered event chain is "A-B".
+  - `4` (Set the 3rd bit of mode) indicates the `INCREASE` mode, which means the filtered events must have strictly increasing timestamps. Duplicate timestamp disrupts the event chain. This mode is supported since version 2.5.
 
 - `array`: The defined event chain. It must be an array.
 
