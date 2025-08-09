@@ -682,4 +682,45 @@ PARALLEL_TEST(MapFunctionsTest, test_map_concat) {
     }
 }
 
+// NOLINTNEXTLINE
+PARALLEL_TEST(MapFunctionsTest, test_map_from_entries) {
+    std::vector<std::string> field_name{"id", "name"};
+    std::vector<TypeDescriptor> field_types;
+    field_types.emplace_back(TYPE_BIGINT);
+    field_types.emplace_back(TYPE_VARCHAR);
+
+    auto array_type = TypeDescriptor::create_array_type(
+            TypeDescriptor::create_struct_type(field_name, field_types));
+    {
+        ColumnPtr array_col = ColumnHelper::create_column(array_type, true);
+        DatumStruct struct1{uint64_t(1), Slice("smith")};
+        DatumStruct struct2{uint64_t(3), Slice("cruise")};
+
+        array_col->append_datum(DatumArray{struct1, struct2});
+        array_col->append_datum(DatumArray{struct2, struct2});
+        array_col->append_datum(DatumArray{struct1, struct1});
+
+        auto res = MapFunctions::map_from_entries(nullptr, {array_col}).value();
+
+        ASSERT_EQ("{1:'smith',3:'cruise'}", res->debug_item(0));
+        ASSERT_EQ("{3:'cruise'}", res->debug_item(1));
+        ASSERT_EQ("{1:'smith'}", res->debug_item(2));
+    }
+
+    {
+        auto nullable_column = NullableColumn::create(
+            ColumnHelper::create_column(array_type, false), NullColumn::create_mutable());
+
+        nullable_column->append_nulls(2);
+        nullable_column->append_datum(DatumArray{DatumStruct{uint64_t(1), Slice("smith")}, DatumStruct{uint64_t(2), Slice("json")}});
+        nullable_column->append_datum(DatumArray{DatumStruct{uint64_t(3), Slice("cruise")}});
+
+        auto res = MapFunctions::map_from_entries(nullptr, {nullable_column}).value();
+
+        ASSERT_TRUE(res->get(0).is_null());
+        ASSERT_TRUE(res->get(1).is_null());
+        ASSERT_EQ("{1:'smith',2:'json'}", res->debug_item(2));
+        ASSERT_EQ("{3:'cruise'}", res->debug_item(3));
+    }
+}
 } // namespace starrocks
