@@ -18,6 +18,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "util/failpoint/fail_point.h"
+#include "util/misc.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -28,12 +29,28 @@ BrpcStubCache::BrpcStubCache() {
         std::lock_guard<SpinLock> l(_lock);
         return _stub_map.size();
     });
+    _cleanup_thread = std::thread([this] {
+#ifdef GOOGLE_PROFILER
+        ProfilerRegisterThread();
+#endif
+        while (!_stopped.load()) {
+            LOG(INFO) << "Start to clean up expired brpc stubs";
+            check_and_cleanup_unhealthy_stubs();
+            nap_sleep(config::brpc_stub_cleanup_interval_s, [this] { return _stopped.load(); });
+        }
+    });
+    Thread::set_thread_name(_cleanup_thread, "brpc_cleanup_thread");
 }
 
 BrpcStubCache::~BrpcStubCache() {
+    _stopped.store(true);
+    _cleanup_thread.join();
+
     for (auto& stub : _stub_map) {
         delete stub.second;
     }
+
+    _stub_map.clear();
 }
 
 std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const butil::EndPoint& endpoint) {
@@ -71,8 +88,36 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const 
     return get_stub(endpoint);
 }
 
+void BrpcStubCache::check_and_cleanup_unhealthy_stubs() {
+    std::vector<butil::EndPoint> snapshot;
+    {
+        std::lock_guard<SpinLock> l(_lock);
+
+        for (auto& entry : _stub_map) {
+            snapshot.push_back(entry.first);
+        }
+    }
+
+    for (const auto& endpoint : snapshot) {
+        auto stub_pool = get_stub_pool_readonly(endpoint);
+        if (stub_pool && stub_pool->is_unhealthy()) {
+            {
+                std::lock_guard<SpinLock> l(_lock);
+
+                LOG(INFO) << "cleanup stubs from endpoint:" << endpoint;
+                _stub_map.erase(endpoint);
+                delete stub_pool;
+            }
+        }
+    }
+}
+
 BrpcStubCache::StubPool::StubPool() : _idx(-1) {
     _stubs.reserve(config::brpc_max_connections_per_server);
+}
+
+BrpcStubCache::StubPool::~StubPool() {
+    _stubs.clear();
 }
 
 std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::get_or_create(
@@ -89,6 +134,27 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::get_o
         _idx = 0;
     }
     return _stubs[_idx];
+}
+
+bool BrpcStubCache::StubPool::is_unhealthy() {
+    if (_stubs.size() == 0) {
+        // When the vector is empty do not need to clean
+        return false;
+    }
+
+    auto& first_stub = _stubs[0];
+    if (!first_stub) {
+        return true;
+    }
+
+    auto status = first_stub->check_health();
+    return !status.ok();
+}
+
+BrpcStubCache::StubPool* BrpcStubCache::get_stub_pool_readonly(const butil::EndPoint& endpoint) {
+    std::lock_guard<SpinLock> l(_lock);
+    auto stub_ptr = _stub_map.seek(endpoint);
+    return stub_ptr ? *stub_ptr : nullptr;
 }
 
 HttpBrpcStubCache* HttpBrpcStubCache::getInstance() {

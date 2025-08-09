@@ -60,6 +60,67 @@ Status PInternalService_RecoverableStub::reset_channel(int64_t next_connection_g
     return Status::OK();
 }
 
+Status PInternalService_RecoverableStub::check_health() {
+#ifdef BE_TEST
+    if (_endpoint.port == 125) {
+        LOG(INFO) << "BE_TEST mode: Port 125 simulated as unhealthy for " << _endpoint;
+        return Status::InternalError("Simulated failure for port 111");
+    }
+    LOG(INFO) << "BE_TEST mode: Endpoint " << _endpoint << " simulated as healthy";
+    return Status::OK();
+#endif
+
+    // extract host
+    std::string host = butil::endpoint2str(_endpoint).c_str();
+    size_t colon_pos = host.find(':');
+    if (colon_pos != std::string::npos) {
+        host = host.substr(0, colon_pos);
+    }
+
+    // generate endpoint
+    butil::EndPoint http_endpoint;
+    if (butil::str2endpoint((host + ":" + std::to_string(config::be_http_port)).c_str(), &http_endpoint) != 0) {
+        LOG(WARNING) << "Invalid HTTP endpoint: " << host << ":" << config::be_http_port;
+        return Status::InternalError("Invalid HTTP endpoint");
+    }
+
+    // generate channel options
+    brpc::ChannelOptions options;
+    options.connect_timeout_ms = config::rpc_connect_timeout_ms;
+    options.timeout_ms = config::rpc_connect_timeout_ms;
+    options.max_retry = 3;
+    options.protocol = "http";
+
+    // init channel
+    brpc::Channel channel;
+    if (channel.Init(http_endpoint, &options) != 0) {
+        LOG(WARNING) << "Failed to init HTTP channel for " << http_endpoint;
+        return Status::InternalError("Failed to init HTTP channel");
+    }
+
+    // generate controller
+    brpc::Controller cntl;
+    cntl.http_request().set_method(brpc::HTTP_METHOD_GET);
+    cntl.http_request().uri() = "/api/health";
+
+    // trigger health API
+    channel.CallMethod(nullptr, &cntl, nullptr, nullptr, nullptr);
+
+    // get and check response
+    if (cntl.Failed()) {
+        LOG(WARNING) << "Health check failed for endpoint " << _endpoint << ", error: " << cntl.ErrorText();
+        return Status::InternalError("Health check request failed");
+    }
+    int status_code = cntl.http_response().status_code();
+    if (status_code == 200) {
+        LOG(INFO) << "Health check passed for endpoint " << _endpoint << " (HTTP " << status_code << ")";
+        return Status::OK();
+    } else {
+        LOG(WARNING) << "Health check failed for endpoint " << _endpoint << ", HTTP status: " << status_code;
+        return Status::InternalError("Health check failed");
+    }
+}
+
 void PInternalService_RecoverableStub::tablet_writer_open(::google::protobuf::RpcController* controller,
                                                           const ::starrocks::PTabletWriterOpenRequest* request,
                                                           ::starrocks::PTabletWriterOpenResult* response,
