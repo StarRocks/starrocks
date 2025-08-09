@@ -29,7 +29,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
 import com.starrocks.proto.DeleteTabletCacheRequest;
 import com.starrocks.proto.DeleteTabletCacheResponse;
 import com.starrocks.proto.DropTableRequest;
@@ -127,7 +126,7 @@ public class LakeTableHelper {
         try {
             nodeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                     .getNodeSelector().seqChooseBackendOrComputeId();
-        } catch (UserException e) {
+        } catch (Exception e) {
             LOG.warn("Fail to remove table path {}: no alive node", path);
             return false;
         }
