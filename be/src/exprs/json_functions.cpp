@@ -18,7 +18,6 @@
 
 #include <algorithm>
 #include <boost/tokenizer.hpp>
-#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -43,7 +42,6 @@
 #include "exprs/jsonpath.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
-#include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "storage/chunk_helper.h"
@@ -1301,90 +1299,86 @@ static StatusOr<JsonValue> _remove_json_paths_core(JsonValue* json_value,
 
     vpack::Slice original_slice = json_value->to_vslice();
 
-    // Recursive function with optimized path checking
-    std::function<vpack::Slice(vpack::Slice, const std::string&)> remove_paths_recursive =
-            [&](vpack::Slice slice, const std::string& current_path) -> vpack::Slice {
-        if (slice.isObject()) {
-            vpack::Builder obj_builder;
-            {
-                vpack::ObjectBuilder builder(&obj_builder);
+    // New recursive writers that build directly into `builder` to avoid returning slices
+    std::function<void(vpack::Builder*, vpack::Slice, const std::string&)> append_object_fields;
+    std::function<void(vpack::Builder*, vpack::Slice, const std::string&)> append_array_elements;
 
-                // Iterate the object directly without collecting and sorting keys
-                for (auto it : vpack::ObjectIterator(slice)) {
-                    auto key = it.key.copyString();
-                    std::string child_path = current_path.empty() ? ("$." + key) : (current_path + "." + key);
+    append_object_fields = [&](vpack::Builder* out, vpack::Slice obj_slice, const std::string& current_path) {
+        for (auto it : vpack::ObjectIterator(obj_slice)) {
+            std::string key = it.key.copyString();
+            std::string child_path = current_path.empty() ? ("$." + key) : (current_path + "." + key);
 
-                    // 1. Check if this is the target level (exact match)
-                    if (exact_paths_to_remove.find(child_path) != exact_paths_to_remove.end()) {
-                        // This is the target level, skip it
-                        continue;
-                    }
+            // Exact match: drop the key
+            if (exact_paths_to_remove.find(child_path) != exact_paths_to_remove.end()) {
+                continue;
+            }
 
-                    vpack::Slice value = it.value;
-                    if (value.isNone()) {
-                        continue;
-                    }
+            vpack::Slice value = it.value;
+            if (value.isNone()) {
+                continue;
+            }
 
-                    // 2. Check if recursion is needed (prefix match)
-                    bool needs_recursion = false;
-                    if (value.isObject() || value.isArray()) {
-                        needs_recursion = (prefix_paths_to_remove.find(child_path) != prefix_paths_to_remove.end());
-                    }
+            bool needs_recursion = (value.isObject() || value.isArray()) &&
+                                   (prefix_paths_to_remove.find(child_path) != prefix_paths_to_remove.end());
 
-                    if (needs_recursion) {
-                        vpack::Slice processed_value = remove_paths_recursive(value, child_path);
-                        builder->add(key, processed_value);
-                    } else {
-                        builder->add(key, value);
-                    }
-                }
-            } // ObjectBuilder automatically closes here
+            if (!needs_recursion) {
+                out->add(key, value);
+                continue;
+            }
 
-            return obj_builder.slice();
-        } else if (slice.isArray()) {
-            vpack::Builder arr_builder;
-            {
-                vpack::ArrayBuilder builder(&arr_builder);
-
-                size_t array_size = slice.length();
-                for (size_t index = 0; index < array_size; index++) {
-                    std::string child_path = current_path + "[" + std::to_string(index) + "]";
-
-                    // 1. Check if this is the target level (exact match)
-                    if (exact_paths_to_remove.find(child_path) != exact_paths_to_remove.end()) {
-                        continue;
-                    }
-
-                    vpack::Slice element = slice.at(index);
-                    if (element.isNone()) {
-                        continue; // Index out of bounds
-                    }
-
-                    // 2. Check if recursion is needed (prefix match)
-                    bool needs_recursion = false;
-                    if (element.isObject() || element.isArray()) {
-                        // Check if current path is a prefix of any removal path
-                        needs_recursion = (prefix_paths_to_remove.find(child_path) != prefix_paths_to_remove.end());
-                    }
-
-                    if (needs_recursion) {
-                        vpack::Slice processed_element = remove_paths_recursive(element, child_path);
-                        builder->add(processed_element);
-                    } else {
-                        builder->add(element);
-                    }
-                }
-            } // ArrayBuilder automatically closes here
-
-            return arr_builder.slice();
-        } else {
-            // Primitive value, return as is
-            return slice;
+            if (value.isObject()) {
+                vpack::ObjectBuilder child(out, key);
+                append_object_fields(out, value, child_path);
+            } else {
+                vpack::ArrayBuilder child(out, key);
+                append_array_elements(out, value, child_path);
+            }
         }
     };
 
-    vpack::Slice result = remove_paths_recursive(original_slice, "$");
-    builder->add(result);
+    append_array_elements = [&](vpack::Builder* out, vpack::Slice arr_slice, const std::string& current_path) {
+        size_t array_size = arr_slice.length();
+        for (size_t index = 0; index < array_size; ++index) {
+            std::string child_path = current_path + "[" + std::to_string(index) + "]";
+
+            // Exact match: drop the element
+            if (exact_paths_to_remove.find(child_path) != exact_paths_to_remove.end()) {
+                continue;
+            }
+
+            vpack::Slice element = arr_slice.at(index);
+            if (element.isNone()) {
+                continue;
+            }
+
+            bool needs_recursion = (element.isObject() || element.isArray()) &&
+                                   (prefix_paths_to_remove.find(child_path) != prefix_paths_to_remove.end());
+
+            if (!needs_recursion) {
+                out->add(element);
+                continue;
+            }
+
+            if (element.isObject()) {
+                vpack::ObjectBuilder child(out);
+                append_object_fields(out, element, child_path);
+            } else {
+                vpack::ArrayBuilder child(out);
+                append_array_elements(out, element, child_path);
+            }
+        }
+    };
+
+    if (original_slice.isObject()) {
+        vpack::ObjectBuilder ob(builder);
+        append_object_fields(builder, original_slice, "$");
+    } else if (original_slice.isArray()) {
+        vpack::ArrayBuilder ab(builder);
+        append_array_elements(builder, original_slice, "$");
+    } else {
+        builder->add(original_slice);
+    }
+
     return JsonValue(builder->slice());
 }
 
