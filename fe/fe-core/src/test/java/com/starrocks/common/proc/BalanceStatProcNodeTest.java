@@ -17,11 +17,13 @@ package com.starrocks.common.proc;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -170,6 +172,46 @@ public class BalanceStatProcNodeTest {
             Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx3);
         }
 
+        // 2. colocate mismatch balance
+        {
+            List<Column> cols = Lists.newArrayList(new Column("province", Type.VARCHAR));
+            PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
+            long partitionId = 1125L;
+            listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+            listPartition.setIsInMemory(partitionId, false);
+            listPartition.setReplicationNum(partitionId, (short) 1);
+            OlapTable olapTable = new OlapTable(1124L, "colocate_table", cols, null, listPartition, null);
+            MaterializedIndex index = new MaterializedIndex(1100L, MaterializedIndex.IndexState.NORMAL);
+            index.setBalanceStat(
+                    BalanceStat.createColocationGroupBalanceStat(1110L, Sets.newHashSet(10001L), Sets.newHashSet(10002L)));
+            Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
+            indexNameToId.put("index1", index.getId());
+            TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), TStorageMedium.HDD);
+            long tablet1Id = 1110L;
+            index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
+            long tablet2Id = 1111L;
+            index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
+            Partition partition = new Partition(partitionId, partitionId, "p1", index, new HashDistributionInfo(2, cols));
+            olapTable.addPartition(partition);
+
+            db.registerTableUnlocked(olapTable);
+
+            // 1 pending tablet, 1 running tablet
+            TabletSchedCtx ctx4 = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, db.getId(), olapTable.getId(), partitionId,
+                    index.getId(), tablet1Id, System.currentTimeMillis());
+            ctx4.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
+            ctx4.setTabletStatus(LocalTablet.TabletHealthStatus.COLOCATE_MISMATCH);
+            ctx4.setStorageMedium(TStorageMedium.HDD);
+            Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx4);
+
+            TabletSchedCtx ctx5 = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, db.getId(), olapTable.getId(), partitionId,
+                    index.getId(), tablet2Id, System.currentTimeMillis());
+            ctx5.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
+            ctx5.setTabletStatus(LocalTablet.TabletHealthStatus.COLOCATE_MISMATCH);
+            ctx5.setStorageMedium(TStorageMedium.HDD);
+            Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx5);
+        }
+
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getLocalMetastore();
@@ -181,7 +223,7 @@ public class BalanceStatProcNodeTest {
         BalanceStatProcNode proc = new BalanceStatProcNode(tabletScheduler);
         BaseProcResult result = (BaseProcResult) proc.fetchResult();
         List<List<String>> rows = result.getRows();
-        Assertions.assertEquals(4, rows.size());
+        Assertions.assertEquals(5, rows.size());
 
         // cluster disk balanced
         Assertions.assertEquals("[HDD, inter-node disk usage, true, 0, 0]", rows.get(0).toString());
@@ -191,5 +233,7 @@ public class BalanceStatProcNodeTest {
         Assertions.assertEquals("[HDD, intra-node disk usage, false, 2, 0]", rows.get(2).toString());
         // backend tablet balanced
         Assertions.assertEquals("[HDD, intra-node tablet distribution, true, 0, 0]", rows.get(3).toString());
+        // colocate table not balanced
+        Assertions.assertEquals("[HDD, colocation group, false, 1, 1]", rows.get(4).toString());
     }
 }
