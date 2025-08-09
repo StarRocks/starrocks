@@ -79,7 +79,6 @@ public class StatisticsUtils {
 
     public static Statistics buildDefaultStatistics(Set<ColumnRefOperator> columns) {
         Statistics.Builder statisticsBuilder = Statistics.builder();
-        statisticsBuilder.setOutputRowCount(1);
         statisticsBuilder.addColumnStatistics(
                 columns.stream().collect(Collectors.toMap(column -> column, column -> ColumnStatistic.unknown())));
         return statisticsBuilder.build();
