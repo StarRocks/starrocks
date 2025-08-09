@@ -38,6 +38,7 @@ TypeCheckerManager::TypeCheckerManager() {
     registerChecker("java.sql.Date", std::make_unique<DateTypeChecker>());
     registerChecker("java.sql.Time", std::make_unique<TimeTypeChecker>());
     registerChecker("java.time.LocalDateTime", std::make_unique<LocalDateTimeTypeChecker>());
+    registerChecker("java.time.LocalDate", std::make_unique<LocalDateTypeChecker>());
     registerChecker("java.math.BigDecimal", std::make_unique<BigDecimalTypeChecker>());
     registerChecker("oracle.sql.TIMESTAMP", std::make_unique<OracleTimestampClassTypeChecker>());
     registerChecker("oracle.sql.TIMESTAMPLTZ", std::make_unique<OracleTimestampClassTypeChecker>());
