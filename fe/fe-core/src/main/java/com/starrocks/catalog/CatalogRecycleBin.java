@@ -618,6 +618,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             Preconditions.checkState(!info.isRecoverable());
             if (finished) {
                 finishedTables.add(info.table.getId());
+                asyncDeleteForTables.remove(info);
             } else if (asyncDeleteForTables.get(info) == null) {
                 // treated as error if task is not running
                 setNextEraseMinTime(info.table.getId(), System.currentTimeMillis() + FAIL_RETRY_INTERVAL);
@@ -683,6 +684,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
             if (finished) {
                 iterator.remove();
+                asyncDeleteForPartitions.remove(partitionInfo);
                 removeRecycleMarkers(partitionId);
 
                 GlobalStateMgr.getCurrentState().getEditLog().logErasePartition(partitionId);
@@ -1063,6 +1065,26 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
             if (tableEntry.get(id) != null) {
                 return tableEntry.get(id);
+            }
+        }
+        return null;
+    }
+
+    @VisibleForTesting
+    synchronized RecycleTableInfo getAsyncDeleteForTables(long id) {
+        for (Map.Entry<RecycleTableInfo, CompletableFuture<Boolean>> entry : asyncDeleteForTables.entrySet()) {
+            if (entry.getKey().getTable().getId() == id) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    @VisibleForTesting
+    synchronized Partition getAsyncDeleteForPartitions(long id) {
+        for (Map.Entry<RecyclePartitionInfo, CompletableFuture<Boolean>> entry : asyncDeleteForPartitions.entrySet()) {
+            if (entry.getKey().getPartition().getId() == id) {
+                return entry.getKey().getPartition();
             }
         }
         return null;
