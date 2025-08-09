@@ -218,6 +218,10 @@ public class SlotRef extends Expr {
         colName = colStr.toString();
     }
 
+    public Boolean isSubField() {
+        return getOriginType().isStructType() && getUsedStructFieldPos() != null && !getUsedStructFieldPos().isEmpty();
+    }
+
     @Override
     public Expr clone() {
         return new SlotRef(this);
