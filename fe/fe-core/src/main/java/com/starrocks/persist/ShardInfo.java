@@ -17,12 +17,8 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.Set;
 
 @Deprecated
@@ -33,13 +29,6 @@ public class ShardInfo implements Writable {
 
     public ShardInfo() {
         this.shardIds = Sets.newHashSet();
-    }
-
-
-
-    public static ShardInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ShardInfo.class);
     }
 
 }

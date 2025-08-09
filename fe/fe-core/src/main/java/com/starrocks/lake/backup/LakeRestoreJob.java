@@ -61,7 +61,6 @@ import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Iterator;
@@ -270,11 +269,6 @@ public class LakeRestoreJob extends RestoreJob {
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, type.name());
         Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    public static LakeRestoreJob read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeRestoreJob.class);
     }
 
     @Override

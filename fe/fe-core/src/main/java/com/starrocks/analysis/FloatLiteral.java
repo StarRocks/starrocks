@@ -43,7 +43,6 @@ import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TFloatLiteral;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -219,17 +218,6 @@ public class FloatLiteral extends LiteralExpr {
     public void write(DataOutput out) throws IOException {
         super.write(out);
         out.writeDouble(value);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = in.readDouble();
-    }
-
-    public static FloatLiteral read(DataInput in) throws IOException {
-        FloatLiteral literal = new FloatLiteral();
-        literal.readFields(in);
-        return literal;
     }
 
     @Override

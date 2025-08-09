@@ -52,7 +52,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.thrift.protocol.TType;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.ZoneId;
@@ -139,9 +138,7 @@ public class SystemTable extends Table {
         throw new UnsupportedOperationException("Do not allow to write SchemaTable to image.");
     }
 
-    public void readFields(DataInput in) throws IOException {
-        throw new UnsupportedOperationException("Do not allow read SchemaTable from image.");
-    }
+
 
     public static Builder builder() {
         return new Builder();

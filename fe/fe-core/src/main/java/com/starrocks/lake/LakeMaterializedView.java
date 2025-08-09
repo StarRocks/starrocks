@@ -36,15 +36,12 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.io.DeepCopy;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -107,12 +104,6 @@ public class LakeMaterializedView extends MaterializedView {
             return null;
         }
         return (MaterializedView) selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
-    }
-
-    public static LakeMaterializedView read(DataInput in) throws IOException {
-        // type is already read in Table
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeMaterializedView.class);
     }
 
     @Override

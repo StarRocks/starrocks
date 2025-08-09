@@ -35,11 +35,7 @@
 package com.starrocks.system;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 /**
  * This the superclass of all kinds of heartbeat response
@@ -100,34 +96,7 @@ public class HeartbeatResponse implements Writable {
         this.isTypeRead = isTypeRead;
     }
 
-    public static HeartbeatResponse read(DataInput in) throws IOException {
-        HeartbeatResponse result = null;
-        Type type = Type.valueOf(Text.readString(in));
-        if (type == Type.FRONTEND) {
-            result = new FrontendHbResponse();
-        } else if (type == Type.BACKEND) {
-            result = new BackendHbResponse();
-        } else if (type == Type.BROKER) {
-            result = new BrokerHbResponse();
-        } else {
-            throw new IOException("Unknown job type: " + type.name());
-        }
 
-        result.setTypeRead(true);
-        result.readFields(in);
-        return result;
-    }
-
-
-
-    public void readFields(DataInput in) throws IOException {
-        if (!isTypeRead) {
-            type = Type.valueOf(Text.readString(in));
-            isTypeRead = true;
-        }
-
-        status = HbStatus.valueOf(Text.readString(in));
-    }
 
     @Override
     public String toString() {

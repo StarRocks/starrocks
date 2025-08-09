@@ -18,12 +18,7 @@
 package com.starrocks.qe;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 /*
  * This class represents an origin statement
@@ -46,13 +41,6 @@ public class OriginStatement implements Writable {
     public OriginStatement(String singleOriginStmt) {
         this(singleOriginStmt, 0);
     }
-
-    public static OriginStatement read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, OriginStatement.class);
-    }
-
-
 
     @Override
     public String toString() {

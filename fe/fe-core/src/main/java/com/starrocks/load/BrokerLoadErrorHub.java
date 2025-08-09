@@ -43,7 +43,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerErrorHubInfo;
 import com.starrocks.thrift.TNetworkAddress;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
@@ -86,16 +85,7 @@ public class BrokerLoadErrorHub extends LoadErrorHub {
             }
         }
 
-        public void readFields(DataInput in) throws IOException {
-            brokerName = Text.readString(in);
-            path = Text.readString(in);
-            int size = in.readInt();
-            for (int i = 0; i < size; i++) {
-                String key = Text.readString(in);
-                String val = Text.readString(in);
-                prop.put(key, val);
-            }
-        }
+
 
         public TBrokerErrorHubInfo toThrift() {
             FsBroker fsBroker = GlobalStateMgr.getCurrentState().getBrokerMgr().getAnyBroker(brokerName);

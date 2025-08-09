@@ -48,10 +48,8 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -217,13 +215,6 @@ public class KafkaProgress extends RoutineLoadProgress {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        int size = in.readInt();
-        partitionIdToOffset = new HashMap<>();
-        for (int i = 0; i < size; i++) {
-            partitionIdToOffset.put(in.readInt(), in.readLong());
-        }
-    }
+
 
 }

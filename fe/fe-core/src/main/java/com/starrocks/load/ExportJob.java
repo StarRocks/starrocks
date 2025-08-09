@@ -118,7 +118,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collections;
@@ -1093,21 +1092,6 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 out.writeInt(entry.first.port);
                 Text.writeString(out, entry.second);
             }
-        }
-
-        public static ExportUpdateInfo read(DataInput input) throws IOException {
-            ExportUpdateInfo info = GsonUtils.GSON.fromJson(Text.readString(input), ExportUpdateInfo.class);
-
-            int snapshotPathsLen = input.readInt();
-            for (int i = 0; i < snapshotPathsLen; i++) {
-                String hostName = Text.readString(input);
-                int port = input.readInt();
-                String path = Text.readString(input);
-                Pair<NetworkAddress, String> entry = Pair.create(new NetworkAddress(hostName, port), path);
-                info.snapshotPaths.set(i, entry);
-            }
-
-            return info;
         }
 
         public List<Pair<NetworkAddress, String>> serialize(List<Pair<TNetworkAddress, String>> snapshotPaths) {

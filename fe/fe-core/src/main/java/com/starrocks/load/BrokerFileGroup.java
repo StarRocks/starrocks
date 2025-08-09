@@ -66,7 +66,6 @@ import com.starrocks.sql.ast.PartitionNames;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -475,80 +474,5 @@ public class BrokerFileGroup implements Writable {
         // src table
         out.writeLong(srcTableId);
         out.writeBoolean(isLoadFromTable);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        tableId = in.readLong();
-        columnSeparator = Text.readString(in);
-        rowDelimiter = Text.readString(in);
-        isNegative = in.readBoolean();
-        // partitionIds
-        {
-            int partSize = in.readInt();
-            if (partSize > 0) {
-                partitionIds = Lists.newArrayList();
-                for (int i = 0; i < partSize; ++i) {
-                    partitionIds.add(in.readLong());
-                }
-            }
-        }
-        // fileFieldName
-        {
-            int fileFieldNameSize = in.readInt();
-            if (fileFieldNameSize > 0) {
-                fileFieldNames = Lists.newArrayList();
-                for (int i = 0; i < fileFieldNameSize; ++i) {
-                    fileFieldNames.add(Text.readString(in));
-                }
-            }
-        }
-        // fileInfos
-        {
-            int size = in.readInt();
-            filePaths = Lists.newArrayList();
-            for (int i = 0; i < size; ++i) {
-                filePaths.add(Text.readString(in));
-            }
-        }
-        // expr column map
-        Map<String, Expr> exprColumnMap = Maps.newHashMap();
-        {
-            int size = in.readInt();
-            for (int i = 0; i < size; ++i) {
-                final String name = Text.readString(in);
-                exprColumnMap.put(name, Expr.readIn(in));
-            }
-        }
-        // file format
-        if (in.readBoolean()) {
-            fileFormat = Text.readString(in);
-        }
-        // src table
-        srcTableId = in.readLong();
-        isLoadFromTable = in.readBoolean();
-
-        // There are no columnExprList in the previous load job which is created before function is supported.
-        // The columnExprList could not be analyzed without origin stmt in the previous load job.
-        // So, the columnExprList need to be merged in here.
-        if (fileFieldNames == null || fileFieldNames.isEmpty()) {
-            return;
-        }
-        // Order of columnExprList: fileFieldNames + columnsFromPath
-        columnExprList = Lists.newArrayList();
-        for (String columnName : fileFieldNames) {
-            columnExprList.add(new ImportColumnDesc(columnName, null));
-        }
-        if (exprColumnMap == null || exprColumnMap.isEmpty()) {
-            return;
-        }
-        for (Map.Entry<String, Expr> columnExpr : exprColumnMap.entrySet()) {
-            columnExprList.add(new ImportColumnDesc(columnExpr.getKey(), columnExpr.getValue()));
-        }
-    }
-
-    public static BrokerFileGroup read(DataInput in) throws IOException {
-        BrokerFileGroup fileGroup = new BrokerFileGroup();
-        fileGroup.readFields(in);
-        return fileGroup;
     }
 }

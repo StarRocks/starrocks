@@ -16,14 +16,9 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TWorkGroupOp;
 import com.starrocks.thrift.TWorkGroupOpType;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 // ResourceGroupEntry is used by EditLog to persist ResourceGroupOp in replicated log
 public class ResourceGroupOpEntry implements Writable {
@@ -35,11 +30,6 @@ public class ResourceGroupOpEntry implements Writable {
     public ResourceGroupOpEntry(TWorkGroupOpType opType, ResourceGroup resourceGroup) {
         this.opType = opType;
         this.resourceGroup = resourceGroup;
-    }
-
-    public static ResourceGroupOpEntry read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ResourceGroupOpEntry.class);
     }
 
     public ResourceGroup getResourceGroup() {
@@ -57,8 +47,6 @@ public class ResourceGroupOpEntry implements Writable {
     public void setOpType(TWorkGroupOpType opType) {
         this.opType = opType;
     }
-
-
 
     public TWorkGroupOp toThrift() {
         TWorkGroupOp op = new TWorkGroupOp();

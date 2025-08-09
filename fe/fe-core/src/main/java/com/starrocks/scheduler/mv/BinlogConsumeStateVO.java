@@ -26,7 +26,6 @@ import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanRange;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -61,12 +60,6 @@ public class BinlogConsumeStateVO implements Writable {
     public Map<BinlogIdVO, BinlogLSNVO> getBinlogMap() {
         return binlogMap;
     }
-
-    public static BinlogConsumeStateVO read(DataInput input) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(input), BinlogConsumeStateVO.class);
-    }
-
-
 
     @Override
     public boolean equals(Object o) {
@@ -108,10 +101,6 @@ public class BinlogConsumeStateVO implements Writable {
 
         public BinlogIdVO(long tabletId) {
             this.tabletId = tabletId;
-        }
-
-        public static BinlogIdVO read(DataInput input) throws IOException {
-            return GsonUtils.GSON.fromJson(Text.readString(input), BinlogIdVO.class);
         }
 
         @Override
@@ -166,11 +155,6 @@ public class BinlogConsumeStateVO implements Writable {
             res.setLsn(lsn);
             res.setVersion(version);
             return res;
-        }
-
-        public static BinlogLSNVO read(DataInput input) throws IOException {
-            String json = Text.readString(input);
-            return GsonUtils.GSON.fromJson(json, BinlogLSNVO.class);
         }
 
         @Override

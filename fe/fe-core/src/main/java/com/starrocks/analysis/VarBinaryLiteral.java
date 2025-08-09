@@ -26,7 +26,6 @@ import com.starrocks.thrift.TBinaryLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -171,16 +170,6 @@ public class VarBinaryLiteral extends LiteralExpr {
         Text.writeBinary(out, value);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = Text.readBinary(in);
-    }
-
-    public static VarBinaryLiteral read(DataInput in) throws IOException {
-        VarBinaryLiteral literal = new VarBinaryLiteral();
-        literal.readFields(in);
-        return literal;
-    }
     @Override
     public boolean equalsWithoutChild(Object obj) {
         if (!(obj instanceof VarBinaryLiteral)) {

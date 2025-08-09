@@ -35,47 +35,29 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ThreadUtil;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
-import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.task.AgentTaskQueue;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -250,51 +232,6 @@ public class RollupJobV2Test extends DDLTestBase {
             }
             retryCount++;
             LOG.info("rollupJob is waiting for JobState retryCount:" + retryCount);
-        }
-    }
-
-    @Test
-    public void testSerializeOfRollupJob() throws IOException,
-                AnalysisException {
-        Config.enable_materialized_view = true;
-        // prepare temporary file
-        File file = File.createTempFile("RollupJobV2Test", ".tmp");
-        file.deleteOnExit();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        short keysCount = 1;
-        List<Column> columns = Lists.newArrayList();
-        String mvColumnName = MVUtils.MATERIALIZED_VIEW_NAME_PREFIX + "bitmap_union_" + "c1";
-        Column column = new Column(mvColumnName, Type.BITMAP, false, AggregateType.BITMAP_UNION, false,
-                    new ColumnDef.DefaultValueDef(true, new StringLiteral("1")), "");
-        columns.add(column);
-        RollupJobV2 rollupJobV2 = new RollupJobV2(1, 1, 1, "test", 1, 1,
-                    1, "test", "rollup", 0, columns, null, 1, 1,
-                    KeysType.AGG_KEYS, keysCount,
-                    new OriginStatement("create materialized view rollup as select bitmap_union(to_bitmap(c1)) from test",
-                                0), "", false);
-
-        // write rollup job
-        rollupJobV2.write(out);
-        out.flush();
-        out.close();
-
-        // read objects from file
-        try (DataInputStream in = new DataInputStream(new FileInputStream(file))) {
-            RollupJobV2 result = (RollupJobV2) AlterJobV2.read(in);
-            List<Column> resultColumns = Deencapsulation.getField(result, "rollupSchema");
-            assertEquals(1, resultColumns.size());
-            Column resultColumn1 = resultColumns.get(0);
-            assertEquals(mvColumnName,
-                        resultColumn1.getName());
-            Assertions.assertTrue(resultColumn1.getDefineExpr() instanceof FunctionCallExpr);
-            FunctionCallExpr resultFunctionCall = (FunctionCallExpr) resultColumn1.getDefineExpr();
-            assertEquals("to_bitmap", resultFunctionCall.getFnName().getFunction());
-        } finally {
-            // Clean up the temporary file
-            if (file.exists()) {
-                file.delete();
-            }
         }
     }
 

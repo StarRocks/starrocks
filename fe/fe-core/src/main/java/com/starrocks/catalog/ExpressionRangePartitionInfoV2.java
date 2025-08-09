@@ -22,12 +22,10 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
@@ -35,7 +33,6 @@ import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -74,10 +71,7 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         this.partitionExprs = partitionExprs;
     }
 
-    public static PartitionInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ExpressionRangePartitionInfoV2.class);
-    }
+
 
     @Override
     public void gsonPreProcess() throws IOException {

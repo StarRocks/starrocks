@@ -21,7 +21,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -49,11 +48,6 @@ public class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
     @Override
     void recover(OlapTable table) throws DdlException {
         RecyclePartitionInfo.recoverRangePartition(table, this);
-    }
-
-    public static RecyclePartitionInfoV2 read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, RecyclePartitionInfoV2.class);
     }
 
     @Override

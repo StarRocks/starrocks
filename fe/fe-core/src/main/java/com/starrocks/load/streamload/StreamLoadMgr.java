@@ -49,7 +49,6 @@ import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -611,30 +610,6 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     public long getStreamLoadTaskCount() {
         return idToStreamLoadTask.size();
-    }
-
-    // for ut
-    public Map<String, StreamLoadTask> getIdToStreamLoadTask() {
-        return idToStreamLoadTask;
-    }
-
-    public static StreamLoadMgr loadStreamLoadManager(DataInput in) throws IOException {
-        int size = in.readInt();
-        long currentMs = System.currentTimeMillis();
-        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
-        streamLoadManager.init();
-        for (int i = 0; i < size; i++) {
-            StreamLoadTask loadTask = StreamLoadTask.read(in);
-            loadTask.init();
-            // discard expired task right away
-            if (loadTask.checkNeedRemove(currentMs, false)) {
-                LOG.info("discard expired task: {}", loadTask.getLabel());
-                continue;
-            }
-
-            streamLoadManager.addLoadTask(loadTask);
-        }
-        return streamLoadManager;
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

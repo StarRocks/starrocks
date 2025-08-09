@@ -50,10 +50,6 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -170,25 +166,6 @@ public class TaskManagerTest {
             LOG.info("SubmitTaskRegularTest is waiting for TaskRunState retryCount:" + retryCount);
         }
         Assertions.assertEquals(Constants.TaskRunState.SUCCESS, state);
-    }
-
-    @Test
-    public void taskSerializeTest() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
-        String submitSQL = "submit task as create table temp as select count(*) as cnt from tbl1";
-        SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, ctx);
-        Task task = TaskBuilder.buildTask(submitTaskStmt, ctx);
-
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
-        task.write(dataOutputStream);
-
-        ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-        DataInputStream dataInputStream = new DataInputStream(inputStream);
-        Task readTask = Task.read(dataInputStream);
-        // upgrade should default task type to manual
-        Assertions.assertEquals(readTask.getType(), Constants.TaskType.MANUAL);
-        Assertions.assertEquals(readTask.getState(), Constants.TaskState.UNKNOWN);
     }
 
     @Test

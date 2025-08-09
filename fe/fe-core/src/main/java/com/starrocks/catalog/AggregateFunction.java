@@ -46,14 +46,12 @@ import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.logging.log4j.util.Strings;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static com.starrocks.common.io.IOUtils.readOptionStringOrNull;
 import static com.starrocks.common.io.IOUtils.writeOptionString;
 
 /**
@@ -418,25 +416,6 @@ public class AggregateFunction extends Function {
         output.writeBoolean(isAnalyticFn);
         output.writeBoolean(isAggregateFn);
         output.writeBoolean(returnsNonNullOnEmpty);
-    }
-
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-
-        if (input.readBoolean()) {
-            intermediateType = ColumnType.read(input);
-        }
-        symbolName = readOptionStringOrNull(input);
-        readOptionStringOrNull(input);
-        readOptionStringOrNull(input);
-        readOptionStringOrNull(input);
-        readOptionStringOrNull(input);
-        readOptionStringOrNull(input);
-        readOptionStringOrNull(input);
-        ignoresDistinct = input.readBoolean();
-        isAnalyticFn = input.readBoolean();
-        isAggregateFn = input.readBoolean();
-        returnsNonNullOnEmpty = input.readBoolean();
     }
 
     @Override

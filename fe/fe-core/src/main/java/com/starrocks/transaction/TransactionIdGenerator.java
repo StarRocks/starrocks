@@ -21,7 +21,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -67,11 +66,7 @@ public class TransactionIdGenerator implements GsonPostProcessable {
         out.writeLong(batchEndId);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        batchEndId = in.readLong();
-        // maybe a little rough
-        nextId = batchEndId;
-    }
+
 
     @Override
     public void gsonPostProcess() throws IOException {

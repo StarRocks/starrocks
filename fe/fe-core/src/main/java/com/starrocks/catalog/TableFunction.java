@@ -30,7 +30,6 @@ import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTableFunction;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -162,14 +161,6 @@ public class TableFunction extends Function {
         super.writeFields(output);
         // 3. write self
         Text.writeString(output, GsonUtils.GSON.toJson(this));
-    }
-
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        final TableFunction tableFunction = GsonUtils.GSON.fromJson(Text.readString(input), TableFunction.class);
-        this.symbolName = tableFunction.symbolName;
-        this.tableFnReturnTypes = tableFunction.getTableFnReturnTypes();
-        this.defaultColumnNames = tableFunction.getDefaultColumnNames();
     }
 
     @Override

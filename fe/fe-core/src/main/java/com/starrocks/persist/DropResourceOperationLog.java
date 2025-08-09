@@ -18,12 +18,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 /**
  * For resource drop
@@ -40,9 +35,4 @@ public class DropResourceOperationLog implements Writable {
         return name;
     }
 
-
-
-    public static DropResourceOperationLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), DropResourceOperationLog.class);
-    }
 }

@@ -35,13 +35,11 @@
 package com.starrocks.persist;
 
 import com.google.common.base.Objects;
-import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
@@ -93,22 +91,6 @@ public class TablePropertyInfo implements Writable {
         for (Map.Entry<String, String> kv : propertyMap.entrySet()) {
             Text.writeString(out, kv.getKey());
             Text.writeString(out, kv.getValue());
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        tableId = in.readLong();
-
-        if (in.readBoolean()) {
-            groupId = GroupId.read(in);
-        }
-
-        int size = in.readInt();
-        propertyMap = Maps.newHashMap();
-        for (int i = 0; i < size; i++) {
-            String key = Text.readString(in);
-            String value = Text.readString(in);
-            propertyMap.put(key, value);
         }
     }
 

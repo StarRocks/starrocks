@@ -51,7 +51,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
-
 public class StringLiteral extends LiteralExpr {
     protected String value;
 

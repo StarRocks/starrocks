@@ -51,7 +51,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -214,11 +213,6 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
         // compatible with old version
         Text.writeString(out, ClusterNamespace.getFullName(db));
         Text.writeString(out, tbl);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        db = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        tbl = Text.readString(in);
     }
 
     @Override

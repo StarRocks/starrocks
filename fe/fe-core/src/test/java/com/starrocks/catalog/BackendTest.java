@@ -46,14 +46,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 
 public class BackendTest {
@@ -128,81 +121,6 @@ public class BackendTest {
         backend.updateDisks(diskInfos);
         Assertions.assertEquals(disk2.getDisk_total_capacity(), backend.getTotalCapacityB());
         Assertions.assertEquals(disk2.getDisk_available_capacity() + 1, backend.getAvailableCapacityB());
-    }
-
-    @Test
-    public void testSerialization() throws Exception {
-        // Write 100 objects to file
-        File file = new File("./backendTest");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-
-        List<Backend> list1 = new LinkedList<Backend>();
-        List<Backend> list2 = new LinkedList<Backend>();
-
-        for (int count = 0; count < 100; ++count) {
-            Backend backend = new Backend(count, "10.120.22.32" + count, 6000 + count);
-            backend.updateOnce(7000 + count, 9000 + count, beRpcPort);
-            list1.add(backend);
-        }
-        for (int count = 100; count < 200; count++) {
-            Backend backend = new Backend(count, "10.120.22.32" + count, 6000 + count);
-            backend.updateOnce(7000 + count, 9000 + count, beRpcPort);
-            list1.add(backend);
-        }
-        for (Backend backend : list1) {
-            backend.write(dos);
-        }
-        dos.flush();
-        dos.close();
-
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        for (int count = 0; count < 100; ++count) {
-            Backend backend = new Backend();
-            backend.readFields(dis);
-            list2.add(backend);
-            Assertions.assertEquals(count, backend.getId());
-            Assertions.assertEquals("10.120.22.32" + count, backend.getHost());
-        }
-
-        for (int count = 100; count < 200; ++count) {
-            Backend backend = Backend.read(dis);
-            list2.add(backend);
-            Assertions.assertEquals(count, backend.getId());
-            Assertions.assertEquals("10.120.22.32" + count, backend.getHost());
-        }
-
-        for (int count = 0; count < 200; count++) {
-            Assertions.assertTrue(list1.get(count).equals(list2.get(count)));
-        }
-        Assertions.assertFalse(list1.get(1).equals(list1.get(2)));
-        Assertions.assertFalse(list1.get(1).equals(this));
-        Assertions.assertTrue(list1.get(1).equals(list1.get(1)));
-
-        Backend back1 = new Backend(1, "a", 1);
-        back1.updateOnce(1, 1, 1);
-        Backend back2 = new Backend(2, "a", 1);
-        back2.updateOnce(1, 1, 1);
-        Assertions.assertFalse(back1.equals(back2));
-
-        back1 = new Backend(1, "a", 1);
-        back1.updateOnce(1, 1, 1);
-        back2 = new Backend(1, "b", 1);
-        back2.updateOnce(1, 1, 1);
-        Assertions.assertFalse(back1.equals(back2));
-
-        back1 = new Backend(1, "a", 1);
-        back1.updateOnce(1, 1, 1);
-        back2 = new Backend(1, "a", 2);
-        back2.updateOnce(1, 1, 1);
-        Assertions.assertFalse(back1.equals(back2));
-
-        Assertions.assertEquals("Backend [id=1, host=a, heartbeatPort=1, alive=true, status=OK]", back1.toString());
-
-        // 3. delete files
-        dis.close();
-        file.delete();
     }
 
     @Test

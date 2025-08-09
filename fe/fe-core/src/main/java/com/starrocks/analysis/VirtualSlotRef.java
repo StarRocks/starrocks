@@ -18,13 +18,10 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import org.apache.commons.collections.CollectionUtils;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -51,12 +48,6 @@ public class VirtualSlotRef extends SlotRef {
         tupleDescriptor = other.tupleDescriptor;
     }
 
-    public static VirtualSlotRef read(DataInput in) throws IOException {
-        VirtualSlotRef virtualSlotRef = new VirtualSlotRef(null, Type.BIGINT, null, new ArrayList<>());
-        virtualSlotRef.readFields(in);
-        return virtualSlotRef;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
@@ -69,17 +60,6 @@ public class VirtualSlotRef extends SlotRef {
             }
         }
 
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        int realSlotsSize = in.readInt();
-        if (realSlotsSize > 0) {
-            for (int i = 0; i < realSlotsSize; i++) {
-                realSlots.add(SlotRef.read(in));
-            }
-        }
     }
 
     public List<Expr> getRealSlots() {

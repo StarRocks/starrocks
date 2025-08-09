@@ -999,15 +999,6 @@ public class RoutineLoadManagerTest {
         Assertions.assertNotNull(leaderLoadManager.getJob(discardJobId));
         Assertions.assertNotNull(leaderLoadManager.getJob(goodJobId));
 
-        // 3. save image & reload
-        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
-        leaderLoadManager.write(pseudoImage.getDataOutputStream());
-        RoutineLoadMgr restartedRoutineLoadManager = new RoutineLoadMgr();
-        restartedRoutineLoadManager.readFields(pseudoImage.getDataInputStream());
-        // discard expired job
-        Assertions.assertNull(restartedRoutineLoadManager.getJob(discardJobId));
-        Assertions.assertNotNull(restartedRoutineLoadManager.getJob(goodJobId));
-
         // 4. clean expire
         leaderLoadManager.cleanOldRoutineLoadJobs();
         // discard expired job

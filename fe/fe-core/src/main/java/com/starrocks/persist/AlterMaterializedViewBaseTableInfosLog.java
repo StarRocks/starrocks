@@ -21,12 +21,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -82,9 +78,4 @@ public class AlterMaterializedViewBaseTableInfosLog implements Writable {
         return baseTableVisibleVersionMap;
     }
 
-
-
-    public static AlterMaterializedViewBaseTableInfosLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), AlterMaterializedViewBaseTableInfosLog.class);
-    }
 }

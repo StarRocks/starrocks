@@ -16,12 +16,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class ModifyColumnCommentLog implements Writable {
 
@@ -57,7 +52,4 @@ public class ModifyColumnCommentLog implements Writable {
         return comment;
     }
 
-    public static ModifyColumnCommentLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), ModifyColumnCommentLog.class);
-    }
 }
