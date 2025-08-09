@@ -901,6 +901,7 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
     }
 
     ColumnPtr column_format = context->get_constant_column(2);
+    RETURN_IF(column_format == nullptr, Status::InvalidArgument("time_slice requires constant parameter"));
     Slice format_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_format);
     auto period_unit = format_slice.to_string();
 
@@ -1465,7 +1466,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format_32(Function
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_64(FunctionContext* context, const Columns& columns) {
-    DCHECK_EQ(columns.size(), 0);
+    RETURN_IF(0 != columns.size(), Status::InvalidArgument("to_unix_for_now requires 0 arguments"));
     int64_t value = context->state()->timestamp_ms() / 1000;
     auto result = Int64Column::create();
     result->append(value);
@@ -1473,7 +1474,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_64(FunctionContext* context, 
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, const Columns& columns) {
-    DCHECK_EQ(columns.size(), 0);
+    RETURN_IF(0 != columns.size(), Status::InvalidArgument("to_unix_for_now requires 0 arguments"));
     int64_t value = context->state()->timestamp_ms() / 1000;
     auto result = Int32Column::create();
     result->append(value);
