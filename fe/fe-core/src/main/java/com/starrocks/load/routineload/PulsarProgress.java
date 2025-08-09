@@ -25,11 +25,9 @@ import com.starrocks.thrift.TPulsarRLTaskProgress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -147,12 +145,5 @@ public class PulsarProgress extends RoutineLoadProgress {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        int size = in.readInt();
-        partitionToBacklogNum = new HashMap<>();
-        for (int i = 0; i < size; i++) {
-            partitionToBacklogNum.put(Text.readString(in), in.readLong());
-        }
-    }
+
 }

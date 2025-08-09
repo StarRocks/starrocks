@@ -60,8 +60,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedInputStream;
-import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -119,12 +117,6 @@ public class SmallFileMgr implements Writable {
             this.isContent = isContent;
         }
 
-        public static SmallFile read(DataInput in) throws IOException {
-            SmallFile smallFile = new SmallFile();
-            smallFile.readFields(in);
-            return smallFile;
-        }
-
         public byte[] getContentBytes() {
             if (!isContent) {
                 return null;
@@ -144,16 +136,6 @@ public class SmallFileMgr implements Writable {
             out.writeBoolean(isContent);
         }
 
-        public void readFields(DataInput in) throws IOException {
-            dbId = in.readLong();
-            catalog = Text.readString(in);
-            name = Text.readString(in);
-            id = in.readLong();
-            content = Text.readString(in);
-            size = in.readLong();
-            md5 = Text.readString(in);
-            isContent = in.readBoolean();
-        }
     }
 
     public static class SmallFiles {
@@ -524,32 +506,12 @@ public class SmallFileMgr implements Writable {
         return infos;
     }
 
-    public static SmallFileMgr read(DataInput in) throws IOException {
-        SmallFileMgr mgr = new SmallFileMgr();
-        mgr.readFields(in);
-        return mgr;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeInt(idToFiles.size());
         for (SmallFile smallFile : idToFiles.values()) {
             smallFile.write(out);
         }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            SmallFile smallFile = SmallFile.read(in);
-            putToFiles(smallFile);
-        }
-    }
-
-    public long loadSmallFiles(DataInputStream in, long checksum) throws IOException {
-        readFields(in);
-        LOG.info("finished replay smallFiles from image");
-        return checksum;
     }
 
     public void loadSmallFilesV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {

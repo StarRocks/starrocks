@@ -45,7 +45,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -99,7 +98,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -1023,10 +1021,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
     }
 
-    public static MaterializedView read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, MaterializedView.class);
-    }
+
 
     @Override
     public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {

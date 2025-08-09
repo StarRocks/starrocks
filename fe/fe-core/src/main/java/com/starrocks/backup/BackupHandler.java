@@ -92,7 +92,6 @@ import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.File;
 import java.io.IOException;
@@ -833,12 +832,6 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         return false;
     }
 
-    public static BackupHandler read(DataInput in) throws IOException {
-        BackupHandler backupHandler = new BackupHandler();
-        backupHandler.readFields(in);
-        return backupHandler;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         repoMgr.write(out);
@@ -847,23 +840,6 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
             job.write(out);
         }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        repoMgr = RepositoryMgr.read(in);
-
-        long currentTimeMs = System.currentTimeMillis();
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            AbstractJob job = AbstractJob.read(in);
-            if (isJobExpired(job, currentTimeMs)) {
-                LOG.warn("skip expired job {}", job);
-                continue;
-            }
-            dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
-            mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
-        }
-        LOG.info("finished replay {} backup/store jobs from image", dbIdToBackupOrRestoreJob.size());
     }
 
     public void saveBackupHandlerV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

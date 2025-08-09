@@ -59,7 +59,6 @@ import com.starrocks.transaction.TransactionStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -548,25 +547,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        serviceUrl = Text.readString(in);
-        topic = Text.readString(in);
-        subscription = Text.readString(in);
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            customPulsarPartitions.add(Text.readString(in));
-        }
 
-        int count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            String propertyKey = Text.readString(in);
-            String propertyValue = Text.readString(in);
-            if (propertyKey.startsWith("property.")) {
-                this.customProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
-            }
-        }
-    }
 
     @Override
     public void modifyDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties) throws DdlException {

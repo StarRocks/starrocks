@@ -82,7 +82,6 @@ import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -1519,20 +1518,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         Text.writeString(out, GsonUtils.GSON.toJson(this));
         out.writeLong(loadId.getHi());
         out.writeLong(loadId.getLo());
-    }
-
-    public static StreamLoadTask read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        StreamLoadTask task = GsonUtils.GSON.fromJson(json, StreamLoadTask.class);
-        long hi = in.readLong();
-        long lo = in.readLong();
-        TUniqueId loadId = new TUniqueId(hi, lo);
-        task.init();
-        task.setTUniqueId(loadId);
-        // Only task which type is PARALLEL will be persisted
-        // just set type to PARALLEL
-        task.setType(Type.PARALLEL_STREAM_LOAD);
-        return task;
     }
 
     @Override

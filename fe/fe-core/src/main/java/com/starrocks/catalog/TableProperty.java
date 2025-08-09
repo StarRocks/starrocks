@@ -49,7 +49,6 @@ import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -57,7 +56,6 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -72,7 +70,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -1200,12 +1197,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public boolean getUseFastSchemaEvolution() {
         return useFastSchemaEvolution;
-    }
-
-
-
-    public static TableProperty read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), TableProperty.class);
     }
 
     @Override

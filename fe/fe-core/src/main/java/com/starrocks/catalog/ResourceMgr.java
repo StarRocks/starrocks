@@ -39,14 +39,12 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.ImageWriter;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -62,7 +60,6 @@ import com.starrocks.sql.ast.DropResourceStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
@@ -309,13 +306,6 @@ public class ResourceMgr implements Writable {
 
     public ResourceProcNode getProcNode() {
         return procNode;
-    }
-
-
-
-    public static ResourceMgr read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ResourceMgr.class);
     }
 
     public class ResourceProcNode implements ProcNodeInterface {

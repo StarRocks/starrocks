@@ -110,7 +110,6 @@ import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -1808,21 +1807,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return false;
     }
 
-    public static RoutineLoadJob read(DataInput in) throws IOException {
-        RoutineLoadJob job = null;
-        LoadDataSourceType type = LoadDataSourceType.valueOf(Text.readString(in));
-        if (type == LoadDataSourceType.KAFKA) {
-            job = new KafkaRoutineLoadJob();
-        } else if (type == LoadDataSourceType.PULSAR) {
-            job = new PulsarRoutineLoadJob();
-        } else {
-            throw new IOException("Unknown load data source type: " + type.name());
-        }
 
-        job.setTypeRead(true);
-        job.readFields(in);
-        return job;
-    }
 
     @Override
     public void write(DataOutput out) throws IOException {
@@ -1870,75 +1855,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        if (!isTypeRead) {
-            dataSourceType = LoadDataSourceType.valueOf(Text.readString(in));
-            isTypeRead = true;
-        }
 
-        id = in.readLong();
-        name = Text.readString(in);
-
-        // ignore the clusterName param
-        Text.readString(in);
-
-        dbId = in.readLong();
-        tableId = in.readLong();
-        desireTaskConcurrentNum = in.readInt();
-        state = JobState.valueOf(Text.readString(in));
-        maxErrorNum = in.readLong();
-        taskSchedIntervalS = in.readLong();
-        maxBatchRows = in.readLong();
-        maxBatchSizeBytes = in.readLong();
-
-        switch (dataSourceType) {
-            case KAFKA: {
-                progress = new KafkaProgress();
-                timestampProgress = new KafkaProgress();
-                progress.readFields(in);
-                break;
-            }
-            case PULSAR: {
-                progress = new PulsarProgress();
-                progress.readFields(in);
-                break;
-            }
-            default:
-                throw new IOException("unknown data source type: " + dataSourceType);
-        }
-
-        createTimestamp = in.readLong();
-        pauseTimestamp = in.readLong();
-        endTimestamp = in.readLong();
-
-        currentErrorRows = in.readLong();
-        currentTotalRows = in.readLong();
-        errorRows = in.readLong();
-        totalRows = in.readLong();
-        unselectedRows = in.readLong();
-        receivedBytes = in.readLong();
-        totalTaskExcutionTimeMs = in.readLong();
-        committedTaskNum = in.readLong();
-        abortedTaskNum = in.readLong();
-
-        origStmt = OriginStatement.read(in);
-
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String key = Text.readString(in);
-            String value = Text.readString(in);
-            jobProperties.put(key, value);
-        }
-
-        size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String key = Text.readString(in);
-            String value = Text.readString(in);
-            sessionVariables.put(key, value);
-        }
-
-        setRoutineLoadDesc(CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables));
-    }
 
     public void modifyJob(RoutineLoadDesc routineLoadDesc,
                           Map<String, String> jobProperties,
