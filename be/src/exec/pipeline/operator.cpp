@@ -27,6 +27,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
+#include "service/backend_options.h"
 #include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 

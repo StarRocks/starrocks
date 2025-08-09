@@ -17,92 +17,14 @@
 
 #pragma once
 
-#include <type_traits>
-#include <utility>
-#include <variant>
-
-#include "column/hash_set.h"
 #include "exec/aggregate/agg_hash_map.h"
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_profile.h"
 #include "types/logical_type.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
 enum AggrPhase { AggrPhase1, AggrPhase2 };
-
-#define APPLY_FOR_AGG_VARIANT_ALL(M) \
-    M(phase1_uint8)                  \
-    M(phase1_int8)                   \
-    M(phase1_int16)                  \
-    M(phase1_int32)                  \
-    M(phase1_int64)                  \
-    M(phase1_int128)                 \
-    M(phase1_decimal32)              \
-    M(phase1_decimal64)              \
-    M(phase1_decimal128)             \
-    M(phase1_decimal256)             \
-    M(phase1_date)                   \
-    M(phase1_timestamp)              \
-    M(phase1_string)                 \
-    M(phase1_slice)                  \
-    M(phase1_null_uint8)             \
-    M(phase1_null_int8)              \
-    M(phase1_null_int16)             \
-    M(phase1_null_int32)             \
-    M(phase1_null_int64)             \
-    M(phase1_null_int128)            \
-    M(phase1_null_decimal32)         \
-    M(phase1_null_decimal64)         \
-    M(phase1_null_decimal128)        \
-    M(phase1_null_decimal256)        \
-    M(phase1_null_date)              \
-    M(phase1_null_timestamp)         \
-    M(phase1_null_string)            \
-    M(phase1_slice_two_level)        \
-    M(phase1_int32_two_level)        \
-    M(phase1_null_string_two_level)  \
-    M(phase1_string_two_level)       \
-                                     \
-    M(phase2_uint8)                  \
-    M(phase2_int8)                   \
-    M(phase2_int16)                  \
-    M(phase2_int32)                  \
-    M(phase2_int64)                  \
-    M(phase2_int128)                 \
-    M(phase2_decimal32)              \
-    M(phase2_decimal64)              \
-    M(phase2_decimal128)             \
-    M(phase2_decimal256)             \
-    M(phase2_date)                   \
-    M(phase2_timestamp)              \
-    M(phase2_string)                 \
-    M(phase2_slice)                  \
-    M(phase2_null_uint8)             \
-    M(phase2_null_int8)              \
-    M(phase2_null_int16)             \
-    M(phase2_null_int32)             \
-    M(phase2_null_int64)             \
-    M(phase2_null_int128)            \
-    M(phase2_null_decimal32)         \
-    M(phase2_null_decimal64)         \
-    M(phase2_null_decimal128)        \
-    M(phase2_null_decimal256)        \
-    M(phase2_null_date)              \
-    M(phase2_null_timestamp)         \
-    M(phase2_null_string)            \
-    M(phase2_slice_two_level)        \
-    M(phase2_int32_two_level)        \
-    M(phase2_null_string_two_level)  \
-    M(phase2_string_two_level)       \
-                                     \
-    M(phase1_slice_fx4)              \
-    M(phase1_slice_fx8)              \
-    M(phase1_slice_fx16)             \
-    M(phase2_slice_fx4)              \
-    M(phase2_slice_fx8)              \
-    M(phase2_slice_fx16)
 
 // Aggregate Hash maps
 
@@ -187,6 +109,16 @@ using SerializedKeyFixedSize8AggHashMap = AggHashMapWithSerializedKeyFixedSize<F
 template <PhmapSeed seed>
 using SerializedKeyFixedSize16AggHashMap = AggHashMapWithSerializedKeyFixedSize<FixedSize16SliceAggHashMap<seed>>;
 
+// fixed compress key
+template <PhmapSeed seed>
+using CompressedFixedSize1AggHashMap = AggHashMapWithCompressedKeyFixedSize<Int8AggHashMap<seed>>;
+template <PhmapSeed seed>
+using CompressedFixedSize4AggHashMap = AggHashMapWithCompressedKeyFixedSize<Int32AggHashMap<seed>>;
+template <PhmapSeed seed>
+using CompressedFixedSize8AggHashMap = AggHashMapWithCompressedKeyFixedSize<Int64AggHashMap<seed>>;
+template <PhmapSeed seed>
+using CompressedFixedSize16AggHashMap = AggHashMapWithCompressedKeyFixedSize<Int128AggHashMap<seed>>;
+
 // Hash sets
 //
 template <PhmapSeed seed>
@@ -270,6 +202,15 @@ using SerializedKeyAggHashSetFixedSize8 = AggHashSetOfSerializedKeyFixedSize<Fix
 template <PhmapSeed seed>
 using SerializedKeyAggHashSetFixedSize16 = AggHashSetOfSerializedKeyFixedSize<FixedSize16SliceAggHashSet<seed>>;
 
+template <PhmapSeed seed>
+using CompressedAggHashSetFixedSize1 = AggHashSetCompressedFixedSize<Int8AggHashSet<seed>>;
+template <PhmapSeed seed>
+using CompressedAggHashSetFixedSize4 = AggHashSetCompressedFixedSize<Int32AggHashSet<seed>>;
+template <PhmapSeed seed>
+using CompressedAggHashSetFixedSize8 = AggHashSetCompressedFixedSize<Int64AggHashSet<seed>>;
+template <PhmapSeed seed>
+using CompressedAggHashSetFixedSize16 = AggHashSetCompressedFixedSize<Int128AggHashSet<seed>>;
+
 // aggregate key
 template <class HashMapWithKey>
 struct CombinedFixedSizeKey {
@@ -293,6 +234,24 @@ static_assert(is_combined_fixed_size_key<SerializedKeyFixedSize4AggHashMap<Phmap
 static_assert(!is_combined_fixed_size_key<Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed1>>);
 static_assert(is_combined_fixed_size_key<SerializedKeyAggHashSetFixedSize4<PhmapSeed1>>);
 static_assert(!is_combined_fixed_size_key<Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>>);
+
+template <class HashMapWithKey>
+struct CompressedFixedSizeKey {
+    static auto constexpr value = false;
+};
+
+template <typename HashMap>
+struct CompressedFixedSizeKey<AggHashMapWithCompressedKeyFixedSize<HashMap>> {
+    static auto constexpr value = true;
+};
+
+template <typename HashSet>
+struct CompressedFixedSizeKey<AggHashSetCompressedFixedSize<HashSet>> {
+    static auto constexpr value = true;
+};
+
+template <typename HashMapOrSetWithKey>
+inline constexpr bool is_compressed_fixed_size_key = CompressedFixedSizeKey<HashMapOrSetWithKey>::value;
 
 // 1) For different group by columns type, size, cardinality, volume, we should choose different
 // hash functions and different hashmaps.
@@ -341,6 +300,10 @@ using AggHashMapWithKeyPtr = std::variant<
         std::unique_ptr<SerializedKeyFixedSize4AggHashMap<PhmapSeed1>>,
         std::unique_ptr<SerializedKeyFixedSize8AggHashMap<PhmapSeed1>>,
         std::unique_ptr<SerializedKeyFixedSize16AggHashMap<PhmapSeed1>>,
+        std::unique_ptr<CompressedFixedSize1AggHashMap<PhmapSeed1>>,
+        std::unique_ptr<CompressedFixedSize4AggHashMap<PhmapSeed1>>,
+        std::unique_ptr<CompressedFixedSize8AggHashMap<PhmapSeed1>>,
+        std::unique_ptr<CompressedFixedSize16AggHashMap<PhmapSeed1>>,
         std::unique_ptr<UInt8AggHashMapWithOneNumberKey<PhmapSeed2>>,
         std::unique_ptr<Int8AggHashMapWithOneNumberKey<PhmapSeed2>>,
         std::unique_ptr<Int16AggHashMapWithOneNumberKey<PhmapSeed2>>,
@@ -373,7 +336,11 @@ using AggHashMapWithKeyPtr = std::variant<
         std::unique_ptr<NullOneStringTwoLevelAggHashMap<PhmapSeed2>>,
         std::unique_ptr<SerializedKeyFixedSize4AggHashMap<PhmapSeed2>>,
         std::unique_ptr<SerializedKeyFixedSize8AggHashMap<PhmapSeed2>>,
-        std::unique_ptr<SerializedKeyFixedSize16AggHashMap<PhmapSeed2>>>;
+        std::unique_ptr<SerializedKeyFixedSize16AggHashMap<PhmapSeed2>>,
+        std::unique_ptr<CompressedFixedSize1AggHashMap<PhmapSeed2>>,
+        std::unique_ptr<CompressedFixedSize4AggHashMap<PhmapSeed2>>,
+        std::unique_ptr<CompressedFixedSize8AggHashMap<PhmapSeed2>>,
+        std::unique_ptr<CompressedFixedSize16AggHashMap<PhmapSeed2>>>;
 
 using AggHashSetWithKeyPtr = std::variant<
         std::unique_ptr<UInt8AggHashSetOfOneNumberKey<PhmapSeed1>>,
@@ -441,7 +408,16 @@ using AggHashSetWithKeyPtr = std::variant<
         std::unique_ptr<SerializedKeyAggHashSetFixedSize16<PhmapSeed1>>,
         std::unique_ptr<SerializedKeyAggHashSetFixedSize4<PhmapSeed2>>,
         std::unique_ptr<SerializedKeyAggHashSetFixedSize8<PhmapSeed2>>,
-        std::unique_ptr<SerializedKeyAggHashSetFixedSize16<PhmapSeed2>>>;
+        std::unique_ptr<SerializedKeyAggHashSetFixedSize16<PhmapSeed2>>,
+
+        std::unique_ptr<CompressedAggHashSetFixedSize1<PhmapSeed1>>,
+        std::unique_ptr<CompressedAggHashSetFixedSize4<PhmapSeed1>>,
+        std::unique_ptr<CompressedAggHashSetFixedSize8<PhmapSeed1>>,
+        std::unique_ptr<CompressedAggHashSetFixedSize16<PhmapSeed1>>,
+        std::unique_ptr<CompressedAggHashSetFixedSize1<PhmapSeed2>>,
+        std::unique_ptr<CompressedAggHashSetFixedSize4<PhmapSeed2>>,
+        std::unique_ptr<CompressedAggHashSetFixedSize8<PhmapSeed2>>,
+        std::unique_ptr<CompressedAggHashSetFixedSize16<PhmapSeed2>>>;
 } // namespace detail
 struct AggHashMapVariant {
     enum class Type {
@@ -481,6 +457,11 @@ struct AggHashMapVariant {
         phase1_slice_fx8,
         phase1_slice_fx16,
 
+        phase1_slice_cx1,
+        phase1_slice_cx4,
+        phase1_slice_cx8,
+        phase1_slice_cx16,
+
         phase2_uint8,
         phase2_int8,
         phase2_int16,
@@ -517,6 +498,10 @@ struct AggHashMapVariant {
         phase2_slice_fx8,
         phase2_slice_fx16,
 
+        phase2_slice_cx1,
+        phase2_slice_cx4,
+        phase2_slice_cx8,
+        phase2_slice_cx16,
     };
 
     detail::AggHashMapWithKeyPtr hash_map_with_key;
@@ -630,6 +615,14 @@ struct AggHashSetVariant {
         phase2_slice_fx8,
         phase2_slice_fx16,
 
+        phase1_slice_cx1,
+        phase1_slice_cx4,
+        phase1_slice_cx8,
+        phase1_slice_cx16,
+        phase2_slice_cx1,
+        phase2_slice_cx4,
+        phase2_slice_cx8,
+        phase2_slice_cx16,
     };
 
     detail::AggHashSetWithKeyPtr hash_set_with_key;
