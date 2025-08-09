@@ -831,6 +831,9 @@ function: wait_min_max_stat_ready('c24','all_t1')
 -- result:
 
 -- !result
+set group_concat_max_len=65535;
+-- result:
+-- !result
 WITH result AS (
     SELECT c1, COUNT(*) AS cnt FROM all_t0 GROUP BY c1 ORDER BY c1 LIMIT 100
 ) SELECT 'Test Case 1' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
