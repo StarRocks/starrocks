@@ -57,8 +57,10 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
+import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.ha.FrontendNodeType;
@@ -101,6 +103,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.opentest4j.AssertionFailedError;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -545,7 +548,8 @@ public abstract class StarRocksHttpTestCase {
             }
         };
 
-        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", "", 0);
+        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", InetAddress.getLocalHost().getHostAddress(), 0);
+        frontend.setAlive(true);
         new Expectations(nodeMgr) {
             {
                 nodeMgr.getClusterInfo();
@@ -555,6 +559,14 @@ public abstract class StarRocksHttpTestCase {
                 nodeMgr.getMySelf();
                 minTimes = 0;
                 result = frontend;
+
+                nodeMgr.getAllFrontends();
+                minTimes = 0;
+                result = Lists.newArrayList(frontend);
+
+                nodeMgr.getSelfNode();
+                minTimes = 0;
+                result = new Pair<>(frontend.getHost(),  Config.http_port);
             }
         };
 
