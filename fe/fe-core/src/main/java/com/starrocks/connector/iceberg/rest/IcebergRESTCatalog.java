@@ -34,6 +34,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
@@ -293,6 +294,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             Schema schema,
             PartitionSpec partitionSpec,
             String location,
+            SortOrder sortOrder,
             Map<String, String> properties) {
 
         Table nativeTable = null;
@@ -301,6 +303,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                             TableIdentifier.of(convertDbNameToNamespace(dbName), tableName), schema)
                     .withLocation(location)
                     .withPartitionSpec(partitionSpec)
+                    .withSortOrder(sortOrder)
                     .withProperties(properties)
                     .create();
         } catch (RESTException re) {

@@ -141,6 +141,19 @@ public class OrderByElement implements ParseNode {
         return pos;
     }
 
+    /**
+     * Try to extract the column name from the `expr`.
+     * If the `expr` represents a valid column, the column name will be returned.
+     * Otherwise, it will return null.
+     */
+    public String castAsSlotRef() {
+        if (!(expr instanceof SlotRef)) {
+            return null;
+        }
+        SlotRef slotRef = (SlotRef) expr;
+        return slotRef.getColumnName();
+    }
+
     public String explain() {
         StringBuilder strBuilder = new StringBuilder();
         strBuilder.append(expr.explain());

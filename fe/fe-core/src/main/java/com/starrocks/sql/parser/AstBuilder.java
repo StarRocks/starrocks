@@ -852,10 +852,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     context.rollupDesc() == null ?
                             null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()),
                     context.orderByDesc() == null ? null :
-                            visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                                    .stream().map(Identifier::getValue).collect(toList()),
+                            visit(context.orderByDesc().sortItem(), OrderByElement.class),
                     NodePosition.ZERO);
-
         }
 
         return new CreateTableStmt(
@@ -877,8 +875,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.rollupDesc() == null ?
                         null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()),
                 context.orderByDesc() == null ? null :
-                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                                .stream().map(Identifier::getValue).collect(toList()));
+                        visit(context.orderByDesc().sortItem(), OrderByElement.class)
+        );
     }
 
     private PartitionDesc generateMulitListPartitionDesc(StarRocksParser.PartitionDescContext context,
@@ -1236,8 +1234,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                             ((StringLiteral) visit(context.comment().string())).getStringValue(),
                     null,
                     context.orderByDesc() == null ? null :
-                            visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                                    .stream().map(Identifier::getValue).collect(toList())
+                            visit(context.orderByDesc().sortItem(), OrderByElement.class)
             );
 
             List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
@@ -1265,8 +1262,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         ((StringLiteral) visit(context.comment().string())).getStringValue(),
                 null,
                 context.orderByDesc() == null ? null :
-                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                                .stream().map(Identifier::getValue).collect(toList())
+                        visit(context.orderByDesc().sortItem(), OrderByElement.class)
         );
 
         List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
@@ -2030,7 +2026,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Map<String, String> properties = new HashMap<>();
         List<Expr> partitionByExprs = null;
         DistributionDesc distributionDesc = null;
-        List<String> sortKeys = null;
+        List<OrderByElement> orderByElements = null;
 
         for (StarRocksParser.MaterializedViewDescContext desc : ListUtils.emptyIfNull(context.materializedViewDesc())) {
             NodePosition clausePos = createPos(desc);
@@ -2090,8 +2086,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
             // Order By
             if (desc.orderByDesc() != null) {
-                sortKeys = visit(desc.orderByDesc().identifierList().identifier(), Identifier.class)
-                        .stream().map(Identifier::getValue).collect(toList());
+                orderByElements = visit(desc.orderByDesc().sortItem(), OrderByElement.class);
             }
         }
 
@@ -2130,7 +2125,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 comment,
                 refreshSchemeDesc,
-                partitionByExprs, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex, queryStopIndex,
+                partitionByExprs, distributionDesc, orderByElements, properties, queryStatement, queryStartIndex, queryStopIndex,
                 currentDBName,
                 createPos(context));
     }
@@ -4786,9 +4781,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), null),
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
-                context.orderByDesc() == null ? null :
-                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                                .stream().map(Identifier::getValue).collect(toList()),
+                context.orderByDesc() == null ? null : visit(context.orderByDesc().sortItem(), OrderByElement.class),
                 context.partitionNames() == null ? null : (PartitionNames) visit(context.partitionNames()),
                 context.optimizeRange() == null ? null : (OptimizeRange) visit(context.optimizeRange()),
                 createPos(context));
