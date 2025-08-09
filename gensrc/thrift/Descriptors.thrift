@@ -629,6 +629,14 @@ struct TJDBCTable {
     8: optional string jdbc_passwd
 }
 
+struct TRedisTable {
+    1: optional string redis_url
+    2: optional string redis_user
+    3: optional string redis_passwd
+    4: optional string value_data_format
+    5: optional string table_description_dir
+}
+
 // "Union" of all table types.
 struct TTableDescriptor {
   1: required Types.TTableId id
@@ -668,6 +676,9 @@ struct TTableDescriptor {
 
   // Paimon Table schema
   36: optional TPaimonTable paimonTable
+
+  // Redis Table schema
+  37: optional TRedisTable redisTable
 }
 
 struct TDescriptorTable {
