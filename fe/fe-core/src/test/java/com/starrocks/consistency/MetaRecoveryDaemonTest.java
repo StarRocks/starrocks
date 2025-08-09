@@ -23,7 +23,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -89,8 +88,7 @@ public class MetaRecoveryDaemonTest {
         partition.getDefaultPhysicalPartition().setNextVersion(2L);
 
         for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
-            backend.getBackendStatus().lastSuccessReportTabletsTime = TimeUtils
-                    .longToTimeString(System.currentTimeMillis());
+            backend.setLastSuccessReportTabletsTime(System.currentTimeMillis());
         }
 
         // add a committed txn
@@ -176,8 +174,7 @@ public class MetaRecoveryDaemonTest {
         long timeMs = System.currentTimeMillis();
         MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
         for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
-            backend.getBackendStatus().lastSuccessReportTabletsTime = TimeUtils
-                    .longToTimeString(timeMs);
+            backend.setLastSuccessReportTabletsTime(timeMs);
         }
         Assertions.assertFalse(metaRecoveryDaemon.checkTabletReportCacheUp(timeMs + 1000L));
         Assertions.assertTrue(metaRecoveryDaemon.checkTabletReportCacheUp(timeMs - 1000L));

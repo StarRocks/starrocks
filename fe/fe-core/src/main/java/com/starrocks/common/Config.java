@@ -1547,6 +1547,12 @@ public class Config extends ConfigBase {
     public static int tablet_collect_timeout_seconds = 60;
 
     /**
+     * Usually the backend will report its tablets status every 10 seconds.
+     */
+    @ConfField(mutable = true, comment = "Max tolerant period for a Backend node not reporting its tablets status." +
+            "The Backend node will be put into non-alive status otherwise.")
+    public static long backend_report_tablets_max_tolerant_seconds = 3600 * 2;
+    /**
      * The tryLock timeout configuration of globalStateMgr lock.
      * Normally it does not need to change, unless you need to test something.
      */

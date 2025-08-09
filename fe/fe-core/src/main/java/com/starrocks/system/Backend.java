@@ -40,13 +40,17 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -91,8 +95,7 @@ public class Backend extends ComputeNode {
     // this field is set by tablet report, and just for metric monitor, no need to persist.
     private volatile long tabletMaxCompactionScore = 0;
 
-    // additional backendStatus information for BE, display in JSON format
-    private final BackendStatus backendStatus = new BackendStatus();
+    private long lastSuccessReportTabletsTimeMs = -1;
 
     public Backend() {
         super();
@@ -389,8 +392,12 @@ public class Backend extends ComputeNode {
         }
     }
 
-    public BackendStatus getBackendStatus() {
-        return backendStatus;
+    public void setLastSuccessReportTabletsTime(long lastSuccessReportTabletsTimeMs) {
+        this.lastSuccessReportTabletsTimeMs = lastSuccessReportTabletsTimeMs;
+    }
+
+    public long getLastSuccessReportTabletsTime() {
+        return lastSuccessReportTabletsTimeMs;
     }
 
     @Override
@@ -503,6 +510,26 @@ public class Backend extends ComputeNode {
                 .stream()
                 .anyMatch(diskInfo -> (pathHash == diskInfo.getPathHash())
                         && diskInfo.getState() == DiskState.DECOMMISSIONED);
+    }
+
+    @Override
+    public boolean isReportTabletsSuccessfulRecently() {
+        if (RunMode.isSharedDataMode()) {
+            // skip the check in shared data mode
+            return true;
+        }
+        if (lastSuccessReportTabletsTimeMs == -1) {
+            // skip the check if never reported before.
+            return true;
+        }
+        return lastSuccessReportTabletsTimeMs + Config.backend_report_tablets_max_tolerant_seconds >=
+                System.currentTimeMillis();
+    }
+
+    public String getBackendStatusJson() {
+        BackendStatus status = new BackendStatus();
+        status.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(this.lastSuccessReportTabletsTimeMs);
+        return new Gson().toJson(status);
     }
 
     /**
