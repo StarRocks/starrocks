@@ -934,6 +934,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN = "enable_multi_cast_limit_push_down";
 
+    public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1906,6 +1908,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //                Fragment-1                                    Fragment-1
     @VarAttr(name = ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableMultiCastLimitPushDown = true;
+
+    @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
+    public boolean enableDropTableCheckMvDependency = false;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5167,6 +5172,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableJSONV2Rewrite(boolean enableJSONV2Rewrite) {
         this.cboJSONV2Rewrite = enableJSONV2Rewrite;
+    }
+  
+    public boolean isEnableDropTableCheckMvDependency() {
+        return enableDropTableCheckMvDependency;
+    }
+
+    public void setEnableDropTableCheckMvDependency(boolean enableDropTableCheckMvDependency) {
+        this.enableDropTableCheckMvDependency = enableDropTableCheckMvDependency;
     }
 
     // Serialize to thrift object
