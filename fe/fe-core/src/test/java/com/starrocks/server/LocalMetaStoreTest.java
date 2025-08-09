@@ -51,6 +51,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
@@ -128,6 +129,14 @@ public class LocalMetaStoreTest {
             public MvPlanContext optimize(MaterializedView mv,
                                           ConnectContext connectContext) {
                 return null;
+            }
+        };
+
+        // Mock the cacheMaterializedView method to avoid actual caching in the background
+        new MockUp<CachingMvPlanContextBuilder>() {
+            @Mock
+            public void cacheMaterializedView(MaterializedView mv) {
+                // Do nothing to avoid actual caching
             }
         };
 
