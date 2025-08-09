@@ -401,8 +401,10 @@ public class QueryStatisticsInfo {
     public static String getExecProgress(String feIp, String queryId, HttpClient httpClient) {
         String result = "";
         try {
-            String url = String.format("http://%s:%s/api/query/progress?query_id=%s",
-                    feIp, Config.http_port, queryId);
+            String protocol = Config.enable_https ? "https" : "http";
+            int port = Config.enable_https ? Config.https_port : Config.http_port;
+            String url = String.format("%s://%s:%s/api/query/progress?query_id=%s",
+                    protocol, feIp, port, queryId);
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .GET()

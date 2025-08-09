@@ -36,6 +36,7 @@ package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.ActionController;
@@ -266,7 +267,8 @@ public class MetaService {
                 imageFormatVersion = ImageFormatVersion.valueOf(formatStr);
             }
 
-            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(machine, Integer.parseInt(portStr)) + 
+            String protocol = Config.enable_https ? "https" : "http";
+            String url = protocol + "://" + NetUtils.getHostPortInAccessibleFormat(machine, Integer.parseInt(portStr)) + 
                     "/image?version=" + versionStr
                     + "&subdir=" + subDirStr
                     + "&image_format_version=" + imageFormatVersion;
