@@ -111,6 +111,13 @@ public:
     DEFINE_VECTORIZED_FN(json_exists);
 
     /**
+     * @param: [json_object, json_value]
+     * @paramType: [JsonColumn, JsonColumn]
+     * @return: BooleanColumn
+     */
+    DEFINE_VECTORIZED_FN(json_contains);
+
+    /**
      * Build json object from json values
      * @param: [field_name, field_value, ...]
      * @paramType: [JsonColumn, JsonColumn, ...]
@@ -233,6 +240,9 @@ private:
 
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
                                     std::vector<SimpleJsonPath>* parsed_paths);
+
+    // Helper function to check if target JSON contains candidate JSON
+    static bool json_value_contains(JsonValue* target, JsonValue* candidate);
 };
 
 } // namespace starrocks
