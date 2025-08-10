@@ -446,7 +446,7 @@ public class ListPartitionPrunerTest {
 
         ListPartitionPruner pruner =
                 new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
-        Assert.assertEquals(Lists.newArrayList(1L), pruner.prune());
+        Assertions.assertEquals(Lists.newArrayList(1L), pruner.prune());
     }
 
     @Test
