@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -49,11 +50,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnRenameClause;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
->>>>>>> 0673fc3b8f ([UT] skip caching mv plan in the background (#61750))
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -125,16 +122,6 @@ public class LocalMetaStoreTest {
 
     @Test
     public void testGetPartitionIdToStorageMediumMap() throws Exception {
-<<<<<<< HEAD
-=======
-        new MockUp<MaterializedViewOptimizer>() {
-            @Mock
-            public MvPlanContext optimize(MaterializedView mv,
-                                          ConnectContext connectContext) {
-                return null;
-            }
-        };
-
         // Mock the cacheMaterializedView method to avoid actual caching in the background
         new MockUp<CachingMvPlanContextBuilder>() {
             @Mock
@@ -143,7 +130,6 @@ public class LocalMetaStoreTest {
             }
         };
 
->>>>>>> 0673fc3b8f ([UT] skip caching mv plan in the background (#61750))
         starRocksAssert.withMaterializedView(
                     "CREATE MATERIALIZED VIEW test.mv1\n" +
                                 "distributed by hash(k1) buckets 3\n" +
