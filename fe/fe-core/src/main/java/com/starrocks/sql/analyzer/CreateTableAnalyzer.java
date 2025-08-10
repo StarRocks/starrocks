@@ -157,7 +157,17 @@ public class CreateTableAnalyzer {
             String catalogType = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalogName);
             if (catalogType.equalsIgnoreCase(ConnectorType.UNIFIED.getName())) {
                 if (Strings.isNullOrEmpty(engineName)) {
-                    throw new SemanticException("Create table in unified catalog requires engine clause (ENGINE = ENGINE_NAME)");
+                    if (null == stmt.getProperties()) {
+                        engineName = ConnectorType.HIVE.getName();
+                    } else {
+                        String unifiedCtasEngine = stmt.getProperties().get("unified_ctas_engine");
+                        if (Strings.isNullOrEmpty(unifiedCtasEngine)) {
+                            engineName = ConnectorType.HIVE.getName();
+                        } else {
+                            engineName = unifiedCtasEngine;
+                        }
+                    }
+                    stmt.setEngineName(engineName);
                 }
             } else {
                 if (Strings.isNullOrEmpty(engineName)) {
