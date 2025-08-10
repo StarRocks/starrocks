@@ -228,6 +228,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";
 
+    public static final String PROPERTIES_UNIFIED_CTAS_ENGINE = "unified_ctas_engine";
+
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";

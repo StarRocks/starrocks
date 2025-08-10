@@ -160,7 +160,7 @@ public class CreateTableAnalyzer {
                     if (null == stmt.getProperties()) {
                         engineName = ConnectorType.HIVE.getName();
                     } else {
-                        String unifiedCtasEngine = stmt.getProperties().get("unified_ctas_engine");
+                        String unifiedCtasEngine = stmt.getProperties().get(PropertyAnalyzer.PROPERTIES_UNIFIED_CTAS_ENGINE);
                         if (Strings.isNullOrEmpty(unifiedCtasEngine)) {
                             engineName = ConnectorType.HIVE.getName();
                         } else {
