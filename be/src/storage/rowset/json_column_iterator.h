@@ -23,21 +23,6 @@
 
 namespace starrocks {
 
-class FlatJsonColumnIterator : public ColumnIterator {
-public:
-    FlatJsonColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
-                           std::vector<std::unique_ptr<ColumnIterator>> iters,
-                           const std::vector<std::string>& target_paths, const std::vector<LogicalType>& target_types,
-                           const std::vector<std::string>& source_paths, const std::vector<LogicalType>& source_types,
-                           bool need_remain = false);
-
-    bool all_page_dict_encoded() const override;
-
-    Status fetch_all_dict_words(std::vector<Slice>* words) const override;
-
-    int dict_size() override;
-};
-
 /**
  * @brief Creates a ColumnIterator that flattens a JSON column into multiple subfields according to the specified target and source paths/types.
  *
