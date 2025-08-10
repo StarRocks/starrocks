@@ -166,7 +166,7 @@ public class CreateTableAnalyzer {
                         } else if (ConnectorType.HIVE.getName().equals(unifiedCtasEngine) || ConnectorType.ICEBERG.getName().equals(unifiedCtasEngine)) {
                             engineName = unifiedCtasEngine;
                         } else {
-                            throw new SemanticException("Create table %s in unified catalog requires engine clause (ENGINE = ENGINE_NAME).", stmt.getDbTbl());
+                            throw new SemanticException("CTAS is not support in the %s catalog", PropertyAnalyzer.PROPERTIES_UNIFIED_CTAS_ENGINE);
                         }
                     }
                     stmt.setEngineName(engineName);
