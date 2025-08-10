@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -49,6 +50,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -120,6 +122,14 @@ public class LocalMetaStoreTest {
 
     @Test
     public void testGetPartitionIdToStorageMediumMap() throws Exception {
+        // Mock the cacheMaterializedView method to avoid actual caching in the background
+        new MockUp<CachingMvPlanContextBuilder>() {
+            @Mock
+            public void cacheMaterializedView(MaterializedView mv) {
+                // Do nothing to avoid actual caching
+            }
+        };
+
         starRocksAssert.withMaterializedView(
                     "CREATE MATERIALIZED VIEW test.mv1\n" +
                                 "distributed by hash(k1) buckets 3\n" +
