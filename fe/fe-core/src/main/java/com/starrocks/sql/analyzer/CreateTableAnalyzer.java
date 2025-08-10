@@ -163,8 +163,10 @@ public class CreateTableAnalyzer {
                         String unifiedCtasEngine = stmt.getProperties().get(PropertyAnalyzer.PROPERTIES_UNIFIED_CTAS_ENGINE);
                         if (Strings.isNullOrEmpty(unifiedCtasEngine)) {
                             engineName = ConnectorType.HIVE.getName();
-                        } else {
+                        } else if (ConnectorType.HIVE.getName().equals(unifiedCtasEngine) || ConnectorType.ICEBERG.getName().equals(unifiedCtasEngine)) {
                             engineName = unifiedCtasEngine;
+                        } else {
+                            throw new SemanticException("Create table %s in unified catalog requires engine clause (ENGINE = ENGINE_NAME).", stmt.getDbTbl());
                         }
                     }
                     stmt.setEngineName(engineName);
