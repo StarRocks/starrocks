@@ -208,6 +208,38 @@ TEST_F(StarCacheEngineTest, adjust_capacity) {
     ASSERT_TRUE(_cache->adjust_mem_quota(-1 * _mem_quota / 3, _mem_quota / 2).is_invalid_argument());
 }
 
+static void empty_deleter(void*) {}
+
+TEST_F(StarCacheEngineTest, adjust_inline_cache_count_limit) {
+    std::string key = "inline1";
+    std::string val = "inline1";
+    {
+        IOBuffer buffer;
+        buffer.append_user_data((void*)val.data(), val.size(), empty_deleter);
+        ASSERT_OK(_cache->write(key, buffer, nullptr));
+    }
+
+    ASSERT_OK(_cache->update_inline_cache_count_limit(0));
+
+    {
+        IOBuffer buffer;
+        ASSERT_TRUE(_cache->read(key, 0, val.size(), &buffer, nullptr).is_not_found());
+    }
+
+    ASSERT_OK(_cache->update_inline_cache_count_limit(131072));
+
+    {
+        IOBuffer buffer;
+        buffer.append_user_data((void*)val.data(), val.size(), empty_deleter);
+        ASSERT_OK(_cache->write(key, buffer, nullptr));
+    }
+
+    {
+        IOBuffer buffer;
+        ASSERT_OK(_cache->read(key, 0, val.size(), &buffer, nullptr));
+    }
+}
+
 TEST_F(StarCacheEngineTest, metrics) {
     insert_value(0);
     size_t kv_size = _cache->mem_usage();

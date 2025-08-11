@@ -51,6 +51,8 @@ public:
 
     Status update_disk_spaces(const std::vector<DirSpace>& spaces) override;
 
+    Status update_inline_cache_count_limit(int32_t limit) override;
+
     const StarCacheMetrics starcache_metrics(int level) const;
 
     const DataCacheMetrics cache_metrics() const override;

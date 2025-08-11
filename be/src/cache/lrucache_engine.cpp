@@ -77,6 +77,10 @@ Status LRUCacheEngine::update_disk_spaces(const std::vector<DirSpace>& spaces) {
     return Status::NotSupported("LRUCache engine don't support update disk spaces");
 }
 
+Status LRUCacheEngine::update_inline_cache_count_limit(int32_t limit) {
+    return Status::NotSupported("LRUCache engine don't support update inline cache count limit");
+}
+
 const DataCacheMetrics LRUCacheEngine::cache_metrics() const {
     return DataCacheMetrics{.status = DataCacheStatus::NORMAL,
                             .mem_quota_bytes = _cache->get_capacity(),
