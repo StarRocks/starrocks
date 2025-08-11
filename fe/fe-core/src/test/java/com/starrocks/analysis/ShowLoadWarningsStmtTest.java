@@ -16,6 +16,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
@@ -46,7 +47,7 @@ public class ShowLoadWarningsStmtTest {
 
         stmt = (ShowLoadWarningsStmt) analyzeSuccess("SHOW LOAD WARNINGS ON 'http://127.0.0.1:8000'");
         Assertions.assertEquals("http://127.0.0.1:8000", stmt.getRawUrl());
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertNotNull(metaData);
         Assertions.assertEquals(3, metaData.getColumnCount());
         Assertions.assertEquals("JobId", metaData.getColumn(0).getName());

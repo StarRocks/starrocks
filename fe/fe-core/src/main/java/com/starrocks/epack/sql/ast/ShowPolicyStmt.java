@@ -51,10 +51,7 @@ public class ShowPolicyStmt extends ShowStmt {
         return policyType;
     }
 
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
+
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

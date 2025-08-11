@@ -39,10 +39,7 @@ public class ShowCreatePasswordPolicyStmt extends ShowStmt {
         return policyName;
     }
 
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
+
 
     @Override
     public RedirectStatus getRedirectStatus() {

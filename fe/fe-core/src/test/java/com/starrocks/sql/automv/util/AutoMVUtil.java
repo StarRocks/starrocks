@@ -24,6 +24,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.QueryStatement;
@@ -215,7 +216,7 @@ public class AutoMVUtil {
 
     public static Void justPrintResult(List<List<String>> results) {
         ShowRecommendationsStmt showStmt = new ShowRecommendationsStmt(null, 1, 1);
-        List<Column> columns = showStmt.getMetaData().getColumns();
+        List<Column> columns = new ShowResultMetaFactory().getMetadata(showStmt).getColumns();
         for (List<String> row : results) {
             PrettyPrinter printer = new PrettyPrinter();
             List<PrettyPrinter> items = IntStream.range(0, columns.size())

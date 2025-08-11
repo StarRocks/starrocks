@@ -15,24 +15,9 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.authorization.GrantType;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowGrantsStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA;
-
-    static {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-
-        builder.addColumn(new Column("UserIdentity", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Catalog", ScalarType.createVarchar(400)));
-        builder.addColumn(new Column("Grants", ScalarType.createVarchar(400)));
-
-        META_DATA = builder.build();
-    }
-
     private UserIdentity userIdent;
     private final String groupOrRole;
     private final GrantType grantType;
@@ -65,11 +50,6 @@ public class ShowGrantsStmt extends ShowStmt {
 
     public GrantType getGrantType() {
         return grantType;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
     }
 
     @Override

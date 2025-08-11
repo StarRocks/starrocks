@@ -15,8 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // Show ResourceGroups
@@ -45,14 +43,6 @@ public class ShowResourceGroupStmt extends ShowStmt {
 
     public boolean isVerbose() {
         return verbose;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        if (verbose) {
-            return ResourceGroup.VERBOSE_META_DATA;
-        }
-        return ResourceGroup.META_DATA;
     }
 
     public String getName() {

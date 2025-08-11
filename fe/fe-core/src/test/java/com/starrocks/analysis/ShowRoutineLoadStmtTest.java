@@ -16,6 +16,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -46,8 +47,8 @@ public class ShowRoutineLoadStmtTest {
         Assertions.assertEquals("label", stmt.getName());
         Assertions.assertEquals("testDb", stmt.getDbFullName());
         Assertions.assertFalse(stmt.isIncludeHistory());
-        Assertions.assertEquals(22, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals(22, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Id", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
     }
 
     @Test

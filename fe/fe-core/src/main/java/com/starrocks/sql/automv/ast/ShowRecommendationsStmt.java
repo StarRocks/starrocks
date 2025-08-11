@@ -96,10 +96,7 @@ public class ShowRecommendationsStmt extends ShowStmt {
         this.tableName = tableName;
     }
 
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
+
 
     public Optional<Long> getLimit() {
         return Optional.ofNullable(limit < 0 ? null : limit);

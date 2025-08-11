@@ -121,7 +121,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                 }).sorted(Comparator.comparing(Warehouse::getId))
                 .map(warehouse -> ((LocalWarehouse) warehouse).getWarehouseInfo())
                 .collect(Collectors.toList());
-        return new ShowResultSet(statement.getMetaData(), rowSet);
+        return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rowSet);
     }
 
     @Override
@@ -203,7 +203,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                 }
             }
         }
-        return new ShowResultSet(statement.getMetaData(), rows);
+        return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
     }
 
     @Override
@@ -220,7 +220,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
         if (rows == null) {
             rows = Lists.newArrayList();
         }
-        return new ShowResultSet(statement.getMetaData(), rows);
+        return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
     }
 
     @Override
@@ -246,7 +246,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                 rows.add(row);
             }
         }
-        return new ShowResultSet(statement.getMetaData(), rows);
+        return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
     }
 
     @Override
@@ -265,7 +265,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                 SqlParser.parseSqlToExpr(policy.getPolicyExpressionSQL(), SqlModeHelper.MODE_DEFAULT),
                 policy.getComment(), NodePosition.ZERO)));
 
-        return new ShowResultSet(statement.getMetaData(), Collections.singletonList(row));
+        return new ShowResultSet(showResultMetaFactory.getMetadata(statement), Collections.singletonList(row));
     }
 
     @Override
@@ -301,13 +301,13 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                 )
                 .collect(Collectors.toList());
 
-        return new ShowResultSet(statement.getMetaData(), sortedList);
+        return new ShowResultSet(showResultMetaFactory.getMetadata(statement), sortedList);
     }
 
     @Override
     public ShowResultSet visitShowFailoverGroupsStatement(ShowFailoverGroupsStmt statement, ConnectContext context) {
         try {
-            return new ShowResultSet(statement.getMetaData(), statement.getRows(context));
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), statement.getRows(context));
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());
         }
@@ -317,7 +317,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
     @Override
     public ShowResultSet visitDescribeFailoverGroupStatement(DescribeFailoverGroupStmt statement, ConnectContext context) {
         try {
-            return new ShowResultSet(statement.getMetaData(), statement.getRows());
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), statement.getRows());
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());
         }
@@ -358,7 +358,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
             }
         }
 
-        return new ShowResultSet(statement.getMetaData(), userAuthInfos);
+        return new ShowResultSet(showResultMetaFactory.getMetadata(statement), userAuthInfos);
     }
 
     @Override
@@ -376,7 +376,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
 
         List<List<String>> rows = Lists.newArrayList();
         rows.add(passwordPolicyRow);
-        return new ShowResultSet(statement.getMetaData(), rows);
+        return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
     }
 
     @Override
@@ -403,6 +403,6 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
             rows.add(row);
         }
 
-        return new ShowResultSet(statement.getMetaData(), rows);
+        return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
     }
 }

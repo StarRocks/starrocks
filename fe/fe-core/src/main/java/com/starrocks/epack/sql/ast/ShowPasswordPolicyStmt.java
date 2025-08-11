@@ -34,10 +34,7 @@ public class ShowPasswordPolicyStmt extends ShowStmt {
         super(pos);
     }
 
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
+
 
     @Override
     public RedirectStatus getRedirectStatus() {

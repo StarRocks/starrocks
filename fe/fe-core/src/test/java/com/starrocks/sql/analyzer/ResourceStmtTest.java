@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Resource;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
@@ -69,7 +70,7 @@ public class ResourceStmtTest {
     @Test
     public void testShowResourcesTest() {
         ShowResourcesStmt stmt = (ShowResourcesStmt) analyzeSuccess("Show Resources");
-        Assertions.assertNotNull(stmt.getMetaData());
+        Assertions.assertNotNull(new ShowResultMetaFactory().getMetadata(stmt));
         Assertions.assertNotNull(stmt.getRedirectStatus());
 
         analyzeFail("show resource");

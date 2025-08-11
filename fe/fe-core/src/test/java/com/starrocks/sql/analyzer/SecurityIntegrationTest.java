@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
@@ -53,11 +54,11 @@ public class SecurityIntegrationTest {
 
         ShowSecurityIntegrationStatement  showSecurityIntegrationStatement =
                 (ShowSecurityIntegrationStatement) analyzeSuccess("show security integrations");
-        Assertions.assertNotNull(showSecurityIntegrationStatement.getMetaData());
+        Assertions.assertNotNull(new ShowResultMetaFactory().getMetadata(showSecurityIntegrationStatement));
 
         ShowCreateSecurityIntegrationStatement showCreateSecurityIntegrationStatement =
                 (ShowCreateSecurityIntegrationStatement) analyzeSuccess("show create security integration test");
-        Assertions.assertNotNull(showCreateSecurityIntegrationStatement.getMetaData());
+        Assertions.assertNotNull(new ShowResultMetaFactory().getMetadata(showCreateSecurityIntegrationStatement));
         Assertions.assertEquals("test", showCreateSecurityIntegrationStatement.getName());
     }
 }

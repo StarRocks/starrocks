@@ -24,6 +24,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -89,9 +90,9 @@ public class ShowCreateTableStmtTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertEquals("testDb", stmt.getDb());
         Assertions.assertEquals("testTbl", stmt.getTable());
-        Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Table", stmt.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("Create Table", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals(2, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Table", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
+        Assertions.assertEquals("Create Table", new ShowResultMetaFactory().getMetadata(stmt).getColumn(1).getName());
     }
 
     @Test

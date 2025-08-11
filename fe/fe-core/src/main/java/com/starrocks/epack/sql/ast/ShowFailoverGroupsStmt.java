@@ -63,10 +63,7 @@ public class ShowFailoverGroupsStmt extends ShowStmt {
         }
     }
 
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
+
 
     public List<List<String>> getRows(ConnectContext connectContext) throws AnalysisException {
         Collection<FailoverGroup> failoverGroups = GlobalStateMgr.getCurrentState().getFailoverGroupMgr()

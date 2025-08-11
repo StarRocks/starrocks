@@ -22,6 +22,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -71,14 +72,14 @@ public class ShowDbStmtTest {
         ShowDbStmt stmt = new ShowDbStmt(null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertNull(stmt.getPattern());
-        Assertions.assertEquals(1, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals(1, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Database", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
 
         stmt = new ShowDbStmt("abc");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertEquals("abc", stmt.getPattern());
-        Assertions.assertEquals(1, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals(1, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Database", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
 
         stmt = new ShowDbStmt(null, null, null);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);

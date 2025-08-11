@@ -21,7 +21,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.parser.NodePosition;
@@ -63,16 +62,8 @@ public class ShowRunningQueriesStmt extends ShowStmt {
                     slot -> TimeUtils.longToTimeString(slot.getFeStartTimeMs()))
     );
 
-    private static final ShowResultSetMetaData COLUMN_META_DATA;
-
     private static final List<Function<LogicalSlot, String>> COLUMN_SUPPLIERS = META_DATA.stream()
             .map(item -> item.second).collect(Collectors.toList());
-
-    static {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        META_DATA.forEach(item -> builder.addColumn(item.first));
-        COLUMN_META_DATA = builder.build();
-    }
 
     private final int limit;
 
@@ -88,11 +79,6 @@ public class ShowRunningQueriesStmt extends ShowStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowRunningQueriesStatement(this, context);
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return COLUMN_META_DATA;
     }
 
     @Override

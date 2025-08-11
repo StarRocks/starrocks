@@ -27,6 +27,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -292,7 +293,7 @@ public class TunespaceExecutor {
             int newStartIdx = Math.min(startIdx, showResults.size());
             int newEndIdx = Math.min(endIdx, showResults.size());
             showResults = showResults.subList(newStartIdx, newEndIdx);
-            return new ShowResultSet(node.getMetaData(), showResults);
+            return new ShowResultSet(new ShowResultMetaFactory().getMetadata(node), showResults);
         }
 
         private ConnectContext buildNewConnectContext(ConnectContext ctx) {
@@ -377,7 +378,7 @@ public class TunespaceExecutor {
                     List<List<String>> rows = results.stream()
                             .map(ShowRecommendationResult::getResult)
                             .collect(Collectors.toList());
-                    return new ShowResultSet(node.getMetaData(), rows);
+                    return new ShowResultSet(new ShowResultMetaFactory().getMetadata(node), rows);
                 } else {
                     return taskStatus.toShowResultSet();
                 }
