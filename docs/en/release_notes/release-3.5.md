@@ -14,10 +14,9 @@ After upgrading StarRocks to v3.5, DO NOT downgrade it directly to v3.4.0 ～ v3
 
 Release Date: August 11, 2025
 
-### Feature Enhancements
+### Improvements
 
 - Lake Compaction adds Segment write time statistics. [#60891](https://github.com/StarRocks/starrocks/pull/60891)
-- Avoid bRPC communication in local PassThrough exchange scenarios. [#60538](https://github.com/StarRocks/starrocks/pull/60538)
 - Disable inline mode for Data Cache writes to avoid performance degradation. [#60530](https://github.com/StarRocks/starrocks/pull/60530)
 - Iceberg metadata scan supports shared file I/O. [#61012](https://github.com/StarRocks/starrocks/pull/61012)
 - Support termination of all PENDING ANALYZE tasks. [#61118](https://github.com/StarRocks/starrocks/pull/61118)
