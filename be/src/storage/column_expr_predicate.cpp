@@ -336,7 +336,7 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     }
     std::string str_v = padded_value.to_string();
     InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
-    bool has_wildcard = str_v.find('%') != std::string::npos;
+    bool has_wildcard = str_v.find('*') != std::string::npos || str_v.find('%') != std::string::npos;
 
     // TODO: The logic for determining query_type will be abstracted into a separate method in the future.
     if (vaild_match && expr->op() == TExprOpcode::MATCH_ANY) {
@@ -344,8 +344,9 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     } else if (vaild_match && expr->op() == TExprOpcode::MATCH_ALL) {
         query_type = InvertedIndexQueryType::MATCH_ALL_QUERY;
     } else {
-        query_type = InvertedIndexQueryType::MATCH_WILDCARD_QUERY;
+        query_type = has_wildcard ? InvertedIndexQueryType::MATCH_WILDCARD_QUERY : InvertedIndexQueryType::EQUAL_QUERY;
     }
+
     roaring::Roaring roaring;
     RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
     if (with_not) {

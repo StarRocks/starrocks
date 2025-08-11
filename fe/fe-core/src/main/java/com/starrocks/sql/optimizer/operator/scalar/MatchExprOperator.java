@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.MatchExpr;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -25,9 +26,11 @@ import java.util.Objects;
 
 public class MatchExprOperator extends ScalarOperator {
     private List<ScalarOperator> arguments;
+    private MatchExpr.MatchOperator matchOperator = MatchExpr.MatchOperator.MATCH;
 
-    public MatchExprOperator(ScalarOperator... arguments) {
+    public MatchExprOperator(MatchExpr.MatchOperator matchOperator, ScalarOperator... arguments) {
         this(Lists.newArrayList(arguments));
+        this.matchOperator = matchOperator;
     }
 
     public MatchExprOperator(List<ScalarOperator> arguments) {
@@ -44,7 +47,7 @@ public class MatchExprOperator extends ScalarOperator {
 
     @Override
     public String toString() {
-        return getChild(0).toString() + " MATCH " + getChild(1).toString();
+        return getChild(0).toString() + " " + matchOperator.getName() + " " + getChild(1).toString();
     }
 
     @Override
@@ -54,7 +57,7 @@ public class MatchExprOperator extends ScalarOperator {
 
     @Override
     public String debugString() {
-        return getChild(0).debugString() + " MATCH " + getChild(1).debugString();
+        return getChild(0).debugString() + " " + matchOperator.getName() + " " + getChild(1).debugString();
     }
 
     @Override
@@ -105,6 +108,7 @@ public class MatchExprOperator extends ScalarOperator {
         List<ScalarOperator> newArguments = Lists.newArrayList();
         this.arguments.forEach(p -> newArguments.add(p.clone()));
         operator.arguments = newArguments;
+        operator.matchOperator = matchOperator;
         return operator;
     }
 }

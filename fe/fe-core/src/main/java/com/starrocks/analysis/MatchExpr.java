@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.TExprOpcode;
 
 import java.util.Objects;
 
@@ -29,8 +30,18 @@ public class MatchExpr extends Expr {
         this(e1, e2, NodePosition.ZERO);
     }
 
-    public MatchExpr(Expr e1, Expr e2, NodePosition pos) {
+    public MatchExpr(MatchOperator matchOperator, Expr e1, Expr e2) {
+        this(matchOperator, e1, e2, NodePosition.ZERO);
+    }
+
+    public MatchExpr(Expr e1, Expr e2, NodePosition position) {
+        this(MatchOperator.MATCH, e1, e2, position);
+    }
+
+    public MatchExpr(MatchOperator operator, Expr e1, Expr e2, NodePosition pos) {
         super(pos);
+        Preconditions.checkNotNull(operator);
+        this.matchOperator = operator;
         Preconditions.checkNotNull(e1);
         children.add(e1);
         Preconditions.checkNotNull(e2);
@@ -40,6 +51,7 @@ public class MatchExpr extends Expr {
 
     protected MatchExpr(MatchExpr other) {
         super(other);
+        this.matchOperator = other.matchOperator;
         this.children.clear();
         for (Expr child : other.getChildren()) {
             Preconditions.checkNotNull(child);
@@ -48,6 +60,33 @@ public class MatchExpr extends Expr {
         setType(Type.BOOLEAN);
     }
 
+    public enum MatchOperator {
+        MATCH("MATCH", TExprOpcode.MATCH),
+        MATCH_ANY("MATCH_ANY", TExprOpcode.MATCH_ANY);
+
+        private final String name;
+        private final TExprOpcode opcode;
+
+        MatchOperator(String name, TExprOpcode opCode) {
+            this.name = name;
+            this.opcode = opCode;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public TExprOpcode getOpcode() {
+            return opcode;
+        }
+    }
+
+    public MatchOperator getMatchOperator() {
+        return matchOperator;
+    }
+
+    private final MatchOperator matchOperator;
+
     @Override
     public Expr clone() {
         return new MatchExpr(this);
@@ -55,12 +94,13 @@ public class MatchExpr extends Expr {
 
     @Override
     public String toSqlImpl() {
-        return getChild(0).toSql() + " MATCH " + getChild(1).toSql();
+        return getChild(0).toSql() + " " + matchOperator.getName() + " " + getChild(1).toSql();
     }
 
     @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.MATCH_EXPR;
+        msg.setOpcode(matchOperator.getOpcode());
     }
 
     @Override
