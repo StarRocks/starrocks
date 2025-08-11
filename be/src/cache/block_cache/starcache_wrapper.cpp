@@ -133,6 +133,10 @@ Status StarCacheWrapper::update_disk_spaces(const std::vector<DirSpace>& spaces)
     return to_status(_cache->update_disk_spaces(disk_spaces));
 }
 
+Status StarCacheWrapper::update_inline_cache_count_limit(int32_t limit) {
+    return to_status(_cache->update_inline_cache_count_limit(limit));
+}
+
 const DataCacheMetrics StarCacheWrapper::cache_metrics(int level) {
     auto metrics = _cache->metrics(level);
     // Now the EEXIST is treated as an failed status in starcache, which will cause the write_fail_count too large

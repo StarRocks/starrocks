@@ -62,6 +62,9 @@ public:
     // Update the datacache disk space infomation, such as disk quota or disk path.
     Status update_disk_spaces(const std::vector<DirSpace>& spaces);
 
+    // Update the datacache inline cache count limit
+    Status update_inline_cache_count_limit(int32_t limit);
+
     // Get datacache metrics.
     // The level can be: 0, 1, 2. The higher the level, more detailed metrics will be returned.
     const DataCacheMetrics cache_metrics(int level = 0) const;

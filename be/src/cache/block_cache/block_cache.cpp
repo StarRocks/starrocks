@@ -154,6 +154,10 @@ Status BlockCache::update_disk_spaces(const std::vector<DirSpace>& spaces) {
     return st;
 }
 
+Status BlockCache::update_inline_cache_count_limit(int32_t limit) {
+    return _local_cache->update_inline_cache_count_limit(limit);
+}
+
 const DataCacheMetrics BlockCache::cache_metrics(int level) const {
     return _local_cache->cache_metrics(level);
 }
