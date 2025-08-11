@@ -92,7 +92,7 @@ After creating a full-text inverted index, you need to ensure that the system va
 
 #### Supported queries when indexed column is tokenized
 
-If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 'standard|english|chinese'`, only the `MATCH` predicate is supported for data filtering using full-text inverted indexes, and the format needs to be `<col_name> (NOT) MATCH '%keyword%'`. The `keyword` must be a string literal, and does not support expressions .
+If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 'standard|english|chinese'`, only the `MATCH` or `MATCH_ANY` predicate is supported for data filtering using full-text inverted indexes, and the format needs to be `<col_name> (NOT) MATCH '%keyword%'` or `<col_name> (NOT) MATCH_ANY 'keyword1, keyword2'. The `keyword` must be a string literal, and does not support expressions .
 
 1. Create a table and insert a few rows of test data.
 
@@ -128,6 +128,14 @@ If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 
 
     ```SQL
     MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "data%";
+    ```
+  
+3. Use the `MATCH_ANY` predicate for querying.
+
+- Query data rows whose `value` column contains the keyword `database` or `data`.
+
+    ```SQL
+    MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH_ANY "database data";
     ```
 
 **Notes:**
@@ -175,7 +183,7 @@ If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 
     1 row in set (0.01 sec)
     ```
 
-- The `MATCH` predicate in the query conditions must be used as a pushdown predicate, so it must be in the WHERE clause and be performed against the indexed column.
+- The `MATCH` or `MATCH_ANY` predicate in the query conditions must be used as a pushdown predicate, so it must be in the WHERE clause and be performed against the indexed column.
 
     Take the following table and test data as an example:
 
@@ -216,7 +224,7 @@ If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 
 
 If the full-text inverted index does not tokenize the indexed column, that is, `'parser' = 'none'`, all pushdown predicates in the query conditions listed below can be used for data filtering using the full-text inverted index:
 
-- Expression predicates: (NOT) LIKE, (NOT) MATCH
+- Expression predicates: (NOT) LIKE, (NOT) MATCH, (NOT) MATCH_ANY
   
   :::note
 

@@ -16,11 +16,14 @@
 #include <CLucene.h>
 #include <CLucene/analysis/LanguageBasedAnalyzer.h>
 
+#include <boost/locale/encoding_utf.hpp>
+#include <codecvt>
+
 #include "common/statusor.h"
 #include "storage/index/inverted/inverted_index_common.h"
 
 namespace starrocks {
-StatusOr<std::unique_ptr<lucene::analysis::Analyzer>> get_analyzer(InvertedIndexParserType parser_type) {
+inline StatusOr<std::unique_ptr<lucene::analysis::Analyzer>> get_analyzer(InvertedIndexParserType parser_type) {
     switch (parser_type) {
     case InvertedIndexParserType::PARSER_NONE:
     case InvertedIndexParserType::PARSER_ENGLISH:
@@ -38,4 +41,19 @@ StatusOr<std::unique_ptr<lucene::analysis::Analyzer>> get_analyzer(InvertedIndex
     }
 }
 
+inline Status tokenize_text(InvertedIndexParserType parser_type, std::string search_str,
+                            std::vector<std::wstring>& result) {
+    ASSIGN_OR_RETURN(auto analyzer, get_analyzer(parser_type));
+    std::wstring search_wstr = boost::locale::conv::utf_to_utf<TCHAR>(search_str);
+    lucene::util::StringReader reader(search_wstr.c_str(), search_wstr.size(), false);
+    auto stream = analyzer->reusableTokenStream(L"", &reader);
+    lucene::analysis::Token token;
+    while (stream->next(&token)) {
+        if (token.termLength() != 0) {
+            std::wstring str(token.termBuffer(), token.termLength());
+            result.emplace_back(str);
+        }
+    }
+    return Status::OK();
+}
 } // namespace starrocks

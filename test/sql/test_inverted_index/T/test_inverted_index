@@ -30,9 +30,9 @@ CREATE TABLE `t_test_basic_create_index_dup` (
   `id5` string NOT NULL COMMENT "",
   `id6` bigint(20) NOT NULL COMMENT "",
   `id7` string NOT NULL COMMENT ""
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(`id1`)
-DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
 "enable_persistent_index" = "true",
@@ -126,6 +126,9 @@ select count(*) from t_test_gin_index_query where query_none_analyzer like '%ed 
 select count(*) from t_test_gin_index_query where query_english match '%ed vi%';
 select count(*) from t_test_gin_index_query where query_english match '%teria%';
 
+select count(*) from t_test_gin_index_query where query_english match_any "hello";
+select count(*) from t_test_gin_index_query where query_english match_any "hello view test";
+
 drop table t_test_gin_index_query;
 
 -- name: test_gin_index_single_predicate_none
@@ -168,6 +171,8 @@ SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "%ABC%";
 SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "%BC";
 SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "AB%";
 SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match "AB%";
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match_any "AB";
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match_any "ABC ABD";
 
 DROP TABLE t_gin_index_single_predicate_none;
 
@@ -251,6 +256,10 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column LIKE "ABC" O
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column LIKE "AB%" AND text_column LIKE "%C";
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "ABC" OR text_column match "ABD";
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "AB%" AND text_column match "%C";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match_any "ABC";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "ABC";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match_any "abc ABC";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "abc ABC";
 
 DROP TABLE t_gin_index_multiple_predicate_none;
 
@@ -280,7 +289,9 @@ INSERT INTO t_gin_index_multiple_predicate_english VALUES
 (5, NULL);
 
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match "this" OR text_column match "abc";
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_any "this abc";
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column not match "this" AND text_column not match "abc";
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column not match_any "this abc";
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "this" OR text_column LIKE "abc";
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "%this%" AND text_column LIKE "%is%";
 
@@ -574,6 +585,15 @@ SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match CONCAT("a
 SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match "";
 SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match NULL;
 
+SELECT * FROM t_complex_predicate_for_gin_none WHERE upper(text_column) match_any "%CBD%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE lower(text_column) match_any "%cbd%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match_any "abc";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match_any "%abc%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_any CONCAT("ab", "c");
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_any CONCAT("ab", "%");
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_any "";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_any NULL;
+
 INSERT INTO t_complex_predicate_for_gin_english VALUES (1, "abc cbd");
 INSERT INTO t_complex_predicate_for_gin_english VALUES (2, "cbd edf");
 
@@ -592,6 +612,15 @@ SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match CONCAT
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match CONCAT("ab", "%");
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match "";
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match NULL;
+
+SELECT * FROM t_complex_predicate_for_gin_english WHERE upper(text_column) match_any "%CBD%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE lower(text_column) match_any "%cbd%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match_any "abc";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match_any "%abc%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any CONCAT("ab", "c");
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any CONCAT("ab", "%");
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any "";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any NULL;
 
 DROP TABLE t_complex_predicate_for_gin_none;
 DROP TABLE t_complex_predicate_for_gin_english;
@@ -644,6 +673,11 @@ SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH "b";
 SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH "b";
 SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH "b";
 
+SELECT id1 FROM t_upper_case_column_name WHERE `TeXt` MATCH_ANY "b";
+SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH_ANY "b";
+SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH_ANY "b";
+SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH_ANY "b";
+
 DROP TABLE t_upper_case_column_name;
 
 -- name: test_alter_replicated_storage
@@ -692,15 +726,29 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 = "abc"
 SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 LIKE "%abc%";
 SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 IN ("abc", "ab");
 
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" AND v1 = "abc";
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" AND v1 LIKE "%abc%";
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" AND v1 IN ("abc", "ab");
+
 SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
 SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
 SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH_ANY "abc";
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH_ANY "abc";
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH_ANY "abc";
 
 SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" GROUP BY v1;
 SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" GROUP BY v2;
 
+SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" GROUP BY v1;
+SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v2 MATCH_ANY "abc" GROUP BY v2;
+
 SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" ORDER BY v1;
 SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" ORDER BY v2;
+
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" ORDER BY v1;
+SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH_ANY "abc" ORDER BY v2;
 
 DROP TABLE t_disable_global_dict_rewrite;
 
@@ -723,6 +771,8 @@ PROPERTIES (
 
 INSERT INTO t_create_mv_with_match VALUES (1, "abc", "bcd");
 CREATE MATERIALIZED VIEW mv AS SELECT id, v1, v2 FROM t_create_mv_with_match WHERE v1 MATCH "abc";
+function: wait_materialized_view_cancel()
+CREATE MATERIALIZED VIEW mv1 AS SELECT id, v1, v2 FROM t_create_mv_with_match WHERE v1 MATCH_ANY "abc bdc";
 function: wait_materialized_view_cancel()
 DROP TABLE t_create_mv_with_match;
 
@@ -829,7 +879,7 @@ CREATE TABLE `t_gin_match_empty` (
    INDEX idx1 (v1) USING GIN ('parser' = 'english'),
    INDEX idx2 (v2) USING GIN ('parser' = 'chinese'),
    INDEX idx3 (v3) USING GIN ('parser' = 'standard')
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1
 PROPERTIES (
@@ -844,6 +894,10 @@ insert into t_gin_match_empty values (1, "中文50中文", "中文50中文", "�
 SELECT count(*) FROM t_gin_match_empty WHERE v1 MATCH "";
 SELECT count(*) FROM t_gin_match_empty WHERE v2 MATCH "";
 SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH "";
+
+SELECT count(*) FROM t_gin_match_empty WHERE v1 MATCH_ANY "";
+SELECT count(*) FROM t_gin_match_empty WHERE v2 MATCH_ANY "";
+SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH_ANY "";
 
 DROP TABLE t_gin_match_empty;
 

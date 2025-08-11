@@ -8101,7 +8101,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitMatchExpr(StarRocksParser.MatchExprContext context) {
         NodePosition pos = createPos(context);
-        MatchExpr matchExpr = new MatchExpr((Expr) visit(context.left), (Expr) visit(context.right), pos);
+        String matchOp = context.matchOperator().getText();
+        MatchExpr.MatchOperator operator;
+        switch (matchOp.toUpperCase()) {
+            case "MATCH":
+                operator = MatchExpr.MatchOperator.MATCH;
+                break;
+            case "MATCH_ANY":
+                operator = MatchExpr.MatchOperator.MATCH_ANY;
+                break;
+            default:
+                throw new SemanticException("Unknown match operator: " + matchOp);
+        }
+        MatchExpr matchExpr = new MatchExpr(operator, (Expr) visit(context.left), (Expr) visit(context.right), pos);
         if (context.NOT() != null) {
             return new CompoundPredicate(CompoundPredicate.Operator.NOT, matchExpr, null, pos);
         } else {
