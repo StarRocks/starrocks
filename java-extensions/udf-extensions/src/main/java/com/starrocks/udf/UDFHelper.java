@@ -227,6 +227,7 @@ public class UDFHelper {
         Platform.copyMemory(dataArr, Platform.DOUBLE_ARRAY_OFFSET, null, addrs[1], numRows * 8L);
     }
 
+    // TODO: Why not use BigInt instead of double?
     private static void getDoubleTimeResult(int numRows, Time[] boxedArr, long columnAddr) {
         byte[] nulls = new byte[numRows];
         double[] dataArr = new double[numRows];
