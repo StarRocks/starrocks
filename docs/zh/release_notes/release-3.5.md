@@ -10,6 +10,47 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.3
+
+发布日期： 2025 年 8 月 11 日
+
+### 功能增强
+
+- Lake Compaction 增加 Segment 写入耗时统计信息。[#60891](https://github.com/StarRocks/starrocks/pull/60891)
+- 本地 PassThrough 交换场景下避免 bRPC 通信。[#60538](https://github.com/StarRocks/starrocks/pull/60538)
+- 禁用 Data Cache 写入的 inline 模式以避免性能下降。[#60530](https://github.com/StarRocks/starrocks/pull/60530)
+- Iceberg 元数据扫描支持共享文件 I/O。[#61012](https://github.com/StarRocks/starrocks/pull/61012)
+- 支持终止所有 PENDING 状态的 ANALYZE 任务。[#61118](https://github.com/StarRocks/starrocks/pull/61118)
+- CTE 节点过多时强制复用以避免优化耗时过长。[#60983](https://github.com/StarRocks/starrocks/pull/60983)
+- 集群均衡结果中新增 `BALANCE` 类型。[#61081](https://github.com/StarRocks/starrocks/pull/61081)
+- 优化含外部表的物化视图改写。[#61037](https://github.com/StarRocks/starrocks/pull/61037)
+- 系统变量 `enable_materialized_view_agg_pushdown_rewrite` 默认值修改为 `true`，即默认为物化视图查询改写启用聚合函数下推。 [#60976](https://github.com/StarRocks/starrocks/pull/60976)
+- 优化分区统计锁竞争。[#61041](https://github.com/StarRocks/starrocks/pull/61041)
+
+### 问题修复
+
+修复了以下问题：
+
+- 列裁剪后 Chunk 列大小不一致。[#61271](https://github.com/StarRocks/starrocks/pull/61271)
+- 非异步执行分区统计加载可能造成死锁。[#61300](https://github.com/StarRocks/starrocks/pull/61300)
+-  `array_map` 处理常量数组列时崩溃。[#61309](https://github.com/StarRocks/starrocks/pull/61309)
+- 将自增列设为 NULL 时，系统错误拒绝同一 Chunk 内的有效数据。[#61255](https://github.com/StarRocks/starrocks/pull/61255)
+- JDBC 实际连接数可能超过 `jdbc_connection_pool_size` 限制。[#61038](https://github.com/StarRocks/starrocks/pull/61038)
+- FQDN 模式下未使用 IP 地址作为缓存键。[#61203](https://github.com/StarRocks/starrocks/pull/61203)
+- 数组比较过程中数组列克隆错误。[#61036](https://github.com/StarRocks/starrocks/pull/61036)
+- 部署序列化线程池阻塞导致查询性能下降。[#61150](https://github.com/StarRocks/starrocks/pull/61150)
+- 心跳重试计数器重置后 OK 响应未同步。[#61249](https://github.com/StarRocks/starrocks/pull/61249)
+- `hour_from_unixtime` 函数结果错误。[#61206](https://github.com/StarRocks/starrocks/pull/61206)
+- ALTER TABLE 任务与分区创建冲突。[#60890](https://github.com/StarRocks/starrocks/pull/60890)
+- 从 v3.3 升级至 v3.4 或更新版本后缓存不生效。[#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- 向量索引指标 `hit_count` 未设置。[#61102](https://github.com/StarRocks/starrocks/pull/61102)
+- Stream Load 事务导入无法找到协调节点。[#60154](https://github.com/StarRocks/starrocks/pull/60154)
+- BE 在加载 OOM 分区时崩溃。[#60778](https://github.com/StarRocks/starrocks/pull/60778)
+- 手动创建的分区在执行 INSERT OVERWRITE 时失败。[#60858](https://github.com/StarRocks/starrocks/pull/60858)
+- 当分区的值不同但名称在不区分大小写的情况下相同时，分区创建失败。 [#60909](https://github.com/StarRocks/starrocks/pull/60909)
+- 不支持 PostgreSQL UUID 类型。[#61021](https://github.com/StarRocks/starrocks/pull/61021)
+- 通过 `FILES()` 导入 Parquet 数据时列名大小写敏感的问题。[#61059](https://github.com/StarRocks/starrocks/pull/61059)
+
 ## 3.5.2
 
 发布日期： 2025 年 7 月 18 日
