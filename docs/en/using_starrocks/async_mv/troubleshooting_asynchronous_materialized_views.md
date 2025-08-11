@@ -144,7 +144,7 @@ ExecTime      | 2.583 s
 
 #### Analyze resource consumption after refresh
 
-After a refresh task, you can analyze its resource consumption via query profiles.
+After a refresh task, you can analyze its resource consumption via query profiles. You can view the profile of the materialized view refresh task through the Web UI of the cluster Leader FE node.
 
 While an asynchronous materialized view refreshes itself, an INSERT OVERWRITE statement is executed. You can check the corresponding query profile to analyze the time and resources consumed by the refresh task.
 
