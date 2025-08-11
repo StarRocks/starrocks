@@ -33,6 +33,10 @@ public:
 
     ~BuiltinInvertedIndexIterator() override;
 private:
+    Status _equal_query(const Slice* search_query, roaring::Roaring* bit_map);
+
+    Status _wildcard_query(const Slice* search_query, roaring::Roaring* bit_map);
+
     Status _init_like_context(const Slice& s);
 
     std::unique_ptr<BitmapIndexIterator> _bitmap_itr;
