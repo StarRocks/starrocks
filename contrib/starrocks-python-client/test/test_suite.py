@@ -366,3 +366,28 @@ class StarRocksReflectionTest(fixtures.TestBase):
 
         eq_(reflected_table.columns["generated_column"].computed.sqltext.text, "id + 1")
         eq_(reflected_table.columns["generated_json"].computed.sqltext.text, "get_json_string(`data`, '$.some_key')")
+
+    def test_reflect_server_default_not_as_computed(self, connection, metadata):
+        tn = "test_server_default_reflection"
+        connection.execute(text(f"DROP TABLE IF EXISTS {tn}"))
+        create_table_sql = dedent(f"""
+            CREATE TABLE {tn} (
+                id INT,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                generated_col BIGINT AS (id + 1)
+            )
+            PRIMARY KEY(id)
+            DISTRIBUTED BY HASH(id);
+        """)
+        connection.execute(text(create_table_sql))
+
+        reflected_meta = MetaData()
+        reflected_meta.reflect(bind=connection, only=[tn])
+        reflected_table = reflected_meta.tables[tn]
+
+        created_at_col = reflected_table.columns["created_at"]
+        eq_(created_at_col.server_default.arg.text, "CURRENT_TIMESTAMP")
+        eq_(created_at_col.computed, None)
+
+        generated_col = reflected_table.columns["generated_col"]
+        eq_(generated_col.computed.sqltext.text, "id + 1")
