@@ -289,6 +289,59 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     fs::remove_all(cache_dir).ok();
 }
 
+TEST_F(BlockCacheTest, update_inline_cache) {
+    const std::string cache_dir = "./block_disk_cache_inline";
+    ASSERT_TRUE(fs::create_directories(cache_dir).ok());
+    std::unique_ptr<BlockCache> cache(new BlockCache);
+    const size_t block_size = 256 * 1024;
+
+    CacheOptions options;
+    options.mem_space_size = 1 * 1024 * 1024;
+    size_t quota = 50 * 1024 * 1024;
+    options.disk_spaces.push_back({.path = cache_dir, .size = quota});
+    options.block_size = block_size;
+    options.max_concurrent_inserts = 100000;
+    options.max_flying_memory_mb = 100;
+    options.enable_direct_io = false;
+    options.inline_item_count_limit = 1000;
+    options.engine = "starcache";
+    Status status = cache->init(options);
+    ASSERT_TRUE(status.ok());
+
+    std::string key = "inline";
+    std::string value = "inline";
+    {
+        Status st = cache->write_buffer(key, 0, value.size(), value.c_str());
+        ASSERT_TRUE(st.ok());
+    }
+
+    {
+        Status st = cache->update_inline_cache_count_limit(0);
+        ASSERT_TRUE(st.ok());
+    }
+    {
+        char buf[128];
+        auto res = cache->read_buffer(key, 0, value.size(), buf, nullptr);
+        ASSERT_TRUE(res.status().is_not_found());
+    }
+    {
+        Status st = cache->update_inline_cache_count_limit(1000);
+        ASSERT_TRUE(st.ok());
+    }
+    {
+        Status st = cache->write_buffer(key, 0, value.size(), value.c_str());
+        ASSERT_TRUE(st.ok());
+    }
+    {
+        char buf[128];
+        auto res = cache->read_buffer(key, 0, value.size(), buf, nullptr);
+        ASSERT_TRUE(res.status().ok());
+    }
+
+    cache->shutdown();
+    fs::remove_all(cache_dir).ok();
+}
+
 TEST_F(BlockCacheTest, clear_residual_blockfiles) {
     const std::string cache_dir = "./block_disk_cache6";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());

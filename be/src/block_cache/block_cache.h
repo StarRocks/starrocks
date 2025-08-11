@@ -73,6 +73,9 @@ public:
     // Adjust the disk spaces, the space quota will be adjusted based on current disk usage before updating.
     Status adjust_disk_spaces(const std::vector<DirSpace>& spaces);
 
+    // Update the datacache inline cache count limit
+    Status update_inline_cache_count_limit(int32_t limit);
+
     void record_read_remote(size_t size, int64_t lateny_us);
 
     void record_read_cache(size_t size, int64_t lateny_us);

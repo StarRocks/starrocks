@@ -168,6 +168,10 @@ Status BlockCache::adjust_disk_spaces(const std::vector<DirSpace>& spaces) {
     return update_disk_spaces(spaces);
 }
 
+Status BlockCache::update_inline_cache_count_limit(int32_t limit) {
+    return _kv_cache->update_inline_cache_count_limit(limit);
+}
+
 void BlockCache::record_read_remote(size_t size, int64_t lateny_us) {
     _kv_cache->record_read_remote(size, lateny_us);
 }
