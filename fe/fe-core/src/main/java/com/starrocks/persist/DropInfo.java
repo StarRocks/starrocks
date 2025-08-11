@@ -38,9 +38,6 @@ import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataOutput;
-import java.io.IOException;
-
 public class DropInfo implements Writable {
     @SerializedName("db")
     private long dbId;
@@ -77,18 +74,8 @@ public class DropInfo implements Writable {
         return forceDrop;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(dbId);
-        out.writeLong(tableId);
-        out.writeBoolean(forceDrop);
-        if (indexId == -1L) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            out.writeLong(indexId);
-        }
-    }
+
+
 
     @Override
     public int hashCode() {

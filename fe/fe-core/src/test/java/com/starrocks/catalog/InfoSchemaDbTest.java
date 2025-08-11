@@ -102,10 +102,8 @@ public class InfoSchemaDbTest {
     @Test
     public void testNormal() throws IOException {
         Database db = new InfoSchemaDb();
-
         Assertions.assertFalse(db.registerTableUnlocked(null));
         db.dropTable("authors");
-        db.write(null);
         Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "authors"));
     }
 

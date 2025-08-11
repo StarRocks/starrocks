@@ -49,7 +49,6 @@ import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -591,17 +590,6 @@ public class StreamLoadMgr implements MemoryTrackable {
                 streamLoadTask.cancelAfterRestart();
             }
         }
-    }
-
-    public synchronized long saveStreamLoadManager(DataOutputStream out, long checksum) throws IOException {
-        List<StreamLoadTask> loadTasks = idToStreamLoadTask.values().stream().collect(Collectors.toList());
-
-        out.writeInt(loadTasks.size());
-        for (StreamLoadTask loadTask : loadTasks) {
-            loadTask.write(out);
-        }
-        checksum ^= getChecksum();
-        return checksum;
     }
 
     public synchronized long getChecksum() {

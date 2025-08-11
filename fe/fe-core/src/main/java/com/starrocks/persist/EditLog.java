@@ -54,10 +54,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
@@ -421,7 +419,6 @@ public class EditLog {
                     deleteHandler.replayMultiDelete(info, globalStateMgr);
                     break;
                 }
-                case OperationType.OP_ADD_REPLICA:
                 case OperationType.OP_ADD_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.data();
                     globalStateMgr.getLocalMetastore().replayAddReplica(info);
@@ -505,15 +502,6 @@ public class EditLog {
                 case OperationType.OP_LEADER_INFO_CHANGE_V2: {
                     LeaderInfo info = (LeaderInfo) journal.data();
                     globalStateMgr.setLeader(info);
-                    break;
-                }
-                case OperationType.OP_META_VERSION_V2: {
-                    MetaVersion metaVersion = (MetaVersion) journal.data();
-                    if (!MetaVersion.isCompatible(metaVersion.getStarRocksVersion(), FeConstants.STARROCKS_META_VERSION)) {
-                        throw new JournalInconsistentException("Not compatible with meta version "
-                                + metaVersion.getStarRocksVersion()
-                                + ", current version is " + FeConstants.STARROCKS_META_VERSION);
-                    }
                     break;
                 }
                 case OperationType.OP_ADD_BROKER_V2: {
@@ -1591,10 +1579,6 @@ public class EditLog {
 
     public void logResetFrontends(Frontend frontend) {
         logEdit(OperationType.OP_RESET_FRONTENDS, frontend);
-    }
-
-    public void logMetaVersion(MetaVersion metaVersion) {
-        logEdit(OperationType.OP_META_VERSION_V2, metaVersion);
     }
 
     public void logBackendStateChange(Backend be) {

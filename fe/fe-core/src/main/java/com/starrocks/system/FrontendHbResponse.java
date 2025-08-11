@@ -35,12 +35,8 @@
 package com.starrocks.system;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
-
-import java.io.DataOutput;
-import java.io.IOException;
 
 /**
  * Frontend heartbeat response contains Frontend's query port, rpc port and current replayed journal id.
@@ -135,14 +131,8 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         return macAddress;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, name);
-        out.writeInt(queryPort);
-        out.writeInt(rpcPort);
-        out.writeLong(replayedJournalId);
-    }
+
+
 
     @Override
     public String toString() {

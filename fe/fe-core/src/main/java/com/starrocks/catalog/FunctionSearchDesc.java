@@ -38,9 +38,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataOutput;
-import java.io.IOException;
-
 // Used to search a function
 public class FunctionSearchDesc implements Writable {
     @SerializedName("fn")
@@ -112,14 +109,6 @@ public class FunctionSearchDesc implements Writable {
         return sb.toString();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        name.write(out);
-        // write args
-        out.writeShort(argTypes.length);
-        for (Type type : argTypes) {
-            ColumnType.write(out, type);
-        }
-        out.writeBoolean(isVariadic);
-    }
+
+
 }
