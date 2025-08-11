@@ -75,21 +75,21 @@ template <LogicalType Type>
 StatusOr<ColumnPtr> BitFunctions::bitShiftLeft(FunctionContext* context, const Columns& columns) {
     auto& l = VECTORIZED_FN_ARGS(0);
     auto& r = VECTORIZED_FN_ARGS(1);
-    return VectorizedStrictBinaryFunction<bitShiftLeftImpl>::evaluate<Type>(l, r);
+    return VectorizedStrictBinaryFunction<bitShiftLeftImpl>::evaluate<Type, TYPE_BIGINT, Type>(l, r);
 }
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> BitFunctions::bitShiftRight(FunctionContext* context, const Columns& columns) {
     auto& l = VECTORIZED_FN_ARGS(0);
     auto& r = VECTORIZED_FN_ARGS(1);
-    return VectorizedStrictBinaryFunction<bitShiftRightImpl>::evaluate<Type>(l, r);
+    return VectorizedStrictBinaryFunction<bitShiftRightImpl>::evaluate<Type, TYPE_BIGINT, Type>(l, r);
 }
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> BitFunctions::bitShiftRightLogical(FunctionContext* context, const Columns& columns) {
     auto& l = VECTORIZED_FN_ARGS(0);
     auto& r = VECTORIZED_FN_ARGS(1);
-    return VectorizedStrictBinaryFunction<bitShiftRightLogicalImpl>::evaluate<Type>(l, r);
+    return VectorizedStrictBinaryFunction<bitShiftRightLogicalImpl>::evaluate<Type, TYPE_BIGINT, Type>(l, r);
 }
 template <LogicalType Type>
 StatusOr<ColumnPtr> BitFunctions::bitNot(FunctionContext* context, const Columns& columns) {
