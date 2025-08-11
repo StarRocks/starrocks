@@ -132,6 +132,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             Status st = BlockCache::instance()->adjust_disk_spaces(spaces);
             return st;
         });
+        _config_callback.emplace("datacache_inline_item_count_limit", [&]() -> Status {
+            LocalCacheEngine* cache = DataCache::GetInstance()->local_cache();
+            if (cache == nullptr || !cache->is_initialized()) {
+                return Status::InternalError("Local cache is not initialized");
+            }
+            return cache->update_inline_cache_count_limit(config::datacache_inline_item_count_limit);
+        });
         _config_callback.emplace("max_compaction_concurrency", [&]() -> Status {
             if (!config::enable_event_based_compaction_framework) {
                 return Status::InvalidArgument(
