@@ -784,27 +784,25 @@ crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
-### 配置 Flat JSON 配置（目前仅支持存算一体集群）
+### 在表级别设置 Flat JSON 属性
 
-如果您想使用 Flat JSON 属性，请在 properties 中指定。有关更多信息，请参见 [Flat JSON](../../../using_starrocks/Flat_json.md)。
+在 v3.3 版本中，StarRocks 引入了 [Flat JSON](../../../using_starrocks/Flat_json.md) 功能，以提升 JSON 数据查询效率并简化 JSON 的使用复杂度。该功能通过特定的 BE 配置项和系统变量进行控制，因此只能全局启用（或禁用）。
+
+从 v4.0 开始，您可以在表级别设置与 Flat JSON 相关的属性。
 
 ```SQL
 PROPERTIES (
-    "flat_json.enable" = "true|false",
-    "flat_json.null.factor" = "0-1",
-    "flat_json.sparsity.factor" = "0-1",
-    "flat_json.column.max" = "${integer_value}"
+    "flat_json.enable" = "{ true | false }",
+    "flat_json.null.factor" = "",
+    "flat_json.sparsity.factor" = "",
+    "flat_json.column.max" = ""
 )
 ```
 
-**属性**
-
-| 属性                    | 必需 | 描述                                                                                                                                                                                                                                                       |
-| --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `flat_json.enable`    | 否       | 是否启用 Flat JSON 功能。启用此功能后，新加载的 JSON 数据将自动扁平化，提高 JSON 查询性能。                                                                                                 |
-| `flat_json.null.factor` | 否      | Flat JSON 提取的列中 NULL 值的比例。如果列中 NULL 值的比例高于此阈值，则不会提取该列。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：0.3。 |
-| `flat_json.sparsity.factor`     | 否      | Flat JSON 中同名列的比例。如果同名列的比例低于此值，则不进行提取。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：0.9。    |
-| `flat_json.column.max`       | 否      | Flat JSON 可以提取的子字段的最大数量。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：100。 |
+- `flat_json.enable`（可选）：是否启用 Flat JSON 功能。启用此功能后，新导入的 JSON 数据将自动进行扁平化处理，从而提升 JSON 查询性能。
+- `flat_json.null.factor`（可选）：列中 NULL 值的比例阈值。如果某列的 NULL 值比例高于此阈值，则该列不会被 Flat JSON 提取。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
+- `flat_json.sparsity.factor`（可选）：具有相同名称的列的比例阈值。如果具有相同名称的列的比例低于此值，则 Flat JSON 不会提取该列。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.9`。
+- `flat_json.column.max`（可选）：Flat JSON 可提取的子字段最大数量。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`100`。
 
 ## 示例
 
@@ -1148,11 +1146,7 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2);
 ```
 
-### 支持 Flat JSON 的表
-
-:::note
-Flat JSON 目前仅支持存算一体集群。
-:::
+### 带有 Flat JSON 属性的表
 
 ```SQL
 CREATE TABLE example_db.example_table
