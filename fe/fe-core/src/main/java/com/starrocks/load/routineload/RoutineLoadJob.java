@@ -209,6 +209,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected JobSubstate substate = JobSubstate.STABLE;
     @SerializedName("da")
     protected LoadDataSourceType dataSourceType;
+    @SerializedName("mfr")
     protected double maxFilterRatio = 1;
     // max number of error data in max batch rows * 10
     // maxErrorNum / (maxBatchRows * 10) = max error rate of routine load job
