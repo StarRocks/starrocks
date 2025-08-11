@@ -1,14 +1,23 @@
 -- name: test_broker_load_json_gzip
 create database db_${uuid0};
+-- result:
+-- !result
 use db_${uuid0};
-
+-- result:
+-- !result
 create table t1 (id int) duplicate key(id);
-
--- prepare gzip-compressed json file
+-- result:
+-- !result
 shell: gzip -c ./sql/test_broker_load/data/row-4k-id.json > ./sql/test_broker_load/data/row-4k-id.json.gz
+-- result:
+0
 
+-- !result
 shell: ossutil64 cp ./sql/test_broker_load/data/row-4k-id.json.gz oss://${oss_bucket}/test_broker_load/test_json_gzip/${uuid0}/row-4k-0.json.gz >/dev/null
+-- result:
+0
 
+-- !result
 LOAD LABEL label0_${uuid1} (
     DATA INFILE("oss://${oss_bucket}/test_broker_load/test_json_gzip/${uuid0}/*.json.gz") 
     INTO TABLE t1 FORMAT AS "json" (id)
@@ -22,10 +31,27 @@ PROPERTIES
     "timeout" = "3600",
     "jsonpaths" ="[\"$.id\"]"
 );
-
+-- result:
+-- !result
 function: wait_load_finish("label0_${uuid1}")
+-- result:
+None
+-- !result
 select error_msg from information_schema.loads where label="label0_${uuid1}";
+-- result:
+None
+-- !result
 select count(*) from t1;
-
+-- result:
+4096
+-- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_broker_load/test_json_gzip/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
 shell: rm -f ./sql/test_broker_load/data/row-4k-id.json.gz >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

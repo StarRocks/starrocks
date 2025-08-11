@@ -14,9 +14,9 @@
 
 #include "exec/file_scanner.h"
 
-#include <memory>
 #include <algorithm>
 #include <cctype>
+#include <memory>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -280,7 +280,7 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         // Extract extension after last '.' in the filename part
         std::string path = range_desc.path;
         // get filename after last '/'
-        size_t slash = path.find_last_of('/') ;
+        size_t slash = path.find_last_of('/');
         std::string filename = (slash == std::string::npos) ? path : path.substr(slash + 1);
         size_t dot = filename.find_last_of('.');
         if (dot != std::string::npos && dot + 1 < filename.size()) {
