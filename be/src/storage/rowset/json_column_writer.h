@@ -83,7 +83,7 @@ protected:
 
     // Store original options for sub-column global dict setup
     // FIXME: avoid copy the map
-    const std::map<std::string, const GlobalDictMap> _global_dict;
+    const std::unordered_map<std::string, const GlobalDictMap> _global_dict;
     std::string _column_name;
 
     // Track global dict validity for each sub-column

@@ -89,7 +89,7 @@ struct ColumnWriterOptions {
     // if global_dict is not nullptr, will checkout whether global_dict can cover all data
     const GlobalDictMap* global_dict = nullptr;
     // map<sub_column_name, dict> for FlatJSON
-    std::map<std::string, const GlobalDictMap> flat_json_dicts;
+    std::unordered_map<std::string, const GlobalDictMap> flat_json_dicts;
 
     bool is_compaction = false;
     bool need_flat = false;
