@@ -55,58 +55,7 @@ namespace starrocks {
 constexpr uint8_t SORT_KEY_NULL_FIRST_MARKER = 0x00;
 constexpr uint8_t SORT_KEY_NORMAL_MARKER = 0x01;
 
-template <class UT>
-UT to_bigendian(UT v);
-
-template <>
-uint8_t to_bigendian(uint8_t v) {
-    return v;
-}
-template <>
-uint16_t to_bigendian(uint16_t v) {
-    return BigEndian::FromHost16(v);
-}
-template <>
-uint32_t to_bigendian(uint32_t v) {
-    return BigEndian::FromHost32(v);
-}
-template <>
-uint64_t to_bigendian(uint64_t v) {
-    return BigEndian::FromHost64(v);
-}
-template <>
-uint128_t to_bigendian(uint128_t v) {
-    return BigEndian::FromHost128(v);
-}
-
-template <class T>
-void encode_integral(const T& v, std::string* dest) {
-    if constexpr (std::is_signed<T>::value) {
-        typedef typename std::make_unsigned<T>::type UT;
-        UT uv = v;
-        uv ^= static_cast<UT>(1) << (sizeof(UT) * 8 - 1);
-        uv = to_bigendian(uv);
-        dest->append(reinterpret_cast<const char*>(&uv), sizeof(uv));
-    } else {
-        T nv = to_bigendian(v);
-        dest->append(reinterpret_cast<const char*>(&nv), sizeof(nv));
-    }
-}
-
-template <class T>
-void decode_integral(Slice* src, T* v) {
-    if constexpr (std::is_signed<T>::value) {
-        typedef typename std::make_unsigned<T>::type UT;
-        UT uv = *(UT*)(src->data);
-        uv = to_bigendian(uv);
-        uv ^= static_cast<UT>(1) << (sizeof(UT) * 8 - 1);
-        *v = uv;
-    } else {
-        T nv = *(T*)(src->data);
-        *v = to_bigendian(nv);
-    }
-    src->remove_prefix(sizeof(T));
-}
+using namespace encoding_utils;
 
 template <int LEN>
 static bool SSEEncodeChunk(const uint8_t** srcp, uint8_t** dstp) {
@@ -164,7 +113,49 @@ static inline void EncodeChunkLoop(const uint8_t** srcp, uint8_t** dstp, int len
     }
 }
 
-inline void encode_slice(const Slice& s, std::string* dst, bool is_last) {
+inline Status decode_slice(Slice* src, std::string* dest, Slice* dest_fast, bool is_last, bool fast_decode) {
+    if (is_last) {
+        if (!fast_decode) {
+            dest->append(src->data, src->size);
+        } else {
+            dest_fast->data = src->data;
+            dest_fast->size = src->size;
+        }
+    } else {
+        if (!fast_decode) {
+            auto* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
+            DCHECK(separator) << "bad encoded primary key, separator not found";
+            if (PREDICT_FALSE(separator == nullptr)) {
+                LOG(WARNING) << "bad encoded primary key, separator not found";
+                return Status::InvalidArgument("bad encoded primary key, separator not found");
+            }
+            auto* data = (uint8_t*)src->data;
+            int len = separator - data;
+            for (int i = 0; i < len; i++) {
+                if (i >= 1 && data[i - 1] == '\0' && data[i] == '\1') {
+                    continue;
+                }
+                dest->push_back((char)data[i]);
+            }
+            src->remove_prefix(len + 2);
+        } else {
+            void* separator = std::memchr(src->data, '\0', src->size);
+            DCHECK(separator) << "bad encoded primary key, separator not found";
+            if (PREDICT_FALSE(separator == nullptr)) {
+                LOG(WARNING) << "bad encoded primary key, separator not found";
+                return Status::InvalidArgument("bad encoded primary key, separator not found");
+            }
+
+            dest_fast->data = src->data;
+            dest_fast->size = (uint8_t*)separator - (uint8_t*)src->data;
+            src->remove_prefix(dest_fast->size + 2);
+        }
+    }
+    return Status::OK();
+}
+
+// Implementation of encoding_utils::encode_slice
+void encoding_utils::encode_slice(const Slice& s, std::string* dst, bool is_last) {
     if (is_last) {
         dst->append(s.data, s.size);
     } else {
@@ -216,47 +207,6 @@ inline void encode_slice(const Slice& s, std::string* dst, bool is_last) {
         *dstp++ = 0;
         dst->resize(dstp - reinterpret_cast<uint8_t*>(&(*dst)[0]));
     }
-}
-
-inline Status decode_slice(Slice* src, std::string* dest, Slice* dest_fast, bool is_last, bool fast_decode) {
-    if (is_last) {
-        if (!fast_decode) {
-            dest->append(src->data, src->size);
-        } else {
-            dest_fast->data = src->data;
-            dest_fast->size = src->size;
-        }
-    } else {
-        if (!fast_decode) {
-            auto* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
-            DCHECK(separator) << "bad encoded primary key, separator not found";
-            if (PREDICT_FALSE(separator == nullptr)) {
-                LOG(WARNING) << "bad encoded primary key, separator not found";
-                return Status::InvalidArgument("bad encoded primary key, separator not found");
-            }
-            auto* data = (uint8_t*)src->data;
-            int len = separator - data;
-            for (int i = 0; i < len; i++) {
-                if (i >= 1 && data[i - 1] == '\0' && data[i] == '\1') {
-                    continue;
-                }
-                dest->push_back((char)data[i]);
-            }
-            src->remove_prefix(len + 2);
-        } else {
-            void* separator = std::memchr(src->data, '\0', src->size);
-            DCHECK(separator) << "bad encoded primary key, separator not found";
-            if (PREDICT_FALSE(separator == nullptr)) {
-                LOG(WARNING) << "bad encoded primary key, separator not found";
-                return Status::InvalidArgument("bad encoded primary key, separator not found");
-            }
-
-            dest_fast->data = src->data;
-            dest_fast->size = (uint8_t*)separator - (uint8_t*)src->data;
-            src->remove_prefix(dest_fast->size + 2);
-        }
-    }
-    return Status::OK();
 }
 
 bool PrimaryKeyEncoder::is_supported(const Field& f) {
@@ -392,53 +342,53 @@ static void prepare_ops_datas(const Schema& schema, const std::vector<ColumnId>&
         switch (schema.field(sort_key_idxes[j])->type()->type()) {
         case TYPE_BOOLEAN:
             ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const uint8_t*)data)[idx], buff);
+                encoding_utils::encode_integral(((const uint8_t*)data)[idx], buff);
             };
             break;
         case TYPE_TINYINT:
             ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int8_t*)data)[idx], buff);
+                encoding_utils::encode_integral(((const int8_t*)data)[idx], buff);
             };
             break;
         case TYPE_SMALLINT:
             ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int16_t*)data)[idx], buff);
+                encoding_utils::encode_integral(((const int16_t*)data)[idx], buff);
             };
             break;
         case TYPE_INT:
             ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int32_t*)data)[idx], buff);
+                encoding_utils::encode_integral(((const int32_t*)data)[idx], buff);
             };
             break;
         case TYPE_BIGINT:
             ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int64_t*)data)[idx], buff);
+                encoding_utils::encode_integral(((const int64_t*)data)[idx], buff);
             };
             break;
         case TYPE_LARGEINT:
             ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int128_t*)data)[idx], buff);
+                encoding_utils::encode_integral(((const int128_t*)data)[idx], buff);
             };
             break;
         case TYPE_VARCHAR:
             if (j + 1 == ncol) {
                 ops[j] = [](const void* data, int idx, std::string* buff) {
-                    encode_slice(((const Slice*)data)[idx], buff, true);
+                    encoding_utils::encode_slice(((const Slice*)data)[idx], buff, true);
                 };
             } else {
                 ops[j] = [](const void* data, int idx, std::string* buff) {
-                    encode_slice(((const Slice*)data)[idx], buff, false);
+                    encoding_utils::encode_slice(((const Slice*)data)[idx], buff, false);
                 };
             }
             break;
         case TYPE_DATE:
             ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int32_t*)data)[idx], buff);
+                encoding_utils::encode_integral(((const int32_t*)data)[idx], buff);
             };
             break;
         case TYPE_DATETIME:
             ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int64_t*)data)[idx], buff);
+                encoding_utils::encode_integral(((const int64_t*)data)[idx], buff);
             };
             break;
         default:
@@ -688,37 +638,37 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
             case TYPE_BOOLEAN: {
                 auto& tc = down_cast<UInt8Column&>(column);
                 uint8_t v;
-                decode_integral(&s, &v);
+                encoding_utils::decode_integral(&s, &v);
                 tc.append((int8_t)v);
             } break;
             case TYPE_TINYINT: {
                 auto& tc = down_cast<Int8Column&>(column);
                 int8_t v;
-                decode_integral(&s, &v);
+                encoding_utils::decode_integral(&s, &v);
                 tc.append(v);
             } break;
             case TYPE_SMALLINT: {
                 auto& tc = down_cast<Int16Column&>(column);
                 int16_t v;
-                decode_integral(&s, &v);
+                encoding_utils::decode_integral(&s, &v);
                 tc.append(v);
             } break;
             case TYPE_INT: {
                 auto& tc = down_cast<Int32Column&>(column);
                 int32_t v;
-                decode_integral(&s, &v);
+                encoding_utils::decode_integral(&s, &v);
                 tc.append(v);
             } break;
             case TYPE_BIGINT: {
                 auto& tc = down_cast<Int64Column&>(column);
                 int64_t v;
-                decode_integral(&s, &v);
+                encoding_utils::decode_integral(&s, &v);
                 tc.append(v);
             } break;
             case TYPE_LARGEINT: {
                 auto& tc = down_cast<Int128Column&>(column);
                 int128_t v;
-                decode_integral(&s, &v);
+                encoding_utils::decode_integral(&s, &v);
                 tc.append(v);
             } break;
             case TYPE_VARCHAR: {
@@ -737,13 +687,13 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
             case TYPE_DATE: {
                 auto& tc = down_cast<DateColumn&>(column);
                 DateValue v;
-                decode_integral(&s, &v._julian);
+                encoding_utils::decode_integral(&s, &v._julian);
                 tc.append(v);
             } break;
             case TYPE_DATETIME: {
                 auto& tc = down_cast<TimestampColumn&>(column);
                 TimestampValue v;
-                decode_integral(&s, &v._timestamp);
+                encoding_utils::decode_integral(&s, &v._timestamp);
                 tc.append(v);
             } break;
             default:

@@ -20,8 +20,10 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "common/statusor.h"
 #include "exprs/function_context.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 #include "types/logical_type.h"
 #include "util/random.h"
 #include "util/time.h"
@@ -180,7 +182,7 @@ TEST_F(UtilityFunctionsTest, makeSortKeyNullHandling) {
     cols.emplace_back(c_int);
     cols.emplace_back(c_str);
 
-    ColumnPtr out = UtilityFunctions::make_sort_key(ctx, cols).value();
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::make_sort_key(ctx, cols));
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
     ASSERT_EQ(2, bin->size());
 
@@ -205,7 +207,7 @@ TEST_F(UtilityFunctionsTest, makeSortKeyStringEscaping) {
     cols.emplace_back(c1);
     cols.emplace_back(c2);
 
-    ColumnPtr out = UtilityFunctions::make_sort_key(ctx, cols).value();
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::make_sort_key(ctx, cols));
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
     ASSERT_EQ(2, bin->size());
     // Ensure keys are comparable and not identical

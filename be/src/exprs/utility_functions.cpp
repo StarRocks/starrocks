@@ -40,10 +40,10 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
-#include "gutil/endian.h"
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
 #include "storage/key_coder.h"
+#include "storage/primary_key_encoder.h"
 #include "types/logical_type.h"
 #include "util/cidr.h"
 #include "util/monotime.h"
@@ -373,62 +373,16 @@ StatusOr<ColumnPtr> UtilityFunctions::equiwidth_bucket(FunctionContext* context,
 
 // Helpers copied and adapted from storage/primary_key_encoder.cpp for order-preserving encoding
 namespace detail {
-template <class UT>
-UT to_bigendian_generic(UT v);
 
-template <>
-uint8_t to_bigendian_generic(uint8_t v) {
-    return v;
-}
-template <>
-uint16_t to_bigendian_generic(uint16_t v) {
-    return BigEndian::FromHost16(v);
-}
-template <>
-uint32_t to_bigendian_generic(uint32_t v) {
-    return BigEndian::FromHost32(v);
-}
-template <>
-uint64_t to_bigendian_generic(uint64_t v) {
-    return BigEndian::FromHost64(v);
-}
-
+// Reuse the existing encode_integral implementation from primary_key_encoder.h
 template <class T>
 void encode_integral(const T& v, std::string* dest) {
-    if constexpr (std::is_signed<T>::value) {
-        using UT = typename std::make_unsigned<T>::type;
-        UT uv = static_cast<UT>(v);
-        uv ^= static_cast<UT>(1) << (sizeof(UT) * 8 - 1);
-        uv = to_bigendian_generic(uv);
-        dest->append(reinterpret_cast<const char*>(&uv), sizeof(uv));
-    } else {
-        T nv = to_bigendian_generic(v);
-        dest->append(reinterpret_cast<const char*>(&nv), sizeof(nv));
-    }
+    starrocks::encoding_utils::encode_integral(v, dest);
 }
 
-inline void encode_slice_middle(const Slice& s, std::string* dst) {
-    // Escape zero bytes and append 0x00 0x00 terminator
-    size_t old_size = dst->size();
-    dst->resize(old_size + s.size * 2 + 2);
-    const auto* srcp = reinterpret_cast<const uint8_t*>(s.data);
-    auto* dstp = reinterpret_cast<uint8_t*>(&(*dst)[old_size]);
-    for (size_t i = 0; i < s.size; i++) {
-        uint8_t b = srcp[i];
-        if (b == 0) {
-            *dstp++ = 0;
-            *dstp++ = 1;
-        } else {
-            *dstp++ = b;
-        }
-    }
-    *dstp++ = 0;
-    *dstp++ = 0;
-    dst->resize(reinterpret_cast<char*>(dstp) - &(*dst)[0]);
-}
-
-inline void encode_slice_last(const Slice& s, std::string* dst) {
-    dst->append(s.data, s.size);
+// Reuse the existing encode_slice implementation from primary_key_encoder.h
+inline void encode_slice(const Slice& s, std::string* dst, bool is_last) {
+    starrocks::encoding_utils::encode_slice(s, dst, is_last);
 }
 
 inline void encode_float32(float v, std::string* dest) {
@@ -437,7 +391,7 @@ inline void encode_float32(float v, std::string* dest) {
     memcpy(&u, &v, sizeof(u));
     // If negative, flip all bits; else flip sign bit only.
     u ^= (u & 0x80000000u) ? 0xFFFFFFFFu : 0x80000000u;
-    u = BigEndian::FromHost32(u);
+    u = starrocks::encoding_utils::to_bigendian(u);
     dest->append(reinterpret_cast<const char*>(&u), sizeof(u));
 }
 
@@ -446,23 +400,32 @@ inline void encode_float64(double v, std::string* dest) {
     static_assert(sizeof(u) == sizeof(v), "size mismatch");
     memcpy(&u, &v, sizeof(u));
     u ^= (u & 0x8000000000000000ull) ? 0xFFFFFFFFFFFFFFFFull : 0x8000000000000000ull;
-    u = BigEndian::FromHost64(u);
-    dest->append(reinterpret_cast<const char*>(&u), sizeof(u));
+    u = starrocks::encoding_utils::to_bigendian(u);
+    dest->append(reinterpret_cast<char*>(&u), sizeof(u));
 }
 
 struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     size_t rows = 0;
     bool is_last_field = false;
-    bool has_nullable = false;
     std::vector<std::string>* buffs;
 
     explicit EncoderVisitor() : ColumnVisitorAdapter(this) {}
 
-    // Nullable wrapper: emit marker then visit inner
+    // Nullable wrapper: handle null values and data together
     Status do_visit(const NullableColumn& column) {
-        RETURN_IF_ERROR(do_visit(column.null_column()));
-        RETURN_IF_ERROR(do_visit(column.data_column()));
-        return Status::OK();
+        const auto& null_column = column.null_column();
+        auto& nulls = null_column->get_data();
+        // NULL value - encode as empty string for sort key purposes
+        // NULL should sort before non-NULL
+        for (size_t i = 0; i < rows; i++) {
+            if (nulls[i]) {
+                (*buffs)[i].append("\0", 1);
+            } else {
+                (*buffs)[i].append("\1", 1);
+            }
+        }
+
+        return column.data_column()->accept(this);
     }
 
     // Const: forward to data
@@ -473,11 +436,7 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     Status do_visit(const BinaryColumnBase<T>& column) {
         for (size_t i = 0; i < rows; i++) {
             Slice s = column.get_slice(i);
-            if (is_last_field) {
-                encode_slice_last(s, &(*buffs)[i]);
-            } else {
-                encode_slice_middle(s, &(*buffs)[i]);
-            }
+            encode_slice(s, &(*buffs)[i], is_last_field);
         }
         return Status::OK();
     }
@@ -485,15 +444,17 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     // Fixed-length numerics
     template <typename T>
     Status do_visit(const FixedLengthColumn<T>& column) {
+        const auto& data = column.get_data();
         for (size_t i = 0; i < rows; i++) {
             if constexpr (std::is_same_v<T, float>) {
-                encode_float32(column.get_data()[i], &(*buffs)[i]);
+                encode_float32(data[i], &(*buffs)[i]);
             } else if constexpr (std::is_same_v<T, double>) {
-                encode_float64(column.get_data()[i], &(*buffs)[i]);
+                encode_float64(data[i], &(*buffs)[i]);
             } else if constexpr (std::is_integral_v<T>) {
-                encode_integral<T>(column.get_data()[i], &(*buffs)[i]);
+                encode_integral<T>(data[i], &(*buffs)[i]);
             } else {
-                return Status::NotSupported("make_sort_key: unsupported argument type");
+                return Status::NotSupported(
+                        fmt::format("make_sort_key: unsupported argument type: {}", typeid(T).name()));
             }
         }
         return Status::OK();
@@ -513,13 +474,10 @@ StatusOr<ColumnPtr> UtilityFunctions::make_sort_key(FunctionContext* context, co
 
     size_t num_rows = columns[0]->size();
     auto result = ColumnBuilder<TYPE_VARBINARY>(num_rows);
-    bool has_nullable =
-            std::any_of(columns.begin(), columns.end(), [](const ColumnPtr& c) { return c->is_nullable(); });
 
     std::vector<std::string> buffs(num_rows);
     detail::EncoderVisitor visitor;
     visitor.rows = num_rows;
-    visitor.has_nullable = has_nullable;
     visitor.buffs = &buffs;
     for (int j = 0; j < num_args; ++j) {
         visitor.is_last_field = (j + 1 == num_args);
