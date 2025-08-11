@@ -536,6 +536,11 @@ Default value: `true`.
 * **Default**: false
 * **Introduced in**: v3.2.3
 
+### enable_spm_rewrite
+
+* **Description**: Whether to enable SQL Plan Manager (SPM) query rewrite. When enabled, StarRocks automatically rewrites queries to use bound query plans, improving query performance and stability.
+* **Default**: false
+
 ### enable_spill
 
 * **Description**: Whether to enable intermediate result spilling. Default: `false`. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries.
