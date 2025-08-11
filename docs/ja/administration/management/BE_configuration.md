@@ -1823,6 +1823,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: starlet filesystem インスタンス キャッシュの有効期限。
 - 導入バージョン: v3.3.15, 3.4.5
 
+##### starlet_write_file_with_tag
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 共有データクラスターにおいて、オブジェクトストレージに書き込まれたファイルにオブジェクトストレージタグを付与し、便利なカスタムファイル管理を行うかどうか。
+- 導入バージョン: v3.5.3
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - デフォルト: 1048576
