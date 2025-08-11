@@ -18,10 +18,10 @@ import com.google.gson.Gson;
 
 public abstract class BalanceStat {
     public enum BalanceType {
-        CLUSTER_DISK("cluster disk"),
-        CLUSTER_TABLET("cluster tablet"),
-        BACKEND_DISK("backend disk"),
-        BACKEND_TABLET("backend tablet");
+        CLUSTER_DISK("inter-node disk usage"),
+        CLUSTER_TABLET("inter-node tablet distribution"),
+        BACKEND_DISK("intra-node disk usage"),
+        BACKEND_TABLET("intra-node tablet distribution");
 
         private final String label;
 
