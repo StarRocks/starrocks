@@ -12,14 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake;
 
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
@@ -35,10 +31,4 @@ public class ShardManager implements Writable {
         return checksum;
     }
 
-
-
-    public static ShardManager read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ShardManager.class);
-    }
 }

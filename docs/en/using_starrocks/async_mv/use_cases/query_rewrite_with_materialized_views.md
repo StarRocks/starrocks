@@ -555,6 +555,66 @@ SELECT
 FROM order_list WHERE order_date='2023-07-03';
 ```
 
+In addition to the above functions, starting from StarRocks v3.4.0, asynchronous materialized views also support generic aggregate functions which can also be used for query rewrite. For more information about generic aggregate functions, see [Generic aggregate function states](../../../table_design/table_types/aggregate_table.md#generic-aggregate-states-in-asynchronous-materialized-views).
+
+```SQL
+-- Create an asynchronous materialized view test_mv2 to store aggregate states.
+CREATE MATERIALIZED VIEW test_mv2
+PARTITION BY (dt)
+DISTRIBUTED BY RANDOM
+AS
+SELECT 
+    dt,
+    -- Original aggregate functions.
+    min(id) AS min_id,
+    max(id) AS max_id,
+    sum(id) AS sum_id,
+    bitmap_union(to_bitmap(id)) AS bitmap_union_id,
+    hll_union(hll_hash(id)) AS hll_union_id,
+    percentile_union(percentile_hash(id)) AS percentile_union_id,
+    -- Generic aggregate state functions.
+    ds_hll_count_distinct_union(ds_hll_count_distinct_state(id)) AS hll_id,
+    avg_union(avg_state(id)) AS avg_id,
+    array_agg_union(array_agg_state(id)) AS array_agg_id,
+    min_by_union(min_by_state(province, id)) AS min_by_province_id
+FROM t1
+GROUP BY dt;
+
+-- Refresh the materialized view.
+REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+
+-- Direct queries against the aggregate function will be transparently accelerated by test_mv2.
+SELECT 
+    dt,
+    min(id),
+    max(id),
+    sum(id),
+    bitmap_union_count(to_bitmap(id)), -- count(distinct id)
+    hll_union_agg(hll_hash(id)), -- approx_count_distinct(id)
+    percentile_approx(id, 0.5),
+    ds_hll_count_distinct(id),
+    avg(id),
+    array_agg(id),
+    min_by(province, id)
+FROM t1
+WHERE dt >= '2024-01-01'
+GROUP BY dt;
+
+SELECT 
+    min(id),
+    max(id),
+    sum(id),
+    bitmap_union_count(to_bitmap(id)), -- count(distinct id)
+    hll_union_agg(hll_hash(id)), -- approx_count_distinct(id)
+    percentile_approx(id, 0.5),
+    ds_hll_count_distinct(id),
+    avg(id),
+    array_agg(id),
+    min_by(province, id)
+FROM t1
+WHERE dt >= '2024-01-01';
+```
+
 ### Aggregation pushdown
 
 From v3.3.0, StarRocks supports aggregation pushdown for materialized view query rewrite. When this feature is enabled, aggregate functions will be pushed down to the Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed. This will relieve the data expansion caused by Join and thereby improve the query performance.

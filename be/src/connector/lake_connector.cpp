@@ -216,7 +216,8 @@ Status LakeDataSource::init_unused_output_columns(const std::vector<std::string>
     return Status::OK();
 }
 
-Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_columns) {
+Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_columns,
+                                            std::vector<uint32_t>& reader_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
         int32_t index = _tablet_schema->field_index(slot->col_name());
@@ -237,6 +238,23 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
     if (scanner_columns.empty()) {
         return Status::InternalError("failed to build storage scanner, no materialized slot!");
     }
+
+    // Return columns
+    if (_params.skip_aggregation) {
+        reader_columns = scanner_columns;
+    } else {
+        for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
+            reader_columns.push_back(i);
+        }
+        for (auto index : scanner_columns) {
+            if (!_tablet_schema->column(index).is_key()) {
+                reader_columns.push_back(index);
+            }
+        }
+    }
+    // Actually only the key columns need to be sorted by id, here we check all
+    // for simplicity.
+    DCHECK(std::is_sorted(reader_columns.begin(), reader_columns.end()));
     return Status::OK();
 }
 
@@ -249,9 +267,7 @@ void LakeDataSource::decide_chunk_size(bool has_predicate) {
     }
 }
 
-Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
-                                          const std::vector<uint32_t>& scanner_columns,
-                                          std::vector<uint32_t>& reader_columns) {
+Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key_ranges) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     bool skip_aggregation = thrift_lake_scan_node.is_preaggregation;
     auto parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
@@ -282,6 +298,23 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
     _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
 
+    for (const auto& cid : _non_pushdown_pred_tree.column_ids()) {
+        _unused_output_column_ids.erase(cid);
+    }
+
+    std::vector<ExprContext*> not_pushdown_conjuncts;
+    _conjuncts_manager->get_not_push_down_conjuncts(&not_pushdown_conjuncts);
+    std::unordered_set<SlotId> conjuncts_slot_ids;
+    for (auto* expr : not_pushdown_conjuncts) {
+        expr->root()->for_each_slot_id([&conjuncts_slot_ids](SlotId id) { conjuncts_slot_ids.insert(id); });
+    }
+    for (auto& slot : *_slots) {
+        if (conjuncts_slot_ids.contains(slot->id())) {
+            int32_t fid = _tablet_schema->field_index(slot->col_name());
+            _unused_output_column_ids.erase(fid);
+        }
+    }
+
     {
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
         RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
@@ -302,22 +335,6 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         _params.end_key.push_back(key_range->end_scan_range);
     }
 
-    // Return columns
-    if (skip_aggregation) {
-        reader_columns = scanner_columns;
-    } else {
-        for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
-            reader_columns.push_back(i);
-        }
-        for (auto index : scanner_columns) {
-            if (!_tablet_schema->column(index).is_key()) {
-                reader_columns.push_back(index);
-            }
-        }
-    }
-    // Actually only the key columns need to be sorted by id, here we check all
-    // for simplicity.
-    DCHECK(std::is_sorted(reader_columns.begin(), reader_columns.end()));
     return Status::OK();
 }
 
@@ -329,10 +346,11 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(get_tablet(_scan_range));
+    RETURN_IF_ERROR(_extend_schema_by_access_paths());
     RETURN_IF_ERROR(init_global_dicts(&_params));
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
-    RETURN_IF_ERROR(init_scanner_columns(scanner_columns));
-    RETURN_IF_ERROR(init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
+    RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
+    RETURN_IF_ERROR(init_scanner_columns(scanner_columns, reader_columns));
 
     if (_split_context != nullptr) {
         auto split_context = down_cast<const pipeline::LakeSplitContext*>(_split_context);
@@ -388,6 +406,41 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_reader->prepare());
     RETURN_IF_ERROR(_reader->open(_params));
     return Status::OK();
+}
+
+// Extend the schema fields based on the column access paths.
+// This ensures that only the necessary subfields required by the query are retained in the schema.
+Status LakeDataSource::_extend_schema_by_access_paths() {
+    auto& access_paths = _column_access_paths;
+    bool need_extend =
+            std::any_of(access_paths.begin(), access_paths.end(), [](auto& path) { return path->is_extended(); });
+    if (!need_extend) {
+        return {};
+    }
+
+    TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_tablet_schema);
+    int field_number = tmp_schema->num_columns();
+    for (auto& path : access_paths) {
+        if (!path->is_extended()) {
+            continue;
+        }
+        int root_column_index = _tablet_schema->field_index(path->path());
+        RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
+
+        LogicalType value_type = path->value_type().type;
+        TabletColumn column;
+        column.set_name(path->linear_path());
+        column.set_unique_id(++field_number);
+        column.set_type(value_type);
+        column.set_length(path->value_type().len);
+        column.set_is_nullable(true);
+        column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_column_index));
+
+        tmp_schema->append_column(column);
+        VLOG(2) << "extend the access path column: " << path->linear_path();
+    }
+    _tablet_schema = tmp_schema;
+    return {};
 }
 
 Status LakeDataSource::init_column_access_paths(Schema* schema) {
@@ -504,9 +557,6 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
 }
 
 void LakeDataSource::init_counter(RuntimeState* state) {
-    _access_path_hits_counter = ADD_COUNTER(_runtime_profile, "AccessPathHits", TUnit::UNIT);
-    _access_path_unhits_counter = ADD_COUNTER(_runtime_profile, "AccessPathUnhits", TUnit::UNIT);
-
     _bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
 
@@ -685,10 +735,14 @@ void LakeDataSource::update_counter() {
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_TIMER(_runtime_profile, "DictDecode");
         COUNTER_UPDATE(c, _reader->stats().decode_dict_ns);
+        RuntimeProfile::Counter* count = ADD_COUNTER(_runtime_profile, "DictDecodeCount", TUnit::UNIT);
+        COUNTER_UPDATE(count, _reader->stats().decode_dict_count);
     }
     if (_reader->stats().late_materialize_ns > 0) {
         RuntimeProfile::Counter* c = ADD_TIMER(_runtime_profile, "LateMaterialize");
         COUNTER_UPDATE(c, _reader->stats().late_materialize_ns);
+        RuntimeProfile::Counter* rows = ADD_COUNTER(_runtime_profile, "LateMaterializeRows", TUnit::UNIT);
+        COUNTER_UPDATE(rows, _reader->stats().late_materialize_rows);
     }
     if (_reader->stats().del_filter_ns > 0) {
         RuntimeProfile::Counter* c1 = ADD_TIMER(_runtime_profile, "DeleteFilter");
@@ -734,6 +788,8 @@ void LakeDataSource::update_counter() {
     }
 
     if (_reader->stats().flat_json_hits.size() > 0 || _reader->stats().merge_json_hits.size() > 0) {
+        RuntimeProfile::Counter* _access_path_hits_counter =
+                ADD_COUNTER(_runtime_profile, "AccessPathHits", TUnit::UNIT);
         std::string access_path_hits = "AccessPathHits";
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
@@ -757,6 +813,8 @@ void LakeDataSource::update_counter() {
         COUNTER_UPDATE(_access_path_hits_counter, total);
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
+        RuntimeProfile::Counter* _access_path_unhits_counter =
+                ADD_COUNTER(_runtime_profile, "AccessPathUnhits", TUnit::UNIT);
         std::string access_path_unhits = "AccessPathUnhits";
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
@@ -769,6 +827,21 @@ void LakeDataSource::update_counter() {
             COUNTER_UPDATE(path_counter, v);
         }
         COUNTER_UPDATE(_access_path_unhits_counter, total);
+    }
+    if (_reader->stats().extract_json_hits.size() > 0) {
+        const std::string counter_name = "AccessPathExtract";
+        RuntimeProfile::Counter* counter = ADD_COUNTER(_runtime_profile, counter_name, TUnit::UNIT);
+        int64_t total = 0;
+        for (auto& [k, v] : _reader->stats().extract_json_hits) {
+            std::string path = fmt::format("[Extract]{}", k);
+            auto* path_counter = _runtime_profile->get_counter(path);
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, path, TUnit::UNIT, counter_name);
+            }
+            total += v;
+            COUNTER_UPDATE(path_counter, v);
+        }
+        COUNTER_UPDATE(counter, total);
     }
 
     std::string parent_name = "SegmentRead";

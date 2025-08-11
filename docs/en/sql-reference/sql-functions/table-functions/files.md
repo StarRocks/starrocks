@@ -133,7 +133,8 @@ Example of the Parquet format:
 
 ```SQL
 "format"="parquet",
-"parquet.use_legacy_encoding" = "true"   -- for unloading only
+"parquet.use_legacy_encoding" = "true",   -- for unloading only
+"parquet.version" = "2.6"                 -- for unloading only
 ```
 
 ###### parquet.use_legacy_encoding
@@ -155,6 +156,10 @@ If this item is set to `false`:
 For DECIMAL 128 data type, only `fixed_len_byte_array` encoding is available. `parquet.use_legacy_encoding` does not take effect.
 
 :::
+
+###### parquet.version
+
+Controls the Parquet version into which the system unloads data. Supported from v3.4.6 onwards. Valid values: `1.0`, `2.4`, and `2.6` (default). This property is only supported for data unloading.
 
 ##### CSV
 
@@ -212,7 +217,7 @@ From v3.2 onwards, FILES() supports automatic schema detection and unionization 
 
 You can configure the sampling rule using the following parameters:
 
-- `auto_detect_sample_files`: the number of random data files to sample in each batch. Range: [0, + ∞]. Default: `1`.
+- `auto_detect_sample_files`: the number of random data files to sample in each batch. By default, the first and last files are selected. Range: [0, + ∞]. Default: `2`.
 - `auto_detect_sample_rows`: the number of data rows to scan in each sampled data file. Range: [0, + ∞]. Default: `500`.
 
 After the sampling, StarRocks unionizes the columns from all the data files according to these rules:

@@ -1,4 +1,4 @@
--- name: test_mv_refresh_list_partitions_multi_columns2
+-- name: test_mv_refresh_list_partitions_multi_columns2 @slow
 create database db_${uuid0};
 -- result:
 -- !result

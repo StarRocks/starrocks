@@ -30,18 +30,42 @@
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
+#include "storage/sstable/sstable_predicate.h"
 #include "storage/sstable/table_builder.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
 
-Status KeyValueMerger::merge(const std::string& key, const std::string& value, uint64_t max_rss_rowid) {
+Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
+    const std::string& key = iter_ptr->key().to_string();
+    const std::string& value = iter_ptr->value().to_string();
+    uint64_t max_rss_rowid = iter_ptr->max_rss_rowid();
+    const auto& predicate = iter_ptr->predicate();
+
     IndexValuesWithVerPB index_value_ver;
     if (!index_value_ver.ParseFromString(value)) {
         return Status::InternalError("Failed to parse index value ver");
     }
     if (index_value_ver.values_size() == 0) {
         return Status::OK();
+    }
+
+    /*
+     * Do not distinguish between base compaction and cumulative compaction here.
+     * Currently we use predicate after tablet split and make predicate available
+     * for both base compaction and cumulative compaction is useful and will not
+     * cause any problem.
+     *
+     * But if caller for another purpose to use this predicate here, should pay attention
+     * if it is only used for base compaction or cumulative compaction.
+    */
+    if (predicate != nullptr) {
+        uint8_t selection = 0;
+        RETURN_IF_ERROR(_predicate_evaluator.evaluate_with_cache(predicate, key, &selection));
+        if (!selection) {
+            // If the key is not hit, we skip it.
+            return Status::OK();
+        }
     }
 
     auto version = index_value_ver.values(0).version();
@@ -215,6 +239,7 @@ Status LakePersistentIndex::minor_compact() {
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
+    TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::minor_compact:inject_predicate", &sstable_pb);
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     _sstables.emplace_back(std::move(sstable));
     TRACE_COUNTER_INCREMENT("minor_compact_times", 1);
@@ -414,6 +439,10 @@ Status LakePersistentIndex::prepare_merging_iterator(
         merging_sstables->push_back(merging_sstable);
         // Pass `max_rss_rowid` to iterator, will be used when compaction.
         read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
+        if (sstable_pb.has_predicate()) {
+            ASSIGN_OR_RETURN(read_options.predicate,
+                             sstable::SstablePredicate::create(metadata.schema(), sstable_pb.predicate()));
+        }
         sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
         // add input sstable.
@@ -433,8 +462,7 @@ Status LakePersistentIndex::merge_sstables(std::unique_ptr<sstable::Iterator> it
     auto merger = std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(), builder,
                                                    base_level_merge);
     while (iter_ptr->Valid()) {
-        RETURN_IF_ERROR(
-                merger->merge(iter_ptr->key().to_string(), iter_ptr->value().to_string(), iter_ptr->max_rss_rowid()));
+        RETURN_IF_ERROR(merger->merge(iter_ptr.get()));
         iter_ptr->Next();
     }
     RETURN_IF_ERROR(iter_ptr->status());

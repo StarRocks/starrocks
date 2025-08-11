@@ -21,6 +21,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/memtable_flush_executor.h"
 #include "util/runtime_profile.h"
@@ -159,6 +160,9 @@ public:
 
     bool has_spill_block() const;
 
+    const DictColumnsValidMap* global_dict_columns_valid_info() const;
+    const GlobalDictByNameMaps* global_dict_map() const;
+
 private:
     DeltaWriterImpl* _impl;
 };
@@ -257,6 +261,11 @@ public:
         return *this;
     }
 
+    DeltaWriterBuilder& set_global_dicts(GlobalDictByNameMaps* global_dicts) {
+        _global_dicts = global_dicts;
+        return *this;
+    }
+
     StatusOr<DeltaWriterPtr> build();
 
 private:
@@ -277,6 +286,7 @@ private:
     PUniqueId _load_id;
     RuntimeProfile* _profile{nullptr};
     BundleWritableFileContext* _bundle_writable_file_context{nullptr};
+    GlobalDictByNameMaps* _global_dicts = nullptr;
 };
 
 } // namespace starrocks::lake

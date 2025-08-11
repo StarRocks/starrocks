@@ -436,6 +436,9 @@ struct THdfsScanRange {
 
     // min/max value of slots
     35: optional map<i32, Exprs.TExprMinMaxValue> min_max_values;
+
+    // mapping transformed bucket id, used to schedule scan range
+    36: optional i32 bucket_id;
 }
 
 struct TBinlogScanRange {
@@ -569,6 +572,7 @@ struct TColumnAccessPath {
     3: optional list<TColumnAccessPath> children
     4: optional bool from_predicate
     5: optional Types.TTypeDesc type_desc
+    6: optional bool extended
 }
 
 struct TVectorSearchOptions {
@@ -1226,6 +1230,9 @@ struct THdfsScanNode {
     23: optional list<Types.TSlotId> extended_slot_ids;
 
     24: optional bool can_use_count_opt;
+
+    // describe distribution of local exchange
+    25: optional list<Partitions.TBucketProperty> bucket_properties;
 }
 
 struct TProjectNode {

@@ -211,7 +211,7 @@ StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持�
 | 特性                   | 支持版本 | 备注                                                         |
 | :--------------------- | :------- | :----------------------------------------------------------- |
 | CREATE DATABASE        | v3.1+    | 可以选择为在 Iceberg 中创建的数据库指定 Location。如果未指定数据库的 Location，则在该数据库下建表时需要指定 Location，否则将返回错误。如果已指定数据库的 Location，则建表时未指定 Location 将继承数据库的 Location。如果同时指定了数据库和表的 Location，最终生效的是表的 Location。 |
-| CREATE TABLE           | v3.1+    | 支持分区表和非分区表。                                       |
+| CREATE TABLE           | v3.1+    | 支持分区表和非分区表。v4.0 起支持创建隐藏分区（Hidden Partition）的表。          |
 | CREATE TABLE AS SELECT | v3.1+    |                                                              |
 | INSERT INTO/OVERWRITE  | v3.1+    | 支持分区表和非分区表。                                       |
 
@@ -281,7 +281,7 @@ StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持�
 
 #### 数据类型对应关系
 
-| MySQL     | StarRocks           | 支持版本 |
+| PGGSQL     | StarRocks           | 支持版本 |
 | :-------- | :------------------ | :------- |
 | BIT       | BOOLEAN             | v2.3+    |
 | SMALLINT  | SMALLINT            | v2.3+    |
@@ -295,6 +295,7 @@ StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持�
 | TEXT      | VARCHAR(columnsize) | v2.3+    |
 | DATE      | DATE                | v2.3+    |
 | TIMESTAMP | DATETIME            | v2.3+    |
+| UUID      | VARBINARY           | v3.5.3+  |
 
 ### ClickHouse 
 

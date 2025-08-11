@@ -37,7 +37,6 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.io.Text;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -173,23 +172,6 @@ public abstract class ColumnType {
         out.writeInt(scalarType.getLength());
         // Actually, varcharLimit need not to write here, write true to back compatible
         out.writeBoolean(true);
-    }
-
-    public static Type read(DataInput in) throws IOException {
-        String type = Text.readString(in);
-        PrimitiveType primitiveType;
-        // For compatible with old udf/udaf
-        if ("DECIMAL".equals(type)) {
-            primitiveType = PrimitiveType.DECIMALV2;
-        } else {
-            primitiveType = PrimitiveType.valueOf(type);
-        }
-        int scale = in.readInt();
-        int precision = in.readInt();
-        int len = in.readInt();
-        // Useless, just for back compatible
-        in.readBoolean();
-        return ScalarType.createType(primitiveType, len, precision, scale);
     }
 }
 

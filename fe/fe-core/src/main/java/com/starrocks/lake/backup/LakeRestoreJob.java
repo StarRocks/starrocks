@@ -61,7 +61,6 @@ import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Iterator;
@@ -272,11 +271,6 @@ public class LakeRestoreJob extends RestoreJob {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static LakeRestoreJob read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeRestoreJob.class);
-    }
-
     @Override
     protected void modifyInvertedIndex(OlapTable restoreTbl, Partition restorePart) {
         for (MaterializedIndex restoredIdx : restorePart.getDefaultPhysicalPartition()
@@ -284,7 +278,7 @@ public class LakeRestoreJob extends RestoreJob {
             MaterializedIndexMeta indexMeta = restoreTbl.getIndexMetaByIndexId(restoredIdx.getId());
             TStorageMedium medium = restoreTbl.getPartitionInfo().getDataProperty(restorePart.getId()).getStorageMedium();
             TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), restorePart.getId(),
-                    restoredIdx.getId(), indexMeta.getSchemaHash(), medium, true);
+                    restoredIdx.getId(), medium, true);
             for (Tablet restoreTablet : restoredIdx.getTablets()) {
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
             }

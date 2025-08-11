@@ -19,6 +19,7 @@
 #include "common/logging.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
+#include "storage/utils.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -46,7 +47,7 @@ SchemaScanner::ColumnDesc SchemaPartitionsMetaScanner::_s_columns[] = {
         {"LAST_CONSISTENCY_CHECK_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"IS_IN_MEMORY", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
         {"IS_TEMP", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
-        {"DATA_SIZE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DATA_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"ROW_COUNT", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"ENABLE_DATACACHE", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
         {"AVG_CS", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
@@ -54,6 +55,7 @@ SchemaScanner::ColumnDesc SchemaPartitionsMetaScanner::_s_columns[] = {
         {"MAX_CS", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
         {"STORAGE_PATH", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"STORAGE_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TABLET_BALANCED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
         {"METADATA_SWITCH_VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
@@ -261,8 +263,8 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
         }
         case 22: {
             // DATA_SIZE
-            Slice data_size = Slice(info.data_size);
-            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&data_size);
+            int64_t data_size_bytes = parse_data_size(info.data_size);
+            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&data_size_bytes);
             break;
         }
         case 23: {
@@ -302,6 +304,11 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 30: {
+            // TABLET_BALANCED
+            fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.tablet_balanced);
+            break;
+        }
+        case 31: {
             // METADATA_SWITCH_VERSION
             fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.metadata_switch_version);
             break;

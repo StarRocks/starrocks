@@ -107,8 +107,7 @@ enum TxnTypePB {
      TXN_NORMAL = 0;
      TXN_REPLICATION = 1;
      TXN_EMPTY = 2;
-     TXN_SPLIT_TABLET = 3;
-     TXN_MERGE_TABLET = 4;
+     TXN_DYNAMIC_TABLET = 3;
 }
 
 enum ReplicationTxnStatePB {
@@ -227,6 +226,9 @@ message PersistentIndexSstablePB {
     optional bytes encryption_meta = 5;
     // Whether this file shared by multiple tablets
     optional bool shared = 6 [default=false];
+    // Filter out rows which do not satisfy the predicate
+    // when reading this specific sstable
+    optional PersistentIndexSstablePredicatePB predicate = 7;
 }
 
 message PersistentIndexSstableMetaPB {

@@ -288,25 +288,25 @@ public class DppUtilsTest {
         Assertions.assertEquals(558161692L, hashValue.getValue());
 
         column = new EtlJobConfig.EtlColumn("k1", "TINYINT", true, true, "NONE", "0", 0, 0, 0);
-        bf = DppUtils.getHashValue(new Byte((byte) 1), DataTypes.ByteType, column);
+        bf = DppUtils.getHashValue(Byte.valueOf((byte) 1), DataTypes.ByteType, column);
         hashValue.reset();
         hashValue.update(bf.array(), 0, bf.limit());
         Assertions.assertEquals(2768625435L, hashValue.getValue());
 
         column = new EtlJobConfig.EtlColumn("k1", "SMALLINT", true, true, "NONE", "0", 0, 0, 0);
-        bf = DppUtils.getHashValue(new Short((short) 1), DataTypes.ShortType, column);
+        bf = DppUtils.getHashValue(Short.valueOf((short) 1), DataTypes.ShortType, column);
         hashValue.reset();
         hashValue.update(bf.array(), 0, bf.limit());
         Assertions.assertEquals(1489118142L, hashValue.getValue());
 
         column = new EtlJobConfig.EtlColumn("k1", "INT", true, true, "NONE", "0", 0, 0, 0);
-        bf = DppUtils.getHashValue(new Integer(1), DataTypes.IntegerType, column);
+        bf = DppUtils.getHashValue(Integer.valueOf(1), DataTypes.IntegerType, column);
         hashValue.reset();
         hashValue.update(bf.array(), 0, bf.limit());
         Assertions.assertEquals(2583214201L, hashValue.getValue());
 
         column = new EtlJobConfig.EtlColumn("k1", "BIGINT", true, true, "NONE", "0", 0, 0, 0);
-        bf = DppUtils.getHashValue(new Long(1), DataTypes.LongType, column);
+        bf = DppUtils.getHashValue(Long.valueOf(1), DataTypes.LongType, column);
         hashValue.reset();
         hashValue.update(bf.array(), 0, bf.limit());
         Assertions.assertEquals(2844319735L, hashValue.getValue());
@@ -318,7 +318,7 @@ public class DppUtilsTest {
         Assertions.assertEquals(603981213L, hashValue.getValue());
 
         column = new EtlJobConfig.EtlColumn("k1", "BOOLEAN", true, true, "NONE", "0", 0, 0, 0);
-        bf = DppUtils.getHashValue(new Boolean(true), DataTypes.BooleanType, column);
+        bf = DppUtils.getHashValue(Boolean.valueOf(true), DataTypes.BooleanType, column);
         hashValue.reset();
         hashValue.update(bf.array(), 0, bf.limit());
         Assertions.assertEquals(2768625435L, hashValue.getValue());

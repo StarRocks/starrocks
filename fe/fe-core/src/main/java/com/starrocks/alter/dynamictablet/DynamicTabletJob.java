@@ -15,24 +15,20 @@
 package com.starrocks.alter.dynamictablet;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.WarehouseIdleChecker;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
-import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.thrift.TDynamicTabletJobsItem;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.IOException;
+import java.util.Map;
 
 /*
- * DynamicTabletJob, for dynamic tablet splitting and merging.
+ * DynamicTabletJob is for dynamic tablet splitting and merging.
  * This is the base class of SplitTabletJob and MergeTabletJob
  */
 public abstract class DynamicTabletJob implements Writable {
@@ -79,16 +75,17 @@ public abstract class DynamicTabletJob implements Writable {
     @SerializedName(value = "errorMessage")
     protected String errorMessage;
 
-    @SerializedName(value = "warehouseId")
-    protected final long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-    // no need to persistent
-    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+    // Physical partition id -> PhysicalPartitionContext
+    @SerializedName(value = "physicalPartitionContexts")
+    protected final Map<Long, PhysicalPartitionContext> physicalPartitionContexts;
 
-    public DynamicTabletJob(long jobId, JobType jobType, long dbId, long tableId) {
+    public DynamicTabletJob(long jobId, JobType jobType, long dbId, long tableId,
+            Map<Long, PhysicalPartitionContext> physicalPartitionContexts) {
         this.jobId = jobId;
         this.jobType = jobType;
         this.dbId = dbId;
         this.tableId = tableId;
+        this.physicalPartitionContexts = physicalPartitionContexts;
     }
 
     public long getJobId() {
@@ -152,8 +149,12 @@ public abstract class DynamicTabletJob implements Writable {
         return errorMessage;
     }
 
-    public long getWarehouseId() {
-        return warehouseId;
+    public long getParallelTablets() {
+        long parallelTablets = 0;
+        for (PhysicalPartitionContext physicalPartitionContext : physicalPartitionContexts.values()) {
+            parallelTablets += physicalPartitionContext.getParallelTablets();
+        }
+        return parallelTablets;
     }
 
     protected abstract void runPendingJob();
@@ -168,19 +169,9 @@ public abstract class DynamicTabletJob implements Writable {
 
     protected abstract boolean canAbort();
 
-    public abstract long getParallelTablets();
-
     public abstract void replay();
 
     public void run() {
-        try {
-            getComputeResource();
-        } catch (Exception e) {
-            LOG.warn("Failed to acquire compute resource for dynamic tablet job, will retry. {}. Exception: ",
-                    this, e);
-            return;
-        }
-
         try {
             JobState prevState = null;
             do {
@@ -220,14 +211,8 @@ public abstract class DynamicTabletJob implements Writable {
         }
     }
 
-    private void getComputeResource() {
-        CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
-        this.computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                .acquireComputeResource(acquireContext);
-    }
-
     private void onJobDone() {
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        LOG.info("Dynamic tablet job is done. {}", this);
     }
 
     @Override
@@ -249,8 +234,40 @@ public abstract class DynamicTabletJob implements Writable {
         return sb.toString();
     }
 
-    public static DynamicTabletJob read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DynamicTabletJob.class);
+    public TDynamicTabletJobsItem getInfo() {
+        TDynamicTabletJobsItem item = new TDynamicTabletJobsItem();
+        item.setJob_id(jobId);
+        item.setDb_id(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            item.setDb_name("");
+            LOG.warn("Failed to get database name for dynamic tablet job. {}", this);
+        } else {
+            item.setDb_name(db.getFullName());
+        }
+
+        item.setTable_id(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            item.setTable_name("");
+            LOG.warn("Failed to get table name for dynamic tablet job. {}", this);
+        } else {
+            item.setTable_name(table.getName());
+        }
+        item.setJob_type(jobType.name());
+        item.setJob_state(jobState.name());
+        item.setTransaction_id(-1L); // override in the future pr.
+        item.setParallel_partitions(physicalPartitionContexts.size());
+        item.setParallel_tablets(getParallelTablets());
+        item.setCreated_time(createdTimeMs / 1000);
+        item.setFinished_time(finishedTimeMs / 1000);
+        if (errorMessage != null) {
+            item.setError_message(errorMessage);
+        } else {
+            item.setError_message("");
+        }
+        return item;
     }
+
+
 }

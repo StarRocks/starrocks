@@ -4,7 +4,86 @@ displayed_sidebar: docs
 
 # StarRocks version 3.5
 
-## v3.5.1
+:::warning
+
+升级至 v3.5 后，请勿直接将集群降级至 v3.4.0 ~ v3.4.4，否则会导致元数据不兼容。您必须降级到 v3.4.5 或更高版本以避免出现此问题。
+
+:::
+
+## 3.5.3
+
+发布日期： 2025 年 8 月 11 日
+
+### 功能增强
+
+- Lake Compaction 增加 Segment 写入耗时统计信息。[#60891](https://github.com/StarRocks/starrocks/pull/60891)
+- 本地 PassThrough 交换场景下避免 bRPC 通信。[#60538](https://github.com/StarRocks/starrocks/pull/60538)
+- 禁用 Data Cache 写入的 inline 模式以避免性能下降。[#60530](https://github.com/StarRocks/starrocks/pull/60530)
+- Iceberg 元数据扫描支持共享文件 I/O。[#61012](https://github.com/StarRocks/starrocks/pull/61012)
+- 支持终止所有 PENDING 状态的 ANALYZE 任务。[#61118](https://github.com/StarRocks/starrocks/pull/61118)
+- CTE 节点过多时强制复用以避免优化耗时过长。[#60983](https://github.com/StarRocks/starrocks/pull/60983)
+- 集群均衡结果中新增 `BALANCE` 类型。[#61081](https://github.com/StarRocks/starrocks/pull/61081)
+- 优化含外部表的物化视图改写。[#61037](https://github.com/StarRocks/starrocks/pull/61037)
+- 系统变量 `enable_materialized_view_agg_pushdown_rewrite` 默认值修改为 `true`，即默认为物化视图查询改写启用聚合函数下推。 [#60976](https://github.com/StarRocks/starrocks/pull/60976)
+- 优化分区统计锁竞争。[#61041](https://github.com/StarRocks/starrocks/pull/61041)
+
+### 问题修复
+
+修复了以下问题：
+
+- 列裁剪后 Chunk 列大小不一致。[#61271](https://github.com/StarRocks/starrocks/pull/61271)
+- 非异步执行分区统计加载可能造成死锁。[#61300](https://github.com/StarRocks/starrocks/pull/61300)
+-  `array_map` 处理常量数组列时崩溃。[#61309](https://github.com/StarRocks/starrocks/pull/61309)
+- 将自增列设为 NULL 时，系统错误拒绝同一 Chunk 内的有效数据。[#61255](https://github.com/StarRocks/starrocks/pull/61255)
+- JDBC 实际连接数可能超过 `jdbc_connection_pool_size` 限制。[#61038](https://github.com/StarRocks/starrocks/pull/61038)
+- FQDN 模式下未使用 IP 地址作为缓存键。[#61203](https://github.com/StarRocks/starrocks/pull/61203)
+- 数组比较过程中数组列克隆错误。[#61036](https://github.com/StarRocks/starrocks/pull/61036)
+- 部署序列化线程池阻塞导致查询性能下降。[#61150](https://github.com/StarRocks/starrocks/pull/61150)
+- 心跳重试计数器重置后 OK 响应未同步。[#61249](https://github.com/StarRocks/starrocks/pull/61249)
+- `hour_from_unixtime` 函数结果错误。[#61206](https://github.com/StarRocks/starrocks/pull/61206)
+- ALTER TABLE 任务与分区创建冲突。[#60890](https://github.com/StarRocks/starrocks/pull/60890)
+- 从 v3.3 升级至 v3.4 或更新版本后缓存不生效。[#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- 向量索引指标 `hit_count` 未设置。[#61102](https://github.com/StarRocks/starrocks/pull/61102)
+- Stream Load 事务导入无法找到协调节点。[#60154](https://github.com/StarRocks/starrocks/pull/60154)
+- BE 在加载 OOM 分区时崩溃。[#60778](https://github.com/StarRocks/starrocks/pull/60778)
+- 手动创建的分区在执行 INSERT OVERWRITE 时失败。[#60858](https://github.com/StarRocks/starrocks/pull/60858)
+- 当分区的值不同但名称在不区分大小写的情况下相同时，分区创建失败。 [#60909](https://github.com/StarRocks/starrocks/pull/60909)
+- 不支持 PostgreSQL UUID 类型。[#61021](https://github.com/StarRocks/starrocks/pull/61021)
+- 通过 `FILES()` 导入 Parquet 数据时列名大小写敏感的问题。[#61059](https://github.com/StarRocks/starrocks/pull/61059)
+
+## 3.5.2
+
+发布日期： 2025 年 7 月 18 日
+
+### 功能增强
+
+- 为数组列实现了 NDV 统计信息采集，以提高查询计划的准确性。[#60623](https://github.com/StarRocks/starrocks/pull/60623)
+- 禁止存算分离集群中 Colocate 表的副本均衡以及 Tablet 调度，减少无用的日志输出。[#60737](https://github.com/StarRocks/starrocks/pull/60737)
+- 优化 Catalog 访问机制，在 FE 启动时，系统默延迟异步访问外部数据源，避免外部服务不可用导致 FE 启动卡死。 [#60614](https://github.com/StarRocks/starrocks/pull/60614)
+- 新增 Session 变量 `enable_predicate_expr_reuse` 以控制是否开启谓词下推。 [#60603](https://github.com/StarRocks/starrocks/pull/60603)
+- 支持获取 Kafka Partition 信息失败后重试。[#60513](https://github.com/StarRocks/starrocks/pull/60513)
+- 移除物化视图和基表的分区列必须一对一匹配的限制。[#60565](https://github.com/StarRocks/starrocks/pull/60565)
+- 支持构建 Runtime In-Filter 增强聚合操作，通过在聚合阶段过滤数据来优化查询性能。[#59288](https://github.com/StarRocks/starrocks/pull/59288)
+
+### 问题修复
+
+修复了以下问题：
+
+- 低基数优化导致多列 COUNT DISTINCT 查询 Crash。[ #60664](https://github.com/StarRocks/starrocks/pull/60664)
+- 当存在多个同名全局用户定义函数（UDF）时，系统错误匹配这些函数。[#60550](https://github.com/StarRocks/starrocks/pull/60550)
+- Stream Load 导入时的空指针问题。[#60755](https://github.com/StarRocks/starrocks/pull/60755)
+- 使用集群快照进行恢复时 FE 启动报空指针问题。[#60604](https://github.com/StarRocks/starrocks/pull/60604)
+- 在处理乱序值列的短路查询时因读取列模式不匹配导致的 BE 崩溃。[#60466](https://github.com/StarRocks/starrocks/pull/60466)
+- 在 SUBMIT TASK 语句中通过 PROPERTIES 设置 Session 变量不生效。[#60584](https://github.com/StarRocks/starrocks/pull/60584)
+- SELECT min/max 查询在部分条件下查询结果不正确。[#60601](https://github.com/StarRocks/starrocks/pull/60601)
+- 当谓词左侧为函数时，系统调用错误的分片裁剪逻辑，导致查询命中错误的 bucket 进而导致查询结果不正确。[#60467](https://github.com/StarRocks/starrocks/pull/60467)
+- 通过 Arrow Flight SQL 协议查询不存在的 `query_id` 导致系统崩溃。 [#60497](https://github.com/StarRocks/starrocks/pull/60497)
+
+### 行为变更
+
+- `lake_compaction_allow_partial_success`  默认值变更为 `true`。Compaction 操作在部分成功后可以标记为成功，避免阻塞后续的 Compaction 任务。 [#60643](https://github.com/StarRocks/starrocks/pull/60643)
+
+## 3.5.1
 
 发布日期：2025 年 7 月 1 日
 
@@ -45,7 +124,7 @@ displayed_sidebar: docs
 
 - 部分 FE 指标新增 `is_leader` 标签。[#59883](https://github.com/StarRocks/starrocks/pull/59883)
 
-## v3.5.0
+## 3.5.0
 
 发布日期：2025 年 6 月 13 日
 
@@ -54,6 +133,7 @@ displayed_sidebar: docs
 - 从 StarRocks v3.5.0 起，需使用 JDK 17 或更高版本。
   - 如从 v3.4 或更早版本升级集群，需先升级 JDK，并在 FE 配置文件 **fe.conf** 中移除 `JAVA_OPTS` 中与 JDK 17 不兼容的参数（如 CMS 和 GC 参数）。推荐直接使用 v3.5 版本的 `JAVA_OPTS` 默认值。
   - 对于使用 External Catalog 的集群，需要在 BE 配置文件 **be.conf** 的配置项 `JAVA_OPTS` 中添加 `--add-opens=java.base/java.util=ALL-UNNAMED`。
+  - 对于使用 Java UDF 的集群，需要在 BE 配置文件 **be.conf** 的配置项 `JAVA_OPTS` 中添加 `--add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED`。
   - 此外，自 v3.5.0 起，StarRocks 不再提供特定 JDK 版本的 JVM 配置，所有 JDK 版本统一使用 `JAVA_OPTS`。
 
 ### 存算分离

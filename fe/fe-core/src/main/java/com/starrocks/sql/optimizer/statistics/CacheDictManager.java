@@ -108,7 +108,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
     private final AsyncLoadingCache<ColumnIdentifier, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
             .maximumSize(Config.statistic_dict_columns)
-            .executor(ThreadPoolManager.getDictCacheThread())
+            .executor(ThreadPoolManager.getStatsCacheThread())
             .buildAsync(dictLoader);
 
     private Optional<ColumnDict> deserializeColumnDict(long tableId, ColumnId columnName, TStatisticData statisticData) {
@@ -129,7 +129,8 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
             int dictDataSize = 0;
             for (int i = 0; i < dictSize; i++) {
                 // a UTF-8 code may take up to 3 bytes
-                dictDataSize += tGlobalDict.strings.get(i).limit();
+                ByteBuffer buf = tGlobalDict.strings.get(i);
+                dictDataSize += buf.limit() - buf.position();
                 // string offsets
                 dictDataSize += 4;
             }

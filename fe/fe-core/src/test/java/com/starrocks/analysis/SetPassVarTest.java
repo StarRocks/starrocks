@@ -63,7 +63,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SetPassVarTest {

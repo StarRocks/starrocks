@@ -240,8 +240,13 @@ public:
         return nullptr;
     }
 
+    // Return the name of this column iterator for debugging and logging purposes
+    virtual std::string name() const { return "ColumnIterator"; }
+
 protected:
     ColumnIteratorOptions _opts;
 };
+
+using ColumnIteratorUPtr = std::unique_ptr<ColumnIterator>;
 
 } // namespace starrocks

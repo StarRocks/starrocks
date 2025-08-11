@@ -445,4 +445,8 @@ int64_t SegmentWriter::bundle_file_offset() const {
     return _wfile->bundle_file_offset();
 }
 
+StatusOr<std::unique_ptr<io::NumericStatistics>> SegmentWriter::get_numeric_statistics() {
+    return _wfile->get_numeric_statistics();
+}
+
 } // namespace starrocks

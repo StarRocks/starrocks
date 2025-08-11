@@ -477,7 +477,7 @@ keyDesc
     ;
 
 orderByDesc
-    : ORDER BY identifierList
+    : ORDER BY '(' sortItem (',' sortItem)* ')'
     ;
 
 columnNullable
@@ -1156,7 +1156,11 @@ dropTagClause
     ;
 
 tableOperationClause
-    : EXECUTE functionCall
+    : EXECUTE tableOperationArg
+    ;
+
+tableOperationArg
+    : functionCall (WHERE expression)?
     ;
 
 tagOptions
@@ -1415,6 +1419,7 @@ showHistogramMetaStatement
 
 killAnalyzeStatement
     : KILL ANALYZE INTEGER_VALUE
+    | KILL ALL PENDING ANALYZE
     ;
 
 // ----------------------------------------- Analyze Profile Statement -------------------------------------------------

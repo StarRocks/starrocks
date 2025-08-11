@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['session variable']
 ---
 
 # System variables
@@ -474,7 +475,7 @@ Default value: `true`.
 
 ### enable_metadata_profile
 
-* **Description**: 是否为 Iceberg Catalog 的元数据收集查询开启 Profile。
+* **Description**: Whether to enabled Profile for Iceberg Catalog metadata.
 * **Default**: true
 * **Introduced in**: v3.3.3
 
@@ -486,6 +487,12 @@ Default value: `true`.
   * `distributed`: Use the distributed plan.
 * **Default**: auto
 * **Introduced in**: v3.3.3
+
+#### enable_iceberg_column_statistics
+
+* **Description**: Whether to obtain column statistics, such as `min`, `max`, `null count`, `row size`, and `ndv` (if a puffin file exists). When this item is set to `false`, only the row count information will be collected.
+* **Default**: false
+* **Introduced in**: v3.4
 
 ### metadata_collect_query_timeout
 
@@ -528,6 +535,11 @@ Default value: `true`.
 * **Description**: Whether to enable short circuiting for queries. Default: `false`. If it is set to `true`, when the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit.
 * **Default**: false
 * **Introduced in**: v3.2.3
+
+### enable_spm_rewrite
+
+* **Description**: Whether to enable SQL Plan Manager (SPM) query rewrite. When enabled, StarRocks automatically rewrites queries to use bound query plans, improving query performance and stability.
+* **Default**: false
 
 ### enable_spill
 
@@ -626,6 +638,32 @@ Default value: `true`.
 * **Description**: Whether to enable metadata cache for files in remote storage (Footer Cache). Setting this to `true` enables the feature. Footer Cache directly caches the parsed Footer object in memory. When the same file's Footer is accessed in subsequent queries, the object descriptor can be obtained directly from the cache, avoiding repetitive parsing. This feature uses the memory module of the Data Cache for data caching. Therefore, you must ensure that the BE parameter `datacache_enable` is set to `true` and configure a reasonable value for `datacache_mem_size`.
 * **Default**: true
 * **Introduced in**: v3.3.0
+
+### enable_file_pagecache
+
+* **Description**: Whether to enable Page Cache for files in remote storage. Setting this to `true` enables the feature. Page Cache stores decompressed Parquet page data in memory. When the same page is accessed in subsequent queries, the data can be obtained directly from the cache, avoiding repetitive I/O operations and decompression. This feature works together with the Data Cache and uses the same memory module. When enabled, Page Caache can significantly improve query performance for workloads with repetitive page access patterns.
+* **Default**: true
+* **Introduced in**: v4.0
+
+### enable_datacache_sharing
+
+* **Description**: Whether to enable Cache Sharing. Setting this to `true` enables the feature. Cache Sharing is used to support accessing cache data from other nodes through the network, which can help to reduce performance jitter caused by cache invalidation during cluster scaling. This variable takes effect only when the FE parameter `enable_trace_historical_node` is set to `true`.
+* **Default**: true
+* **Introduced in**: v3.5.1
+
+### datacache_sharing_work_period
+
+* **Description**: The period of time that Cache Sharing takes effect. After each cluster scaling operation, only the requests within this period of time will try to access the cache data from other nodes if the Cache Sharing feature is enabled.
+* **Default**: 600
+* **Unit**: Seconds
+* **Introduced in**: v3.5.1
+
+### historical_nodes_min_update_interval
+
+* **Description**: The minimum interval between two updates of historical node records. If the nodes of a cluster change frequently in a short period of time (that is, less than the value set in this variable), some intermediate states will not be recorded as valid historical node snapshots. The historical nodes are the main basis for the Cache Sharing feature to choose the right cache nodes during cluster scaling.
+* **Default**: 600
+* **Unit**: Seconds
+* **Introduced in**: v3.5.1
 
 ### enable_tablet_internal_parallel
 

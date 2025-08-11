@@ -82,7 +82,6 @@ import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -293,8 +292,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return endTimeMs();
     }
 
-    public void beginTxnFromBackend(TUniqueId requestId, String clientIp, TransactionResult resp) {
-        beginTxn(0, 1, requestId, new TxnCoordinator(TransactionState.TxnSourceType.BE, clientIp), resp);
+    public void beginTxnFromBackend(TUniqueId requestId, String clientIp, long backendId, TransactionResult resp) {
+        beginTxn(0, 1, requestId, TxnCoordinator.fromBackend(clientIp, backendId), resp);
     }
 
     public void beginTxnFromFrontend(int channelId, int channelNum, TransactionResult resp) {
@@ -672,7 +671,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return;
     }
 
-    public void waitCoordFinishAndPrepareTxn(TransactionResult resp) {
+    public void waitCoordFinishAndPrepareTxn(long preparedTimeoutMs, TransactionResult resp) {
         long startTimeMs = System.currentTimeMillis();
         boolean exception = false;
         writeLock();
@@ -717,7 +716,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
 
         try {
-            unprotectedPrepareTxn();
+            unprotectedPrepareTxn(preparedTimeoutMs);
         } catch (Exception e) {
             this.errorMsg = new LogBuilder(LogKey.STREAM_LOAD_TASK, id, ':').add("label", label)
                     .add("error_msg", "cancel stream task for exception: " + e.getMessage()).build_http_log();
@@ -978,7 +977,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 sourceType, id, timeoutMs / 1000, computeResource);
     }
 
-    public void unprotectedPrepareTxn() throws StarRocksException, LockTimeoutException {
+    public void unprotectedPrepareTxn(long preparedTimeoutMs) throws StarRocksException, LockTimeoutException {
         List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(coord.getCommitInfos());
         List<TabletFailInfo> failInfos = TabletFailInfo.fromThrift(coord.getFailInfos());
         finishPreparingTimeMs = System.currentTimeMillis();
@@ -987,7 +986,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 endTimeMs, numRowsNormal, numRowsAbnormal, numRowsUnselected, numLoadBytesTotal,
                 trackingUrl);
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
-                dbId, txnId, commitInfos, failInfos, txnCommitAttachment, timeoutMs);
+                dbId, txnId, preparedTimeoutMs, commitInfos, failInfos, txnCommitAttachment, timeoutMs);
     }
 
     public boolean checkNeedRemove(long currentMs, boolean isForce) {
@@ -1519,20 +1518,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         Text.writeString(out, GsonUtils.GSON.toJson(this));
         out.writeLong(loadId.getHi());
         out.writeLong(loadId.getLo());
-    }
-
-    public static StreamLoadTask read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        StreamLoadTask task = GsonUtils.GSON.fromJson(json, StreamLoadTask.class);
-        long hi = in.readLong();
-        long lo = in.readLong();
-        TUniqueId loadId = new TUniqueId(hi, lo);
-        task.init();
-        task.setTUniqueId(loadId);
-        // Only task which type is PARALLEL will be persisted
-        // just set type to PARALLEL
-        task.setType(Type.PARALLEL_STREAM_LOAD);
-        return task;
     }
 
     @Override

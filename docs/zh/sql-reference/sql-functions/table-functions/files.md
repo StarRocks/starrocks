@@ -132,7 +132,8 @@ Parquet 格式示例：
 
 ```SQL
 "format"="parquet",
-"parquet.use_legacy_encoding" = "true"  -- 仅用于数据导出
+"parquet.use_legacy_encoding" = "true",  -- 仅用于数据导出
+"parquet.version" = "2.6"                -- 仅用于数据导出
 ```
 
 ###### parquet.use_legacy_encoding
@@ -154,6 +155,10 @@ Parquet 格式示例：
 对于 DECIMAL 128 数据类型，仅可使用 `fixed_len_byte_array` 编码。`parquet.use_legacy_encoding` 不生效。
 
 :::
+
+###### parquet.version
+
+控制系统导出数据时使用的 Parquet 版本。自 v3.4.6 版本起支持该功能。有效值：`1.0`、`2.4` 和 `2.6`（默认）。该属性仅支持数据导出。
 
 ##### CSV
 
@@ -211,7 +216,7 @@ CSV 格式示例：
 
 您可以使用以下参数配置采样规则：
 
-- `auto_detect_sample_files`：每个批次中采样的数据文件数量。范围：[0, + ∞]。默认值：`1`。
+- `auto_detect_sample_files`：每个批次中采样的数据文件数量。默认选择第一个和最后一个文件。范围：[0, + ∞]。默认值：`2`。
 - `auto_detect_sample_rows`：每个采样数据文件中的数据扫描行数。范围：[0, + ∞]。默认值：`500`。
 
 采样后，StarRocks 根据以下规则 Union 所有数据文件的列：

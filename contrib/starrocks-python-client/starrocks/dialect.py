@@ -62,7 +62,9 @@ ischema_names = {
     "double": DOUBLE,
     # === Fixed-precision ===
     "decimal": DECIMAL,
+    "decimal32": DECIMAL,
     "decimal64": DECIMAL,
+    "decimal128": DECIMAL,
     # === String ===
     "varchar": VARCHAR,
     "char": CHAR,
@@ -239,7 +241,9 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         # ToDo - Partition
         # ToDo - Distribution
-        # ToDo - Order by
+
+        if "ORDER_BY" in opts:
+            table_opts.append(f"ORDER BY ({opts['ORDER_BY']})")
 
         if "PROPERTIES" in opts:
             props = ",\n".join([f'\t"{k}"="{v}"' for k, v in opts["PROPERTIES"]])

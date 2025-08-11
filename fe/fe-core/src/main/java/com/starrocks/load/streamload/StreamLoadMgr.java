@@ -49,7 +49,6 @@ import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -162,8 +161,9 @@ public class StreamLoadMgr implements MemoryTrackable {
     // for sync stream load task
     public void beginLoadTaskFromBackend(String dbName, String tableName, String label, TUniqueId requestId,
                                          String user, String clientIp, long timeoutMillis,
-                                         TransactionResult resp, boolean isRoutineLoad, ComputeResource computeResource) throws
-            StarRocksException {
+                                         TransactionResult resp, boolean isRoutineLoad,
+                                         ComputeResource computeResource, long backendId)
+            throws StarRocksException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
@@ -176,7 +176,7 @@ public class StreamLoadMgr implements MemoryTrackable {
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
 
-            task.beginTxnFromBackend(requestId, clientIp, resp);
+            task.beginTxnFromBackend(requestId, clientIp, backendId, resp);
             addLoadTask(task);
         } finally {
             writeUnlock();
@@ -334,7 +334,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         }
     }
 
-    public void tryPrepareLoadTaskTxn(String label, TransactionResult resp)
+    public void tryPrepareLoadTaskTxn(String label, long preparedTimeoutMs, TransactionResult resp)
             throws StarRocksException {
         boolean needUnLock = true;
         readLock();
@@ -346,7 +346,7 @@ public class StreamLoadMgr implements MemoryTrackable {
             readUnlock();
             needUnLock = false;
             if (task.checkNeedPrepareTxn()) {
-                task.waitCoordFinishAndPrepareTxn(resp);
+                task.waitCoordFinishAndPrepareTxn(preparedTimeoutMs, resp);
             }
         } finally {
             if (needUnLock) {
@@ -610,30 +610,6 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     public long getStreamLoadTaskCount() {
         return idToStreamLoadTask.size();
-    }
-
-    // for ut
-    public Map<String, StreamLoadTask> getIdToStreamLoadTask() {
-        return idToStreamLoadTask;
-    }
-
-    public static StreamLoadMgr loadStreamLoadManager(DataInput in) throws IOException {
-        int size = in.readInt();
-        long currentMs = System.currentTimeMillis();
-        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
-        streamLoadManager.init();
-        for (int i = 0; i < size; i++) {
-            StreamLoadTask loadTask = StreamLoadTask.read(in);
-            loadTask.init();
-            // discard expired task right away
-            if (loadTask.checkNeedRemove(currentMs, false)) {
-                LOG.info("discard expired task: {}", loadTask.getLabel());
-                continue;
-            }
-
-            streamLoadManager.addLoadTask(loadTask);
-        }
-        return streamLoadManager;
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

@@ -376,6 +376,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_MAX_LIMIT = "cbo_cte_max_limit";
     public static final String CBO_CTE_REUSE_RATE_V2 = "cbo_cte_reuse_rate_v2";
     public static final String PREFER_CTE_REWRITE = "prefer_cte_rewrite";
+    public static final String CBO_CTE_FORCE_REUSE_NODE_COUNT = "cbo_cte_force_reuse_node_count";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
@@ -387,6 +388,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_HISTOGRAM_JOIN_ESTIMATION = "cbo_enable_histogram_join_estimation";
     public static final String CBO_ENABLE_SINGLE_NODE_PREFER_TWO_STAGE_AGGREGATE =
             "cbo_enable_single_node_prefer_two_stage_aggregate";
+
+    public static final String CBO_JSON_V2_REWRITE = "cbo_json_v2_rewrite";
 
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
@@ -445,6 +448,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE = "global_runtime_filter_rpc_http_min_size";
     public static final String ENABLE_JOIN_RUNTIME_FILTER_PUSH_DOWN = "enable_join_runtime_filter_push_down";
     public static final String ENABLE_JOIN_RUNTIME_BITSET_FILTER = "enable_join_runtime_bitset_filter";
+
+    public static final String ENABLE_HASH_JOIN_RANGE_DIRECT_MAPPING_OPT = "enable_hash_join_range_direct_mapping_opt";
 
     public static final String ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF =
             "enable_pipeline_level_multi_partitioned_rf";
@@ -581,9 +586,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MATERIALIZED_VIEW_UNION_REWRITE_MODE = "materialized_view_union_rewrite_mode";
     public static final String ENABLE_MATERIALIZED_VIEW_TRANSPARENT_UNION_REWRITE =
             "enable_materialized_view_transparent_union_rewrite";
+
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
             "enable_materialized_view_rewrite_partition_compensate";
-    public static final String ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE = "enable_materialized_view_agg_pushdown_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE
+            = "enable_materialized_view_agg_pushdown_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE_V2 =
+            "enable_materialized_view_agg_pushdown_rewrite_v2";
     public static final String ENABLE_MATERIALIZED_VIEW_TIMESERIES_AGG_PUSHDOWN_REWRITE =
             "enable_materialized_view_timeseries_agg_pushdown_rewrite";
 
@@ -1206,6 +1215,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_CTE_MAX_LIMIT, flag = VariableMgr.INVISIBLE)
     private int cboCTEMaxLimit = 10;
 
+    // If the number of nodes in a CTE producer tree exceeds the threshold, force reuse of that CTE.
+    // When the value is 0, disable the force reuse optimization.
+    @VarAttr(name = CBO_CTE_FORCE_REUSE_NODE_COUNT)
+    private int cboCTEForceReuseNodeCount = 2000;
+
     @VarAttr(name = PREFER_CTE_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean preferCTERewrite = false;
 
@@ -1227,6 +1241,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_USE_DB_LOCK, flag = VariableMgr.INVISIBLE)
     private boolean cboUseDBLock = false;
+
+    @VarAttr(name = CBO_JSON_V2_REWRITE)
+    private boolean cboJSONV2Rewrite = true;
+
 
     /*
      * the parallel exec instance num for one Fragment in one BE
@@ -1589,6 +1607,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableJoinRuntimeFilterPushDown = true;
     @VariableMgr.VarAttr(name = ENABLE_JOIN_RUNTIME_BITSET_FILTER, flag = VariableMgr.INVISIBLE)
     private boolean enableJoinRuntimeBitsetFilter = true;
+
+    @VarAttr(name = ENABLE_HASH_JOIN_RANGE_DIRECT_MAPPING_OPT)
+    private boolean enableHashJoinRangeDirectMappingOpt = true;
 
     @VarAttr(name = ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF)
     private boolean enablePipelineLevelMultiPartitionedRf = false;
@@ -2185,8 +2206,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     /**
      * Whether to support to rewrite query with materialized view by using aggregate pushdown.
      */
-    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE)
-    private boolean enableMaterializedViewPushDownRewrite = false;
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE_V2, alias = ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE,
+            show = ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE)
+    private boolean enableMaterializedViewPushDownRewrite = true;
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_TIMESERIES_AGG_PUSHDOWN_REWRITE)
     private boolean enableMaterializedViewTimeSeriesPushDownRewrite = true;
@@ -2833,6 +2855,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboCTEMaxLimit;
     }
 
+    public int getCboCTEForceReuseNodeCount() {
+        return cboCTEForceReuseNodeCount;
+    }
+
+    public void setCboCTEForceReuseNodeCount(int cboCTEForceReuseNodeCount) {
+        this.cboCTEForceReuseNodeCount = cboCTEForceReuseNodeCount;
+    }
+
     public double getCboPruneShuffleColumnRate() {
         return cboPruneShuffleColumnRate;
     }
@@ -2898,6 +2928,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableCacheSelect(boolean enableCacheSelect) {
         this.enableCacheSelect = enableCacheSelect;
+    }
+
+    public boolean isEnableCacheSelect() {
+        return enableCacheSelect;
     }
 
     public void setConnectorIoTasksPerScanOperator(int connectorIoTasksPerScanOperator) {
@@ -4640,6 +4674,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableMinMaxOptimization;
     }
 
+    public void setIsEnableMinMaxOptimization(boolean v) {
+        this.enableMinMaxOptimization = v;
+    }
+
     public boolean isEnablePartitionColumnValueOnlyOptimization() {
         return enablePartitionColumnValueOnlyOptimization;
     }
@@ -4761,6 +4799,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnablePlanSerializeConcurrently() {
         return enablePlanSerializeConcurrently;
+    }
+
+    public void setEnablePlanSerializeConcurrently(boolean enablePlanSerializeConcurrently) {
+        this.enablePlanSerializeConcurrently = enablePlanSerializeConcurrently;
     }
 
     public long getCrossJoinCostPenalty() {
@@ -5119,6 +5161,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableMultiCastLimitPushDown;
     }
 
+    public boolean isEnableJSONV2Rewrite() {
+        return cboJSONV2Rewrite;
+    }
+
+    public void setEnableJSONV2Rewrite(boolean enableJSONV2Rewrite) {
+        this.cboJSONV2Rewrite = enableJSONV2Rewrite;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -5278,6 +5328,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_parquet_reader_page_index(enableParquetReaderPageIndex);
         tResult.setColumn_view_concat_rows_limit(columnViewConcatRowsLimit);
         tResult.setColumn_view_concat_bytes_limit(columnViewConcatRowsLimit);
+        tResult.setEnable_hash_join_range_direct_mapping_opt(enableHashJoinRangeDirectMappingOpt);
+
         return tResult;
     }
 
@@ -5312,10 +5364,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, getJsonString());
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        readFromJson(in);
     }
 
     private void readFromJson(DataInput in) throws IOException {

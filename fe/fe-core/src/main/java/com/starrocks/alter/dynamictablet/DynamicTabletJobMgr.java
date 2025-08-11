@@ -14,9 +14,13 @@
 
 package com.starrocks.alter.dynamictablet;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -25,51 +29,64 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.SplitTabletClause;
+import com.starrocks.thrift.TDynamicTabletJobsResponse;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.Map;
 
 public class DynamicTabletJobMgr extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(DynamicTabletJobMgr.class);
 
-    @SerializedName(value = "jobs")
-    protected final Map<Long, DynamicTabletJob> jobs = Maps.newConcurrentMap();
+    @SerializedName(value = "dynamicTabletJobs")
+    protected final Map<Long, DynamicTabletJob> dynamicTabletJobs = Maps.newConcurrentMap();
+
+    protected final Map<Long, DynamicTablet> dynamicTablets = Maps.newConcurrentMap();
 
     public DynamicTabletJobMgr() {
         super("DynamicTabletJobMgr", Config.dynamic_tablet_job_scheduler_interval_ms);
     }
 
-    public Map<Long, DynamicTabletJob> getJobs() {
-        return jobs;
+    public DynamicTabletJob getDynamicTabletJob(long dynamicJobId) {
+        return dynamicTabletJobs.get(dynamicJobId);
     }
 
-    public boolean addDynamicTabletJob(DynamicTabletJob dynamicTabletJob) {
-        if (dynamicTabletJob.getJobState() != DynamicTabletJob.JobState.PENDING) {
-            throw new RuntimeException("Dynamic tablet job state is not pending. " + dynamicTabletJob);
-        }
+    public Map<Long, DynamicTabletJob> getDynamicTabletJobs() {
+        return dynamicTabletJobs;
+    }
 
-        if (getTotalParalelTablets()
-                + dynamicTabletJob.getParallelTablets() > Config.dynamic_tablet_max_parallel_tablets) {
-            return false;
-        }
+    public DynamicTablet getDynamicTablet(long tabletId) {
+        return dynamicTablets.get(tabletId);
+    }
 
-        DynamicTabletJob existingJob = jobs.putIfAbsent(dynamicTabletJob.getJobId(), dynamicTabletJob);
-        if (existingJob != null) {
-            throw new RuntimeException("Running dynamic tablet job is already existed. " + existingJob);
+    public void createDynamicTabletJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
+            throws StarRocksException {
+        DynamicTabletJob job = new SplitTabletJobFactory(db, table, splitTabletClause).createDynamicTabletJob();
+        addDynamicTabletJob(job);
+    }
+
+    public void addDynamicTabletJob(DynamicTabletJob dynamicTabletJob) throws StarRocksException {
+        synchronized (this) {
+            checkDynamicTabletJob(dynamicTabletJob);
+
+            DynamicTabletJob existingJob = dynamicTabletJobs.putIfAbsent(dynamicTabletJob.getJobId(), dynamicTabletJob);
+            if (existingJob != null) {
+                throw new StarRocksException("Dynamic tablet job is already existed. " + existingJob);
+            }
         }
 
         GlobalStateMgr.getCurrentState().getEditLog().logUpdateDynamicTabletJob(dynamicTabletJob);
 
-        LOG.info("Added running dynamic tablet job. {}", dynamicTabletJob);
-        return true;
+        LOG.info("Added dynamic tablet job. {}", dynamicTabletJob);
     }
 
     public long getTotalParalelTablets() {
         long totalParallelTablets = 0;
-        for (DynamicTabletJob job : jobs.values()) {
+        for (DynamicTabletJob job : dynamicTabletJobs.values()) {
             if (job.isDone()) {
                 continue;
             }
@@ -80,11 +97,11 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
 
     public void replayUpdateDynamicTabletJob(DynamicTabletJob dynamicTabletJob) {
         dynamicTabletJob.replay();
-        jobs.put(dynamicTabletJob.getJobId(), dynamicTabletJob);
+        dynamicTabletJobs.put(dynamicTabletJob.getJobId(), dynamicTabletJob);
     }
 
     public void replayRemoveDynamicTabletJob(long dynamicTabletJobId) {
-        if (jobs.remove(dynamicTabletJobId) == null) {
+        if (dynamicTabletJobs.remove(dynamicTabletJobId) == null) {
             // Should not happen, just add a warnning log
             LOG.warn("Failed to find dynamic tablet job {} when replaying remove dynamic tablet job",
                     dynamicTabletJobId);
@@ -92,14 +109,56 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
         }
     }
 
-    @Override
-    protected void runAfterCatalogReady() {
-        runJobs();
+    public TDynamicTabletJobsResponse getAllJobsInfo() {
+        TDynamicTabletJobsResponse response = new TDynamicTabletJobsResponse();
+        response.status = new TStatus();
+        response.status.setStatus_code(TStatusCode.OK);
+        for (DynamicTabletJob job : dynamicTabletJobs.values()) {
+            try {
+                response.addToItems(job.getInfo());
+            } catch (Exception e) {
+                if (response.status.getStatus_code() == TStatusCode.OK) {
+                    // if encouter any unexpected exception, set error status for response
+                    response.status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+                    response.status.addToError_msgs(Strings.nullToEmpty(e.getMessage()));
+                    LOG.warn("Encounter unexpected exception when getting dynamic tablet jobs info. ", e);
+                }
+            }
+        }
+        return response;
     }
 
-    private void runJobs() {
-        for (Iterator<Map.Entry<Long, DynamicTabletJob>> it = jobs.entrySet().iterator(); it.hasNext(); /* */) {
-            DynamicTabletJob job = it.next().getValue();
+    @Override
+    protected void runAfterCatalogReady() {
+        runDynamicTabletJobs();
+    }
+
+    private void checkDynamicTabletJob(DynamicTabletJob dynamicTabletJob) throws StarRocksException {
+        if (dynamicTabletJob.getJobState() != DynamicTabletJob.JobState.PENDING) {
+            throw new StarRocksException("Dynamic tablet job state is not pending. " + dynamicTabletJob);
+        }
+
+        long totalParallelTablets = dynamicTabletJob.getParallelTablets();
+        for (DynamicTabletJob job : dynamicTabletJobs.values()) {
+            if (job.isDone()) {
+                continue;
+            }
+
+            if (job.getDbId() == dynamicTabletJob.getDbId() && job.getTableId() == dynamicTabletJob.getTableId()) {
+                throw new StarRocksException("Dynamic tablet job is not done. " + job);
+            }
+            totalParallelTablets += job.getParallelTablets();
+        }
+
+        if (totalParallelTablets > Config.dynamic_tablet_max_parallel_tablets) {
+            throw new StarRocksException("Total parallel tablets exceed dynamic_tablet_max_parallel_tablets: "
+                    + Config.dynamic_tablet_max_parallel_tablets);
+        }
+    }
+
+    private void runDynamicTabletJobs() {
+        for (var iterator = dynamicTabletJobs.entrySet().iterator(); iterator.hasNext(); /* */) {
+            DynamicTabletJob job = iterator.next().getValue();
             // Job is not done, run it
             if (!job.isDone()) {
                 job.run();
@@ -108,7 +167,7 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
 
             // Job is done, remove expired job
             if (job.isExpired()) {
-                it.remove();
+                iterator.remove();
                 GlobalStateMgr.getCurrentState().getEditLog().logRemoveDynamicTabletJob(job.getJobId());
                 LOG.info("Removed expired dynamic tablet job. {}", job);
             }
@@ -123,6 +182,6 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
 
     public void load(SRMetaBlockReader reader) throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
         DynamicTabletJobMgr dynamicTabletJobMgr = reader.readJson(DynamicTabletJobMgr.class);
-        jobs.putAll(dynamicTabletJobMgr.jobs);
+        dynamicTabletJobs.putAll(dynamicTabletJobMgr.dynamicTabletJobs);
     }
 }

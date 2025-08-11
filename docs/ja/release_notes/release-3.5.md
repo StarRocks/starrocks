@@ -4,7 +4,86 @@ displayed_sidebar: docs
 
 # StarRocks version 3.5
 
-## v3.5.1
+:::warning
+
+StarRocks を v3.5 にアップグレードした後、直接 v3.4.0 ~ v3.4.4 にダウングレードしないでください。そうしないとメタデータの非互換性を引き起こす。問題を防ぐために、クラスタを v3.4.5 以降にダウングレードする必要があります。
+
+:::
+
+## 3.5.3
+
+リリース日: 2025年8月11日
+
+### 改善点
+
+- Lake Compaction にセグメント書き込み時間統計情報を追加。 [#60891](https://github.com/StarRocks/starrocks/pull/60891)
+- ローカル PassThrough 交換シナリオで bRPC 通信を回避。 [#60538](https://github.com/StarRocks/starrocks/pull/60538)
+- パフォーマンス低下を避けるため、Data Cache 書き込みの Inline モードを無効化。 [#60530](https://github.com/StarRocks/starrocks/pull/60530)
+- Iceberg メタデータスキャンで共有ファイル I/O をサポート。 [#61012](https://github.com/StarRocks/starrocks/pull/61012)
+- すべての PENDING 状態の ANALYZE タスクの終了をサポート。 [#61118](https://github.com/StarRocks/starrocks/pull/61118)
+- CTE ノードが多すぎる場合、最適化時間が長くならないように強制的に再利用。 [#60983](https://github.com/StarRocks/starrocks/pull/60983)
+- クラスターバランス結果に `BALANCE` タイプを追加。 [#61081](https://github.com/StarRocks/starrocks/pull/61081)
+- 外部テーブルを含む物化ビューの書き換えを最適化。 [#61037](https://github.com/StarRocks/starrocks/pull/61037)
+- システム変数 `enable_materialized_view_agg_pushdown_rewrite` のデフォルト値を `true` に変更し、マテリアライズドビューに対する集計関数のプッシュダウンをデフォルトで有効化。 [#60976](https://github.com/StarRocks/starrocks/pull/60976)
+- パーティション統計のロック競合を最適化。 [#61041](https://github.com/StarRocks/starrocks/pull/61041)
+
+### バグ修正
+
+次の問題が修正されました：
+
+- 列の切り取り後、チャンク列のサイズが不一致。 [#61271](https://github.com/StarRocks/starrocks/pull/61271)
+- 非同期実行のパーティション統計ロードでデッドロックが発生する可能性。 [#61300](https://github.com/StarRocks/starrocks/pull/61300)
+- `array_map` が定数配列列を処理する際にクラッシュ。 [#61309](https://github.com/StarRocks/starrocks/pull/61309)
+- 自動増分列を NULL に設定すると、システムエラーが発生し、同一チャンク内の有効データが拒否される。 [#61255](https://github.com/StarRocks/starrocks/pull/61255)
+- 実際の JDBC 接続数が `jdbc_connection_pool_size` 制限を超える可能性。 [#61038](https://github.com/StarRocks/starrocks/pull/61038)
+- FQDN モードで IP アドレスがキャッシュキーとして使用されない。 [#61203](https://github.com/StarRocks/starrocks/pull/61203)
+- 配列比較中に配列列のクローンエラー。 [#61036](https://github.com/StarRocks/starrocks/pull/61036)
+- シリアライズされたスレッドプールをデプロイする際にブロックが発生し、クエリのパフォーマンスが低下しています。 [#61150](https://github.com/StarRocks/starrocks/pull/61150)
+- heartbeatRetryTimes カウンターのリセット後、OK hbResponse が同期されない。 [#61249](https://github.com/StarRocks/starrocks/pull/61249)
+- `hour_from_unixtime` 関数の結果が誤っている。 [#61206](https://github.com/StarRocks/starrocks/pull/61206)
+- ALTER TABLE タスクとパーティション作成の競合。 [#60890](https://github.com/StarRocks/starrocks/pull/60890)
+- v3.3 から v3.4 以降にアップグレード後、キャッシュが効かない。 [#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- ベクトルインデックス指標 `hit_count` が設定されていない。 [#61102](https://github.com/StarRocks/starrocks/pull/61102)
+- Stream Load トランザクションがコーディネータノードを見つけられない。 [#60154](https://github.com/StarRocks/starrocks/pull/60154)
+- OOM パーティションを読み込む際にBEがクラッシュ。 [#60778](https://github.com/StarRocks/starrocks/pull/60778)
+- 手動作成したパーティションで INSERT OVERWRITE 実行時に失敗。 [#60858](https://github.com/StarRocks/starrocks/pull/60858)
+- パーティション値が異なっても名前が大文字小文字を区別しない場合にパーティション作成が失敗。 [#60909](https://github.com/StarRocks/starrocks/pull/60909)
+- PostgreSQL UUID 型がサポートされていない。 [#61021](https://github.com/StarRocks/starrocks/pull/61021)
+- `FILES()` 経由で Parquet データをインポート時、列名の大文字小文字の問題。 [#61059](https://github.com/StarRocks/starrocks/pull/61059)
+
+## 3.5.2
+
+リリース日: 2025年7月18日
+
+### 改善点
+
+- ARRAY 列に対する NDV 統計の収集を追加し、クエリプランの精度を向上。[#60623](https://github.com/StarRocks/starrocks/pull/60623)
+- 共有データクラスタで、Colocate テーブルのレプリカ均衡とタブレットスケジューリングを無効化し、不要なログ出力を抑制。[#60737](https://github.com/StarRocks/starrocks/pull/60737)
+- FE 起動時、外部データソースへのアクセスを非同期かつ遅延させるように最適化し、外部サービスの利用不可による起動停止を防止。[#60614](https://github.com/StarRocks/starrocks/pull/60614)
+- プレディケートプッシュダウンを制御するセッション変数 `enable_predicate_expr_reuse` を追加。[#60603](https://github.com/StarRocks/starrocks/pull/60603)
+- Kafka Partition 情報の取得失敗時に自動リトライを実装。[#60513](https://github.com/StarRocks/starrocks/pull/60513)
+- マテリアライズドビューとベーステーブル間のパーティション列の 1 対 1 制約を撤廃。[#60565](https://github.com/StarRocks/starrocks/pull/60565)
+- 集約フェーズでのデータフィルタリングを通じてパフォーマンスを向上させる Runtime In-Filter をサポート。[#59288](https://github.com/StarRocks/starrocks/pull/59288)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- 低カーディナリティ最適化が原因で、複数列の COUNT DISTINCT クエリがクラッシュする問題を修正。[#60664](https://github.com/StarRocks/starrocks/pull/60664)
+- 同名のグローバル UDF が複数存在する場合に関数が誤ってマッチする問題を修正。[#60550](https://github.com/StarRocks/starrocks/pull/60550)
+- Stream Load によるインポート時の NPE を修正。[#60755](https://github.com/StarRocks/starrocks/pull/60755)
+- クラスタスナップショットからの復旧時に FE が NPE で起動に失敗する問題を修正。[#60604](https://github.com/StarRocks/starrocks/pull/60604)
+- 無順序値列のショートサーキットクエリ処理時、列モード不一致により BE がクラッシュする問題を修正。[#60466](https://github.com/StarRocks/starrocks/pull/60466)
+- SUBMIT TASK ステートメントで PROPERTIES を使って設定したセッション変数が無効だった問題を修正。[#60584](https://github.com/StarRocks/starrocks/pull/60584)
+- 特定条件下で `SELECT min/max` クエリが誤った結果を返す問題を修正。[#60601](https://github.com/StarRocks/starrocks/pull/60601)
+- プレディケートの左辺が関数である場合、誤ったバケットが使用され、クエリ結果が間違ってしまう問題を修正。[#60467](https://github.com/StarRocks/starrocks/pull/60467)
+- Arrow Flight SQL プロトコルで存在しない `query_id` をクエリした際にクラッシュする問題を修正。[#60497](https://github.com/StarRocks/starrocks/pull/60497)
+
+### 動作の変更
+
+- `lake_compaction_allow_partial_success` のデフォルト値を `true` に変更。Compaction タスクが一部のみ成功しても成功とみなされ、後続のタスクがブロックされるのを回避可能に。[#60643](https://github.com/StarRocks/starrocks/pull/60643)
+
+## 3.5.1
 
 リリース日：2025年7月1日
 
@@ -45,7 +124,7 @@ displayed_sidebar: docs
 
 - 一部の FE メトリクスに `is_leader` ラベルを追加。 [#59883](https://github.com/StarRocks/starrocks/pull/59883)
 
-## v3.5.0
+## 3.5.0
 
 リリース日： 2025 年 6 月 13 日
 
@@ -54,6 +133,7 @@ displayed_sidebar: docs
 - StarRocks v3.5.0 以降は JDK 17 以上が必要です。
   - v3.4 以前からのアップグレードでは、StarRocks が依存する JDK  バージョンを 17 以上に更新し、FE の構成ファイル **fe.conf** の `JAVA_OPTS` にある JDK 17 と互換性のないオプション（CMS や GC 関連など）を削除する必要があります。v3.5 設定ファイルの`JAVA_OPTS`のデフォルト値を推奨する。
   - 外部カタログを使用するクラスタでは、BE の構成ファイル **be.conf** の`JAVA_OPTS` 設定項目に `--add-opens=java.base/java.util=ALL-UNNAMED` を追加する必要がある。
+  - Java UDF を使用するクラスタでは、BE の構成ファイル **be.conf** の`JAVA_OPTS` 設定項目に `--add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED` を追加する必要がある。
   - また、v3.5.0 以降、StarRocks は特定の JDK バージョン向けの JVM 構成を提供しません。すべての JDK バージョンに対して共通の `JAVA_OPTS` を使用します。
 
 ### 共有データクラスタ機能強化

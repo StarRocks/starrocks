@@ -19,12 +19,7 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 // edit log from removing alter job v2
 public class RemoveAlterJobV2OperationLog implements Writable {
@@ -45,13 +40,6 @@ public class RemoveAlterJobV2OperationLog implements Writable {
 
     public AlterJobV2.JobType getType() {
         return type;
-    }
-
-
-
-    public static RemoveAlterJobV2OperationLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, RemoveAlterJobV2OperationLog.class);
     }
 
 }

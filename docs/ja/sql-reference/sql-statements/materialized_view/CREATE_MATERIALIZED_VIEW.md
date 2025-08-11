@@ -76,7 +76,7 @@ SELECT select_expr[, select_expr ...]
   > - v3.1以降、各同期マテリアライズドビューはベーステーブルの各列に対して複数の集計関数をサポートできます。例: `select b, sum(a), min(a) from table group by b`のようなクエリステートメント。
   > - v3.1以降、同期マテリアライズドビューはSELECTおよび集計関数の複雑な式をサポートします。例: `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b`や`select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table`のようなクエリステートメント。同期マテリアライズドビューで使用される複雑な式には次の制限があります:
   >   - 各複雑な式にはエイリアスが必要で、ベーステーブルのすべての同期マテリアライズドビュー間で異なる複雑な式には異なるエイリアスを割り当てる必要があります。例: `select b, sum(a + 1) as sum_a from table group by b`と`select b, sum(a) as sum_a from table group by b`のようなクエリステートメントは、同じベーステーブルに対して同期マテリアライズドビューを作成するために使用できません。複雑な式に異なるエイリアスを設定できます。
-  >   - 複雑な式で作成された同期マテリアライズドビューによってクエリが書き換えられているかどうかを確認するには、`EXPLAIN <sql_statement>`を実行します。詳細については、[クエリ分析](../../../administration/Query_planning.md)を参照してください。
+  >   - 複雑な式で作成された同期マテリアライズドビューによってクエリが書き換えられているかどうかを確認するには、`EXPLAIN <sql_statement>`を実行します。詳細については、[クエリ分析](../../../best_practices/query_tuning/query_planning.md)を参照してください。
 
 - WHERE (オプション)
 
@@ -124,6 +124,30 @@ SELECT * FROM <mv_name> [_SYNC_MV_];
 | bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                    |
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                       |
 | percentile_approx, percentile_union                    | percentile_union                                |
+
+上記の関数に加えて、StarRocks v3.4.0以降では、同期マテリアライズドビューは汎用集計関数もサポートしています。汎用集計関数の詳細については、[汎用集計関数の状態](../../../table_design/table_types/aggregate_table.md#use-generic-aggregate-states-in-materialized-views)を参照してください。
+
+```SQL
+-- Create a synchronous materialized view test_mv1 to store aggregate states.
+CREATE MATERIALIZED VIEW test_mv1 
+AS
+SELECT 
+    dt,
+    -- Original aggregate functions.
+    min(id) AS min_id,
+    max(id) AS max_id,
+    sum(id) AS sum_id,
+    bitmap_union(to_bitmap(id)) AS bitmap_union_id,
+    hll_union(hll_hash(id)) AS hll_union_id,
+    percentile_union(percentile_hash(id)) AS percentile_union_id,
+    -- Generic aggregate state functions.
+    ds_hll_count_distinct_union(ds_hll_count_distinct_state(id)) AS hll_id,
+    avg_union(avg_state(id)) AS avg_id,
+    array_agg_union(array_agg_state(id)) AS array_agg_id,
+    min_by_union(min_by_state(province, id)) AS min_by_province_id
+FROM t1
+GROUP BY dt;
+```
 
 ## 非同期マテリアライズドビュー
 
@@ -276,6 +300,11 @@ v3.5.0以降、非同期マテリアライズドビューは複数列パーテ�
 
 非同期マテリアライズドビューのソートキー。このソートキーを指定しない場合、StarRocksはSELECT列からいくつかのプレフィックス列をソートキーとして選択します。例: `select a, b, c, d`では、ソートキーとして`a`と`b`を使用できます。このパラメータはStarRocks v3.0以降でサポートされています。
 
+> **注意**
+> マテリアライズドビューには2つの異なる`ORDER BY`の使用方法があります：
+> - CREATE MATERIALIZED VIEWステートメントの`ORDER BY`はマテリアライズドビューのソートキーを定義し、ソートキーに基づくクエリの加速に役立ちます。これはマテリアライズドビューのSPJGベースの透過的加速機能には影響しませんが、マテリアライズドビューのクエリ結果のグローバルソートを保証しません。
+> - マテリアライズドビューのクエリ定義の`ORDER BY`はクエリ結果のグローバルソートを保証しますが、マテリアライズドビューがSPJGベースの透過的クエリの書き換えに使用されることを防ぎます。したがって、マテリアライズドビューがクエリの書き換えに使用される場合、マテリアライズドビューのクエリ定義で`ORDER BY`を使用すべきではありません。
+
 **INDEX** (オプション)
 
 非同期マテリアライズドビューは、クエリパフォーマンスを高速化するために Bitmap インデックスと BloomFilter インデックスをサポートしています。Bitmap インデックスと BloomFilter インデックスの使用例と情報の詳細については、[Bitmap Index](../../../table_design/indexes/Bitmap_index.md) と [Bloom filter Index](../../../table_design/indexes/Bloomfilter_index.md) を参照してください。
@@ -319,7 +348,17 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 - `partition_ttl`: パーティションの有効期限 (TTL)。指定された時間範囲内のデータを持つパーティションが保持されます。期限切れのパーティションは自動的に削除されます。単位: `YEAR`、`MONTH`、`DAY`、`HOUR`、`MINUTE`。例: `2 MONTH`としてこのプロパティを指定できます。このプロパティは`partition_ttl_number`より推奨されます。v3.1.5以降でサポートされています。
 - `partition_ttl_number`: 保持する最新のマテリアライズドビューのパーティション数。開始時間が現在の時間より前のパーティションについて、この値を超えると、古いパーティションが削除されます。StarRocksはFE設定項目`dynamic_partition_check_interval_seconds`で指定された時間間隔に従ってマテリアライズドビューパーティションを定期的にチェックし、期限切れのパーティションを自動的に削除します。[動的パーティション化](../../../table_design/data_distribution/dynamic_partitioning.md)戦略を有効にした場合、事前に作成されたパーティションはカウントされません。値が`-1`の場合、マテリアライズドビューのすべてのパーティションが保持されます。デフォルト: `-1`。
 - `partition_refresh_number`: 単一のリフレッシュでリフレッシュする最大パーティション数。リフレッシュするパーティションの数がこの値を超える場合、StarRocksはリフレッシュタスクを分割し、バッチで完了します。前のバッチのパーティションが正常にリフレッシュされると、StarRocksは次のバッチのパーティションをリフレッシュし続け、すべてのパーティションがリフレッシュされるまで続けます。パーティションのいずれかがリフレッシュに失敗した場合、後続のリフレッシュタスクは生成されません。値が`-1`の場合、リフレッシュタスクは分割されません。デフォルト値はv3.3以降`-1`から`1`に変更され、StarRocksはパーティションを1つずつリフレッシュします。
+- `partition_refresh_strategy`：単一のリフレッシュ操作中のマテリアライズドビューのリフレッシュ戦略。このプロパティが `adaptive` に設定されている場合、ベーステーブルのパーティション内のデータ量に基づいてリフレッシュするパーティション数が自動的に決定され、リフレッシュ効率が大幅に向上します。このプロパティが指定されていない場合、デフォルト戦略は `strict` であり、単一の操作でリフレッシュされるパーティション数は `partition_refresh_number` によって厳密に制御されます。
 - `excluded_trigger_tables`: マテリアライズドビューのベーステーブルがここにリストされている場合、ベーステーブルのデータが変更されても自動リフレッシュタスクはトリガーされません。このパラメータはロードトリガー型リフレッシュ戦略にのみ適用され、通常はプロパティ`auto_refresh_partitions_limit`と一緒に使用されます。形式: `[db_name.]table_name`。値が空文字列の場合、すべてのベーステーブルのデータ変更が対応するマテリアライズドビューのリフレッシュをトリガーします。デフォルト値は空文字列です。
+
+- `excluded_refresh_tables`： このプロパティにリストされているベーステーブルは、データが変更されてもマテリアライズドビューに更新されません。フォーマット `db_name.]table_name`。デフォルト値は空文字列です。値が空文字列の場合、ベーステーブルのデータが変更されると、対応するマテリアライズドビューが更新されます。
+
+  :::tip
+  `excluded_trigger_tables` と `excluded_refresh_tables` の違いは以下の通りである：
+  - `excluded_trigger_tables` はリフレッシュをトリガーするかどうかを制御するものであり、リフレッシュに参加するかどうかを制御するものではありません。例えば、パーティショニングされたマテリアライズドビューは 2 つのパーティショニングされたテーブル A と B を結合することで得られ、2 つのテーブル A と B のパーティショニングは 1 対 1 に対応します。`excluded_trigger_table` はテーブル A を含んでいる。ある期間中、テーブル A はパーティション `[1,2,3]` を更新したが、`excluded_trigger_table` であるため、マテリアライズドビューのリフレッシュはトリガーされなかった。この時、テーブル B はパーティション `[3]` を更新し、マテリアライズドビューはリフレッシュをトリガーして、3 つのパーティション `[1, 2, 3]` をリフレッシュします。ここで、`excluded_trigger_table` はリフレッシュをトリガーするかどうかを制御するだけであることがわかります。テーブル A の更新がマテリアライズドビューのリフレッシュのトリガーになることはありませんが、テーブル B の更新がマテリアライズドビューのリフレッシュのトリガーになると、テーブルAによって更新されたパーティションもリフレッシュタスクに追加されます。
+  - `excluded_refresh_tables` はリフレッシュに参加するかどうかを制御します。上の例では、テーブル A が `excluded_trigger_table` と `excluded_refresh_tables` の両方に存在する場合、テーブル B の更新がマテリアライズドビューのリフレッシュのトリガーになると、パーティション `[3]` だけがリフレッシュされます。
+  :::
+
 - `auto_refresh_partitions_limit`: マテリアライズドビューのリフレッシュがトリガーされたときにリフレッシュする必要がある最新のマテリアライズドビューパーティションの数。このプロパティを使用してリフレッシュ範囲を制限し、リフレッシュコストを削減できます。ただし、すべてのパーティションがリフレッシュされないため、マテリアライズドビューのデータがベーステーブルと一致しない場合があります。デフォルト: `-1`。値が`-1`の場合、すべてのパーティションがリフレッシュされます。値が正の整数Nの場合、StarRocksは既存のパーティションを時系列順に並べ替え、現在のパーティションとN-1の最新パーティションをリフレッシュします。パーティションの数がN未満の場合、StarRocksはすべての既存のパーティションをリフレッシュします。マテリアライズドビューに事前に作成された動的パーティションがある場合、StarRocksはすべての事前作成されたパーティションをリフレッシュします。
 - `mv_rewrite_staleness_second`: マテリアライズドビューの最終リフレッシュがこのプロパティで指定された時間間隔内である場合、マテリアライズドビューはクエリの書き換えに直接使用できます。ベーステーブルのデータが変更されているかどうかに関係なく、マテリアライズドビューがクエリの書き換えに使用されるかどうかを決定します。単位: 秒。このプロパティはv3.0からサポートされています。
 - `colocate_with`: 非同期マテリアライズドビューのコロケーショングループ。詳細については、[Colocate Join](../../../using_starrocks/Colocate_join.md)を参照してください。このプロパティはv3.0からサポートされています。
@@ -786,8 +825,10 @@ PROPERTIES (
 例1: 非パーティション化されたマテリアライズドビューを作成します。
 
 ```SQL
+-- lo_custkeyでソートされた非パーティション化されたマテリアライズドビューを作成
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC
 AS
 select
@@ -798,15 +839,16 @@ select
     count(lo_shipmode) as shipmode_count
 from lineorder 
 group by lo_orderkey, lo_custkey 
-order by lo_orderkey;
 ```
 
 例2: パーティション化されたマテリアライズドビューを作成します。
 
 ```SQL
+-- `lo_orderdate`でパーティション化され、`lo_custkey`でソートされたパーティション化されたマテリアライズドビューを作成
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -817,8 +859,8 @@ select
     sum(lo_revenue) as total_revenue, 
     count(lo_shipmode) as shipmode_count
 from lineorder 
-group by lo_orderkey, lo_orderdate, lo_custkey
-order by lo_orderkey;
+group by lo_orderkey, lo_orderdate, lo_custkey;
+```
 
 -- date_trunc()関数を使用して、マテリアライズドビューを月単位でパーティション化します。
 CREATE MATERIALIZED VIEW order_mv1
@@ -989,4 +1031,23 @@ PROPERTIES (
     "query_rewrite_consistency" = "force_mv"
 )
 AS SELECT * from t1;
+```
+
+例7: 特定のソートキーを持つパーティション化されたマテリアライズドビューを作成します：
+```SQL
+CREATE MATERIALIZED VIEW lo_mv2
+PARTITION BY `lo_orderdate`
+DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
+REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+AS
+select
+    lo_orderkey,
+    lo_orderdate,
+    lo_custkey, 
+    sum(lo_quantity) as total_quantity, 
+    sum(lo_revenue) as total_revenue, 
+    count(lo_shipmode) as shipmode_count
+from lineorder 
+group by lo_orderkey, lo_orderdate, lo_custkey;
 ```

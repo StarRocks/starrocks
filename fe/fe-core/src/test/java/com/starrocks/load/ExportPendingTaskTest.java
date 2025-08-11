@@ -79,11 +79,11 @@ public class ExportPendingTaskTest {
         Method method = ExportPendingTask.class.getDeclaredMethod("makeSnapshots");
         method.setAccessible(true);
 
-        Status status = (Status) method.invoke(task, null);
+        Status status = (Status) method.invoke(task, (Object[]) null);
         Assertions.assertEquals(Status.CANCELLED, status);
 
         node.setAlive(true);
-        status = (Status) method.invoke(task, null);
+        status = (Status) method.invoke(task, (Object[]) null);
         Assertions.assertEquals(TStatusCode.CANCELLED, status.getErrorCode());
     }
 }

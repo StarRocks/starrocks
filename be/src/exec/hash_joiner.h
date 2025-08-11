@@ -22,7 +22,7 @@
 #include "common/statusor.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_components.h"
-#include "exec/join_hash_map.h"
+#include "exec/join/join_hash_map.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/spill_process_channel.h"
@@ -161,6 +161,7 @@ struct HashJoinBuildMetrics {
     RuntimeProfile::Counter* hash_table_memory_usage = nullptr;
     RuntimeProfile::Counter* partial_runtime_bloom_filter_bytes = nullptr;
     RuntimeProfile::Counter* partition_nums = nullptr;
+    std::string* hash_map_type_info = nullptr;
 
     void prepare(RuntimeProfile* runtime_profile);
 };

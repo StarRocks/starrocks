@@ -556,6 +556,43 @@ public class StarOSAgent {
         return shardInfos.stream().map(ShardInfo::getShardId).collect(Collectors.toList());
     }
 
+    public void createShards(Map<Long, List<Long>> oldToNewShardIds, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+            long groupId, @NotNull Map<String, String> properties, ComputeResource computeResource)
+            throws DdlException {
+        long workerGroupId = computeResource.getWorkerGroupId();
+        prepare();
+        List<ShardInfo> shardInfos = null;
+        try {
+            CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
+            builder.setReplicaCount(1)
+                    .addGroupIds(groupId)
+                    .setPathInfo(pathInfo)
+                    .setCacheInfo(cacheInfo)
+                    .putAllShardProperties(properties)
+                    .setScheduleToWorkerGroup(workerGroupId);
+
+            List<CreateShardInfo> createShardInfoList = new ArrayList<>(oldToNewShardIds.size() * 2);
+            for (Map.Entry<Long, List<Long>> entry : oldToNewShardIds.entrySet()) {
+                builder.clearPlacementPreferences();
+                PlacementPreference preference = PlacementPreference.newBuilder()
+                        .setPlacementPolicy(PlacementPolicy.PACK)
+                        .setPlacementRelationship(PlacementRelationship.WITH_SHARD)
+                        .setRelationshipTargetId(entry.getKey())
+                        .build();
+                builder.addPlacementPreferences(preference);
+                for (Long newShardId : entry.getValue()) {
+                    builder.setShardId(newShardId);
+                    createShardInfoList.add(builder.build());
+                }
+            }
+            shardInfos = client.createShard(serviceId, createShardInfoList);
+            Preconditions.checkState(shardInfos.size() == createShardInfoList.size());
+            LOG.debug("Create shards success. shard infos: {}", shardInfos);
+        } catch (Exception e) {
+            throw new DdlException("Failed to create shards. error: " + e.getMessage());
+        }
+    }
+
     public List<Long> listShard(long groupId) throws DdlException {
         prepare();
 

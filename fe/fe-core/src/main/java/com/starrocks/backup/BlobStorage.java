@@ -83,7 +83,6 @@ import org.apache.thrift.transport.TTransportException;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.File;
 import java.io.FileInputStream;
@@ -915,12 +914,6 @@ public class BlobStorage implements Writable {
         return Status.OK;
     }
 
-    public static BlobStorage read(DataInput in) throws IOException {
-        BlobStorage blobStorage = new BlobStorage();
-        blobStorage.readFields(in);
-        return blobStorage;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         // must write type first
@@ -933,25 +926,5 @@ public class BlobStorage implements Writable {
         }
         Text.writeString(out, "HasBrokerField");
         Text.writeString(out, String.valueOf(hasBroker));
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        brokerName = Text.readString(in);
-
-        // properties
-        int size = in.readInt();
-        hasBroker = true;
-        for (int i = 0; i < size; i++) {
-            String key = Text.readString(in);
-            String value = Text.readString(in);
-            if (key.equals("HasBrokerField")) {
-                hasBroker = Boolean.valueOf(value);
-                continue;
-            }
-            properties.put(key, value);
-        }
-        if (!hasBroker) {
-            brokerDesc = new BrokerDesc(properties);
-        }
     }
 }

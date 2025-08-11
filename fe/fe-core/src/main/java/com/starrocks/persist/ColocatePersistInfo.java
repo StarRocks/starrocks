@@ -40,7 +40,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -115,22 +114,6 @@ public class ColocatePersistInfo implements Writable {
             for (Long be : beList) {
                 out.writeLong(be);
             }
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        tableId = in.readLong();
-        groupId = GroupId.read(in);
-
-        int size = in.readInt();
-        backendsPerBucketSeq = new ArrayList<>();
-        for (int i = 0; i < size; i++) {
-            int beListSize = in.readInt();
-            List<Long> beLists = new ArrayList<>();
-            for (int j = 0; j < beListSize; j++) {
-                beLists.add(in.readLong());
-            }
-            backendsPerBucketSeq.add(beLists);
         }
     }
 

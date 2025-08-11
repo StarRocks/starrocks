@@ -127,7 +127,6 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
@@ -352,7 +351,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         long indexId = index.getId();
                         int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId,
-                                indexId, schemaHash, medium, table.isCloudNativeTableOrMaterializedView());
+                                indexId, medium, table.isCloudNativeTableOrMaterializedView());
                         for (Tablet tablet : index.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
@@ -1229,7 +1228,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             // check colocation
             checkColocation(db, olapTable, distributionInfo, partitionDescs);
-            copiedTable = getShadowCopyTable(olapTable);
+            copiedTable = AnalyzerUtils.getShadowCopyTable(olapTable);
             copiedTable.setDefaultDistributionInfo(distributionInfo);
             checkExistPartitionName = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
         } finally {
@@ -1346,7 +1345,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                     TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(), physicalPartition.getId(),
-                            index.getId(), schemaHash, info.getDataProperty().getStorageMedium());
+                            index.getId(), info.getDataProperty().getStorageMedium());
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
@@ -1579,7 +1578,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             // create tablets
             TabletMeta tabletMeta =
-                    new TabletMeta(db.getId(), olapTable.getId(), id, indexId, indexMeta.getSchemaHash(),
+                    new TabletMeta(db.getId(), olapTable.getId(), id, indexId,
                             storageMedium, olapTable.isCloudNativeTableOrMaterializedView());
 
             if (olapTable.isCloudNativeTableOrMaterializedView()) {
@@ -1615,7 +1614,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     throw new DdlException("Only support adding physical partition to random distributed table");
                 }
 
-                copiedTable = getShadowCopyTable(olapTable);
+                copiedTable = AnalyzerUtils.getShadowCopyTable(olapTable);
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);
             }
@@ -1697,7 +1696,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                     TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(),
-                            physicalPartition.getId(), index.getId(), schemaHash, olapTable.getPartitionInfo().getDataProperty(
+                            physicalPartition.getId(), index.getId(), olapTable.getPartitionInfo().getDataProperty(
                             info.getPartitionId()).getStorageMedium(), false);
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
@@ -1769,7 +1768,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             // create tablets
             TabletMeta tabletMeta =
-                    new TabletMeta(db.getId(), table.getId(), physicalPartitionId, indexId, indexMeta.getSchemaHash(),
+                    new TabletMeta(db.getId(), table.getId(), physicalPartitionId, indexId,
                             storageMedium, table.isCloudNativeTableOrMaterializedView());
 
             if (table.isCloudNativeTableOrMaterializedView()) {
@@ -2005,7 +2004,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         long indexId = mIndex.getId();
                         int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId,
-                                indexId, schemaHash, medium, table.isCloudNativeTableOrMaterializedView());
+                                indexId, medium, table.isCloudNativeTableOrMaterializedView());
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
@@ -2169,10 +2168,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
 
                 // create replicas
+                int schemaHash = table.getSchemaHashByIndexId(index.getId());
                 for (long backendId : chosenBackendIds) {
                     long replicaId = getNextId();
-                    Replica replica = new Replica(replicaId, backendId, replicaState, version,
-                            tabletMeta.getOldSchemaHash());
+                    Replica replica = new Replica(replicaId, backendId, replicaState, version, schemaHash);
                     tablet.addReplica(replica);
                 }
                 Preconditions.checkState(chosenBackendIds.size() == replicationNum,
@@ -4435,7 +4434,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
             }
 
-            copiedTbl = getShadowCopyTable(olapTable);
+            copiedTbl = AnalyzerUtils.getShadowCopyTable(olapTable);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -4635,7 +4634,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                             long indexId = mIndex.getId();
                             int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                             TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(),
-                                    physicalPartition.getId(), indexId, schemaHash, medium,
+                                    physicalPartition.getId(), indexId, medium,
                                     olapTable.isCloudNativeTableOrMaterializedView());
                             for (Tablet tablet : mIndex.getTablets()) {
                                 long tabletId = tablet.getId();
@@ -4983,7 +4982,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             for (Long id : sourcePartitionIds) {
                 origPartitions.put(id, olapTable.getPartition(id).getName());
             }
-            copiedTbl = getShadowCopyTable(olapTable);
+            copiedTbl = AnalyzerUtils.getShadowCopyTable(olapTable);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -4994,22 +4993,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public OlapTable getCopiedTable(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
                                     Map<Long, String> origPartitions) {
         return getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions, false);
-    }
-
-    private OlapTable getShadowCopyTable(OlapTable olapTable) {
-        OlapTable copiedTable;
-        if (olapTable instanceof LakeMaterializedView) {
-            copiedTable = new LakeMaterializedView();
-        } else if (olapTable instanceof MaterializedView) {
-            copiedTable = new MaterializedView();
-        } else if (olapTable instanceof LakeTable) {
-            copiedTable = new LakeTable();
-        } else {
-            copiedTable = new OlapTable();
-        }
-
-        olapTable.copyOnlyForQuery(copiedTable);
-        return copiedTable;
     }
 
     @VisibleForTesting

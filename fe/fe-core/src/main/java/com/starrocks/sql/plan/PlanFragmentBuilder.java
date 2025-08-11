@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
@@ -197,14 +196,9 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
@@ -240,7 +234,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -574,155 +567,52 @@ public class PlanFragmentBuilder {
             }
 
             // ------------------------------------------------------------------------------------
-            // Get outputColumnIds.
+            // Get outputColumns.
             // ------------------------------------------------------------------------------------
-            Set<Integer> outputColumnIds = node.getOutputColumns().stream()
+            Set<Integer> requiredColumns = node.getOutputColumns().stream()
                     .map(ColumnRefOperator::getId)
                     .collect(Collectors.toSet());
             // Empty outputColumnIds means that the expression after ScanNode does not need any column from ScanNode.
             // However, at least one column needs to be output, so choose any column as the output column.
-            if (outputColumnIds.isEmpty()) {
+            if (requiredColumns.isEmpty()) {
                 if (!scanNode.getSlots().isEmpty()) {
-                    outputColumnIds.add(scanNode.getSlots().get(0).getId().asInt());
+                    requiredColumns.add(scanNode.getSlots().get(0).getId().asInt());
                 }
             }
 
             // ------------------------------------------------------------------------------------
-            // Get nonPushdownColumnIds.
+            // Get mv use columns
             // ------------------------------------------------------------------------------------
-            Set<Integer> nonPushdownColumnIds = Collections.emptySet();
             if (materializedIndexMeta.getKeysType().isAggregationFamily() ||
                     materializedIndexMeta.getKeysType() == KeysType.PRIMARY_KEYS) {
                 Map<String, Integer> columnNameToId = scanNode.getSlots().stream().collect(Collectors.toMap(
                         slot -> slot.getColumn().getName(),
                         slot -> slot.getId().asInt()
                 ));
-                nonPushdownColumnIds = materializedIndexMeta.getSchema().stream()
+                materializedIndexMeta.getSchema().stream()
                         .filter(col -> !col.isKey())
                         .map(Column::getName)
                         .map(columnNameToId::get)
-                        .collect(Collectors.toSet());
+                        .forEach(requiredColumns::add);
             }
 
             // ------------------------------------------------------------------------------------
-            // Get pushdownPredUsedColumnIds and nonPushdownPredUsedColumnIds.
+            // Get predicate use columns
             // ------------------------------------------------------------------------------------
-            Set<Integer> pushdownPredUsedColumnIds = new HashSet<>();
-            Set<Integer> nonPushdownPredUsedColumnIds = new HashSet<>();
-            IsSimpleStrictPredicateVisitor checkVistor = new IsSimpleStrictPredicateVisitor(sessionVariable);
+            ColumnRefSet predicateColumns = new ColumnRefSet();
             for (ScalarOperator predicate : predicates) {
-                ColumnRefSet usedColumns = predicate.getUsedColumns();
-                boolean isPushdown = predicate.accept(checkVistor, null)
-                                && Arrays.stream(usedColumns.getColumnIds()).noneMatch(nonPushdownColumnIds::contains);
-                if (isPushdown) {
-                    for (int cid : usedColumns.getColumnIds()) {
-                        pushdownPredUsedColumnIds.add(cid);
-                    }
-                } else {
-                    for (int cid : usedColumns.getColumnIds()) {
-                        nonPushdownPredUsedColumnIds.add(cid);
-                    }
-                }
+                predicateColumns.union(predicate.getUsedColumns());
             }
 
+
             // ------------------------------------------------------------------------------------
-            // Get unUsedOutputColumnIds which are in pushdownPredUsedColumnIds
-            // but not in nonPushdownPredUsedColumnIds and outputColumnIds.
+            // unused Columns = required columns - predicate columns.
+            // be will prune columns by predicate push down
             // ------------------------------------------------------------------------------------
-            Set<Integer> unUsedOutputColumnIds = pushdownPredUsedColumnIds.stream()
-                    .filter(cid -> !nonPushdownPredUsedColumnIds.contains(cid) && !outputColumnIds.contains(cid))
+            Set<Integer> unUsedOutputColumnIds = Arrays.stream(predicateColumns.getColumnIds())
+                    .boxed().filter(c -> !requiredColumns.contains(c))
                     .collect(Collectors.toSet());
             scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds);
-        }
-
-        // The predicate no function all, this implementation is consistent with BE olap scan node
-        private static class IsSimpleStrictPredicateVisitor extends ScalarOperatorVisitor<Boolean, Void> {
-
-            private final boolean enablePushDownOrPredicate;
-
-            private final boolean enablePushDownExprPredicate;
-
-            public IsSimpleStrictPredicateVisitor(SessionVariable variable) {
-                this.enablePushDownOrPredicate = variable.isEnablePushdownOrPredicate();
-                this.enablePushDownExprPredicate = variable.isEnableColumnExprPredicate();
-            }
-
-            @Override
-            public Boolean visit(ScalarOperator scalarOperator, Void context) {
-                return false;
-            }
-
-            @Override
-            public Boolean visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
-                if (!enablePushDownOrPredicate) {
-                    return false;
-                }
-
-                if (predicate.isNot() && enablePushDownExprPredicate) {
-                    if (predicate.getUsedColumns().cardinality() <= 1) {
-                        return predicate.getChildren().stream().allMatch(child -> child.accept(this, context));
-                    }
-                    return false;
-                }
-
-                if (!predicate.isAnd() && !predicate.isOr()) {
-                    return false;
-                }
-
-                return predicate.getChildren().stream().allMatch(child -> child.accept(this, context));
-            }
-
-            @Override
-            public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-                if (predicate.getBinaryType() == EQ_FOR_NULL) {
-                    return false;
-                }
-                if (predicate.getUsedColumns().cardinality() > 1) {
-                    return false;
-                }
-                if (!predicate.getChild(1).isConstant()) {
-                    return false;
-                }
-
-                if (!checkTypeCanPushDown(predicate)) {
-                    return false;
-                }
-
-                return predicate.getChild(0).isColumnRef();
-            }
-
-            @Override
-            public Boolean visitInPredicate(InPredicateOperator predicate, Void context) {
-                if (!checkTypeCanPushDown(predicate)) {
-                    return false;
-                }
-
-                return predicate.getChild(0).isColumnRef() && predicate.allValuesMatch(ScalarOperator::isConstantRef);
-            }
-
-            @Override
-            public Boolean visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
-                if (!checkTypeCanPushDown(predicate)) {
-                    return false;
-                }
-
-                return predicate.getChild(0).isColumnRef();
-            }
-
-            @Override
-            public Boolean visitMatchExprOperator(MatchExprOperator predicate, Void context) {
-                // match expression is always satisfy the following format:
-                // SlotRef MATCH StringLiteral which is always SimpleStrictPredicate
-                return true;
-            }
-
-            // These type predicates couldn't be pushed down to storage engine,
-            // which are consistent with BE implementations.
-            private boolean checkTypeCanPushDown(ScalarOperator scalarOperator) {
-                Type leftType = scalarOperator.getChild(0).getType();
-                return !leftType.isFloatingPointType() && !leftType.isComplexType() && !leftType.isJsonType() &&
-                        !leftType.isTime();
-            }
         }
 
         @Override
@@ -4057,18 +3947,18 @@ public class PlanFragmentBuilder {
         }
 
         @Override
-        public PlanFragment visitPhysicalTableFunctionTableScan(OptExpression optExpression, ExecPlan context) {
+        public PlanFragment visitPhysicalTableFunctionTableScan(OptExpression optExpression, ExecPlan execPlan) {
             PhysicalTableFunctionTableScanOperator node = (PhysicalTableFunctionTableScanOperator) optExpression.getOp();
 
             TableFunctionTable table = (TableFunctionTable) node.getTable();
 
-            TupleDescriptor tupleDesc = context.getDescTbl().createTupleDescriptor();
-            prepareContextSlots(node, context, tupleDesc);
+            TupleDescriptor tupleDesc = execPlan.getDescTbl().createTupleDescriptor();
+            prepareContextSlots(node, execPlan, tupleDesc);
 
             List<List<TBrokerFileStatus>> files = new ArrayList<>();
             files.add(table.loadFileList());
-            ComputeResource computeResource = context.getConnectContext().getCurrentComputeResource();
-            FileScanNode scanNode = new FileScanNode(context.getNextNodeId(), tupleDesc,
+            ComputeResource computeResource = execPlan.getConnectContext().getCurrentComputeResource();
+            FileScanNode scanNode = new FileScanNode(execPlan.getNextNodeId(), tupleDesc,
                     "FileScanNode", files, table.loadFileList().size(), computeResource);
 
             Set<String> scanColumns = tupleDesc.getSlots().stream().map(SlotDescriptor::getColumn).map(Column::getName).collect(
@@ -4089,11 +3979,9 @@ public class PlanFragmentBuilder {
             scanNode.setFlexibleColumnMapping(table.isFlexibleColumnMapping());
             scanNode.setFileScanType(table.isLoadType() ? TFileScanType.FILES_INSERT : TFileScanType.FILES_QUERY);
 
-            Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), context.getConnectContext());
-            analyzer.setDescTbl(context.getDescTbl());
             try {
-                scanNode.init(analyzer);
-                scanNode.finalizeStats(analyzer);
+                scanNode.init(execPlan.getDescTbl());
+                scanNode.finalizeStats();
             } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
                         "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),
@@ -4103,7 +3991,7 @@ public class PlanFragmentBuilder {
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
             ScalarOperatorToExpr.FormatterContext formatterContext =
-                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                    new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr());
             for (ScalarOperator predicate : predicates) {
                 scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
@@ -4112,10 +4000,10 @@ public class PlanFragmentBuilder {
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
 
-            context.getScanNodes().add(scanNode);
+            execPlan.getScanNodes().add(scanNode);
             PlanFragment fragment =
-                    new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
-            context.getFragments().add(fragment);
+                    new PlanFragment(execPlan.getNextFragmentId(), scanNode, DataPartition.RANDOM);
+            execPlan.getFragments().add(fragment);
             return fragment;
         }
 

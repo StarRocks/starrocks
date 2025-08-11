@@ -103,6 +103,7 @@ import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
 import com.starrocks.sql.optimizer.rule.tree.InlineCteProjectPruneRule;
 import com.starrocks.sql.optimizer.rule.tree.JoinLocalShuffleRule;
+import com.starrocks.sql.optimizer.rule.tree.JsonPathRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.MarkParentRequiredDistributionRule;
 import com.starrocks.sql.optimizer.rule.tree.PhysicalDistributionAggOptRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
@@ -127,6 +128,7 @@ import com.starrocks.sql.optimizer.task.TaskScheduler;
 import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import com.starrocks.sql.optimizer.validate.PlanValidator;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -244,7 +246,7 @@ public class QueryOptimizer extends Optimizer {
 
         Preconditions.checkNotNull(memo);
         memo.init(logicOperatorTree);
-        if (context.getQueryMaterializationContext() != null) {
+        if (mvRewriteStrategy.enableViewBasedRewrite && context.getQueryMaterializationContext() != null) {
             // LogicalTreeWithView is logically equivalent to logicOperatorTree
             addViewBasedPlanIntoMemo(context.getQueryMaterializationContext().getQueryOptPlanWithView());
         }
@@ -458,10 +460,11 @@ public class QueryOptimizer extends Optimizer {
 
     private void doRuleBasedMaterializedViewRewrite(OptExpression tree,
                                                     TaskContext rootTaskContext) {
-        if (mvRewriteStrategy.enableViewBasedRewrite) {
-            // try view based mv rewrite first, then try normal mv rewrite rules
-            viewBasedMvRuleRewrite(tree, rootTaskContext);
+        // view rewrite can handle single table and multi tables query rewrite, no need extra rules to further optimization
+        if (mvRewriteStrategy.enableViewBasedRewrite && viewBasedMvRuleRewrite(tree, rootTaskContext)) {
+            return;
         }
+
         if (mvRewriteStrategy.enableForceRBORewrite) {
             // use rule based mv rewrite strategy to do mv rewrite for multi tables query
             if (mvRewriteStrategy.enableMultiTableRewrite) {
@@ -513,7 +516,6 @@ public class QueryOptimizer extends Optimizer {
 
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
         CTEContext cteContext = context.getCteContext();
-        CTEUtils.collectCteOperators(tree, context);
 
         // see JoinPredicatePushdown
         if (sessionVariable.isEnableRboTablePrune()) {
@@ -524,13 +526,14 @@ public class QueryOptimizer extends Optimizer {
             context.setEnableJoinPredicatePushDown(false);
         }
 
+        scheduler.rewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
+        CTEUtils.collectCteOperators(tree, context);
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
             scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.INLINE_CTE_RULES);
             CTEUtils.collectCteOperators(tree, context);
         }
 
-        scheduler.rewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
         CTEUtils.collectCteOperators(tree, context);
 
         scheduler.rewriteOnce(tree, rootTaskContext, new IcebergPartitionsTableRewriteRule());
@@ -609,7 +612,6 @@ public class QueryOptimizer extends Optimizer {
 
         tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
 
-        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_ASSERT_ROW_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_PROJECT_RULES);
 
         CTEUtils.collectCteOperators(tree, context);
@@ -681,7 +683,7 @@ public class QueryOptimizer extends Optimizer {
 
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.META_SCAN_REWRITE_RULES);
-        scheduler.rewriteOnce(tree, rootTaskContext, new MergeTwoProjectRule());
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
         // before MergeProjectWithChildRule, after INLINE_CTE and MergeApplyWithTableFunction
         scheduler.rewriteIterative(tree, rootTaskContext, RewriteUnnestBitmapRule.getInstance());
@@ -711,7 +713,6 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
 
         scheduler.rewriteOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
-        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_EMPTY_OPERATOR_RULES);
         scheduler.rewriteOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
 
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.VECTOR_REWRITE_RULES);
@@ -745,10 +746,15 @@ public class QueryOptimizer extends Optimizer {
     }
 
     // for single scan node, to make sure we can rewrite
-    private void viewBasedMvRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
+    private boolean viewBasedMvRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
         QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
         Preconditions.checkArgument(queryMaterializationContext != null);
+        if (queryMaterializationContext.getQueryOptPlanWithView() == null ||
+                CollectionUtils.isEmpty(queryMaterializationContext.getQueryViewScanOps())) {
+            return false;
+        }
 
+        boolean isRewrittenSuccess = false;
         try (Timer ignored = Tracers.watchScope("MVViewRewrite")) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "try VIEW_BASED_MV_REWRITE");
             OptExpression treeWithView = queryMaterializationContext.getQueryOptPlanWithView();
@@ -771,7 +777,8 @@ public class QueryOptimizer extends Optimizer {
                 deriveLogicalProperty(tree);
 
                 // if there are view scan operator left, we should replace it back to original plans
-                if (!leftViewScanOperators.isEmpty()) {
+                isRewrittenSuccess = leftViewScanOperators.isEmpty();
+                if (!isRewrittenSuccess) {
                     MvUtils.replaceLogicalViewScanOperator(tree);
                 }
             }
@@ -781,6 +788,7 @@ public class QueryOptimizer extends Optimizer {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
                     "single table view based mv rule rewrite failed.", e);
         }
+        return isRewrittenSuccess;
     }
 
     private OptExpression rewriteAndValidatePlan(
@@ -953,6 +961,8 @@ public class QueryOptimizer extends Optimizer {
         Preconditions.checkState(result.getOp().isPhysical());
 
         int planCount = result.getPlanCount();
+
+        result = new JsonPathRewriteRule().rewrite(result, rootTaskContext);
 
         // Since there may be many different plans in the logic phase, it's possible
         // that this switch can't turned on after logical optimization, so we only determine

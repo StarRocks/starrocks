@@ -19,12 +19,7 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Replica.ReplicaStatus;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class SetReplicaStatusOperationLog implements Writable {
 
@@ -52,11 +47,5 @@ public class SetReplicaStatusOperationLog implements Writable {
     public ReplicaStatus getReplicaStatus() {
         return replicaStatus;
     }
-
-    public static SetReplicaStatusOperationLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, SetReplicaStatusOperationLog.class);
-    }
-
 
 }

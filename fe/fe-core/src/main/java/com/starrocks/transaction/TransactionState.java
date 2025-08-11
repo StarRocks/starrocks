@@ -164,6 +164,15 @@ public class TransactionState implements Writable, GsonPreProcessable {
         public TxnSourceType sourceType;
         @SerializedName("ip")
         public String ip;
+        // The id of the coordinator backend. Only valid if sourceType is BE.
+        // Currently, it's only used to record which backend to redirect for
+        // transaction stream load when the transaction is still in PREPARE.
+        // Do not persist it as the PREPARE transaction also does not persist,
+        // and it will not be used after the transaction is prepared, committed
+        // or aborted. We can not do redirection based on 'ip' because there may
+        // be multiple backends on the same physical node, so the ip is not unique
+        // among backends, but backend id is unique.
+        private long backendId = -1;
 
         public TxnCoordinator() {
         }
@@ -176,6 +185,16 @@ public class TransactionState implements Writable, GsonPreProcessable {
         public static TxnCoordinator fromThisFE() {
             return new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                     FrontendOptions.getLocalHostAddress());
+        }
+
+        public static TxnCoordinator fromBackend(String ip, long backendId) {
+            TxnCoordinator coordinator = new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, ip);
+            coordinator.backendId = backendId;
+            return coordinator;
+        }
+
+        public long getBackendId() {
+            return backendId;
         }
 
         @Override
@@ -291,6 +310,17 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     @SerializedName("to")
     private long timeoutMs = Config.stream_load_default_timeout_second * 1000L;
+
+    // The default timeout value (in milliseconds) for a transaction in the PREPARED state.
+    // A value of -1 indicates that the actual timeout will be determined dynamically at
+    // runtime by Config.prepared_transaction_default_timeout_second.
+    public static final long DEFAULT_PREPARED_TIMEOUT_MS = -1;
+
+    // The timeout (in milliseconds) that a transaction can remain in the PREPARED state
+    // before it must be either COMMITTED or ABORTED. This value is lazily set when the
+    // transaction transitions to the PREPARED state.
+    @SerializedName("pto")
+    private long preparedTimeoutMs = DEFAULT_PREPARED_TIMEOUT_MS;
 
     // optional
     @SerializedName("ta")
@@ -737,8 +767,18 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.prepareTime = prepareTime;
     }
 
-    public void setPreparedTime(long preparedTime) {
+    public void setPreparedTimeAndTimeout(long preparedTime, long preparedTimeoutMs) {
         this.preparedTime = preparedTime;
+        this.preparedTimeoutMs = preparedTimeoutMs;
+    }
+
+    public long getPreparedTime() {
+        return preparedTime;
+    }
+
+    public long getPreparedTimeoutMs() {
+        return preparedTimeoutMs == DEFAULT_PREPARED_TIMEOUT_MS ?
+            Config.prepared_transaction_default_timeout_second * 1000L : preparedTimeoutMs;
     }
 
     public void setCommitTime(long commitTime) {
@@ -806,9 +846,15 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     // return true if txn is running but timeout
     public boolean isTimeout(long currentMillis) {
-        return (transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs)
-                || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - preparedTime)
-                / 1000 > Config.prepared_transaction_default_timeout_second);
+        if (transactionStatus == TransactionStatus.PREPARE) {
+            return currentMillis - prepareTime > timeoutMs;
+        }
+        if (transactionStatus == TransactionStatus.PREPARED) {
+            long timeout = preparedTimeoutMs > 0 ?
+                    preparedTimeoutMs : Config.prepared_transaction_default_timeout_second * 1000L;
+            return (currentMillis - preparedTime) > timeout;
+        }
+        return false;
     }
 
     /*

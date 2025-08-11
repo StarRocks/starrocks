@@ -118,6 +118,7 @@ public class StatisticUtils {
         context.getSessionVariable().setEnablePipelineEngine(true);
         context.getSessionVariable().setCboCteReuse(true);
         context.getSessionVariable().setCboCTERuseRatio(0);
+        context.getSessionVariable().setEnablePlanSerializeConcurrently(false);
 
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getBackgroundWarehouse();
@@ -158,7 +159,7 @@ public class StatisticUtils {
             return true;
         }
 
-        return COLLECT_DATABASES_BLACKLIST.stream().anyMatch(d -> databaseName.toLowerCase().contains(d.toLowerCase()));
+        return COLLECT_DATABASES_BLACKLIST.stream().anyMatch(databaseName::equalsIgnoreCase);
     }
 
     public static boolean statisticTableBlackListCheck(long tableId) {
@@ -191,6 +192,7 @@ public class StatisticUtils {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
         // check database
         if (db == null) {
+            LOG.warn("Statistics database {} not found", StatsConstants.STATISTICS_DB_NAME);
             return false;
         }
 
@@ -198,6 +200,7 @@ public class StatisticUtils {
             // check table
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
             if (table == null) {
+                LOG.warn("Statistics table {} not found in database {}", tableName, db.getFullName());
                 return false;
             }
             if (table.isCloudNativeTableOrMaterializedView()) {
@@ -208,6 +211,8 @@ public class StatisticUtils {
             for (Partition partition : table.getPartitions()) {
                 if (partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().stream()
                         .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
+                    LOG.warn("Statistics table {} partition {} has tablets without normal replicas", 
+                            tableName, partition.getName());
                     return false;
                 }
             }

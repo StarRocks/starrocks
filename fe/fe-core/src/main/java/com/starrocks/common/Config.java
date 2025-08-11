@@ -709,6 +709,21 @@ public class Config extends ConfigBase {
     public static int http_port = 8030;
 
     /**
+     * Fe https port
+     * Currently, all FEs' https port must be the same.
+     */
+    @ConfField
+    public static int https_port = 8443;
+
+    /**
+     *  https enable flag. false by default.
+     *  If the value is false, http is supported. Otherwise, https is supported.
+     */
+    @ConfField(comment = "enable https flag. false by default. If true then http " +
+            "and https are both enabled on different ports. Otherwise, only http is enabled.")
+    public static boolean enable_https = false;
+
+    /**
      * Configs for query queue v2.
      * The configs {@code query_queue_v2_xxx} are effective only when {@code enable_query_queue_v2} is true.
      * @see com.starrocks.qe.scheduler.slot.QueryQueueOptions
@@ -802,6 +817,16 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_http_detail_metrics = false;
+
+    @ConfField(mutable = true, comment = "Whether to handle HTTP request asynchronously." +
+            "If enabled, a HTTP request is received in netty workers, and then submitted to a separate " +
+            "thread pool to handle the business logic to avoid blocking the HTTP server. If disabled, " +
+            "the business logic is also handled in netty workers.")
+    public static boolean enable_http_async_handler = true;
+
+    @ConfField(mutable = true, aliases = {"max_http_sql_service_task_threads_num"},
+            comment = "Size of the thread pool for asynchronously processing HTTP request.")
+    public static int http_async_threads_num = 4096;
 
     /**
      * Cluster name will be shown as the title of web page
@@ -907,12 +932,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int max_mysql_service_task_threads_num = 4096;
-
-    /**
-     * max num of thread to handle task for http sql.
-     */
-    @ConfField
-    public static int max_http_sql_service_task_threads_num = 4096;
 
     /**
      * modifies the version string returned by following situations:
@@ -1053,6 +1072,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_stream_load_timeout_second = 259200; // 3days
+
+    @ConfField(mutable = true, comment =
+            "The capacity of the cache that stores the mapping from transaction label to coordinator node.")
+    public static int transaction_stream_load_coordinator_cache_capacity = 4096;
+
+    @ConfField(mutable = true, comment = "The time to keep the coordinator mapping in the cache before it's evicted.")
+    public static int transaction_stream_load_coordinator_cache_expire_seconds = 900;
 
     /**
      * Max stream load load batch size
@@ -2206,6 +2232,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Whether to allow auto collection of the NDV of array columns")
     public static boolean enable_auto_collect_array_ndv = false;
+
+    @ConfField(mutable = true, comment = "Synchronously load statistics for testing purpose")
+    public static boolean enable_sync_statistics_load = false;
 
     /**
      * default bucket size of histogram statistics
@@ -3765,8 +3794,38 @@ public class Config extends ConfigBase {
     public static long dynamic_tablet_max_parallel_tablets = 10 * 1024;
 
     /**
+     * Tablets with size larger than this value will be considered to split.
+     */
+    @ConfField(mutable = true, comment = "Tablets with size larger than this value will be considered to split.")
+    public static long dynamic_tablet_split_size = 4 * 1024 * 1024 * 1024;
+
+    /**
+     * The max number of new tablets that an old tablet can be split into.
+     */
+    @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
+    public static int dynamic_tablet_max_split_count = 1024;
+
+    /**
      * Whether to enable tracing historical nodes when cluster scale
      */
     @ConfField(mutable = true)
     public static boolean enable_trace_historical_node = false;
+
+    /**
+     * The size of the thread pool for deploy serialization.
+     * If set to -1, it means same as cpu core number.
+     */
+    @ConfField
+    public static int deploy_serialization_thread_pool_size = -1;
+
+    /**
+     * The size of the queue for deploy serialization thread pool.
+     * If set to -1, it means same as cpu core number * 2.
+     */
+    @ConfField
+    public static int deploy_serialization_queue_size = -1;
+
+    @ConfField(comment = "Enable case-insensitive catalog/database/table names. " +
+            "Only configurable during cluster initialization, immutable once set.")
+    public static boolean enable_table_name_case_insensitive = false;
 }

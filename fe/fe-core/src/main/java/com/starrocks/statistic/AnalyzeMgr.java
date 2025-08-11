@@ -50,7 +50,6 @@ import com.starrocks.transaction.TxnCommitAttachment;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.Duration;
@@ -61,8 +60,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
 public class AnalyzeMgr implements Writable {
@@ -842,6 +843,23 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+    public void killAllPendingTasks() {
+        if (ANALYZE_TASK_THREAD_POOL instanceof ThreadPoolExecutor executor) {
+            BlockingQueue<Runnable> queue = executor.getQueue();
+            List<Runnable> tasksToRemove = new ArrayList<>();
+
+            for (Runnable task : queue) {
+                if (task instanceof CancelableAnalyzeTask cancellableTask) {
+                    cancellableTask.cancel();
+                    tasksToRemove.add(task);
+                }
+            }
+
+            queue.removeAll(tasksToRemove);
+            LOG.info("Cancelled {} CancelableAnalyzeTask from queue", tasksToRemove.size());
+        }
+    }
+
     public ExecutorService getAnalyzeTaskThreadPool() {
         return ANALYZE_TASK_THREAD_POOL;
     }
@@ -879,44 +897,6 @@ public class AnalyzeMgr implements Writable {
                     loadRows = table != null ? table.getRowCount() : 0;
                 }
                 updateBasicStatsMeta(db.getId(), tableId, loadRows);
-            }
-        }
-    }
-
-    public void readFields(DataInputStream dis) throws IOException {
-        // read job
-        String s = Text.readString(dis);
-        SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
-
-        if (null != data) {
-            if (null != data.jobs) {
-                for (NativeAnalyzeJob job : data.jobs) {
-                    replayAddAnalyzeJob(job);
-                }
-            }
-
-            if (null != data.nativeStatus) {
-                for (AnalyzeStatus status : data.nativeStatus) {
-                    replayAddAnalyzeStatus(status);
-                }
-            }
-
-            if (null != data.basicStatsMeta) {
-                for (BasicStatsMeta meta : data.basicStatsMeta) {
-                    replayAddBasicStatsMeta(meta);
-                }
-            }
-
-            if (null != data.histogramStatsMeta) {
-                for (HistogramStatsMeta meta : data.histogramStatsMeta) {
-                    replayAddHistogramStatsMeta(meta);
-                }
-            }
-
-            if (null != data.multiColumnStatsMeta) {
-                for (MultiColumnStatsMeta meta : data.multiColumnStatsMeta) {
-                    replayAddMultiColumnStatsMeta(meta);
-                }
             }
         }
     }

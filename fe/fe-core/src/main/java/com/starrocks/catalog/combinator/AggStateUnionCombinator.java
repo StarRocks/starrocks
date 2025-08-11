@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.logging.log4j.LogManager;
@@ -51,7 +50,7 @@ public final class AggStateUnionCombinator extends AggregateFunction {
     public static Optional<AggStateUnionCombinator> of(AggregateFunction aggFunc) {
         try {
             Type intermediateType = aggFunc.getIntermediateTypeOrReturnType().clone();
-            FunctionName functionName = new FunctionName(aggFunc.functionName() + FunctionSet.AGG_STATE_UNION_SUFFIX);
+            FunctionName functionName = new FunctionName(AggStateUtils.aggStateUnionFunctionName(aggFunc.functionName()));
             AggStateUnionCombinator aggStateUnionFunc = new AggStateUnionCombinator(functionName, intermediateType);
             aggStateUnionFunc.setBinaryType(TFunctionBinaryType.BUILTIN);
             aggStateUnionFunc.setPolymorphic(aggFunc.isPolymorphic());

@@ -1281,6 +1281,15 @@ public class EditLog {
     }
 
     /**
+     * Apply the in-memory change in WALApplier.
+     */
+    public void logEdit(short op, Writable writable, WALApplier applier) {
+        JournalTask task = submitLog(op, writable, -1);
+        waitInfinity(task);
+        applier.apply(writable);
+    }
+
+    /**
      * submit log in queue and return immediately
      */
     private JournalTask submitLog(short op, Writable writable, long maxWaitIntervalMs) {

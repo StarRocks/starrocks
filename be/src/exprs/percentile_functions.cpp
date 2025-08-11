@@ -19,10 +19,8 @@
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/percentile_cont.h"
-#include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
 #include "util/percentile_value.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 
@@ -97,3 +95,5 @@ struct LCPercentileExtracter {
 };
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/PercentileFunctions.inc"

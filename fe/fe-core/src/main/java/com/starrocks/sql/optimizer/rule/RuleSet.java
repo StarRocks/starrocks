@@ -85,9 +85,9 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MinMaxOptOnScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.OuterJoinEliminationRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEConsumeColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyDirectRule;
@@ -311,11 +311,6 @@ public class RuleSet {
                     new QuantifiedApply2OuterJoinRule()
             ));
 
-    public static final Rule PRUNE_ASSERT_ROW_RULES =
-            new CombinationRule(RuleType.GP_PRUNE_ASSERT_ROW, ImmutableList.of(
-                    new PruneAssertOneRowRule()
-            ));
-
     public static final Rule PRUNE_UKFK_JOIN_RULES = new CombinationRule(RuleType.GP_PRUNE_UKFK_JOIN, ImmutableList.of(
             new PruneUKFKJoinRule()
     ));
@@ -440,6 +435,7 @@ public class RuleSet {
     public void addOuterJoinTransformationRules() {
         transformRules.add(JoinAssociativityRule.OUTER_JOIN_ASSOCIATIVITY_RULE);
         transformRules.add(JoinLeftAsscomRule.OUTER_JOIN_LEFT_ASSCOM_RULE);
+        transformRules.add(OuterJoinEliminationRule.getInstance());
     }
 
     public void addJoinCommutativityWithoutInnerRule() {

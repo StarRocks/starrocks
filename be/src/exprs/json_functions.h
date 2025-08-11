@@ -20,16 +20,15 @@
 
 #include <utility>
 
-#include "column/column_builder.h"
-#include "column/vectorized_fwd.h"
-#include "common/compiler_util.h"
 #include "common/status.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
-#include "exprs/jsonpath.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
+
+// Forward declarations
+struct JsonPath;
 
 extern const re2::RE2 SIMPLE_JSONPATH_PATTERN;
 
@@ -155,6 +154,13 @@ public:
      * 
      */
     DEFINE_VECTORIZED_FN(json_keys);
+
+    /**
+     * Remove data from a JSON document at one or more specified JSON paths
+     * @param JSON, JSONPath, [JSONPath, ...]
+     * @return JSON with specified paths removed
+     */
+    DEFINE_VECTORIZED_FN(json_remove);
 
     /**
      * Return json built from struct/map

@@ -53,7 +53,6 @@ import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.collections.map.HashedMap;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -257,34 +256,6 @@ public class EtlStatus implements Writable {
         }
         // TODO: Persist `tableCounters`
         // Text.writeString(out, GsonUtils.GSON.toJson(tableCounters));
-    }
-
-    @SuppressWarnings("unchecked")
-    public void readFields(DataInput in) throws IOException {
-        state = TEtlState.valueOf(Text.readString(in));
-        trackingUrl = Text.readString(in);
-
-        int statsCount = in.readInt();
-        for (int i = 0; i < statsCount; ++i) {
-            String key = Text.readString(in);
-            String value = Text.readString(in);
-            stats.put(key, value);
-        }
-        // restore load statics from stat counter
-        if (stats.containsKey(LOAD_STATISTIC)) {
-            loadStatistic = LoadStatistic.fromJson(stats.get(LOAD_STATISTIC));
-        }
-
-        int countersCount = in.readInt();
-        for (int i = 0; i < countersCount; ++i) {
-            String key = Text.readString(in);
-            String value = Text.readString(in);
-            counters.put(key, value);
-        }
-        // TODO: Persist `tableCounters`
-        // if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_93) {
-        //     tableCounters = GsonUtils.GSON.fromJson(Text.readString(in), tableCounters.getClass());
-        // }
     }
 
     public void setLoadFileInfo(int filenum, long filesize) {

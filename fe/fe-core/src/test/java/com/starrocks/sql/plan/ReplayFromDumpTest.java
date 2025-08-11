@@ -165,21 +165,22 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testTPCDS23_1() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds23_1"), null, TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("MultiCastDataSinks\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 56\n" +
-                "    RANDOM\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 77\n" +
-                "    RANDOM\n" +
-                "\n" +
-                "  40:Project\n" +
-                "  |  <slot 99> : 99: c_customer_sk\n" +
-                "  |  \n" +
-                "  39:NESTLOOP JOIN\n" +
-                "  |  join op: INNER JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: CAST(118: sum AS DOUBLE) > CAST(0.5 * 190: max AS DOUBLE)"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("MultiCastDataSinks\n"
+                        + "  STREAM DATA SINK\n"
+                        + "    EXCHANGE ID: 55\n"
+                        + "    RANDOM\n"
+                        + "  STREAM DATA SINK\n"
+                        + "    EXCHANGE ID: 76\n"
+                        + "    RANDOM\n"
+                        + "\n"
+                        + "  39:Project\n"
+                        + "  |  <slot 99> : 99: c_customer_sk\n"
+                        + "  |  \n"
+                        + "  38:NESTLOOP JOIN\n"
+                        + "  |  join op: INNER JOIN\n"
+                        + "  |  colocate: false, reason: \n"
+                        + "  |  other join predicates: CAST(118: sum AS DOUBLE) > CAST(0.5 * 190: max AS DOUBLE)"),
+                replayPair.second);
     }
 
     @Test
@@ -378,17 +379,17 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null,
                         TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("20:Project\n" +
-                "  |  <slot 31> : bitmap_and(20: bitmap_agg, 27: bitmap_agg)\n" +
-                "  |  \n" +
-                "  19:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----18:EXCHANGE\n" +
-                "  |    \n" +
-                "  11:Project\n" +
-                "  |  <slot 20> : 17: bitmap_agg"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("13:Project\n"
+                + "  |  <slot 31> : bitmap_and(20: bitmap_agg, 27: bitmap_agg)\n"
+                + "  |  \n"
+                + "  12:NESTLOOP JOIN\n"
+                + "  |  join op: CROSS JOIN\n"
+                + "  |  colocate: false, reason: \n"
+                + "  |  \n"
+                + "  |----11:EXCHANGE\n"
+                + "  |    \n"
+                + "  5:Project\n"
+                + "  |  <slot 20> : 17: bitmap_agg"), replayPair.second);
     }
 
     @Test
@@ -523,10 +524,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_skew_hint"), null,
                         TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("  9:Project\n" +
-                "  |  <slot 39> : 39: year\n" +
-                "  |  <slot 42> : 42: case\n" +
-                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"), replayPair.second);
+        Assertions.assertTrue(
+                replayPair.second.contains("CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"),
+                replayPair.second);
     }
 
     @Test
@@ -534,10 +534,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_optimize"), null,
                         TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("  9:Project\n" +
-                "  |  <slot 39> : 39: year\n" +
-                "  |  <slot 42> : 42: case\n" +
-                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"), replayPair.second);
+        Assertions.assertTrue(
+                replayPair.second.contains("CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"),
+                replayPair.second);
     }
 
     @Test
@@ -1012,6 +1011,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testPushdownSubfield() throws Exception {
         String dumpString = getDumpInfoFromFile("query_dump/pushdown_subfield");
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        queryDumpInfo.getSessionVariable().setEnableJSONV2Rewrite(false);
         Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                 TExplainLevel.NORMAL);
         Assertions.assertTrue(replayPair.second.contains(
@@ -1069,10 +1069,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
         Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                 TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("" +
-                "RESULT SINK\n" +
-                "\n" +
-                "  0:EMPTYSET"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("0:EMPTYSET"), replayPair.second);
     }
 
     @Test
@@ -1114,5 +1111,55 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         int end = ss.indexOf("]", start);
         long count = Long.parseLong(ss.substring(start, end));
         Assertions.assertTrue(count < 1000, ss);
+    }
+
+    @Test
+    public void testForceReuseCTEWithHugeCTE() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/big_cte_with_force_reuse");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        Assertions.assertTrue(replayPair.second.contains("MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1607\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1612\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1627\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1644\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1650\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1664\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1691\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1697\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1711\n" +
+                "    RANDOM"), replayPair.second);
+    }
+
+    @Test
+    public void testPruneUnionEmpty() throws Exception {
+        try {
+            FeConstants.enablePruneEmptyOutputScan = true;
+            String dumpString = getDumpInfoFromFile("query_dump/prune_union_empty");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                    TExplainLevel.NORMAL);
+            Assertions.assertTrue(replayPair.second.contains("1:EMPTYSET"), replayPair.second);
+        } finally {
+            FeConstants.enablePruneEmptyOutputScan = false;
+        }
     }
 }

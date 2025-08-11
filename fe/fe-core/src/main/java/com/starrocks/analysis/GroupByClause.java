@@ -196,10 +196,6 @@ public class GroupByClause implements ParseNode {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-    }
-
-    @Override
     public String toSql() {
         if (needToSql) {
             return toViewSql();

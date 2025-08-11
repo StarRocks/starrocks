@@ -836,6 +836,7 @@ struct TMasterOpRequest {
     35: optional string session_id
     36: optional i32 connectionId
     37: optional i64 txn_id;
+    38: optional bool isInternalStmt;
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
@@ -1061,6 +1062,8 @@ struct TLoadTxnCommitRequest {
     11: optional TTxnCommitAttachment txnCommitAttachment
     12: optional i64 thrift_rpc_timeout_ms
     13: optional list<Types.TTabletFailInfo> failInfos
+    // The timeout for prepared transaction. Only valid if this requerst is sent by rpc loadTxnPrepare
+    14: optional i32 prepared_timeout_second
 }
 
 struct TLoadTxnCommitResult {
@@ -1517,7 +1520,8 @@ struct TPartitionMetaInfo {
     27: optional i64 version_epoch
     28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
     29: optional i64 storage_size
-    30: optional i64 metadata_switch_version
+    30: optional bool tablet_balanced
+    31: optional i64 metadata_switch_version
 }
 
 struct TGetPartitionsMetaResponse {
@@ -2133,6 +2137,30 @@ struct TUpdateFailPointResponse {
     1: optional Status.TStatus status;
 }
 
+struct TDynamicTabletJobsItem {
+    1: optional i64 job_id;
+    2: optional string db_name;
+    3: optional string table_name;
+    4: optional i64 db_id;
+    5: optional i64 table_id;
+    6: optional string job_type;
+    7: optional string job_state;
+    8: optional i64 transaction_id;
+    9: optional i64 parallel_partitions;
+    10: optional i64 parallel_tablets;
+    11: optional i64 created_time;
+    12: optional i64 finished_time;
+    13: optional string error_message;
+}
+
+struct TDynamicTabletJobsRequest {
+}
+
+struct TDynamicTabletJobsResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TDynamicTabletJobsItem> items;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2274,5 +2302,7 @@ service FrontendService {
     TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
 
     TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
+
+    TDynamicTabletJobsResponse getDynamicTabletJobsInfo(1: TDynamicTabletJobsRequest request)
 }
 

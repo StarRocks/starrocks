@@ -21,6 +21,8 @@ import com.starrocks.server.GlobalStateMgr;
 import java.util.List;
 import java.util.Objects;
 
+import static com.google.common.base.Preconditions.checkState;
+
 public class HashDistributionSpec extends DistributionSpec {
     private final HashDistributionDesc hashDistributionDesc;
     private final EquivalentDescriptor equivDesc;
@@ -130,7 +132,7 @@ public class HashDistributionSpec extends DistributionSpec {
         HashDistributionDesc.SourceType thisSourceType = hashDistributionDesc.getSourceType();
 
         // check shuffle_local equivalentDescriptor
-        if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
+        if (thisSourceType == HashDistributionDesc.SourceType.LOCAL && hashDistributionDesc.isNative()) {
             ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
             long tableId = equivDesc.getTableId();
             // Disable use colocate/bucket join when table with empty partition
@@ -167,6 +169,41 @@ public class HashDistributionSpec extends DistributionSpec {
 
     public EquivalentDescriptor getEquivDesc() {
         return equivDesc;
+    }
+
+    public boolean canColocate(HashDistributionSpec o) {
+        if (!hashDistributionDesc.canColocate(o.hashDistributionDesc)) {
+            return false;
+        }
+        if (hashDistributionDesc.isNative()) {
+            ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+            long leftTableId = equivDesc.getTableId();
+            long rightTableId = o.equivDesc.getTableId();
+            // join self
+            if (leftTableId == rightTableId && !colocateIndex.isColocateTable(leftTableId)) {
+                if (!equivDesc.isSinglePartition() || !o.equivDesc.isSinglePartition() ||
+                        !equivDesc.getPartitionIds().equals(o.equivDesc.getPartitionIds())) {
+                    return false;
+                }
+            } else {
+                // colocate group
+                if (!colocateIndex.isSameGroup(leftTableId, rightTableId)) {
+                    return false;
+                }
+
+                ColocateTableIndex.GroupId leftGroupId = colocateIndex.getGroup(leftTableId);
+                ColocateTableIndex.GroupId rightGroupId = colocateIndex.getGroup(rightTableId);
+                if (colocateIndex.isGroupUnstable(leftGroupId) || colocateIndex.isGroupUnstable(rightGroupId)) {
+                    return false;
+                }
+                checkState(hashDistributionDesc.getDistributionCols().size()
+                                == o.hashDistributionDesc.getDistributionCols().size(),
+                        "Failed to enforce the output property of children in the join operator. " +
+                                "left child distribution info %s, right child distribution info %s",
+                        this, o);
+            }
+        }
+        return true;
     }
 
     @Override

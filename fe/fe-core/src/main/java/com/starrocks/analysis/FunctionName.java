@@ -24,7 +24,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TFunctionName;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Objects;
@@ -144,20 +143,6 @@ public class FunctionName implements Writable {
             out.writeBoolean(false);
         }
         Text.writeString(out, fn_);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        if (in.readBoolean()) {
-            // compatible with old version
-            db_ = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        }
-        fn_ = Text.readString(in);
-    }
-
-    public static FunctionName read(DataInput in) throws IOException {
-        FunctionName functionName = new FunctionName();
-        functionName.readFields(in);
-        return functionName;
     }
 
     @Override

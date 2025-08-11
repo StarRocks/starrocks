@@ -26,6 +26,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
@@ -1437,7 +1438,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         String sql = "show running queries;";
         ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowResultSet res = ShowExecutor.execute(showStmt, ctx);
-        Assertions.assertEquals(showStmt.getMetaData().getColumns(), res.getMetaData().getColumns());
+        Assertions.assertEquals(new ShowResultMetaFactory().getMetadata(showStmt).getColumns(), res.getMetaData().getColumns());
         Assertions.assertTrue(res.getResultRows().isEmpty());
     }
 
@@ -1494,7 +1495,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             String sql = "show running queries;";
             ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             ShowResultSet res = ShowExecutor.execute(showStmt, ctx);
-            Assertions.assertEquals(showStmt.getMetaData().getColumns(), res.getMetaData().getColumns());
+            Assertions.assertEquals(new ShowResultMetaFactory().getMetadata(showStmt).getColumns(),
+                    res.getMetaData().getColumns());
 
             final int groupIndex = 2;
             final int stateIndex = 6;
@@ -1520,7 +1522,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             String sql = "show running queries limit 4;";
             ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             ShowResultSet res = ShowExecutor.execute(showStmt, ctx);
-            Assertions.assertEquals(showStmt.getMetaData().getColumns(), res.getMetaData().getColumns());
+            Assertions.assertEquals(new ShowResultMetaFactory().getMetadata(showStmt).getColumns(),
+                    res.getMetaData().getColumns());
             Assertions.assertEquals(4, res.getResultRows().size());
         }
 

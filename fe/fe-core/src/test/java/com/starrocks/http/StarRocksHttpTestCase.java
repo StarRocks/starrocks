@@ -124,6 +124,7 @@ public abstract class StarRocksHttpTestCase {
 
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
+    public static final String TABLE_NAME2 = "testTbl2";
 
     protected static final String ES_TABLE_NAME = "es_table";
 
@@ -230,7 +231,7 @@ public abstract class StarRocksHttpTestCase {
         // index
         MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta =
-                new TabletMeta(testDbId, testTableId, testPartitionId, testIndexId, testSchemaHash, TStorageMedium.HDD);
+                new TabletMeta(testDbId, testTableId, testPartitionId, testIndexId, TStorageMedium.HDD);
         baseIndex.addTablet(tablet, tabletMeta);
 
         tablet.addReplica(replica1);
@@ -445,7 +446,13 @@ public abstract class StarRocksHttpTestCase {
             }
         }
 
-        httpServer = new HttpServer(HTTP_PORT);
+        try {
+            httpServer = new HttpServer(HTTP_PORT);
+        } catch (Exception e) {
+            System.err.println("Failed to initialize HttpServer: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("HttpServer initialization failed", e);
+        }
         httpServer.setup();
         httpServer.start();
         // must ensure the http server started before any unit test

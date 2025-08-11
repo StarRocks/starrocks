@@ -56,9 +56,8 @@ private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
     Status _get_tablet(const TInternalScanRange* scan_range);
-    Status _init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
-                               const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
-    Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns);
+    Status _init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges);
+    Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     Status _init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status _init_olap_reader(RuntimeState* state);
     TCounterMinMaxType::type _get_counter_min_max_type(const std::string& metric_name);
@@ -70,6 +69,7 @@ private:
     void _decide_chunk_size(bool has_predicate);
     Status _init_column_access_paths(Schema* schema);
     Status _prune_schema_by_access_paths(Schema* schema);
+    Status _extend_schema_by_access_paths();
 
 private:
     TabletReaderParams _params{};
@@ -195,9 +195,9 @@ private:
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
     RuntimeProfile::Counter* _read_pk_index_timer = nullptr;
+
+    // FlatJSON
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
-    RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
-    RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
 };
 } // namespace pipeline
 } // namespace starrocks

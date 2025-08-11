@@ -342,6 +342,10 @@ To achieve these goals, you must consider the following aspects when creating a 
 
   You can use the property `partition_refresh_number` to specify the granularity of each refresh operation. `partition_refresh_number` controls the maximum number of partitions to be refreshed in a refresh task when a refresh is triggered. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. The partitions are refreshed in chronological order from the least recent partition to the most recent partition (excluding partitions created dynamically for the future). When the value is `-1`, the refresh task will not be split. The default value is changed from `-1` to `1` since v3.3, meaning StarRocks refeshes partitions one by one.
 
+  You can also use the `partition_refresh_strategy` property to control the adaptability of the refresh strategy. This parameter supports the following two values:
+  - "strict" (default): Partition refresh strictly follows the partition_refresh_number setting to control the refresh granularity.
+  - "adaptive": Adjusts the number of partitions refreshed per batch adaptively based on the amount of data in the base table partitions, improving refresh efficiency.
+
 - **Materialization scope**
 
   The scope of the materialized data is controlled by the properties `partition_ttl_number` (for versions earlier than v3.1.5) or `partition_ttl` (recommended for v3.1.5 and later). `partition_ttl_number` specifies the number of the most recent partitions to retain, and `partition_ttl` specifies the time range of the materialized view data to retain. During each refresh, StarRocks arranges the partitions in chronological order, and retains only those who satisfy the TTL requirements.

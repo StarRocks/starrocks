@@ -19,11 +19,17 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
@@ -35,6 +41,7 @@ import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -50,10 +57,12 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
+import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -110,6 +119,7 @@ import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
@@ -395,6 +405,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)) {
+            // Allow setting flat_json.enable to true or false
             PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
@@ -411,7 +422,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                     }
                 } else {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            "Property " + PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE +
+                            "Property " + PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE +
                                     " haven't been enabled");
                 }
             }
@@ -482,6 +493,10 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "Random distribution table already supports automatic scaling and does not require optimization");
         }
+
+        // set the sort keys into OptimizeClause
+        List<String> sortKeys = genOptimizeClauseSortKeys(clause);
+        clause.setSortKeys(sortKeys);
 
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         List<ColumnDef> columnDefs = olapTable.getColumns()
@@ -1226,6 +1241,13 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         if (!table.isCloudNativeTableOrMaterializedView()) {
             throw new SemanticException("Split tablet only support cloud native tables");
         }
+
+        try {
+            clause.analyze();
+        } catch (StarRocksException e) {
+            throw new SemanticException(e.getMessage());
+        }
+
         return null;
     }
 
@@ -1391,6 +1413,28 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         return singleRangePartitionDescs;
     }
 
+    /**
+     * @param statement : optimize clause statement
+     * @return : Generate the `sortKeys` of optimize clause based on its `orderByElements`
+     * from optimize clause statement.
+     */
+    private List<String> genOptimizeClauseSortKeys(OptimizeClause statement) {
+        List<OrderByElement> orderByElements = statement.getOrderByElements();
+        if (orderByElements == null) {
+            return null;
+        }
+        List<String> sortKeys = new ArrayList<>();
+        for (OrderByElement orderByElement : orderByElements) {
+            String column = orderByElement.castAsSlotRef();
+            if (column == null) {
+                throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+            }
+            sortKeys.add(column);
+        }
+        return sortKeys;
+    }
+
+
     @Override
     public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {
         if (clause.getMultiRangePartitionDesc() != null) {
@@ -1478,19 +1522,99 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         for (Expr expr : clause.getExprs()) {
             ScalarOperator result;
             try {
-                Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
-                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), scope, context);
-                ExpressionMapping expressionMapping = new ExpressionMapping(scope);
-                result = SqlToScalarOperatorTranslator.translate(expr, expressionMapping, new ColumnRefFactory());
-                if (result instanceof ConstantOperator) {
-                    args.add((ConstantOperator) result);
+                if (IcebergTableOperation.fromString(clause.getTableOperationName()) 
+                        == IcebergTableOperation.REWRITE_DATA_FILES) {
+                    if (!(expr instanceof BinaryPredicate)) {
+                        throw new SemanticException("Invalid arg: " + expr);
+                    }
+                    BinaryPredicate binExpr = (BinaryPredicate) expr;
+                    if (binExpr.getOp() != BinaryType.EQ) {
+                        throw new SemanticException("Invalid arg: " + expr);
+                    } else if (!(binExpr.getChild(0) instanceof LiteralExpr) ||
+                            !(binExpr.getChild(1) instanceof LiteralExpr)) {
+                        throw new SemanticException("Invalid arg: " + expr);
+                    }
+                    LiteralExpr constExpr = (LiteralExpr) binExpr.getChild(0);
+                    if (!(constExpr instanceof StringLiteral)) {
+                        throw new SemanticException("Invalid arg: " + constExpr);
+                    } 
+                    IcebergTableOperation.RewriteFileOption option = 
+                            IcebergTableOperation.RewriteFileOption.fromString(((StringLiteral) constExpr).getValue());
+                    LiteralExpr valExpr = (LiteralExpr) binExpr.getChild(1); 
+                    switch (option) {
+                        case REWRITE_ALL:
+                            if (valExpr instanceof BoolLiteral) {
+                                clause.setRewriteAll(((BoolLiteral) valExpr).getValue());
+                            } else {
+                                throw new SemanticException("Rewrite all arg should be boolean value");
+                            }
+                            break;
+                        case MIN_FILE_SIZE_BYTES:
+                            if (valExpr instanceof IntLiteral) {
+                                long size = ((IntLiteral) valExpr).getValue();
+                                if (size < 0) {
+                                    throw new SemanticException("min file size arg should be non-negative integer");
+                                }
+                                clause.setMinFileSizeBytes(size);
+                            } else {
+                                throw new SemanticException("min file size arg should be integer value");
+                            }
+                            break;
+                        case BATCH_SIZE:
+                            if (valExpr instanceof IntLiteral) {
+                                long size = ((IntLiteral) valExpr).getValue();
+                                if (size < 0) {
+                                    throw new SemanticException("batch size arg should be non-negative integer");
+                                }
+                                clause.setBatchSize(((IntLiteral) valExpr).getValue());
+                            } else {
+                                throw new SemanticException("min file size arg should be integer value");
+                            }
+                            break;
+                        default:
+                            throw new SemanticException("Unknown key:" + expr);
+                    }
                 } else {
-                    throw new SemanticException("invalid arg " + expr);
+                    Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+                    ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), scope, context);
+                    ExpressionMapping expressionMapping = new ExpressionMapping(scope);
+                    result = SqlToScalarOperatorTranslator.translate(expr, expressionMapping, new ColumnRefFactory());
+                    if (result instanceof ConstantOperator) {
+                        args.add((ConstantOperator) result);
+                    }
                 }
             } catch (Exception e) {
                 throw new SemanticException("Failed to resolve table operation args %s. msg: %s", expr, e.getMessage());
             }
         }
+
+        if (clause.getWhere() != null) {
+            if (!(table instanceof IcebergTable)) {
+                throw new SemanticException("rewrite table is not an iceberg table");
+            }
+            IcebergTable icebergTable = (IcebergTable) table;
+            
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            List<ColumnRefOperator> columnRefOperators = table.getBaseSchema()
+                    .stream()
+                    .map(col -> columnRefFactory.create(col.getName(), col.getType(), col.isAllowNull()))
+                    .collect(Collectors.toList());
+            Scope scope = new Scope(RelationId.anonymous(), new RelationFields(columnRefOperators.stream()
+                    .map(col -> new Field(col.getName(), col.getType(), 
+                            new TableName(context.getDatabase(), icebergTable.getName()), null))
+                                    .collect(Collectors.toList())));
+            ExpressionAnalyzer.analyzeExpression(clause.getWhere(), new AnalyzeState(), scope, context);
+            ExpressionMapping expressionMapping = new ExpressionMapping(scope, columnRefOperators);
+            ScalarOperator res = SqlToScalarOperatorTranslator.translate(
+                    clause.getWhere(), expressionMapping, columnRefFactory);
+            clause.setPartitionFilter(res);
+            List<Column> partitionCols = icebergTable.getPartitionColumnsIncludeTransformed();
+            if (res.getColumnRefs().stream().anyMatch(col -> 
+                    partitionCols.stream().noneMatch(partCol -> partCol.getName().equals(col.getName())))) {
+                throw new SemanticException("Partition filter contains columns that are not partition columns");
+            }
+        }
+
         clause.setArgs(args);
         return null;
     }

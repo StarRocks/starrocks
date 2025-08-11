@@ -585,9 +585,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             new BigInteger("57896044618658097711785492504343953926634992332820282019728792003956564819968"); // 2^255
 
     private static final List<String> DATE_FUNCTIONS =
-            Lists.newArrayList(FunctionSet.DATE_ADD,
+            Lists.newArrayList(
+                    FunctionSet.DATE_ADD,
                     FunctionSet.ADDDATE,
-                    FunctionSet.DATE_ADD, FunctionSet.DATE_SUB,
+                    FunctionSet.DATE_SUB,
                     FunctionSet.SUBDATE,
                     FunctionSet.DAYS_SUB);
 
@@ -851,10 +852,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     context.rollupDesc() == null ?
                             null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()),
                     context.orderByDesc() == null ? null :
-                            visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                                    .stream().map(Identifier::getValue).collect(toList()),
+                            visit(context.orderByDesc().sortItem(), OrderByElement.class),
                     NodePosition.ZERO);
-
         }
 
         return new CreateTableStmt(
@@ -876,8 +875,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.rollupDesc() == null ?
                         null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()),
                 context.orderByDesc() == null ? null :
-                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                                .stream().map(Identifier::getValue).collect(toList()));
+                        visit(context.orderByDesc().sortItem(), OrderByElement.class)
+        );
     }
 
     private PartitionDesc generateMulitListPartitionDesc(StarRocksParser.PartitionDescContext context,
@@ -1235,8 +1234,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                             ((StringLiteral) visit(context.comment().string())).getStringValue(),
                     null,
                     context.orderByDesc() == null ? null :
-                            visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                                    .stream().map(Identifier::getValue).collect(toList())
+                            visit(context.orderByDesc().sortItem(), OrderByElement.class)
             );
 
             List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
@@ -1264,8 +1262,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         ((StringLiteral) visit(context.comment().string())).getStringValue(),
                 null,
                 context.orderByDesc() == null ? null :
-                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                                .stream().map(Identifier::getValue).collect(toList())
+                        visit(context.orderByDesc().sortItem(), OrderByElement.class)
         );
 
         List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
@@ -1602,8 +1599,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitTableOperationClause(StarRocksParser.TableOperationClauseContext context) {
-        FunctionCallExpr fun = (FunctionCallExpr) visit(context.functionCall());
-        return new AlterTableOperationClause(createPos(context), fun.getFnName().getFunction(), fun.getParams().exprs());
+        StarRocksParser.TableOperationArgContext arg = context.tableOperationArg();
+        FunctionCallExpr fun = (FunctionCallExpr) visit(arg.functionCall());
+        Expr where = null;
+        if (arg.WHERE() != null) {
+            where = (Expr) visit(arg.expression());
+        }
+        return new AlterTableOperationClause(createPos(context), fun.getFnName().getFunction(), fun.getParams().exprs(), where);
     }
 
     @Override
@@ -2024,7 +2026,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Map<String, String> properties = new HashMap<>();
         List<Expr> partitionByExprs = null;
         DistributionDesc distributionDesc = null;
-        List<String> sortKeys = null;
+        List<OrderByElement> orderByElements = null;
 
         for (StarRocksParser.MaterializedViewDescContext desc : ListUtils.emptyIfNull(context.materializedViewDesc())) {
             NodePosition clausePos = createPos(desc);
@@ -2084,8 +2086,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
             // Order By
             if (desc.orderByDesc() != null) {
-                sortKeys = visit(desc.orderByDesc().identifierList().identifier(), Identifier.class)
-                        .stream().map(Identifier::getValue).collect(toList());
+                orderByElements = visit(desc.orderByDesc().sortItem(), OrderByElement.class);
             }
         }
 
@@ -2124,7 +2125,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 comment,
                 refreshSchemeDesc,
-                partitionByExprs, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex, queryStopIndex,
+                partitionByExprs, distributionDesc, orderByElements, properties, queryStatement, queryStartIndex, queryStopIndex,
                 currentDBName,
                 createPos(context));
     }
@@ -3000,7 +3001,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitKillAnalyzeStatement(StarRocksParser.KillAnalyzeStatementContext context) {
-        return new KillAnalyzeStmt(Long.parseLong(context.INTEGER_VALUE().getText()), createPos(context));
+        if (context.ALL() != null) {
+            return new KillAnalyzeStmt(-1, createPos(context));
+        } else {
+            return new KillAnalyzeStmt(Long.parseLong(context.INTEGER_VALUE().getText()), createPos(context));
+        }
     }
 
     // ------------------------------------------- Analyze Profile Statement -------------------------------------------
@@ -4776,9 +4781,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), null),
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
-                context.orderByDesc() == null ? null :
-                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                                .stream().map(Identifier::getValue).collect(toList()),
+                context.orderByDesc() == null ? null : visit(context.orderByDesc().sortItem(), OrderByElement.class),
                 context.partitionNames() == null ? null : (PartitionNames) visit(context.partitionNames()),
                 context.optimizeRange() == null ? null : (OptimizeRange) visit(context.optimizeRange()),
                 createPos(context));
