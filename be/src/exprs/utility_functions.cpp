@@ -450,71 +450,53 @@ inline void encode_float64(double v, std::string* dest) {
     dest->append(reinterpret_cast<const char*>(&u), sizeof(u));
 }
 
-constexpr uint8_t SORT_KEY_NULL_FIRST_MARKER = 0x00;
-constexpr uint8_t SORT_KEY_NORMAL_MARKER = 0x01;
-
 struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
-    size_t row = 0;
+    size_t rows = 0;
     bool is_last_field = false;
     bool has_nullable = false;
-    std::string* buff;
+    std::vector<std::string>* buffs;
 
-    explicit EncoderVisitor(std::string* b) : ColumnVisitorAdapter(this), buff(b) {}
+    explicit EncoderVisitor() : ColumnVisitorAdapter(this) {}
 
     // Nullable wrapper: emit marker then visit inner
     Status do_visit(const NullableColumn& column) {
-        if (has_nullable) {
-            (*buff).push_back(column.is_null(row) ? SORT_KEY_NULL_FIRST_MARKER : SORT_KEY_NORMAL_MARKER);
-        }
-        if (column.is_null(row)) return Status::OK();
-        return column.data_column()->accept(this);
+        RETURN_IF_ERROR(do_visit(column.null_column()));
+        RETURN_IF_ERROR(do_visit(column.data_column()));
+        return Status::OK();
     }
 
     // Const: forward to data
     Status do_visit(const ConstColumn& column) { return column.data_column()->accept(this); }
 
     // Strings/binary
-    Status do_visit(const BinaryColumn& column) {
-        Slice s = column.get_slice(row);
-        if (is_last_field) {
-            encode_slice_last(s, buff);
-        } else {
-            encode_slice_middle(s, buff);
+    template <typename T>
+    Status do_visit(const BinaryColumnBase<T>& column) {
+        for (size_t i = 0; i < rows; i++) {
+            Slice s = column.get_slice(i);
+            if (is_last_field) {
+                encode_slice_last(s, &(*buffs)[i]);
+            } else {
+                encode_slice_middle(s, &(*buffs)[i]);
+            }
         }
         return Status::OK();
     }
-    Status do_visit(const LargeBinaryColumn& column) { return do_visit(down_cast<const BinaryColumn&>(column)); }
 
     // Fixed-length numerics
     template <typename T>
     Status do_visit(const FixedLengthColumn<T>& column) {
-        if constexpr (std::is_same_v<T, float>) {
-            encode_float32(column.get_data()[row], buff);
-        } else if constexpr (std::is_same_v<T, double>) {
-            encode_float64(column.get_data()[row], buff);
-        } else {
-            encode_integral<T>(column.get_data()[row], buff);
+        for (size_t i = 0; i < rows; i++) {
+            if constexpr (std::is_same_v<T, float>) {
+                encode_float32(column.get_data()[i], &(*buffs)[i]);
+            } else if constexpr (std::is_same_v<T, double>) {
+                encode_float64(column.get_data()[i], &(*buffs)[i]);
+            } else if constexpr (std::is_integral_v<T>) {
+                encode_integral<T>(column.get_data()[i], &(*buffs)[i]);
+            } else {
+                return Status::NotSupported("make_sort_key: unsupported argument type");
+            }
         }
         return Status::OK();
-    }
-
-    // DecimalV2Value encoded as Largeint via KeyCoder
-    Status do_visit(const DecimalColumn& column) {
-        DecimalV2Value v = column.get_data()[row];
-        const KeyCoder* coder = get_key_coder(TYPE_DECIMALV2);
-        coder->full_encode_ascending(&v, buff);
-        return Status::OK();
-    }
-
-    // Decimal32/64/128 underlying fixed columns are handled by template above
-    Status do_visit(const Decimal32Column& column) {
-        return do_visit(down_cast<const FixedLengthColumn<int32_t>&>(column));
-    }
-    Status do_visit(const Decimal64Column& column) {
-        return do_visit(down_cast<const FixedLengthColumn<int64_t>&>(column));
-    }
-    Status do_visit(const Decimal128Column& column) {
-        return do_visit(down_cast<const FixedLengthColumn<int128_t>&>(column));
     }
 
     // Unsupported complex types map/array/struct/json/hll/bitmap/percentile
@@ -534,22 +516,19 @@ StatusOr<ColumnPtr> UtilityFunctions::make_sort_key(FunctionContext* context, co
     bool has_nullable =
             std::any_of(columns.begin(), columns.end(), [](const ColumnPtr& c) { return c->is_nullable(); });
 
-    detail::EncoderVisitor visitor(nullptr);
-
-    std::string buff;
-    for (size_t row = 0; row < num_rows; ++row) {
-        buff.clear();
-        visitor.row = row;
-        visitor.has_nullable = has_nullable;
-        visitor.buff = &buff;
-
-        for (int j = 0; j < num_args; ++j) {
-            visitor.is_last_field = (j + 1 == num_args);
-            RETURN_IF_ERROR(columns[j]->accept(&visitor));
-        }
-        result.append(buff);
+    std::vector<std::string> buffs(num_rows);
+    detail::EncoderVisitor visitor;
+    visitor.rows = num_rows;
+    visitor.has_nullable = has_nullable;
+    visitor.buffs = &buffs;
+    for (int j = 0; j < num_args; ++j) {
+        visitor.is_last_field = (j + 1 == num_args);
+        RETURN_IF_ERROR(columns[j]->accept(&visitor));
     }
 
+    for (size_t i = 0; i < num_rows; i++) {
+        result.append(buffs[i]);
+    }
     return result.build(false);
 }
 
