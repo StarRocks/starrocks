@@ -15,7 +15,7 @@
 
 package com.starrocks.system;
 
-import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.sql.ast.FrontendNodeType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

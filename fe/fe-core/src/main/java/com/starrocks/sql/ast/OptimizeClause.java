@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.sql.parser.NodePosition;
 

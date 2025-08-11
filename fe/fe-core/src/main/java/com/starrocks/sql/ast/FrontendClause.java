@@ -15,8 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.sql.parser.NodePosition;
 
 public class FrontendClause extends AlterClause {

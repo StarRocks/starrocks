@@ -25,6 +25,8 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.PartitionType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;

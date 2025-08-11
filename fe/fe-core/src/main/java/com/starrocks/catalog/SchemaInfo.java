@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TOlapTableIndex;
 import com.starrocks.thrift.TStorageType;

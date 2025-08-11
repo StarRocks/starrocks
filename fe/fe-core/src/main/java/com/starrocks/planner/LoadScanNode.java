@@ -41,7 +41,6 @@ import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.SimpleScheduler;
@@ -49,6 +48,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 

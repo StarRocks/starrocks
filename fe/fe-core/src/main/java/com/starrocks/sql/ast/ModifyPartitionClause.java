@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

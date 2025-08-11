@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;

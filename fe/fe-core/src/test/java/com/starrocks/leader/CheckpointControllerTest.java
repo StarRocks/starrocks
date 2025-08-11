@@ -15,9 +15,9 @@
 package com.starrocks.leader;
 
 import com.starrocks.common.Config;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.sql.ast.FrontendNodeType;
 import com.starrocks.system.Frontend;
 import com.starrocks.utframe.MockJournal;
 import org.junit.jupiter.api.AfterEach;

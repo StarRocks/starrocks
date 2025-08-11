@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PrintableMap;

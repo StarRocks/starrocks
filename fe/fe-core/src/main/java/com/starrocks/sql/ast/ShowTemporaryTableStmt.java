@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql;
+package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.UUID;

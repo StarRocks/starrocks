@@ -48,6 +48,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.PartitionType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;

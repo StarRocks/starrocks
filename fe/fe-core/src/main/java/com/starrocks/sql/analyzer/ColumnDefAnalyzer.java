@@ -28,7 +28,6 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -36,6 +35,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 
 import java.util.Set;

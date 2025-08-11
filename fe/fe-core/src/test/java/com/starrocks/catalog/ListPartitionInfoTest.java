@@ -28,6 +28,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionType;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.thrift.TDataSink;

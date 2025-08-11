@@ -23,8 +23,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;

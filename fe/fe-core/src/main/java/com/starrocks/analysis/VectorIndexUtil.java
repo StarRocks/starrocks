@@ -19,7 +19,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IndexParams;
 import com.starrocks.catalog.IndexParams.IndexParamItem;
 import com.starrocks.catalog.IndexParams.IndexParamType;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.common.Config;
 import com.starrocks.common.VectorIndexParams;
 import com.starrocks.common.VectorIndexParams.CommonIndexParamKey;
@@ -29,6 +28,7 @@ import com.starrocks.common.VectorIndexParams.VectorIndexType;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.sql.ast.KeysType;
 
 import java.util.Arrays;
 import java.util.Collections;

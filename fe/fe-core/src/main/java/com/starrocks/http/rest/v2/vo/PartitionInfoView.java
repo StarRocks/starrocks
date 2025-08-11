@@ -21,7 +21,6 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -31,6 +30,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.PartitionUtils;
 import com.starrocks.load.PartitionUtils.RangePartitionBoundary;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionType;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;

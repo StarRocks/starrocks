@@ -36,7 +36,6 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -46,6 +45,7 @@ import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import org.junit.jupiter.api.Assertions;

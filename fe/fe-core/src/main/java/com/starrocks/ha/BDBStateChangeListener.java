@@ -39,6 +39,7 @@ import com.sleepycat.je.rep.StateChangeEvent;
 import com.sleepycat.je.rep.StateChangeListener;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.EditLog;
+import com.starrocks.sql.ast.FrontendNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

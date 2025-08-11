@@ -49,6 +49,7 @@ import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
+import com.starrocks.sql.ast.PartitionType;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;

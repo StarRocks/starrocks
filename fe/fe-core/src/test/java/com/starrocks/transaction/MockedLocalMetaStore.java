@@ -21,7 +21,6 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -35,6 +34,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageType;
 
 import java.util.HashMap;

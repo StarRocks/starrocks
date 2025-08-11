@@ -34,11 +34,10 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.sql.ast.PartitionType;
+
 public class SinglePartitionInfo extends PartitionInfo {
     public SinglePartitionInfo() {
         super(PartitionType.UNPARTITIONED);
     }
-
-
-
 }

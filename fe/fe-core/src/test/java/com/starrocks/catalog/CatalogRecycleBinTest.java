@@ -24,6 +24,8 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;

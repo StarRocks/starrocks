@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-package com.starrocks.alter;
+package com.starrocks.sql.ast;
 
 // DecommissionType is for compatible with older versions of metadata
 public enum DecommissionType {

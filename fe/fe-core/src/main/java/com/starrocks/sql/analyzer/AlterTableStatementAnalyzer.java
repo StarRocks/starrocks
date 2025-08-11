@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Sets;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -26,6 +25,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterOpType;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;

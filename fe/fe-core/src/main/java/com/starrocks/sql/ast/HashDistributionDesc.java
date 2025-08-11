@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;

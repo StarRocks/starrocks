@@ -15,7 +15,7 @@
 package com.starrocks.proc;
 
 import com.starrocks.common.proc.FrontendsProcNode;
-import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.sql.ast.FrontendNodeType;
 import com.starrocks.system.Frontend;
 import mockit.Expectations;
 import mockit.Injectable;

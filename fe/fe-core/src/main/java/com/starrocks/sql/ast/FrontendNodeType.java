@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/PartitionType.java
+//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/ha/FrontendNodeType.java
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -32,45 +32,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.catalog;
+package com.starrocks.sql.ast;
 
-import com.starrocks.thrift.TPartitionType;
-
-public enum PartitionType {
-    UNPARTITIONED("UNPARTITIONED"),
-    RANGE("RANGE"),
-    LIST("LIST"),
-    EXPR_RANGE("EXPR_RANGE"),
-    EXPR_RANGE_V2("EXPR_RANGE_V2");
-
-    public String typeString;
-
-    private PartitionType(String typeString) {
-        this.typeString = typeString;
-    }
-
-    public static PartitionType fromThrift(TPartitionType tType) {
-        switch (tType) {
-            case UNPARTITIONED:
-                return UNPARTITIONED;
-            case RANGE_PARTITIONED:
-                return RANGE;
-            default:
-                return UNPARTITIONED;
-        }
-    }
-
-    public TPartitionType toThrift() {
-        switch (this) {
-            case UNPARTITIONED:
-                return TPartitionType.UNPARTITIONED;
-            case RANGE:
-            case EXPR_RANGE:
-            case EXPR_RANGE_V2:
-                return TPartitionType.RANGE_PARTITIONED;
-            default:
-                return TPartitionType.UNPARTITIONED;
-        }
-    }
-
+public enum FrontendNodeType {
+    LEADER,
+    FOLLOWER,
+    OBSERVER,
+    INIT,
+    UNKNOWN
 }

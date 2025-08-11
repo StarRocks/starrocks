@@ -43,7 +43,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
@@ -53,6 +52,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionType;
 
 import java.util.ArrayList;
 import java.util.Collections;

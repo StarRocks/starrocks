@@ -16,7 +16,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IndexParams;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
@@ -24,6 +23,7 @@ import com.starrocks.common.InvertedIndexParams;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.sql.ast.KeysType;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Locale;

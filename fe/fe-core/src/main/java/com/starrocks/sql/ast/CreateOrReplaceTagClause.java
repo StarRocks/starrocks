@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
-import com.starrocks.connector.TagOptions;
 import com.starrocks.sql.parser.NodePosition;
 
 public class CreateOrReplaceTagClause extends AlterTableClause {
