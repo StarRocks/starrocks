@@ -88,6 +88,7 @@ import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -632,6 +633,23 @@ public class FileScanNode extends LoadScanNode {
         rangeDesc.setFile_size(fileStatus.size);
         rangeDesc.setNum_of_columns_from_file(numberOfColumnsFromFile);
         rangeDesc.setColumns_from_path(columnsFromPath);
+        // Infer compression for JSON by suffix so BE can decompress
+        if (formatType == TFileFormatType.FORMAT_JSON) {
+            String lower = fileStatus.path.toLowerCase();
+            if (lower.endsWith(".gz") || lower.endsWith(".gzip")) {
+                rangeDesc.setCompression_type(TCompressionType.GZIP);
+            } else if (lower.endsWith(".bz2")) {
+                rangeDesc.setCompression_type(TCompressionType.BZIP2);
+            } else if (lower.endsWith(".zst") || lower.endsWith(".zstd")) {
+                rangeDesc.setCompression_type(TCompressionType.ZSTD);
+            } else if (lower.endsWith(".lz4")) {
+                rangeDesc.setCompression_type(TCompressionType.LZ4_FRAME);
+            } else if (lower.endsWith(".deflate")) {
+                rangeDesc.setCompression_type(TCompressionType.DEFLATE);
+            } else if (lower.endsWith(".snappy")) {
+                rangeDesc.setCompression_type(TCompressionType.SNAPPY);
+            }
+        }
         return rangeDesc;
     }
 
