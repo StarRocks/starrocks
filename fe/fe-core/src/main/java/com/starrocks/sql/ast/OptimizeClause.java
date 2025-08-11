@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterOpType;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -34,21 +35,26 @@ public class OptimizeClause extends AlterTableClause {
     @SerializedName(value = "isTableOptimize")
     private boolean isTableOptimize = false;
 
-    private List<String> sortKeys = null;
+    // It saves the original sort order elements parsing from the order by clause.
+    // Because other sort properties, such as sort-direction and null-orders, are not supported in optimize clause now.
+    // We extract its sort columns to `sortKeys` in analyze phase and use the `sortKeys` instead of it in most places.
+    private List<OrderByElement> orderByElements;
+    // It will be set based on `orderByElements` in analyze
+    private List<String> sortKeys;
 
     public OptimizeClause(KeysDesc keysDesc,
                           PartitionDesc partitionDesc,
                           DistributionDesc distributionDesc,
-                          List<String> sortKeys,
+                          List<OrderByElement> orderByElements,
                           PartitionNames partitionNames,
                           OptimizeRange range) {
-        this(keysDesc, partitionDesc, distributionDesc, sortKeys, partitionNames, range, NodePosition.ZERO);
+        this(keysDesc, partitionDesc, distributionDesc, orderByElements, partitionNames, range, NodePosition.ZERO);
     }
 
     public OptimizeClause(KeysDesc keysDesc,
                           PartitionDesc partitionDesc,
                           DistributionDesc distributionDesc,
-                          List<String> sortKeys,
+                          List<OrderByElement> orderByElements,
                           PartitionNames partitionNames,
                           OptimizeRange range,
                           NodePosition pos) {
@@ -56,7 +62,7 @@ public class OptimizeClause extends AlterTableClause {
         this.keysDesc = keysDesc;
         this.partitionDesc = partitionDesc;
         this.distributionDesc = distributionDesc;
-        this.sortKeys = sortKeys;
+        this.orderByElements = orderByElements;
         this.partitionNames = partitionNames;
         this.range = range;
     }
@@ -80,6 +86,14 @@ public class OptimizeClause extends AlterTableClause {
 
     public DistributionDesc getDistributionDesc() {
         return this.distributionDesc;
+    }
+
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
+    public void setSortKeys(List<String> sortKeys) {
+        this.sortKeys = sortKeys;
     }
 
     public List<String> getSortKeys() {

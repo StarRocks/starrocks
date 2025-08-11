@@ -346,7 +346,7 @@ public class IcebergRESTCatalogTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Failed to create table using REST Catalog",
                 () -> icebergRESTCatalog.createTable(connectContext, "db", "tbl", null, null, null,
-                        Maps.newHashMap()));
+                        null, Maps.newHashMap()));
 
         new Expectations() {
             {

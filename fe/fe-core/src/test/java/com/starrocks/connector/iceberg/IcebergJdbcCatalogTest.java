@@ -246,7 +246,7 @@ public class IcebergJdbcCatalogTest {
         Assertions.assertTrue(exists);
 
         boolean createTableFlag = icebergJdbcCatalog.createTable(connectContext, "db", "tb2", null, null,
-                LOCATION, new HashMap<>());
+                LOCATION, null, new HashMap<>());
         assertEquals(true, createTableFlag);
     }
 
@@ -260,7 +260,7 @@ public class IcebergJdbcCatalogTest {
                 new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", LOCATION,
                 "iceberg.catalog.uri", URI));
         boolean createTableFlag = icebergJdbcCatalog.createTable(connectContext, "db", "tb2", null, null,
-                LOCATION, new HashMap<>());
+                LOCATION, null, new HashMap<>());
         assertEquals(true, createTableFlag);
     }
 
