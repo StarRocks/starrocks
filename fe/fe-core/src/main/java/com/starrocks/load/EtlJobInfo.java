@@ -19,7 +19,6 @@ package com.starrocks.load;
 
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -46,9 +45,5 @@ public class EtlJobInfo implements Writable {
     @Override
     public void write(DataOutput out) throws IOException {
         jobStatus.write(out);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        jobStatus.readFields(in);
     }
 }

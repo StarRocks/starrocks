@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
-import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;

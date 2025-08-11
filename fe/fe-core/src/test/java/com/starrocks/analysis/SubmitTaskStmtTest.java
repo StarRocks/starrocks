@@ -17,7 +17,6 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;

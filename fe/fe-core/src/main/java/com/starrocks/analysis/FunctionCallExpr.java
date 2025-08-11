@@ -50,7 +50,6 @@ import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -368,22 +367,6 @@ public class FunctionCallExpr extends Expr {
         fnParams.write(out);
         out.writeBoolean(isAnalyticFnCall);
         out.writeBoolean(isMergeAggFn);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        fnName = FunctionName.read(in);
-        fnParams = FunctionParams.read(in);
-        if (fnParams.exprs() != null) {
-            children.addAll(fnParams.exprs());
-        }
-        isAnalyticFnCall = in.readBoolean();
-        isMergeAggFn = in.readBoolean();
-    }
-
-    public static FunctionCallExpr read(DataInput in) throws IOException {
-        FunctionCallExpr func = new FunctionCallExpr();
-        func.readFields(in);
-        return func;
     }
 
     // Used for store load

@@ -46,7 +46,6 @@ import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TScalarFunction;
 import org.apache.logging.log4j.util.Strings;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -277,17 +276,6 @@ public class ScalarFunction extends Function {
         Text.writeString(output, symbolName);
         writeOptionString(output, prepareFnSymbol);
         writeOptionString(output, closeFnSymbol);
-    }
-
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        symbolName = Text.readString(input);
-        if (input.readBoolean()) {
-            prepareFnSymbol = Text.readString(input);
-        }
-        if (input.readBoolean()) {
-            closeFnSymbol = Text.readString(input);
-        }
     }
 
     @Override

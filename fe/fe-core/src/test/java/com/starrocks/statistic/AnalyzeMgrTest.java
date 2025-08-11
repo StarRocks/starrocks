@@ -290,26 +290,6 @@ public class AnalyzeMgrTest {
     }
 
     @Test
-    public void testExternalAnalyzeStatusPersist() throws Exception {
-        Table table =
-                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
-
-        ExternalAnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(100,
-                "hive0", "partitioned_db", "t1",
-                table.getUUID(), ImmutableList.of("c1", "c2"), StatsConstants.AnalyzeType.FULL,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
-        UtFrameUtils.PseudoImage testImage = new UtFrameUtils.PseudoImage();
-        analyzeStatus.write(testImage.getDataOutputStream());
-
-        ExternalAnalyzeStatus loadAnalyzeStatus = ExternalAnalyzeStatus.read(testImage.getDataInputStream());
-        Assertions.assertEquals("hive0", loadAnalyzeStatus.getCatalogName());
-        Assertions.assertEquals("partitioned_db", loadAnalyzeStatus.getDbName());
-        Assertions.assertEquals("t1", loadAnalyzeStatus.getTableName());
-        Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, loadAnalyzeStatus.getType());
-        Assertions.assertEquals(StatsConstants.ScheduleType.ONCE, loadAnalyzeStatus.getScheduleType());
-    }
-
-    @Test
     public void testDropExternalAnalyzeStatus() {
         Table table =
                 connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");

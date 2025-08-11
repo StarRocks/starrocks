@@ -42,7 +42,6 @@ import com.starrocks.thrift.TBoolLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -160,17 +159,6 @@ public class BoolLiteral extends LiteralExpr {
     public void write(DataOutput out) throws IOException {
         super.write(out);
         out.writeBoolean(value);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = in.readBoolean();
-    }
-
-    public static BoolLiteral read(DataInput in) throws IOException {
-        BoolLiteral literal = new BoolLiteral();
-        literal.readFields(in);
-        return literal;
     }
 
     @Override

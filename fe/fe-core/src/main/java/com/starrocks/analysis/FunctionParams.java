@@ -35,11 +35,9 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
@@ -221,24 +219,6 @@ public class FunctionParams implements Writable {
         } else {
             out.writeBoolean(false);
         }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        isStar = in.readBoolean();
-        isDistinct = in.readBoolean();
-        if (in.readBoolean()) {
-            exprs = Lists.newArrayList();
-            int size = in.readInt();
-            for (int i = 0; i < size; ++i) {
-                exprs.add(Expr.readIn(in));
-            }
-        }
-    }
-
-    public static FunctionParams read(DataInput in) throws IOException {
-        FunctionParams params = new FunctionParams();
-        params.readFields(in);
-        return params;
     }
 
     @Override

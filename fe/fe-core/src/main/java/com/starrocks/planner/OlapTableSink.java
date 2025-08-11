@@ -77,7 +77,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;

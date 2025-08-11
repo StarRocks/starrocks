@@ -66,7 +66,6 @@ import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -101,21 +100,10 @@ public class ColocateTableIndex implements Writable {
             this.grpId = grpId;
         }
 
-        public static GroupId read(DataInput in) throws IOException {
-            GroupId groupId = new GroupId();
-            groupId.readFields(in);
-            return groupId;
-        }
-
         @Override
         public void write(DataOutput out) throws IOException {
             out.writeLong(dbId);
             out.writeLong(grpId);
-        }
-
-        public void readFields(DataInput in) throws IOException {
-            dbId = in.readLong();
-            grpId = in.readLong();
         }
 
         @Override
@@ -749,41 +737,6 @@ public class ColocateTableIndex implements Writable {
         out.writeInt(size);
         for (GroupId groupId : unstableGroups) {
             groupId.write(out);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String fullGrpName = Text.readString(in);
-            GroupId grpId = GroupId.read(in);
-            groupName2Id.put(fullGrpName, grpId);
-            int tableSize = in.readInt();
-            for (int j = 0; j < tableSize; j++) {
-                long tblId = in.readLong();
-                group2Tables.put(grpId, tblId);
-                table2Group.put(tblId, grpId);
-            }
-            ColocateGroupSchema groupSchema = ColocateGroupSchema.read(in);
-            group2Schema.put(grpId, groupSchema);
-
-            List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
-            int beSize = in.readInt();
-            for (int j = 0; j < beSize; j++) {
-                int seqSize = in.readInt();
-                List<Long> seq = Lists.newArrayList();
-                for (int k = 0; k < seqSize; k++) {
-                    long beId = in.readLong();
-                    seq.add(beId);
-                }
-                backendsPerBucketSeq.add(seq);
-            }
-            group2BackendsPerBucketSeq.put(grpId, backendsPerBucketSeq);
-        }
-
-        size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            unstableGroups.add(GroupId.read(in));
         }
     }
 

@@ -19,7 +19,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.epack.catalog.system.starrocks.PolicyReferences;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -50,9 +49,7 @@ public class SysDb extends Database {
         // Do nothing
     }
 
-    public void readFields(DataInput in) throws IOException {
-        throw new IOException("Not support.");
-    }
+
 
     @Override
     public Table getTable(String name) {

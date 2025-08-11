@@ -15,12 +15,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class DropDictionaryInfo implements Writable {
     @SerializedName(value = "dictionaryName")
@@ -35,11 +30,5 @@ public class DropDictionaryInfo implements Writable {
     String getDictionaryName() {
         return dictionaryName;
     }
-
-    public static DropDictionaryInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DropDictionaryInfo.class);
-    }
-
 
 }

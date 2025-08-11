@@ -73,7 +73,6 @@ import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunction;
 import org.roaringbitmap.RoaringBitmap;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -1140,10 +1139,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         throw new IOException("Not implemented serializable ");
     }
 
-    public void readFields(DataInput in) throws IOException {
-        throw new IOException("Not implemented serializable ");
-    }
-
     enum ExprSerCode {
         SLOT_REF(1),
         NULL_LITERAL(2),
@@ -1208,47 +1203,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             throw new IOException("Unknown class " + expr.getClass().getName());
         }
         expr.write(output);
-    }
-
-    /**
-     * The expr result may be null
-     *
-     * @param in
-     * @return
-     * @throws IOException
-     */
-    public static Expr readIn(DataInput in) throws IOException {
-        int code = in.readInt();
-        ExprSerCode exprSerCode = ExprSerCode.fromCode(code);
-        if (exprSerCode == null) {
-            throw new IOException("Unknown code: " + code);
-        }
-        switch (exprSerCode) {
-            case SLOT_REF:
-                return SlotRef.read(in);
-            case NULL_LITERAL:
-                return NullLiteral.read(in);
-            case BOOL_LITERAL:
-                return BoolLiteral.read(in);
-            case INT_LITERAL:
-                return IntLiteral.read(in);
-            case LARGE_INT_LITERAL:
-                return LargeIntLiteral.read(in);
-            case FLOAT_LITERAL:
-                return FloatLiteral.read(in);
-            case DECIMAL_LITERAL:
-                return DecimalLiteral.read(in);
-            case STRING_LITERAL:
-                return StringLiteral.read(in);
-            case MAX_LITERAL:
-                return MaxLiteral.read(in);
-            case BINARY_PREDICATE:
-                return BinaryPredicate.read(in);
-            case FUNCTION_CALL:
-                return FunctionCallExpr.read(in);
-            default:
-                throw new IOException("Unknown code: " + code);
-        }
     }
 
     // If this expr can serialize and deserialize,

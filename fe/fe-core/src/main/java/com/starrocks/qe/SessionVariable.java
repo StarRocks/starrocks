@@ -5648,10 +5648,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         Text.writeString(out, getJsonString());
     }
 
-    public void readFields(DataInput in) throws IOException {
-        readFromJson(in);
-    }
-
     private void readFromJson(DataInput in) throws IOException {
         String json = Text.readString(in);
         replayFromJson(json);

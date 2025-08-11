@@ -39,7 +39,6 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletChecker;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -54,11 +53,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.util.List;
 import java.util.Map;
 
@@ -156,55 +150,6 @@ public class LocalTabletTest {
         // clear replicas
         tablet.clearReplica();
         Assertions.assertEquals(0, tablet.getImmutableReplicas().size());
-    }
-
-    @Test
-    public void testSerialization() throws Exception {
-        File file = new File("./olapTabletTest");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-        tablet.write(dos);
-        dos.flush();
-        dos.close();
-
-        // Read an object from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        LocalTablet rTablet1 = LocalTablet.read(dis);
-        Assertions.assertEquals(1, rTablet1.getId());
-        Assertions.assertEquals(3, rTablet1.getImmutableReplicas().size());
-        Assertions.assertEquals(rTablet1.getImmutableReplicas().get(0).getVersion(),
-                rTablet1.getImmutableReplicas().get(1).getVersion());
-
-        Assertions.assertTrue(rTablet1.equals(tablet));
-        Assertions.assertTrue(rTablet1.equals(rTablet1));
-        Assertions.assertFalse(rTablet1.equals(this));
-
-        LocalTablet tablet2 = new LocalTablet(1);
-        Replica replica1 = new Replica(1L, 1L, 100L, 0, 200000L, 3000L, ReplicaState.NORMAL, 0, 0);
-        Replica replica2 = new Replica(2L, 2L, 100L, 0, 200001L, 3001L, ReplicaState.NORMAL, 0, 0);
-        Replica replica3 = new Replica(3L, 3L, 100L, 0, 200002L, 3002L, ReplicaState.NORMAL, 0, 0);
-        tablet2.addReplica(replica1);
-        tablet2.addReplica(replica2);
-        Assertions.assertFalse(tablet2.equals(tablet));
-        tablet2.addReplica(replica3);
-        Assertions.assertTrue(tablet2.equals(tablet));
-
-        LocalTablet tablet3 = new LocalTablet(1);
-        tablet3.addReplica(replica1);
-        tablet3.addReplica(replica2);
-        tablet3.addReplica(new Replica(4L, 4L, 100L, 0, 200002L, 3002L, ReplicaState.NORMAL, 0, 0));
-        Assertions.assertFalse(tablet3.equals(tablet));
-
-        dis.close();
-        file.delete();
-
-        // Read an object from json
-        String jsonStr = GsonUtils.GSON.toJson(tablet);
-        LocalTablet jTablet = GsonUtils.GSON.fromJson(jsonStr, LocalTablet.class);
-        Assertions.assertEquals(1, jTablet.getId());
-        Assertions.assertEquals(3, jTablet.getImmutableReplicas().size());
-        Assertions.assertEquals(jTablet.getImmutableReplicas().get(0).getVersion(),
-                jTablet.getImmutableReplicas().get(1).getVersion());
     }
 
     @Test

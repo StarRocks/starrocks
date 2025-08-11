@@ -24,8 +24,6 @@ import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -312,10 +310,6 @@ public class CreateTableStmt extends DdlStmt {
 
     public boolean isHasGeneratedColumn() {
         return hasGeneratedColumn;
-    }
-
-    public static CreateTableStmt read(DataInput in) throws IOException {
-        throw new RuntimeException("CreateTableStmt serialization is not supported anymore.");
     }
 
     @Override

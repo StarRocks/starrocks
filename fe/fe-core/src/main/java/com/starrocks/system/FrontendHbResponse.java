@@ -39,7 +39,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -136,12 +135,6 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         return macAddress;
     }
 
-    public static FrontendHbResponse read(DataInput in) throws IOException {
-        FrontendHbResponse result = new FrontendHbResponse();
-        result.readFields(in);
-        return result;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
@@ -149,15 +142,6 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         out.writeInt(queryPort);
         out.writeInt(rpcPort);
         out.writeLong(replayedJournalId);
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        name = Text.readString(in);
-        queryPort = in.readInt();
-        rpcPort = in.readInt();
-        replayedJournalId = in.readLong();
     }
 
     @Override

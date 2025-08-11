@@ -15,13 +15,8 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.replication.ReplicationJob;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class ReplicationJobLog implements Writable {
     @SerializedName(value = "replicationJob")
@@ -35,10 +30,4 @@ public class ReplicationJobLog implements Writable {
         return replicationJob;
     }
 
-
-
-    public static ReplicationJobLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ReplicationJobLog.class);
-    }
 }

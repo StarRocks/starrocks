@@ -20,7 +20,6 @@ package com.starrocks.persist;
 import com.google.common.collect.Lists;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -41,13 +40,6 @@ public class BackendIdsUpdateInfo implements Writable {
         out.writeInt(backendIds.size());
         for (Long id : backendIds) {
             out.writeLong(id);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        int backendCount = in.readInt();
-        while (backendCount-- > 0) {
-            backendIds.add(in.readLong());
         }
     }
 

@@ -22,7 +22,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TFlatJsonConfig;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
@@ -111,7 +110,6 @@ public class FlatJsonConfig implements Writable {
         this.flatJsonColumnMax = flatJsonColumnMax;
     }
 
-
     public Map<String, String> toProperties() {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, String.valueOf(flatJsonEnable));
@@ -138,10 +136,6 @@ public class FlatJsonConfig implements Writable {
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    public static FlatJsonConfig read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), FlatJsonConfig.class);
     }
 
     @Override

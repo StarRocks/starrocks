@@ -44,14 +44,12 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.lang.ArrayUtils;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
@@ -62,7 +60,6 @@ import java.util.Vector;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
-import static com.starrocks.common.io.IOUtils.readOptionStringOrNull;
 import static com.starrocks.common.io.IOUtils.writeOptionString;
 
 /**
@@ -841,10 +838,6 @@ public class Function implements Writable {
         public void write(DataOutput output) throws IOException {
             output.writeInt(code);
         }
-
-        public static FunctionType read(DataInput input) throws IOException {
-            return fromCode(input.readInt());
-        }
     }
 
     protected void writeFields(DataOutput output) throws IOException {
@@ -878,58 +871,6 @@ public class Function implements Writable {
     @Override
     public void write(DataOutput output) throws IOException {
         throw new Error("Origin function cannot be serialized");
-    }
-
-    public void readFields(DataInput input) throws IOException {
-        id = 0;
-        functionId = input.readLong();
-        name = FunctionName.read(input);
-        retType = ColumnType.read(input);
-        int numArgs = input.readInt();
-        argTypes = new Type[numArgs];
-        for (int i = 0; i < numArgs; ++i) {
-            argTypes[i] = ColumnType.read(input);
-        }
-        boolean hasNamedArg = input.readBoolean();
-        if (hasNamedArg) {
-            argNames = new String[numArgs];
-            for (int i = 0; i < numArgs; ++i) {
-                argNames[i] = readOptionStringOrNull(input);
-                argNames[i] = argNames[i] == null ? "" : argNames[i];
-            }
-        }
-        hasVarArgs = input.readBoolean();
-        userVisible = input.readBoolean();
-        binaryType = TFunctionBinaryType.findByValue(input.readInt());
-
-        boolean hasLocation = input.readBoolean();
-        if (hasLocation) {
-            location = new HdfsURI(Text.readString(input));
-        }
-        boolean hasChecksum = input.readBoolean();
-        if (hasChecksum) {
-            checksum = Text.readString(input);
-        }
-    }
-
-    public static Function read(DataInput input) throws IOException {
-        Function function;
-        FunctionType functionType = FunctionType.read(input);
-        switch (functionType) {
-            case SCALAR:
-                function = new ScalarFunction();
-                break;
-            case AGGREGATE:
-                function = new AggregateFunction();
-                break;
-            case TABLE:
-                function = new TableFunction();
-                break;
-            default:
-                throw new Error("Unsupported function type, type=" + functionType);
-        }
-        function.readFields(input);
-        return function;
     }
 
     public String getSignature() {

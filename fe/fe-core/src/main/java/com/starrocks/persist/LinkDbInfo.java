@@ -20,7 +20,6 @@ package com.starrocks.persist;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -56,13 +55,6 @@ public class LinkDbInfo implements Writable {
         Text.writeString(out, cluster);
         Text.writeString(out, name);
         out.writeLong(id);
-
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        cluster = Text.readString(in);
-        name = Text.readString(in);
-        id = in.readLong();
 
     }
 

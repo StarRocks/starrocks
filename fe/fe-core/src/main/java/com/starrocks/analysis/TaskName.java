@@ -16,6 +16,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.sql.parser.NodePosition;
+
 import static com.starrocks.common.util.Util.normalizeName;
 
 public class TaskName {

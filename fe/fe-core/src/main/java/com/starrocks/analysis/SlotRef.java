@@ -44,7 +44,6 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -54,7 +53,6 @@ import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TSlotRef;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -504,20 +502,6 @@ public class SlotRef extends Expr {
             tblName.write(out);
         }
         Text.writeString(out, colName);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        if (in.readBoolean()) {
-            tblName = new TableName();
-            tblName.readFields(in);
-        }
-        colName = Text.readString(in);
-    }
-
-    public static SlotRef read(DataInput in) throws IOException {
-        SlotRef slotRef = new SlotRef();
-        slotRef.readFields(in);
-        return slotRef;
     }
 
     /**

@@ -52,7 +52,6 @@ import com.starrocks.thrift.TExprNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -423,17 +422,6 @@ public class DecimalLiteral extends LiteralExpr {
     public void write(DataOutput out) throws IOException {
         super.write(out);
         Text.writeString(out, value.toString());
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = new BigDecimal(Text.readString(in));
-    }
-
-    public static DecimalLiteral read(DataInput in) throws IOException {
-        DecimalLiteral dec = new DecimalLiteral();
-        dec.readFields(in);
-        return dec;
     }
 
     // To be compatible with OLAP, only need 9 digits.

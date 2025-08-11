@@ -19,11 +19,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.ha.FrontendNodeType;
-import com.starrocks.journal.JournalEntity;
-import com.starrocks.persist.EditLog;
-import com.starrocks.persist.OperationType;
 import com.starrocks.persist.Storage;
-import com.starrocks.persist.TableStorageInfos;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -32,7 +28,6 @@ import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.io.FileUtils;
@@ -40,10 +35,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.util.Collections;
 import java.util.Map;
@@ -132,24 +123,6 @@ public class RestoreClusterSnapshotMgrTest {
             @Mock
             public long getImageJournalId() {
                 return 10L;
-            }
-        };
-
-        new MockUp<EditLog>() {
-            @Mock
-            public void logUpdateTableStorageInfos(Invocation invocation, TableStorageInfos tableStorageInfos) {
-                invocation.proceed();
-                ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
-                try (DataOutputStream out = new DataOutputStream(byteOut)) {
-                    tableStorageInfos.write(out);
-                    try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(byteOut.toByteArray()))) {
-                        TableStorageInfos newTableStorageInfos = TableStorageInfos.read(in);
-                        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(),
-                                new JournalEntity(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, newTableStorageInfos));
-                    }
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
             }
         };
 
