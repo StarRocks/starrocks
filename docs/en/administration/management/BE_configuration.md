@@ -3619,6 +3619,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The cache expiration time of starlet filesystem instances.
 - Introduced in: v3.3.15, 3.4.5
 
+##### starlet_write_file_with_tag
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: In a shared-data cluster, whether to tag files written to object storage with object storage tags for convenient custom file management.
+- Introduced in: v3.5.3
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
