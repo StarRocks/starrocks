@@ -779,7 +779,7 @@ StatusOr<ColumnPtr> JsonFunctions::_full_json_exists(FunctionContext* context, c
 }
 
 StatusOr<ColumnPtr> JsonFunctions::json_array_empty(FunctionContext* context, const Columns& columns) {
-    DCHECK_EQ(0, columns.size());
+    RETURN_IF(columns.size() != 0, Status::InvalidArgument("json_array_empty requires none parameter"));
     ColumnBuilder<TYPE_JSON> result(1);
     JsonValue json(vpack::Slice::emptyArraySlice());
     result.append(std::move(json));
@@ -819,7 +819,7 @@ StatusOr<ColumnPtr> JsonFunctions::json_array(FunctionContext* context, const Co
 }
 
 StatusOr<ColumnPtr> JsonFunctions::json_object_empty(FunctionContext* context, const Columns& columns) {
-    DCHECK_EQ(0, columns.size());
+    RETURN_IF(0 != columns.size(), Status::InvalidArgument("json_object_empty requires 0 arguments"));
     ColumnBuilder<TYPE_JSON> result(1);
     JsonValue json(vpack::Slice::emptyObjectSlice());
     result.append(std::move(json));
