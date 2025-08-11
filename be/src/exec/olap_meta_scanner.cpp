@@ -55,7 +55,7 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     } else {
         _reader_params.tablet_schema = _tablet->tablet_schema();
     }
-    if (_parent->_meta_scan_node.__isset.column_access_paths) {
+    if (_parent->_meta_scan_node.__isset.column_access_paths && !_parent->_column_access_paths.empty()) {
         _reader_params.column_access_paths = &_parent->_column_access_paths;
     }
     // add the extended column access paths into tablet_schema

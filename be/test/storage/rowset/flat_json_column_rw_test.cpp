@@ -2605,7 +2605,6 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
         GlobalDictMap incomplete_name_dict;
         incomplete_name_dict["Alice"] = 0;
         incomplete_name_dict["Bob"] = 1;
-        // Missing "Charlie" - this should cause dictionary to be invalid
 
         invalid_global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{incomplete_name_dict, 1};
 

@@ -34,13 +34,8 @@ Status MetaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     if (_meta_scan_node.__isset.column_access_paths) {
         for (int i = 0; i < _meta_scan_node.column_access_paths.size(); ++i) {
-            auto st = ColumnAccessPath::create(_meta_scan_node.column_access_paths[i], state, _pool);
-            if (LIKELY(st.ok())) {
-                _column_access_paths.emplace_back(std::move(st.value()));
-            } else {
-                LOG(WARNING) << "Failed to create column access path: " << _meta_scan_node.column_access_paths[i].type
-                             << "index: " << i << ", error: " << st.status();
-            }
+            ASSIGN_OR_RETURN(auto path, ColumnAccessPath::create(_meta_scan_node.column_access_paths[i], state, _pool));
+            _column_access_paths.emplace_back(std::move(path));
         }
     }
 
