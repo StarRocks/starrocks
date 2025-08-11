@@ -434,19 +434,12 @@ public class KafkaRoutineLoadJobTest {
 
         String data = GsonUtils.GSON.toJson(job, KafkaRoutineLoadJob.class);
         KafkaRoutineLoadJob newJob = GsonUtils.GSON.fromJson(data, KafkaRoutineLoadJob.class);
-<<<<<<< HEAD
         Assert.assertEquals("csv", newJob.getFormat());
         Assert.assertTrue(newJob.isTrimspace());
         Assert.assertEquals((byte) "'".charAt(0), newJob.getEnclose());
         Assert.assertEquals((byte) "\\".charAt(0), newJob.getEscape());
-=======
-        Assertions.assertEquals("csv", newJob.getFormat());
-        Assertions.assertTrue(newJob.isTrimspace());
-        Assertions.assertEquals((byte) "'".charAt(0), newJob.getEnclose());
-        Assertions.assertEquals((byte) "\\".charAt(0), newJob.getEscape());
-        Assertions.assertEquals(0, newJob.getMaxFilterRatio());
-        Assertions.assertEquals(10, newJob.maxErrorNum);
->>>>>>> 5341a7cc96 ([BugFix] Fix max filter ratio not serialized bug in routine load job (#61755))
+        Assert.assertEquals(0, newJob.getMaxFilterRatio());
+        Assert.assertEquals(10, newJob.maxErrorNum);
     }
 
     @Test
