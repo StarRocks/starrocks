@@ -65,8 +65,32 @@ public:
     // Get the cache capacity.
     virtual size_t capacity() const = 0;
 
+<<<<<<< HEAD:be/src/cache/object_cache/object_cache.h
     // Get the memory usage.
     virtual size_t usage() const = 0;
+=======
+    // Update the datacache inline cache count limit
+    virtual Status update_inline_cache_count_limit(int32_t limit) = 0;
+
+    virtual const DataCacheMetrics cache_metrics() const = 0;
+
+    virtual void record_read_remote(size_t size, int64_t latency_us) = 0;
+
+    virtual void record_read_cache(size_t size, int64_t latency_us) = 0;
+
+    virtual Status shutdown() = 0;
+
+    virtual LocalCacheEngineType engine_type() = 0;
+
+    virtual bool has_mem_cache() const = 0;
+    virtual bool has_disk_cache() const = 0;
+    virtual bool available() const = 0;
+    virtual bool mem_cache_available() const = 0;
+    virtual void disk_spaces(std::vector<DirSpace>* spaces) const = 0;
+
+    virtual size_t mem_quota() const = 0;
+    virtual size_t mem_usage() const = 0;
+>>>>>>> ac8a74a78e ([BugFix] support configure starcache inline cache count limit (#61724)):be/src/cache/local_cache_engine.h
 
     // Get the lookup count, including cache hit count and cache miss count.
     virtual size_t lookup_count() const = 0;

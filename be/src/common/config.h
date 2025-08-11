@@ -1298,7 +1298,18 @@ CONF_mInt64(datacache_min_disk_quota_for_adjustment, "107374182400");
 // When a cache item has a really small data size, we will try to cache it inline with its metadata
 // to optimize the io performance and reduce disk waste.
 // Set the parameter to `0` will turn off this optimization.
+<<<<<<< HEAD
 CONF_Int32(datacache_inline_item_count_limit, "130172");
+=======
+
+CONF_mBool(enable_datacache_mem_auto_adjust, "true");
+// Datacache size adjust period, default 20, it should be between [1, 180].
+CONF_mInt64(datacache_mem_adjust_period, "20");
+// Sleep time in seconds between datacache adjust iterations.
+CONF_mInt64(datacache_mem_adjust_interval_seconds, "10");
+
+CONF_mInt32(datacache_inline_item_count_limit, "130172");
+>>>>>>> ac8a74a78e ([BugFix] support configure starcache inline cache count limit (#61724))
 // Whether use an unified datacache instance.
 CONF_Bool(datacache_unified_instance_enable, "true");
 // The eviction policy for datacache, alternatives: [lru, slru].

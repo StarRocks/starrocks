@@ -187,4 +187,13 @@ TEST_F(LRUCacheModuleTest, test_metrics) {
     ASSERT_EQ(metrics.capacity, _cache_opt.capacity);
     ASSERT_EQ(metrics.object_item_count, 0);
 }
+<<<<<<< HEAD:be/test/cache/object_cache/lrucache_module_test.cpp
 } // namespace starrocks
+=======
+
+TEST_F(LRUCacheEngineTest, adjust_inline_cache_count_limit) {
+    ASSERT_TRUE(_cache->update_inline_cache_count_limit(0).is_not_supported());
+}
+
+} // namespace starrocks
+>>>>>>> ac8a74a78e ([BugFix] support configure starcache inline cache count limit (#61724)):be/test/cache/lrucache_engine_test.cpp

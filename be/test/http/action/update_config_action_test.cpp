@@ -38,8 +38,13 @@ public:
     void TearDown() override {}
 };
 
+<<<<<<< HEAD
 TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
     SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
+=======
+TEST_F(UpdateConfigActionTest, update_datacache_config) {
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
+>>>>>>> ac8a74a78e ([BugFix] support configure starcache inline cache count limit (#61724))
     const std::string cache_dir = "./block_cache_for_update_config";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
@@ -56,11 +61,19 @@ TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
 
     UpdateConfigAction action(ExecEnv::GetInstance());
 
+<<<<<<< HEAD
     st = action.update_config("datacache_disk_size", "-200");
     ASSERT_TRUE(!st.ok());
 
     st = action.update_config("datacache_disk_size", "100000000");
     ASSERT_TRUE(st.ok());
+=======
+    // update disk size
+    ASSERT_ERROR(action.update_config("datacache_disk_size", "-200"));
+    ASSERT_OK(action.update_config("datacache_disk_size", "100000000"));
+    // update inline cache limit
+    ASSERT_OK(action.update_config("datacache_inline_item_count_limit", "260344"));
+>>>>>>> ac8a74a78e ([BugFix] support configure starcache inline cache count limit (#61724))
 
     std::vector<DirSpace> spaces;
     cache->disk_spaces(&spaces);
