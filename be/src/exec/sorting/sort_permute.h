@@ -38,50 +38,90 @@ struct SmallPermuteItem {
     bool operator==(const SmallPermuteItem& rhs) const { return index_in_chunk == rhs.index_in_chunk; }
 };
 
+// Permutate items in a single chunk, so `chunk_index` is unnecessary
+struct LargePermuteItem {
+    uint64_t index_in_chunk;
+
+    bool operator==(const LargePermuteItem& rhs) const { return index_in_chunk == rhs.index_in_chunk; }
+};
+
 // Inline data value into the permutation to optimize cache efficiency
-template <class T>
-struct InlinePermuteItem {
+template <class T, class P>
+struct BaseInlinePermuteItem {
     // NOTE: do not inline a large value
     static_assert(sizeof(T) <= 32, "Do not inline a large value");
 
     T inline_value;
-    uint32_t index_in_chunk;
+    P permutation;
 };
 
 template <class T>
-using InlinePermutation = std::vector<InlinePermuteItem<T>>;
+using SmallInlinePermuteItem = BaseInlinePermuteItem<T, SmallPermuteItem>;
+template <class T>
+using LargeInlinePermuteItem = BaseInlinePermuteItem<T, LargePermuteItem>;
+template <class T>
+using InlinePermuteItem = BaseInlinePermuteItem<T, PermutationItem>;
 
 using Permutation = std::vector<PermutationItem>;
 using PermutationView = array_view<PermutationItem>;
 using SmallPermutation = std::vector<SmallPermuteItem>;
+using SmallPermutationView = array_view<SmallPermuteItem>;
+using LargePermutation = std::vector<LargePermuteItem>;
+using LargePermutationView = array_view<LargePermuteItem>;
 
-template <class T, bool CheckBound = false>
-static inline InlinePermutation<T> create_inline_permutation(const SmallPermutation& other, const auto& container) {
-    InlinePermutation<T> inlined(other.size());
-    for (int i = 0; i < other.size(); i++) {
-        int index = other[i].index_in_chunk;
-        inlined[i].index_in_chunk = index;
+template <class T>
+concept SingleContainerPermutation = std::is_same_v<T, SmallPermutation> || std::is_same_v<T, LargePermutation>;
+template <class T>
+concept SingleContainerPermutationView =
+        std::is_same_v<T, SmallPermutationView> || std::is_same_v<T, LargePermutationView>;
+
+template <class T, class P>
+using BaseInlinePermutation = std::vector<BaseInlinePermuteItem<T, P>>;
+template <class T>
+using SmallInlinePermutation = BaseInlinePermutation<T, SmallPermuteItem>;
+template <class T>
+using LargeInlinePermutation = BaseInlinePermutation<T, LargePermuteItem>;
+template <class T>
+using InlinePermutation = BaseInlinePermutation<T, PermutationItem>;
+
+template <class T, SingleContainerPermutation P, bool CheckBound = false>
+static inline BaseInlinePermutation<T, typename P::value_type> create_inline_permutation(const P& other,
+                                                                                         const auto& container) {
+    BaseInlinePermutation<T, typename P::value_type> inlined(other.size());
+    for (size_t i = 0; i < other.size(); i++) {
+        auto perm = other[i];
         if constexpr (CheckBound) {
-            if (index >= container.size()) {
+            if (perm.index_in_chunk >= container.size()) {
                 continue;
             }
         }
-        inlined[i].inline_value = container[index];
+        inlined[i] = BaseInlinePermuteItem<T, typename P::value_type>{container[perm.index_in_chunk], std::move(perm)};
     }
     return inlined;
 }
 
-template <class T>
-static inline void restore_inline_permutation(const InlinePermutation<T>& inlined, SmallPermutation& output) {
-    for (int i = 0; i < inlined.size(); i++) {
-        output[i].index_in_chunk = inlined[i].index_in_chunk;
+template <class T, class P>
+static inline void restore_inline_permutation(const BaseInlinePermutation<T, typename P::value_type>& inlined,
+                                              P& output) {
+    for (size_t i = 0; i < inlined.size(); i++) {
+        output[i] = inlined[i].permutation;
     }
 }
 
 inline SmallPermutation create_small_permutation(uint32_t rows) {
-    SmallPermutation perm(rows);
+    SmallPermutation perm{};
+    perm.reserve(rows);
     for (uint32_t i = 0; i < rows; i++) {
-        perm[i].index_in_chunk = i;
+        perm.emplace_back(i);
+    }
+    return perm;
+}
+
+inline LargePermutation create_large_permutation(uint64_t rows) {
+    LargePermutation perm{};
+    perm.reserve(rows);
+    for (uint64_t i = 0; i < rows; i++) {
+        perm.emplace_back(i);
     }
     return perm;
 }
@@ -106,6 +146,11 @@ inline void permutate_to_selective(const Permutation& perm, std::vector<uint32_t
 // Materialize chunk by permutation
 void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const PermutationView& perm);
 void materialize_column_by_permutation(Column* dst, const Columns& columns, const PermutationView& perm);
+
+template <SingleContainerPermutationView PV>
+void materialize_by_permutation(Chunk* dst, const ChunkPtr& chunk, const PV& perm);
+template <SingleContainerPermutationView PV>
+void materialize_column_by_permutation(Column* dst, const Column* column, const PV& perm);
 
 // Tie and TieIterator
 // Tie is a compact representation of equal ranges in a vector, in which `1` means equal and `0` means not equal.

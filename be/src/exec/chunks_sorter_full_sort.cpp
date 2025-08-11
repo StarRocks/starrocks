@@ -20,6 +20,7 @@
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "sorting/sort_permute.h"
 
 namespace starrocks {
 
@@ -94,28 +95,37 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
     _profiler->input_required_memory->update(_staging_unsorted_bytes);
 
     concat_chunks(_unsorted_chunk, std::move(_staging_unsorted_chunks), _staging_unsorted_rows);
-    RETURN_IF_ERROR(_unsorted_chunk->upgrade_if_overflow());
     _staging_unsorted_chunks.clear();
     RETURN_IF_ERROR(_unsorted_chunk->upgrade_if_overflow());
 
     SCOPED_TIMER(_sort_timer);
     DataSegment segment(_sort_exprs, _unsorted_chunk);
-    Permutation sort_permutation{};
-    RETURN_IF_ERROR(
-            sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_desc, &sort_permutation));
     const size_t max_chunk_size = _state->chunk_size();
     const size_t total_rows = _unsorted_chunk->num_rows();
     const size_t total_chunks = (total_rows - 1 + max_chunk_size) / max_chunk_size;
     _sorted_chunks.resize(total_chunks);
-    for (size_t i = 0; i < total_chunks; ++i) {
-        const size_t begin = i * max_chunk_size;
-        const size_t curr_chunk_size = std::min((i + 1) * max_chunk_size, total_rows) - begin;
-        const auto permutation_view = array_view{sort_permutation.data() + begin, curr_chunk_size};
-        ChunkPtr newChunk = _unsorted_chunk->clone_empty(curr_chunk_size);
-        materialize_by_permutation(newChunk.get(), {_unsorted_chunk}, permutation_view);
-        _sorted_chunks[total_chunks - 1 - i] = std::move(newChunk);
+
+    auto sort_by_permutation = [&](auto& permutation) {
+        RETURN_IF_ERROR(
+                sort_and_tie_columns2(state->cancelled_ref(), segment.order_by_columns, _sort_desc, permutation));
+        for (size_t i = 0; i < total_chunks; ++i) {
+            const size_t begin = i * max_chunk_size;
+            const size_t curr_chunk_size = std::min((i + 1) * max_chunk_size, total_rows) - begin;
+            const auto permutation_view = array_view{permutation.data() + begin, curr_chunk_size};
+            ChunkPtr newChunk = _unsorted_chunk->clone_empty(curr_chunk_size);
+            materialize_by_permutation(newChunk.get(), _unsorted_chunk, permutation_view);
+            _sorted_chunks[total_chunks - 1 - i] = std::move(newChunk);
+        }
+        return Status::OK();
+    };
+
+    if (total_rows <= std::numeric_limits<uint32_t>::max()) {
+        auto permutation = create_small_permutation(total_rows);
+        RETURN_IF_ERROR(sort_by_permutation(permutation));
+    } else {
+        auto permutation = create_large_permutation(total_rows);
+        RETURN_IF_ERROR(sort_by_permutation(permutation));
     }
-    sort_permutation.clear();
     _total_rows += _unsorted_chunk->num_rows();
     _unsorted_chunk->reset();
 

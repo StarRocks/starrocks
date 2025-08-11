@@ -160,9 +160,9 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
 /// For example, given two columns `(null(3), null(2), null(1)), (1, 2, 3)`, if the datum values of null elements are
 /// not set to the same, the sorting result is `(null(1), null(2), null(3)), (3, 2, 1)`, but the expected result
 /// should be (null(3), null(2), null(1)), (1, 2, 3).
-template <class NullPred>
+template <class NullPred, class P>
 static inline Status partition_null_and_nonnull_helper(const std::atomic<bool>& cancel, NullPred null_pred,
-                                                       const SortDesc& sort_desc, SmallPermutation& permutation,
+                                                       const SortDesc& sort_desc, P& permutation,
                                                        Tie& tie, std::pair<int, int> range) {
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
@@ -200,10 +200,10 @@ static inline Status partition_null_and_nonnull_helper(const std::atomic<bool>& 
 
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
-template <class NullPred>
+template <class NullPred, class P>
 static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, const NullableColumn* column,
                                                   const ColumnPtr& data_column, NullPred null_pred,
-                                                  const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
+                                                  const SortDesc& sort_desc, P& permutation, Tie& tie,
                                                   std::pair<int, int> range, bool build_tie) {
     RETURN_IF_ERROR(partition_null_and_nonnull_helper(cancel, null_pred, sort_desc, permutation, tie, range));
 
