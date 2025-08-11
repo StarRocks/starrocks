@@ -170,7 +170,7 @@ TEST_F(UtilityFunctionsTest, makeSortKeyNullHandling) {
 
     auto c_int = NullableColumn::create(Int32Column::create(), NullColumn::create());
     c_int->append_datum(Datum(int32_t(1)));
-    c_int->append_null();
+    c_int->append_nulls(1);
 
     auto c_str = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     c_str->append_datum(Datum(Slice("z")));

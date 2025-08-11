@@ -14,6 +14,7 @@
 
 #include "exprs/utility_functions.h"
 
+#include "column/column_visitor_adapter.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/client_cache.h"
 
@@ -29,7 +30,9 @@
 #include <limits>
 #include <random>
 
+#include "column/binary_column.h"
 #include "column/column_builder.h"
+#include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -37,19 +40,16 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
+#include "gutil/endian.h"
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
+#include "storage/key_coder.h"
 #include "types/logical_type.h"
 #include "util/cidr.h"
 #include "util/monotime.h"
 #include "util/network_util.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
-
-#include "column/binary_column.h"
-#include "column/column_helper.h"
-#include "gutil/endian.h"
-#include "storage/key_coder.h"
 
 namespace starrocks {
 
@@ -372,7 +372,7 @@ StatusOr<ColumnPtr> UtilityFunctions::equiwidth_bucket(FunctionContext* context,
 }
 
 // Helpers copied and adapted from storage/primary_key_encoder.cpp for order-preserving encoding
-namespace {
+namespace detail {
 template <class UT>
 UT to_bigendian_generic(UT v);
 
@@ -452,88 +452,89 @@ inline void encode_float64(double v, std::string* dest) {
 
 constexpr uint8_t SORT_KEY_NULL_FIRST_MARKER = 0x00;
 constexpr uint8_t SORT_KEY_NORMAL_MARKER = 0x01;
-} // namespace
+
+struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
+    size_t row = 0;
+    bool is_last_field = false;
+    bool has_nullable = false;
+    std::string* buff;
+
+    explicit EncoderVisitor(std::string* b) : ColumnVisitorAdapter(this), buff(b) {}
+
+    // Nullable wrapper: emit marker then visit inner
+    Status do_visit(const NullableColumn& column) {
+        if (has_nullable) {
+            (*buff).push_back(column.is_null(row) ? SORT_KEY_NULL_FIRST_MARKER : SORT_KEY_NORMAL_MARKER);
+        }
+        if (column.is_null(row)) return Status::OK();
+        return column.data_column()->accept(this);
+    }
+
+    // Const: forward to data
+    Status do_visit(const ConstColumn& column) { return column.data_column()->accept(this); }
+
+    // Strings/binary
+    Status do_visit(const BinaryColumn& column) {
+        Slice s = column.get_slice(row);
+        if (is_last_field) {
+            encode_slice_last(s, buff);
+        } else {
+            encode_slice_middle(s, buff);
+        }
+        return Status::OK();
+    }
+    Status do_visit(const LargeBinaryColumn& column) { return do_visit(down_cast<const BinaryColumn&>(column)); }
+
+    // Fixed-length numerics
+    template <typename T>
+    Status do_visit(const FixedLengthColumn<T>& column) {
+        if constexpr (std::is_same_v<T, float>) {
+            encode_float32(column.get_data()[row], buff);
+        } else if constexpr (std::is_same_v<T, double>) {
+            encode_float64(column.get_data()[row], buff);
+        } else {
+            encode_integral<T>(column.get_data()[row], buff);
+        }
+        return Status::OK();
+    }
+
+    // DecimalV2Value encoded as Largeint via KeyCoder
+    Status do_visit(const DecimalColumn& column) {
+        DecimalV2Value v = column.get_data()[row];
+        const KeyCoder* coder = get_key_coder(TYPE_DECIMALV2);
+        coder->full_encode_ascending(&v, buff);
+        return Status::OK();
+    }
+
+    // Decimal32/64/128 underlying fixed columns are handled by template above
+    Status do_visit(const Decimal32Column& column) {
+        return do_visit(down_cast<const FixedLengthColumn<int32_t>&>(column));
+    }
+    Status do_visit(const Decimal64Column& column) {
+        return do_visit(down_cast<const FixedLengthColumn<int64_t>&>(column));
+    }
+    Status do_visit(const Decimal128Column& column) {
+        return do_visit(down_cast<const FixedLengthColumn<int128_t>&>(column));
+    }
+
+    // Unsupported complex types map/array/struct/json/hll/bitmap/percentile
+    template <typename T>
+    Status do_visit(const T& column) {
+        return Status::NotSupported("make_sort_key: unsupported argument type");
+    }
+};
+} // namespace detail
 
 StatusOr<ColumnPtr> UtilityFunctions::make_sort_key(FunctionContext* context, const Columns& columns) {
     int num_args = columns.size();
     RETURN_IF(num_args < 1, Status::InvalidArgument("make_sort_key requires at least 1 argument"));
 
     size_t num_rows = columns[0]->size();
-    for (int j = 1; j < num_args; ++j) {
-        RETURN_IF(columns[j]->size() != num_rows,
-                  Status::InvalidArgument("all arguments to make_sort_key must have same row count"));
-    }
+    auto result = ColumnBuilder<TYPE_VARBINARY>(num_rows);
+    bool has_nullable =
+            std::any_of(columns.begin(), columns.end(), [](const ColumnPtr& c) { return c->is_nullable(); });
 
-    auto result = BinaryColumn::create();
-    result->reserve(num_rows);
-
-    // If any column is nullable, we add a marker per field
-    bool has_nullable = std::any_of(columns.begin(), columns.end(), [](const ColumnPtr& c) { return c->is_nullable(); });
-
-    struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
-        size_t row = 0;
-        bool is_last_field = false;
-        bool has_nullable = false;
-        std::string* buff;
-
-        explicit EncoderVisitor(std::string* b) : ColumnVisitorAdapter(this), buff(b) {}
-
-        // Nullable wrapper: emit marker then visit inner
-        Status do_visit(const NullableColumn& column) {
-            if (has_nullable) {
-                (*buff).push_back(column.is_null(row) ? SORT_KEY_NULL_FIRST_MARKER : SORT_KEY_NORMAL_MARKER);
-            }
-            if (column.is_null(row)) return Status::OK();
-            return column.data_column()->accept(this);
-        }
-
-        // Const: forward to data
-        Status do_visit(const ConstColumn& column) { return column.data_column()->accept(this); }
-
-        // Strings/binary
-        Status do_visit(const BinaryColumn& column) {
-            Slice s = column.get_slice(row);
-            if (is_last_field) {
-                encode_slice_last(s, buff);
-            } else {
-                encode_slice_middle(s, buff);
-            }
-            return Status::OK();
-        }
-        Status do_visit(const LargeBinaryColumn& column) { return do_visit(down_cast<const BinaryColumn&>(column)); }
-
-        // Fixed-length numerics
-        template <typename T>
-        Status do_visit(const FixedLengthColumn<T>& column) {
-            if constexpr (std::is_same_v<T, float>) {
-                encode_float32(column.get_data()[row], buff);
-            } else if constexpr (std::is_same_v<T, double>) {
-                encode_float64(column.get_data()[row], buff);
-            } else {
-                encode_integral<T>(column.get_data()[row], buff);
-            }
-            return Status::OK();
-        }
-
-        // DecimalV2Value encoded as Largeint via KeyCoder
-        Status do_visit(const DecimalColumn& column) {
-            DecimalV2Value v = column.get_data()[row];
-            const KeyCoder* coder = get_key_coder(TYPE_DECIMALV2);
-            coder->full_encode_ascending(&v, buff);
-            return Status::OK();
-        }
-
-        // Decimal32/64/128 underlying fixed columns are handled by template above
-        Status do_visit(const Decimal32Column& column) { return do_visit(down_cast<const FixedLengthColumn<int32_t>&>(column)); }
-        Status do_visit(const Decimal64Column& column) { return do_visit(down_cast<const FixedLengthColumn<int64_t>&>(column)); }
-        Status do_visit(const Decimal128Column& column) { return do_visit(down_cast<const FixedLengthColumn<int128_t>&>(column)); }
-
-        // Unsupported complex types map/array/struct/json/hll/bitmap/percentile
-        template <typename T>
-        Status do_visit(const T& column) {
-            return Status::NotSupported("make_sort_key: unsupported argument type");
-        }
-    } visitor(nullptr);
+    detail::EncoderVisitor visitor(nullptr);
 
     std::string buff;
     for (size_t row = 0; row < num_rows; ++row) {
@@ -546,10 +547,10 @@ StatusOr<ColumnPtr> UtilityFunctions::make_sort_key(FunctionContext* context, co
             visitor.is_last_field = (j + 1 == num_args);
             RETURN_IF_ERROR(columns[j]->accept(&visitor));
         }
-        result->append(buff);
+        result.append(buff);
     }
 
-    return result;
+    return result.build(false);
 }
 
 } // namespace starrocks
