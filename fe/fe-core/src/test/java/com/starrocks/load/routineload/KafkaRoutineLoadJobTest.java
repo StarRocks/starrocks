@@ -438,7 +438,7 @@ public class KafkaRoutineLoadJobTest {
         Assert.assertTrue(newJob.isTrimspace());
         Assert.assertEquals((byte) "'".charAt(0), newJob.getEnclose());
         Assert.assertEquals((byte) "\\".charAt(0), newJob.getEscape());
-        Assert.assertEquals(0, newJob.getMaxFilterRatio());
+        Assert.assertEquals(0, newJob.getMaxFilterRatio(), 0.01);
         Assert.assertEquals(10, newJob.maxErrorNum);
     }
 
