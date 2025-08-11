@@ -127,4 +127,91 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
     }
 }
 
+TEST_F(UtilityFunctionsTest, makeSortKeyBasicOrdering) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    // Prepare columns of different types
+    auto c_int = Int32Column::create();
+    c_int->append(1);
+    c_int->append(2);
+    c_int->append(10);
+
+    auto c_str = BinaryColumn::create();
+    c_str->append(Slice("a"));
+    c_str->append(Slice("b"));
+    c_str->append(Slice("b"));
+
+    auto c_date = Int32Column::create();
+    // Assume DATE stored as int32 days; smaller -> earlier
+    c_date->append(1000);
+    c_date->append(1000);
+    c_date->append(999);
+
+    Columns cols;
+    cols.emplace_back(c_int);
+    cols.emplace_back(c_str);
+    cols.emplace_back(c_date);
+
+    ColumnPtr out = UtilityFunctions::make_sort_key(ctx, cols).value();
+    auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
+    ASSERT_EQ(3, bin->size());
+
+    // Verify lexicographic order aligns with tuple order
+    std::vector<Slice> keys = {bin->get_slice(0), bin->get_slice(1), bin->get_slice(2)};
+    // Expect row0 (1,"a",1000) < row1 (2,"b",1000) < row2 (10,"b",999)
+    ASSERT_LT(keys[0].compare(keys[1]), 0);
+    ASSERT_LT(keys[1].compare(keys[2]), 0);
+}
+
+TEST_F(UtilityFunctionsTest, makeSortKeyNullHandling) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    auto c_int = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    c_int->append_datum(Datum(int32_t(1)));
+    c_int->append_null();
+
+    auto c_str = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    c_str->append_datum(Datum(Slice("z")));
+    c_str->append_datum(Datum(Slice("a")));
+
+    Columns cols;
+    cols.emplace_back(c_int);
+    cols.emplace_back(c_str);
+
+    ColumnPtr out = UtilityFunctions::make_sort_key(ctx, cols).value();
+    auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
+    ASSERT_EQ(2, bin->size());
+
+    // NULL in first column should sort before non-NULL
+    Slice k0 = bin->get_slice(0); // (1,"z")
+    Slice k1 = bin->get_slice(1); // (NULL,"a")
+    ASSERT_LT(k1.compare(k0), 0);
+}
+
+TEST_F(UtilityFunctionsTest, makeSortKeyStringEscaping) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    auto c1 = BinaryColumn::create();
+    auto c2 = BinaryColumn::create();
+    c1->append(Slice("a\0b", 3));
+    c1->append(Slice("a", 1));
+    c2->append(Slice("x", 1));
+    c2->append(Slice("\0", 1));
+
+    Columns cols;
+    cols.emplace_back(c1);
+    cols.emplace_back(c2);
+
+    ColumnPtr out = UtilityFunctions::make_sort_key(ctx, cols).value();
+    auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
+    ASSERT_EQ(2, bin->size());
+    // Ensure keys are comparable and not identical
+    Slice k0 = bin->get_slice(0);
+    Slice k1 = bin->get_slice(1);
+    ASSERT_NE(k0.to_string(), k1.to_string());
+}
+
 } // namespace starrocks
