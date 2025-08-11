@@ -64,7 +64,7 @@ You can verify whether the executed query benefits from Flat JSON optimization t
 
 ## Usage Example
 
-- Method 1: Configure Flat JSON properties when creating a table with JSON columns. Supported from v4.0 and only on shared-nothing clusters.
+- Method 1: Configure Flat JSON properties when creating a table with JSON columns. Supported from v4.0 onwards.
 
   ```SQL
   CREATE TABLE `t1` (
@@ -95,7 +95,7 @@ You can verify whether the executed query benefits from Flat JSON optimization t
       (20,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}'));
   ``` 
 
-- Method 2: Enable Flat JSON before creating the table. Applicable to both shared-nothing and shared-data clusters.
+- Method 2: Enable Flat JSON before creating the table.
 
 1. Enable the feature (refer to other sections)
 2. Create a table with JSON columns. In this example, use INSERT INTO to load JSON data into the table.
@@ -186,9 +186,7 @@ Starting from version v3.3.3:
 
 ## Enabling Flat JSON Feature on table level
 
-:::note
-Currently, setting Flat JSON-related properties on table level is only supported on shared-nothing clusters with StarRocks v4.0 or later.
-:::
+Setting Flat JSON-related properties on table level is supported from v4.0 onwards.
 
 1. When creating the table, you can set `flat_json.enable` and other Flat JSON-related properties. For detailed instructions, see [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-flat-json-properties-on-table-level).
 

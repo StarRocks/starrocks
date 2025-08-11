@@ -64,7 +64,7 @@ FROM <table_name>[_META_];
 
 ## 使用示例
 
-- 方法 1：在创建包含 JSON 列的表时配置 Flat JSON 属性。该功能自 v4.0 版本起支持，且仅适用于存算一体集群。
+- 方法 1：在创建包含 JSON 列的表时配置 Flat JSON 属性。该功能自 v4.0 版本起支持。
 
   ```SQL
   CREATE TABLE `t1` (
@@ -95,7 +95,7 @@ FROM <table_name>[_META_];
       (20,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}'));
   ``` 
 
-- 方法 2：在创建表之前启用 Flat JSON。此方法适用于存算一体和存算分离集群。
+- 方法 2：在创建表之前启用 Flat JSON。
 
 1. 启用该功能（参考其他章节）
 2. 创建包含JSON列的表。在此示例中，使用INSERT INTO将JSON数据加载到表中。
@@ -186,9 +186,7 @@ StarRocks存算一体集群从v3.3.0开始支持Flat JSON，存算分离集群�
 
 ## 在表级别启用 Flat JSON 功能
 
-:::note
-目前，在表级别设置与 Flat JSON 相关的属性仅在使用 StarRocks v4.0 及更高版本的存算一体集群中支持。
-:::
+在表级别设置与 Flat JSON 相关的属性自 v4.0 起支持。
 
 1. 在创建表时，您可以设置 `flat_json.enable` 及其他与 Flat JSON 相关的属性。如需详细说明，请参阅 [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#在表级别设置-flat-json-属性)。
 

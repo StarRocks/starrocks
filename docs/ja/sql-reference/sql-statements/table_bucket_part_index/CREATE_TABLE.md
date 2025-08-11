@@ -763,10 +763,6 @@ v3.3 から、StarRocks は JSON データクエリの効率を向上させ、JS
 
 v4.0 以降、テーブルレベルで Flat JSON 関連のプロパティを設定できます。
 
-:::note
-現在、テーブルレベルで Flat JSON 関連のプロパティを設定する機能は、共有なしクラスターでのみサポートされています。
-:::
-
 ```SQL
 PROPERTIES (
     "flat_json.enable" = "{ true | false }",
@@ -1124,10 +1120,6 @@ DISTRIBUTED BY HASH(k2);
 ```
 
 ### Flat JSON プロパティを持つテーブル
-
-:::note
-現在、テーブルレベルで Flat JSON 関連のプロパティを設定する機能は、共有なしクラスターでのみサポートされています。
-:::
 
 ```SQL
 CREATE TABLE example_db.example_table

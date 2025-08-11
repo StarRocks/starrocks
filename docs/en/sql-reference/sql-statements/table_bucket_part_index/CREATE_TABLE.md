@@ -766,10 +766,6 @@ In v3.3, StarRocks introduced the [Flat JSON](../../../using_starrocks/Flat_json
 
 From v4.0 onwards, you can set the Flat JSON-related properties on table level.
 
-:::note
-Currently, setting Flat JSON-related properties on table level is only supported on shared-nothing clusters.
-:::
-
 ```SQL
 PROPERTIES (
     "flat_json.enable" = "{ true | false }",
@@ -1127,10 +1123,6 @@ DISTRIBUTED BY HASH(k2);
 ```
 
 ### Table with Flat JSON properties
-
-:::note
-Currently, setting Flat JSON-related properties on table level is only supported on shared-nothing clusters.
-:::
 
 ```SQL
 CREATE TABLE example_db.example_table

@@ -64,7 +64,7 @@ FROM <table_name>[_META_];
 
 ## 使用例
 
-- 方法 1: JSON 列を含むテーブルを作成する際、Flat JSON プロパティを設定します。v4.0 からサポートされており、共有なしクラスターでのみ利用可能です。
+- 方法 1: JSON 列を含むテーブルを作成する際、Flat JSON プロパティを設定します。v4.0 からサポートされています。
 
   ```SQL
   CREATE TABLE `t1` (
@@ -95,7 +95,7 @@ FROM <table_name>[_META_];
       (20,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}'));
   ``` 
 
-- 方法 2: テーブルを作成する前に Flat JSON を有効にします。共有なしクラスターと共有データクラスターの両方に適用可能です。
+- 方法 2: テーブルを作成する前に Flat JSON を有効にします。
 
 1. 機能を有効にする（他のセクションを参照）
 2. JSON カラムを持つテーブルを作成します。この例では、INSERT INTO を使用して JSON データをテーブルにロードします。
@@ -186,9 +186,7 @@ StarRocks 共有なしクラスタは v3.3.0 から Flat JSON をサポートし
 
 ## テーブルレベルでの Flat JSON 機能の有効化
 
-:::note
-現在、テーブルレベルで Flat JSON 関連のプロパティを設定する機能は、StarRocks v4.0 以降を搭載した共有なしクラスターでのみサポートされています。
-:::
+テーブルレベルでの Flat JSON 関連プロパティの設定は、v4.0 以降でサポートされています。
 
 1. テーブルを作成する際、`flat_json.enable` を含む Flat JSON に関連するプロパティを設定できます。詳細な手順については、[CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#テーブルレベルの-flat-json-プロパティを設定) を参照してください。
 

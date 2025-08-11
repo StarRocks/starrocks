@@ -763,10 +763,6 @@ ALTER TABLE tbl SET('partition_retention_condition' = '');
 
 从 v4.0 开始，您可以在表级别设置与 Flat JSON 相关的属性。
 
-:::note
-目前，仅存算一体集群支持在表级别设置与 Flat JSON 相关的属性。
-:::
-
 ```SQL
 PROPERTIES (
     "flat_json.enable" = "{ true | false }",
@@ -1124,10 +1120,6 @@ DISTRIBUTED BY HASH(k2);
 ```
 
 ### 带有 Flat JSON 属性的表
-
-:::note
-目前，仅存算一体集群支持在表级别设置与 Flat JSON 相关的属性。
-:::
 
 ```SQL
 CREATE TABLE example_db.example_table
