@@ -16,7 +16,7 @@ package com.starrocks.server;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.sql.ast.FrontendNodeType;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.utframe.UtFrameUtils;

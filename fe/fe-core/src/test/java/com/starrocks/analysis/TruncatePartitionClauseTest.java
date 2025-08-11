@@ -15,7 +15,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.alter.AlterOpType;
+import com.starrocks.sql.ast.AlterOpType;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import org.junit.jupiter.api.Assertions;

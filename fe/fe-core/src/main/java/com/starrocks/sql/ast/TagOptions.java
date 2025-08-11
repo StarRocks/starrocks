@@ -12,38 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.connector;
+package com.starrocks.sql.ast;
 
 import java.util.Optional;
 
-public class BranchOptions {
+public class TagOptions {
     private final Optional<Long> snapshotId;
-    private final Optional<Integer> numSnapshots;
-    private final Optional<Long> snapshotRetain;
     private final Optional<Long> snapshotRefRetain;
 
-    public BranchOptions(Optional<Long> snapshotId, Optional<Integer> numSnapshots,
-                         Optional<Long> snapshotRetain, Optional<Long> snapshotRefRetain) {
+    public TagOptions(Optional<Long> snapshotId, Optional<Long> snapshotRefRetain) {
         this.snapshotId = snapshotId;
-        this.numSnapshots = numSnapshots;
-        this.snapshotRetain = snapshotRetain;
         this.snapshotRefRetain = snapshotRefRetain;
     }
 
-    public static BranchOptions empty() {
-        return new BranchOptions(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+    public static TagOptions empty() {
+        return new TagOptions(Optional.empty(), Optional.empty());
     }
 
     public Optional<Long> getSnapshotId() {
         return snapshotId;
-    }
-
-    public Optional<Integer> getNumSnapshots() {
-        return numSnapshots;
-    }
-
-    public Optional<Long> getSnapshotRetain() {
-        return snapshotRetain;
     }
 
     public Optional<Long> getSnapshotRefRetain() {

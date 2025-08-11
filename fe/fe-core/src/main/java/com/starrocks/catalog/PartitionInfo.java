@@ -40,6 +40,7 @@ import com.starrocks.common.io.JsonWriter;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.sql.ast.PartitionType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.lang.NotImplementedException;

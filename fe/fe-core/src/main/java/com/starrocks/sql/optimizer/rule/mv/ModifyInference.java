@@ -15,9 +15,9 @@
 
 package com.starrocks.sql.optimizer.rule.mv;
 
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;

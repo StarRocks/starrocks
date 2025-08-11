@@ -36,7 +36,7 @@ package com.starrocks.persist;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.sql.ast.FrontendNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

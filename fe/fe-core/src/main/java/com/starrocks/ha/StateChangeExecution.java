@@ -15,6 +15,8 @@
 
 package com.starrocks.ha;
 
+import com.starrocks.sql.ast.FrontendNodeType;
+
 public interface StateChangeExecution {
     public void transferToLeader();
     public void transferToNonLeader(FrontendNodeType newType);

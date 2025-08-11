@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropObserverClause extends FrontendClause {

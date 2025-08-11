@@ -15,10 +15,10 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.AlterOpType;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.utframe.UtFrameUtils;

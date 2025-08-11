@@ -36,7 +36,6 @@ package com.starrocks.planner;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -44,6 +43,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.FrontendNodeType;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;

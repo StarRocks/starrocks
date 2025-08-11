@@ -42,6 +42,7 @@ import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.transaction.GtidGenerator;
 import mockit.Expectations;
 import mockit.Mocked;

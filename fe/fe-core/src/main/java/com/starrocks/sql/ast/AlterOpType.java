@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.alter;
+package com.starrocks.sql.ast;
 
 public enum AlterOpType {
     // rollup
