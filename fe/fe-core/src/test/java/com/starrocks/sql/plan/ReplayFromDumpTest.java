@@ -1012,6 +1012,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         String dumpString = getDumpInfoFromFile("query_dump/pushdown_subfield");
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
         queryDumpInfo.getSessionVariable().setCboExtractCommonPlan(false);
+        queryDumpInfo.getSessionVariable().setEnableJSONV2Rewrite(false);
         Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                 TExplainLevel.NORMAL);
         Assertions.assertTrue(replayPair.second.contains(
