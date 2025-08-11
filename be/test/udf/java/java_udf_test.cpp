@@ -40,7 +40,11 @@ void JavaUDFTest::SetUp() {
 }
 
 void JavaUDFTest::TearDown() {
-    _set_timezone(std::string(_env->GetStringUTFChars(_timezone, nullptr)));
+    const char* cstr = _env->GetStringUTFChars(_timezone, nullptr);
+    if (cstr != nullptr) {
+        _set_timezone(std::string(cstr));
+        _env->ReleaseStringUTFChars(_timezone, cstr);
+    }
 }
 
 jstring JavaUDFTest::_get_timezone() {
