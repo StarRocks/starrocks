@@ -2511,6 +2511,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：事务标签与coordinator节点映射关系在缓存中的存活时间(TTL)。
 - 引入版本：-
 
+##### enable_file_bundling
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为云原生表启用 File Bundling 优化功能。当启用该功能（设置为 `true`）时，系统会自动将导入、Compaction 或 Publish 操作生成的数据文件进行打包，从而减少因频繁访问外部存储系统而产生的 API 成本。您还可以通过 CREATE TABLE 语句的 `file_bundling` 属性在表级别控制此行为。有关详细说明，请参阅 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
+- 引入版本：v4.0
+
 ### 存储
 
 ##### default_replication_num
