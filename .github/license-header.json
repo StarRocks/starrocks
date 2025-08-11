@@ -1,7 +1,0 @@
-[
-  {
-    "include": ["be/**/*.h", "be/**/*.cpp"],
-    "exclude": ["test/**", "fe/**", "build-support/**", "**/*.sh", "**/*.txt"],
-    "license": "./.github/LICENSE_TEMPLATE/header-be.txt"
-  }
-]
