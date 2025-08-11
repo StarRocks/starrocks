@@ -22,6 +22,14 @@
 
 namespace starrocks {
 
+template <typename T>
+void clDelete(T* p) {
+    _CLDELETE(p);
+}
+
+using TermPtr = std::unique_ptr<lucene::index::Term, void (*)(lucene::index::Term*)>;
+using TermQueryPtr = std::unique_ptr<lucene::search::TermQuery, void (*)(lucene::search::TermQuery*)>;
+
 // MatchOperator is the base operator which wraps index search operations
 // and it would be the minimum cache unit in the searching of inverted index.
 class MatchOperator {
