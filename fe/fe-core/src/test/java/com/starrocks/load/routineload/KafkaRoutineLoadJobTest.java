@@ -56,6 +56,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -376,6 +378,8 @@ public class KafkaRoutineLoadJobTest {
         jobProperties.put("enclose", "'");
         jobProperties.put("escape", "\\");
         jobProperties.put("timezone", "Asia/Shanghai");
+        jobProperties.put("max_filter_ratio", "0");
+        jobProperties.put("max_error_number", "10");
         createRoutineLoadStmt.checkJobProperties();
 
         RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
@@ -404,6 +408,9 @@ public class KafkaRoutineLoadJobTest {
                 table.isOlapOrCloudNativeTable();
                 minTimes = 0;
                 result = true;
+                globalStateMgr.getSqlParser();
+                minTimes = 0;
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -416,7 +423,7 @@ public class KafkaRoutineLoadJobTest {
         };
 
         String createSQL = "CREATE ROUTINE LOAD db1.job1 ON table1 " +
-                "PROPERTIES('format' = 'csv', 'trim_space' = 'true') " +
+                "PROPERTIES('format' = 'csv', 'trim_space' = 'true', 'max_filter_ratio' = '0', 'max_error_number' = '10') " +
                 "FROM KAFKA('kafka_broker_list' = 'http://127.0.0.1:8080','kafka_topic' = 'topic1');";
         KafkaRoutineLoadJob job = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
         job.setOrigStmt(new OriginStatement(createSQL, 0));
@@ -427,10 +434,19 @@ public class KafkaRoutineLoadJobTest {
 
         String data = GsonUtils.GSON.toJson(job, KafkaRoutineLoadJob.class);
         KafkaRoutineLoadJob newJob = GsonUtils.GSON.fromJson(data, KafkaRoutineLoadJob.class);
+<<<<<<< HEAD
         Assert.assertEquals("csv", newJob.getFormat());
         Assert.assertTrue(newJob.isTrimspace());
         Assert.assertEquals((byte) "'".charAt(0), newJob.getEnclose());
         Assert.assertEquals((byte) "\\".charAt(0), newJob.getEscape());
+=======
+        Assertions.assertEquals("csv", newJob.getFormat());
+        Assertions.assertTrue(newJob.isTrimspace());
+        Assertions.assertEquals((byte) "'".charAt(0), newJob.getEnclose());
+        Assertions.assertEquals((byte) "\\".charAt(0), newJob.getEscape());
+        Assertions.assertEquals(0, newJob.getMaxFilterRatio());
+        Assertions.assertEquals(10, newJob.maxErrorNum);
+>>>>>>> 5341a7cc96 ([BugFix] Fix max filter ratio not serialized bug in routine load job (#61755))
     }
 
     @Test
@@ -472,6 +488,9 @@ public class KafkaRoutineLoadJobTest {
                 table.isOlapOrCloudNativeTable();
                 minTimes = 0;
                 result = true;
+                globalStateMgr.getSqlParser();
+                minTimes = 0;
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
