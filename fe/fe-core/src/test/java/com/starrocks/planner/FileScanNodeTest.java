@@ -39,6 +39,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
@@ -609,5 +610,35 @@ public class FileScanNodeTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "The valid bytes length for 'row delimiter' is [1, 50]",
                 () -> scanNode.init(descTable));
+    }
+
+    @Test
+    public void testJsonSuffixSetsCompressionType() throws StarRocksException {
+        List<String> columnNames = Lists.newArrayList("c1");
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/data.json.gz");
+        DataDescription desc = new DataDescription("testTable", null, files, columnNames, null, null, "json", false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        fileGroups.add(brokerFileGroup);
+
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/data.json.gz", false, 100, true));
+        fileStatusesList.add(fileStatusList);
+
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1,
+                WarehouseManager.DEFAULT_RESOURCE);
+        scanNode.setLoadInfo(1L, 2L, null, new BrokerDesc("b0", null), fileGroups, true, 1);
+        scanNode.init(descTable);
+        scanNode.finalizeStats();
+
+        List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
+        Assertions.assertEquals(1, locationsList.size());
+        TBrokerRangeDesc rd = locationsList.get(0).scan_range.broker_scan_range.ranges.get(0);
+        Assertions.assertEquals(TFileFormatType.FORMAT_JSON, rd.format_type);
+        Assertions.assertTrue(rd.isSetCompression_type());
+        Assertions.assertEquals(TCompressionType.GZIP, rd.compression_type);
     }
 }
