@@ -525,9 +525,8 @@ public class ConsistencyChecker extends FrontendDaemon {
                                 // sort tablets
                                 Queue<MetaObject> tabletQueue =
                                         new PriorityQueue<>(Math.max(index.getTablets().size(), 1), COMPARATOR);
-                                // tablet can be checked only one time on one day, to avoid to many disk io in be
                                 List<Tablet> cooldownedTablets = index.getTablets().stream()
-                                        .filter(t -> startTime - t.getLastCheckTime() > 24 * 3600 * 1000)
+                                        .filter(t -> startTime - t.getLastCheckTime() > Config.consistency_check_cooldown_time_ms)
                                         .toList();
                                 tabletQueue.addAll(cooldownedTablets);
 
