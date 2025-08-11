@@ -46,6 +46,11 @@
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
 
+#include "column/binary_column.h"
+#include "column/column_helper.h"
+#include "gutil/endian.h"
+#include "storage/key_coder.h"
+
 namespace starrocks {
 
 StatusOr<ColumnPtr> UtilityFunctions::version(FunctionContext* context, const Columns& columns) {
@@ -364,6 +369,250 @@ StatusOr<ColumnPtr> UtilityFunctions::equiwidth_bucket(FunctionContext* context,
         builder.append(bucket);
     }
     return builder.build(false);
+}
+
+// Helpers copied and adapted from storage/primary_key_encoder.cpp for order-preserving encoding
+namespace {
+template <class UT>
+UT to_bigendian_generic(UT v);
+
+template <>
+uint8_t to_bigendian_generic(uint8_t v) {
+    return v;
+}
+template <>
+uint16_t to_bigendian_generic(uint16_t v) {
+    return BigEndian::FromHost16(v);
+}
+template <>
+uint32_t to_bigendian_generic(uint32_t v) {
+    return BigEndian::FromHost32(v);
+}
+template <>
+uint64_t to_bigendian_generic(uint64_t v) {
+    return BigEndian::FromHost64(v);
+}
+
+template <class T>
+void encode_integral(const T& v, std::string* dest) {
+    if constexpr (std::is_signed<T>::value) {
+        using UT = typename std::make_unsigned<T>::type;
+        UT uv = static_cast<UT>(v);
+        uv ^= static_cast<UT>(1) << (sizeof(UT) * 8 - 1);
+        uv = to_bigendian_generic(uv);
+        dest->append(reinterpret_cast<const char*>(&uv), sizeof(uv));
+    } else {
+        T nv = to_bigendian_generic(v);
+        dest->append(reinterpret_cast<const char*>(&nv), sizeof(nv));
+    }
+}
+
+inline void encode_slice_middle(const Slice& s, std::string* dst) {
+    // Escape zero bytes and append 0x00 0x00 terminator
+    size_t old_size = dst->size();
+    dst->resize(old_size + s.size * 2 + 2);
+    const auto* srcp = reinterpret_cast<const uint8_t*>(s.data);
+    auto* dstp = reinterpret_cast<uint8_t*>(&(*dst)[old_size]);
+    for (size_t i = 0; i < s.size; i++) {
+        uint8_t b = srcp[i];
+        if (b == 0) {
+            *dstp++ = 0;
+            *dstp++ = 1;
+        } else {
+            *dstp++ = b;
+        }
+    }
+    *dstp++ = 0;
+    *dstp++ = 0;
+    dst->resize(reinterpret_cast<char*>(dstp) - &(*dst)[0]);
+}
+
+inline void encode_slice_last(const Slice& s, std::string* dst) {
+    dst->append(s.data, s.size);
+}
+
+inline void encode_float32(float v, std::string* dest) {
+    uint32_t u;
+    static_assert(sizeof(u) == sizeof(v), "size mismatch");
+    memcpy(&u, &v, sizeof(u));
+    // If negative, flip all bits; else flip sign bit only.
+    u ^= (u & 0x80000000u) ? 0xFFFFFFFFu : 0x80000000u;
+    u = BigEndian::FromHost32(u);
+    dest->append(reinterpret_cast<const char*>(&u), sizeof(u));
+}
+
+inline void encode_float64(double v, std::string* dest) {
+    uint64_t u;
+    static_assert(sizeof(u) == sizeof(v), "size mismatch");
+    memcpy(&u, &v, sizeof(u));
+    u ^= (u & 0x8000000000000000ull) ? 0xFFFFFFFFFFFFFFFFull : 0x8000000000000000ull;
+    u = BigEndian::FromHost64(u);
+    dest->append(reinterpret_cast<const char*>(&u), sizeof(u));
+}
+
+constexpr uint8_t SORT_KEY_NULL_FIRST_MARKER = 0x00;
+constexpr uint8_t SORT_KEY_NORMAL_MARKER = 0x01;
+} // namespace
+
+StatusOr<ColumnPtr> UtilityFunctions::make_sort_key(FunctionContext* context, const Columns& columns) {
+    int num_args = columns.size();
+    RETURN_IF(num_args < 1, Status::InvalidArgument("make_sort_key requires at least 1 argument"));
+
+    size_t num_rows = columns[0]->size();
+    for (int j = 1; j < num_args; ++j) {
+        RETURN_IF(columns[j]->size() != num_rows,
+                  Status::InvalidArgument("all arguments to make_sort_key must have same row count"));
+    }
+
+    // Determine if any argument is nullable to decide whether to add null markers
+    bool has_nullable = false;
+    for (int j = 0; j < num_args; ++j) {
+        if (columns[j]->is_nullable()) {
+            has_nullable = true;
+            break;
+        }
+    }
+
+    auto result = BinaryColumn::create();
+    result->reserve(num_rows);
+
+    const auto& arg_types = context->get_arg_types();
+    std::vector<const void*> datas(num_args);
+    std::vector<bool> is_const(num_args, false);
+    for (int j = 0; j < num_args; ++j) {
+        const Column* data_col = ColumnHelper::get_data_column(columns[j].get());
+        datas[j] = data_col->raw_data();
+        is_const[j] = columns[j]->is_constant();
+    }
+
+    std::string buff;
+    for (size_t row = 0; row < num_rows; ++row) {
+        buff.clear();
+        for (int j = 0; j < num_args; ++j) {
+            size_t idx = is_const[j] ? 0 : row;
+            if (has_nullable) {
+                if (columns[j]->is_null(row)) {
+                    buff.push_back(static_cast<char>(SORT_KEY_NULL_FIRST_MARKER));
+                    continue;
+                } else {
+                    buff.push_back(static_cast<char>(SORT_KEY_NORMAL_MARKER));
+                }
+            } else {
+                if (columns[j]->is_null(row)) {
+                    // Should not happen unless all rows are null without nullable flag; still handle gracefully
+                    continue;
+                }
+            }
+
+            LogicalType lt = arg_types[j].type;
+            switch (lt) {
+            case TYPE_BOOLEAN: {
+                uint8_t v = (ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
+                encode_integral<uint8_t>(v, &buff);
+                break;
+            }
+            case TYPE_TINYINT: {
+                int8_t v = (ColumnHelper::cast_to_raw<TYPE_TINYINT>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
+                encode_integral<int8_t>(v, &buff);
+                break;
+            }
+            case TYPE_SMALLINT: {
+                int16_t v = (ColumnHelper::cast_to_raw<TYPE_SMALLINT>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
+                encode_integral<int16_t>(v, &buff);
+                break;
+            }
+            case TYPE_INT: {
+                int32_t v = (ColumnHelper::cast_to_raw<TYPE_INT>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
+                encode_integral<int32_t>(v, &buff);
+                break;
+            }
+            case TYPE_BIGINT: {
+                int64_t v = (ColumnHelper::cast_to_raw<TYPE_BIGINT>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
+                encode_integral<int64_t>(v, &buff);
+                break;
+            }
+            case TYPE_LARGEINT: {
+                int128_t v = (ColumnHelper::cast_to_raw<TYPE_LARGEINT>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
+                encode_integral<int128_t>(v, &buff);
+                break;
+            }
+            case TYPE_FLOAT: {
+                float v = (ColumnHelper::cast_to_raw<TYPE_FLOAT>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
+                encode_float32(v, &buff);
+                break;
+            }
+            case TYPE_DOUBLE: {
+                double v = (ColumnHelper::cast_to_raw<TYPE_DOUBLE>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
+                encode_float64(v, &buff);
+                break;
+            }
+            case TYPE_CHAR:
+            case TYPE_VARCHAR: {
+                Slice s = (ColumnHelper::cast_to_raw<TYPE_VARCHAR>(ColumnHelper::get_data_column(columns[j].get())))->get_slice(idx);
+                bool is_last = (j + 1 == num_args);
+                if (is_last) {
+                    encode_slice_last(s, &buff);
+                } else {
+                    encode_slice_middle(s, &buff);
+                }
+                break;
+            }
+            case TYPE_VARBINARY: {
+                auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(ColumnHelper::get_data_column(columns[j].get()));
+                Slice s = bin->get_slice(idx);
+                bool is_last = (j + 1 == num_args);
+                if (is_last) {
+                    encode_slice_last(s, &buff);
+                } else {
+                    encode_slice_middle(s, &buff);
+                }
+                break;
+            }
+            case TYPE_DATE: {
+                int32_t v = (ColumnHelper::cast_to_raw<TYPE_DATE>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
+                encode_integral<int32_t>(v, &buff);
+                break;
+            }
+            case TYPE_DATETIME: {
+                int64_t v = (ColumnHelper::cast_to_raw<TYPE_DATETIME>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
+                encode_integral<int64_t>(v, &buff);
+                break;
+            }
+            case TYPE_DECIMAL32: {
+                auto* col = ColumnHelper::cast_to_raw<TYPE_DECIMAL32>(ColumnHelper::get_data_column(columns[j].get()));
+                int32_t v = col->get_data()[idx];
+                encode_integral<int32_t>(v, &buff);
+                break;
+            }
+            case TYPE_DECIMAL64: {
+                auto* col = ColumnHelper::cast_to_raw<TYPE_DECIMAL64>(ColumnHelper::get_data_column(columns[j].get()));
+                int64_t v = col->get_data()[idx];
+                encode_integral<int64_t>(v, &buff);
+                break;
+            }
+            case TYPE_DECIMAL128: {
+                auto* col = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(ColumnHelper::get_data_column(columns[j].get()));
+                int128_t v = col->get_data()[idx];
+                encode_integral<int128_t>(v, &buff);
+                break;
+            }
+            case TYPE_DECIMALV2: {
+                auto* col = ColumnHelper::cast_to_raw<TYPE_DECIMALV2>(ColumnHelper::get_data_column(columns[j].get()));
+                DecimalV2Value v = col->get_data()[idx];
+                // Encode as LARGEINT with KeyCoder
+                const KeyCoder* coder = get_key_coder(TYPE_DECIMALV2);
+                coder->full_encode_ascending(&v, &buff);
+                break;
+            }
+            default: {
+                return Status::NotSupported("make_sort_key: unsupported argument type");
+            }
+            }
+        }
+        result->append(buff);
+    }
+
+    return result;
 }
 
 } // namespace starrocks

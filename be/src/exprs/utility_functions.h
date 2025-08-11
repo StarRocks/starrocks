@@ -65,8 +65,11 @@ public:
     // Draw a bar graph
     DEFINE_VECTORIZED_FN(bar);
 
-    // Build a equi-width histogram
+        // Build a equi-width histogram
     DEFINE_VECTORIZED_FN(equiwidth_bucket);
+ 
+    // Build an order-preserving composite binary key from heterogeneous arguments
+    DEFINE_VECTORIZED_FN(make_sort_key);
 };
-
+ 
 } // namespace starrocks
