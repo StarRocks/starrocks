@@ -253,6 +253,13 @@ jobs:
           git checkout $BRANCH_NAME;
           git checkout -b merge_pr;
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
+      
+      - name: Check license headers
+        uses: viperproject/check-license-header@v2
+        with:
+          path: ${{ github.workspace }}
+          config: .github/license-header.json
+          strict: true
 
       - name: Run Clang-Format
         run: |

@@ -1,0 +1,6 @@
+[
+  {
+    "include": ["be/**/*.h", "be/**/*.cpp"],
+    "license": "./.github/LICENSE_TEMPLATE/header-be.txt"
+  }
+]
