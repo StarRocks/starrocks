@@ -787,27 +787,25 @@ To disable this feature, you can use the ALTER TABLE statement to set this prope
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
-### Configure flat json config (only support on shared-nothing clusters now)
+### Set Flat JSON properties on table level
 
-If you want to use flat json attributes, please specify it in properties. See [ Flat JSON ](../../../using_starrocks/Flat_json.md) for further information
+In v3.3, StarRocks introduced the [Flat JSON](../../../using_starrocks/Flat_json.md) feature to improve JSON data query efficiency and reduce the complexity of using JSON. This feature was controlled by specific BE configuration items and system variables. As a result, it can only be enabled (or disabled) globally.
+
+From v4.0 onwards, you can set the Flat JSON-related properties on table level.
 
 ```SQL
 PROPERTIES (
-    "flat_json.enable" = "true|false",
-    "flat_json.null.factor" = "0-1",
-    "flat_json.sparsity.factor" = "0-1",
-    "flat_json.column.max" = "${integer_value}"
+    "flat_json.enable" = "{ true | false }",
+    "flat_json.null.factor" = "",
+    "flat_json.sparsity.factor" = "",
+    "flat_json.column.max" = ""
 )
 ```
 
-**Properties**
-
-| Property                    | Required | Description                                                                                                                                                                                                                                                       |
-| --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `flat_json.enable`    | No       | Whether to enable the Flat JSON feature. After this feature is enabled, newly loaded JSON data will be automatically flattened, improving JSON query performance.                                                                                                 |
-| `flat_json.null.factor` | No      | The proportion of NULL values in the column to extract for Flat JSON. A column will not be extracted if its proportion of NULL value is higher than this threshold. This parameter takes effect only when `flat_json.enable` is set to true.  Default value: 0.3. |
-| `flat_json.sparsity.factor`     | No      | The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to true. Default value: 0.9.    |
-| `flat_json.column.max`       | No      | The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to true.  Default value: 100. |
+- `flat_json.enable` (Optional): Whether to enable the Flat JSON feature. After this feature is enabled, newly loaded JSON data will be automatically flattened, improving JSON query performance.
+- `flat_json.null.factor` (Optional): The proportion threshold of NULL values in the column. A column will not be extracted by Flat JSON if its proportion of NULL values is higher than this threshold. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
+- `flat_json.sparsity.factor` (Optional): The proportion threshold of columns with the same name. A column will not be extracted by Flat JSON if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.9`.
+- `flat_json.column.max` (Optional): The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `100`.
 
 ## Examples
 
@@ -1151,11 +1149,7 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2);
 ```
 
-### Table supporting flat JSON
-
-:::note
-Flat JSON is only support on shared-nothing clusters now.
-:::
+### Table with Flat JSON properties
 
 ```SQL
 CREATE TABLE example_db.example_table
