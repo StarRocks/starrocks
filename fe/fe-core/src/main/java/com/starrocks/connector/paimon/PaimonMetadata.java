@@ -177,52 +177,19 @@ public class PaimonMetadata implements ConnectorMetadata {
             partitionColumnTypes.add(dataTableRowType.getTypeAt(dataTableRowType.getFieldIndex(partitionColumnName)));
         }
 
-        if (paimonNativeCatalog instanceof CachingCatalog) {
-            try {
-                List<org.apache.paimon.partition.Partition> partitions = paimonNativeCatalog.listPartitions(identifier);
-                boolean partitionLegacyName = getPartitionLegacyName(paimonTable);for (org.apache.paimon.partition.Partition partition : partitions) {
-                    String partitionPath = PartitionPathUtils
-                            .generatePartitionPath(partition.spec(), dataTableRowType);
-                    String[] partitionValues = Arrays.stream(partitionPath.split("/"))
-                            .map(part -> part.split("=")[1])
-                            .toArray(String[]::new);
-                    Partition srPartition = getPartition(partition,
-                            partitionColumnNames, partitionColumnTypes,
-                            partitionValues, partitionLegacyName);
-                    this.partitionInfos.get(identifier).put(srPartition.getPartitionName(), srPartition);
-                }
-                return;
-            } catch (Catalog.TableNotExistException e) {
-                LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
-            }
-        }
-
-        // For system table, remove the symbol
-        tableName = tableName.replaceAll("\\$.*", "");
-        Identifier partitionTableIdentifier = new Identifier(databaseName, String.format("%s%s", tableName, "$partitions"));
-        RecordReaderIterator<InternalRow> iterator = null;
         try {
-            PartitionsTable table = (PartitionsTable) paimonNativeCatalog.getTable(partitionTableIdentifier);
-            RowType partitionTableRowType = table.rowType();
-            DataType lastUpdateTimeType = partitionTableRowType.getTypeAt(partitionTableRowType
-                    .getFieldIndex("last_update_time"));
-            int[] projected = new int[] {0, 1, 2, 3, 4};
-            RecordReader<InternalRow> recordReader = table.newReadBuilder().withProjection(projected)
-                    .newRead().createReader(table.newScan().plan());
-            iterator = new RecordReaderIterator<>(recordReader);
-            while (iterator.hasNext()) {
-                InternalRow rowData = iterator.next();
-                String partitionStr = rowData.getString(0).toString();
-                org.apache.paimon.data.Timestamp lastUpdateTime = rowData.getTimestamp(4,
-                        DataTypeChecks.getPrecision(lastUpdateTimeType));
-                String[] partitionValues = partitionStr.replace("[", "").replace("]", "")
-                        .split(",");
-                Partition partition =
-                        getPartition(rowData.getLong(1), rowData.getLong(2), rowData.getLong(3),
-                                partitionColumnNames, partitionColumnTypes, partitionValues, lastUpdateTime);
-                this.partitionInfos.get(identifier).put(partition.getPartitionName(), partition);
+            List<org.apache.paimon.partition.Partition> partitions = paimonNativeCatalog.listPartitions(identifier);
+            boolean partitionLegacyName = getPartitionLegacyName(paimonTable);for (org.apache.paimon.partition.Partition partition : partitions) {
+                String partitionPath = PartitionPathUtils.generatePartitionPath(partition.spec(), dataTableRowType);
+                String[] partitionValues = Arrays.stream(partitionPath.split("/"))
+                        .map(part -> part.split("=")[1])
+                        .toArray(String[]::new);
+                Partition srPartition = getPartition(partition,
+                        partitionColumnNames, partitionColumnTypes,
+                        partitionValues, partitionLegacyName);
+                this.partitionInfos.get(identifier).put(srPartition.getPartitionName(), srPartition);
             }
-        } catch (Exception e) {
+        } catch (Catalog.TableNotExistException e) {
             LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
         }
     }
