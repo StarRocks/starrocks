@@ -1298,7 +1298,7 @@ CONF_mInt64(datacache_min_disk_quota_for_adjustment, "107374182400");
 // When a cache item has a really small data size, we will try to cache it inline with its metadata
 // to optimize the io performance and reduce disk waste.
 // Set the parameter to `0` will turn off this optimization.
-CONF_Int32(datacache_inline_item_count_limit, "130172");
+CONF_mInt32(datacache_inline_item_count_limit, "130172");
 // Whether use an unified datacache instance.
 CONF_Bool(datacache_unified_instance_enable, "true");
 // The eviction policy for datacache, alternatives: [lru, slru].

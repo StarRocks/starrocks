@@ -48,6 +48,9 @@ public:
     // Update the datacache disk space infomation, such as disk quota or disk path.
     virtual Status update_disk_spaces(const std::vector<DirSpace>& spaces) = 0;
 
+    // Update the datacache inline cache count limit
+    virtual Status update_inline_cache_count_limit(int32_t limit) = 0;
+
     virtual const DataCacheMetrics cache_metrics(int level) = 0;
 
     virtual void record_read_remote(size_t size, int64_t lateny_us) = 0;
