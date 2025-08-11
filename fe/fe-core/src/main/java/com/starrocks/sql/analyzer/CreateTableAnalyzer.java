@@ -169,7 +169,7 @@ public class CreateTableAnalyzer {
                             throw new SemanticException("CTAS is not support in the %s ENGINE", PropertyAnalyzer.PROPERTIES_UNIFIED_CTAS_ENGINE);
                         }
                     }
-                    stmt.setEngineName(engineName);
+                    stmt.setEngineName(engineName.toLowerCase());
                 }
             } else {
                 if (Strings.isNullOrEmpty(engineName)) {
