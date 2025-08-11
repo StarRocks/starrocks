@@ -17,7 +17,6 @@ displayed_sidebar: docs
 ### 功能增强
 
 - Lake Compaction 增加 Segment 写入耗时统计信息。[#60891](https://github.com/StarRocks/starrocks/pull/60891)
-- 本地 PassThrough 交换场景下避免 bRPC 通信。[#60538](https://github.com/StarRocks/starrocks/pull/60538)
 - 禁用 Data Cache 写入的 inline 模式以避免性能下降。[#60530](https://github.com/StarRocks/starrocks/pull/60530)
 - Iceberg 元数据扫描支持共享文件 I/O。[#61012](https://github.com/StarRocks/starrocks/pull/61012)
 - 支持终止所有 PENDING 状态的 ANALYZE 任务。[#61118](https://github.com/StarRocks/starrocks/pull/61118)
