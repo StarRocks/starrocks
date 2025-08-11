@@ -464,150 +464,87 @@ StatusOr<ColumnPtr> UtilityFunctions::make_sort_key(FunctionContext* context, co
                   Status::InvalidArgument("all arguments to make_sort_key must have same row count"));
     }
 
-    // Determine if any argument is nullable to decide whether to add null markers
-    bool has_nullable = false;
-    for (int j = 0; j < num_args; ++j) {
-        if (columns[j]->is_nullable()) {
-            has_nullable = true;
-            break;
-        }
-    }
-
     auto result = BinaryColumn::create();
     result->reserve(num_rows);
 
-    const auto& arg_types = context->get_arg_types();
-    std::vector<const void*> datas(num_args);
-    std::vector<bool> is_const(num_args, false);
-    for (int j = 0; j < num_args; ++j) {
-        const Column* data_col = ColumnHelper::get_data_column(columns[j].get());
-        datas[j] = data_col->raw_data();
-        is_const[j] = columns[j]->is_constant();
-    }
+    // If any column is nullable, we add a marker per field
+    bool has_nullable = std::any_of(columns.begin(), columns.end(), [](const ColumnPtr& c) { return c->is_nullable(); });
+
+    struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
+        size_t row = 0;
+        bool is_last_field = false;
+        bool has_nullable = false;
+        std::string* buff;
+
+        explicit EncoderVisitor(std::string* b) : ColumnVisitorAdapter(this), buff(b) {}
+
+        // Nullable wrapper: emit marker then visit inner
+        Status do_visit(const NullableColumn& column) {
+            if (has_nullable) {
+                (*buff).push_back(column.is_null(row) ? SORT_KEY_NULL_FIRST_MARKER : SORT_KEY_NORMAL_MARKER);
+            }
+            if (column.is_null(row)) return Status::OK();
+            return column.data_column()->accept(this);
+        }
+
+        // Const: forward to data
+        Status do_visit(const ConstColumn& column) { return column.data_column()->accept(this); }
+
+        // Strings/binary
+        Status do_visit(const BinaryColumn& column) {
+            Slice s = column.get_slice(row);
+            if (is_last_field) {
+                encode_slice_last(s, buff);
+            } else {
+                encode_slice_middle(s, buff);
+            }
+            return Status::OK();
+        }
+        Status do_visit(const LargeBinaryColumn& column) { return do_visit(down_cast<const BinaryColumn&>(column)); }
+
+        // Fixed-length numerics
+        template <typename T>
+        Status do_visit(const FixedLengthColumn<T>& column) {
+            if constexpr (std::is_same_v<T, float>) {
+                encode_float32(column.get_data()[row], buff);
+            } else if constexpr (std::is_same_v<T, double>) {
+                encode_float64(column.get_data()[row], buff);
+            } else {
+                encode_integral<T>(column.get_data()[row], buff);
+            }
+            return Status::OK();
+        }
+
+        // DecimalV2Value encoded as Largeint via KeyCoder
+        Status do_visit(const DecimalColumn& column) {
+            DecimalV2Value v = column.get_data()[row];
+            const KeyCoder* coder = get_key_coder(TYPE_DECIMALV2);
+            coder->full_encode_ascending(&v, buff);
+            return Status::OK();
+        }
+
+        // Decimal32/64/128 underlying fixed columns are handled by template above
+        Status do_visit(const Decimal32Column& column) { return do_visit(down_cast<const FixedLengthColumn<int32_t>&>(column)); }
+        Status do_visit(const Decimal64Column& column) { return do_visit(down_cast<const FixedLengthColumn<int64_t>&>(column)); }
+        Status do_visit(const Decimal128Column& column) { return do_visit(down_cast<const FixedLengthColumn<int128_t>&>(column)); }
+
+        // Unsupported complex types map/array/struct/json/hll/bitmap/percentile
+        template <typename T>
+        Status do_visit(const T& column) {
+            return Status::NotSupported("make_sort_key: unsupported argument type");
+        }
+    } visitor(nullptr);
 
     std::string buff;
     for (size_t row = 0; row < num_rows; ++row) {
         buff.clear();
-        for (int j = 0; j < num_args; ++j) {
-            size_t idx = is_const[j] ? 0 : row;
-            if (has_nullable) {
-                if (columns[j]->is_null(row)) {
-                    buff.push_back(static_cast<char>(SORT_KEY_NULL_FIRST_MARKER));
-                    continue;
-                } else {
-                    buff.push_back(static_cast<char>(SORT_KEY_NORMAL_MARKER));
-                }
-            } else {
-                if (columns[j]->is_null(row)) {
-                    // Should not happen unless all rows are null without nullable flag; still handle gracefully
-                    continue;
-                }
-            }
+        visitor.row = row;
+        visitor.has_nullable = has_nullable;
+        visitor.buff = &buff;
 
-            LogicalType lt = arg_types[j].type;
-            switch (lt) {
-            case TYPE_BOOLEAN: {
-                uint8_t v = (ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
-                encode_integral<uint8_t>(v, &buff);
-                break;
-            }
-            case TYPE_TINYINT: {
-                int8_t v = (ColumnHelper::cast_to_raw<TYPE_TINYINT>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
-                encode_integral<int8_t>(v, &buff);
-                break;
-            }
-            case TYPE_SMALLINT: {
-                int16_t v = (ColumnHelper::cast_to_raw<TYPE_SMALLINT>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
-                encode_integral<int16_t>(v, &buff);
-                break;
-            }
-            case TYPE_INT: {
-                int32_t v = (ColumnHelper::cast_to_raw<TYPE_INT>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
-                encode_integral<int32_t>(v, &buff);
-                break;
-            }
-            case TYPE_BIGINT: {
-                int64_t v = (ColumnHelper::cast_to_raw<TYPE_BIGINT>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
-                encode_integral<int64_t>(v, &buff);
-                break;
-            }
-            case TYPE_LARGEINT: {
-                int128_t v = (ColumnHelper::cast_to_raw<TYPE_LARGEINT>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
-                encode_integral<int128_t>(v, &buff);
-                break;
-            }
-            case TYPE_FLOAT: {
-                float v = (ColumnHelper::cast_to_raw<TYPE_FLOAT>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
-                encode_float32(v, &buff);
-                break;
-            }
-            case TYPE_DOUBLE: {
-                double v = (ColumnHelper::cast_to_raw<TYPE_DOUBLE>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
-                encode_float64(v, &buff);
-                break;
-            }
-            case TYPE_CHAR:
-            case TYPE_VARCHAR: {
-                Slice s = (ColumnHelper::cast_to_raw<TYPE_VARCHAR>(ColumnHelper::get_data_column(columns[j].get())))->get_slice(idx);
-                bool is_last = (j + 1 == num_args);
-                if (is_last) {
-                    encode_slice_last(s, &buff);
-                } else {
-                    encode_slice_middle(s, &buff);
-                }
-                break;
-            }
-            case TYPE_VARBINARY: {
-                auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(ColumnHelper::get_data_column(columns[j].get()));
-                Slice s = bin->get_slice(idx);
-                bool is_last = (j + 1 == num_args);
-                if (is_last) {
-                    encode_slice_last(s, &buff);
-                } else {
-                    encode_slice_middle(s, &buff);
-                }
-                break;
-            }
-            case TYPE_DATE: {
-                int32_t v = (ColumnHelper::cast_to_raw<TYPE_DATE>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
-                encode_integral<int32_t>(v, &buff);
-                break;
-            }
-            case TYPE_DATETIME: {
-                int64_t v = (ColumnHelper::cast_to_raw<TYPE_DATETIME>(ColumnHelper::get_data_column(columns[j].get())))->get_data()[idx];
-                encode_integral<int64_t>(v, &buff);
-                break;
-            }
-            case TYPE_DECIMAL32: {
-                auto* col = ColumnHelper::cast_to_raw<TYPE_DECIMAL32>(ColumnHelper::get_data_column(columns[j].get()));
-                int32_t v = col->get_data()[idx];
-                encode_integral<int32_t>(v, &buff);
-                break;
-            }
-            case TYPE_DECIMAL64: {
-                auto* col = ColumnHelper::cast_to_raw<TYPE_DECIMAL64>(ColumnHelper::get_data_column(columns[j].get()));
-                int64_t v = col->get_data()[idx];
-                encode_integral<int64_t>(v, &buff);
-                break;
-            }
-            case TYPE_DECIMAL128: {
-                auto* col = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(ColumnHelper::get_data_column(columns[j].get()));
-                int128_t v = col->get_data()[idx];
-                encode_integral<int128_t>(v, &buff);
-                break;
-            }
-            case TYPE_DECIMALV2: {
-                auto* col = ColumnHelper::cast_to_raw<TYPE_DECIMALV2>(ColumnHelper::get_data_column(columns[j].get()));
-                DecimalV2Value v = col->get_data()[idx];
-                // Encode as LARGEINT with KeyCoder
-                const KeyCoder* coder = get_key_coder(TYPE_DECIMALV2);
-                coder->full_encode_ascending(&v, &buff);
-                break;
-            }
-            default: {
-                return Status::NotSupported("make_sort_key: unsupported argument type");
-            }
-            }
+        for (int j = 0; j < num_args; ++j) {
+            visitor.is_last_field = (j + 1 == num_args);
+            RETURN_IF_ERROR(columns[j]->accept(&visitor));
         }
         result->append(buff);
     }
