@@ -31,6 +31,7 @@ Status GinFunctions::tokenize_prepare(FunctionContext* context, FunctionContext:
     }
 
     auto column = context->get_constant_column(0);
+    RETURN_IF(column == nullptr, Status::InvalidArgument("Tokenize function requires constant parameter"));
     auto method = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
 
     lucene::analysis::Analyzer* analyzer;

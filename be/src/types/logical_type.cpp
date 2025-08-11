@@ -39,8 +39,9 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "DOUBLE") return TYPE_DOUBLE;
     if (upper_type_str == "CHAR") return TYPE_CHAR;
     if (upper_type_str == "DATE_V2") return TYPE_DATE;
-    if (upper_type_str == "DATE") return TYPE_DATE_V1;
-    if (upper_type_str == "DATETIME") return TYPE_DATETIME_V1;
+    if (upper_type_str == "DATE") return TYPE_DATE;
+    if (upper_type_str == "TIME") return TYPE_TIME;
+    if (upper_type_str == "DATETIME") return TYPE_DATETIME;
     if (upper_type_str == "TIMESTAMP") return TYPE_DATETIME;
     if (upper_type_str == "DECIMAL_V2") return TYPE_DECIMALV2;
     if (upper_type_str == "DECIMAL") return TYPE_DECIMAL;
@@ -50,6 +51,7 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "STRUCT") return TYPE_STRUCT;
     if (upper_type_str == "ARRAY") return TYPE_ARRAY;
     if (upper_type_str == "MAP") return TYPE_MAP;
+    if (upper_type_str == "BITMAP") return TYPE_OBJECT;
     if (upper_type_str == "OBJECT") return TYPE_OBJECT;
     if (upper_type_str == "PERCENTILE") return TYPE_PERCENTILE;
     if (upper_type_str == "DECIMAL32") return TYPE_DECIMAL32;

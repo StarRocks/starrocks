@@ -280,19 +280,31 @@ public:
      */
     template <LogicalType Type>
     static inline typename RunTimeColumnType<Type>::Ptr cast_to(const ColumnPtr& value) {
-        down_cast<const RunTimeColumnType<Type>*>(value.get());
+#ifndef NDEBUG
+        auto* result = dynamic_cast<const RunTimeColumnType<Type>*>(value.get());
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
+#endif
         return RunTimeColumnType<Type>::static_pointer_cast(value);
     }
 
     template <LogicalType Type>
     static inline typename RunTimeColumnType<Type>::Ptr cast_to(ColumnPtr&& value) {
-        down_cast<const RunTimeColumnType<Type>*>(value.get());
+#ifndef NDEBUG
+        auto* result = dynamic_cast<const RunTimeColumnType<Type>*>(value.get());
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
+#endif
         return RunTimeColumnType<Type>::static_pointer_cast(std::move(value));
     }
 
     template <LogicalType Type>
     static inline typename RunTimeColumnType<Type>::MutablePtr cast_to(MutableColumnPtr&& value) {
-        down_cast<const RunTimeColumnType<Type>*>(value.get());
+#ifndef NDEBUG
+        auto* result = dynamic_cast<const RunTimeColumnType<Type>*>(value.get());
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
+#endif
         return RunTimeColumnType<Type>::static_pointer_cast(std::move(value));
     }
 
@@ -303,18 +315,38 @@ public:
     // TODO(COW): return const Column* instead of Column*
     template <LogicalType Type>
     static inline RunTimeColumnType<Type>* cast_to_raw(const ColumnPtr& value) {
+#ifdef NDEBUG
         auto* raw_column_ptr = down_cast<const RunTimeColumnType<Type>*>(value.get());
+#else
+        auto* raw_column_ptr = dynamic_cast<const RunTimeColumnType<Type>*>(value.get());
+        DCHECK(raw_column_ptr) << "Cast failed for column: "
+                               << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
+#endif
         return const_cast<RunTimeColumnType<Type>*>(raw_column_ptr);
     }
 
     template <LogicalType Type>
     static inline RunTimeColumnType<Type>* cast_to_raw(Column* value) {
+#ifdef NDEBUG
         return down_cast<RunTimeColumnType<Type>*>(value);
+#else
+        auto* result = dynamic_cast<RunTimeColumnType<Type>*>(value);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
+        return result;
+#endif
     }
 
     template <LogicalType Type>
     static inline const RunTimeColumnType<Type>* cast_to_raw(const Column* value) {
+#ifdef NDEBUG
         return down_cast<const RunTimeColumnType<Type>*>(value);
+#else
+        auto* result = dynamic_cast<const RunTimeColumnType<Type>*>(value);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
+        return result;
+#endif
     }
 
     /**
@@ -323,32 +355,74 @@ public:
      */
     template <typename Type>
     static inline typename Type::Ptr as_column(const ColumnPtr& value) {
+#ifdef NDEBUG
         return Type::static_pointer_cast(value);
+#else
+        auto* result = dynamic_cast<const Type*>(value.get());
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
+        return Type::static_pointer_cast(value);
+#endif
     }
 
     template <typename Type>
     static inline typename Type::Ptr as_column(ColumnPtr&& value) {
+#ifdef NDEBUG
         return Type::static_pointer_cast(std::move(value));
+#else
+        auto* result = dynamic_cast<const Type*>(value.get());
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
+        return Type::static_pointer_cast(std::move(value));
+#endif
     }
 
     template <typename Type>
     static inline typename Type::MutablePtr as_column(MutableColumnPtr&& value) {
+#ifdef NDEBUG
         return Type::static_pointer_cast(std::move(value));
+#else
+        auto* result = dynamic_cast<const Type*>(value.get());
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
+        return Type::static_pointer_cast(std::move(value));
+#endif
     }
 
     template <typename Type>
     static inline const Type* as_raw_const_column(const ColumnPtr& value) {
+#ifdef NDEBUG
         return down_cast<const Type*>(value.get());
+#else
+        auto* result = dynamic_cast<const Type*>(value.get());
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
+        return result;
+#endif
     }
 
     template <typename Type>
     static inline Type* as_raw_column(const MutableColumnPtr& value) {
+#ifdef NDEBUG
         return down_cast<Type*>(value.get());
+#else
+        auto* result = dynamic_cast<Type*>(value.get());
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
+        return result;
+#endif
     }
 
     template <typename Type>
     static inline const Type* as_raw_column(const Column* value) {
+#ifdef NDEBUG
         return down_cast<const Type*>(value);
+#else
+        auto* result = dynamic_cast<const Type*>(value);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
+        return result;
+#endif
     }
     /**
      * Cast columnPtr to special type Column*
@@ -356,7 +430,13 @@ public:
      */
     template <typename Type>
     static inline Type* as_raw_column(const ColumnPtr& value) {
+#ifdef NDEBUG
         auto* col = down_cast<const Type*>(value.get());
+#else
+        auto* col = dynamic_cast<const Type*>(value.get());
+        DCHECK(col) << "Cast failed for column: "
+                    << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
+#endif
         // TODO: remove const_cast
         return const_cast<Type*>(col);
     }

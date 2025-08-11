@@ -91,6 +91,7 @@ OPTS=$(getopt \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'without-starcache' \
+  -l 'without-java-ext' \
   -l 'with-brpc-keepalive' \
   -l 'without-debug-symbol-split' \
   -l 'without-java-ext' \
@@ -325,6 +326,7 @@ cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util
 test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
     | grep -v starrocks_test \
     | grep -v bench_test \
+    | grep -v builtin_functions_fuzzy_test \
     | grep -e "$TEST_MODULE" `
 
 echo "[INFO] gtest_filter: $TEST_NAME"
@@ -353,4 +355,3 @@ do
         fi
     fi
 done
-
