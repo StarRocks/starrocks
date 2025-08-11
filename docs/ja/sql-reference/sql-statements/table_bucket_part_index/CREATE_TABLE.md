@@ -784,27 +784,25 @@ v3.5.0 以降、StarRocks 内部テーブルは共通パーティション式 TT
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
-### フラット JSON 設定の構成 (現在は共有なしクラスタのみサポート)
+### テーブルレベルの Flat JSON プロパティを設定
 
-フラット JSON 属性を使用したい場合、`properties` で指定してください。詳細については、[Flat JSON](../../../using_starrocks/Flat_json.md) を参照してください。
+v3.3 から、StarRocks は JSON データクエリの効率を向上させ、JSON の使用複雑さを軽減するため、[Flat JSON](../../../using_starrocks/Flat_json.md) 機能を導入しました。この機能は、特定の B E設定項目とシステム変数によって制御されていました。そのため、グローバルにのみ有効化（または無効化）可能です。
+
+v4.0 以降、テーブルレベルで Flat JSON 関連のプロパティを設定できます。
 
 ```SQL
 PROPERTIES (
-    "flat_json.enable" = "true|false",
-    "flat_json.null.factor" = "0-1",
-    "flat_json.sparsity.factor" = "0-1",
-    "flat_json.column.max" = "${integer_value}"
+    "flat_json.enable" = "{ true | false }",
+    "flat_json.null.factor" = "",
+    "flat_json.sparsity.factor" = "",
+    "flat_json.column.max" = ""
 )
 ```
 
-**プロパティ**
-
-| プロパティ                    | 必須 | 説明                                                                                                                                                                                                                                                       |
-| --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `flat_json.enable`    | No       | フラット JSON 機能を有効にするかどうか。この機能が有効になると、新しくロードされた JSON データが自動的にフラット化され、JSON クエリのパフォーマンスが向上します。                                                                                                 |
-| `flat_json.null.factor` | No      | フラット JSON のために抽出する列の NULL 値の割合。このしきい値を超える NULL 値の割合を持つ列は抽出されません。このパラメータは `flat_json.enable` が true に設定されている場合にのみ有効です。 デフォルト値: 0.3。 |
-| `flat_json.sparsity.factor`     | No      | フラット JSON のために同じ名前を持つ列の割合。この値より低い割合を持つ同じ名前の列は抽出されません。このパラメータは `flat_json.enable` が true に設定されている場合にのみ有効です。デフォルト値: 0.9。    |
-| `flat_json.column.max`       | No      | フラット JSON によって抽出できるサブフィールドの最大数。このパラメータは `flat_json.enable` が true に設定されている場合にのみ有効です。 デフォルト値: 100。 |
+- `flat_json.enable` (オプション): Flat JSON 機能を有効にするかどうか。この機能を有効にすると、新たに読み込まれた JSON データが自動的にフラット化され、JSON クエリのパフォーマンスが向上します。
+- `flat_json.null.factor` (オプション): 列内の NULL 値の割合の閾値。この閾値を超えるNULL値の割合を持つ列は、Flat JSON によって抽出されません。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。 デフォルト値: `0.3`。
+- `flat_json.sparsity.factor` (オプション): 同じ名前を持つ列の割合の閾値。同じ名前を持つ列の割合がこの値未満の場合、Flat JSON ではその列が抽出されません。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。デフォルト値: `0.9`。
+- `flat_json.column.max` (オプション): Flat JSON で抽出可能なサブフィールドの最大数。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。 デフォルト値: `100`。
 
 ## 例
 
@@ -1148,11 +1146,7 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2);
 ```
 
-### フラット JSON をサポートするテーブル
-
-:::note
-フラット JSON は現在、共有なしクラスタのみでサポートされています。
-:::
+### Flat JSON プロパティを持つテーブル
 
 ```SQL
 CREATE TABLE example_db.example_table
