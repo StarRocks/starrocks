@@ -186,8 +186,61 @@ def generate_cpp(path):
 
     content = cpp_template.substitute(value)
 
+<<<<<<< HEAD
     with open(path, mode="w+") as f:
         f.write(content)
+=======
+    modules_contents = dict()
+    for module in modules:
+        modules_contents[module] = ""
+
+    for fnm in function_list:
+        target = "Unknown"
+        if fnm["fn"] == "nullptr":
+            continue
+        for module in modules:
+            if module in fnm["fn"]:
+                target = module
+                break
+        if target == "Unknown":
+            print("fnm:" + fnm["fn"] + str(fnm))
+
+        if "prepare" in fnm:
+            modules_contents[target] = modules_contents[
+                target
+            ] + '\tBuiltinFunctions::emplace_builtin_function(static_cast<uint64_t>(%d), "%s", %d, %s, %s, %s, %s, %s, "%s", std::vector<const char*>{%s});\n' % (
+                fnm["id"],
+                fnm["name"],
+                fnm["args_nums"],
+                fnm["fn"],
+                fnm["prepare"],
+                fnm["close"],
+                fnm["exception_safe"],
+                fnm["check_overflow"],
+                fnm['ret'], 
+                ", ".join(['"%s"' % arg for arg in fnm['args']]),
+            )
+        else:
+            modules_contents[target] = modules_contents[
+                target
+            ] + '\tBuiltinFunctions::emplace_builtin_function(static_cast<uint64_t>(%d), "%s", %d, %s, %s, %s, "%s", std::vector<const char*>{%s});\n' % (
+                fnm["id"],
+                fnm["name"],
+                fnm["args_nums"],
+                fnm["fn"],
+                fnm["exception_safe"],
+                fnm["check_overflow"],
+                fnm['ret'], 
+                ", ".join(['"%s"' % arg for arg in fnm['args']]),
+            )
+
+    for module in modules:
+        with open(path + module + ".inc", mode="w+") as f:
+            content = cpp_template.format(
+                module=module, content=modules_contents[module]
+            )
+            f.write(content)
+>>>>>>> bf792a6455 ([BugFix] fix builtin_function fuzzy test (#61530))
 
 
 if __name__ == '__main__':
