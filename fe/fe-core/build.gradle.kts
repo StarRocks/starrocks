@@ -408,7 +408,6 @@ tasks.register<Task>("generateByScripts") {
             commandLine(
                 "python3",
                 "${project.rootProject.projectDir}/../build-support/gen_build_version.py",
-                "--cpp", outputDir.toString(),
                 "--java", outputDir.toString()
             )
         }

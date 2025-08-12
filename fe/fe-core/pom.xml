@@ -1073,8 +1073,6 @@ under the License.
                                 <exec executable="${ant.python}">
                                     <env key="JAVA_HOME" value="${java.home}"/>
                                     <arg value="${starrocks.home}/build-support/gen_build_version.py"/>
-                                    <arg value="--cpp"/>
-                                    <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
                                     <arg value="--java"/>
                                     <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
                                 </exec>

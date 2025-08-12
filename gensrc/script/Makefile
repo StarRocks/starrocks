@@ -56,7 +56,7 @@ gen_functions: ${GEN_FUNCTIONS_OUTPUT}
 
 # generate version info
 gen_version:
-	${PYTHON} ${CURDIR}/../../build-support/gen_build_version.py --cpp ${BUILD_DIR}/gen_cpp --java ${FE_TARGET_DIR}
+	${PYTHON} ${CURDIR}/../../build-support/gen_build_version.py --cpp ${BUILD_DIR}/gen_cpp
 .PHONY: gen_version
 
 
