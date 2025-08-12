@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
@@ -45,6 +46,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
@@ -153,6 +155,22 @@ public class CatalogRecycleBinLakeTableTest {
             } catch (Exception ignore) {
             }
         }
+    }
+
+    private static boolean containsAsyncDeleteTable(Object recycleBin, long id) {
+        Map<?, CompletableFuture<Boolean>> asyncDeleteForTables =
+                Deencapsulation.getField(recycleBin, "asyncDeleteForTables");
+
+        return asyncDeleteForTables.entrySet().stream()
+                .anyMatch(e -> ((CatalogRecycleBin.RecycleTableInfo) e.getKey()).getTable().getId() == id);
+    }
+
+    private static boolean containsAsyncDeletePartition(Object recycleBin, long id) {
+        Map<?, CompletableFuture<Boolean>> asyncDeleteForPartitions =
+                Deencapsulation.getField(recycleBin, "asyncDeleteForPartitions");
+
+        return asyncDeleteForPartitions.entrySet().stream()
+                .anyMatch(e -> ((RecyclePartitionInfo) e.getKey()).getPartition().getId() == id);
     }
 
     @Test
@@ -295,6 +313,7 @@ public class CatalogRecycleBinLakeTableTest {
 
         recycleBin.replayEraseTable(Lists.newArrayList(table1.getId()));
         Assert.assertNull(recycleBin.getTable(db.getId(), table1.getId()));
+        Assert.assertFalse(containsAsyncDeleteTable(recycleBin, table1.getId()));
     }
 
     @Test
@@ -479,7 +498,9 @@ public class CatalogRecycleBinLakeTableTest {
         waitPartitionClearFinished(recycleBin, p1.getId(), System.currentTimeMillis() + delay);
         waitPartitionClearFinished(recycleBin, p2.getId(), System.currentTimeMillis() + delay);
         Assert.assertNull(recycleBin.getPartition(p1.getId()));
+        Assert.assertFalse(containsAsyncDeletePartition(recycleBin, p1.getId()));
         Assert.assertNull(recycleBin.getPartition(p2.getId()));
+        Assert.assertFalse(containsAsyncDeletePartition(recycleBin, p2.getId()));
         checkPartitionTablet(p1, false);
         checkPartitionTablet(p2, false);
 
@@ -521,6 +542,7 @@ public class CatalogRecycleBinLakeTableTest {
         recycleBin.erasePartition(System.currentTimeMillis() + delay);
         waitPartitionClearFinished(recycleBin, p1.getId(), System.currentTimeMillis() + delay);
         Assert.assertNull(recycleBin.getPartition(p1.getId()));
+        Assert.assertFalse(containsAsyncDeletePartition(recycleBin, p1.getId()));
         checkPartitionTablet(p1, false);
     }
 
