@@ -674,8 +674,6 @@ DROP TABLE t_auto_increment_partial_update_only;
 -- !result
 DROP DATABASE test_auto_increment_partial_update_only;
 -- result:
-<<<<<<< HEAD
-=======
 -- !result
 -- name: test_auto_increment_insert_partial_update @sequential
 ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
