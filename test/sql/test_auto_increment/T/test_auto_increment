@@ -284,8 +284,6 @@ SELECT * FROM t_auto_increment_partial_update_only;
 
 DROP TABLE t_auto_increment_partial_update_only;
 DROP DATABASE test_auto_increment_partial_update_only;
-<<<<<<< HEAD
-=======
 
 -- name: test_auto_increment_insert_partial_update @sequential
 ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
