@@ -34,17 +34,12 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.builder.HashCodeBuilder;
-
-import java.io.DataOutput;
-import java.io.IOException;
 
 import static com.starrocks.common.util.Util.normalizeName;
 
@@ -109,12 +104,8 @@ public class LabelName implements ParseNode, Writable {
         return stringBuilder.toString();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // compatible with old version
-        Text.writeString(out, ClusterNamespace.getFullName(dbName));
-        Text.writeString(out, labelName);
-    }
+
+
 
     @Override
     public NodePosition getPos() {

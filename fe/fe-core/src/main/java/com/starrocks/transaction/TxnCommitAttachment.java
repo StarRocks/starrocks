@@ -35,15 +35,11 @@
 package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.loadv2.MiniLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.thrift.TTxnCommitAttachment;
-
-import java.io.DataOutput;
-import java.io.IOException;
 
 public abstract class TxnCommitAttachment implements Writable {
 
@@ -74,9 +70,6 @@ public abstract class TxnCommitAttachment implements Writable {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // ATTN: must write type first
-        Text.writeString(out, sourceType.name());
-    }
+
+
 }

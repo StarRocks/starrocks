@@ -17,12 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.lake.DataCacheInfo;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
     @SerializedName(value = "storageCacheInfo")
@@ -50,10 +45,6 @@ public class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
         RecyclePartitionInfo.recoverRangePartition(table, this);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(-1L);
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
+
 }

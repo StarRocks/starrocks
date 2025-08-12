@@ -19,9 +19,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.epack.catalog.system.starrocks.PolicyReferences;
 
-import java.io.DataOutput;
-import java.io.IOException;
-
 // Mysql schema used for MySQL compatible.
 public class SysDb extends Database {
     public static final String DATABASE_NAME = "sys";
@@ -44,10 +41,8 @@ public class SysDb extends Database {
         return null;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // Do nothing
-    }
+
+
 
 
 

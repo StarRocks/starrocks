@@ -49,7 +49,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -58,7 +57,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.DataOutput;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -676,15 +674,8 @@ public class BackupJobInfo implements Writable {
         return Joiner.on(", ").join(objs);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, toJson(true).toString());
-        out.writeInt(tblAlias.size());
-        for (Map.Entry<String, String> entry : tblAlias.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            Text.writeString(out, entry.getValue());
-        }
-    }
+
+
 
     @Override
     public String toString() {

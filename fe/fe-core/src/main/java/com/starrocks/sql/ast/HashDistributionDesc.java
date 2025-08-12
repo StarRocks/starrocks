@@ -22,12 +22,9 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
@@ -105,17 +102,8 @@ public class HashDistributionDesc extends DistributionDesc {
         return new HashDistributionInfo(numBucket, distributionColumns);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
 
-        out.writeInt(numBucket);
-        int count = distributionColumnNames.size();
-        out.writeInt(count);
-        for (String colName : distributionColumnNames) {
-            Text.writeString(out, colName);
-        }
-    }
+
 
     @Override
     public String toString() {

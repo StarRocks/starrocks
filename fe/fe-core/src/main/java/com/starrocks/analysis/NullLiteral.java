@@ -41,8 +41,6 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class NullLiteral extends LiteralExpr {
@@ -155,10 +153,5 @@ public class NullLiteral extends LiteralExpr {
     @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.NULL_LITERAL;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
     }
 }

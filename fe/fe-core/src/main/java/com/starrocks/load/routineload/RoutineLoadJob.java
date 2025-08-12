@@ -55,7 +55,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
@@ -92,7 +91,6 @@ import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
@@ -110,7 +108,6 @@ import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -1810,51 +1807,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
 
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // ATTN: must write type first
-        Text.writeString(out, dataSourceType.name());
 
-        out.writeLong(id);
-        Text.writeString(out, name);
-        Text.writeString(out, SystemInfoService.DEFAULT_CLUSTER);
-        out.writeLong(dbId);
-        out.writeLong(tableId);
-        out.writeInt(desireTaskConcurrentNum);
-        Text.writeString(out, state.name());
-        out.writeLong(maxErrorNum);
-        out.writeLong(taskSchedIntervalS);
-        out.writeLong(maxBatchRows);
-        out.writeLong(maxBatchSizeBytes);
-        progress.write(out);
 
-        out.writeLong(createTimestamp);
-        out.writeLong(pauseTimestamp);
-        out.writeLong(endTimestamp);
-
-        out.writeLong(currentErrorRows);
-        out.writeLong(currentTotalRows);
-        out.writeLong(errorRows);
-        out.writeLong(totalRows);
-        out.writeLong(unselectedRows);
-        out.writeLong(receivedBytes);
-        out.writeLong(totalTaskExcutionTimeMs);
-        out.writeLong(committedTaskNum);
-        out.writeLong(abortedTaskNum);
-
-        origStmt.write(out);
-        out.writeInt(jobProperties.size());
-        for (Map.Entry<String, String> entry : jobProperties.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            Text.writeString(out, entry.getValue());
-        }
-
-        out.writeInt(sessionVariables.size());
-        for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            Text.writeString(out, entry.getValue());
-        }
-    }
 
 
 

@@ -295,6 +295,7 @@ public class Text implements Writable {
         }
     }
 
+    @Override
     public void write(DataOutput out) throws IOException {
         out.writeInt(length);
         out.write(bytes, 0, length);

@@ -20,8 +20,6 @@ package com.starrocks.persist;
 import com.google.common.collect.Lists;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 
 public class BackendIdsUpdateInfo implements Writable {
@@ -35,13 +33,8 @@ public class BackendIdsUpdateInfo implements Writable {
         this.backendIds = backends;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeInt(backendIds.size());
-        for (Long id : backendIds) {
-            out.writeLong(id);
-        }
-    }
+
+
 
     public List<Long> getBackendList() {
         return backendIds;

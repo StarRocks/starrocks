@@ -36,15 +36,12 @@ package com.starrocks.load;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerErrorHubInfo;
 import com.starrocks.thrift.TNetworkAddress;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Map;
 
 public class BrokerLoadErrorHub extends LoadErrorHub {
@@ -74,16 +71,8 @@ public class BrokerLoadErrorHub extends LoadErrorHub {
             this.prop = prop;
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            Text.writeString(out, brokerName);
-            Text.writeString(out, path);
-            out.writeInt(prop.size());
-            for (Map.Entry<String, String> entry : prop.entrySet()) {
-                Text.writeString(out, entry.getKey());
-                Text.writeString(out, entry.getValue());
-            }
-        }
+
+
 
 
 

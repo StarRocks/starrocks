@@ -74,14 +74,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.Status;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -112,8 +110,6 @@ import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
@@ -1230,11 +1226,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         return taskInfos;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this, AlterJobV2.class);
-        Text.writeString(out, json);
-    }
+
+
 
     @Override
     public Optional<Long> getTransactionId() {

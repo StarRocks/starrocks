@@ -46,13 +46,9 @@ import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.logging.log4j.util.Strings;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-
-import static com.starrocks.common.io.IOUtils.writeOptionString;
 
 /**
  * Internal representation of an aggregate function.
@@ -392,31 +388,8 @@ public class AggregateFunction extends Function {
         return fn;
     }
 
-    @Override
-    public void write(DataOutput output) throws IOException {
-        // 1. type
-        FunctionType.AGGREGATE.write(output);
-        // 2. parent
-        super.writeFields(output);
-        // 3. self's member
-        boolean hasInterType = intermediateType != null;
-        output.writeBoolean(hasInterType);
-        if (hasInterType) {
-            ColumnType.write(output, intermediateType);
-        }
-        writeOptionString(output, symbolName);
-        writeOptionString(output, Strings.EMPTY);
-        writeOptionString(output, Strings.EMPTY);
-        writeOptionString(output, Strings.EMPTY);
-        writeOptionString(output, Strings.EMPTY);
-        writeOptionString(output, Strings.EMPTY);
-        writeOptionString(output, Strings.EMPTY);
 
-        output.writeBoolean(ignoresDistinct);
-        output.writeBoolean(isAnalyticFn);
-        output.writeBoolean(isAggregateFn);
-        output.writeBoolean(returnsNonNullOnEmpty);
-    }
+
 
     @Override
     public String getProperties() {

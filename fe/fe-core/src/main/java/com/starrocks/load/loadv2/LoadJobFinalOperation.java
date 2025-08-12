@@ -18,15 +18,11 @@
 package com.starrocks.load.loadv2;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
-
-import java.io.DataOutput;
-import java.io.IOException;
 
 /**
  * This object will be created when job finished or cancelled.
@@ -93,22 +89,8 @@ public class LoadJobFinalOperation extends TxnCommitAttachment implements Writab
         return failMsg;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeLong(id);
-        loadingStatus.write(out);
-        out.writeInt(progress);
-        out.writeLong(loadStartTimestamp);
-        out.writeLong(finishTimestamp);
-        Text.writeString(out, jobState.name());
-        if (failMsg == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            failMsg.write(out);
-        }
-    }
+
+
 
     @Override
     public String toString() {

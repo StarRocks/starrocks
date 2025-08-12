@@ -38,8 +38,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Map;
 
 public class TableCommitInfo implements Writable {
@@ -58,19 +56,8 @@ public class TableCommitInfo implements Writable {
         idToPartitionCommitInfo = Maps.newHashMap();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(tableId);
-        if (idToPartitionCommitInfo == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            out.writeInt(idToPartitionCommitInfo.size());
-            for (PartitionCommitInfo partitionCommitInfo : idToPartitionCommitInfo.values()) {
-                partitionCommitInfo.write(out);
-            }
-        }
-    }
+
+
 
 
 

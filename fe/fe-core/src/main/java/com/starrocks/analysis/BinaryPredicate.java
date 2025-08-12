@@ -36,15 +36,12 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Objects;
 
 /**
@@ -168,31 +165,8 @@ public class BinaryPredicate extends Predicate implements Writable {
      * the follow persistence code is only for TableFamilyDeleteInfo.
      * Maybe useless
      */
-    @Override
-    public void write(DataOutput out) throws IOException {
-        boolean isWritable = true;
-        Expr left = this.getChild(0);
-        if (!(left instanceof SlotRef)) {
-            isWritable = false;
-        }
 
-        Expr right = this.getChild(1);
-        if (!(right instanceof StringLiteral)) {
-            isWritable = false;
-        }
 
-        if (isWritable) {
-            out.writeInt(1);
-            // write op
-            Text.writeString(out, op.name());
-            // write left
-            Text.writeString(out, ((SlotRef) left).getColumnName());
-            // write right
-            Text.writeString(out, ((StringLiteral) right).getStringValue());
-        } else {
-            out.writeInt(0);
-        }
-    }
 
     public Pair<SlotRef, Expr> createSlotAndLiteralPair() {
         Expr leftExpr = getChild(0);
