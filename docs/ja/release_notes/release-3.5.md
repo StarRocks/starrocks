@@ -17,7 +17,6 @@ StarRocks を v3.5 にアップグレードした後、直接 v3.4.0 ~ v3.4.4 �
 ### 改善点
 
 - Lake Compaction にセグメント書き込み時間統計情報を追加。 [#60891](https://github.com/StarRocks/starrocks/pull/60891)
-- ローカル PassThrough 交換シナリオで bRPC 通信を回避。 [#60538](https://github.com/StarRocks/starrocks/pull/60538)
 - パフォーマンス低下を避けるため、Data Cache 書き込みの Inline モードを無効化。 [#60530](https://github.com/StarRocks/starrocks/pull/60530)
 - Iceberg メタデータスキャンで共有ファイル I/O をサポート。 [#61012](https://github.com/StarRocks/starrocks/pull/61012)
 - すべての PENDING 状態の ANALYZE タスクの終了をサポート。 [#61118](https://github.com/StarRocks/starrocks/pull/61118)
