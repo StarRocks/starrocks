@@ -683,6 +683,7 @@ public class QueryOptimizer extends Optimizer {
             CTEUtils.collectCteOperators(tree, context);
         }
 
+        // Rewrite the jsonpath in META-SCAN
         tree = new JsonPathRewriteRule().rewrite(tree, rootTaskContext);
 
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
