@@ -37,7 +37,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.LakeServiceWithMetrics;
-import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -353,7 +352,7 @@ public class VacuumTest {
 
         new MockUp<BrpcProxy>() {
             @Mock
-            public LakeService getLakeService(String host, int port) throws RpcException {
+            public LakeService getLakeService(String host, int port) {
                 return new LakeServiceWithMetrics(null);
             }
         };
@@ -403,7 +402,7 @@ public class VacuumTest {
         new MockUp<VacuumFullRequest>() {
             @Mock
             public void setRetainVersions(List<Long> retainVersions) {
-                Assertions.assertEquals(retainVersions.size(), 0);
+                Assertions.assertEquals(0, retainVersions.size());
                 return;
             }
 
