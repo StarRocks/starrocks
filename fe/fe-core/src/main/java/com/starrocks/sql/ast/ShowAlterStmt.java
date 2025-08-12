@@ -18,9 +18,9 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;

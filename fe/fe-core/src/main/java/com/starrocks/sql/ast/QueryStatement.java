@@ -19,13 +19,13 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OutFileClause;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.thrift.TExprOpcode;
 
 import java.util.HashMap;

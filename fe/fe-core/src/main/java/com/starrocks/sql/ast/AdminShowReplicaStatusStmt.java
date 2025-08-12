@@ -19,10 +19,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

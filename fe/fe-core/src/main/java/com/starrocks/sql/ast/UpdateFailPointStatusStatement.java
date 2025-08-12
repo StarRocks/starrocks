@@ -15,11 +15,11 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.failpoint.TriggerPolicy;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointTriggerMode;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TUpdateFailPointRequest;
 

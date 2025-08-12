@@ -15,7 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.qe;
+
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.StatementBase;
 
 public class RedirectStatus {
     private final boolean isForwardToLeader;
@@ -46,4 +50,19 @@ public class RedirectStatus {
     public static RedirectStatus FORWARD_NO_SYNC = new RedirectStatus(true, false);
     public static RedirectStatus FORWARD_WITH_SYNC = new RedirectStatus(true, true);
     public static RedirectStatus NO_FORWARD = new RedirectStatus(false, false);
+
+    public static RedirectStatus getRedirectStatus(StatementBase stmt) {
+        return new RedirectStatusVisitor().getRedirectStatus(stmt);
+    }
+
+    public static class RedirectStatusVisitor implements AstVisitor<RedirectStatus, Void> {
+        public RedirectStatus getRedirectStatus(StatementBase stmt) {
+            return stmt.accept(this, null);
+        }
+
+        @Override
+        public RedirectStatus visitShowStatement(ShowStmt statement, Void context) {
+            return RedirectStatus.NO_FORWARD;
+        }
+    }
 }

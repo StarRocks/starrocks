@@ -17,10 +17,10 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.HashMap;

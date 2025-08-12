@@ -16,9 +16,9 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 // SHOW PROC statement. Used to show proc information, only admin can use.

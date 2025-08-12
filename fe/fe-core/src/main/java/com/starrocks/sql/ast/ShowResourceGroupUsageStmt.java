@@ -15,10 +15,10 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.ComputeNode;
 import org.jetbrains.annotations.NotNull;

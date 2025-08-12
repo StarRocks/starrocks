@@ -38,6 +38,7 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.load.loadv2.JobState;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;

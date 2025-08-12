@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast.spm;
 
-import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.QueryRelation;

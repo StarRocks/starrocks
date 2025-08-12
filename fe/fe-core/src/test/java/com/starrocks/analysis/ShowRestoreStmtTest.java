@@ -15,6 +15,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import org.junit.jupiter.api.Test;
 

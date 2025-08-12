@@ -1545,7 +1545,7 @@ public class RedirectStatusTest {
 
     @Test
     public void testDataCacheSelectStatement() {
-        // Since DataCacheSelectStatement has complex constructor requirements and 
+        // Since DataCacheSelectStatement has complex constructor requirements and
         // extends DdlStmt which has default FORWARD_WITH_SYNC, we test this directly
         // without constructing a complex object that would fail due to null checks
         class TestDataCacheSelectStatement extends DataCacheSelectStatement {

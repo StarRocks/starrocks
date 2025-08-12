@@ -14,7 +14,6 @@
 
 package com.starrocks.server;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.meta.BlackListSql;
@@ -23,6 +22,7 @@ import com.starrocks.persist.DeleteSqlBlackLists;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.SqlBlackListPersistInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;

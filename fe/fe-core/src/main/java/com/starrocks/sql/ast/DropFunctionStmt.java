@@ -16,8 +16,8 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropFunctionStmt extends DdlStmt {

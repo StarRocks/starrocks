@@ -20,9 +20,9 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

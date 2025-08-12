@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast.pipe;
 
-import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;

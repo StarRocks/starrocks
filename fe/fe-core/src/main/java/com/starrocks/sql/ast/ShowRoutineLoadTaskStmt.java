@@ -19,10 +19,10 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
 
