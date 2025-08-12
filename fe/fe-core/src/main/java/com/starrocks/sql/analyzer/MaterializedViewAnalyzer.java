@@ -52,6 +52,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
@@ -1540,7 +1541,28 @@ public class MaterializedViewAnalyzer {
 
         @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, ConnectContext context) {
-            stmt.getDbMvName().normalization(context);
+            TableName mvName = stmt.getDbMvName();
+            mvName.normalization(context);
+            Table mvTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, mvName.getCatalog(),
+                    mvName.getDb(), mvName.getTbl());
+            // Check mv dependency
+            if (context.getSessionVariable().isEnableDropTableCheckMvDependency() && mvTable != null) {
+                Set<MvId> relatedMvIds = mvTable.getRelatedMaterializedViews();
+                if (!relatedMvIds.isEmpty()) {
+                    Set<String> relatedMvNames = Sets.newHashSet();
+                    for (MvId mvId : relatedMvIds) {
+                        Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getDb(mvId.getDbId());
+                        Table mvTbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(mvId.getDbId(), mvId.getId());
+                        relatedMvNames.add(mvDb.getOriginName() + "." + mvTbl.getName());
+                    }
+                    throw new SemanticException(mvTable.getName() + " exists mv dependencies: " +
+                            relatedMvNames.toString() + ", drop is not allowed. " +
+                            "See more detailed information in `sys.object_dependencies`, " +
+                            "or `set global enable_drop_table_check_mv_dependency=false`");
+                }
+            }
             return null;
         }
 

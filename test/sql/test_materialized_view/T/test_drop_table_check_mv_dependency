@@ -1,0 +1,29 @@
+-- name: test_drop_table_check_mv_dependency
+
+create database db_drop_table_check_mv_dependency;
+use db_drop_table_check_mv_dependency;
+
+-- mv on table
+create table t1 (c1 int, c2 string);
+create materialized view mv1 refresh async as select * from t1;
+
+-- mv on view
+create view v1 as select * from t1;
+create materialized view mv2 refresh async as select * from v1;
+
+-- mv on mv
+create materialized view mv3 refresh async as select * from mv1;
+
+-- check mv dependency
+set enable_drop_table_check_mv_dependency=true;
+drop table t1;
+drop view v1;
+drop materialized view mv1;
+
+-- not check mv dependency
+set enable_drop_table_check_mv_dependency=false;
+drop table t1;
+drop view v1;
+drop materialized view mv1;
+
+drop database db_drop_table_check_mv_dependency;
