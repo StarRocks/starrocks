@@ -64,11 +64,14 @@ public:
     ordinal_t get_next_rowid() const override { return _json_writer->get_next_rowid(); }
     uint64_t total_mem_footprint() const override { return _json_writer->total_mem_footprint(); }
 
+    bool is_global_dict_valid() override { return _is_global_dict_valid; }
+
 private:
     void _flat_column(Columns& json_datas);
 
 private:
     ColumnMetaPB* _json_meta;
     std::unique_ptr<ScalarColumnWriter> _json_writer;
+    bool _is_global_dict_valid = true;
 };
 } // namespace starrocks

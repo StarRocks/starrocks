@@ -43,6 +43,7 @@
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/index/inverted/inverted_writer.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
@@ -86,7 +87,9 @@ struct ColumnWriterOptions {
 
     // when column data is encoding by dict
     // if global_dict is not nullptr, will checkout whether global_dict can cover all data
-    GlobalDictMap* global_dict = nullptr;
+    const GlobalDictMap* global_dict = nullptr;
+    // map<sub_column_name, dict> for FlatJSON
+    std::unordered_map<std::string, const GlobalDictMap> flat_json_dicts;
 
     bool is_compaction = false;
     bool need_flat = false;
