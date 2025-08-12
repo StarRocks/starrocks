@@ -312,12 +312,8 @@ public class CatalogRecycleBinLakeTableTest {
         Assert.assertFalse(recycleBin.isTableRecoverable(db.getId(), table1.getId()));
 
         recycleBin.replayEraseTable(Lists.newArrayList(table1.getId()));
-<<<<<<< HEAD
         Assert.assertNull(recycleBin.getTable(db.getId(), table1.getId()));
-=======
-        Assertions.assertNull(recycleBin.getTable(db.getId(), table1.getId()));
-        Assertions.assertFalse(containsAsyncDeleteTable(recycleBin, table1.getId()));
->>>>>>> 1fddf21c3b ([BugFix]Fix high memory usage in CatalogRecycleBin (#61582))
+        Assert.assertFalse(containsAsyncDeleteTable(recycleBin, table1.getId()));
     }
 
     @Test
@@ -501,15 +497,10 @@ public class CatalogRecycleBinLakeTableTest {
         recycleBin.erasePartition(System.currentTimeMillis() + delay);
         waitPartitionClearFinished(recycleBin, p1.getId(), System.currentTimeMillis() + delay);
         waitPartitionClearFinished(recycleBin, p2.getId(), System.currentTimeMillis() + delay);
-<<<<<<< HEAD
         Assert.assertNull(recycleBin.getPartition(p1.getId()));
+        Assert.assertFalse(containsAsyncDeletePartition(recycleBin, p1.getId()));
         Assert.assertNull(recycleBin.getPartition(p2.getId()));
-=======
-        Assertions.assertNull(recycleBin.getPartition(p1.getId()));
-        Assertions.assertFalse(containsAsyncDeletePartition(recycleBin, p1.getId()));
-        Assertions.assertNull(recycleBin.getPartition(p2.getId()));
-        Assertions.assertFalse(containsAsyncDeletePartition(recycleBin, p2.getId()));
->>>>>>> 1fddf21c3b ([BugFix]Fix high memory usage in CatalogRecycleBin (#61582))
+        Assert.assertFalse(containsAsyncDeletePartition(recycleBin, p2.getId()));
         checkPartitionTablet(p1, false);
         checkPartitionTablet(p2, false);
 
@@ -550,12 +541,8 @@ public class CatalogRecycleBinLakeTableTest {
         };
         recycleBin.erasePartition(System.currentTimeMillis() + delay);
         waitPartitionClearFinished(recycleBin, p1.getId(), System.currentTimeMillis() + delay);
-<<<<<<< HEAD
         Assert.assertNull(recycleBin.getPartition(p1.getId()));
-=======
-        Assertions.assertNull(recycleBin.getPartition(p1.getId()));
-        Assertions.assertFalse(containsAsyncDeletePartition(recycleBin, p1.getId()));
->>>>>>> 1fddf21c3b ([BugFix]Fix high memory usage in CatalogRecycleBin (#61582))
+        Assert.assertFalse(containsAsyncDeletePartition(recycleBin, p1.getId()));
         checkPartitionTablet(p1, false);
     }
 
