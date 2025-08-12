@@ -438,9 +438,16 @@ public class StatisticUtils {
         List<String> columns = new ArrayList<>();
         for (Column column : table.getBaseSchema()) {
             // disable stats collection for auto generated columns, see SelectAnalyzer#analyzeSelect
-            // generated column doesn't support cross DB use
-            if (column.isGeneratedColumn()) {
+            if (column.isGeneratedColumn() && column.getName()
+                    .startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 continue;
+            }
+            // generated column doesn't support cross DB use
+            if (column.isGeneratedColumn() && column.generatedColumnExprToString() != null) {
+                String expr = column.generatedColumnExprToString().toLowerCase();
+                if (expr.contains("dict_mapping") || expr.contains("dictionary_get")) {
+                    continue;
+                }
             }
             if (!column.isAggregated()) {
                 columns.add(column.getName());
