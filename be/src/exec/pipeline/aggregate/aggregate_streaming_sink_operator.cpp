@@ -25,12 +25,17 @@ namespace starrocks::pipeline {
 
 Status AggregateStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    _aggregator->attach_sink_observer(state, this->_observer);
+    return Status::OK();
+}
+
+Status AggregateStreamingSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_aggregator->prepare(state, _object_pool.get(), _unique_metrics.get()));
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::LIMITED_MEM) {
         _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
     }
     RETURN_IF_ERROR(_aggregator->open(state));
-    _aggregator->attach_sink_observer(state, this->_observer);
     return Status::OK();
 }
 

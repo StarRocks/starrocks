@@ -35,6 +35,7 @@ public:
               _shared_limit_countdown(shared_limit_countdown) {
         _aggregator->set_aggr_phase(AggrPhase2);
         _aggregator->ref();
+        _object_pool = std::make_unique<ObjectPool>();
     }
 
     ~AggregateBlockingSinkOperator() override = default;
@@ -45,6 +46,7 @@ public:
     Status set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -69,6 +71,7 @@ protected:
     bool _agg_group_by_with_limit = false;
 
     std::vector<RuntimeFilter*> _runtime_filters;
+    std::unique_ptr<ObjectPool> _object_pool = nullptr;
 
 private:
     // Whether prev operator has no output

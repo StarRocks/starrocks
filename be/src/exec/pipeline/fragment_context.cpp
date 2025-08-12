@@ -14,7 +14,12 @@
 
 #include "exec/pipeline/fragment_context.h"
 
+#include <atomic>
+#include <chrono>
+#include <future>
 #include <memory>
+#include <mutex>
+#include <thread>
 
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
@@ -22,6 +27,7 @@
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/client_cache.h"
@@ -168,7 +174,19 @@ void FragmentContext::report_exec_state_if_necessary() {
         // Fix the report interval regardless the noise.
         normalized_report_ns = last_report_ns + interval_ns;
     }
-    if (_last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
+
+    bool allPrepared = true;
+    iterate_pipeline([&allPrepared](const Pipeline* pipeline) {
+        if (!allPrepared) return;
+        for (const auto& driver : pipeline->drivers()) {
+            if (!driver->local_prepare_is_done()) {
+                allPrepared = false;
+                break;
+            }
+        }
+    });
+
+    if (allPrepared && _last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
         iterate_pipeline([](const Pipeline* pipeline) {
             for (const auto& driver : pipeline->drivers()) {
                 driver->runtime_report_action();
@@ -427,9 +445,90 @@ Status FragmentContext::iterate_pipeline(const std::function<Status(Pipeline*)>&
 }
 
 Status FragmentContext::prepare_active_drivers() {
-    for (auto& group : _execution_groups) {
-        RETURN_IF_ERROR(group->prepare_drivers(_runtime_state.get()));
+    auto* executor_set = workgroup()->executors();
+    auto* prepare_thread_pool = executor_set->prepare_thread_pool();
+
+    auto* profile = runtime_state()->runtime_profile();
+    auto* prepare_driver_timer =
+            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-global", "prepare-pipeline-driver", 0_ms);
+
+    {
+        SCOPED_TIMER(prepare_driver_timer);
+        for (auto& group : _execution_groups) {
+            RETURN_IF_ERROR(group->prepare_drivers(_runtime_state.get()));
+        }
     }
+
+    if (prepare_thread_pool->num_queued_tasks() > 100000000) {
+        SCOPED_TIMER(prepare_driver_timer);
+        for (auto& group : _execution_groups) {
+            RETURN_IF_ERROR(group->for_each_pipeline([this](Pipeline* pipeline) -> Status {
+                auto* source_op = pipeline->source_operator_factory();
+                if (!source_op->is_adaptive_group_initial_active()) {
+                    return Status::OK();
+                }
+                for (auto& driver : pipeline->drivers()) {
+                    RETURN_IF_ERROR(driver->prepare_operators_local_state(_runtime_state.get()));
+                }
+                return Status::OK();
+            }));
+        }
+        RETURN_IF_ERROR(submit_all_timer());
+        return Status::OK();
+    }
+
+    auto* prepare_driver_local_timer =
+            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-local", "prepare-pipeline-driver", 0_ms);
+    SCOPED_TIMER(prepare_driver_local_timer);
+
+    std::vector<std::future<Status>> futures;
+    futures.reserve(100);
+
+    std::vector<std::pair<ExecutionGroup*, DriverPtr>> all_drivers;
+    all_drivers.reserve(100);
+    for (auto& group : _execution_groups) {
+        group->for_each_pipeline([&](Pipeline* pipeline) {
+            auto* source_op = pipeline->source_operator_factory();
+            if (!source_op->is_adaptive_group_initial_active()) {
+                return;
+            }
+            for (auto& driver : pipeline->drivers()) {
+                all_drivers.emplace_back(group.get(), driver);
+            }
+        });
+    }
+
+    if (all_drivers.empty()) {
+        RETURN_IF_ERROR(submit_all_timer());
+        return Status::OK();
+    }
+
+    for (auto& [group, driver] : all_drivers) {
+        auto task = std::make_shared<std::packaged_task<Status()>>(
+                [driver_ptr = driver, group_ptr = group, runtime_state = _runtime_state.get()]() {
+                    return driver_ptr->prepare_operators_local_state(runtime_state);
+                });
+
+        auto submit_status = prepare_thread_pool->submit_func([task]() { (*task)(); });
+
+        if (!submit_status.ok()) {
+            (*task)();
+        }
+
+        futures.push_back(task->get_future());
+    }
+
+    for (auto& future : futures) {
+        try {
+            auto status = future.get();
+            if (!status.ok()) {
+                return status;
+            }
+        } catch (const std::exception& e) {
+            return Status::InternalError("Exception in prepare task: " + std::string(e.what()));
+        }
+    }
+
     RETURN_IF_ERROR(submit_all_timer());
     return Status::OK();
 }

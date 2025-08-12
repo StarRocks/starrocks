@@ -52,7 +52,12 @@ public:
     // prepare is used to do the initialization work
     // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
+    // do not add heavy task in this method!
     virtual Status prepare(RuntimeState* state);
+
+    // thread-safe operation in prepare can be moved into prepare_local_state
+    // this method will be called in pipeline_driver's first run
+    virtual Status prepare_local_state(RuntimeState* state);
 
     // Notifies the operator that no more input chunk will be added.
     // The operator should finish processing.
@@ -201,6 +206,7 @@ public:
     RuntimeState* runtime_state() const;
 
     void set_prepare_time(int64_t cost_ns);
+    void set_local_prepare_time(int64_t cost_ns);
 
     // INCREMENTAL MV Methods
     //
@@ -313,7 +319,9 @@ protected:
     RuntimeProfile::Counter* _finishing_timer = nullptr;
     RuntimeProfile::Counter* _finished_timer = nullptr;
     RuntimeProfile::Counter* _close_timer = nullptr;
-    RuntimeProfile::Counter* _prepare_timer = nullptr;
+    RuntimeProfile::Counter* _local_prepare_timer = nullptr;
+    RuntimeProfile::Counter* _global_prepare_timer = nullptr;
+    int64_t _global_prepare_time_ns = 0;
 
     RuntimeProfile::Counter* _push_chunk_num_counter = nullptr;
     RuntimeProfile::Counter* _push_row_num_counter = nullptr;

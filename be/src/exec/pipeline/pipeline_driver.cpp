@@ -242,6 +242,21 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
+Status PipelineDriver::prepare_operators_local_state(RuntimeState* runtime_state) {
+    for (auto& op : _operators) {
+        int64_t time_spent = 0;
+        {
+            SCOPED_RAW_TIMER(&time_spent);
+            RETURN_IF_ERROR(op->prepare_local_state(runtime_state));
+        }
+        op->set_local_prepare_time(time_spent);
+    }
+
+    _local_prepare_is_done = true;
+
+    return Status::OK();
+}
+
 void PipelineDriver::update_peak_driver_queue_size_counter(size_t new_value) {
     if (_peak_driver_queue_size_counter != nullptr) {
         _peak_driver_queue_size_counter->set(new_value);
@@ -252,6 +267,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
     QUERY_TRACE_SCOPED("process", _driver_name);
+    DCHECK(_local_prepare_is_done);
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
     size_t total_rows_moved = 0;
@@ -731,6 +747,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 }
 
 void PipelineDriver::_update_driver_level_timer() {
+    DCHECK(_local_prepare_is_done) << to_readable_string();
     // Total Time
     COUNTER_SET(_total_timer, static_cast<int64_t>(_total_timer_sw->elapsed_time()));
 

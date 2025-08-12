@@ -18,6 +18,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/cpu_util.h"
+#include "util/threadpool.h"
 
 namespace starrocks::pipeline {
 class PipelineExecutorMetrics;
@@ -61,6 +62,8 @@ public:
     pipeline::DriverExecutor* driver_executor() const { return _driver_executor.get(); }
     ScanExecutor* scan_executor() const { return _scan_executor.get(); }
     ScanExecutor* connector_scan_executor() const { return _connector_scan_executor.get(); }
+    
+    ThreadPool* prepare_thread_pool() const { return _prepare_thread_pool.get(); }
 
     std::string to_string() const;
 
@@ -82,6 +85,8 @@ private:
     std::unique_ptr<pipeline::DriverExecutor> _driver_executor;
     std::unique_ptr<ScanExecutor> _scan_executor;
     std::unique_ptr<ScanExecutor> _connector_scan_executor;
+
+    std::unique_ptr<ThreadPool> _prepare_thread_pool;
 
     enum class Stage : uint8_t {
         CREATED = 0,
