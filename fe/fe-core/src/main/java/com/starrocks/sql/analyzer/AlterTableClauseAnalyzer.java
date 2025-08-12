@@ -27,6 +27,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -492,6 +493,10 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "Random distribution table already supports automatic scaling and does not require optimization");
         }
+
+        // set the sort keys into OptimizeClause
+        List<String> sortKeys = genOptimizeClauseSortKeys(clause);
+        clause.setSortKeys(sortKeys);
 
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         List<ColumnDef> columnDefs = olapTable.getColumns()
@@ -1407,6 +1412,28 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         }
         return singleRangePartitionDescs;
     }
+
+    /**
+     * @param statement : optimize clause statement
+     * @return : Generate the `sortKeys` of optimize clause based on its `orderByElements`
+     * from optimize clause statement.
+     */
+    private List<String> genOptimizeClauseSortKeys(OptimizeClause statement) {
+        List<OrderByElement> orderByElements = statement.getOrderByElements();
+        if (orderByElements == null) {
+            return null;
+        }
+        List<String> sortKeys = new ArrayList<>();
+        for (OrderByElement orderByElement : orderByElements) {
+            String column = orderByElement.castAsSlotRef();
+            if (column == null) {
+                throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+            }
+            sortKeys.add(column);
+        }
+        return sortKeys;
+    }
+
 
     @Override
     public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {

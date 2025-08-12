@@ -4,6 +4,7 @@ package com.starrocks.epack.failover.job;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
@@ -22,6 +23,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.epack.failover.FailoverGroup;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -102,11 +104,11 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         PartitionDesc partitionDesc = getPartitionDesc(table);
         DistributionDesc distributionDesc = getDistributionDesc(table);
         Map<String, String> properties = getProperties(table);
-        List<String> sortKeysColumnNames = getSortKeysColumnNames(table);
+        List<OrderByElement> orderByElements = getSortKeysColumnNames(table);
 
         CreateTableStmt createTableStmt = new CreateTableStmt(true, false, tableName, columnDefs, indexDefs,
                 engine, "utf8", keysDesc, partitionDesc, distributionDesc, properties, null,
-                table.getComment(), null, sortKeysColumnNames, NodePosition.ZERO);
+                table.getComment(), null, orderByElements, NodePosition.ZERO);
 
         createTableStmt.setColumns(columns);
         createTableStmt.setIndexes(indexes);
@@ -298,15 +300,18 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         return properties;
     }
 
-    private static List<String> getSortKeysColumnNames(OlapTable table) {
-        List<String> sortKeysColumnNames = null;
+    private static List<OrderByElement> getSortKeysColumnNames(OlapTable table) {
+        List<OrderByElement> orderByElements = null;
         MaterializedIndexMeta baseIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
         if (baseIndexMeta.getSortKeyIdxes() != null) {
-            sortKeysColumnNames = Lists.newArrayListWithCapacity(baseIndexMeta.getSortKeyIdxes().size());
+            orderByElements = Lists.newArrayListWithCapacity(baseIndexMeta.getSortKeyIdxes().size());
             for (Integer i : baseIndexMeta.getSortKeyIdxes()) {
-                sortKeysColumnNames.add(table.getBaseSchema().get(i).getName());
+                String columnName = table.getBaseSchema().get(i).getName();
+                OrderByElement orderByElement = new OrderByElement(
+                        ColumnIdExpr.fromSql(columnName).getExpr(), true, true);
+                orderByElements.add(orderByElement);
             }
         }
-        return sortKeysColumnNames;
+        return orderByElements;
     }
 }

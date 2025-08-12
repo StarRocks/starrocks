@@ -528,7 +528,7 @@ keyDesc
     ;
 
 orderByDesc
-    : ORDER BY identifierList
+    : ORDER BY '(' sortItem (',' sortItem)* ')'
     ;
 
 columnNullable

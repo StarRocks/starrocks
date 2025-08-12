@@ -29,6 +29,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -365,6 +366,10 @@ public class MaterializedViewAnalyzer {
             }
             statement.setBaseTableInfos(Lists.newArrayList(baseTableInfos));
 
+            // set the sort keys into createMaterializedViewStatement
+            List<String> sortKeys = genMaterializedViewSortKeys(statement);
+            statement.setSortKeys(sortKeys);
+
             // set the columns into createMaterializedViewStatement
             List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement);
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
@@ -694,6 +699,27 @@ public class MaterializedViewAnalyzer {
                 }
             }
             return indexes;
+        }
+
+        /**
+         * @param statement : creating materialized view statement
+         * @return : Generate materialized view's `sortKeys` based on the `orderByElements`
+         * from creating materialized view statement.
+         */
+        private List<String> genMaterializedViewSortKeys(CreateMaterializedViewStatement statement) {
+            List<OrderByElement> orderByElements = statement.getOrderByElements();
+            if (orderByElements == null) {
+                return null;
+            }
+            List<String> sortKeys = new ArrayList<>();
+            for (OrderByElement orderByElement : orderByElements) {
+                String column = orderByElement.castAsSlotRef();
+                if (column == null) {
+                    throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                }
+                sortKeys.add(column);
+            }
+            return sortKeys;
         }
 
         private void checkExpInColumn(CreateMaterializedViewStatement statement) {

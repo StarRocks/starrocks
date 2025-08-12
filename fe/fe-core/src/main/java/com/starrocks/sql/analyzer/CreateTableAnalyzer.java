@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
@@ -418,12 +419,16 @@ public class CreateTableAnalyzer {
         KeysType keysType = keysDesc.getKeysType();
 
         List<ColumnDef> columnDefs = stmt.getColumnDefs();
-        List<String> sortKeys = stmt.getSortKeys();
+        List<OrderByElement> orderByElements = stmt.getOrderByElements();
         List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
-        if (sortKeys != null) {
+        if (orderByElements != null) {
             // we should check sort key column type if table is primary key table
             if (keysType == KeysType.PRIMARY_KEYS) {
-                for (String column : sortKeys) {
+                for (OrderByElement orderByElement : orderByElements) {
+                    String column = orderByElement.castAsSlotRef();
+                    if (column == null) {
+                        throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                    }
                     int idx = columnNames.indexOf(column);
                     if (idx == -1) {
                         throw new SemanticException("Unknown column '%s' does not exist", column);
@@ -439,7 +444,11 @@ public class CreateTableAnalyzer {
                 // sort key column of duplicate table has no limitation
             } else if (keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) {
                 List<Integer> sortKeyIdxes = Lists.newArrayList();
-                for (String column : sortKeys) {
+                for (OrderByElement orderByElement : orderByElements) {
+                    String column = orderByElement.castAsSlotRef();
+                    if (column == null) {
+                        throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                    }
                     int idx = columnNames.indexOf(column);
                     if (idx == -1) {
                         throw new SemanticException("Unknown column '%s' does not exist", column);

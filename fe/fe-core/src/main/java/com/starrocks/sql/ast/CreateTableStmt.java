@@ -16,6 +16,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
@@ -47,7 +48,7 @@ public class CreateTableStmt extends DdlStmt {
 
     // set in analyze
     private List<Column> columns;
-    private List<String> sortKeys = Lists.newArrayList();
+    private List<OrderByElement> orderByElements;
 
     private List<Index> indexes;
 
@@ -88,7 +89,7 @@ public class CreateTableStmt extends DdlStmt {
                            DistributionDesc distributionDesc,
                            Map<String, String> properties,
                            Map<String, String> extProperties,
-                           String comment, List<AlterClause> rollupAlterClauseList, List<String> sortKeys,
+                           String comment, List<AlterClause> rollupAlterClauseList, List<OrderByElement> orderByElements,
                            NodePosition pos) {
         super(pos);
         this.tableName = tableName;
@@ -111,7 +112,7 @@ public class CreateTableStmt extends DdlStmt {
 
         this.tableSignature = -1;
         this.rollupAlterClauseList = rollupAlterClauseList == null ? new ArrayList<>() : rollupAlterClauseList;
-        this.sortKeys = sortKeys;
+        this.orderByElements = orderByElements;
     }
 
     public void addColumnDef(ColumnDef columnDef) {
@@ -174,8 +175,8 @@ public class CreateTableStmt extends DdlStmt {
         return engineName;
     }
 
-    public List<String> getSortKeys() {
-        return sortKeys;
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
     }
 
     public void setEngineName(String engineName) {
