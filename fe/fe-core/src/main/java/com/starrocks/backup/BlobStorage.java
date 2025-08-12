@@ -43,7 +43,6 @@ import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.NetUtils;
@@ -83,7 +82,6 @@ import org.apache.thrift.transport.TTransportException;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.DataOutput;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -914,17 +912,6 @@ public class BlobStorage implements Writable {
         return Status.OK;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // must write type first
-        Text.writeString(out, brokerName);
 
-        out.writeInt(properties.size() + 1);
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            Text.writeString(out, entry.getValue());
-        }
-        Text.writeString(out, "HasBrokerField");
-        Text.writeString(out, String.valueOf(hasBroker));
-    }
+
 }

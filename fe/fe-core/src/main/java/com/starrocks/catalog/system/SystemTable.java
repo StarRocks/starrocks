@@ -52,8 +52,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.thrift.protocol.TType;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
@@ -133,10 +131,8 @@ public class SystemTable extends Table {
         return name.equals(BeConfigsSystemTable.NAME);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        throw new UnsupportedOperationException("Do not allow to write SchemaTable to image.");
-    }
+
+
 
 
 

@@ -34,12 +34,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
-import com.starrocks.common.io.Text;
-
-import java.io.DataOutput;
-import java.io.IOException;
-
 public abstract class ColumnType {
     private static Boolean[][] schemaChangeMatrix;
 
@@ -161,17 +155,6 @@ public abstract class ColumnType {
             return isSchemaChangeAllowedInvolvingDecimalV3(lhs, rhs);
         }
         return schemaChangeMatrix[lhs.getPrimitiveType().ordinal()][rhs.getPrimitiveType().ordinal()];
-    }
-
-    public static void write(DataOutput out, Type type) throws IOException {
-        Preconditions.checkArgument(type.isScalarType(), "only support scalar type serialization");
-        ScalarType scalarType = (ScalarType) type;
-        Text.writeString(out, scalarType.getPrimitiveType().name());
-        out.writeInt(scalarType.getScalarScale());
-        out.writeInt(scalarType.getScalarPrecision());
-        out.writeInt(scalarType.getLength());
-        // Actually, varcharLimit need not to write here, write true to back compatible
-        out.writeBoolean(true);
     }
 }
 

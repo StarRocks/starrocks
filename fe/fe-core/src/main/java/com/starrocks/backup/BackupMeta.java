@@ -119,7 +119,7 @@ public class BackupMeta implements Writable, GsonPostProcessable {
     public void writeToFile(File metaInfoFile) throws IOException {
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(metaInfoFile));
         try {
-            write(dos);
+            Text.writeString(dos, GsonUtils.GSON.toJson(this));
             dos.flush();
         } finally {
             dos.close();
