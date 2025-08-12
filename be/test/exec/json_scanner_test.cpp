@@ -15,7 +15,11 @@
 #include "exec/json_scanner.h"
 
 #include <gtest/gtest.h>
+#include <zlib.h>
 
+#include <fstream>
+#include <random>
+#include <sstream>
 #include <utility>
 
 #include "column/chunk.h"
@@ -26,9 +30,11 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/stream_load/stream_load_pipe.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/defer_op.h"
+#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -36,7 +42,8 @@ class JsonScannerTest : public ::testing::Test {
 protected:
     std::unique_ptr<JsonScanner> create_json_scanner(const std::vector<TypeDescriptor>& types,
                                                      const std::vector<TBrokerRangeDesc>& ranges,
-                                                     const std::vector<std::string>& col_names) {
+                                                     const std::vector<std::string>& col_names,
+                                                     size_t file_size_limit = 1024 * 1024) {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -61,7 +68,7 @@ protected:
         params->strict_mode = true;
         params->dest_tuple_id = 0;
         params->src_tuple_id = 0;
-        params->json_file_size_limit = 1024 * 1024;
+        params->json_file_size_limit = file_size_limit;
         for (int i = 0; i < types.size(); i++) {
             params->expr_of_dest_slot[i] = TExpr();
             params->expr_of_dest_slot[i].nodes.emplace_back(TExprNode());
@@ -154,6 +161,102 @@ protected:
         ofs << json_data;
         ofs.close();
     }
+
+    // Helper function to create a large JSON array with random data
+    static std::string generate_large_json_array(size_t num_records, size_t target_size_bytes) {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> int_dist(1, 1000000);
+        std::uniform_real_distribution<> double_dist(1.0, 1000000.0);
+
+        std::vector<std::string> words = {"apple", "banana", "cherry",   "date", "elderberry",
+                                          "fig",   "grape",  "honeydew", "kiwi", "lemon"};
+        std::uniform_int_distribution<> word_dist(0, words.size() - 1);
+
+        std::ostringstream json_stream;
+        json_stream << "[";
+
+        size_t current_size = 1; // Start with "["
+
+        for (size_t i = 0; i < num_records && current_size < target_size_bytes; ++i) {
+            if (i > 0) json_stream << ",";
+
+            // Create a record with multiple fields to increase size
+            json_stream << "{";
+            json_stream << R"("id":)" << int_dist(gen) << ",";
+            json_stream << R"("name":")" << words[word_dist(gen)] << "_" << int_dist(gen) << R"(",)";
+            json_stream << R"("value":)" << double_dist(gen) << ",";
+            json_stream << R"("timestamp":)" << int_dist(gen) << ",";
+            json_stream << R"("category":")" << words[word_dist(gen)] << R"(",)";
+            json_stream << R"("score":)" << double_dist(gen) << ",";
+            json_stream << R"("active":)" << (int_dist(gen) % 2 ? "true" : "false") << ",";
+            json_stream << R"("tags":[")" << words[word_dist(gen)] << R"(",")" << words[word_dist(gen)] << R"("])";
+            json_stream << "}";
+
+            current_size = json_stream.str().length();
+        }
+
+        json_stream << "]";
+        return json_stream.str();
+    }
+
+    // Helper function to compress data using gzip
+    static std::string compress_gzip(const std::string& data) {
+        z_stream strm;
+        strm.zalloc = Z_NULL;
+        strm.zfree = Z_NULL;
+        strm.opaque = Z_NULL;
+
+        if (deflateInit2(&strm, Z_NO_COMPRESSION, Z_DEFLATED, 31, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+            return "";
+        }
+
+        strm.avail_in = data.size();
+        strm.next_in = (Bytef*)data.data();
+
+        std::string compressed;
+        char out_buffer[4096];
+
+        do {
+            strm.avail_out = sizeof(out_buffer);
+            strm.next_out = (Bytef*)out_buffer;
+
+            int ret = deflate(&strm, Z_FINISH);
+            if (ret == Z_STREAM_ERROR) {
+                deflateEnd(&strm);
+                return "";
+            }
+
+            compressed.append(out_buffer, sizeof(out_buffer) - strm.avail_out);
+        } while (strm.avail_out == 0);
+
+        deflateEnd(&strm);
+        return compressed;
+    }
+
+    // Helper function to create a temporary large compressed JSON file
+    static std::string create_temp_large_compressed_json(size_t target_size_mb) {
+        size_t target_size_bytes = target_size_mb * 1024 * 1024;
+
+        // Generate large JSON data
+        std::string json_data = generate_large_json_array(1000000, target_size_bytes);
+
+        // Compress the data
+        std::string compressed_data = compress_gzip(json_data);
+
+        // Create temporary file path
+        std::string temp_file = "/tmp/large_test_" + std::to_string(target_size_mb) + "MB.json.gz";
+
+        // Write compressed data to temporary file
+        std::ofstream ofs(temp_file, std::ios::binary);
+        ofs.write(compressed_data.data(), compressed_data.size());
+        ofs.close();
+
+        return temp_file;
+    }
+
+    // Helper function to clean up temporary files
+    static void cleanup_temp_file(const std::string& filepath) { std::remove(filepath.c_str()); }
 
     void SetUp() override {
         config::vector_chunk_size = 4096;
@@ -1614,6 +1717,93 @@ TEST_F(JsonScannerTest, test_gzip_compressed_json_with_suffix_inference) {
     ChunkPtr chunk = scanner->get_next().value();
     EXPECT_EQ(4, chunk->num_columns());
     EXPECT_GT(chunk->num_rows(), 0);
+}
+
+TEST_F(JsonScannerTest, test_large_compressed_json_large) {
+    // Create a temporary large compressed JSON file (>1MB)
+    std::string temp_file = create_temp_large_compressed_json(3); // 3MB target
+    std::vector<std::string> column_names{"id", "name", "value", "timestamp", "category", "score", "active", "tags"};
+
+    // Ensure cleanup happens even if test fails
+    // auto cleanup = [temp_file]() { cleanup_temp_file(temp_file); };
+    // DeferOp defer_cleanup(cleanup);
+
+    // Verify file was created and has reasonable size
+    std::ifstream file_check(temp_file, std::ios::binary | std::ios::ate);
+    ASSERT_TRUE(file_check.is_open());
+    size_t file_size = file_check.tellg();
+    file_check.close();
+
+    // File should be at least 1MB (since we're targeting 3MB)
+    EXPECT_GE(file_size, 1 * 1024 * 1024);
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(100)); // id
+    types.emplace_back(TypeDescriptor::create_varchar_type(100)); // name
+    types.emplace_back(TYPE_DOUBLE);                              // value
+    types.emplace_back(TYPE_BIGINT);                              // timestamp
+    types.emplace_back(TypeDescriptor::create_varchar_type(50));  // category
+    types.emplace_back(TYPE_DOUBLE);                              // score
+    types.emplace_back(TYPE_BOOLEAN);                             // active
+    types.emplace_back(TypeDescriptor::create_json_type());       // tags
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.strip_outer_array = true;
+    range.__isset.strip_outer_array = true;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_compression_type(TCompressionType::GZIP);
+    range.__set_path(temp_file);
+    ranges.emplace_back(range);
+
+    // small size limit
+    {
+        size_t file_size_limit = 1024 * 1024;
+        auto scanner = create_json_scanner(types, ranges, column_names, file_size_limit);
+        Status st = scanner->open();
+        ASSERT_OK(st);
+        DeferOp close_scanner([&]() { scanner->close(); });
+        auto res = scanner->get_next();
+        EXPECT_TRUE(res.status().is_mem_limit_exceeded()) << res.status();
+    }
+
+    size_t file_size_limit = 10 * 1024 * 1024;
+    auto scanner = create_json_scanner(types, ranges, column_names, file_size_limit);
+    Status st = scanner->open();
+    ASSERT_OK(st);
+    DeferOp close_scanner([&]() { scanner->close(); });
+
+    // Test that we can read multiple chunks from the large file
+    int total_rows = 0;
+    int chunk_count = 0;
+    const int max_chunks = 10; // Limit to avoid excessive memory usage in tests
+
+    while (chunk_count < max_chunks) {
+        auto res = scanner->get_next();
+        if (!res.ok()) {
+            EXPECT_TRUE(res.status().is_end_of_file()) << res.status();
+            break; // End of file or error
+        }
+
+        ChunkPtr chunk = std::move(res.value());
+        if (chunk->num_rows() == 0) {
+            break; // End of file
+        }
+
+        total_rows += chunk->num_rows();
+        chunk_count++;
+
+        // Verify chunk structure
+        EXPECT_EQ(8, chunk->num_columns());
+        EXPECT_GT(chunk->num_rows(), 0);
+    }
+
+    // Should have read some data
+    EXPECT_GT(total_rows, 0);
+    EXPECT_GT(chunk_count, 0);
 }
 
 } // namespace starrocks
