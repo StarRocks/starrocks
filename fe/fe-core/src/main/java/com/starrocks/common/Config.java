@@ -2990,7 +2990,7 @@ public class Config extends ConfigBase {
     public static int lake_autovacuum_parallel_partitions = 8;
 
     @ConfField(comment = "how many partitions can fullvacuum execute simultaneously at most")
-    public static int lake_fullvacuum_parallel_partitions = 128;
+    public static int lake_fullvacuum_parallel_partitions = 16;
 
     @ConfField(mutable = true, comment = "the minimum delay between autovacuum runs on any given partition")
     public static long lake_autovacuum_partition_naptime_seconds = 180;
@@ -3013,7 +3013,10 @@ public class Config extends ConfigBase {
     public static boolean lake_autovacuum_detect_vaccumed_version = true;
 
     @ConfField(mutable = true, comment = "the minimum delay between full vacuum runs on any given partition")
-    public static long lake_fullvacuum_partition_naptime_seconds = 3600 * 24;
+    public static long lake_fullvacuum_partition_naptime_seconds = 3600L * 24L;
+
+    @ConfField(mutable = true, comment = "metadata expired time from full vacuum begin running")
+    public static long lake_fullvacuum_meta_expired_seconds = 3600L * 24L * 2L;
 
     @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
