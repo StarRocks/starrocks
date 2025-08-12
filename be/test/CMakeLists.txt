@@ -518,6 +518,12 @@ set(EXEC_FILES
         ./block_cache/block_cache_hit_rate_counter_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         ./util/thrift_client_test.cpp
+<<<<<<< HEAD
+=======
+        ./udf/java/java_native_method_test.cpp
+        ./udf/java/java_data_converter_test.cpp
+        ./udf/java/java_udf_test.cpp
+>>>>>>> 1db0060022 ([BugFix] Fix the bug in JDBC's processing of the TIME type (#61783))
         ./util/table_metrics_mgr_test.cpp
         )
 
