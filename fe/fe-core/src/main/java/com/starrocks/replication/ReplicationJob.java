@@ -67,6 +67,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.TestOnly;
 
 import java.io.IOException;
 import java.util.List;
@@ -370,37 +371,37 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     @SerializedName(value = "jobId")
-    private final String jobId;
+    private String jobId;
 
     @SerializedName(value = "createdTimeMs")
-    private final long createdTimeMs;
+    private long createdTimeMs;
 
     @SerializedName(value = "finishedTimeMs")
     private volatile long finishedTimeMs;
 
     @SerializedName(value = "srcToken")
-    private final String srcToken;
+    private String srcToken;
 
     @SerializedName(value = "databaseId")
-    private final long databaseId;
+    private long databaseId;
 
     @SerializedName(value = "tableId")
-    private final long tableId;
+    private long tableId;
 
     @SerializedName(value = "tableType")
-    private final Table.TableType tableType;
+    private Table.TableType tableType;
 
     @SerializedName(value = "srcTableType")
-    private final Table.TableType srcTableType;
+    private Table.TableType srcTableType;
 
     @SerializedName(value = "replicationDataSize")
-    private final long replicationDataSize;
+    private long replicationDataSize;
 
     @SerializedName(value = "replicationReplicaCount")
-    private final long replicationReplicaCount;
+    private long replicationReplicaCount;
 
     @SerializedName(value = "partitionInfos")
-    private final Map<Long, PartitionInfo> partitionInfos;
+    private Map<Long, PartitionInfo> partitionInfos;
 
     @SerializedName(value = "transactionId")
     private volatile long transactionId;
@@ -495,6 +496,9 @@ public class ReplicationJob implements GsonPostProcessable {
         }
         return transactionState.getReason();
     }
+
+    @TestOnly
+    public ReplicationJob() {}
 
     public ReplicationJob(TTableReplicationRequest request) throws MetaNotFoundException {
         Preconditions.checkState(request.src_table_type == TTableType.OLAP_TABLE);

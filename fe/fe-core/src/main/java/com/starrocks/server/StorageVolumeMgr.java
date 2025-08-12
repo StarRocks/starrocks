@@ -274,12 +274,14 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         }
     }
 
-    public void resetStorageVolumeUniqueId(String name) throws DdlException {
+    public long resetStorageVolumeUniqueId(String name) throws DdlException {
         StorageVolume sv = getStorageVolumeByName(name);
         Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
         StorageVolume copied = new StorageVolume(sv);
+        // reset global unique id
         copied.setUniqueId(GlobalStateMgr.getCurrentState().getNextId());
         updateInternalNoLock(copied);
+        return copied.getUniqueId();
     }
 
     public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) {

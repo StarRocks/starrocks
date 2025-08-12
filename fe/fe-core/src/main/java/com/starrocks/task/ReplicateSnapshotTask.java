@@ -38,7 +38,7 @@ public class ReplicateSnapshotTask extends AgentTask {
     private final byte[] encryptionMeta;
 
     // for lake
-    private final long fakedShardId;
+    private final long virtualTabletId;
     private final long srcDbId;
     private final long srcTableId;
     private final long srcPartitionId;
@@ -62,7 +62,7 @@ public class ReplicateSnapshotTask extends AgentTask {
         this.srcSnapshotInfos = srcSnapshotInfos;
         this.encryptionMeta = encryptionMeta;
 
-        this.fakedShardId = -1;
+        this.virtualTabletId = -1;
         this.srcDbId = -1;
         this.srcTableId = -1;
         this.srcPartitionId = -1;
@@ -74,7 +74,7 @@ public class ReplicateSnapshotTask extends AgentTask {
                                           int schemaHash, long visibleVersion, long dataVersion,
                                           long srcTabletId, TTabletType srcTabletType,
                                           int srcSchemaHash, long srcVisibleVersion,
-                                          byte[] encryptionMeta, long fakedShardId,
+                                          byte[] encryptionMeta, long virtualTabletId,
                                           long srcDbId, long srcTableId, long srcPartitionId) {
         super(null, backendId, TTaskType.REPLICATE_SNAPSHOT, dbId, tableId, partitionId, indexId, tabletId, tabletId,
                 System.currentTimeMillis());
@@ -88,7 +88,7 @@ public class ReplicateSnapshotTask extends AgentTask {
         this.srcSchemaHash = srcSchemaHash;
         this.srcVisibleVersion = srcVisibleVersion;
         this.encryptionMeta = encryptionMeta;
-        this.fakedShardId = fakedShardId;
+        this.virtualTabletId = virtualTabletId;
         this.srcDbId = srcDbId;
         this.srcTableId = srcTableId;
         this.srcPartitionId = srcPartitionId;
@@ -117,7 +117,7 @@ public class ReplicateSnapshotTask extends AgentTask {
         request.setSrc_snapshot_infos(srcSnapshotInfos);
         request.setEncryption_meta(encryptionMeta);
 
-        request.setFaked_shard_id(fakedShardId);
+        request.setVirtual_tablet_id(virtualTabletId);
         request.setSrc_db_id(srcDbId);
         request.setSrc_table_id(srcTableId);
         request.setSrc_partition_id(srcPartitionId);

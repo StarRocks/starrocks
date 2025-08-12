@@ -14,11 +14,13 @@
 
 package com.starrocks.replication;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.annotations.SerializedName;
 import com.staros.client.StarClientException;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.ShardInfo;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.lake.StarOSAgent;
@@ -26,10 +28,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TTableReplicationRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.TestOnly;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -37,28 +41,41 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class LakeReplicationJob extends ReplicationJob {
     private static final Logger LOG = LogManager.getLogger(LakeReplicationJob.class);
-    private final long fakedShardId;
+    private long virtualTabletId;
     static Map<String, Long> storageVolumeNameToShardIdMap = new ConcurrentHashMap<>();
 
     @SerializedName(value = "srcDatabaseId")
-    protected final long srcDatabaseId;
+    protected long srcDatabaseId;
 
     @SerializedName(value = "srcTableId")
-    protected final long srcTableId;
+    protected long srcTableId;
+
+    @TestOnly
+    public LakeReplicationJob() {}
+
+    @TestOnly
+    public LakeReplicationJob(String jobId, long virtualTabletId, long srcDatabaseId, long srcTableId, long databaseId,
+                              OlapTable table, OlapTable srcTable, SystemInfoService srcSystemInfoService) {
+        super(jobId, null, databaseId, table, srcTable, srcSystemInfoService);
+        this.srcDatabaseId = srcDatabaseId;
+        this.srcTableId = srcTableId;
+        this.virtualTabletId = virtualTabletId;
+    }
 
     public LakeReplicationJob(TTableReplicationRequest request) throws MetaNotFoundException {
         super(request);
         this.srcDatabaseId = request.src_database_id;
         this.srcTableId = request.src_table_id;
-        this.fakedShardId = getFakedShardId(request.src_storage_volume_name, request.src_service_id);
+        this.virtualTabletId = getVirtualTabletId(request.src_storage_volume_name, request.src_service_id);
     }
 
-    private synchronized long getFakedShardId(String svName, String srcServiceId) {
+    @VisibleForTesting
+    public synchronized long getVirtualTabletId(String svName, String srcServiceId) {
         return storageVolumeNameToShardIdMap.computeIfAbsent(svName,
-                storageVolumeName -> getOrCreateFakeShard(storageVolumeName, srcServiceId));
+                storageVolumeName -> getOrCreateVirtualTabletId(storageVolumeName, srcServiceId));
     }
 
-    private long getOrCreateFakeShard(String storageVolumeName, String srcServiceId) {
+    public long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId) {
         StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         StorageVolume storageVolume = storageVolumeMgr.getStorageVolumeByName(storageVolumeName);
         if (storageVolume == null) {
@@ -66,32 +83,34 @@ public class LakeReplicationJob extends ReplicationJob {
         }
 
         long vTabletId = storageVolume.getUniqueId();
+        // missing storage volume unique id, reset it
         if (vTabletId == -1) {
             try {
-                storageVolumeMgr.resetStorageVolumeUniqueId(storageVolumeName);
-                vTabletId = storageVolume.getUniqueId();
+                vTabletId = storageVolumeMgr.resetStorageVolumeUniqueId(storageVolumeName);
             } catch (DdlException e) {
-                LOG.error("Failed to reset storage volume unique id for {}", storageVolume);
-                throw new RuntimeException("Failed to reset storage volume unique id for " + storageVolume);
+                LOG.error("Failed to reset storage volume unique id for {}", storageVolumeName);
+                throw new RuntimeException("Failed to reset storage volume unique id for " + storageVolumeName);
             }
         }
 
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         try {
-            ShardInfo shardInfo = starOSAgent.getShardInfo(fakedShardId, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            ShardInfo shardInfo = starOSAgent.getShardInfo(vTabletId, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             if (shardInfo != null) {
-                LOG.info("Shard {} already exists, skip creating it", fakedShardId);
-                return fakedShardId;
+                assert shardInfo.getShardId() == vTabletId;
+                LOG.info("Shard {} already exists, skip creating it", vTabletId);
+                return vTabletId;
             }
         } catch (StarClientException e) {
             // skip as shard not found
         }
+
         try {
             FilePathInfo pathInfo = starOSAgent.allocateFilePath(storageVolume.getId(), srcServiceId);
             FileCacheInfo cacheInfo =
                     FileCacheInfo.newBuilder().setEnableCache(false).setTtlSeconds(-1).setAsyncWriteBack(false).build();
             // assume each shard group has only one shard
-            long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().createShardGroupForVirtualTablet();
+            long shardGroupId = starOSAgent.createShardGroupForVirtualTablet();
             Map<String, String> properties = new HashMap<>();
             starOSAgent.createShardWithVirtualTabletId(pathInfo, cacheInfo, shardGroupId, properties, vTabletId,
                     WarehouseManager.DEFAULT_RESOURCE);
@@ -100,7 +119,8 @@ public class LakeReplicationJob extends ReplicationJob {
             return vTabletId;
         } catch (Exception e) {
             LOG.error("Failed to create shard for storage volume {} ", storageVolumeName, e);
-            throw new RuntimeException("Failed to create shard for storage volume: " + storageVolumeName, e);
+            throw new RuntimeException("Failed to create shard for storage volume: " + storageVolumeName + ", " +
+                    "error: " + e.getMessage(), e);
         }
     }
 
@@ -133,11 +153,12 @@ public class LakeReplicationJob extends ReplicationJob {
 
     private void sendReplicateLakeRemoteStorageTasks() throws Exception {
         runningTasks.clear();
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         byte[] encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
         for (PartitionInfo partitionInfo : super.getPartitionInfos().values()) {
             for (IndexInfo indexInfo : partitionInfo.getIndexInfos().values()) {
                 for (TabletInfo tabletInfo : indexInfo.getTabletInfos().values()) {
-                    Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    Long computeNodeId = warehouseMgr
                             .getComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tabletInfo.getTabletId());
                     if (computeNodeId == null) {
                         throw new RuntimeException("Send lake replicate task failed, no compute node found for tablet: "
@@ -150,7 +171,7 @@ public class LakeReplicationJob extends ReplicationJob {
                             partitionInfo.getDataVersion(), tabletInfo.getSrcTabletId(),
                             getTabletType(super.getSrcTableType()),
                             indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(), encryptionMeta,
-                            fakedShardId, srcDatabaseId, srcTableId, partitionInfo.getSrcPartitionId());
+                            virtualTabletId, srcDatabaseId, srcTableId, partitionInfo.getSrcPartitionId());
                     LOG.info("Add lake replicate snapshot task, tablet id: {}, txn id: {}, src partition info: {}/{}/{}",
                             tabletInfo.getTabletId(), super.getTransactionId(), srcDatabaseId, srcTableId,
                             partitionInfo.getSrcPartitionId());
