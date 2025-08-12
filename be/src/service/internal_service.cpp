@@ -343,7 +343,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        if (Status status = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get());
+        if (Status status = deserialize_thrift_msg(buf, &len, request->attachment_protocol(), t_batch_requests.get());
             !status.ok()) {
             status.to_protobuf(response->mutable_status());
             return;
@@ -352,13 +352,71 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
 
     auto& common_request = t_batch_requests->common_param;
     auto& unique_requests = t_batch_requests->unique_param_per_instance;
+    std::string instances_id;
+    for (const auto& unique_request : unique_requests) {
+        instances_id.append(print_id(unique_request.params.fragment_instance_id) + " ");
+    }
+    VLOG(1) << "exec plan batch plan_fragments:, query id=" << print_id(common_request.params.query_id)
+            << ", instance id:" << instances_id;
 
     if (unique_requests.empty()) {
         Status::OK().to_protobuf(response->mutable_status());
         return;
     }
 
-    Status status = _exec_plan_fragment_by_pipeline(common_request, unique_requests[0]);
+    SignalTimerGuard guard(config::pipeline_prepare_timeout_guard_ms);
+
+    // prepare query context and desc table first
+    pipeline::FragmentExecutor fragment_executor;
+    Status status = fragment_executor.prepare_global_state(_exec_env, common_request);
+    if (!status.ok()) {
+        status.to_protobuf(response->mutable_status());
+        return;
+    }
+
+    // Each fragment instance preparation moves the plan out of the request.
+    // Create a private copy of the common request per instance to avoid races.
+    std::vector<TExecPlanFragmentParams> common_requests;
+    common_requests.reserve(unique_requests.size());
+    for (int i = 0; i < unique_requests.size(); ++i) {
+        common_requests.emplace_back(common_request);
+    }
+
+    // prepare fragment instance in parallel
+    std::vector<PromiseStatusSharedPtr> promise_statuses;
+    std::vector<pipeline::FragmentExecutor> fragment_executors(unique_requests.size());
+    for (int i = 0; i < unique_requests.size(); ++i) {
+        PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
+        _exec_env->pipeline_prepare_pool()->offer(
+                [ms, i, &fragment_executors, &unique_requests, &common_requests, this] {
+                    auto& req = unique_requests[i];
+                    auto& local_common_request = common_requests[i];
+                    ms->set_value(fragment_executors[i].prepare(_exec_env, local_common_request, req));
+                });
+        promise_statuses.emplace_back(std::move(ms));
+    }
+
+    for (size_t i = 0; i < unique_requests.size(); ++i) {
+        auto& promise = promise_statuses[i];
+        // When a preparation fails, return error immediately. The other unfinished preparation is safe,
+        // since they can use the shared pointer of promise and t_batch_requests.
+        status = promise->get_future().get();
+        if (status.ok()) {
+            status = fragment_executors[i].execute(_exec_env);
+        } else if (status.is_duplicate_rpc_invocation()) {
+            status = Status::OK();
+        }
+        if (!status.ok()) {
+            break;
+        }
+    }
+
+    // prepare_global_state is success when reach here, so we must count down once
+    pipeline::QueryContext* query_context = _exec_env->query_context_mgr()->get(common_request.params.query_id).get();
+    if (query_context != nullptr) {
+        query_context->count_down_fragments();
+    }
+
     status.to_protobuf(response->mutable_status());
 }
 

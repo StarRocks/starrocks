@@ -81,6 +81,7 @@ import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.dag.PhasedExecutionSchedule;
+import com.starrocks.qe.scheduler.dag.SingleNodeSchedule;
 import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
@@ -521,6 +522,10 @@ public class DefaultCoordinator extends Coordinator {
         prepareResultSink();
 
         prepareProfile();
+
+        // if all the instance are in the same worker, we can send them all in once
+        // but only after prepareExec() we can know the worker number
+        maybeChangeScheduler();
     }
 
     @Override
@@ -685,6 +690,23 @@ public class DefaultCoordinator extends Coordinator {
         } finally {
             unlock();
         }
+    }
+
+    private void maybeChangeScheduler() {
+        if (executionDAG.getWorkerNum() == 1 && jobSpec.supportSingleNodeParallelSchedule() &&
+                scheduler instanceof AllAtOnceExecutionSchedule && !isLoadType() && !hasOlapTableSink()) {
+            scheduler = new SingleNodeSchedule();
+        }
+    }
+
+    /**
+     * Check if any fragment contains OlapTableSink
+     * OlapTableSink requires BE availability check during query planning phase,
+     * which may cause timing issues with SingleNodeSchedule's batch deployment
+     */
+    private boolean hasOlapTableSink() {
+        return executionDAG.getFragmentsInPostorder().stream()
+                .anyMatch(fragment -> fragment.getPlanFragment().getSink() instanceof com.starrocks.planner.OlapTableSink);
     }
 
     @Override

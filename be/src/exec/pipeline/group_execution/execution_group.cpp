@@ -17,6 +17,8 @@
 #include "common/logging.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "runtime/current_thread.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {
 // clang-format off
@@ -59,6 +61,80 @@ auto for_each_active_driver(PipelineRawPtrs& pipelines, Callable call) {
     if constexpr (std::is_same_v<ReturnType, Status>) {
         return Status::OK();
     }
+}
+
+size_t ExecutionGroup::total_active_driver_size() {
+    size_t total = 0;
+    for_each_active_driver(_pipelines, [&total](const DriverPtr& driver) { total += 1; });
+    return total;
+}
+
+void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
+                                                     std::shared_ptr<std::atomic<int>> pending_tasks,
+                                                     std::shared_ptr<std::mutex> completion_mutex,
+                                                     std::shared_ptr<std::condition_variable> completion_cv,
+                                                     std::shared_ptr<std::atomic<Status*>> first_error) {
+    auto pipeline_prepare_pool = state->exec_env()->pipeline_prepare_pool();
+
+    for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
+        bool submitted = pipeline_prepare_pool->try_offer(
+                [pending_tasks, completion_mutex, completion_cv, first_error, &driver, runtime_state = state]() {
+                    // make sure mem tracker is instance level
+                    auto mem_tracker = runtime_state->instance_mem_tracker();
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+                    // do the thread-safe prepare operation
+                    Status status = driver->prepare_local_state(runtime_state);
+
+                    if (!status.ok()) {
+                        auto* error_ptr = new Status(std::move(status));
+                        Status* expected = nullptr;
+                        // Only store the first error
+                        (void)first_error->compare_exchange_strong(expected, error_ptr);
+                        if (expected != nullptr) {
+                            // If CAS failed, another thread already set the error, delete our copy
+                            delete error_ptr;
+                        }
+                    }
+
+                    if (pending_tasks->fetch_sub(1) == 1) {
+                        std::lock_guard<std::mutex> lock(*completion_mutex);
+                        completion_cv->notify_one();
+                    }
+                });
+
+        if (!submitted) {
+            Status status = driver->prepare_local_state(state);
+            if (!status.ok()) {
+                auto* error_ptr = new Status(std::move(status));
+                Status* expected = nullptr;
+                // Only store the first error
+                (void)first_error->compare_exchange_strong(expected, error_ptr);
+                if (expected != nullptr) {
+                    // If CAS failed, another thread already set the error, delete our copy
+                    delete error_ptr;
+                }
+            }
+
+            if (pending_tasks->fetch_sub(1) == 1) {
+                std::lock_guard<std::mutex> lock(*completion_mutex);
+                completion_cv->notify_one();
+            }
+        }
+    });
+}
+
+Status ExecutionGroup::prepare_active_drivers_sequentially(RuntimeState* state) {
+    return for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
+        RETURN_IF_ERROR(driver->prepare_local_state(state));
+        return Status::OK();
+    });
+}
+
+Status ExecutionGroup::post_local_prepare(RuntimeState* state) {
+    return for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
+        RETURN_IF_ERROR(driver->post_local_prepare(state));
+        return Status::OK();
+    });
 }
 
 Status NormalExecutionGroup::prepare_drivers(RuntimeState* state) {

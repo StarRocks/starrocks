@@ -78,6 +78,17 @@ public:
 
     size_t total_logical_dop() const { return _total_logical_dop; }
 
+    size_t total_active_driver_size();
+
+    void prepare_active_drivers_parallel(RuntimeState* state, std::shared_ptr<std::atomic<int>> pending_tasks,
+                                         std::shared_ptr<std::mutex> completion_mutex,
+                                         std::shared_ptr<std::condition_variable> completion_cv,
+                                         std::shared_ptr<std::atomic<Status*>> first_error);
+
+    Status prepare_active_drivers_sequentially(RuntimeState* state);
+
+    Status post_local_prepare(RuntimeState* state);
+
     ExecutionGroupType type() const { return _type; }
     bool is_colocate_exec_group() const { return type() == ExecutionGroupType::COLOCATE; }
 

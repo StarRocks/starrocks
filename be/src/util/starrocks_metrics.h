@@ -371,6 +371,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
     METRICS_DEFINE_THREAD_POOL(exec_state_report);
     METRICS_DEFINE_THREAD_POOL(priority_exec_state_report);
+    METRICS_DEFINE_THREAD_POOL(pip_prepare);
 
     METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
 

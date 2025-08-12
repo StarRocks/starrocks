@@ -155,6 +155,16 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
+        // Disable SingleNodeSchedule to avoid BE availability check timing issues in test environment
+        // SingleNodeSchedule uses batch deployment which may cause race conditions with OlapTableSink's
+        // BE availability checks during query planning phase
+        connectContext.getSessionVariable().setEnableSingleNodeSchedule(false);
+
+        // Also disable SingleNodeSchedule in the global default session variable
+        // This ensures that any new ConnectContext created (e.g., by TaskRun) will inherit this setting
+        GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable()
+                .setEnableSingleNodeSchedule(false);
     }
 
     @AfterAll

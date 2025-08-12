@@ -65,6 +65,8 @@ public:
     Status set_finished(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
+
     void close(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -127,6 +129,8 @@ public:
     void close(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
+
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     bool spillable() const override { return true; }

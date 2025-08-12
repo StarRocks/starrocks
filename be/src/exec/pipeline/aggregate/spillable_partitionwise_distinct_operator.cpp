@@ -103,6 +103,12 @@ Status SpillablePartitionWiseDistinctSinkOperator::prepare(RuntimeState* state) 
     return Status::OK();
 }
 
+Status SpillablePartitionWiseDistinctSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_distinct_op->prepare_local_state(state));
+    return Status::OK();
+}
+
 Status SpillablePartitionWiseDistinctSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     if (chunk == nullptr || chunk->is_empty()) {
         return Status::OK();
@@ -217,6 +223,14 @@ Status SpillablePartitionWiseDistinctSourceOperator::prepare(RuntimeState* state
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     RETURN_IF_ERROR(_non_pw_distinct->prepare(state));
     RETURN_IF_ERROR(_pw_distinct->prepare(state));
+    return Status::OK();
+}
+
+Status SpillablePartitionWiseDistinctSourceOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_non_pw_distinct->prepare_local_state(state));
+    RETURN_IF_ERROR(_pw_distinct->prepare_local_state(state));
+
     return Status::OK();
 }
 

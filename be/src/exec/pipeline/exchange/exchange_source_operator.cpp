@@ -25,9 +25,23 @@ namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     _stream_recvr = static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state);
-    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
-    _stream_recvr->attach_observer(state, observer());
+    // DO NOT attach observer here - must wait until profile is bound in prepare_local_state()
+    // to avoid NULL pointer dereference when network data arrives before bind_profile() completes
     _stream_recvr->attach_query_ctx(state->query_ctx());
+    return Status::OK();
+}
+
+Status ExchangeSourceOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare_local_state(state));
+    // IMPORTANT: bind_profile() MUST be called before observers are attached
+    // to ensure all profile counters are initialized before network data arrives
+    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
+    return Status::OK();
+}
+
+Status ExchangeSourceOperator::post_local_prepare(RuntimeState* state) {
+    _stream_recvr->attach_observer(state, observer());
+
     return Status::OK();
 }
 

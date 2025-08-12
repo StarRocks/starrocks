@@ -291,6 +291,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
 
     public static final String ENABLE_QUERY_TABLET_AFFINITY = "enable_query_tablet_affinity";
+    public static final String ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION = "enable_gather_fragment_locality_optimization";
 
     public static final String SKIP_LOCAL_DISK_CACHE = "skip_local_disk_cache";
 
@@ -652,6 +653,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PHASED_SCHEDULER = "enable_phased_scheduler";
     public static final String PHASED_SCHEDULER_MAX_CONCURRENCY = "phased_scheduler_max_concurrency";
+    public static final String ENABLE_SINGLE_NODE_SCHEDULE = "enable_single_node_schedule";
 
     public static final String CUSTOM_QUERY_ID = "custom_query_id";
 
@@ -1065,6 +1067,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VariableMgr.VarAttr(name = ENABLE_QUERY_TABLET_AFFINITY)
     private boolean enableQueryTabletAffinity = false;
+
+    /**
+     * used for test
+     * Determines whether to enable gather fragment locality optimization. When enabled, 
+     * gather fragments will be assigned to the same node as other fragments if all 
+     * other fragments' instances are on the same node.
+     */
+    @VariableMgr.VarAttr(name = ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION)
+    private boolean enableGatherFragmentLocalityOptimization = false;
 
     @VariableMgr.VarAttr(name = SKIP_LOCAL_DISK_CACHE)
     private boolean skipLocalDiskCache = false;
@@ -2910,6 +2921,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PHASED_SCHEDULER)
     private boolean enablePhasedScheduler = false;
 
+    @VarAttr(name = ENABLE_SINGLE_NODE_SCHEDULE)
+    private boolean enableSingleNodeSchedule = true;
+
     @VarAttr(name = ENABLE_PIPELINE_EVENT_SCHEDULER)
     private boolean enablePipelineEventScheduler = true;
 
@@ -2936,6 +2950,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePhasedScheduler(boolean enablePhasedScheduler) {
         this.enablePhasedScheduler = enablePhasedScheduler;
+    }
+
+    public boolean enableSingleNodeSchedule() {
+        return enableSingleNodeSchedule;
+    }
+
+    public void setEnableSingleNodeSchedule(boolean enableSingleNodeSchedule) {
+        this.enableSingleNodeSchedule = enableSingleNodeSchedule;
     }
 
     public void setFollowerQueryForwardMode(String mode) {
@@ -3149,6 +3171,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableQueryTabletAffinity() {
         return enableQueryTabletAffinity;
+    }
+
+    public boolean isEnableGatherFragmentLocalityOptimization() {
+        return enableGatherFragmentLocalityOptimization;
     }
 
     public boolean isSkipLocalDiskCache() {

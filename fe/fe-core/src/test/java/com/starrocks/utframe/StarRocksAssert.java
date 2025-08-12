@@ -993,7 +993,10 @@ public class StarRocksAssert {
             taskRunProperties.put(TaskRun.FORCE, "true");
 
             Task task = TaskBuilder.rebuildMvTask(mv, mvName.getDb(), taskRunProperties, null);
-            TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task)
+                    .setConnectContext(ctx)
+                    .properties(taskRunProperties)
+                    .build();
             taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
             taskRun.executeTaskRun();
             waitTaskRunFinish(taskRun);

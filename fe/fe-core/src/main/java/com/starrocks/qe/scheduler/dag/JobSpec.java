@@ -548,6 +548,11 @@ public class JobSpec {
         return !notNeed;
     }
 
+    public boolean supportSingleNodeParallelSchedule() {
+        return connectContext.getSessionVariable().enableSingleNodeSchedule() &&
+                !scanNodes.stream().anyMatch(scanNode -> scanNode.isConnectorScanNode());
+    }
+
     public static class Builder {
         private final JobSpec instance = new JobSpec();
 

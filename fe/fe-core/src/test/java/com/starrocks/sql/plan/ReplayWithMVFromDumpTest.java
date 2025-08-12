@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
@@ -39,6 +40,12 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
         FeConstants.isReplayFromQueryDump = true;
         MVTestBase.disableMVRewriteConsiderDataLayout();
+
+        // Disable SingleNodeSchedule to avoid BE availability check timing issues in test environment
+        // SingleNodeSchedule uses batch deployment which may cause race conditions affecting MV selection
+        connectContext.getSessionVariable().setEnableSingleNodeSchedule(false);
+        GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable()
+                .setEnableSingleNodeSchedule(false);
     }
 
     @Test

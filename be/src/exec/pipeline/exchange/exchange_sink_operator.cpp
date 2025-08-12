@@ -396,6 +396,13 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
     _buffer->incr_sinker(state);
+    // DO NOT attach observer here - must wait until all metrics are initialized in prepare_local_state()
+    // to avoid NULL pointer dereference when data processing begins before metrics initialization completes
+    return Status::OK();
+}
+
+Status ExchangeSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
 
     _be_number = state->be_number();
     if (state->query_options().__isset.transmission_encode_level) {
@@ -467,6 +474,11 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
 
     _shuffle_channel_ids.resize(state->chunk_size());
     _row_indexes.resize(state->chunk_size());
+
+    return Status::OK();
+}
+
+Status ExchangeSinkOperator::post_local_prepare(RuntimeState* state) {
     _buffer->attach_observer(state, observer());
     return Status::OK();
 }

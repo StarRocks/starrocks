@@ -105,14 +105,18 @@ void GlobalDriverExecutor::_worker_thread() {
         if (driver == nullptr) {
             continue;
         }
+
+        auto* fragment_ctx = driver->fragment_ctx();
+        auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();
+        auto* runtime_state = runtime_state_ptr.get();
+        auto* query_ctx = driver->query_ctx();
+
         DCHECK(!driver->is_in_ready());
         DCHECK(!driver->is_in_blocked());
 
         if (current_thread != nullptr) {
             current_thread->set_idle(false);
         }
-        auto* query_ctx = driver->query_ctx();
-        auto* fragment_ctx = driver->fragment_ctx();
 
         driver->increment_schedule_times();
         _metrics->driver_schedule_count.increment(1);
@@ -123,8 +127,6 @@ void GlobalDriverExecutor::_worker_thread() {
 
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
         //  This writing method is a bit tricky, and when there is a better way, replace it
-        auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();
-        auto* runtime_state = runtime_state_ptr.get();
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)

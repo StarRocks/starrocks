@@ -44,6 +44,7 @@ import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
+import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchArrowSchemaRequest;
 import com.starrocks.proto.PFetchArrowSchemaResult;
@@ -83,13 +84,15 @@ public class BackendServiceClient {
         return BackendServiceClient.SingletonHolder.INSTANCE;
     }
 
-    private Future<PExecPlanFragmentResult> sendPlanFragmentAsync(TNetworkAddress address, PExecPlanFragmentRequest pRequest)
-            throws RpcException {
-        Tracers.count(Tracers.Module.SCHEDULER, "DeployDataSize", pRequest.serializedRequest.length);
+    private <R> Future<R> sendRequestAsync(
+            TNetworkAddress address,
+            java.util.function.Function<PBackendService, Future<R>> serviceCall,
+            int dataSize) throws RpcException {
+        Tracers.count(Tracers.Module.SCHEDULER, "DeployDataSize", dataSize);
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployAsyncSendTime")) {
             final PBackendService service = BrpcProxy.getBackendService(address);
             TalkTimeoutController.setTalkTimeout(Config.brpc_send_plan_fragment_timeout_ms);
-            return service.execPlanFragmentAsync(pRequest);
+            return serviceCall.apply(service);
         } catch (NoSuchElementException e) {
             try {
                 // retry
@@ -99,7 +102,7 @@ public class BackendServiceClient {
                     // do nothing
                 }
                 final PBackendService service = BrpcProxy.getBackendService(address);
-                return service.execPlanFragmentAsync(pRequest);
+                return serviceCall.apply(service);
             } catch (NoSuchElementException noSuchElementException) {
                 LOG.warn("Execute plan fragment retry failed, address={}:{}",
                         address.getHostname(), address.getPort(), noSuchElementException);
@@ -112,13 +115,37 @@ public class BackendServiceClient {
         }
     }
 
+    private Future<PExecPlanFragmentResult> sendPlanFragmentAsync(TNetworkAddress address,
+                                                                  PExecPlanFragmentRequest pRequest)
+            throws RpcException {
+        return sendRequestAsync(address,
+                service -> service.execPlanFragmentAsync(pRequest),
+                pRequest.serializedRequest.length);
+    }
+
     public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
             TNetworkAddress address, byte[] request, String protocol)
-            throws TException, RpcException {
+            throws  RpcException {
         final PExecPlanFragmentRequest pRequest = new PExecPlanFragmentRequest();
         pRequest.setAttachmentProtocol(protocol);
         pRequest.setRequest(request);
         return sendPlanFragmentAsync(address, pRequest);
+    }
+
+    private Future<PExecBatchPlanFragmentsResult> sendBatchPlanFragmentsAsync(
+            TNetworkAddress address, PExecBatchPlanFragmentsRequest pRequest) throws RpcException {
+        return sendRequestAsync(address,
+                service -> service.execBatchPlanFragmentsAsync(pRequest),
+                pRequest.serializedRequest.length);
+    }
+
+    public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
+            TNetworkAddress address, byte[] serializedRequest, String protocol)
+            throws RpcException {
+        final PExecBatchPlanFragmentsRequest pRequest = new PExecBatchPlanFragmentsRequest();
+        pRequest.setRequest(serializedRequest);
+        pRequest.setAttachmentProtocol(protocol);
+        return sendBatchPlanFragmentsAsync(address, pRequest);
     }
 
     public Future<PExecPlanFragmentResult> execPlanFragmentAsync(

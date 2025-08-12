@@ -59,6 +59,10 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
+    Status prepare_local_state(RuntimeState* state) override;
+
+    Status post_local_prepare(RuntimeState* state) override;
+
     void close(RuntimeState* state) override;
 
     bool has_output() const override { return false; }

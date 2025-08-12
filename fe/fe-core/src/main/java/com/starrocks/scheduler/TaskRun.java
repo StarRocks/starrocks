@@ -291,6 +291,12 @@ public class TaskRun implements Comparable<TaskRun> {
         context.setQueryId(UUID.fromString(status.getQueryId()));
         context.setIsLastStmt(true);
         context.resetSessionVariable();
+        // Preserve critical session variables from parent context if available
+        // This ensures that settings like enableSingleNodeSchedule are inherited
+        if (parentRunCtx != null && parentRunCtx.getSessionVariable() != null) {
+            context.getSessionVariable().setEnableSingleNodeSchedule(
+                    parentRunCtx.getSessionVariable().enableSingleNodeSchedule());
+        }
         switchUser(context);
 
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
