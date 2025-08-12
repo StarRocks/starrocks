@@ -20,7 +20,6 @@ import com.starrocks.analysis.InvertedIndexUtil;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.VectorIndexUtil;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;

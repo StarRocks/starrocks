@@ -34,6 +34,8 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.sql.ast.PartitionType;
+
 import java.io.DataOutput;
 import java.io.IOException;
 

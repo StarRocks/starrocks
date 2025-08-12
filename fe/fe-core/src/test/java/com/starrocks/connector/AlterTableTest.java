@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -22,6 +21,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterOpType;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateOrReplaceBranchClause;
 import com.starrocks.sql.ast.CreateOrReplaceTagClause;

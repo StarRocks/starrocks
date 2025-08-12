@@ -16,6 +16,7 @@
 package com.starrocks.ha;
 
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.FrontendNodeType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;

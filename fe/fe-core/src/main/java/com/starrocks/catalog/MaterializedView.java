@@ -76,6 +76,7 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PRangeCell;
