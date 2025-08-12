@@ -41,6 +41,7 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 
 import java.util.List;
@@ -217,5 +218,10 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
             return hasSecretInProperties(tableProperties);
         }
         return false;
+    }
+
+    @Override
+    public Boolean visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement, Void context) {
+        return true;
     }
 }

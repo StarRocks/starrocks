@@ -18,9 +18,7 @@ create security integration oidc properties("type"="authentication_jwt", "jwks_u
 show create security integration oidc;
 -- result:
 oidc	CREATE SECURITY INTEGRATION `oidc` PROPERTIES (
-"type" = "authentication_jwt",
-"principal_field" = "sub",
-"jwks_url" = "jwks.json"
+"type" = "authentication_jwt", "principal_field" = "sub", "jwks_url" = "jwks.json"
 )
 -- !result
 alter security integration oidc set ("principal_field"="preferred_name");
@@ -29,9 +27,7 @@ alter security integration oidc set ("principal_field"="preferred_name");
 show create security integration oidc;
 -- result:
 oidc	CREATE SECURITY INTEGRATION `oidc` PROPERTIES (
-"type" = "authentication_jwt",
-"principal_field" = "preferred_name",
-"jwks_url" = "jwks.json"
+"type" = "authentication_jwt", "principal_field" = "preferred_name", "jwks_url" = "jwks.json"
 )
 -- !result
 execute as u1 with no revert;
