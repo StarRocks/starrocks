@@ -96,6 +96,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.catalog.combinator.AggStateUtils;
@@ -6202,6 +6203,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             relation.setAlias(new TableName(null, identifier.getValue()));
         }
         relation.setColumnOutputNames(getColumnNames(context.columnAliases()));
+
+        if (functionName.toString().equalsIgnoreCase(TableFunction.RESULT_SCAN_FUNCTION)) {
+            return relation;
+        }
 
         return new NormalizedTableFunctionRelation(relation);
     }
