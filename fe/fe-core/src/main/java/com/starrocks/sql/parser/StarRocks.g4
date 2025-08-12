@@ -1355,7 +1355,11 @@ dropTagClause
     ;
 
 tableOperationClause
-    : EXECUTE functionCall
+    : EXECUTE tableOperationArg
+    ;
+
+tableOperationArg
+    : functionCall (WHERE expression)?
     ;
 
 tagOptions

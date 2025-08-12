@@ -600,6 +600,7 @@ struct TSinkCommitInfo {
 
     100: optional bool is_overwrite;
     101: optional string staging_dir
+    102: optional bool is_rewrite;
 }
 
 struct TSnapshotInfo {
