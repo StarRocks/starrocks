@@ -79,9 +79,11 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
+import com.starrocks.journal.JournalTask;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDeleteReplicaInfo;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -924,9 +926,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
             LOG.info("before sync tablets in db[{}]. report num: {}. backend[{}]",
                     dbId, allTabletIds.size(), backendId);
+            List<JournalTask> journalTasks = Lists.newArrayList();
             while (offset < allTabletIds.size()) {
                 int syncCounter = 0;
                 int logSyncCounter = 0;
+                journalTasks.clear();
                 List<Long> tabletIds = allTabletIds.subList(offset, allTabletIds.size());
                 Locker locker = new Locker();
                 locker.lockDatabase(db.getId(), LockType.WRITE);
@@ -1034,7 +1038,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             replica.getLastFailedVersion(),
                                             replica.getLastSuccessVersion(),
                                             replica.getMinReadableVersion());
-                                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
+                                    journalTasks.add(GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplicaNoWait(info));
                                     ++logSyncCounter;
                                 }
 
@@ -1056,6 +1060,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 } finally {
                     locker.unLockDatabase(db.getId(), LockType.WRITE);
                 }
+
+                // wait update replica journal task finish
+                for (JournalTask task : journalTasks) {
+                    EditLog.waitInfinity(task);
+                }
+
                 LOG.info("sync {} update {} in {} tablets in db[{}]. backend[{}]", syncCounter, logSyncCounter,
                         offset, dbId, backendId);
             }

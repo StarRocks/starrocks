@@ -63,6 +63,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.journal.JournalTask;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -1040,6 +1042,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db does not exist");
         }
+
+        String finishInfo = "";
+        JournalTask journalTask = null;
         Locker locker = new Locker();
         try {
             locker.lockDatabase(db.getId(), LockType.WRITE);
@@ -1077,15 +1082,16 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 throw new SchedException(Status.UNRECOVERABLE, "tablet does not exist");
             }
 
-            String finishInfo = "";
             if (cloneTask.isLocal()) {
                 unprotectedFinishLocalMigration(request);
             } else {
-                finishInfo = unprotectedFinishClone(request, partition, replicationNum, olapTable.getLocation());
+                Pair<String, JournalTask> ret =
+                        unprotectedFinishClone(request, partition, replicationNum, olapTable.getLocation());
+                finishInfo = ret.first;
+                journalTask = ret.second;
             }
 
             state = State.FINISHED;
-            LOG.info("clone finished: {} {}", this, finishInfo);
         } catch (SchedException e) {
             // if failed to too many times, remove this task
             ++failedRunningCounter;
@@ -1096,6 +1102,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
+
+        // wait journal log finished
+        if (journalTask != null) {
+            EditLog.waitInfinity(journalTask);
+        }
+
+        LOG.info("clone finished: {}. {}", this, finishInfo);
 
         if (request.isSetCopy_size()) {
             this.copySize = request.getCopy_size();
@@ -1120,8 +1133,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         replica.updateVersion(reportedTablet.version);
     }
 
-    private String unprotectedFinishClone(TFinishTaskRequest request, PhysicalPartition partition,
-                                          short replicationNum, Multimap<String, String> location) throws SchedException {
+    private Pair<String, JournalTask> unprotectedFinishClone(TFinishTaskRequest request, PhysicalPartition partition,
+                                                             short replicationNum, Multimap<String, String> location)
+            throws SchedException {
         List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
         Pair<TabletHealthStatus, TabletSchedCtx.Priority> pair = TabletChecker.getTabletHealthStatusWithPriority(
                 tablet, infoService, visibleVersion, replicationNum,
@@ -1182,17 +1196,20 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 replica.getLastSuccessVersion(),
                 reportedTablet.getMin_readable_version());
 
+        JournalTask journalTask = null;
         if (replica.getState() == ReplicaState.CLONE) {
             replica.setState(ReplicaState.NORMAL);
             tablet.setLastFullCloneFinishedTimeMs(System.currentTimeMillis());
-            GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
+            journalTask = GlobalStateMgr.getCurrentState().getEditLog().logAddReplicaNoWait(info);
         } else {
             // if in VERSION_INCOMPLETE, replica is not newly created, thus the state is not CLONE
             // so, we keep it state unchanged, and log update replica
-            GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
+            journalTask = GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplicaNoWait(info);
         }
-        return String.format("version:%d min_readable_version:%d", reportedTablet.getVersion(),
+
+        String finishInfo = String.format("version:%d min_readable_version:%d", reportedTablet.getVersion(),
                 reportedTablet.getMin_readable_version());
+        return Pair.create(finishInfo, journalTask);
     }
 
     /**

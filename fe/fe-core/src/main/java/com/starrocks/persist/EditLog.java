@@ -1565,8 +1565,16 @@ public class EditLog {
         logJsonObject(OperationType.OP_ADD_REPLICA_V2, info);
     }
 
+    public JournalTask logAddReplicaNoWait(ReplicaPersistInfo info) {
+        return logJsonObjectNoWait(OperationType.OP_ADD_REPLICA_V2, info);
+    }
+
     public void logUpdateReplica(ReplicaPersistInfo info) {
         logJsonObject(OperationType.OP_UPDATE_REPLICA_V2, info);
+    }
+
+    public JournalTask logUpdateReplicaNoWait(ReplicaPersistInfo info) {
+        return logJsonObjectNoWait(OperationType.OP_UPDATE_REPLICA_V2, info);
     }
 
     public void logDeleteReplica(ReplicaPersistInfo info) {
@@ -2101,6 +2109,15 @@ public class EditLog {
                 Text.writeString(out, GsonUtils.GSON.toJson(obj));
             }
         });
+    }
+
+    public JournalTask logJsonObjectNoWait(short op, Object obj) {
+        return submitLog(op, new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, GsonUtils.GSON.toJson(obj));
+            }
+        }, -1);
     }
 
     public void logModifyTableAddOrDrop(TableAddOrDropColumnsInfo info) {
