@@ -202,7 +202,8 @@ TEST_F(JsonFunctionsTest, json_query_filter_simple) {
     Columns columns{jsons, path_builder.build(true)};
 
     ctx.get()->set_constant_columns(columns);
-    std::ignore = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     DeferOp defer([&]() {
         (void)JsonFunctions::native_json_path_close(
                 ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -239,7 +240,8 @@ TEST_F(JsonFunctionsTest, json_query_filter_logical) {
     Columns columns{jsons, path_builder.build(true)};
 
     ctx.get()->set_constant_columns(columns);
-    std::ignore = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     DeferOp defer([&]() {
         (void)JsonFunctions::native_json_path_close(
                 ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -276,7 +278,8 @@ TEST_F(JsonFunctionsTest, json_query_filter_no_match) {
     Columns columns{jsons, path_builder.build(true)};
 
     ctx.get()->set_constant_columns(columns);
-    std::ignore = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     DeferOp defer([&]() {
         (void)JsonFunctions::native_json_path_close(
                 ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
