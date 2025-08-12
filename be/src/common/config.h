@@ -1141,6 +1141,7 @@ CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_tim
 CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
+CONF_mBool(starlet_write_file_with_tag, "false");
 CONF_mInt32(tablet_warmup_max_threads, "4");
 #endif
 
