@@ -618,6 +618,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             Preconditions.checkState(!info.isRecoverable());
             if (finished) {
                 finishedTables.add(info.table.getId());
+                asyncDeleteForTables.remove(info);
             } else if (asyncDeleteForTables.get(info) == null) {
                 // treated as error if task is not running
                 setNextEraseMinTime(info.table.getId(), System.currentTimeMillis() + FAIL_RETRY_INTERVAL);
@@ -683,6 +684,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
             if (finished) {
                 iterator.remove();
+                asyncDeleteForPartitions.remove(partitionInfo);
                 removeRecycleMarkers(partitionId);
 
                 GlobalStateMgr.getCurrentState().getEditLog().logErasePartition(partitionId);
