@@ -1,0 +1,64 @@
+-- name: test_varbinary_groupby_join
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table a(
+  id int,
+  kb varbinary,
+  v int
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id)
+BUCKETS 1
+PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+create table b(
+  id int,
+  kb varbinary,
+  v int
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id)
+BUCKETS 1
+PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into a values
+  (1, x'0102', 10),
+  (2, x'0102', 20),
+  (3, x'0AFF', 30),
+  (4, x'', 40);
+-- result:
+-- !result
+insert into b values
+  (10, x'0102', 100),
+  (20, x'0AFF', 200),
+  (30, x'BEEF', 300),
+  (40, x'', 400);
+-- result:
+-- !result
+select hex(kb), count(*), sum(v) from a group by kb order by hex(kb);
+-- result:
+        	2	30
+0AFF    	1	30
+BEEF    	0	0
+        	1	40
+-- !result
+select hex(a.kb), a.v, b.v from a join b on a.kb = b.kb order by hex(a.kb), a.v, b.v;
+-- result:
+        	40	400
+0102    	10	100
+0102    	20	100
+0AFF    	30	200
+-- !result
+select hex(a.kb), a.v, ifnull(b.v, -1) from a left join b on a.kb = b.kb order by hex(a.kb), a.v, ifnull(b.v, -1);
+-- result:
+        	40	400
+0102    	10	100
+0102    	20	100
+0AFF    	30	200
+-- !result
