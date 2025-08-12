@@ -68,7 +68,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1223,10 +1222,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return this.isCreatePartitionFailed.get();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
 
-    }
+
 
     @Override
     public void gsonPreProcess() throws IOException {

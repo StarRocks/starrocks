@@ -41,14 +41,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.util.ArrayList;
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class ReplicaTest {
@@ -94,57 +86,6 @@ public class ReplicaTest {
         // check version catch up
         Assertions.assertFalse(replica.checkVersionCatchUp(5, false));
         Assertions.assertTrue(replica.checkVersionCatchUp(newVersion, false));
-    }
-
-    @Test
-    public void testSerialization() throws Exception {
-        // 1. Write objects to file
-        File file = new File("./olapReplicaTest");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-
-        List<Replica> list1 = new ArrayList<Replica>();
-        List<Replica> list2 = new ArrayList<Replica>();
-        for (int count = 0; count < 10; ++count) {
-            Replica olapReplica = new Replica(100L * count, 100L * count, 100L * count, 0,
-                    100L * count, 100 * count, ReplicaState.NORMAL, 0, 100L * count);
-            list1.add(olapReplica);
-            olapReplica.write(dos);
-        }
-
-        Replica replica = new Replica(10L, 20L, 0, null);
-        list1.add(replica);
-        replica.write(dos);
-        dos.flush();
-        dos.close();
-
-        // 2. Read a object from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        for (int count = 0; count < 10; ++count) {
-            Replica olapReplica = new Replica();
-            olapReplica.readFields(dis);
-            Assertions.assertEquals(100 * count, olapReplica.getId());
-            Assertions.assertEquals(100 * count, olapReplica.getBackendId());
-            Assertions.assertEquals(100 * count, olapReplica.getVersion());
-            Assertions.assertEquals(100 * count, olapReplica.getDataSize());
-            Assertions.assertEquals(100 * count, olapReplica.getRowCount());
-            Assertions.assertEquals(Replica.ReplicaState.NORMAL, olapReplica.getState());
-            list2.add(olapReplica);
-        }
-        Replica olapReplica = new Replica();
-        olapReplica.readFields(dis);
-        list2.add(olapReplica);
-
-        // 3. Check equal
-        for (int i = 0; i < 11; i++) {
-            Assertions.assertTrue(list1.get(i).equals(list2.get(i)));
-        }
-
-        Assertions.assertTrue(list1.get(1).equals(list1.get(1)));
-        Assertions.assertFalse(list1.get(1).equals(list1));
-
-        dis.close();
-        file.delete();
     }
 
     @Test

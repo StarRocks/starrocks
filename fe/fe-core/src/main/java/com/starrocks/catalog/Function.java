@@ -50,8 +50,6 @@ import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.lang.ArrayUtils;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -59,8 +57,6 @@ import java.util.Optional;
 import java.util.Vector;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
-
-import static com.starrocks.common.io.IOUtils.writeOptionString;
 
 /**
  * Base class for all functions.
@@ -834,43 +830,6 @@ public class Function implements Writable {
                     return UNSUPPORTED;
             }
         }
-
-        public void write(DataOutput output) throws IOException {
-            output.writeInt(code);
-        }
-    }
-
-    protected void writeFields(DataOutput output) throws IOException {
-        output.writeLong(functionId);
-        name.write(output);
-        ColumnType.write(output, retType);
-        output.writeInt(argTypes.length);
-        for (Type type : argTypes) {
-            ColumnType.write(output, type);
-        }
-        if (hasNamedArg()) {
-            output.writeBoolean(true);
-            for (String name : argNames) {
-                writeOptionString(output, name);
-            }
-        } else {
-            output.writeBoolean(false);
-        }
-        output.writeBoolean(hasVarArgs);
-        output.writeBoolean(userVisible);
-        output.writeInt(binaryType.getValue());
-        // write library URL
-        String libUrl = "";
-        if (location != null) {
-            libUrl = location.toString();
-        }
-        writeOptionString(output, libUrl);
-        writeOptionString(output, checksum);
-    }
-
-    @Override
-    public void write(DataOutput output) throws IOException {
-        throw new Error("Origin function cannot be serialized");
     }
 
     public String getSignature() {

@@ -23,15 +23,11 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTableFunction;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Vector;
@@ -153,15 +149,8 @@ public class TableFunction extends Function {
         this.isLeftJoin = isLeftJoin;
     }
 
-    @Override
-    public void write(DataOutput output) throws IOException {
-        // 1. type
-        FunctionType.TABLE.write(output);
-        // 2. parent
-        super.writeFields(output);
-        // 3. write self
-        Text.writeString(output, GsonUtils.GSON.toJson(this));
-    }
+
+
 
     @Override
     public TFunction toThrift() {

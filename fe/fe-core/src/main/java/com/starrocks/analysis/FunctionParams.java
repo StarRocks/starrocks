@@ -38,8 +38,6 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Function;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -206,20 +204,8 @@ public class FunctionParams implements Writable {
         this.exprs = exprs;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeBoolean(isStar);
-        out.writeBoolean(isDistinct);
-        if (exprs != null) {
-            out.writeBoolean(true);
-            out.writeInt(exprs.size());
-            for (Expr expr : exprs) {
-                Expr.writeTo(expr, out);
-            }
-        } else {
-            out.writeBoolean(false);
-        }
-    }
+
+
 
     @Override
     public int hashCode() {

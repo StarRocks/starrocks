@@ -37,7 +37,6 @@ package com.starrocks.backup;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
-import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
@@ -64,7 +63,6 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.DeepCopy;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -89,9 +87,7 @@ import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -926,54 +922,8 @@ public class BackupJob extends AbstractJob {
         return Joiner.on(", ").join(list);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
 
-        // table refs
-        out.writeInt(tableRefs.size());
-        for (TableRef tblRef : tableRefs) {
-            tblRef.write(out);
-        }
 
-        // state
-        Text.writeString(out, state.name());
-
-        // times
-        out.writeLong(snapshotFinishedTime);
-        out.writeLong(snapshotUploadFinishedTime);
-
-        // snapshot info
-        out.writeInt(snapshotInfos.size());
-        for (SnapshotInfo info : snapshotInfos.values()) {
-            info.write(out);
-        }
-
-        // backup meta
-        if (backupMeta == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            backupMeta.write(out);
-        }
-
-        // No need to persist job info. It is generated then write to file
-
-        // metaInfoFilePath and jobInfoFilePath
-        if (Strings.isNullOrEmpty(localMetaInfoFilePath)) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            Text.writeString(out, localMetaInfoFilePath);
-        }
-
-        if (Strings.isNullOrEmpty(localJobInfoFilePath)) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            Text.writeString(out, localJobInfoFilePath);
-        }
-    }
 
     @Override
     public String toString() {

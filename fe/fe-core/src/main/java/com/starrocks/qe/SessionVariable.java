@@ -81,7 +81,6 @@ import org.jetbrains.annotations.TestOnly;
 import org.json.JSONObject;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
@@ -5374,10 +5373,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return root.toString();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, getJsonString());
-    }
+
+
 
     private void readFromJson(DataInput in) throws IOException {
         String json = Text.readString(in);

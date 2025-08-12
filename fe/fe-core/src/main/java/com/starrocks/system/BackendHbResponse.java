@@ -38,9 +38,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TStatusCode;
 
-import java.io.DataOutput;
-import java.io.IOException;
-
 /**
  * Backend heartbeat response contains Backend's be port, http port and brpc port
  */
@@ -166,13 +163,7 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         this.statusCode = statusCode;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeLong(beId);
-        out.writeInt(bePort);
-        out.writeInt(httpPort);
-        out.writeInt(brpcPort);
-    }
+
+
 
 }

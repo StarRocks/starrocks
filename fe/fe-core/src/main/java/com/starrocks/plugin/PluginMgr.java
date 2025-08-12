@@ -57,7 +57,6 @@ import com.starrocks.sql.ast.InstallPluginStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
@@ -325,16 +324,8 @@ public class PluginMgr implements Writable {
         return rows;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // only need to persist dynamic plugins
-        List<PluginInfo> list = getAllDynamicPluginInfo();
-        int size = list.size();
-        out.writeInt(size);
-        for (PluginInfo pc : list) {
-            pc.write(out);
-        }
-    }
+
+
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         List<PluginInfo> pluginInfos = getAllDynamicPluginInfo();

@@ -84,9 +84,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_ALTER_JOB_V2 = 125;
 
-    @Deprecated
-    public static final short OP_ADD_REPLICA = 42;
-
     public static final short OP_SET_REPLICA_STATUS = 47;
 
     @IgnorableOnReplayFailed
@@ -144,8 +141,6 @@ public class OperationType {
     public static final short OP_DROP_RESOURCE = 277;
 
     // NOTICE newly added type starts from 10000, to avoid conflicting with community added type
-
-    public static final short OP_META_VERSION_V2 = 10000;
 
     @IgnorableOnReplayFailed
     public static final short OP_SWAP_TABLE = 10001;

@@ -35,11 +35,7 @@
 package com.starrocks.load.routineload;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-
-import java.io.DataOutput;
-import java.io.IOException;
 
 public abstract class RoutineLoadProgress implements Writable {
 
@@ -59,9 +55,6 @@ public abstract class RoutineLoadProgress implements Writable {
 
     abstract String toJsonString();
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // ATTN: must write type first
-        Text.writeString(out, loadDataSourceType.name());
-    }
+
+
 }

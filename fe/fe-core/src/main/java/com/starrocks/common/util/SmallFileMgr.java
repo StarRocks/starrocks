@@ -43,7 +43,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -60,8 +59,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedInputStream;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -124,17 +121,8 @@ public class SmallFileMgr implements Writable {
             return Base64.getDecoder().decode(content);
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            out.writeLong(dbId);
-            Text.writeString(out, catalog);
-            Text.writeString(out, name);
-            out.writeLong(id);
-            Text.writeString(out, content);
-            out.writeLong(size);
-            Text.writeString(out, md5);
-            out.writeBoolean(isContent);
-        }
+
+
 
     }
 
@@ -506,13 +494,8 @@ public class SmallFileMgr implements Writable {
         return infos;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeInt(idToFiles.size());
-        for (SmallFile smallFile : idToFiles.values()) {
-            smallFile.write(out);
-        }
-    }
+
+
 
     public void loadSmallFilesV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
         reader.readCollection(SmallFile.class, this::putToFiles);
@@ -530,11 +513,6 @@ public class SmallFileMgr implements Writable {
         } catch (DdlException e) {
             LOG.warn("add file: {} failed", smallFile.name, e);
         }
-    }
-
-    public long saveSmallFiles(DataOutputStream out, long checksum) throws IOException {
-        write(out);
-        return checksum;
     }
 
     public void saveSmallFilesV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

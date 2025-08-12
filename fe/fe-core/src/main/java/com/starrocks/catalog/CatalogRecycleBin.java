@@ -49,7 +49,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.persist.ImageWriter;
@@ -66,7 +65,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -1080,39 +1078,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return info != null && asyncDeleteForTables.get(info) != null;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        int count = idToDatabase.size();
-        out.writeInt(count);
-        for (Map.Entry<Long, RecycleDatabaseInfo> entry : idToDatabase.entrySet()) {
-            out.writeLong(entry.getKey());
-            entry.getValue().write(out);
-        }
 
-        count = idToTableInfo.size();
-        out.writeInt(count);
 
-        for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
-            for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {
-                out.writeLong(entry.getKey());
-                entry.getValue().write(out);
-            }
-        }
-
-        count = idToPartition.size();
-        out.writeInt(count);
-        for (Map.Entry<Long, RecyclePartitionInfo> entry : idToPartition.entrySet()) {
-            out.writeLong(entry.getKey());
-            entry.getValue().write(out);
-        }
-
-        count = idToRecycleTime.size();
-        out.writeInt(count);
-        for (Map.Entry<Long, Long> entry : idToRecycleTime.entrySet()) {
-            out.writeLong(entry.getKey());
-            out.writeLong(entry.getValue());
-        }
-    }
 
     public static class RecycleDatabaseInfo implements Writable {
         @SerializedName("d")
@@ -1145,16 +1112,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             return recoverable;
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            db.write(out);
 
-            int count = tableNames.size();
-            out.writeInt(count);
-            for (String tableName : tableNames) {
-                Text.writeString(out, tableName);
-            }
-        }
+
     }
 
     static class RecycleTableInfo implements Writable {
@@ -1195,11 +1154,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             return recoverable;
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            out.writeLong(dbId);
-            table.write(out);
-        }
+
+
     }
 
     public synchronized List<Long> getAllDbIds() {

@@ -25,7 +25,6 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
@@ -279,10 +278,6 @@ public class EditLogDeserializer {
                 ((Text) data).readFields(in);
                 break;
             }
-            case OperationType.OP_ADD_REPLICA: {
-                data = ReplicaPersistInfo.read(in);
-                break;
-            }
             case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME: {
                 data = ChangeMaterializedViewRefreshSchemeLog.read(in);
                 break;
@@ -290,10 +285,6 @@ public class EditLogDeserializer {
             case OperationType.OP_FINISH_CONSISTENCY_CHECK: {
                 data = new ConsistencyCheckInfo();
                 ((ConsistencyCheckInfo) data).readFields(in);
-                break;
-            }
-            case OperationType.OP_META_VERSION_V2: {
-                data = MetaVersion.read(in);
                 break;
             }
             case OperationType.OP_GLOBAL_VARIABLE_V2: {

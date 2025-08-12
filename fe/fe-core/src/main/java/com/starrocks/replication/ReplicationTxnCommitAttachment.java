@@ -15,13 +15,9 @@
 package com.starrocks.replication;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Map;
 
 /*
@@ -53,10 +49,6 @@ public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
         return partitionVersionEpochs;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
-    }
+
+
 }

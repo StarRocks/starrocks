@@ -40,8 +40,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -98,10 +96,8 @@ public class RandomDistributionInfo extends DistributionInfo {
         return builder.toString();
     }
 
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeInt(bucketNum);
-    }
+
+
 
     @Override
     public List<ColumnId> getDistributionColumns() {

@@ -41,7 +41,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
@@ -51,7 +50,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
@@ -208,12 +206,8 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
         return stringBuilder.toString();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // compatible with old version
-        Text.writeString(out, ClusterNamespace.getFullName(db));
-        Text.writeString(out, tbl);
-    }
+
+
 
     @Override
     public void gsonPostProcess() throws IOException {

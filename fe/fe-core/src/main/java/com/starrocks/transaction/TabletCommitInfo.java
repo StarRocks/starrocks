@@ -40,8 +40,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TTabletCommitInfo;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
@@ -131,11 +129,8 @@ public class TabletCommitInfo implements Writable {
         return commitInfos;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(tabletId);
-        out.writeLong(backendId);
-    }
+
+
 
 
 

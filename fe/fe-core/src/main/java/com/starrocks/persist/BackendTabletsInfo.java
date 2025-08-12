@@ -39,8 +39,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 
 public class BackendTabletsInfo implements Writable {
@@ -94,24 +92,6 @@ public class BackendTabletsInfo implements Writable {
         return tabletSchemaHash.isEmpty() && replicaPersistInfos.isEmpty();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(backendId);
-        out.writeInt(tabletSchemaHash.size());
-        for (Pair<Long, Integer> pair : tabletSchemaHash) {
-            out.writeLong(pair.first);
-            out.writeInt(pair.second);
-        }
 
-        out.writeBoolean(bad);
 
-        // this is for further extension
-        out.writeBoolean(true);
-        out.writeInt(replicaPersistInfos.size());
-        for (ReplicaPersistInfo info : replicaPersistInfos) {
-            info.write(out);
-        }
-        // this is for further extension
-        out.writeBoolean(false);
-    }
 }

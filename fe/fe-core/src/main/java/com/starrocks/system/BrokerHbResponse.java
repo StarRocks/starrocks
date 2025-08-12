@@ -35,11 +35,7 @@
 package com.starrocks.system;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-
-import java.io.DataOutput;
-import java.io.IOException;
 
 /*
  * Broker heartbeat response currently contains nothing and the heartbeat status
@@ -87,13 +83,8 @@ public class BrokerHbResponse extends HeartbeatResponse implements Writable {
         return port;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, name);
-        Text.writeString(out, host);
-        out.writeInt(port);
-    }
+
+
 
     @Override
     public String toString() {

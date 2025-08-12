@@ -21,7 +21,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class TransactionIdGenerator implements GsonPostProcessable {
@@ -62,9 +61,8 @@ public class TransactionIdGenerator implements GsonPostProcessable {
     }
 
     // this two function used to read snapshot or write snapshot
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(batchEndId);
-    }
+
+
 
 
 

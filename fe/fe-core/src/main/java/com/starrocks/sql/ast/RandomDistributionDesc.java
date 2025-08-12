@@ -41,8 +41,6 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
@@ -80,11 +78,8 @@ public class RandomDistributionDesc extends DistributionDesc {
         return new RandomDistributionInfo(numBucket);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeInt(numBucket);
-    }
+
+
 
     @Override
     public String toString() {

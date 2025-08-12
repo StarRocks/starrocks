@@ -92,7 +92,6 @@ import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -832,15 +831,8 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         return false;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        repoMgr.write(out);
 
-        out.writeInt(dbIdToBackupOrRestoreJob.size());
-        for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
-            job.write(out);
-        }
-    }
+
 
     public void saveBackupHandlerV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = imageWriter.getBlockWriter(
