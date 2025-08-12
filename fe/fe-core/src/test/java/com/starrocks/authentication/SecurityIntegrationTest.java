@@ -20,18 +20,25 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
+import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.wildfly.common.Assert;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -45,6 +52,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyShort;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.spy;
 
 public class SecurityIntegrationTest {
     private final MockTokenUtils mockTokenUtils = new MockTokenUtils();
@@ -224,5 +236,60 @@ public class SecurityIntegrationTest {
                         context,
                         new UserIdentity("admin", "%"),
                         "x".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    public void testLDAPSecurityIntegrationPassword() throws DdlException, AuthenticationException, IOException {
+        EditLog editLog = spy(new EditLog(null));
+        doNothing().when(editLog).logEdit(anyShort(), any());
+        GlobalStateMgr.getCurrentState().setEditLog(editLog);
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_ldap_simple");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_HOST, "localhost");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_PORT, "389");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_DN, "cn=admin,dc=example,dc=com");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_PWD, "12345");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_BASE_DN, "");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_USER_SEARCH_ATTR, "");
+        authenticationMgr.createSecurityIntegration("ldap", properties, true);
+
+        ShowResultSet resultSet =
+                ShowExecutor.execute(new ShowCreateSecurityIntegrationStatement("ldap", NodePosition.ZERO), null);
+        Assert.assertTrue(
+                resultSet.getResultRows().get(0).get(1).contains("\"authentication_ldap_simple_bind_root_pwd\" = \"***\""));
+
+
+        properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_oauth2");
+        properties.put(OAuth2AuthenticationProvider.OAUTH2_CLIENT_SECRET, "123");
+        authenticationMgr.createSecurityIntegration("oauth2", properties, true);
+        resultSet =
+                ShowExecutor.execute(new ShowCreateSecurityIntegrationStatement("oauth2", NodePosition.ZERO), null);
+        Assert.assertTrue(
+                resultSet.getResultRows().get(0).get(1).contains("\"client_secret\" = \"***\""));
+    }
+
+    @Test
+    public void testShowCreateGroupProviderPassword() throws DdlException {
+        EditLog editLog = spy(new EditLog(null));
+        doNothing().when(editLog).logEdit(anyShort(), any());
+        GlobalStateMgr.getCurrentState().setEditLog(editLog);
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(GroupProvider.GROUP_PROVIDER_PROPERTY_TYPE_KEY, "ldap");
+        properties.put("ldap_bind_root_dn", "cn=admin,dc=example,dc=com");
+        properties.put("ldap_bind_root_pwd", "12345");
+        properties.put("ldap_search_base_dn", "dc=example,dc=com");
+        authenticationMgr.replayCreateGroupProvider("ldap_group", properties);
+
+        ShowResultSet resultSet =
+                ShowExecutor.execute(new ShowCreateGroupProviderStmt("ldap_group", NodePosition.ZERO), null);
+        Assert.assertTrue(
+                resultSet.getResultRows().get(0).get(1).contains("\"ldap_bind_root_pwd\" = \"***\""));
     }
 }
