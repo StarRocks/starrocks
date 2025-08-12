@@ -23,7 +23,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -323,11 +322,8 @@ public class StatisticExecutor {
                     table.getName());
         }
 
-        OlapTable olapTable = (OlapTable) table;
         long version = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
                 PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
-        String columnName = MetaUtils.getColumnNameByColumnId(dbId, tableId, columnId);
-
         List<String> pieces = Lists.newArrayList();
         SubfieldAccessPathNormalizer.parseSimpleJsonPath(columnId.getId(), pieces);
         if (pieces.size() == 1) {

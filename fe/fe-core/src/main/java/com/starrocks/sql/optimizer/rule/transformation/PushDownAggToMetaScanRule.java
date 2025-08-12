@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.tree.JsonPathRewriteRule;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 
@@ -65,13 +66,11 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                 continue;
             }
             // select dict_merge(get_json_string(c1)) from tbl [_META_]
-            if (entry.getValue() instanceof CallOperator call &&
-                    !call.getArguments().isEmpty() &&
-                    call.getArguments().get(0).equals(entry.getKey())) {
+            if (entry.getValue().getHints().contains(JsonPathRewriteRule.COLUMN_REF_HINT)) {
                 continue;
             }
 
-            break;
+            return false;
         }
 
         for (CallOperator aggCall : agg.getAggregations().values()) {

@@ -274,9 +274,17 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
             if (parts.size() > 1) {
                 String rootColumn = parts.get(0);
                 columnIdentifier = new ColumnIdentifier(tableId, ColumnId.create(rootColumn));
-                Column column = MetaUtils.getColumnByColumnId(columnIdentifier);
-                if (column.getType().isJsonType()) {
-                    removeGlobalDictForJson(tableId, column.getColumnId());
+
+                // Set dbId for the columnIdentifier to enable MetaUtils.getColumnByColumnId lookup
+                long dbId = MetaUtils.lookupDbIdByTableId(tableId);
+                if (dbId != -1) {
+                    columnIdentifier.setDbId(dbId);
+                    Column column = MetaUtils.getColumnByColumnId(columnIdentifier);
+                    if (column.getType().isJsonType()) {
+                        removeGlobalDictForJson(tableId, column.getColumnId());
+                    }
+                } else {
+                    LOG.debug("Could not find db id for table {}, skipping JSON subfield cleanup", tableId);
                 }
             }
         } catch (Exception ignored) {

@@ -1,4 +1,7 @@
--- name: test_normal_flat_json_dict @system
+-- name: test_normal_flat_json_dict @sequential
+update information_schema.be_configs set value = 'true' where name = 'enable_json_flat';
+-- result:
+-- !result
 set enable_profile = true;
 -- result:
 -- !result
@@ -53,11 +56,11 @@ select dict_merge(get_json_string(c1, 'f3'), 255) from js2 [_META_];
 -- !result
 select dict_merge(get_json_string(c1, 'f4'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'global dict size:500 greater than low_cardinality_threshold:255: BE:21006')
+E: (1064, 'global dict size:500 greater than low_cardinality_threshold:255: BE:10003')
 -- !result
 select dict_merge(get_json_string(c1, 'f5'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'no global dict: BE:21006')
+E: (1064, 'no global dict: BE:10003')
 -- !result
 insert into js2 
 select 
@@ -74,23 +77,23 @@ from (table(generate_series(1, 100)));
 -- !result
 select dict_merge(get_json_string(c1, 'f1'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'no global dict: BE:21006')
+E: (1064, 'no global dict: BE:10003')
 -- !result
 select dict_merge(get_json_string(c1, 'f2'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'no global dict: BE:21006')
+E: (1064, 'no global dict: BE:10003')
 -- !result
 select dict_merge(get_json_string(c1, 'f3'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'no global dict: BE:21006')
+E: (1064, 'no global dict: BE:10003')
 -- !result
 select dict_merge(get_json_string(c1, 'f4'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'global dict size:500 greater than low_cardinality_threshold:255: BE:21006')
+E: (1064, 'global dict size:500 greater than low_cardinality_threshold:255: BE:10003')
 -- !result
 select dict_merge(get_json_string(c1, 'f5'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'no global dict: BE:21006')
+E: (1064, 'no global dict: BE:10003')
 -- !result
 truncate table js2;
 -- result:
@@ -109,7 +112,7 @@ from (table(generate_series(1, 1000)));
 -- !result
 select get_json_string(inspect_global_dict('js2', 'c1'), 'dict');
 -- result:
-None
+{"a0": 1, "a1": 2, "a10": 3, "a100": 4, "a101": 5, "a102": 6, "a103": 7, "a104": 8, "a105": 9, "a106": 10, "a107": 11, "a108": 12, "a109": 13, "a11": 14, "a110": 15, "a111": 16, "a112": 17, "a113": 18, "a114": 19, "a115": 20, "a116": 21, "a117": 22, "a118": 23, "a119": 24, "a12": 25, "a120": 26, "a121": 27, "a122": 28, "a123": 29, "a124": 30, "a125": 31, "a126": 32, "a127": 33, "a128": 34, "a129": 35, "a13": 36, "a130": 37, "a131": 38, "a132": 39, "a133": 40, "a134": 41, "a135": 42, "a136": 43, "a137": 44, "a138": 45, "a139": 46, "a14": 47, "a140": 48, "a141": 49, "a142": 50, "a143": 51, "a144": 52, "a145": 53, "a146": 54, "a147": 55, "a148": 56, "a149": 57, "a15": 58, "a150": 59, "a151": 60, "a152": 61, "a153": 62, "a154": 63, "a155": 64, "a156": 65, "a157": 66, "a158": 67, "a159": 68, "a16": 69, "a160": 70, "a161": 71, "a162": 72, "a163": 73, "a164": 74, "a165": 75, "a166": 76, "a167": 77, "a168": 78, "a169": 79, "a17": 80, "a170": 81, "a171": 82, "a172": 83, "a173": 84, "a174": 85, "a175": 86, "a176": 87, "a177": 88, "a178": 89, "a179": 90, "a18": 91, "a180": 92, "a181": 93, "a182": 94, "a183": 95, "a184": 96, "a185": 97, "a186": 98, "a187": 99, "a188": 100, "a189": 101, "a19": 102, "a190": 103, "a191": 104, "a192": 105, "a193": 106, "a194": 107, "a195": 108, "a196": 109, "a197": 110, "a198": 111, "a199": 112, "a2": 113, "a20": 114, "a21": 115, "a22": 116, "a23": 117, "a24": 118, "a25": 119, "a26": 120, "a27": 121, "a28": 122, "a29": 123, "a3": 124, "a30": 125, "a31": 126, "a32": 127, "a33": 128, "a34": 129, "a35": 130, "a36": 131, "a37": 132, "a38": 133, "a39": 134, "a4": 135, "a40": 136, "a41": 137, "a42": 138, "a43": 139, "a44": 140, "a45": 141, "a46": 142, "a47": 143, "a48": 144, "a49": 145, "a5": 146, "a50": 147, "a51": 148, "a52": 149, "a53": 150, "a54": 151, "a55": 152, "a56": 153, "a57": 154, "a58": 155, "a59": 156, "a6": 157, "a60": 158, "a61": 159, "a62": 160, "a63": 161, "a64": 162, "a65": 163, "a66": 164, "a67": 165, "a68": 166, "a69": 167, "a7": 168, "a70": 169, "a71": 170, "a72": 171, "a73": 172, "a74": 173, "a75": 174, "a76": 175, "a77": 176, "a78": 177, "a79": 178, "a8": 179, "a80": 180, "a81": 181, "a82": 182, "a83": 183, "a84": 184, "a85": 185, "a86": 186, "a87": 187, "a88": 188, "a89": 189, "a9": 190, "a90": 191, "a91": 192, "a92": 193, "a93": 194, "a94": 195, "a95": 196, "a96": 197, "a97": 198, "a98": 199, "a99": 200}
 -- !result
 select get_json_string(inspect_global_dict('js2', 'c1.f1'), 'dict');
 -- result:

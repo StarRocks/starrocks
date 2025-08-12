@@ -1,5 +1,6 @@
--- name: test_normal_flat_json_dict @system
+-- name: test_normal_flat_json_dict @sequential
 
+update information_schema.be_configs set value = 'true' where name = 'enable_json_flat';
 set enable_profile = true;
 set enable_async_profile = false;
 set cbo_json_v2_rewrite = true;

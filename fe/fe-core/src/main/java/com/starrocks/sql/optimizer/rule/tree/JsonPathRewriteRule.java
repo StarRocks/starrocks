@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -235,33 +236,27 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
             JsonPathExpressionRewriter rewriter = new JsonPathExpressionRewriter(context);
 
             // rewrite project
-            Map<ColumnRefOperator, ScalarOperator> changed = Maps.newHashMap();
+            Map<ColumnRefOperator, ScalarOperator> newProjection = Maps.newHashMap();
+            boolean hasChanges = false;
             for (var entry : project.getColumnRefMap().entrySet()) {
                 ScalarOperator rewritten = rewriteScalar(entry.getValue(), context, rewriter);
-                if (!rewritten.equals(entry.getValue())) {
-                    // no change, keep the original column
-                    changed.put(entry.getKey(), rewritten);
-                }
+                newProjection.put(entry.getKey(), rewritten);
+                hasChanges = hasChanges || !rewritten.equals(entry.getValue());
             }
-            if (changed.isEmpty()) {
+
+            // Check if any changes were made
+            if (!hasChanges) {
                 return optExpr;
             }
 
-            Map<ColumnRefOperator, ScalarOperator> projection = Maps.newHashMap();
-            projection.putAll(project.getColumnRefMap());
-            projection.putAll(changed);
-            LogicalProjectOperator newProject = new LogicalProjectOperator(changed);
+            LogicalProjectOperator newProject = new LogicalProjectOperator(newProjection);
 
-            // add the columns into scan
-            Map<ColumnRefOperator, Column> metaScanColumnMap = Maps.newHashMap();
-            metaScanColumnMap.putAll(rewriter.getExtendedColumns());
-            for (var entry : metaScan.getColRefToColumnMetaMap().entrySet()) {
-                if (!changed.containsKey(entry.getKey())) {
-                    metaScanColumnMap.put(entry.getKey(), entry.getValue());
-                } else {
-                    metaScanColumnMap.put(entry.getKey(), rewriter.getExtendedColumns().get(entry.getKey()));
-                }
-            }
+            Map<ColumnRefOperator, Column> metaScanColumnMap =
+                    ImmutableMap.<ColumnRefOperator, Column>builder()
+                            .putAll(metaScan.getColRefToColumnMetaMap())
+                            .putAll(rewriter.getExtendedColumns())
+                            .build();
+
             scanBuilder.setColRefToColumnMetaMap(metaScanColumnMap);
 
             // Record the access path into scan node
