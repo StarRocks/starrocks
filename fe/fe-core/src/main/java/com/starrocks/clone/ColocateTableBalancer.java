@@ -797,29 +797,32 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                         Preconditions.checkState(backendBucketsSeq.size() == index.getTablets().size(),
                                 backendBucketsSeq.size() + " v.s. " + index.getTablets().size());
+
                         BalanceStat balanceStat = BalanceStat.BALANCED_STAT;
+
                         int idx = 0;
                         for (Long tabletId : index.getTabletIds()) {
                             LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                             Set<Long> bucketSeq = backendBucketsSeq.get(idx);
+
+                            // check tablet colocate status
+                            TabletHealthStatus st = TabletChecker.getColocateTabletHealthStatus(tablet, visibleVersion,
+                                    replicationNum, bucketSeq);
+                            if (st == TabletHealthStatus.COLOCATE_MISMATCH && balanceStat.isBalanced()) {
+                                balanceStat =
+                                        BalanceStat.createColocationGroupBalanceStat(tabletId, tablet.getBackendIds(), bucketSeq);
+                            }
+
                             // Tablet has already been scheduled, no need to schedule again
                             if (!tabletScheduler.containsTablet(tablet.getId())) {
                                 Preconditions.checkState(bucketSeq.size() == replicationNum,
                                         bucketSeq.size() + " vs. " + replicationNum);
-                                TabletHealthStatus
-                                        st = TabletChecker.getColocateTabletHealthStatus(tablet, visibleVersion,
-                                        replicationNum, bucketSeq);
                                 if (st != TabletHealthStatus.HEALTHY) {
                                     isGroupStable = false;
                                     Priority colocateUnhealthyPrio = Priority.HIGH;
                                     if (isPartitionUrgent) {
                                         colocateUnhealthyPrio = Priority.VERY_HIGH;
                                         isUrgentPartitionHealthy = false;
-                                    }
-
-                                    if (st == TabletHealthStatus.COLOCATE_MISMATCH && balanceStat.isBalanced()) {
-                                        balanceStat = BalanceStat.createColocationGroupBalanceStat(
-                                                tabletId, tablet.getBackendIds(), bucketSeq);
                                     }
 
                                     // We should also check if the tablet is ready to be repaired like
@@ -872,8 +875,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                             } else {
                                 // tablet maybe added to scheduler because of balance between local disks,
                                 // in this case we shouldn't mark the group unstable
-                                if (TabletChecker.getColocateTabletHealthStatus(
-                                        tablet, visibleVersion, replicationNum, bucketSeq) != TabletHealthStatus.HEALTHY) {
+                                if (st != TabletHealthStatus.HEALTHY) {
                                     isGroupStable = false;
                                 }
                             }

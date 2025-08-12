@@ -77,12 +77,8 @@ public class BalanceStatTest {
         }
 
         {
-            Set<Long> currentBes = Sets.newHashSet();
-            currentBes.add(1L);
-            currentBes.add(2L);
-            Set<Long> expectedBes = Sets.newHashSet();
-            expectedBes.add(2L);
-            expectedBes.add(3L);
+            Set<Long> currentBes = Sets.newHashSet(1L, 2L);
+            Set<Long> expectedBes = Sets.newHashSet(2L, 3L);
             BalanceStat stat = BalanceStat.createColocationGroupBalanceStat(1L, currentBes, expectedBes);
             Assertions.assertFalse(stat.isBalanced());
             Assertions.assertEquals(BalanceType.COLOCATION_GROUP, stat.getBalanceType());
