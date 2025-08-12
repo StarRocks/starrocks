@@ -290,10 +290,10 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
 
     protected boolean checkTabletReportCacheUp(long timeMs) {
         for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
-            if (TimeUtils.timeStringToLong(backend.getBackendStatus().lastSuccessReportTabletsTime)
-                    < timeMs) {
+            if (backend.getLastSuccessReportTabletsTime() < timeMs) {
                 LOG.warn("last tablet report time of backend {}:{} is {}, should wait it to report tablets",
-                        backend.getHost(), backend.getHeartbeatPort(), backend.getBackendStatus().lastSuccessReportTabletsTime);
+                        backend.getHost(), backend.getHeartbeatPort(),
+                        TimeUtils.longToTimeString(backend.getLastSuccessReportTabletsTime()));
                 return false;
             }
         }

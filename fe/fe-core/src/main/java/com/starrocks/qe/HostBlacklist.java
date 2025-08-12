@@ -203,6 +203,10 @@ public class HostBlacklist {
                 // Avoid the node enter and exit the blocklist too quick.
                 continue;
             }
+            if (!node.isReportTabletsSuccessfulRecently()) {
+                // still fail to report its tablets status
+                continue;
+            }
 
             // Check all the ports, determine if the BE node is recovered
             if (clusterInfoService.checkNodeAvailable(node) && entry.getValue().type == DisconnectEvent.TYPE_AUTO) {
