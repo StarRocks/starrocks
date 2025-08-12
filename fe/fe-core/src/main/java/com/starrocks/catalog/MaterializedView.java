@@ -166,7 +166,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
          * Selects candidate partitions based on thresholds mv_max_rows_per_refresh and mv_max_bytes_per_refresh.
          * Stops selecting more partitions once either threshold is reached.
          */
-        ADAPTIVE
+        ADAPTIVE;
+
+        public static final Set<PartitionRefreshStrategy> ALL_STRATEGIES = ImmutableSet.of(FORCE, STRICT, ADAPTIVE);
+
+        public static PartitionRefreshStrategy defaultValue() {
+            return STRICT;
+        }
     }
 
     @Override
@@ -1312,6 +1318,22 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         AsyncRefreshContext asyncRefreshContext = this.refreshScheme.asyncRefreshContext;
         return this.refreshScheme.getType() == MaterializedView.RefreshType.ASYNC &&
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
+    }
+
+    /**
+     * Return the partition refresh strategy of the materialized view.
+     */
+    public PartitionRefreshStrategy getPartitionRefreshStrategy() {
+        if (tableProperty == null || tableProperty.getPartitionRefreshStrategy() == null) {
+            return PartitionRefreshStrategy.defaultValue();
+        }
+        try {
+            return PartitionRefreshStrategy.valueOf(tableProperty.getPartitionRefreshStrategy().trim().toUpperCase());
+        } catch (Exception e) {
+            LOG.warn("Failed to get partition refresh strategy for materialized view: {}, use default value",
+                    this.getName(), e);
+            return PartitionRefreshStrategy.defaultValue();
+        }
     }
 
     /**
