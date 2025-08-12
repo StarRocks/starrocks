@@ -225,10 +225,16 @@ public class TaskRunScheduler {
     public Map<Long, Long> getAllRunnableTaskCount() {
         Map<Long, Long> result = new HashMap<>();
         for (TaskRun taskRun : runningTaskRunMap.values()) {
+            if (taskRun.getRunCtx() == null) {
+                continue;
+            }
             result.compute(taskRun.getRunCtx().getCurrentWarehouseId(),
                     (key, value) -> value == null ? 1L : value + 1);
         }
         for (TaskRun taskRun : runningSyncTaskRunMap.values()) {
+            if (taskRun.getRunCtx() == null) {
+                continue;
+            }
             result.compute(taskRun.getRunCtx().getCurrentWarehouseId(),
                     (key, value) -> value == null ? 1L : value + 1);
         }
