@@ -130,8 +130,18 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 DeleteTabletResponse response = lakeService.deleteTablet(request).get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                    String errorMsg = "";
+                    if (response.status != null && response.status.errorMsgs != null &&
+                            !response.status.errorMsgs.isEmpty()) {
+                        errorMsg = response.status.errorMsgs.get(0);
+                    }
                     TStatusCode stCode = TStatusCode.findByValue(response.status.statusCode);
+<<<<<<< HEAD
                     LOG.info("Fail to delete tablet. StatusCode: {}, failedTablets: {}", stCode, response.failedTablets);
+=======
+                    LOG.info("Fail to delete tablet from node: {}. StatusCode: {}, Error: {}, failedTablets: {}",
+                            nodeId, stCode, errorMsg, response.failedTablets);
+>>>>>>> 23d11f1fe2 ([BugFix] support print error msg when delete tablet failed in StarMgrMetaSync (#61810))
 
                     // ignore INVALID_ARGUMENT error, treat it as success
                     if (stCode != TStatusCode.INVALID_ARGUMENT) {
