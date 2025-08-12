@@ -688,7 +688,22 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     std::vector<ColumnUID> update_column_uids;
     std::vector<ColumnUID> unique_update_column_ids;
     const auto& tschema = rowset->schema();
+    /* 
+      * skip overwrite the auto increment column using data in .upt files if user partially update it for the existed keys
+
+      * In current implementation, if user partially update the auto increment column, it will also be included in partial schema
+      * in writing phrase. Because we need to allocate the id in this phrase. It means that .upt files will contains auto increment
+      * column data even it is partially updated (does not specfied by user).
+      * 
+      * For the keys which have already existed in the tablet, we will write "0" in .upt file. In the apply phrase, such "0" data is not
+      * used and we need to discard the column for the keys which have already existed in the tablet.
+    */
     for (ColumnId cid : txn_meta.partial_update_column_ids()) {
+        if (txn_meta.has_auto_increment_partial_update_column_id() &&
+            cid == txn_meta.auto_increment_partial_update_column_id()) {
+            // skip auto increment column if it is being used for partial update
+            continue;
+        }
         if (cid >= tschema->num_key_columns()) {
             update_column_ids.push_back(cid);
             update_column_uids.push_back((ColumnUID)cid);
@@ -702,7 +717,12 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             LOG(ERROR) << msg;
             return Status::InternalError(msg);
         }
-        if (!tschema->column(cid).is_key()) {
+        const auto& column = tschema->column(cid);
+        if (txn_meta.has_auto_increment_partial_update_column_id() && column.is_auto_increment()) {
+            // skip auto increment column if it is being used for partial update
+            continue;
+        }
+        if (!column.is_key()) {
             unique_update_column_ids.push_back(uid);
         }
     }
