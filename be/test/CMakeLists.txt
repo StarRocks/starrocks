@@ -563,6 +563,7 @@ set(EXEC_FILES
         ./util/thrift_client_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
+        ./udf/java/java_udf_test.cpp
         ./util/table_metrics_mgr_test.cpp
         )
 
