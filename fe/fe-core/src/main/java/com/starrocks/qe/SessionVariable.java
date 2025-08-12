@@ -914,6 +914,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DATACACHE_SHARING_WORK_PERIOD = "datacache_sharing_work_period";
     public static final String HISTORICAL_NODES_MIN_UPDATE_INTERVAL = "historical_nodes_min_update_interval";
 
+<<<<<<< HEAD
+=======
+    public static final String COLUMN_VIEW_CONCAT_ROWS_LIMIT = "column_view_concat_rows_limit";
+    public static final String COLUMN_VIEW_CONCAT_BYTES_LIMIT = "column_view_concat_bytes_limit";
+    public static final String ENABLE_DEFER_PROJECT_AFTER_TOPN = "enable_defer_project_after_topn";
+
+    public static final String ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN = "enable_multi_cast_limit_push_down";
+
+    public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
+
+>>>>>>> 4878d7a233 ([Enhancement] check mv dependency when drop table (#61584))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1846,6 +1857,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableMultiCastLimitPushDown = true;
 
+<<<<<<< HEAD
     @VarAttr(name = ENABLE_DATACACHE_SHARING)
     private boolean enableDataCacheSharing = true;
 
@@ -1854,6 +1866,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = HISTORICAL_NODES_MIN_UPDATE_INTERVAL)
     private int historicalNodesMinUpdateInterval = 600;
+=======
+    @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
+    public boolean enableDropTableCheckMvDependency = false;
+>>>>>>> 4878d7a233 ([Enhancement] check mv dependency when drop table (#61584))
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5034,6 +5050,105 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.historicalNodesMinUpdateInterval = historicalNodesMinUpdateInterval;
     }
 
+<<<<<<< HEAD
+=======
+    public long getColumnViewConcatRowsLimit() {
+        return columnViewConcatRowsLimit;
+    }
+
+    public void setColumnViewConcatRowsLimit(long value) {
+        this.columnViewConcatRowsLimit = value;
+    }
+
+    public long getColumnViewConcatBytesLimit() {
+        return columnViewConcatBytesLimit;
+    }
+
+    public void setColumnViewConcatBytesLimit(long value) {
+        this.columnViewConcatBytesLimit = value;
+    }
+
+    public void setEnableDeferProjectAfterTopN(boolean enableDeferProjectAfterTopN) {
+        this.enableDeferProjectAfterTopN = enableDeferProjectAfterTopN;
+    }
+
+    public boolean isEnableDeferProjectAfterTopN() {
+        return enableDeferProjectAfterTopN;
+    }
+
+    public boolean isEnableSPMRewrite() {
+        return enableSPMRewrite;
+    }
+
+    public void setEnableSPMRewrite(boolean enableSPMRewrite) {
+        this.enableSPMRewrite = enableSPMRewrite;
+    }
+
+    public int getSemiJoinDeduplicateMode() {
+        return semiJoinDeduplicateMode;
+    }
+
+    public void setSemiJoinDeduplicateMode(int semiJoinDeduplicateMode) {
+        this.semiJoinDeduplicateMode = semiJoinDeduplicateMode;
+    }
+
+    public boolean isEnableInnerJoinToSemi() {
+        return enableInnerJoinToSemi;
+    }
+
+    public void setEnableInnerJoinToSemi(boolean enableInnerJoinToSemi) {
+        this.enableInnerJoinToSemi = enableInnerJoinToSemi;
+    }
+
+    public String getCboPushDownDistinct() {
+        return cboPushDownDistinct;
+    }
+
+    public int getJoinReorderDrivingTableMaxElement() {
+        return joinReorderDrivingTableMaxElement;
+    }
+
+    public boolean isEnableJoinReorderBeforeDeduplicate() {
+        return enableJoinReorderBeforeDeduplicate;
+    }
+
+    public void setEnableJoinReorderBeforeDeduplicate(boolean enableJoinReorderBeforeDeduplicate) {
+        this.enableJoinReorderBeforeDeduplicate = enableJoinReorderBeforeDeduplicate;
+    }
+
+    public int getSpmRewriteTimeoutMs() {
+        return spmRewriteTimeoutMs;
+    }
+
+    public void setSpmRewriteTimeoutMs(int spmRewriteTimeoutMs) {
+        this.spmRewriteTimeoutMs = spmRewriteTimeoutMs;
+    }
+
+    public void setEnableMultiCastLimitPushDown(boolean enableMultiCastLimitPushDown) {
+        this.enableMultiCastLimitPushDown = enableMultiCastLimitPushDown;
+    }
+
+    public boolean isEnableMultiCastLimitPushDown() {
+        return enableMultiCastLimitPushDown;
+    }
+
+    public boolean isEnableJSONV2Rewrite() {
+        return cboJSONV2Rewrite;
+    }
+
+    public void setEnableJSONV2Rewrite(boolean enableJSONV2Rewrite) {
+        this.cboJSONV2Rewrite = enableJSONV2Rewrite;
+    }
+  
+    public boolean isEnableDropTableCheckMvDependency() {
+        return enableDropTableCheckMvDependency;
+    }
+
+    public void setEnableDropTableCheckMvDependency(boolean enableDropTableCheckMvDependency) {
+        this.enableDropTableCheckMvDependency = enableDropTableCheckMvDependency;
+    }
+
+>>>>>>> 4878d7a233 ([Enhancement] check mv dependency when drop table (#61584))
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
