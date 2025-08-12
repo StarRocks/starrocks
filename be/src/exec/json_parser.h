@@ -33,6 +33,7 @@ public:
     virtual Status advance() noexcept = 0;
     // left_bytes_string returns bytes not parsed in std:string.
     virtual std::string left_bytes_string(size_t sz) noexcept = 0;
+    virtual size_t left_bytes() { return 0; }
 
 protected:
     simdjson::ondemand::parser* const _parser;
@@ -50,6 +51,7 @@ public:
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
     std::string left_bytes_string(size_t sz) noexcept override;
+    size_t left_bytes() noexcept override;
 
 private:
     Status _get_current_impl(simdjson::ondemand::object* row);
@@ -92,6 +94,8 @@ private:
     size_t _batch_size = simdjson::dom::DEFAULT_BATCH_SIZE;
     // _first_object_parsed is true if there is at least one object is parsed successfully
     bool _first_object_parsed = false;
+    size_t _last_offset = 0;
+    size_t _left_bytes = 0;
 };
 
 // JsonArrayParser parse json in json array

@@ -125,7 +125,6 @@ struct ByteBuffer {
         if (tracker == nullptr) {
             return Status::InternalError("current thread memory tracker Not Found when allocate ByteBuffer");
         }
-#ifndef BE_TEST
         // check limit before allocation
         TRY_CATCH_BAD_ALLOC({
             ASSIGN_OR_RETURN(auto meta, ByteBufferMeta::create(meta_type));
@@ -136,17 +135,6 @@ struct ByteBuffer {
             meta = nullptr;
             return ptr;
         });
-#else
-        ASSIGN_OR_RETURN(auto meta, ByteBufferMeta::create(meta_type));
-        ByteBufferPtr ptr(new ByteBuffer(size, meta), MemTrackerDeleter(tracker));
-        Status ret = Status::OK();
-        TEST_SYNC_POINT_CALLBACK("ByteBuffer::allocate_with_tracker", &ret);
-        if (ret.ok()) {
-            return ptr;
-        } else {
-            return ret;
-        }
-#endif
     }
 
     static StatusOr<ByteBufferPtr> reallocate_with_tracker(const ByteBufferPtr& old_ptr, size_t new_size) {
@@ -174,10 +162,32 @@ struct ByteBuffer {
         DCHECK(pos <= limit);
     }
 
+    void move_to_front() {
+        if (pos > 0) {
+            if (has_remaining()) {
+                size_t size = remaining();
+                std::memmove(ptr, ptr + pos, size);
+                pos = 0;
+                limit = size;
+            } else {
+                pos = 0;
+                limit = 0;
+            }
+        }
+    }
+
+    size_t try_read_size() {
+        return capacity - limit;
+    }
+
     void flip() {
         limit = pos;
         pos = 0;
     }
+
+    char* const pos_ptr() { return ptr + pos; }
+    char* const limit_ptr() { return ptr + limit; }
+    void read(size_t read_size) { limit = limit + read_size; }
 
     size_t remaining() const { return limit - pos; }
     bool has_remaining() const { return limit > pos; }

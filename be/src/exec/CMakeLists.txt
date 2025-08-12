@@ -103,6 +103,7 @@ set(EXEC_FILES
     hdfs_scanner_orc.cpp
     hdfs_scanner_parquet.cpp
     hdfs_scanner_text.cpp
+    hdfs_scanner_json.cpp
     hdfs_scanner_partition.cpp
     cache_select_scanner.cpp
     json_scanner.cpp
