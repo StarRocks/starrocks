@@ -17,7 +17,6 @@
 #include <fs/fs.h>
 #include <gtest/gtest.h>
 
-#include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
 #include "cctz/time_zone.h"
@@ -25,7 +24,7 @@
 #include "runtime/decimalv3.h"
 #include "types/timestamp_value.h"
 #include "util/timezone_utils.h"
-#include "util/url_coding.h"
+#include "util/variant_util.h"
 
 namespace starrocks {
 
@@ -35,8 +34,6 @@ public:
     ~VariantValueTest() override = default;
 
 protected:
-    uint8_t primitiveHeader(VariantPrimitiveType primitive) { return static_cast<uint8_t>(primitive) << 2; }
-
     void SetUp() override {
         std::string starrocks_home = getenv("STARROCKS_HOME");
         test_exec_dir = starrocks_home + "/be/test/formats/parquet/test_data/variant";
@@ -225,7 +222,7 @@ TEST_F(VariantValueTest, DecimalToJson) {
 
 TEST_F(VariantValueTest, UUIDToJson) {
     std::string_view empty_metadata = VariantMetadata::kEmptyMetadata;
-    const uint8_t uuid_chars[] = {primitiveHeader(VariantPrimitiveType::UUID),
+    const uint8_t uuid_chars[] = {VariantUtil::primitiveHeader(VariantPrimitiveType::UUID),
                                   0xf2,
                                   0x4f,
                                   0x9b,

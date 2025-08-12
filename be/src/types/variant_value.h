@@ -20,58 +20,47 @@
 
 #include "common/statusor.h"
 #include "fmt/format.h"
-#include "formats/parquet/variant.h"
 #include "util/slice.h"
 
 namespace starrocks {
 
 class VariantValue {
 public:
-    VariantValue(const std::string_view metadata, const std::string_view value) : _metadata(metadata), _value(value) {}
-
-    explicit VariantValue(const Slice& slice) {
-        const char* variant_raw = slice.get_data();
-        // convert variant_raw to a string_view
-        // The first 4 bytes are the size of the value
-        uint32_t variant_size;
-        std::memcpy(&variant_size, variant_raw, sizeof(uint32_t));
-        if (variant_size > slice.get_size() - sizeof(uint32_t)) {
-            throw std::runtime_error("Invalid variant size");
+    VariantValue(const std::string_view metadata, const std::string_view value) : _metadata(metadata), _value(value) {
+        if (auto status = validate_metadata(_metadata); !status.ok()) {
+            throw std::runtime_error("Invalid metadata: " + status.to_string());
         }
 
-        const auto variant = std::string_view(variant_raw + sizeof(uint32_t), variant_size);
-        auto metadata_status = load_metadata(variant);
-        if (!metadata_status.ok()) {
-            throw std::runtime_error("Failed to load metadata: " + metadata_status.status().to_string());
+        if (_value.empty()) {
+            throw std::runtime_error("Value cannot be empty");
         }
-
-        _metadata = metadata_status.value();
-        _value = std::string_view(variant_raw + sizeof(uint32_t) + _metadata.size(), variant_size - _metadata.size());
     }
+
+    VariantValue(std::string metadata, std::string value) : _metadata(std::move(metadata)), _value(std::move(value)) {
+        if (auto status = validate_metadata(_metadata); !status.ok()) {
+            throw std::runtime_error("Invalid metadata: " + status.to_string());
+        }
+
+        if (_value.empty()) {
+            throw std::runtime_error("Value cannot be empty");
+        }
+    }
+
+    explicit VariantValue(const Slice& slice);
 
     VariantValue() = default;
 
     VariantValue(const VariantValue& rhs) = default;
 
-    VariantValue(VariantValue&& rhs) noexcept : _metadata(std::move(rhs._metadata)), _value(std::move(rhs._value)) {}
+    VariantValue(VariantValue&& rhs) noexcept = default;
 
-    VariantValue& operator=(const VariantValue& rhs) {
-        if (this != &rhs) {
-            _metadata = rhs._metadata;
-            _value = rhs._value;
-        }
+    static Status validate_metadata(const std::string_view metadata);
 
-        return *this;
-    }
+    VariantValue& operator=(const VariantValue& rhs) = default;
 
-    VariantValue& operator=(VariantValue&& rhs) noexcept {
-        if (this != &rhs) {
-            _metadata = std::move(rhs._metadata);
-            _value = std::move(rhs._value);
-        }
+    VariantValue& operator=(VariantValue&& rhs) noexcept = default;
 
-        return *this;
-    }
+    static VariantValue of_null();
 
     // Load metadata from the variant binary.
     // will slice the variant binary to extract metadata
@@ -91,8 +80,8 @@ public:
     StatusOr<std::string> to_json(cctz::time_zone timezone = cctz::local_time_zone()) const;
     std::string to_string() const;
 
-    std::string_view get_metadata() const { return _metadata; }
-    std::string_view get_value() const { return _value; }
+    std::string get_metadata() const { return _metadata; }
+    std::string get_value() const { return _value; }
 
 private:
     static constexpr uint8_t kVersionMask = 0b1111;
@@ -101,8 +90,9 @@ private:
     static constexpr uint8_t kOffsetSizeShift = 6;
     static constexpr uint8_t kHeaderSize = 1;
 
-    std::string_view _metadata;
-    std::string_view _value;
+    // Now directly store strings instead of string_views
+    std::string _metadata;
+    std::string _value;
 };
 
 // append json string to the stream

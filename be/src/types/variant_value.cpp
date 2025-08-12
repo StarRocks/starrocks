@@ -19,28 +19,62 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <cstring>
 
-#include "formats/parquet/variant.h"
 #include "util/url_coding.h"
 #include "util/variant_util.h"
 
 namespace starrocks {
 
-StatusOr<std::string_view> VariantValue::load_metadata(std::string_view variant) const {
-    if (variant.size() < 3) {
-        return Status::NotSupported("Variant metadata is too short");
+VariantValue::VariantValue(const Slice& slice) {
+    const char* variant_raw = slice.get_data();
+    // convert variant_raw to a string_view
+    // The first 4 bytes are the size of the value
+    uint32_t variant_size;
+    std::memcpy(&variant_size, variant_raw, sizeof(uint32_t));
+    if (variant_size > slice.get_size() - sizeof(uint32_t)) {
+        throw std::runtime_error("Invalid variant size");
     }
 
-    const uint8_t header = static_cast<uint8_t>(variant[0]);
+    const auto variant = std::string_view(variant_raw + sizeof(uint32_t), variant_size);
+    auto metadata_status = load_metadata(variant);
+    if (!metadata_status.ok()) {
+        throw std::runtime_error("Failed to load metadata: " + metadata_status.status().to_string());
+    }
+
+    _metadata = std::string(metadata_status.value());
+    _value = std::string(variant_raw + sizeof(uint32_t) + metadata_status.value().size(),
+                         variant_size - metadata_status.value().size());
+}
+
+Status VariantValue::validate_metadata(const std::string_view metadata) {
+    // metadata at least 3 bytes: version, dictionarySize and at least one offset.
+    if (metadata.size() < 3) {
+        return Status::InternalError("Variant metadata is too short");
+    }
+
+    const uint8_t header = static_cast<uint8_t>(metadata[0]);
     if (const uint8_t version = header & kVersionMask; version != 1) {
         return Status::NotSupported("Unsupported variant version: " + std::to_string(version));
     }
 
+    return Status::OK();
+}
+
+VariantValue VariantValue::of_null() {
+    static constexpr uint8_t header = static_cast<uint8_t>(VariantPrimitiveType::NULL_TYPE) << 2;
+    static constexpr uint8_t null_chars[] = {header};
+    return VariantValue(VariantMetadata::kEmptyMetadata,
+                        std::string_view{reinterpret_cast<const char*>(null_chars), 1});
+}
+
+StatusOr<std::string_view> VariantValue::load_metadata(std::string_view variant) const {
+    RETURN_IF_ERROR(validate_metadata(variant));
+
+    const uint8_t header = static_cast<uint8_t>(variant[0]);
     const uint8_t offset_size = 1 + ((header & kOffsetSizeMask) >> kOffsetSizeShift);
     if (offset_size < 1 || offset_size > 4) {
         return Status::InvalidArgument("Invalid offset size in variant metadata: " + std::to_string(offset_size) +
                                        ", expected 1, 2, 3 or 4 bytes");
     }
-
     uint8_t dict_size = VariantUtil::readLittleEndianUnsigned(variant.data() + 1, offset_size);
     uint8_t offset_list_offset = kHeaderSize + offset_size;
     uint8_t data_offset = offset_list_offset + (1 + dict_size) * offset_size;
