@@ -387,7 +387,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(
     _is_pipeline_level_shuffle = is_pipeline_level_shuffle && (_num_shuffles > 1);
 
     _shuffler = std::make_unique<Shuffler>(runtime_state()->func_version() <= 3, !_is_channel_bound_driver_sequence,
-                                           _part_type, _channels.size(), _num_shuffles_per_channel);
+                                           _part_type, _channels.size(), _num_shuffles_per_channel,
+                                           !bucket_properties.empty());
 }
 
 Status ExchangeSinkOperator::prepare(RuntimeState* state) {
