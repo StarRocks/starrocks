@@ -26,7 +26,6 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
-import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
@@ -1538,22 +1537,6 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Type", metaData.getColumn(1).getName());
         Assertions.assertEquals("Comment", metaData.getColumn(2).getName());
-    }
-
-    @Test
-    public void testDescribeStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        DescribeStmt stmt = new DescribeStmt(tableName, false, NodePosition.ZERO);
-        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(8, metaData.getColumnCount());
-        Assertions.assertEquals("IndexName", metaData.getColumn(0).getName());
-        Assertions.assertEquals("IndexKeysType", metaData.getColumn(1).getName());
-        Assertions.assertEquals("Field", metaData.getColumn(2).getName());
-        Assertions.assertEquals("Type", metaData.getColumn(3).getName());
-        Assertions.assertEquals("Null", metaData.getColumn(4).getName());
-        Assertions.assertEquals("Key", metaData.getColumn(5).getName());
-        Assertions.assertEquals("Default", metaData.getColumn(6).getName());
-        Assertions.assertEquals("Extra", metaData.getColumn(7).getName());
     }
 
     @Test

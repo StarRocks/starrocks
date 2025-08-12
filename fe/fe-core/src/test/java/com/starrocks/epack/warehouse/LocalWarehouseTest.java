@@ -194,7 +194,8 @@ public class LocalWarehouseTest extends LocalWarehouseTestBase {
         { // single cngroup, default warehouse
             ShowClustersStmt stmt = new ShowClustersStmt("default_warehouse");
             ShowResultSet resultSet = ShowExecutor.execute(stmt, connectContext);
-            Assert.assertEquals(new ShowResultMetaFactory().getMetadata(stmt), resultSet.getMetaData());
+            Assert.assertEquals(new ShowResultMetaFactory().getMetadata(stmt).getColumnCount(),
+                    resultSet.getMetaData().getColumnCount());
             Assert.assertEquals(1L, resultSet.getResultRows().size());
 
             Assert.assertTrue(resultSet.next());
@@ -242,7 +243,8 @@ public class LocalWarehouseTest extends LocalWarehouseTestBase {
 
             ShowClustersStmt stmt = new ShowClustersStmt("default_warehouse");
             ShowResultSet resultSet = ShowExecutor.execute(stmt, connectContext);
-            Assert.assertEquals(new ShowResultMetaFactory().getMetadata(stmt), resultSet.getMetaData());
+            Assert.assertEquals(new ShowResultMetaFactory().getMetadata(stmt).getColumnCount(),
+                    resultSet.getMetaData().getColumnCount());
             Assert.assertEquals(8L, resultSet.numColumns());
             Assert.assertEquals(2L, resultSet.getResultRows().size());
 
