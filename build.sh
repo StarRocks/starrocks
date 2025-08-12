@@ -373,14 +373,15 @@ do
 done
 
 # Clean and build generated code
-echo "Build generated code"
-cd ${STARROCKS_HOME}/gensrc
-if [ ${CLEAN} -eq 1 ]; then
-   make clean
-   rm -rf ${STARROCKS_HOME}/fe/fe-core/target
+if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
+    echo "Build generated code"
+    cd ${STARROCKS_HOME}/gensrc
+    if [ ${CLEAN} -eq 1 ]; then
+       make clean
+    fi
+    # DO NOT using parallel make(-j) for gensrc
+    make
 fi
-# DO NOT using parallel make(-j) for gensrc
-make
 cd ${STARROCKS_HOME}
 
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
@@ -521,7 +522,8 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests -T ${PARALLEL}
+    # clean phase is explicited by `--clean` option, don't bother doing clean again.
+    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests -Dmaven.clean.skip=true -T ${PARALLEL}
     cd ${STARROCKS_HOME}/java-extensions
     ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests -T ${PARALLEL}
     cd ${STARROCKS_HOME}
