@@ -74,6 +74,7 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
     private static final Logger LOG = LogManager.getLogger(JsonPathRewriteRule.class);
     private static final int DEFAULT_JSON_FLATTEN_DEPTH = 20;
     private static final Pattern JSON_PATH_VALID_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
+    public static final String COLUMN_REF_HINT = "JsonPathExtended";
 
     private static final Set<String> SUPPORTED_JSON_FUNCTIONS = Set.of(
             FunctionSet.GET_JSON_STRING,
@@ -152,6 +153,7 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
 
             // Create a ref
             ColumnRefOperator newColumnRef = columnRefFactory.create(path, jsonPath.getValueType(), true);
+            newColumnRef.setHints(List.of(COLUMN_REF_HINT));
             columnRefFactory.updateColumnRefToColumns(newColumnRef, extendedColumn, tableAndColumn.first);
             pathMap.put(fullPath, newColumnRef);
 
@@ -241,6 +243,10 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
                     changed.put(entry.getKey(), rewritten);
                 }
             }
+            if (changed.isEmpty()) {
+                return optExpr;
+            }
+
             Map<ColumnRefOperator, ScalarOperator> projection = Maps.newHashMap();
             projection.putAll(project.getColumnRefMap());
             projection.putAll(changed);

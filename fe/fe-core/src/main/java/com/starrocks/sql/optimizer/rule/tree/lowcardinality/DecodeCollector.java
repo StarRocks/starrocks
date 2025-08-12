@@ -65,6 +65,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rule.tree.JsonPathRewriteRule;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.CacheRelaxDictManager;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
@@ -264,14 +265,14 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             List<ScalarOperator> dictExprList = stringExpressions.getOrDefault(cid, Collections.emptyList());
             long allExprNum = dictExprList.size();
             // only query original string-column
-            long worthless = dictExprList.stream().filter(ScalarOperator::isColumnRef).count();
+            long worthless = dictExprList.stream()
+                    .filter(ScalarOperator::isColumnRef)
+                    .filter(x -> !((ColumnRefOperator) x).getHints().contains(JsonPathRewriteRule.COLUMN_REF_HINT))
+                    .count();
             // we believe that the more complex expressions using the dict-column, and the preformance will be better
             if (worthless == 0 && allExprNum != 0) {
                 context.allStringColumns.add(cid);
             } else if (allExprNum > worthless && allExprNum >= worthless * 2) {
-                context.allStringColumns.add(cid);
-            } else if (allExprNum == worthless && allExprNum > 0) {
-                // It's beneficial to rewrite the extended column
                 context.allStringColumns.add(cid);
             }
         }
