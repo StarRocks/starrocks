@@ -266,8 +266,8 @@ private:
     bool need_recover(const Status& st) { return _builder.recover_flag() != RecoverFlag::OK; }
     bool need_re_publish(const Status& st) { return _builder.recover_flag() == RecoverFlag::RECOVER_WITH_PUBLISH; }
     bool is_column_mode_partial_update(const TxnLogPB_OpWrite& op_write) const {
-        // TODO support COLUMN_UPSERT_MODE
-        return op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPDATE_MODE;
+        auto mode = op_write.txn_meta().partial_update_mode();
+        return mode == PartialUpdateMode::COLUMN_UPDATE_MODE || mode == PartialUpdateMode::COLUMN_UPSERT_MODE;
     }
 
     Status check_and_recover(const std::function<Status()>& publish_func) {
@@ -321,7 +321,7 @@ private:
         RETURN_IF_ERROR(prepare_primary_index());
         if (is_column_mode_partial_update(op_write)) {
             return _tablet.update_mgr()->publish_column_mode_partial_update(op_write, txn_id, _metadata, &_tablet,
-                                                                            &_builder, _base_version);
+                                                                             _index_entry, &_builder, _base_version);
         } else {
             return _tablet.update_mgr()->publish_primary_key_tablet(op_write, txn_id, _metadata, &_tablet, _index_entry,
                                                                     &_builder, _base_version);

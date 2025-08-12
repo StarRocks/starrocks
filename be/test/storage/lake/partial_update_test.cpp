@@ -1792,3 +1792,123 @@ INSTANTIATE_TEST_SUITE_P(LakePartialUpdateConcurrentSchemaEvolutionTest,
 // clang-format on
 
 } // namespace starrocks::lake
+
+namespace starrocks::lake {
+
+class LakeColumnUpsertModeTest : public LakePartialUpdateTestBase {
+public:
+    LakeColumnUpsertModeTest() : LakePartialUpdateTestBase(kTestDirectory) {}
+
+    void SetUp() override {
+        LakePartialUpdateTestBase::SetUp();
+    }
+
+    constexpr static const char* const kTestDirectory = "test_lake_column_upsert_mode";
+};
+
+TEST_F(LakeColumnUpsertModeTest, upsert_existing_rows_generates_dcg_only) {
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    auto chunk_partial = generate_data(kChunkSize, 0, true, 5);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                           .set_tablet_manager(_tablet_mgr.get())
+                                           .set_tablet_id(tablet_id)
+                                           .set_txn_id(txn_id)
+                                           .set_partition_id(_partition_id)
+                                           .set_mem_tracker(_mem_tracker.get())
+                                           .set_schema_id(_tablet_schema->id())
+                                           .set_slot_descriptors(&_slot_pointers)
+                                           .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                           .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
+    ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(md->rowsets_size(), 3);
+    EXPECT_GT(md->dcg_meta().dcgs_size(), 0);
+}
+
+TEST_F(LakeColumnUpsertModeTest, upsert_with_new_rows_adds_new_segments) {
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                           .set_tablet_manager(_tablet_mgr.get())
+                                           .set_tablet_id(tablet_id)
+                                           .set_txn_id(txn_id)
+                                           .set_partition_id(_partition_id)
+                                           .set_mem_tracker(_mem_tracker.get())
+                                           .set_schema_id(_tablet_schema->id())
+                                           .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSIGN_OR_ABORT(auto md_before, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    auto prev_rowsets = md_before->rowsets_size();
+
+    auto chunk_insert = generate_data(kChunkSize, 100, true, 7);
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                           .set_tablet_manager(_tablet_mgr.get())
+                                           .set_tablet_id(tablet_id)
+                                           .set_txn_id(txn_id)
+                                           .set_partition_id(_partition_id)
+                                           .set_mem_tracker(_mem_tracker.get())
+                                           .set_schema_id(_tablet_schema->id())
+                                           .set_slot_descriptors(&_slot_pointers)
+                                           .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                           .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_insert, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    ASSIGN_OR_ABORT(auto md_after, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_GT(md_after->rowsets_size(), prev_rowsets);
+    auto total = check(version, [](int c0, int c1, int c2) { return (c2 == c0 * 4) || (c2 == 10); });
+    EXPECT_EQ(total, kChunkSize * 2);
+}
+
+} // namespace starrocks::lake
