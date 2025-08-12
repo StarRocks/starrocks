@@ -2033,7 +2033,104 @@ public class ShowExecutor {
                     authorizationManager.isBuiltinRole(e) ? "true" : "false",
                     authorizationManager.getRoleComment(e))));
 
+<<<<<<< HEAD
             return new ShowResultSet(statement.getMetaData(), infos);
+=======
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), infos);
+        }
+
+        @Override
+        public ShowResultSet visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement,
+                                                                   ConnectContext context) {
+            AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            Set<SecurityIntegration> securityIntegrations = authenticationManager.getAllSecurityIntegrations();
+            List<List<String>> infos = new ArrayList<>();
+            for (SecurityIntegration securityIntegration : securityIntegrations) {
+                List<String> info = new ArrayList<>();
+                info.add(securityIntegration.getName());
+                info.add(securityIntegration.getType());
+                if (securityIntegration.getComment().isEmpty()) {
+                    info.add(FeConstants.NULL_STRING);
+                } else {
+                    info.add(securityIntegration.getComment());
+                }
+                infos.add(info);
+            }
+
+            // sort by type, then by name
+            List<List<String>> sortedList = infos.stream()
+                    .sorted(
+                            Comparator.comparing((List<String> sublist) -> sublist.get(1))
+                                    .thenComparing((List<String> sublist) -> sublist.get(0))
+                    )
+                    .collect(Collectors.toList());
+
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), sortedList);
+        }
+
+        @Override
+        public ShowResultSet visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement,
+                                                                         ConnectContext context) {
+            AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+
+            String name = statement.getName();
+            List<List<String>> infos = new ArrayList<>();
+            SecurityIntegration securityIntegration = authenticationManager.getSecurityIntegration(name);
+            if (securityIntegration != null) {
+                Map<String, String> propertyMap = securityIntegration.getPropertyMap();
+                PrintableMap<String, String> printableMap = new PrintableMap<>(propertyMap, "=", true, false, true);
+                infos.add(Lists.newArrayList(name,
+                        "CREATE SECURITY INTEGRATION `" + name +
+                                "` PROPERTIES (\n" + printableMap + "\n)"));
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), infos);
+        }
+
+        @Override
+        public ShowResultSet visitShowGroupProvidersStatement(ShowGroupProvidersStmt statement, ConnectContext context) {
+            AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            List<GroupProvider> groupProviderLogs = authenticationManager.getAllGroupProviders();
+            List<List<String>> infos = new ArrayList<>();
+            for (GroupProvider groupProviderLog : groupProviderLogs) {
+                List<String> info = new ArrayList<>();
+                info.add(groupProviderLog.getName());
+                info.add(groupProviderLog.getType());
+                if (groupProviderLog.getComment().isEmpty()) {
+                    info.add(FeConstants.NULL_STRING);
+                } else {
+                    info.add(groupProviderLog.getComment());
+                }
+                infos.add(info);
+            }
+
+            // sort by type, then by name
+            List<List<String>> sortedList = infos.stream()
+                    .sorted(
+                            Comparator.comparing((List<String> sublist) -> sublist.get(1))
+                                    .thenComparing((List<String> sublist) -> sublist.get(0))
+                    )
+                    .collect(Collectors.toList());
+
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), sortedList);
+        }
+
+        @Override
+        public ShowResultSet visitShowCreateGroupProviderStatement(ShowCreateGroupProviderStmt statement,
+                                                                   ConnectContext context) {
+            AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+
+            String name = statement.getName();
+            List<List<String>> infos = new ArrayList<>();
+            GroupProvider groupProviderLog = authenticationManager.getGroupProvider(name);
+            if (groupProviderLog != null) {
+                Map<String, String> propertyMap = groupProviderLog.getProperties();
+                PrintableMap<String, String> printableMap = new PrintableMap<>(propertyMap, "=", true, false, true);
+                infos.add(Lists.newArrayList(name,
+                        "CREATE GROUP PROVIDER `" + name +
+                                "` PROPERTIES (\n" + printableMap + "\n)"));
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), infos);
+>>>>>>> fb3c1fbeb3 ([BugFix] Fix security integration miss encrypt password bug (#60666))
         }
 
         @Override
