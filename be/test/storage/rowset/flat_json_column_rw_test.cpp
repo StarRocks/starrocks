@@ -26,6 +26,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/statusor.h"
+#include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
@@ -63,7 +64,7 @@ public:
 protected:
     void SetUp() override {
         config::enable_json_flat_complex_type = true;
-        _meta.reset(new ColumnMetaPB());
+        _meta = std::make_shared<ColumnMetaPB>();
     }
 
     void TearDown() override {
@@ -158,7 +159,7 @@ protected:
         return json_col;
     }
 
-private:
+protected:
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
     std::shared_ptr<ColumnMetaPB> _meta;
 };
@@ -2497,6 +2498,251 @@ TEST_F(FlatJsonColumnRWTest, testSegmentWriterIteratorWithMixedDataTypes) {
             ASSERT_EQ(result, column->debug_string()) << fmt::format("field={} type={}", field_name, field_type);
         }
     }
+}
+
+TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
+    // Test JSON global dictionary functionality
+    auto fs = std::make_shared<MemoryFileSystem>();
+    const std::string file_name = "/tmp/test_json_global_dict.dat";
+    ASSERT_TRUE(fs->create_dir("/tmp/").ok());
+
+    // Prepare test data with repeated JSON values to trigger dictionary encoding
+    std::vector<std::string> json_strings = {
+            R"({"name": "Alice", "age": 30, "city": "Beijing"})",
+            R"({"name": "Bob", "age": 25, "city": "Shanghai"})",
+            R"({"name": "Alice", "age": 35, "city": "Beijing"})", // repeated name and city
+            R"({"name": "Charlie", "age": 28, "city": "Guangzhou"})",
+            R"({"name": "Bob", "age": 30, "city": "Shanghai"})",  // repeated name and city
+            R"({"name": "Alice", "age": 40, "city": "Beijing"})", // repeated name and city
+    };
+    TabletSchemaPB tablet_schema_pb;
+    auto* column_pb = tablet_schema_pb.add_column();
+    column_pb->set_name("test_json");
+    column_pb->set_type("JSON");
+    column_pb->set_is_key(false);
+    column_pb->set_is_nullable(true);
+    column_pb->set_unique_id(0);
+    auto tablet_schema = TabletSchema::create(tablet_schema_pb);
+    SchemaPtr chunk_schema = std::make_shared<Schema>(tablet_schema->schema());
+    TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
+
+    auto write_data = [tablet_schema](std::unique_ptr<WritableFile> wfile, const std::vector<std::string>& json_strings,
+                                      const SegmentWriterOptions& opts, std::unique_ptr<SegmentWriter>* out_writer) {
+        auto writer = std::make_unique<SegmentWriter>(std::move(wfile), 0, tablet_schema, opts);
+        ASSERT_OK(writer->init());
+
+        auto json_column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
+        SchemaPtr chunk_schema = std::make_shared<Schema>(tablet_schema->schema());
+        auto chunk = std::make_shared<Chunk>(Columns{json_column}, chunk_schema);
+
+        // Add JSON data to chunk
+        for (const auto& json_str : json_strings) {
+            JsonValue json_value;
+            ASSERT_OK(JsonValue::parse(json_str, &json_value));
+            json_column->append_datum(Datum(&json_value));
+        }
+
+        ASSERT_OK(writer->append_chunk(*chunk));
+
+        uint64_t index_size = 0;
+        uint64_t footer_position = 0;
+        ASSERT_OK(writer->finalize_columns(&index_size));
+        ASSERT_OK(writer->finalize_footer(&footer_position));
+        *out_writer = std::move(writer);
+    };
+
+    // Write data with global dictionary
+    {
+        // Create global dictionary for sub-columns
+        GlobalDictByNameMaps global_dicts;
+        GlobalDictMap name_dict = {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}};
+        GlobalDictMap city_dict = {{"Beijing", 0}, {"Shanghai", 1}, {"Guangzhou", 2}};
+
+        // Store dictionaries with column names
+        global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{name_dict, 1};
+        global_dicts["test_json.city"] = GlobalDictsWithVersion<GlobalDictMap>{city_dict, 1};
+
+        SegmentWriterOptions opts;
+        opts.global_dicts = &global_dicts;
+        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+        opts.flat_json_config->set_flat_json_enabled(true);
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
+
+        auto json_column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
+        auto chunk = std::make_shared<Chunk>(Columns{json_column}, chunk_schema);
+
+        // Add JSON data to chunk
+        for (const auto& json_str : json_strings) {
+            JsonValue json_value;
+            ASSERT_OK(JsonValue::parse(json_str, &json_value));
+            json_column->append_datum(Datum(&json_value));
+        }
+
+        std::unique_ptr<SegmentWriter> writer;
+        write_data(std::move(wfile), json_strings, opts, &writer);
+
+        // Check global dictionary validity
+        const auto& dict_valid_info = writer->global_dict_columns_valid_info();
+        ASSERT_TRUE(dict_valid_info.count("test_json.name") > 0);
+        ASSERT_TRUE(dict_valid_info.at("test_json.name")); // Should be valid
+        ASSERT_TRUE(dict_valid_info.count("test_json.city") > 0);
+        ASSERT_TRUE(dict_valid_info.at("test_json.city")); // Should be valid
+    }
+
+    // Another batch of JSON strings with different values
+    std::vector<std::string> json_strings2 = {
+            R"({"name": "David", "age": 22, "city": "Shenzhen"})", R"({"name": "Eve", "age": 29, "city": "Hangzhou"})",
+            R"({"name": "Frank", "age": 33, "city": "Chengdu"})",  R"({"name": "Grace", "age": 27, "city": "Wuhan"})",
+            R"({"name": "Heidi", "age": 31, "city": "Nanjing"})",  R"({"name": "Ivan", "age": 26, "city": "Suzhou"})"};
+
+    // Test with invalid global dictionary (missing values)
+    {
+        ASSIGN_OR_ABORT(auto wfile2, fs->new_writable_file(file_name + "_invalid"));
+
+        // Create incomplete dictionary that doesn't contain all values
+        GlobalDictByNameMaps invalid_global_dicts;
+
+        GlobalDictMap incomplete_name_dict;
+        incomplete_name_dict["Alice"] = 0;
+        incomplete_name_dict["Bob"] = 1;
+
+        invalid_global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{incomplete_name_dict, 1};
+
+        SegmentWriterOptions seg_opts;
+        seg_opts.global_dicts = &invalid_global_dicts;
+        seg_opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+        seg_opts.flat_json_config->set_flat_json_enabled(true);
+
+        auto json_column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
+        auto chunk = std::make_shared<Chunk>(Columns{json_column}, chunk_schema);
+
+        // Add JSON data to chunk
+        for (const auto& json_str : json_strings2) {
+            JsonValue json_value;
+            ASSERT_OK(JsonValue::parse(json_str, &json_value));
+            json_column->append_datum(Datum(&json_value));
+        }
+
+        std::unique_ptr<SegmentWriter> writer;
+        write_data(std::move(wfile2), json_strings2, seg_opts, &writer);
+
+        const auto& dict_valid_info = writer->global_dict_columns_valid_info();
+        ASSERT_TRUE(dict_valid_info.count("test_json.city") > 0);
+        ASSERT_FALSE(dict_valid_info.at("test_json.city")); // Should be invalid
+    }
+    // Clean up test files
+    ASSERT_OK(fs->delete_file(file_name));
+    ASSERT_OK(fs->delete_file(file_name + "_invalid"));
+
+    // Test case 1: Generate JSON data with same fields but different data types
+    std::vector<std::string> json_strings_different_types = {
+            R"({"name": "Alice", "age": 30, "city": "Beijing"})",
+            R"({"name": "Bob", "age": "25", "city": "Shanghai"})", // age is string instead of number
+            R"({"name": "Charlie", "age": 28, "city": "Guangzhou"})",
+            R"({"name": "David", "age": 35.5, "city": "Shenzhen"})", // age is float instead of integer
+            R"({"name": "Eve", "age": 29, "city": 12345})",          // city is number instead of string
+            R"({"name": "Frank", "age": 33, "city": "Chengdu"})"};
+
+    // Test with global dictionary that expects consistent data types
+    {
+        ASSIGN_OR_ABORT(auto wfile3, fs->new_writable_file(file_name + "_different_types"));
+
+        // Create global dictionary expecting consistent data types
+        GlobalDictByNameMaps type_consistent_global_dicts;
+        GlobalDictMap name_dict = {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}, {"David", 3}, {"Eve", 4}, {"Frank", 5}};
+        GlobalDictMap age_dict = {{"30", 0}, {"25", 1}, {"28", 2}, {"35", 3}, {"29", 4}, {"33", 5}}; // All as strings
+        GlobalDictMap city_dict = {{"Beijing", 0}, {"Shanghai", 1}, {"Guangzhou", 2}, {"Shenzhen", 3}, {"Chengdu", 4}};
+
+        type_consistent_global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{name_dict, 1};
+        type_consistent_global_dicts["test_json.age"] = GlobalDictsWithVersion<GlobalDictMap>{age_dict, 1};
+        type_consistent_global_dicts["test_json.city"] = GlobalDictsWithVersion<GlobalDictMap>{city_dict, 1};
+
+        SegmentWriterOptions seg_opts3;
+        seg_opts3.global_dicts = &type_consistent_global_dicts;
+        seg_opts3.flat_json_config = std::make_shared<FlatJsonConfig>();
+        seg_opts3.flat_json_config->set_flat_json_enabled(true);
+
+        auto json_column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
+        auto chunk = std::make_shared<Chunk>(Columns{json_column}, chunk_schema);
+
+        // Add JSON data with different data types to chunk
+        for (const auto& json_str : json_strings_different_types) {
+            JsonValue json_value;
+            ASSERT_OK(JsonValue::parse(json_str, &json_value));
+            json_column->append_datum(Datum(&json_value));
+        }
+
+        std::unique_ptr<SegmentWriter> writer;
+        write_data(std::move(wfile3), json_strings_different_types, seg_opts3, &writer);
+
+        // Check that dictionaries are invalidated due to data type inconsistencies
+        const auto& dict_valid_info = writer->global_dict_columns_valid_info();
+        ASSERT_TRUE(dict_valid_info.count("test_json.name") > 0);
+        ASSERT_TRUE(dict_valid_info.at("test_json.name")); // Name should still be valid (all strings)
+        ASSERT_TRUE(dict_valid_info.count("test_json.age") > 0);
+        ASSERT_FALSE(dict_valid_info.at("test_json.age")); // Age should be invalid (mixed types)
+        ASSERT_TRUE(dict_valid_info.count("test_json.city") > 0);
+        ASSERT_FALSE(dict_valid_info.at("test_json.city")); // City should be invalid (mixed types)
+    }
+
+    // Test case 2: Verify dict invalidation with more complex type mismatches
+    std::vector<std::string> json_strings_complex_types = {
+            R"({"user": {"id": 1001, "name": "Alice", "active": true, "score": 95.5}})",
+            R"({"user": {"id": [1,2,3], "name": "Bob", "active": "yes", "score": 88}})", // id is array, active is string, score is int
+            R"({"user": {"id": 1003, "name": "Charlie", "active": false, "score": 92.0}})",
+            R"({"user": {"id": 1004, "name": "David", "active": 1, "score": "85.5"}})", // active is number, score is string
+            R"({"user": {"id": 1005, "name": {"nick": "murphy"}, "active": true, "score": 90}})" // score is int, name is object
+    };
+
+    {
+        ASSIGN_OR_ABORT(auto wfile4, fs->new_writable_file(file_name + "_complex_types"));
+
+        // Create global dictionary for nested fields
+        GlobalDictByNameMaps complex_global_dicts;
+        GlobalDictMap user_id_dict = {{"1001", 0}, {"1002", 1}, {"1003", 2}, {"1004", 3}, {"1005", 4}};
+        GlobalDictMap user_name_dict = {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}, {"David", 3}, {"Eve", 4}};
+        GlobalDictMap user_active_dict = {{"true", 0}, {"false", 1}};
+        GlobalDictMap user_score_dict = {{"95.5", 0}, {"88", 1}, {"92.0", 2}, {"85.5", 3}, {"90", 4}};
+
+        complex_global_dicts["test_json.user.id"] = GlobalDictsWithVersion<GlobalDictMap>{user_id_dict, 1};
+        complex_global_dicts["test_json.user.name"] = GlobalDictsWithVersion<GlobalDictMap>{user_name_dict, 1};
+        complex_global_dicts["test_json.user.active"] = GlobalDictsWithVersion<GlobalDictMap>{user_active_dict, 1};
+        complex_global_dicts["test_json.user.score"] = GlobalDictsWithVersion<GlobalDictMap>{user_score_dict, 1};
+
+        SegmentWriterOptions seg_opts4;
+        seg_opts4.global_dicts = &complex_global_dicts;
+        seg_opts4.flat_json_config = std::make_shared<FlatJsonConfig>();
+        seg_opts4.flat_json_config->set_flat_json_enabled(true);
+
+        auto json_column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
+        auto chunk = std::make_shared<Chunk>(Columns{json_column}, chunk_schema);
+
+        // Add JSON data with complex type mismatches to chunk
+        for (const auto& json_str : json_strings_complex_types) {
+            JsonValue json_value;
+            ASSERT_OK(JsonValue::parse(json_str, &json_value));
+            json_column->append_datum(Datum(&json_value));
+        }
+
+        std::unique_ptr<SegmentWriter> writer;
+        write_data(std::move(wfile4), json_strings_complex_types, seg_opts4, &writer);
+
+        // Check that dictionaries are invalidated due to complex type mismatches
+        const auto& dict_valid_info = writer->global_dict_columns_valid_info();
+        ASSERT_TRUE(dict_valid_info.count("test_json.user.name") > 0);
+        ASSERT_FALSE(dict_valid_info.at("test_json.user.name")); // Name should be invalid(mixed object/string)
+        ASSERT_TRUE(dict_valid_info.count("test_json.user.id") > 0);
+        ASSERT_FALSE(dict_valid_info.at("test_json.user.id")); // ID should be invalid (mixed int/string)
+        ASSERT_TRUE(dict_valid_info.count("test_json.user.active") > 0);
+        ASSERT_FALSE(
+                dict_valid_info.at("test_json.user.active")); // Active should be invalid (mixed bool/string/number)
+        ASSERT_TRUE(dict_valid_info.count("test_json.user.score") > 0);
+        ASSERT_FALSE(dict_valid_info.at("test_json.user.score")); // Score should be invalid (mixed float/int/string)
+    }
+
+    // Clean up additional test files
+    ASSERT_OK(fs->delete_file(file_name + "_different_types"));
+    ASSERT_OK(fs->delete_file(file_name + "_complex_types"));
 }
 
 } // namespace starrocks

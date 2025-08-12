@@ -121,10 +121,15 @@ public:
     using CollectFunc = std::function<Status(ColumnId, Column*, LogicalType)>;
     std::unordered_map<std::string, CollectFunc> support_collect_func;
 
+    // Friend class for testing
+    friend class SegmentMetaCollecterTest;
+
 private:
     Status _init_return_column_iterators();
     Status _collect(const std::string& name, ColumnId cid, Column* column, LogicalType type);
     Status _collect_dict(ColumnId cid, Column* column, LogicalType type);
+    Status _collect_dict_for_flatjson(ColumnId cid, Column* column);
+    Status _collect_dict_for_column(ColumnIterator* column_iter, ColumnId cid, Column* column);
     Status _collect_max(ColumnId cid, Column* column, LogicalType type);
     Status _collect_min(ColumnId cid, Column* column, LogicalType type);
     Status _collect_count(ColumnId cid, Column* column, LogicalType type);
