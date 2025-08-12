@@ -252,6 +252,9 @@ public class TaskRunFIFOQueue {
         try {
             for (Set<TaskRun> taskRuns : gIdToTaskRunsMap.values()) {
                 for (TaskRun taskRun : taskRuns) {
+                    if (taskRun.getRunCtx() == null) {
+                        continue;
+                    }
                     result.compute(taskRun.getRunCtx().getCurrentWarehouseId(),
                             (key, value) -> value == null ? 1 : value + 1);
                 }
