@@ -86,6 +86,7 @@ public class UDFHelper {
     private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
+    // TODO: Use the time zone set by session variables?
     private static final TimeZone timeZone = TimeZone.getDefault();
 
     private static void getBooleanBoxedResult(int numRows, Boolean[] boxedArr, long columnAddr) {
@@ -226,6 +227,7 @@ public class UDFHelper {
         Platform.copyMemory(dataArr, Platform.DOUBLE_ARRAY_OFFSET, null, addrs[1], numRows * 8L);
     }
 
+    // TODO: Why not use BigInt instead of double?
     private static void getDoubleTimeResult(int numRows, Time[] boxedArr, long columnAddr) {
         byte[] nulls = new byte[numRows];
         double[] dataArr = new double[numRows];
@@ -234,7 +236,8 @@ public class UDFHelper {
                 nulls[i] = 1;
             } else {
                 // Note: add the timezone offset back because Time#getTime() returns the GMT timestamp
-                dataArr[i] = (boxedArr[i].getTime() + timeZone.getRawOffset()) / 1000;
+                long v = boxedArr[i].getTime();
+                dataArr[i] = (v + timeZone.getOffset(v)) / 1000;
             }
         }
 
