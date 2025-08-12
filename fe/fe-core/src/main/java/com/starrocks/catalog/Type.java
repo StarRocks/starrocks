@@ -883,8 +883,9 @@ public abstract class Type implements Cloneable {
 
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
+        // Allow VARBINARY as distribution key
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType()
-                && !isFunctionType() && !isBinaryType();
+                && !isFunctionType();
     }
 
     public boolean canBeWindowFunctionArgumentTypes() {
