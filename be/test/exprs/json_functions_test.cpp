@@ -182,6 +182,117 @@ TEST_F(JsonFunctionsTest, get_json_string_array) {
                         .ok());
 }
 
+TEST_F(JsonFunctionsTest, json_query_filter_simple) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    JsonColumn::Ptr jsons = JsonColumn::create();
+    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
+
+    std::string input = R"({
+        "books": [
+            { "id": 1, "price": 5 },
+            { "id": 2, "price": 20 }
+        ]
+    })";
+
+    JsonValue json;
+    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
+    jsons->append(&json);
+
+    path_builder.append("$.books[?(@.price > 10)]");
+    Columns columns{jsons, path_builder.build(true)};
+
+    ctx.get()->set_constant_columns(columns);
+    std::ignore = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    DeferOp defer([&]() {
+        (void)JsonFunctions::native_json_path_close(
+                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    });
+
+    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+    Datum datum = result->get(0);
+    ASSERT_FALSE(datum.is_null());
+    std::string out = datum.get_json()->to_string().value();
+    StripWhiteSpace(&out);
+    std::string expect = R"([{"id": 2, "price": 20}])";
+    StripWhiteSpace(&expect);
+    ASSERT_EQ(expect, out);
+}
+
+TEST_F(JsonFunctionsTest, json_query_filter_logical) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    JsonColumn::Ptr jsons = JsonColumn::create();
+    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
+
+    std::string input = R"({
+        "books": [
+            { "id": 1, "price": 5 },
+            { "id": 2, "price": 20 }
+        ]
+    })";
+
+    JsonValue json;
+    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
+    jsons->append(&json);
+
+    path_builder.append("$.books[?(@.price > 10 && @.id = 2)]");
+    Columns columns{jsons, path_builder.build(true)};
+
+    ctx.get()->set_constant_columns(columns);
+    std::ignore = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    DeferOp defer([&]() {
+        (void)JsonFunctions::native_json_path_close(
+                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    });
+
+    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+    Datum datum = result->get(0);
+    ASSERT_FALSE(datum.is_null());
+    std::string out = datum.get_json()->to_string().value();
+    StripWhiteSpace(&out);
+    std::string expect = R"([{"id": 2, "price": 20}])";
+    StripWhiteSpace(&expect);
+    ASSERT_EQ(expect, out);
+}
+
+TEST_F(JsonFunctionsTest, json_query_filter_no_match) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    JsonColumn::Ptr jsons = JsonColumn::create();
+    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
+
+    std::string input = R"({
+        "books": [
+            { "id": 1, "price": 5 },
+            { "id": 2, "price": 20 }
+        ]
+    })";
+
+    JsonValue json;
+    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
+    jsons->append(&json);
+
+    path_builder.append("$.books[?(@.unknown_field = 1)]");
+    Columns columns{jsons, path_builder.build(true)};
+
+    ctx.get()->set_constant_columns(columns);
+    std::ignore = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    DeferOp defer([&]() {
+        (void)JsonFunctions::native_json_path_close(
+                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    });
+
+    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+    Datum datum = result->get(0);
+    ASSERT_FALSE(datum.is_null());
+    std::string out = datum.get_json()->to_string().value();
+    StripWhiteSpace(&out);
+    std::string expect = R"([])";
+    StripWhiteSpace(&expect);
+    ASSERT_EQ(expect, out);
+}
+
 TEST_F(JsonFunctionsTest, get_json_emptyTest) {
     {
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
