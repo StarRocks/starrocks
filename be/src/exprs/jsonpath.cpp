@@ -26,9 +26,9 @@
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "glog/logging.h"
+#include "gutil/strings/numbers.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "gutil/strings/numbers.h"
 #include "util/json.h"
 #include "velocypack/vpack.h"
 
@@ -143,21 +143,51 @@ struct Lexer {
         if (c == '>' || c == '<' || c == '!' || c == '=') {
             if (i + 1 < s.size()) {
                 std::string two = s.substr(i, 2);
-                if (two == ">=" ) { i += 2; return Token{TokenType::OP_GE, two}; }
-                if (two == "<=" ) { i += 2; return Token{TokenType::OP_LE, two}; }
-                if (two == "!=" ) { i += 2; return Token{TokenType::OP_NE, two}; }
-                if (two == "==" ) { i += 2; return Token{TokenType::OP_EQ, two}; }
+                if (two == ">=") {
+                    i += 2;
+                    return Token{TokenType::OP_GE, two};
+                }
+                if (two == "<=") {
+                    i += 2;
+                    return Token{TokenType::OP_LE, two};
+                }
+                if (two == "!=") {
+                    i += 2;
+                    return Token{TokenType::OP_NE, two};
+                }
+                if (two == "==") {
+                    i += 2;
+                    return Token{TokenType::OP_EQ, two};
+                }
             }
-            if (c == '>') { i++; return {TokenType::OP_GT, ">"}; }
-            if (c == '<') { i++; return {TokenType::OP_LT, "<"}; }
-            if (c == '=') { i++; return {TokenType::OP_EQ, "="}; }
+            if (c == '>') {
+                i++;
+                return {TokenType::OP_GT, ">"};
+            }
+            if (c == '<') {
+                i++;
+                return {TokenType::OP_LT, "<"};
+            }
+            if (c == '=') {
+                i++;
+                return {TokenType::OP_EQ, "="};
+            }
         }
-        if (c == '&' && i + 1 < s.size() && s[i + 1] == '&') { i += 2; return {TokenType::AND, "&&"}; }
-        if (c == '|' && i + 1 < s.size() && s[i + 1] == '|') { i += 2; return {TokenType::OR, "||"}; }
-        if (std::isdigit(static_cast<unsigned char>(c)) || (c == '-' && i + 1 < s.size() && std::isdigit(static_cast<unsigned char>(s[i+1])))) {
+        if (c == '&' && i + 1 < s.size() && s[i + 1] == '&') {
+            i += 2;
+            return {TokenType::AND, "&&"};
+        }
+        if (c == '|' && i + 1 < s.size() && s[i + 1] == '|') {
+            i += 2;
+            return {TokenType::OR, "||"};
+        }
+        if (std::isdigit(static_cast<unsigned char>(c)) ||
+            (c == '-' && i + 1 < s.size() && std::isdigit(static_cast<unsigned char>(s[i + 1])))) {
             size_t start = i;
             i++;
-            while (i < s.size() && (std::isdigit(static_cast<unsigned char>(s[i])) || s[i]=='.' || s[i]=='e' || s[i]=='E' || s[i]=='+' || s[i]=='-')) i++;
+            while (i < s.size() && (std::isdigit(static_cast<unsigned char>(s[i])) || s[i] == '.' || s[i] == 'e' ||
+                                    s[i] == 'E' || s[i] == '+' || s[i] == '-'))
+                i++;
             return {TokenType::NUMBER, s.substr(start, i - start)};
         }
         if (is_ident_start(c)) {
@@ -176,20 +206,35 @@ struct Parser {
     Token cur;
     vpack::Slice current;
     explicit Parser(const std::string& e, vpack::Slice s) : lex(e), current(s) { cur = lex.next(); }
-    void consume(TokenType t) { if (cur.type == t) cur = lex.next(); }
+    void consume(TokenType t) {
+        if (cur.type == t) cur = lex.next();
+    }
     bool parse_expr() { return parse_or(); }
     bool parse_or() {
         bool v = parse_and();
-        while (cur.type == TokenType::OR) { consume(TokenType::OR); bool r = parse_and(); v = v || r; }
+        while (cur.type == TokenType::OR) {
+            consume(TokenType::OR);
+            bool r = parse_and();
+            v = v || r;
+        }
         return v;
     }
     bool parse_and() {
         bool v = parse_factor();
-        while (cur.type == TokenType::AND) { consume(TokenType::AND); bool r = parse_factor(); v = v && r; }
+        while (cur.type == TokenType::AND) {
+            consume(TokenType::AND);
+            bool r = parse_factor();
+            v = v && r;
+        }
         return v;
     }
     bool parse_factor() {
-        if (cur.type == TokenType::LPAREN) { consume(TokenType::LPAREN); bool v = parse_expr(); if (cur.type == TokenType::RPAREN) consume(TokenType::RPAREN); return v; }
+        if (cur.type == TokenType::LPAREN) {
+            consume(TokenType::LPAREN);
+            bool v = parse_expr();
+            if (cur.type == TokenType::RPAREN) consume(TokenType::RPAREN);
+            return v;
+        }
         return parse_predicate();
     }
     bool parse_predicate() {
@@ -214,39 +259,62 @@ struct Parser {
         case TokenType::OP_GT:
         case TokenType::OP_LT:
         case TokenType::OP_GE:
-        case TokenType::OP_LE: consume(op); break;
-        default: return false;
+        case TokenType::OP_LE:
+            consume(op);
+            break;
+        default:
+            return false;
         }
         // literal
         if (cur.type == TokenType::NUMBER) {
             // type mismatch treated as false
-            if (!target.isNumber()) { consume(TokenType::NUMBER); return false; }
+            if (!target.isNumber()) {
+                consume(TokenType::NUMBER);
+                return false;
+            }
             double lhs = target.getNumber<double>();
             double rhs = 0.0;
             safe_strtod(cur.text.c_str(), &rhs);
             consume(TokenType::NUMBER);
             switch (op) {
-            case TokenType::OP_EQ: return lhs == rhs;
-            case TokenType::OP_NE: return lhs != rhs;
-            case TokenType::OP_GT: return lhs > rhs;
-            case TokenType::OP_LT: return lhs < rhs;
-            case TokenType::OP_GE: return lhs >= rhs;
-            case TokenType::OP_LE: return lhs <= rhs;
-            default: return false;
+            case TokenType::OP_EQ:
+                return lhs == rhs;
+            case TokenType::OP_NE:
+                return lhs != rhs;
+            case TokenType::OP_GT:
+                return lhs > rhs;
+            case TokenType::OP_LT:
+                return lhs < rhs;
+            case TokenType::OP_GE:
+                return lhs >= rhs;
+            case TokenType::OP_LE:
+                return lhs <= rhs;
+            default:
+                return false;
             }
         } else if (cur.type == TokenType::STRING) {
-            if (!target.isString()) { consume(TokenType::STRING); return false; }
+            if (!target.isString()) {
+                consume(TokenType::STRING);
+                return false;
+            }
             std::string lhs = target.copyString();
             std::string rhs = cur.text;
             consume(TokenType::STRING);
             switch (op) {
-            case TokenType::OP_EQ: return lhs == rhs;
-            case TokenType::OP_NE: return lhs != rhs;
-            case TokenType::OP_GT: return lhs > rhs;
-            case TokenType::OP_LT: return lhs < rhs;
-            case TokenType::OP_GE: return lhs >= rhs;
-            case TokenType::OP_LE: return lhs <= rhs;
-            default: return false;
+            case TokenType::OP_EQ:
+                return lhs == rhs;
+            case TokenType::OP_NE:
+                return lhs != rhs;
+            case TokenType::OP_GT:
+                return lhs > rhs;
+            case TokenType::OP_LT:
+                return lhs < rhs;
+            case TokenType::OP_GE:
+                return lhs >= rhs;
+            case TokenType::OP_LE:
+                return lhs <= rhs;
+            default:
+                return false;
             }
         } else {
             // unsupported literal
@@ -258,7 +326,7 @@ struct Parser {
 static bool eval_filter_expr(const std::string& inner_expr, vpack::Slice current) {
     // inner_expr is like ?( ... ), or possibly trimmed already. Strip leading ?( and trailing ) if present.
     std::string expr = trim_copy(inner_expr);
-    if (!expr.empty() && expr[0] == '?' ) {
+    if (!expr.empty() && expr[0] == '?') {
         size_t p = expr.find('(');
         if (p != std::string::npos && expr.back() == ')') {
             expr = expr.substr(p + 1, expr.size() - p - 2);
