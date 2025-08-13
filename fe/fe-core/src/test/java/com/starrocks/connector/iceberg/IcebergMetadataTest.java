@@ -38,7 +38,9 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -1952,5 +1954,50 @@ public class IcebergMetadataTest extends TableTestBase {
                 icebergHiveCatalog,
                 HDFS_ENVIRONMENT);
         executor.execute();
+    }
+
+    @Test
+    public void testGetCurrentTvrSnapshot(@Mocked IcebergHiveCatalog icebergHiveCatalog,
+                             @Mocked HiveTableOperations hiveTableOperations) {
+        new Expectations() {
+            {
+                icebergHiveCatalog.getTable(connectContext, "db", "tbl");
+                result = new BaseTable(hiveTableOperations, "tbl");
+                minTimes = 0;
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        Table actual = metadata.getTable(new ConnectContext(), "db", "tbl");
+        Assertions.assertEquals("tbl", actual.getName());
+        Assertions.assertEquals(ICEBERG, actual.getType());
+        TvrTableSnapshot tvrTableSnapshot = metadata.getCurrentTvrSnapshot("db", actual);
+        Assertions.assertNotNull(tvrTableSnapshot);
+        Assertions.assertFalse(tvrTableSnapshot.isEmpty());
+        Assertions.assertEquals(0L, tvrTableSnapshot.to().getVersion());
+    }
+
+    @Test
+    public void testListTableVersionRanges(@Mocked IcebergHiveCatalog icebergHiveCatalog,
+                                           @Mocked HiveTableOperations hiveTableOperations) {
+        new Expectations() {
+            {
+                icebergHiveCatalog.getTable(connectContext, "db", "tbl");
+                result = new BaseTable(hiveTableOperations, "tbl");
+                minTimes = 0;
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        Table actual = metadata.getTable(new ConnectContext(), "db", "tbl");
+        Assertions.assertEquals("tbl", actual.getName());
+        Assertions.assertEquals(ICEBERG, actual.getType());
+        TvrTableSnapshot tvrTableSnapshot = metadata.getCurrentTvrSnapshot("db", actual);
+        List<TvrTableDeltaTrait> deltas = metadata.listTableVersionRanges("db", actual,
+                TvrTableSnapshot.of(TvrVersion.MIN), tvrTableSnapshot);
+        Assertions.assertNotNull(deltas);
+        Assertions.assertFalse(deltas.isEmpty());
     }
 }

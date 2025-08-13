@@ -17,8 +17,6 @@ package com.starrocks.common.tvr;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.util.Optional;
-
 public class TvrVersionTest {
 
     @Test

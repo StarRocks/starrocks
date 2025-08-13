@@ -529,28 +529,29 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (fromSnapshotExclusive.equals(toSnapshotInclusive)) {
             return Collections.emptyList();
         }
-        final long fromSnapshotIdExclusive =
-                fromSnapshotExclusive.getTo().orElseThrow(() -> new StarRocksConnectorException(
-                        "fromSnapshotExclusive must have a valid snapshot ID"));
-        final long toSnapshotIdInclusive =
-                toSnapshotInclusive.getTo().orElseThrow(() -> new StarRocksConnectorException(
-                        "toSnapshotInclusive must have a valid snapshot ID"));
+        final long fromSnapshotIdExclusive = fromSnapshotExclusive.from.getVersion();
+        final long toSnapshotIdInclusive = toSnapshotInclusive.getTo().orElseThrow(
+                () -> new StarRocksConnectorException("Invalid snapshot range: %s", toSnapshotInclusive));
         final IcebergTable icebergTable = (IcebergTable) table;
         final org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
-        long lastSnapshotId = fromSnapshotIdExclusive;
-
         final List<TvrTableDeltaTrait> tvrTableDeltaTraits = new ArrayList<>();
+
         final Iterable<Snapshot> snapshots = SnapshotUtil.ancestorsBetween(
                 toSnapshotIdInclusive, fromSnapshotIdExclusive, nativeTable::snapshot);
+        long lastSnapshotId = toSnapshotIdInclusive;
         for (Snapshot snapshot : snapshots) {
             long currentSnapshotId = snapshot.snapshotId();
-            TvrTableDelta delta = TvrTableDelta.of(lastSnapshotId, currentSnapshotId);
+            TvrTableDelta delta = TvrTableDelta.of(currentSnapshotId, lastSnapshotId);
             TvrDeltaStats stats = TvrDeltaStats.of(snapshot.addedRows());
-            if (snapshot.operation().equals(DataOperations.APPEND)) {
+            if (snapshot.operation() != null && snapshot.operation().equals(DataOperations.APPEND)) {
                 tvrTableDeltaTraits.add(TvrTableDeltaTrait.ofMonotonic(delta, stats));
             } else {
                 tvrTableDeltaTraits.add(TvrTableDeltaTrait.ofRetractable(delta, stats));
             }
+            if (lastSnapshotId == currentSnapshotId) {
+                break;
+            }
+            lastSnapshotId = currentSnapshotId;
         }
         return tvrTableDeltaTraits;
     }
