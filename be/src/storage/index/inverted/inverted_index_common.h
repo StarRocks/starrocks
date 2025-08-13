@@ -49,6 +49,9 @@ const std::string INVERTED_INDEX_TOKENIZED_KEY = "tokenized";
 
 const std::string INVERTED_ENABLE_PHRASE_QUERY_SEQUENTIAL_OPT = "enable_phrase_query_sequential_opt";
 
+const std::string GIN_MAX_EXPANSIONS = "gin_max_expansions";
+constexpr int32_t GIN_MAX_EXPANSIONS_DEFAULT = 50;
+
 enum class InvertedIndexReaderType {
     UNKNOWN = -1,
     TEXT = 0,

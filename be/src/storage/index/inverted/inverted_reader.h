@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "fs/fs_util.h"
+#include "gin_query_options.h"
 #include "roaring/roaring.hh"
 #include "storage/index/inverted/inverted_index_common.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
@@ -40,7 +41,7 @@ public:
     virtual Status new_iterator(const std::shared_ptr<TabletIndex> index_meta, InvertedIndexIterator** iterator) = 0;
 
     virtual Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
-                         InvertedIndexQueryType query_type, roaring::Roaring* bit_map) = 0;
+                         GinQueryOptions* gin_query_options, roaring::Roaring* bit_map) = 0;
 
     virtual Status query_null(OlapReaderStatistics* stats, const std::string& column_name,
                               roaring::Roaring* bit_map) = 0;

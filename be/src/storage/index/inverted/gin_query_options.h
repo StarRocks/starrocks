@@ -18,12 +18,9 @@
 
 namespace starrocks {
 
-class InvertedIndexCtx {
+class GinQueryOptions {
 public:
-    InvertedIndexCtx() = default;
-    InvertedIndexCtx(const InvertedIndexQueryType& _query_type, const InvertedIndexReaderType& _reader_type,
-                     const InvertedIndexParserType& _parser_type)
-            : query_type(_query_type), reader_type(_reader_type), parser_type(_parser_type) {}
+    GinQueryOptions() = default;
 
     void setQueryType(const InvertedIndexQueryType& _query_type) { query_type = _query_type; }
     void setReaderType(const InvertedIndexReaderType& _reader_type) { reader_type = _reader_type; }
@@ -31,17 +28,20 @@ public:
     void setEnablePhraseQuerySequentialOpt(bool _enable_phrase_query_sequential_opt) {
         enable_phrase_query_sequential_opt = _enable_phrase_query_sequential_opt;
     }
+    void setMaxExpansions(const int32_t& _max_expansions) { max_expansions = _max_expansions; }
 
     InvertedIndexQueryType getQueryType() const { return query_type; }
     InvertedIndexReaderType getReaderType() const { return reader_type; }
     InvertedIndexParserType getParserType() const { return parser_type; }
     bool enablePhraseQuerySequentialOpt() const { return enable_phrase_query_sequential_opt; }
+    int32_t maxExpansions() const { return max_expansions; }
 
 private:
     InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
     InvertedIndexReaderType reader_type = InvertedIndexReaderType::UNKNOWN;
     InvertedIndexParserType parser_type = InvertedIndexParserType::PARSER_UNKNOWN;
     bool enable_phrase_query_sequential_opt = false;
+    int32_t max_expansions = 50;
 };
 
 } // namespace starrocks

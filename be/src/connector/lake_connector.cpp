@@ -271,6 +271,13 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
     _params.scan_dop = _provider->get_scan_dop();
 
+    if (_runtime_state->query_options().__isset.gin_max_expansions) {
+        _params.gin_max_expansions = _runtime_state->query_options().gin_max_expansions;
+    }
+    if (_runtime_state->query_options().__isset.enable_phrase_query_sequential_opt) {
+        _params.enable_phrase_query_sequential_opt = _runtime_state->query_options().enable_phrase_query_sequential_opt;
+    }
+
     if (thrift_lake_scan_node.__isset.enable_prune_column_after_index_filter) {
         _params.prune_column_after_index_filter = thrift_lake_scan_node.enable_prune_column_after_index_filter;
     }

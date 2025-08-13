@@ -33,7 +33,7 @@ public:
     }
 
     Status read_from_inverted_index(const std::string& column_name, const void* query_value,
-                                    InvertedIndexQueryType query_type, roaring::Roaring* bit_map);
+                                    GinQueryOptions* gin_query_options, roaring::Roaring* bit_map);
 
     Status read_null(const std::string& column_name, roaring::Roaring* bit_map);
 
@@ -45,7 +45,7 @@ public:
 
 private:
     const std::shared_ptr<TabletIndex> _index_meta;
-    OlapReaderStatistics* _stats;
+    OlapReaderStatistics* _stats = nullptr;
     InvertedReader* _reader;
     InvertedIndexParserType _analyser_type;
 };

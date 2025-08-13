@@ -24,13 +24,14 @@
 #include <roaring/roaring.hh>
 
 #include "fs/fs.h"
+#include "fs/fs_posix.h"
 #include "storage/index/inverted/clucene/clucene_file_reader.h"
 #include "storage/tablet_index.h"
 #include "util/defer_op.h"
 
 DECLARE_string(operation);
-DEFINE_string(ivt_dir, "", "inverted index directory.");
-DEFINE_string(ivt_file, "", "inverted index file.");
+DEFINE_string(ivt_dir, "", "inverted index directory, required if ivt_file doesn't provided.");
+DEFINE_string(ivt_file, "", "inverted index file, required if ivt_dir doesn't provided.");
 DEFINE_string(term, "", "term");
 DEFINE_string(field, "", "column name");
 DEFINE_int32(num_docs, 100, "The maximum number of documents will be listed.");
@@ -43,9 +44,9 @@ std::string get_usage_for_index_tool(const std::string& progname) {
 
   Usage:
     term_position:
-      {progname} --operation=term_position --field=<field> --term=<term> --ivt_dir=<ivt_dir> --num_docs=<num_docs>
+      {progname} --operation=term_position --field=<field> --term=<term> --ivt_dir=<ivt_dir> --ivt_file=<ivt_file> --num_docs=<num_docs>
     check_terms_stats：
-      {progname} --operation=check_terms_stats --ivt_dir=<ivt_dir> --print_doc_id
+      {progname} --operation=check_terms_stats --ivt_dir=<ivt_dir> --ivt_file=<ivt_file> --print_doc_id
 )";
     return fmt::format(usage_msg, fmt::arg("progname", progname));
 }
@@ -96,14 +97,9 @@ void term_position(const std::string& field, const std::string& term, const int3
         return;
     }
 
-    auto st = starrocks::FileSystem::CreateSharedFromString(ivt_file.c_str());
-    if (!st.ok()) {
-        std::cerr << "Failed to open " << ivt_file << std::endl;
-        return;
-    }
-    auto fs = std::move(st).value();
-    auto index_file_reader = std::make_unique<starrocks::CLuceneFileReader>(fs, ivt_file);
-    auto st1 = index_file_reader->init();
+    auto fs = starrocks::new_fs_posix();
+    auto index_file_reader = std::make_unique<starrocks::CLuceneFileReader>(std::move(fs), ivt_file);
+    auto st1 = index_file_reader->init(4096);
     if (!st1.ok()) {
         std::cerr << "Failed to init " << ivt_file << std::endl;
         return;
@@ -180,22 +176,17 @@ void check_terms_stats(const std::string& ivt_dir, const std::string& ivt_file) 
         return;
     }
 
-    auto st = starrocks::FileSystem::CreateSharedFromString(ivt_file.c_str());
-    if (!st.ok()) {
-        std::cerr << "Failed to open " << ivt_file << std::endl;
-        return;
-    }
-    auto fs = std::move(st).value();
-    auto index_file_reader = std::make_unique<starrocks::CLuceneFileReader>(fs, ivt_file);
-    auto st1 = index_file_reader->init();
+    auto fs = starrocks::new_fs_posix();
+    auto index_file_reader = std::make_unique<starrocks::CLuceneFileReader>(std::move(fs), ivt_file);
+    auto st1 = index_file_reader->init(4096);
     if (!st1.ok()) {
-        std::cerr << "Failed to init " << ivt_file << std::endl;
+        std::cerr << "Failed to init " << ivt_file << ", reason: " << st1.detailed_message() << std::endl;
         return;
     }
 
     auto st2 = index_file_reader->get_all_directories();
     if (!st2.ok()) {
-        std::cerr << "Failed to get all directories." << std::endl;
+        std::cerr << "Failed to get all directories, reason: " << st2.status().detailed_message() << std::endl;
         return;
     }
     for (auto dirs = std::move(st2).value(); const auto& dir : dirs | std::views::values) {

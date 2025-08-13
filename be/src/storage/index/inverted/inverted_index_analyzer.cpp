@@ -17,8 +17,8 @@
 #include "CLucene.h"
 #include "CLucene/analysis/LanguageBasedAnalyzer.h"
 #include "CLucene/analysis/standard95/StandardAnalyzer.h"
+#include "storage/index/inverted/gin_query_options.h"
 #include "storage/index/inverted/inverted_index_common.h"
-#include "storage/index/inverted/inverted_index_context.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -42,10 +42,11 @@ StatusOr<std::unique_ptr<lucene::analysis::Analyzer>> InvertedIndexAnalyzer::cre
     }
 }
 
-StatusOr<std::vector<std::string>> InvertedIndexAnalyzer::get_analyse_result(
-        const std::string& search_str, const std::wstring& field_name, const InvertedIndexCtx* inverted_index_ctx) {
-    return get_analyse_result(search_str, field_name, inverted_index_ctx->getParserType(),
-                              inverted_index_ctx->getQueryType());
+StatusOr<std::vector<std::string>> InvertedIndexAnalyzer::get_analyse_result(const std::string& search_str,
+                                                                             const std::wstring& field_name,
+                                                                             const GinQueryOptions* gin_query_options) {
+    return get_analyse_result(search_str, field_name, gin_query_options->getParserType(),
+                              gin_query_options->getQueryType());
 }
 
 StatusOr<std::vector<std::string>> InvertedIndexAnalyzer::get_analyse_result(const std::string& search_str,

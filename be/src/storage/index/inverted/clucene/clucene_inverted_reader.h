@@ -72,18 +72,14 @@ protected:
 class FullTextCLuceneInvertedReader final : public CLuceneInvertedReader {
 public:
     explicit FullTextCLuceneInvertedReader(std::string path, const std::shared_ptr<TabletIndex>& tablet_index,
-                                           std::shared_ptr<CLuceneFileReader> inverted_index_reader,
-                                           const InvertedIndexParserType& parser_type,
-                                           const bool& enable_phrase_query_sequential_opt)
+                                           std::shared_ptr<CLuceneFileReader> inverted_index_reader)
             : CLuceneInvertedReader(std::move(path), tablet_index->index_id(), std::move(inverted_index_reader)),
-              _tablet_index(tablet_index),
-              _parser_type(parser_type),
-              _enable_phrase_query_sequential_opt(enable_phrase_query_sequential_opt) {
+              _tablet_index(tablet_index) {
         lucene::search::BooleanQuery::setMaxClauseCount(INT_MAX);
     }
 
     Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
-                 InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override;
+                 GinQueryOptions* gin_query_options, roaring::Roaring* bit_map) override;
 
     Status query_null(OlapReaderStatistics* stats, const std::string& column_name, roaring::Roaring* bit_map) override;
 
@@ -91,8 +87,6 @@ public:
 
 private:
     std::shared_ptr<TabletIndex> _tablet_index;
-    InvertedIndexParserType _parser_type;
-    bool _enable_phrase_query_sequential_opt;
 };
 
 } // namespace starrocks

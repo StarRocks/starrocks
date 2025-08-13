@@ -26,8 +26,10 @@
 namespace starrocks {
 
 void add_enable_phrase_query_sequential_opt_options(TabletIndex* tablet_index, bool enable_phrase_query_sequential_opt);
-
 bool is_enable_phrase_query_sequential_opt(const TabletIndex& tablet_index);
+
+void add_gin_max_expansions(TabletIndex* tablet_index, int32_t gin_max_expansions);
+int32_t get_gin_max_expansions(const TabletIndex& tablet_index);
 
 StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_index);
 
