@@ -2100,8 +2100,8 @@ public class TabletScheduler extends FrontendDaemon {
         for (TStorageMedium medium : storageMediums) {
             for (BalanceType type : BalanceType.values()) {
                 boolean isBalanced = !mediumBalanceTypes.contains(Pair.create(medium, type));
-                long pendingTabletNum = getBalancePendingTabletNum(medium, type);
-                long runningTabletNum = getBalanceRunningTabletNum(medium, type);
+                long pendingTabletNum = getPendingBalanceTabletNum(medium, type);
+                long runningTabletNum = getRunningBalanceTabletNum(medium, type);
                 stats.add(Lists.newArrayList(medium.name(), type.label(), String.valueOf(isBalanced),
                         String.valueOf(pendingTabletNum), String.valueOf(runningTabletNum)));
             }
@@ -2171,13 +2171,33 @@ public class TabletScheduler extends FrontendDaemon {
                 + runningTablets.values().stream().filter(t -> t.getType() == Type.BALANCE).count();
     }
 
-    private synchronized long getBalancePendingTabletNum(TStorageMedium medium, BalanceStat.BalanceType balanceType) {
+    private synchronized long getPendingRepairTabletNum(TStorageMedium medium, TabletHealthStatus status) {
+        return pendingTablets.stream()
+                .filter(t -> t.getStorageMedium() == medium && t.getType() == Type.REPAIR && t.getTabletHealthStatus() == status)
+                .count();
+    }
+
+    private synchronized long getPendingBalanceTabletNum(TStorageMedium medium, BalanceType balanceType) {
+        if (balanceType == BalanceType.COLOCATION_GROUP) {
+            return getPendingRepairTabletNum(medium, TabletHealthStatus.COLOCATE_MISMATCH);
+        }
+
         return pendingTablets.stream()
                 .filter(t -> t.getStorageMedium() == medium && t.getType() == Type.BALANCE && t.getBalanceType() == balanceType)
                 .count();
     }
 
-    private synchronized long getBalanceRunningTabletNum(TStorageMedium medium, BalanceStat.BalanceType balanceType) {
+    private synchronized long getRunningRepairTabletNum(TStorageMedium medium, TabletHealthStatus status) {
+        return runningTablets.values().stream()
+                .filter(t -> t.getStorageMedium() == medium && t.getType() == Type.REPAIR && t.getTabletHealthStatus() == status)
+                .count();
+    }
+
+    private synchronized long getRunningBalanceTabletNum(TStorageMedium medium, BalanceType balanceType) {
+        if (balanceType == BalanceType.COLOCATION_GROUP) {
+            return getRunningRepairTabletNum(medium, TabletHealthStatus.COLOCATE_MISMATCH);
+        }
+
         return runningTablets.values().stream()
                 .filter(t -> t.getStorageMedium() == medium && t.getType() == Type.BALANCE && t.getBalanceType() == balanceType)
                 .count();
