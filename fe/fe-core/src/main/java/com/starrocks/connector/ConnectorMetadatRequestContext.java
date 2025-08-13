@@ -14,16 +14,18 @@
 
 package com.starrocks.connector;
 
+import com.starrocks.common.tvr.TvrVersionRange;
+
 public class ConnectorMetadatRequestContext {
     public static ConnectorMetadatRequestContext DEFAULT = new ConnectorMetadatRequestContext();
-    TableVersionRange tableVersionRange = TableVersionRange.empty();
-    boolean queryMVRewrite = false;
+    private TvrVersionRange tableVersionRange = TvrVersionRange.empty();
+    private boolean queryMVRewrite = false;
 
-    public void setTableVersionRange(TableVersionRange value) {
+    public void setTableVersionRange(TvrVersionRange value) {
         tableVersionRange = value;
     }
 
-    public TableVersionRange getTableVersionRange() {
+    public TvrVersionRange getTableVersionRange() {
         return tableVersionRange;
     }
 
@@ -36,7 +38,7 @@ public class ConnectorMetadatRequestContext {
     }
 
     public long getSnapshotId() {
-        return tableVersionRange.end().isPresent() ? tableVersionRange.end().get() : -1;
+        return tableVersionRange.to().isPresent() ? tableVersionRange.to().get() : -1;
     }
 }
 

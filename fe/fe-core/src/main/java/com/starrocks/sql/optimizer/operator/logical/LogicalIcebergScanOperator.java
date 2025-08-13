@@ -18,7 +18,10 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.TableVersionRange;
+import com.starrocks.common.tvr.TvrDeltaStats;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.iceberg.IcebergDeleteSchema;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergTableMORParams;
@@ -30,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -55,7 +59,7 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                       long limit,
                                       ScalarOperator predicate) {
-        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TableVersionRange.empty());
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TvrVersionRange.empty());
     }
 
     public LogicalIcebergScanOperator(Table table,
@@ -63,7 +67,7 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                       long limit,
                                       ScalarOperator predicate,
-                                      TableVersionRange versionRange) {
+                                      TvrVersionRange versionRange) {
         super(OperatorType.LOGICAL_ICEBERG_SCAN,
                 table,
                 colRefToColumnMetaMap,
@@ -88,6 +92,23 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
     @Override
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
         this.predicates = predicates;
+    }
+
+    public Optional<TvrTableDeltaTrait> getTvrTableDeltaTrait() {
+        if (tvrVersionRange != null && tvrVersionRange instanceof TvrTableDelta) {
+            // TODO: how to check tvrDelta is append-only?
+            return Optional.of(TvrTableDeltaTrait.ofMonotonic((TvrTableDelta) tvrVersionRange,
+                    TvrDeltaStats.EMPTY));
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public boolean isEmptyOutputRows() {
+        if (tvrVersionRange != null && tvrVersionRange.isEmpty()) {
+            return true;
+        }
+        return false;
     }
 
     public boolean isFromEqDeleteRewriteRule() {

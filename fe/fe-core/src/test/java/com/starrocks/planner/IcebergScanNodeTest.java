@@ -14,6 +14,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
@@ -172,7 +173,7 @@ public class IcebergScanNodeTest {
         IcebergScanNode scanNode = new IcebergScanNode(
                 new PlanNodeId(0), desc, catalog,
                 tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
-        scanNode.setSnapshotId(Optional.of(12345L));
+        scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(12345L)));
 
         IcebergRemoteFileInfo remoteFileInfo = new IcebergRemoteFileInfo(fileScanTask);
         List<RemoteFileInfo> remoteFileInfos = List.of(remoteFileInfo);
@@ -194,7 +195,7 @@ public class IcebergScanNodeTest {
         List<RemoteFileInfo> empty = new ArrayList<>();
         try {
             scanNode.rebuildScanRange(empty);
-            scanNode.setSnapshotId(Optional.empty());
+            scanNode.setTvrVersionRange(TvrTableSnapshot.empty());
             scanNode.rebuildScanRange(remoteFileInfos);
             testSource.clearScannedFiles();
         } catch (Exception e) {
