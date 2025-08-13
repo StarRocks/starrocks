@@ -911,19 +911,15 @@ void TabletUpdatesTest::test_apply(bool enable_persistent_index, bool has_merge_
     }
     test_pk_dump(rowsets.size());
     // test extra file size;
-    // calc tablet update extra file size
-    ASSERT_TRUE(_tablet->updates()->calc_extra_file_size().ok());
     // get TabletUpdatesPB
     TabletUpdatesPB updates_pb;
     _tablet->updates()->to_updates_pb(&updates_pb);
-// check extra file size exist.
-#if !defined(ADDRESS_SANITIZER)
+    // check extra file size exist.
     if (enable_persistent_index) {
-        ASSERT_TRUE(updates_pb.extra_file_size().col_size() > 0);
+        ASSERT_TRUE(updates_pb.extra_file_size().pindex_size() > 0);
     } else {
-        ASSERT_TRUE(updates_pb.extra_file_size().col_size() == 0);
+        ASSERT_TRUE(updates_pb.extra_file_size().pindex_size() == 0);
     }
-#endif
 }
 
 TEST_F(TabletUpdatesTest, apply) {

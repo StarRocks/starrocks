@@ -520,8 +520,6 @@ private:
 
     std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
 
-    Status calc_extra_file_size();
-
     bool _use_light_apply_compaction(Rowset* rowset);
 
     Status _light_apply_compaction_commit(const EditVersion& version, Rowset* output_rowset, PrimaryIndex* index,

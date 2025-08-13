@@ -1623,7 +1623,8 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         }
     }
     span->AddEvent("commit_index");
-    st = index.commit(index_meta);
+    IOStat stat;
+    st = index.commit(index_meta, &stat);
     FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_index_commit_failed,
                                { st = Status::InternalError("inject tablet_apply_index_commit_failed"); });
     if (!st.ok()) {
@@ -1632,6 +1633,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         return apply_st;
     }
 
+    _extra_file_size_cache.pindex_size.store(stat.total_file_size);
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
     // release resource
     // update state only used once, so delete it
@@ -2493,7 +2495,8 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     }
     int64_t t_index_delvec = MonotonicMillis();
 
-    st = index.commit(index_meta);
+    IOStat stat;
+    st = index.commit(index_meta, &stat);
     FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_index_commit_failed,
                                { st = Status::InternalError("inject tablet_apply_index_commit_failed"); });
     if (!st.ok()) {
@@ -2502,6 +2505,8 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         failure_handler(msg, st.code());
         return apply_st;
     }
+
+    _extra_file_size_cache.pindex_size.store(stat.total_file_size);
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
 
     {
@@ -2752,6 +2757,10 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         std::unique_lock wrlock(_tablet.get_header_lock());
         rewrite_rs_meta(false);
     }
+    // get delta column group file size
+    _extra_file_size_cache.col_size.store(
+            StorageEngine::instance()->update_manager()->get_delta_column_group_file_size_by_tablet_id(
+                    _tablet.tablet_id()));
 
     // GC works that can be done outside of lock
     if (num_version_removed > 0) {
@@ -3555,37 +3564,6 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
         num_dels += delvec.cardinality();
     }
     return num_dels;
-}
-
-Status TabletUpdates::calc_extra_file_size() {
-#if !defined(ADDRESS_SANITIZER)
-    std::string tablet_path_str = _tablet.schema_hash_path();
-    std::filesystem::path tablet_path(tablet_path_str.c_str());
-    try {
-        for (const auto& entry : std::filesystem::directory_iterator(tablet_path)) {
-            if (entry.is_regular_file()) {
-                std::string filename = entry.path().filename().string();
-
-                if (filename.starts_with("index.l")) {
-                    _extra_file_size_cache.pindex_size.fetch_add(entry.file_size());
-                } else if (filename.ends_with(".cols")) {
-                    // TODO skip the expired cols file
-                    _extra_file_size_cache.col_size.fetch_add(entry.file_size());
-                }
-            }
-        }
-    } catch (const std::filesystem::filesystem_error& ex) {
-        std::string err_msg = "Iterate dir " + tablet_path.string() + " Filesystem error: " + ex.what();
-        return Status::InternalError(err_msg);
-    } catch (const std::exception& ex) {
-        std::string err_msg = "Iterate dir " + tablet_path.string() + " Standard error: " + ex.what();
-        return Status::InternalError(err_msg);
-    } catch (...) {
-        std::string err_msg = "Iterate dir " + tablet_path.string() + " Unknown exception occurred.";
-        return Status::InternalError(err_msg);
-    }
-#endif
-    return Status::OK();
 }
 
 void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
