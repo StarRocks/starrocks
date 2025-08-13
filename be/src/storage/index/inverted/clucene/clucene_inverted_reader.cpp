@@ -105,10 +105,8 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
 Status FullTextCLuceneInvertedReader::query_null(OlapReaderStatistics* stats, const std::string& column_name,
                                                  roaring::Roaring* bit_map) {
     lucene::store::IndexInput* null_bitmap_in = nullptr;
-    lucene::store::FSDirectory* dir = nullptr;
     try {
-        // try to get query bitmap result from cache and return immediately on cache hit
-        dir = lucene::store::FSDirectory::getDirectory(_index_path.c_str());
+        ASSIGN_OR_RETURN(const auto dir, _inverted_index_reader->open(_tablet_index));
 
         // ownership of null_bitmap and its deletion will be transfered to cache
         std::shared_ptr<roaring::Roaring> null_bitmap = std::make_shared<roaring::Roaring>();
@@ -134,9 +132,6 @@ Status FullTextCLuceneInvertedReader::query_null(OlapReaderStatistics* stats, co
     } catch (CLuceneError& e) {
         if (null_bitmap_in) {
             FINALLY_CLOSE_INPUT(null_bitmap_in)
-        }
-        if (dir) {
-            FINALLY_CLOSE_DIR(dir)
         }
         LOG(WARNING) << "Inverted index read null bitmap error occurred: " << e.what();
         return Status::NotFound(fmt::format("Inverted index read null bitmap error occurred: ", e.what()));
