@@ -345,6 +345,10 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support getting delete files");
     }
 
+    default Procedure getProcedure(DatabaseTableName procedureName) {
+        throw new StarRocksConnectorException("This connector doesn't support getting procedure");
+    }
+
     default void shutdown() {
     }
 }

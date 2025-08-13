@@ -1683,4 +1683,10 @@ public interface AstVisitor<R, C> {
     default R visitControlBaselinePlanStatement(ControlBaselinePlanStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
+
+    // ------------------------------------------- Procedure Statement -------------------------------------------------
+
+    default R visitCallProcedureStatement(CallProcedureStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
 }
