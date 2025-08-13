@@ -134,7 +134,7 @@ public interface ConnectorMetadata {
      * Get the current Time Versioned Relation (TVR) snapshot for the table.
      */
     default TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
-        return TvrVersionRange.empty();
+        return TvrTableSnapshot.empty();
     }
 
     /**
@@ -152,7 +152,7 @@ public interface ConnectorMetadata {
     default TvrVersionRange getTableVersionRange(String dbName, Table table,
                                                  Optional<ConnectorTableVersion> startVersion,
                                                  Optional<ConnectorTableVersion> endVersion) {
-        return TvrVersionRange.empty();
+        return TvrTableSnapshot.empty();
     }
 
     default boolean tableExists(ConnectContext context, String dbName, String tblName) {

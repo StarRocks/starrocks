@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -61,7 +62,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
                                 long limit,
                                 ScalarOperator predicate,
                                 Projection projection) {
-        this(type, table, colRefToColumnMetaMap, limit, predicate, projection, TvrVersionRange.empty());
+        this(type, table, colRefToColumnMetaMap, limit, predicate, projection, TvrTableSnapshot.empty());
     }
 
     public PhysicalScanOperator(OperatorType type, Table table,

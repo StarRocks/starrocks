@@ -1731,7 +1731,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
     @Test
     public void testVersionRange() {
-        TvrVersionRange versionRange = TvrVersionRange.empty();
+        TvrVersionRange versionRange = TvrTableSnapshot.empty();
         Assertions.assertTrue(versionRange.isEmpty());
         versionRange = TvrTableSnapshot.of(Optional.of(1L));
         Assertions.assertFalse(versionRange.isEmpty());

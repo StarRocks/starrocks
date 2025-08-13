@@ -87,7 +87,7 @@ public class IcebergMetadataScanNode extends ScanNode {
         String originDbName = table.getOriginDb();
         String originTableName = table.getOriginTable();
 
-        long snapshotId = version.to().isPresent() ? version.to().get() : -1;
+        long snapshotId = version.getTo().isPresent() ? version.getTo().get() : -1;
         IcebergMetaSpec serializedMetaSpec = GlobalStateMgr.getCurrentState().getMetadataMgr().getSerializedMetaSpec(
                 catalogName, originDbName, originTableName, snapshotId, icebergPredicate, metadataTableType).cast();
 

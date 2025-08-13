@@ -14,14 +14,15 @@
 
 package com.starrocks.common.tvr;
 
+import java.util.Objects;
+
 /**
  * TvrTableDeltaTrait represents the delta and associated trait infos of a Time Versioned Relation (TVR).
  */
 public class TvrTableDeltaTrait {
 
-    public static final TvrTableDeltaTrait DEFAULT = new TvrTableDeltaTrait(TvrTableDelta.emptyDelta(),
+    public static final TvrTableDeltaTrait DEFAULT = new TvrTableDeltaTrait(TvrTableDelta.empty(),
             TvrChangeType.MONOTONIC, TvrDeltaStats.EMPTY);
-
     /**
      * TvrChangeType indicates the type of change in the TVR delta.
      */
@@ -42,9 +43,17 @@ public class TvrTableDeltaTrait {
         this.tvrDeltaStats = tvrDeltaStats;
     }
 
+    public static TvrTableDeltaTrait ofMonotonic(TvrTableDelta tvrTableDelta) {
+        return new TvrTableDeltaTrait(tvrTableDelta, TvrChangeType.MONOTONIC, TvrDeltaStats.EMPTY);
+    }
+
     public static TvrTableDeltaTrait ofMonotonic(TvrTableDelta tvrTableDelta,
                                                  TvrDeltaStats tvrDeltaStats) {
         return new TvrTableDeltaTrait(tvrTableDelta, TvrChangeType.MONOTONIC, tvrDeltaStats);
+    }
+
+    public static TvrTableDeltaTrait ofRetractable(TvrTableDelta tvrTableDelta) {
+        return new TvrTableDeltaTrait(tvrTableDelta, TvrChangeType.RETRACTABLE, TvrDeltaStats.EMPTY);
     }
 
     public static TvrTableDeltaTrait ofRetractable(TvrTableDelta tvrTableDelta,
@@ -66,6 +75,26 @@ public class TvrTableDeltaTrait {
 
     public TvrDeltaStats getTvrDeltaStats() {
         return tvrDeltaStats;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        TvrTableDeltaTrait that = (TvrTableDeltaTrait) o;
+        return Objects.equals(tvrChangeType, that.tvrChangeType) &&
+                Objects.equals(tvrTableDelta, that.tvrTableDelta);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(tvrChangeType, tvrTableDelta);
     }
 
     @Override

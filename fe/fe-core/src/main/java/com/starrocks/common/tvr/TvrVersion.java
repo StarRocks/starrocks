@@ -53,6 +53,10 @@ public class TvrVersion implements Comparable<TvrVersion> {
         return this.equals(MIN);
     }
 
+    public boolean isMinOrMax() {
+       return isMin() || isMax();
+    }
+
     public long getVersion() {
         return version;
     }

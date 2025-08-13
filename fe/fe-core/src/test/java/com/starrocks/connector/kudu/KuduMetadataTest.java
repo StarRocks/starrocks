@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
@@ -174,7 +174,8 @@ public class KuduMetadataTest {
         Table table = metadata.getTable(new ConnectContext(), "db1", "tbl1");
         KuduTable kuduTable = (KuduTable) table;
         Statistics statistics = metadata.getTableStatistics(
-                null, kuduTable, Collections.emptyMap(), Collections.emptyList(), null, -1, TvrVersionRange.empty());
+                null, kuduTable, Collections.emptyMap(), Collections.emptyList(), null, -1,
+                TvrTableSnapshot.empty());
         Assertions.assertEquals(1D, statistics.getOutputRowCount(), 0.01);
     }
 

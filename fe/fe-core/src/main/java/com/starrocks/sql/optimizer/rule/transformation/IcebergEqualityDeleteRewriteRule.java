@@ -83,7 +83,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             return false;
         }
 
-        Optional<Long> snapshotId = scanOperator.getTvrVersionRange().to();
+        Optional<Long> snapshotId = scanOperator.getTvrVersionRange().getTo();
         if (snapshotId.isEmpty()) {
             return false;
         }

@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergTableMORParams;
@@ -48,7 +49,7 @@ public class LogicalIcebergEqualityDeleteScanOperator extends LogicalScanOperato
                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                       long limit,
                                       ScalarOperator predicate) {
-        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TvrVersionRange.empty());
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TvrTableSnapshot.empty());
     }
 
     public LogicalIcebergEqualityDeleteScanOperator(Table table,

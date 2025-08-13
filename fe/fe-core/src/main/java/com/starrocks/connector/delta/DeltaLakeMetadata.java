@@ -123,7 +123,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         String dbName = deltaLakeTable.getCatalogDBName();
         String tableName = deltaLakeTable.getCatalogTableName();
         PredicateSearchKey key =
-                PredicateSearchKey.of(dbName, tableName, params.getTableVersionRange().to().get(), params.getPredicate());
+                PredicateSearchKey.of(dbName, tableName, params.getTableVersionRange().getTo().get(), params.getPredicate());
 
         triggerDeltaLakePlanFilesIfNeeded(key, table, params.getPredicate(), params.getFieldNames());
 

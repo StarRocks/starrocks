@@ -21,6 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -74,7 +75,8 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             long limit,
             ScalarOperator predicate,
             Projection projection) {
-        this(type, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, projection, TvrVersionRange.empty());
+        this(type, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
+                projection, TvrTableSnapshot.empty());
     }
 
     public LogicalScanOperator(
@@ -102,7 +104,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.columnMetaToColRefMap = ImmutableMap.of();
         this.columnAccessPaths = ImmutableList.of();
         this.scanOptimizeOption = new ScanOptimizeOption();
-        this.tvrVersionRange = TvrVersionRange.empty();
+        this.tvrVersionRange = TvrTableSnapshot.empty();
     }
 
     public Table getTable() {

@@ -42,20 +42,24 @@ public abstract class TvrVersionRange {
                 Objects.equals(to, other.to);
     }
 
-    public static TvrTableSnapshot empty() {
-        return new TvrTableSnapshot(Optional.empty());
+    public TvrVersion from() {
+        return from;
     }
 
-    public Optional<Long> from() {
-        if (from.isMin()) {
+    public TvrVersion to() {
+        return to;
+    }
+
+    public Optional<Long> getFrom() {
+        if (from.isMinOrMax()) {
             return Optional.empty();
         } else {
             return Optional.of(from.getVersion());
         }
     }
 
-    public Optional<Long> to() {
-        if (to.isMax()) {
+    public Optional<Long> getTo() {
+        if (to.isMinOrMax()) {
             return Optional.empty();
         } else {
             return Optional.of(to.getVersion());

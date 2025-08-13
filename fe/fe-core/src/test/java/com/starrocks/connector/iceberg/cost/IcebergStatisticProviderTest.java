@@ -111,7 +111,7 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
         Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap,
-                null, null, TvrVersionRange.empty());
+                null, null, TvrTableSnapshot.empty());
         Assertions.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
     }
 

@@ -39,7 +39,7 @@ public final class TvrTableDelta extends TvrVersionRange {
         return new TvrTableDelta(from, to);
     }
 
-    public static TvrTableDelta emptyDelta() {
+    public static TvrTableDelta empty() {
         return new TvrTableDelta(TvrVersion.MIN, TvrVersion.MIN);
     }
 
@@ -62,7 +62,7 @@ public final class TvrTableDelta extends TvrVersionRange {
 
     @Override
     public String toString() {
-        return "Delta[" + from + "," + to + "]";
+        return "Delta@[" + from + "," + to + "]";
     }
 
     @Override
