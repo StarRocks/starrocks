@@ -488,8 +488,8 @@ int64_t JoinHashTable::mem_usage() const {
     // cases where `_table_items` was unexpectedly cleared or left uninitialized.
     // To prevent potential null pointer exceptions, we add a defensive check here.
     if (_table_items == nullptr) {
-        DCHECK(false);
         LOG(WARNING) << "table_items is nullptr in mem_usage, stack:" << get_stack_trace();
+        DCHECK(false);
         return 0;
     }
 
