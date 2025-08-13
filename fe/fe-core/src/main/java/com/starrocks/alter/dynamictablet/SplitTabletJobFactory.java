@@ -367,7 +367,7 @@ public class SplitTabletJobFactory implements DynamicTabletJobFactory {
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(indexId));
 
                 GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(oldToNewTabletIds,
-                        table.getPartitionFilePathInfo(physicalPartitionId),
+                        table.getPartitionFilePathInfo(physicalPartitionId), // TODO(TackY): use path id
                         table.getPartitionFileCacheInfo(physicalPartitionId),
                         indexContext.getMaterializedIndex().getShardGroupId(),
                         properties, WarehouseManager.DEFAULT_RESOURCE);
