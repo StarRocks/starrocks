@@ -41,7 +41,8 @@ public class ExternalScanPartitionPruneRule extends TransformationRule {
             OperatorType.LOGICAL_ES_SCAN,
             OperatorType.LOGICAL_PAIMON_SCAN,
             OperatorType.LOGICAL_ODPS_SCAN,
-            OperatorType.LOGICAL_KUDU_SCAN
+            OperatorType.LOGICAL_KUDU_SCAN,
+            OperatorType.LOGICAL_REDIS_SCAN
     );
 
     public ExternalScanPartitionPruneRule() {
