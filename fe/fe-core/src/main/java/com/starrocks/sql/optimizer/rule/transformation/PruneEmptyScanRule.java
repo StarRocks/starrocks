@@ -38,7 +38,8 @@ public class PruneEmptyScanRule extends TransformationRule {
             OperatorType.LOGICAL_ICEBERG_SCAN,
             OperatorType.LOGICAL_PAIMON_SCAN,
             OperatorType.LOGICAL_ODPS_SCAN,
-            OperatorType.LOGICAL_KUDU_SCAN
+            OperatorType.LOGICAL_KUDU_SCAN,
+            OperatorType.LOGICAL_REDIS_SCAN
     );
 
     public PruneEmptyScanRule() {
