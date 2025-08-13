@@ -112,7 +112,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 :::note
 - 式パーティションの追加はサポートされていません。
-- レンジパーティションで date_trunc または time_slice を使用した場合（つまり `PARTITION BY RANGE (date_trunc/time_slice(column))`）、新しいパーティションを追加する際はレンジパーティションの構文に従う必要があります。注意：`PARTITION BY date_trunc/time_slice(column)` は式パーティションです。
+- 注意：`PARTITION BY date_trunc(column)` および `PARTITION BY time_slice(column)` は、表現形式が式パーティションであるにもかかわらず、レンジパーティションとして扱われます。したがって、このようなパーティション方法を使用するテーブルに新しいパーティションを追加する際は、以下のレンジパーティションの構文を使用できます。
 :::
 
 構文：

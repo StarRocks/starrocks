@@ -44,8 +44,6 @@ function_expression ::=
       from_unixtime(column) 
     | from_unixtime_ms(column) 
     | str2date(column) 
-    | date_trunc(column) 
-    | time_slice(column) 
 
 single_range_partition ::=
     PARTITION <partition_name> VALUES partition_key_desc
@@ -76,7 +74,7 @@ time_unit ::=
 | **Parameters**        | **Description**                                              |
 | --------------------- | ------------------------------------------------------------ |
 | `partition_columns`   | The names of the partitioning columns. The partitioning column values can be string (BINARY not supported), date or datetime, or integer.   |
-| `function_expression` | The function expression that transforms the partitioning column into specific data types. Supported functions: from_unixtime, from_unixtime_ms, str2date, date_trunc, and time_slice.<br />**NOTE**<br />Range partitioning supports one and only one function expression. |
+| `function_expression` | The function expression that transforms the partitioning column into specific data types. Supported functions: from_unixtime, from_unixtime_ms, and str2date.<br />**NOTE**<br />Range partitioning supports one and only one function expression. |
 | `partition_name`      | Partition name. It is recommended to set appropriate partition names based on the business scenario to differentiate the data in different partitions. |
 
 ### Example

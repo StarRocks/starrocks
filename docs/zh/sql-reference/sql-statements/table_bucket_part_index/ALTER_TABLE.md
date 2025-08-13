@@ -112,7 +112,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 :::note
 - 不支持添加表达式分区。
-- 若您已基于 date_trunc 或 time_slice 函数对表进行 Range 分区（即 `PARTITION BY RANGE (date_trunc/time_slice(column))`），则添加新分区时必须遵循 Range 分区的语法。请注意，`PARTITION BY date_trunc/time_slice(column)` 属于表达式分区。
+- 请注意，尽管 `PARTITION BY date_trunc(column)` 和 `PARTITION BY time_slice(column)` 的格式为表达式分区，两者都属于属于 Range 分区。因此，您可以使用以下 Range 分区的语法，为采用此类分区策略的表添加新分区。
 :::
 
 语法：

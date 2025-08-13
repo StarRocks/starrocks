@@ -44,8 +44,6 @@ function_expression ::=
       from_unixtime(column) 
     | from_unixtime_ms(column) 
     | str2date(column) 
-    | date_trunc(column) 
-    | time_slice(column) 
 
 single_range_partition ::=
     PARTITION <partition_name> VALUES partition_key_desc
@@ -76,7 +74,7 @@ time_unit ::=
 | **参数**              | **描述**                                              |
 | --------------------- | ----------------------------------------------------- |
 | `partition_columns`   | 分区列的名称。分区列值可以是字符串（不支持 BINARY）、日期或日期时间、或整数。   |
-| `function_expression` | 将分区列转换为特定数据类型的函数表达式。支持的函数：from_unixtime, from_unixtime_ms, str2date, date_trunc, 和 time_slice。<br />**注意**<br />Range 分区仅支持一个函数表达式。 |
+| `function_expression` | 将分区列转换为特定数据类型的函数表达式。支持的函数：from_unixtime, from_unixtime_ms, 和 str2date。<br />**注意**<br />Range 分区仅支持一个函数表达式。 |
 | `partition_name`      | 分区名称。建议根据业务场景设置适当的分区名称，以区分不同分区中的数据。 |
 
 ### 示例

@@ -44,8 +44,6 @@ function_expression ::=
       from_unixtime(column) 
     | from_unixtime_ms(column) 
     | str2date(column) 
-    | date_trunc(column) 
-    | time_slice(column) 
 
 single_range_partition ::=
     PARTITION <partition_name> VALUES partition_key_desc
@@ -76,7 +74,7 @@ time_unit ::=
 | **パラメータ**        | **説明**                                              |
 | --------------------- | ------------------------------------------------------------ |
 | `partition_columns`   | パーティション列の名前。パーティション列の値は文字列 (BINARY はサポートされていません)、日付または日時、または整数であることができます。   |
-| `function_expression` | パーティション列を特定のデータ型に変換する関数式。サポートされている関数: from_unixtime, from_unixtime_ms, str2date, date_trunc, および time_slice。<br />**注意**<br />レンジパーティション化は1つの関数式のみをサポートします。 |
+| `function_expression` | パーティション列を特定のデータ型に変換する関数式。サポートされている関数: from_unixtime, from_unixtime_ms, および str2date。<br />**注意**<br />レンジパーティション化は1つの関数式のみをサポートします。 |
 | `partition_name`      | パーティション名。ビジネスシナリオに基づいて適切なパーティション名を設定し、異なるパーティション内のデータを区別することをお勧めします。 |
 
 ### 例

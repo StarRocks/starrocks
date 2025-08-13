@@ -110,7 +110,7 @@ You must strictly follow the respective syntax to add range partitions or list p
 
 :::note
 - Adding expression partitions is not supported.
-- If you have used date_trunc or time_slice with range partitioning (that is, `PARTITION BY RANGE (date_trunc/time_slice(column))`), you must follow the syntax of range partitions to add new partitions. Note that `PARTITION BY date_trunc/time_slice(column)` is expression partitioning.
+- Please note that `PARTITION BY date_trunc(column)` and `PARTITION BY time_slice(column)` are considered range partitioning, despite their format of expression partitioning. Therefore, you can use the following syntax for range partitions to add new partitions to tables use such partitioning strategies.
 :::
 
 Syntax：
