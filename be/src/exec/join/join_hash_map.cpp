@@ -483,6 +483,9 @@ void JoinHashTable::_init_join_keys() {
 }
 
 int64_t JoinHashTable::mem_usage() const {
+    // Theoretically, `_table_items` may be a nullptr after a cancel, even though in practice we haven’t observed any
+    // cases where `_table_items` was unexpectedly cleared or left uninitialized.
+    // To prevent potential null pointer exceptions, we add a defensive check here.
     if (_table_items == nullptr) {
         return 0;
     }
