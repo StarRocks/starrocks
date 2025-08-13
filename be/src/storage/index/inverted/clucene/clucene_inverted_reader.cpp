@@ -24,7 +24,7 @@
 #include "storage/index/inverted/clucene/clucene_file_reader.h"
 #include "storage/index/inverted/clucene/match_operator.h"
 #include "storage/index/inverted/clucene/match_operator_factory.h"
-#include "storage/index/inverted/inverted_index_context.h"
+#include "storage/index/inverted/gin_query_options.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/faststring.h"
@@ -44,20 +44,15 @@ Status CLuceneInvertedReader::create(const std::string& path, const std::shared_
     }
     if (is_string_type(field_type)) {
         ASSIGN_OR_RETURN(auto file_reader, CLuceneFileManager::getInstance().get_or_create_clucene_file_reader(path));
-        InvertedIndexParserType parser_type = get_inverted_index_parser_type_from_string(
-                get_parser_string_from_properties(tablet_index->index_properties()));
-        bool enable_phrase_query_sequential_opt = is_enable_phrase_query_sequential_opt(*tablet_index);
         // Only support full text search for now
-        *res = std::make_unique<FullTextCLuceneInvertedReader>(path, tablet_index, std::move(file_reader), parser_type,
-                                                               enable_phrase_query_sequential_opt);
+        *res = std::make_unique<FullTextCLuceneInvertedReader>(path, tablet_index, std::move(file_reader));
         return Status::OK();
-    } else {
-        return Status::InvalidArgument(fmt::format("Not supported type {}", field_type));
     }
+    return Status::InvalidArgument(fmt::format("Not supported type {}", field_type));
 }
 
 Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const std::string& column_name,
-                                            const void* query_value, InvertedIndexQueryType query_type,
+                                            const void* query_value, GinQueryOptions* gin_query_options,
                                             roaring::Roaring* bit_map) {
     const auto* search_query = reinterpret_cast<const Slice*>(query_value);
     auto act_len = strnlen(search_query->data, search_query->size);
@@ -71,20 +66,16 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     roaring::Roaring result;
     try {
         ASSIGN_OR_RETURN(auto dir, _inverted_index_reader->open(_tablet_index));
-        lucene::search::IndexSearcher index_searcher(dir.release(), true);
-
-        auto inverted_index_ctx = std::make_unique<InvertedIndexCtx>();
-        inverted_index_ctx->setParserType(_parser_type);
-        inverted_index_ctx->setQueryType(query_type);
-        inverted_index_ctx->setReaderType(get_inverted_index_reader_type());
-        inverted_index_ctx->setEnablePhraseQuerySequentialOpt(_enable_phrase_query_sequential_opt);
+        lucene::search::IndexSearcher index_searcher(dir.get());
 
         const auto match_operator_context = std::make_unique<MatchOperatorContext>();
-        match_operator_context->inverted_index_ctx = inverted_index_ctx.get();
+        match_operator_context->gin_query_options = gin_query_options;
         match_operator_context->searcher = &index_searcher;
-        match_operator_context->parser_type = _parser_type;
         match_operator_context->column_name = column_name;
         match_operator_context->search_str = search_str;
+
+        // query type should be set at ColumnPredicate#seek_inverted_index
+        const auto query_type = gin_query_options->getQueryType();
 
         if (query_type == InvertedIndexQueryType::LESS_EQUAL_QUERY ||
             query_type == InvertedIndexQueryType::GREATER_EQUAL_QUERY) {

@@ -27,8 +27,8 @@
 #include "common/statusor.h"
 #include "http/action/datacache_action.h"
 #include "storage/index/inverted/clucene/clucene_roaring_hit_collector.h"
+#include "storage/index/inverted/gin_query_options.h"
 #include "storage/index/inverted/inverted_index_analyzer.h"
-#include "storage/index/inverted/inverted_index_context.h"
 
 namespace starrocks {
 
@@ -190,13 +190,21 @@ void MatchOperator::parser_slop(std::string& query, InvertedIndexQueryInfo& quer
     }
 }
 
+void MatchTermOperator::add_terms(std::vector<std::string> terms) {
+    _terms = std::move(terms);
+}
+
 Status MatchTermOperator::_match_internal(roaring::Roaring& result) {
     std::vector<Term*> terms;
     std::vector<TermDocs*> _term_docs;
     std::vector<TermIterator> iterators;
 
-    ASSIGN_OR_RETURN(const auto _terms,
-                     InvertedIndexAnalyzer::get_analyse_result(_search_str, _field_name, _inverted_index_ctx));
+    if (_terms.empty()) {
+        ASSIGN_OR_RETURN(_terms,
+                         InvertedIndexAnalyzer::get_analyse_result(_search_str, _field_name, _gin_query_options));
+        VLOG(10) << "No terms specified, use search_str to get analyse result.";
+    }
+
     for (const auto& term : _terms) {
         std::wstring ws_term = boost::locale::conv::utf_to_utf<TCHAR>(term);
         Term* t = _CLNEW Term(_field_name.c_str(), ws_term.c_str());
@@ -406,8 +414,9 @@ MatchPhraseOperator::~MatchPhraseOperator() {
 
 Status MatchPhraseOperator::_match_internal(roaring::Roaring& result) {
     InvertedIndexQueryInfo query_info;
-    RETURN_IF_ERROR(parser_info(_search_str, _field_name, _parser_type, InvertedIndexQueryType::MATCH_PHRASE_QUERY,
-                                query_info, _inverted_index_ctx->enablePhraseQuerySequentialOpt()));
+    RETURN_IF_ERROR(parser_info(_search_str, _field_name, _gin_query_options->getParserType(),
+                                InvertedIndexQueryType::MATCH_PHRASE_QUERY, query_info,
+                                _gin_query_options->enablePhraseQuerySequentialOpt()));
     _slop = query_info.slop;
     if (_slop == 0 || query_info.ordered) {
         if (query_info.ordered) {
@@ -462,7 +471,7 @@ void MatchAnyTermOperator::_filter(const TermIterator& term_docs, const bool& fi
 
 Status MatchPhraseEdgeOperator::_match_internal(roaring::Roaring& result) {
     ASSIGN_OR_RETURN(const auto terms,
-                     InvertedIndexAnalyzer::get_analyse_result(_search_str, _field_name, _inverted_index_ctx));
+                     InvertedIndexAnalyzer::get_analyse_result(_search_str, _field_name, _gin_query_options));
 
     if (terms.size() == 1) {
         return search_one_term(terms, result);
@@ -510,16 +519,18 @@ Status MatchPhraseEdgeOperator::search_multi_term(const std::vector<std::string>
     std::vector<CL_NS(index)::Term*> suffix_terms;
     std::vector<CL_NS(index)::Term*> prefix_terms;
 
-    find_words([this, &suffix_term, &suffix_terms, &prefix_term, &prefix_terms](Term* term) {
+    auto max_expansions = _gin_query_options->maxExpansions();
+
+    find_words([this, &suffix_term, &suffix_terms, &prefix_term, &prefix_terms, &max_expansions](Term* term) {
         std::wstring_view ws_term(term->text(), term->textLength());
 
-        if (_max_expansions == 0 || suffix_terms.size() < _max_expansions) {
+        if (max_expansions == 0 || suffix_terms.size() < max_expansions) {
             if (ws_term.ends_with(suffix_term)) {
                 suffix_terms.push_back(_CL_POINTER(term));
             }
         }
 
-        if (_max_expansions == 0 || prefix_terms.size() < _max_expansions) {
+        if (max_expansions == 0 || prefix_terms.size() < max_expansions) {
             if (ws_term.starts_with(prefix_term)) {
                 prefix_terms.push_back(_CL_POINTER(term));
             }
@@ -639,7 +650,7 @@ void MatchPhrasePrefixOperator::get_prefix_terms(IndexReader* reader, const std:
 Status MatchPhrasePrefixOperator::_match_internal(roaring::Roaring& result) {
     lucene::search::MultiPhraseQuery _query;
     ASSIGN_OR_RETURN(const auto terms,
-                     InvertedIndexAnalyzer::get_analyse_result(_search_str, _field_name, _inverted_index_ctx));
+                     InvertedIndexAnalyzer::get_analyse_result(_search_str, _field_name, _gin_query_options));
 
     for (size_t i = 0; i < terms.size(); i++) {
         if (i < terms.size() - 1) {
@@ -649,7 +660,8 @@ Status MatchPhrasePrefixOperator::_match_internal(roaring::Roaring& result) {
             _CLLDECDELETE(t);
         } else {
             std::vector<CL_NS(index)::Term*> prefix_terms;
-            get_prefix_terms(_searcher->getReader(), _field_name, terms[i], prefix_terms, _max_expansions);
+            get_prefix_terms(_searcher->getReader(), _field_name, terms[i], prefix_terms,
+                             _gin_query_options->maxExpansions());
             if (prefix_terms.empty()) {
                 std::wstring ws_term = boost::locale::conv::utf_to_utf<TCHAR>(terms[i]);
                 Term* t = _CLNEW Term(_field_name.c_str(), ws_term.c_str());
@@ -702,20 +714,19 @@ Status MatchRegexpOperator::_match_internal(roaring::Roaring& result) {
             std::string input = lucene_wcstoutf8string(term->text(), term->textLength());
 
             bool is_match = false;
-            if (hs_scan(database, input.data(), input.size(), 0, scratch, on_match, (void*)&is_match) != HS_SUCCESS) {
+            if (hs_scan(database, input.data(), input.size(), 0, scratch, on_match, &is_match) != HS_SUCCESS) {
                 LOG(ERROR) << "hyperscan match failed: " << input;
                 break;
             }
 
             if (is_match) {
-                if (_max_expansions > 0 && count >= _max_expansions) {
+                if (_gin_query_options->maxExpansions() > 0 && count >= _gin_query_options->maxExpansions()) {
                     break;
                 }
 
                 terms.emplace_back(std::move(input));
                 count++;
             }
-
             _CLDECDELETE(term);
         }
     }
@@ -732,13 +743,9 @@ Status MatchRegexpOperator::_match_internal(roaring::Roaring& result) {
         return Status::OK();
     }
 
-    for (int i = 0; i < terms.size(); ++i) {
-        MatchOperatorContext ctx = *_ctx;
-        ctx.search_str = terms[i];
-        MatchTermOperator query(&ctx);
-        RETURN_IF_ERROR(query.match(result));
-    }
-    return Status::OK();
+    MatchAnyTermOperator query(_ctx);
+    query.add_terms(terms);
+    return query.match(result);
 }
 
 } // namespace starrocks

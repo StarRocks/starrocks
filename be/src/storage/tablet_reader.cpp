@@ -376,6 +376,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
         rs_opts.asc_hint = _is_asc_hint;
     }
+    rs_opts.enable_phrase_query_sequential_opt = params.enable_phrase_query_sequential_opt;
+    rs_opts.gin_max_expansions = params.gin_max_expansions;
     rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
     rs_opts.enable_gin_filter = params.enable_gin_filter;
     rs_opts.has_preaggregation = true;

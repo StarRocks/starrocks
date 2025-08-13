@@ -33,6 +33,19 @@ bool is_enable_phrase_query_sequential_opt(const TabletIndex& tablet_index) {
     return false;
 }
 
+void add_gin_max_expansions(TabletIndex* tablet_index, int32_t gin_max_expansions) {
+    tablet_index->add_search_properties(GIN_MAX_EXPANSIONS, std::to_string(gin_max_expansions));
+}
+
+int32_t get_gin_max_expansions(const TabletIndex& tablet_index) {
+    if (const auto it = tablet_index.search_properties().find(GIN_MAX_EXPANSIONS);
+        it != tablet_index.search_properties().end()) {
+        const auto value = it->second;
+        return std::stoi(value);
+    }
+    return GIN_MAX_EXPANSIONS_DEFAULT;
+}
+
 StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_index) {
     auto inverted_imp_prop = tablet_index.common_properties().find(INVERTED_IMP_KEY);
     if (inverted_imp_prop != tablet_index.common_properties().end()) {

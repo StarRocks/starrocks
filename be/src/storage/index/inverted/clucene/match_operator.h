@@ -28,16 +28,14 @@
 
 namespace starrocks {
 
-class InvertedIndexCtx;
+class GinQueryOptions;
 
 struct MatchOperatorContext {
-    InvertedIndexCtx* inverted_index_ctx = nullptr;
+    GinQueryOptions* gin_query_options = nullptr;
     lucene::search::IndexSearcher* searcher = nullptr;
-    InvertedIndexParserType parser_type = InvertedIndexParserType::PARSER_UNKNOWN;
     std::string column_name;
     std::string search_str;
     bool inclusive = false;
-    int32_t max_expansions = 50;
 };
 
 struct InvertedIndexQueryInfo {
@@ -110,7 +108,7 @@ class MatchOperator {
 public:
     explicit MatchOperator(MatchOperatorContext* ctx)
             : _ctx(ctx),
-              _inverted_index_ctx(ctx->inverted_index_ctx),
+              _gin_query_options(ctx->gin_query_options),
               _searcher(ctx->searcher),
               _field_name(std::wstring(ctx->column_name.begin(), ctx->column_name.end())) {}
     virtual ~MatchOperator() = default;
@@ -125,7 +123,7 @@ protected:
                               InvertedIndexQueryInfo& query_info, const bool& sequential_opt);
 
     MatchOperatorContext* _ctx;
-    InvertedIndexCtx* _inverted_index_ctx;
+    GinQueryOptions* _gin_query_options;
     lucene::search::IndexSearcher* _searcher;
     std::wstring _field_name;
 };
@@ -135,6 +133,8 @@ public:
     explicit MatchTermOperator(MatchOperatorContext* ctx)
             : MatchOperator(ctx), _search_str(std::move(ctx->search_str)) {}
 
+    void add_terms(std::vector<std::string> terms);
+
 protected:
     Status _match_internal(roaring::Roaring& result) override;
 
@@ -142,6 +142,7 @@ protected:
 
 private:
     std::string _search_str;
+    std::vector<std::string> _terms{};
 };
 
 class MatchRangeOperator : public MatchOperator {
@@ -192,7 +193,7 @@ private:
 class MatchPhraseOperator final : public MatchOperator {
 public:
     explicit MatchPhraseOperator(MatchOperatorContext* ctx)
-            : MatchOperator(ctx), _search_str(std::move(ctx->search_str)), _parser_type(ctx->parser_type) {}
+            : MatchOperator(ctx), _search_str(std::move(ctx->search_str)) {}
     ~MatchPhraseOperator() override;
 
 protected:
@@ -211,7 +212,6 @@ private:
 
     std::string _search_str;
     int _slop = 0;
-    InvertedIndexParserType _parser_type;
 
     TermIterator _lead1;
     TermIterator _lead2;
@@ -237,8 +237,7 @@ protected:
 
 class MatchPhraseEdgeOperator final : public MatchOperator {
 public:
-    explicit MatchPhraseEdgeOperator(MatchOperatorContext* ctx)
-            : MatchOperator(ctx), _search_str(ctx->search_str), _max_expansions(ctx->max_expansions) {}
+    explicit MatchPhraseEdgeOperator(MatchOperatorContext* ctx) : MatchOperator(ctx), _search_str(ctx->search_str) {}
 
 protected:
     Status _match_internal(roaring::Roaring& result) override;
@@ -254,13 +253,11 @@ private:
                              const std::wstring& ws_term, std::vector<Term*>& checked_terms);
 
     std::string _search_str;
-    const int32_t _max_expansions;
 };
 
 class MatchPhrasePrefixOperator final : public MatchOperator {
 public:
-    explicit MatchPhrasePrefixOperator(MatchOperatorContext* ctx)
-            : MatchOperator(ctx), _search_str(ctx->search_str), _max_expansions(ctx->max_expansions) {}
+    explicit MatchPhrasePrefixOperator(MatchOperatorContext* ctx) : MatchOperator(ctx), _search_str(ctx->search_str) {}
 
 protected:
     Status _match_internal(roaring::Roaring& result) override;
@@ -270,13 +267,12 @@ private:
                                  std::vector<CL_NS(index)::Term*>& prefix_terms, int32_t max_expansions);
 
     std::string _search_str;
-    const int32_t _max_expansions;
 };
 
 class MatchRegexpOperator final : public MatchOperator {
 public:
     explicit MatchRegexpOperator(MatchOperatorContext* ctx)
-            : MatchOperator(ctx), _ctx(ctx), _pattern(ctx->search_str), _max_expansions(ctx->max_expansions) {}
+            : MatchOperator(ctx), _ctx(ctx), _pattern(ctx->search_str) {}
 
 protected:
     Status _match_internal(roaring::Roaring& result) override;
@@ -284,7 +280,6 @@ protected:
 private:
     MatchOperatorContext* _ctx;
     std::string _pattern;
-    int32_t _max_expansions;
 };
 
 } // namespace starrocks

@@ -271,6 +271,13 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
     _params.scan_dop = _provider->get_scan_dop();
 
+    if (_runtime_state->query_options().__isset.gin_max_expansions) {
+        _params.gin_max_expansions = _runtime_state->query_options().gin_max_expansions;
+    }
+    if (_runtime_state->query_options().__isset.enable_phrase_query_sequential_opt) {
+        _params.enable_phrase_query_sequential_opt = _runtime_state->query_options().enable_phrase_query_sequential_opt;
+    }
+
     ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
     decide_chunk_size(!pred_tree.empty());
     _has_any_predicate = !pred_tree.empty();

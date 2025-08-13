@@ -22,8 +22,8 @@
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/clucene/clucene_file_writer.h"
 #include "storage/index/inverted/clucene/clucene_fs_directory.h"
+#include "storage/index/inverted/gin_query_options.h"
 #include "storage/index/inverted/inverted_index_analyzer.h"
-#include "storage/index/inverted/inverted_index_context.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/rowset/common.h"
 #include "types/logical_type.h"
@@ -201,8 +201,8 @@ private:
     }
 
     Status init_inverted_index_context() {
-        _inverted_index_ctx = std::make_shared<InvertedIndexCtx>();
-        _inverted_index_ctx->setParserType(_parser_type);
+        _gin_query_options = std::make_shared<GinQueryOptions>();
+        _gin_query_options->setParserType(_parser_type);
         return Status::OK();
     }
 
@@ -248,7 +248,7 @@ private:
 
     std::wstring _field_name;
     const TabletIndex* _inverted_index;
-    std::shared_ptr<InvertedIndexCtx> _inverted_index_ctx;
+    std::shared_ptr<GinQueryOptions> _gin_query_options;
 
     std::shared_ptr<StarRocksFSDirectory> _dir = nullptr;
 };

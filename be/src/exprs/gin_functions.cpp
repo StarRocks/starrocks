@@ -19,9 +19,9 @@
 
 #include "column/array_column.h"
 #include "column/column_viewer.h"
+#include "storage/index/inverted/gin_query_options.h"
 #include "storage/index/inverted/inverted_index_analyzer.h"
 #include "storage/index/inverted/inverted_index_common.h"
-#include "storage/index/inverted/inverted_index_context.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "util/faststring.h"
 
@@ -35,7 +35,7 @@ Status GinFunctions::tokenize_prepare(FunctionContext* context, FunctionContext:
     auto column = context->get_constant_column(0);
     auto method_col = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
 
-    InvertedIndexCtx* inverted_index_ctx = new InvertedIndexCtx();
+    GinQueryOptions* inverted_index_ctx = new GinQueryOptions();
 
     InvertedIndexParserType parser_type = get_inverted_index_parser_type_from_string(method_col.to_string());
     inverted_index_ctx->setParserType(parser_type);
@@ -47,7 +47,7 @@ Status GinFunctions::tokenize_prepare(FunctionContext* context, FunctionContext:
 Status GinFunctions::tokenize_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
         auto* inverted_index_ctx =
-                reinterpret_cast<InvertedIndexCtx*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+                reinterpret_cast<GinQueryOptions*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
         delete inverted_index_ctx;
     }
     return Status::OK();
@@ -55,7 +55,7 @@ Status GinFunctions::tokenize_close(FunctionContext* context, FunctionContext::F
 
 StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starrocks::Columns& columns) {
     auto* inverted_index_ctx =
-            reinterpret_cast<InvertedIndexCtx*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+            reinterpret_cast<GinQueryOptions*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
     if (inverted_index_ctx == nullptr) {
         return Status::InternalError("InvertedIndexCtx is null.");
     }
