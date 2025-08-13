@@ -29,10 +29,13 @@ public class ShowDataDistributionStmtTest {
 
     @Test
     public void testShowDataDistribution() throws Exception {
+        long start = System.currentTimeMillis();
+        System.out.println("xxx ut create cluster " +  start / 1000);
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
 
+        System.out.println("xxx ut start " + System.currentTimeMillis() / 1000);
         try {
             //1.init env: create table、insert data
             stmt.execute("create database IF NOT EXISTS show_data_distribution_test_db");
@@ -53,6 +56,7 @@ public class ShowDataDistributionStmtTest {
                     "('c','c','2024-09-21'),('c','c','2024-09-21'),('d','d','2024-09-21')");
             stmt.execute("insert into unpartition_table(col1,col2,ds) " +
                     "values('c','c','2024-09-21'),('c','c','2024-09-21'),('d','d','2024-09-21')");
+            System.out.println("xxx prepare finish " + System.currentTimeMillis() / 1000);
 
             //2.check
             //2.0 check: vaild sql
@@ -66,15 +70,18 @@ public class ShowDataDistributionStmtTest {
             for (String sql : vaildSql) {
                 Assertions.assertTrue(stmt.execute(sql));
             }
-            System.out.println("ShowDataDistributionStmtTest: 2.0check vaild sql done!");
+            System.out.println("ShowDataDistributionStmtTest: 2.0check vaild sql done! "
+                    + System.currentTimeMillis() / 1000);
 
             //2.1 check value: partition table
             stmt.execute("select count(*) from partition_table;");
             if (stmt.getResultSet().next()) {
-                System.out.println("ShowDataDistributionStmtTest: begin check value: partition table");
+                System.out.println("ShowDataDistributionStmtTest: begin check value: partition table "
+                        + System.currentTimeMillis() / 1000);
                 //check insert data success and wait table meta update
                 int count = stmt.getResultSet().getInt(1);
-                System.out.println("ShowDataDistributionStmtTest: partition_table row count = " + count);
+                System.out.println("ShowDataDistributionStmtTest: partition_table row count = " + count + " "
+                        + System.currentTimeMillis() / 1000);
                 Assertions.assertEquals(count, 6);
                 Thread.sleep(60000);
 
@@ -88,15 +95,18 @@ public class ShowDataDistributionStmtTest {
                 stmt.execute("show data distribution from partition_table partition(p20240920,p20240921);");
                 checkExpAndActValPartitionTable(stmt.getResultSet());
             }
-            System.out.println("ShowDataDistributionStmtTest: 2.1check partition table done!");
+            System.out.println("ShowDataDistributionStmtTest: 2.1check partition table done! "
+                    + System.currentTimeMillis() / 1000);
 
             //2.2 check value: unpartition table
             stmt.execute("select count(*) from unpartition_table;");
             if (stmt.getResultSet().next()) {
-                System.out.println("ShowDataDistributionStmtTest: begin check value: unpartition table");
+                System.out.println("ShowDataDistributionStmtTest: begin check value: unpartition table "
+                        + System.currentTimeMillis() / 1000);
                 //check insert data success and wait table meta update
                 int count = stmt.getResultSet().getInt(1);
-                System.out.println("ShowDataDistributionStmtTest: unpartition_table row count = " + count);
+                System.out.println("ShowDataDistributionStmtTest: unpartition_table row count = " + count + " "
+                        + System.currentTimeMillis() / 1000);
                 Assertions.assertEquals(count, 3);
                 Thread.sleep(60000);
 
@@ -105,7 +115,8 @@ public class ShowDataDistributionStmtTest {
                 stmt.execute("show data distribution from unpartition_table partition(unpartition_table);");
                 checkExpAndActValUnPartitionTable(stmt.getResultSet());
             }
-            System.out.println("ShowDataDistributionStmtTest: 2.2check unpartition table done!");
+            System.out.println("ShowDataDistributionStmtTest: 2.2check unpartition table done! "
+                    + System.currentTimeMillis() / 1000);
 
             //2.3 check: db not exist
             try {
@@ -114,7 +125,8 @@ public class ShowDataDistributionStmtTest {
                 String exp = "Database no_exist_db does not exsit";
                 Assertions.assertTrue(e.getMessage().contains(exp));
             }
-            System.out.println("ShowDataDistributionStmtTest: 2.3check db not exist done!");
+            System.out.println("ShowDataDistributionStmtTest: 2.3check db not exist done! "
+                    + System.currentTimeMillis() / 1000);
 
             //2.4 check: table not exist
             try {
@@ -123,7 +135,8 @@ public class ShowDataDistributionStmtTest {
                 String exp = "Table does not exist";
                 Assertions.assertTrue(e.getMessage().contains(exp));
             }
-            System.out.println("ShowDataDistributionStmtTest: 2.4check table not exist done!");
+            System.out.println("ShowDataDistributionStmtTest: 2.4check table not exist done! "
+                    + System.currentTimeMillis() / 1000);
 
             //2.5 check: partition not exist
             try {
@@ -132,7 +145,8 @@ public class ShowDataDistributionStmtTest {
                 String exp = "Partition does not exist";
                 Assertions.assertTrue(e.getMessage().contains(exp));
             }
-            System.out.println("ShowDataDistributionStmtTest: 2.5check partition not exist done!");
+            System.out.println("ShowDataDistributionStmtTest: 2.5check partition not exist done! "
+                    + System.currentTimeMillis() / 1000);
 
             //2.6 check: privilege
             //create user and grant select privilege on other db
@@ -148,7 +162,8 @@ public class ShowDataDistributionStmtTest {
                         "on TABLE partition_table for this operation";
                 Assertions.assertTrue(e.getMessage().contains(exp));
             }
-            System.out.println("ShowDataDistributionStmtTest: 2.6check privilege done!");
+            System.out.println("ShowDataDistributionStmtTest: 2.6check privilege done! "
+                    + System.currentTimeMillis() / 1000);
 
             //2.7 check: invaild sql
             List<String> invaildSql = Arrays.asList(
@@ -165,13 +180,15 @@ public class ShowDataDistributionStmtTest {
                     Assertions.assertTrue(e.getMessage().contains(exp));
                 }
             }
-            System.out.println("ShowDataDistributionStmtTest: 2.7check invaild sql done!");
+            System.out.println("ShowDataDistributionStmtTest: 2.7check invaild sql done! "
+                    + System.currentTimeMillis() / 1000);
         } finally {
-            System.out.println("ShowDataDistributionStmtTest: 2.check done!");
+            System.out.println("ShowDataDistributionStmtTest: 2.check done! " + System.currentTimeMillis() / 1000);
             stmt.close();
             connection.close();
             PseudoCluster.getInstance().shutdown(true);
         }
+        System.out.println("xxx ut cost: " + (System.currentTimeMillis() - start) / 1000 + "s");
     }
 
     public void checkExpAndActValPartitionTable(ResultSet rs) throws Exception {
