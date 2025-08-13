@@ -67,7 +67,7 @@ import java.util.stream.Collectors;
 
 import static org.apache.paimon.data.Timestamp.fromLocalDateTime;
 
-public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, Void> {
+public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, PaimonPredicateContext> {
     private static final Logger LOG = LogManager.getLogger(PaimonPredicateConverter.class);
     private final PredicateBuilder builder;
     private final List<String> fieldNames;
@@ -87,28 +87,36 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
     }
 
     @Override
-    public Predicate visit(ScalarOperator scalarOperator, Void context) {
+    public Predicate visit(ScalarOperator scalarOperator, PaimonPredicateContext context) {
         return null;
     }
 
     @Override
-    public Predicate visitCompoundPredicate(CompoundPredicateOperator operator, Void context) {
+    public Predicate visitCompoundPredicate(CompoundPredicateOperator operator, PaimonPredicateContext context) {
         CompoundPredicateOperator.CompoundType op = operator.getCompoundType();
         if (op == CompoundPredicateOperator.CompoundType.NOT) {
             if (operator.getChild(0) instanceof LikePredicateOperator) {
                 return null;
             }
-            Predicate expression = operator.getChild(0).accept(this, null);
-
+            PaimonPredicateContext paimonPredicateContext = new PaimonPredicateContext();
+            paimonPredicateContext.setParentPredicateOperator(operator);
+            Predicate expression = operator.getChild(0).accept(this, paimonPredicateContext);
             if (expression != null) {
                 return expression.negate().orElse(null);
             }
         } else {
-            Predicate left = operator.getChild(0).accept(this, null);
-            Predicate right = operator.getChild(1).accept(this, null);
+            Predicate left = operator.getChild(0).accept(this, context);
+            Predicate right = operator.getChild(1).accept(this, context);
+            CompoundPredicateOperator parentPredicateOperator = null;
+            if (context != null && context.getParentPredicateOperator() != null) {
+                parentPredicateOperator = context.getParentPredicateOperator();
+            }
             if (left != null && right != null) {
                 return (op == CompoundPredicateOperator.CompoundType.OR) ? PredicateBuilder.or(left, right) :
                         PredicateBuilder.and(left, right);
+            } else if (parentPredicateOperator != null &&
+                    parentPredicateOperator.getCompoundType() == CompoundPredicateOperator.CompoundType.NOT) {
+                return null;
             } else if (left != null && op == CompoundPredicateOperator.CompoundType.AND) {
                 //if op=and, return the predicates that are not null.
                 return left;
@@ -120,7 +128,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
     }
 
     @Override
-    public Predicate visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
+    public Predicate visitIsNullPredicate(IsNullPredicateOperator operator, PaimonPredicateContext context) {
         String columnName = getColumnName(operator.getChild(0));
         if (columnName == null) {
             return null;
@@ -134,7 +142,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
     }
 
     @Override
-    public Predicate visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
+    public Predicate visitBinaryPredicate(BinaryPredicateOperator operator, PaimonPredicateContext context) {
         String columnName = getColumnName(operator.getChild(0));
         if (columnName == null) {
             return null;
@@ -166,12 +174,12 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
     }
 
     @Override
-    public Predicate visitLargeInPredicate(LargeInPredicateOperator operator, Void context) {
+    public Predicate visitLargeInPredicate(LargeInPredicateOperator operator, PaimonPredicateContext context) {
         throw new UnsupportedOperationException("not support large in predicate in the PaimonPredicateConverter");
     }
 
     @Override
-    public Predicate visitInPredicate(InPredicateOperator operator, Void context) {
+    public Predicate visitInPredicate(InPredicateOperator operator, PaimonPredicateContext context) {
         String columnName = getColumnName(operator.getChild(0));
         if (columnName == null) {
             return null;
@@ -198,7 +206,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
     }
 
     @Override
-    public Predicate visitLikePredicateOperator(LikePredicateOperator operator, Void context) {
+    public Predicate visitLikePredicateOperator(LikePredicateOperator operator, PaimonPredicateContext context) {
         String columnName = getColumnName(operator.getChild(0));
         if (columnName == null) {
             return null;
