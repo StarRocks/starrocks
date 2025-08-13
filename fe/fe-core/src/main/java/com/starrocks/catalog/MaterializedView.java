@@ -168,8 +168,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
          */
         ADAPTIVE;
 
-        public static final Set<PartitionRefreshStrategy> ALL_STRATEGIES = ImmutableSet.of(FORCE, STRICT, ADAPTIVE);
-
         public static PartitionRefreshStrategy defaultValue() {
             return STRICT;
         }

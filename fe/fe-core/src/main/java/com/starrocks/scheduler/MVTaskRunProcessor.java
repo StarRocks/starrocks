@@ -161,6 +161,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     @Override
     public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
         // init to collect the base timer for refresh profile
+        Tracers.register(context.getCtx());
         final QueryDebugOptions queryDebugOptions = context.getCtx().getSessionVariable().getQueryDebugOptions();
         final Tracers.Mode mvRefreshTraceMode = queryDebugOptions.getMvRefreshTraceMode();
         final Tracers.Module mvRefreshTraceModule = queryDebugOptions.getMvRefreshTraceModule();

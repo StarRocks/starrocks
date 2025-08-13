@@ -378,9 +378,9 @@ public abstract class MVTestBase extends StarRocksTestBase {
         return taskRun;
     }
 
-    protected MVTaskRunProcessor withMVRefreshProcessor(String dbName, MaterializedView mv) throws Exception {
+    protected MVTaskRunProcessor getMVTaskRunProcessor(String dbName, MaterializedView mv) throws Exception {
         TaskRun taskRun = withMVRefreshTaskRun(dbName, mv);
-        return getMVRefreshProcessor(taskRun);
+        return getMVTaskRunProcessor(taskRun);
     }
 
     protected MVPCTBasedRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
@@ -625,7 +625,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         });
     }
 
-    public static MVTaskRunProcessor getMVRefreshProcessor(TaskRun taskRun) {
+    public static MVTaskRunProcessor getMVTaskRunProcessor(TaskRun taskRun) {
         Assertions.assertTrue(taskRun.getProcessor() instanceof MVTaskRunProcessor);
         return (MVTaskRunProcessor) taskRun.getProcessor();
     }

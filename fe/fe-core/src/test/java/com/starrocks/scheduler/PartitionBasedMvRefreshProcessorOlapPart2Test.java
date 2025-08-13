@@ -275,7 +275,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     executeInsertSql(connectContext, "insert into tbl1 values(\"2022-02-20\", 1, 10)");
                     OlapTable table = (OlapTable) getTable("test", "tbl1");
                     MaterializedView mv = getMv("test", "test_mv1");
-                    MVTaskRunProcessor mvTaskRunProcessor = withMVRefreshProcessor("test", mv);
+                    MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor("test", mv);
                     QueryMaterializationContext queryMVContext = connectContext.getQueryMVContext();
                     Assertions.assertTrue(queryMVContext == null);
 
@@ -303,7 +303,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     Assertions.assertFalse(partitionsToRefresh1.isEmpty());
 
                     {
-                        mvTaskRunProcessor = withMVRefreshProcessor("test", mv);
+                        mvTaskRunProcessor = getMVTaskRunProcessor("test", mv);
                         RuntimeProfile runtimeProfile = mvTaskRunProcessor.getRuntimeProfile();
                         QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
                         String key = String.format("cache_getUpdatedPartitionNames_%s_%s", mv.getId(), table.getId());

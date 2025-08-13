@@ -346,7 +346,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                     () -> {
                         UtFrameUtils.mockEnableQueryContextCache();
                         MaterializedView mv = getMv("test", "test_mv1");
-                        MVTaskRunProcessor mvTaskRunProcessor = withMVRefreshProcessor("test", mv);
+                        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor("test", mv);
                         RuntimeProfile runtimeProfile = mvTaskRunProcessor.getRuntimeProfile();
                         QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
                         Assertions.assertTrue(queryCacheStats != null);
