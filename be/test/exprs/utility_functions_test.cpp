@@ -134,34 +134,68 @@ TEST_F(UtilityFunctionsTest, makeSortKeyBasicOrdering) {
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
 
     // Prepare columns of different types
+    // int32
     auto c_int = Int32Column::create();
     c_int->append(1);
     c_int->append(2);
     c_int->append(10);
 
+    // binary
     auto c_str = BinaryColumn::create();
     c_str->append(Slice("a"));
     c_str->append(Slice("b"));
-    c_str->append(Slice("b"));
+    c_str->append(Slice("c"));
 
-    auto c_date = Int32Column::create();
-    // Assume DATE stored as int32 days; smaller -> earlier
-    c_date->append(1000);
-    c_date->append(1000);
-    c_date->append(999);
+    // date
+    auto c_date = DateColumn::create();
+    c_date->append(DateValue::create(2021, 1, 1));
+    c_date->append(DateValue::create(2021, 1, 2));
+    c_date->append(DateValue::create(2021, 1, 10));
+
+    // timestamp
+    auto c_timestamp = TimestampColumn::create();
+    c_timestamp->append(TimestampValue::create(2021, 1, 1, 0, 0, 0, 0));
+    c_timestamp->append(TimestampValue::create(2021, 1, 2, 0, 0, 0, 0));
+    c_timestamp->append(TimestampValue::create(2021, 1, 10, 0, 0, 0, 0));
+
+    // float32
+    auto c_float32 = FloatColumn::create();
+    c_float32->append(1.0f);
+    c_float32->append(2.0f);
+    c_float32->append(10.0f);
+
+    // float64
+    auto c_float64 = DoubleColumn::create();
+    c_float64->append(1.0);
+    c_float64->append(2.0);
+    c_float64->append(10.0);
 
     Columns cols;
     cols.emplace_back(c_int);
     cols.emplace_back(c_str);
     cols.emplace_back(c_date);
+    cols.emplace_back(c_timestamp);
+    cols.emplace_back(c_float32);
+    cols.emplace_back(c_float64);
 
-    ColumnPtr out = UtilityFunctions::make_sort_key(ctx, cols).value();
+    // verify each column
+    for (auto& col : cols) {
+        ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::make_sort_key(ctx, {col}));
+        auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
+        ASSERT_EQ(3, bin->size());
+
+        std::vector<Slice> keys = {bin->get_slice(0), bin->get_slice(1), bin->get_slice(2)};
+        ASSERT_LT(keys[0].compare(keys[1]), 0) << col->get_name();
+        ASSERT_LT(keys[1].compare(keys[2]), 0) << col->get_name();
+    }
+
+    // verify all columns
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::make_sort_key(ctx, cols));
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
     ASSERT_EQ(3, bin->size());
 
     // Verify lexicographic order aligns with tuple order
     std::vector<Slice> keys = {bin->get_slice(0), bin->get_slice(1), bin->get_slice(2)};
-    // Expect row0 (1,"a",1000) < row1 (2,"b",1000) < row2 (10,"b",999)
     ASSERT_LT(keys[0].compare(keys[1]), 0);
     ASSERT_LT(keys[1].compare(keys[2]), 0);
 }

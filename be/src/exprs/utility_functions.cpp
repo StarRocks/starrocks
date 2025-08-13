@@ -374,17 +374,6 @@ StatusOr<ColumnPtr> UtilityFunctions::equiwidth_bucket(FunctionContext* context,
 // Helpers copied and adapted from storage/primary_key_encoder.cpp for order-preserving encoding
 namespace detail {
 
-// Reuse the existing encode_integral implementation from primary_key_encoder.h
-template <class T>
-void encode_integral(const T& v, std::string* dest) {
-    starrocks::encoding_utils::encode_integral(v, dest);
-}
-
-// Reuse the existing encode_slice implementation from primary_key_encoder.h
-inline void encode_slice(const Slice& s, std::string* dst, bool is_last) {
-    starrocks::encoding_utils::encode_slice(s, dst, is_last);
-}
-
 inline void encode_float32(float v, std::string* dest) {
     uint32_t u;
     static_assert(sizeof(u) == sizeof(v), "size mismatch");
@@ -436,7 +425,7 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     Status do_visit(const BinaryColumnBase<T>& column) {
         for (size_t i = 0; i < rows; i++) {
             Slice s = column.get_slice(i);
-            encode_slice(s, &(*buffs)[i], is_last_field);
+            encoding_utils::encode_slice(s, &(*buffs)[i], is_last_field);
         }
         return Status::OK();
     }
@@ -451,7 +440,13 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
             } else if constexpr (std::is_same_v<T, double>) {
                 encode_float64(data[i], &(*buffs)[i]);
             } else if constexpr (std::is_integral_v<T>) {
-                encode_integral<T>(data[i], &(*buffs)[i]);
+                encoding_utils::encode_integral<T>(data[i], &(*buffs)[i]);
+            } else if constexpr (std::is_same_v<T, DateValue>) {
+                encoding_utils::encode_integral<int32_t>(data[i].julian(), &(*buffs)[i]);
+            } else if constexpr (std::is_same_v<T, DateTimeValue>) {
+                encoding_utils::encode_integral<int64_t>(data[i].to_int64(), &(*buffs)[i]);
+            } else if constexpr (std::is_same_v<T, TimestampValue>) {
+                encoding_utils::encode_integral<int64_t>(data[i].timestamp(), &(*buffs)[i]);
             } else {
                 return Status::NotSupported(
                         fmt::format("make_sort_key: unsupported argument type: {}", typeid(T).name()));
