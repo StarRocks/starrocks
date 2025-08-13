@@ -62,66 +62,6 @@ public class BalanceStatProcNodeTest {
 
     @Test
     public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr) throws AnalysisException {
-<<<<<<< HEAD
-        // 0. backend disk balance
-        // system info service
-        // be1
-        Backend be1 = new Backend(10001L, "192.168.0.1", 9051);
-        Map<String, DiskInfo> disks = Maps.newHashMap();
-        DiskInfo diskInfo1 = new DiskInfo("/path1");
-        diskInfo1.setTotalCapacityB(1000000L);
-        diskInfo1.setAvailableCapacityB(100000L);
-        diskInfo1.setDataUsedCapacityB(880000L);
-        diskInfo1.setStorageMedium(TStorageMedium.HDD);
-        disks.put(diskInfo1.getRootPath(), diskInfo1);
-        DiskInfo diskInfo2 = new DiskInfo("/path2");
-        diskInfo2.setTotalCapacityB(1000000L);
-        diskInfo2.setAvailableCapacityB(900000L);
-        diskInfo2.setDataUsedCapacityB(80000L);
-        diskInfo2.setStorageMedium(TStorageMedium.HDD);
-        disks.put(diskInfo2.getRootPath(), diskInfo2);
-        be1.setDisks(ImmutableMap.copyOf(disks));
-        be1.setAlive(true);
-
-        // be2
-        Backend be2 = new Backend(10002L, "192.168.0.2", 9051);
-        disks = Maps.newHashMap();
-        diskInfo1 = new DiskInfo("/path1");
-        diskInfo1.setTotalCapacityB(1000000L);
-        diskInfo1.setAvailableCapacityB(500000L);
-        diskInfo1.setDataUsedCapacityB(480000L);
-        diskInfo1.setStorageMedium(TStorageMedium.HDD);
-        disks.put(diskInfo1.getRootPath(), diskInfo1);
-        diskInfo2 = new DiskInfo("/path2");
-        diskInfo2.setTotalCapacityB(1000000L);
-        diskInfo2.setAvailableCapacityB(500000L);
-        diskInfo2.setDataUsedCapacityB(480000L);
-        diskInfo2.setStorageMedium(TStorageMedium.HDD);
-        disks.put(diskInfo2.getRootPath(), diskInfo2);
-        be2.setDisks(ImmutableMap.copyOf(disks));
-        be2.setAlive(true);
-
-        SystemInfoService systemInfoService = new SystemInfoService();
-        systemInfoService.addBackend(be1);
-        systemInfoService.addBackend(be2);
-
-        // tablet inverted index
-        TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
-
-        invertedIndex.addTablet(50000L, new TabletMeta(1L, 2L, 3L, 4L, 0, TStorageMedium.HDD));
-        invertedIndex.addReplica(50000L, new Replica(50001L, be1.getId(), 0, Replica.ReplicaState.NORMAL));
-
-        invertedIndex.addTablet(60000L, new TabletMeta(1L, 2L, 3L, 4L, 0, TStorageMedium.HDD));
-        invertedIndex.addReplica(60000L, new Replica(60002L, be2.getId(), 0, Replica.ReplicaState.NORMAL));
-
-        // cluster load statistic
-        ClusterLoadStatistic clusterLoadStat = new ClusterLoadStatistic(systemInfoService, invertedIndex);
-        clusterLoadStat.init();
-        clusterLoadStat.updateBackendDiskBalanceStat(Pair.create(TStorageMedium.HDD, be1.getId()),
-                BalanceStat.createBackendDiskBalanceStat(be1.getId(), "/path1", "/path2", 0.9, 0.1));
-
-=======
->>>>>>> 8c9a9e63c5 ([Enhancement] Add colocate group balance statistic (#61736))
         // tablet scheduler
         TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
 
@@ -177,10 +117,10 @@ public class BalanceStatProcNodeTest {
             // tablet inverted index
             TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
 
-            invertedIndex.addTablet(50000L, new TabletMeta(1L, 2L, 3L, 4L, TStorageMedium.HDD));
+            invertedIndex.addTablet(50000L, new TabletMeta(1L, 2L, 3L, 4L, 0, TStorageMedium.HDD));
             invertedIndex.addReplica(50000L, new Replica(50001L, be1.getId(), 0, Replica.ReplicaState.NORMAL));
 
-            invertedIndex.addTablet(60000L, new TabletMeta(1L, 2L, 3L, 4L, TStorageMedium.HDD));
+            invertedIndex.addTablet(60000L, new TabletMeta(1L, 2L, 3L, 4L, 0, TStorageMedium.HDD));
             invertedIndex.addReplica(60000L, new Replica(60002L, be2.getId(), 0, Replica.ReplicaState.NORMAL));
 
             // cluster load statistic
@@ -217,24 +157,18 @@ public class BalanceStatProcNodeTest {
             OlapTable olapTable = new OlapTable(1024L, "olap_table", cols, null, listPartition, null);
 
             MaterializedIndex index = new MaterializedIndex(1000L, MaterializedIndex.IndexState.NORMAL);
-            TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), TStorageMedium.HDD);
+            TabletMeta tabletMeta = 
+                    new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), 0, TStorageMedium.HDD);
             long tablet1Id = 1010L;
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1011L;
             index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
             Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
             indexNameToId.put("index1", index.getId());
-<<<<<<< HEAD
-            TabletMeta tabletMeta =
-                    new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), 0, TStorageMedium.HDD);
-            index.addTablet(new LocalTablet(1010L), tabletMeta);
-            index.addTablet(new LocalTablet(1011L), tabletMeta);
-=======
 
             // balance stat
             index.setBalanceStat(BalanceStat.createClusterTabletBalanceStat(be1.getId(), be2.getId(), 9L, 1L));
 
->>>>>>> 8c9a9e63c5 ([Enhancement] Add colocate group balance statistic (#61736))
             Partition partition = new Partition(partitionId, partitionId, "p1", index, new RandomDistributionInfo(2));
             olapTable.addPartition(partition);
 
@@ -260,7 +194,8 @@ public class BalanceStatProcNodeTest {
             OlapTable olapTable = new OlapTable(1124L, "colocate_table", cols, null, listPartition, null);
 
             MaterializedIndex index = new MaterializedIndex(1100L, MaterializedIndex.IndexState.NORMAL);
-            TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), TStorageMedium.HDD);
+            TabletMeta tabletMeta = 
+                    new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), 0, TStorageMedium.HDD);
             long tablet1Id = 1110L;
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1111L;
