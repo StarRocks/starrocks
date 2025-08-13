@@ -3386,6 +3386,13 @@ public class Config extends ConfigBase {
     public static long dlf_data_token_refresh_check_interval_second = 1800;
 
     /**
+     * The core size of the thread pool for deploy serialization.
+     * default is 1
+     */
+    @ConfField
+    public static int deploy_serialization_core_pool_size = 1;
+
+    /**
      * Enable auto create tablet when creating table and add partition
      **/
     @ConfField(mutable = true)
