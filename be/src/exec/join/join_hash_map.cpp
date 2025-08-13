@@ -26,6 +26,7 @@
 #include "simd/simd.h"
 #include "types/logical_type_infra.h"
 #include "util/runtime_profile.h"
+#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -487,7 +488,7 @@ int64_t JoinHashTable::mem_usage() const {
     // cases where `_table_items` was unexpectedly cleared or left uninitialized.
     // To prevent potential null pointer exceptions, we add a defensive check here.
     if (_table_items == nullptr) {
-        LOG(WARNING) << "table_items is nullptr, returning 0 for memory usage";
+        LOG(WARNING) << "table_items is nullptr in mem_usage, stack:" << get_stack_trace();
         return 0;
     }
 
