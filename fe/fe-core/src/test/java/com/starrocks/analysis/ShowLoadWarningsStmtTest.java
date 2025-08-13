@@ -16,7 +16,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -87,11 +86,5 @@ public class ShowLoadWarningsStmtTest {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
         analyzeFail("SHOW LOAD WARNINGS ON 'xxx'", "Invalid url: no protocol: xxx");
         analyzeFail("SHOW LOAD WARNINGS ON ''", "Error load url is missing");
-    }
-
-    @Test
-    public void testGetRedirectStatus() {
-        ShowLoadWarningsStmt stmt = new ShowLoadWarningsStmt(null, null, null, null);
-        Assertions.assertEquals(stmt.getRedirectStatus(), RedirectStatus.NO_FORWARD);
     }
 }

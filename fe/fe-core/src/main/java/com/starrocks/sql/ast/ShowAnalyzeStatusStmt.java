@@ -22,7 +22,6 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -100,11 +99,6 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         }
 
         return row;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

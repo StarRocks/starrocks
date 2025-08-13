@@ -14,9 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -54,10 +52,5 @@ public class SetDefaultRoleStmt extends StatementBase {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitSetDefaultRoleStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 }

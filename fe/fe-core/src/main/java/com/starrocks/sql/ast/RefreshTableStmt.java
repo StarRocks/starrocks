@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -51,10 +50,5 @@ public class RefreshTableStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitRefreshTableStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 }

@@ -22,7 +22,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -130,11 +129,6 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
             throw new AnalysisException(
                     "show routine load job only support one equal expr which is sames like JobName=\"ILoveStarRocks\"");
         }
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     public static List<String> getTitleNames() {

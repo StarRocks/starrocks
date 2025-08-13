@@ -25,7 +25,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.OriginStatement;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.thrift.TExprOpcode;
 
 import java.util.HashMap;
@@ -70,11 +69,6 @@ public class QueryStatement extends StatementBase {
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitQueryStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 
     public int getQueryStartIndex() {

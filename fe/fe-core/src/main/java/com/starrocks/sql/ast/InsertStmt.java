@@ -23,7 +23,6 @@ import com.starrocks.catalog.BlackHoleTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.parser.NodePosition;
@@ -319,15 +318,6 @@ public class InsertStmt extends DmlStmt {
 
     public void setPartitionNotSpecifiedInOverwrite(boolean partitionNotSpecifiedInOverwrite) {
         this.partitionNotSpecifiedInOverwrite = partitionNotSpecifiedInOverwrite;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        if (isExplain() && !StatementBase.ExplainLevel.ANALYZE.equals(getExplainLevel())) {
-            return RedirectStatus.NO_FORWARD;
-        } else {
-            return RedirectStatus.FORWARD_WITH_SYNC;
-        }
     }
 
     public boolean isForCTAS() {

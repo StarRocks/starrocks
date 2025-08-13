@@ -23,7 +23,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.parser.NodePosition;
@@ -72,11 +71,6 @@ public class ShowMultiColumnStatsMetaStmt extends ShowStmt {
         row.set(6, meta.getProperties() == null ? "{}" : meta.getProperties().toString());
 
         return row;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

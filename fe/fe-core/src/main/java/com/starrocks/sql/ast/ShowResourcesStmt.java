@@ -15,8 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowResourcesStmt extends ShowStmt {
@@ -27,15 +25,6 @@ public class ShowResourcesStmt extends ShowStmt {
 
     public ShowResourcesStmt(NodePosition pos) {
         super(pos);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
-            return RedirectStatus.FORWARD_NO_SYNC;
-        } else {
-            return RedirectStatus.NO_FORWARD;
-        }
     }
 
     @Override

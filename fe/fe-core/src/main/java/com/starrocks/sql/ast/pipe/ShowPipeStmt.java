@@ -25,7 +25,6 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.pipe.Pipe;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
@@ -132,11 +131,6 @@ public class ShowPipeStmt extends ShowStmt {
 
     public void setOrderByPairs(List<OrderByPair> orderByPairs) {
         this.orderByPairs = orderByPairs;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

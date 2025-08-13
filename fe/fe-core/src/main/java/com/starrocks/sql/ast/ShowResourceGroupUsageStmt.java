@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Pair;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.ComputeNode;
 import org.jetbrains.annotations.NotNull;
@@ -62,11 +61,6 @@ public class ShowResourceGroupUsageStmt extends ShowStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowResourceGroupUsageStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     public String getGroupName() {

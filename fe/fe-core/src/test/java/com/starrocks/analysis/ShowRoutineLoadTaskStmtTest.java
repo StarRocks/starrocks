@@ -15,7 +15,6 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.analyzer.ShowStmtAnalyzer;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -35,12 +34,6 @@ public class ShowRoutineLoadTaskStmtTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setDatabase("testDb");
-    }
-
-    @Test
-    public void testGetRedirectStatus() {
-        ShowRoutineLoadTaskStmt loadStmt = new ShowRoutineLoadTaskStmt("", null);
-        Assertions.assertTrue(loadStmt.getRedirectStatus().equals(RedirectStatus.FORWARD_WITH_SYNC));
     }
 
     @Test

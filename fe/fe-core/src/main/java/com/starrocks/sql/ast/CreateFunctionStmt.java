@@ -20,7 +20,6 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.HashMap;
@@ -162,11 +161,6 @@ public class CreateFunctionStmt extends DdlStmt {
 
     public void setFunction(Function function) {
         this.function = function;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     public boolean shouldReplaceIfExists() {

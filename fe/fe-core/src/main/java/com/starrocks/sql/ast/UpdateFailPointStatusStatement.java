@@ -19,7 +19,6 @@ import com.starrocks.failpoint.TriggerPolicy;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointTriggerMode;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TUpdateFailPointRequest;
 
@@ -130,11 +129,6 @@ public class UpdateFailPointStatusStatement extends StatementBase {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitUpdateFailPointStatusStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 
     @Override

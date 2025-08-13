@@ -21,7 +21,6 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -141,12 +140,6 @@ public class ShowRoutineLoadStmt extends ShowStmt {
 
     public static List<String> getTitleNames() {
         return TITLE_NAMES;
-    }
-
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     public void setDb(String db) {

@@ -20,7 +20,6 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.util.OrderByPair;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -121,10 +120,5 @@ public class ShowAlterStmt extends ShowStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowAlterStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 }

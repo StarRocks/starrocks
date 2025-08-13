@@ -20,7 +20,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.parser.NodePosition;
@@ -79,11 +78,6 @@ public class ShowRunningQueriesStmt extends ShowStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowRunningQueriesStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     public int getLimit() {

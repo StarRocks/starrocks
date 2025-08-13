@@ -575,7 +575,6 @@ public class StmtExecutor {
             ExecPlan execPlan = null;
             try (Timer ignored = Tracers.watchScope("Total")) {
                 redirectStatus = RedirectStatus.getRedirectStatus(parsedStmt);
-                redirectStatus = parsedStmt.getRedirectStatus();
                 if (!isForwardToLeader()) {
                     if (context.shouldDumpQuery()) {
                         if (context.getDumpInfo() == null) {

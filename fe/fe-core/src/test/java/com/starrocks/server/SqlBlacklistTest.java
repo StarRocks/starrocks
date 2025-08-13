@@ -22,7 +22,6 @@ import com.starrocks.persist.DeleteSqlBlackLists;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.SqlBlackListPersistInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
@@ -132,18 +131,6 @@ public class SqlBlacklistTest {
         Mockito.verify(editLog).logDeleteSQLBlackList(deleteBlacklistsEditLogArgument.capture());
 
         Assertions.assertEquals(List.of(id1, id2), deleteBlacklistsEditLogArgument.getValue().ids);
-    }
-
-    @Test
-    public void testRedirectStatus() {
-        Assertions.assertEquals(
-                new AddSqlBlackListStmt("ADD SQLBLACKLIST \".+\";").getRedirectStatus(),
-                RedirectStatus.FORWARD_NO_SYNC
-        );
-        Assertions.assertEquals(
-                new DelSqlBlackListStmt(List.of(1L, 2L)).getRedirectStatus(),
-                RedirectStatus.FORWARD_NO_SYNC
-        );
     }
 
     @Test

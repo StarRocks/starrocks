@@ -40,7 +40,6 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.EnumUtils;
@@ -133,8 +132,6 @@ public abstract class StatementBase implements ParseNode {
             return explainLevel;
         }
     }
-
-    public abstract RedirectStatus getRedirectStatus();
 
     public void setOrigStmt(OriginStatement origStmt) {
         Preconditions.checkState(origStmt != null);

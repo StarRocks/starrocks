@@ -27,7 +27,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Arrays;
@@ -160,11 +159,6 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                 where);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
                 finalWhere, null, null), this.getOrigStmt());
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.qe.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropFunctionStmt extends DdlStmt {
@@ -59,11 +58,6 @@ public class DropFunctionStmt extends DdlStmt {
 
     public boolean dropIfExists() {
         return dropIfExists;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     @Override
