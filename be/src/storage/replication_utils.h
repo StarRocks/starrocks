@@ -48,7 +48,7 @@ public:
                                                                const std::string& file_name, uint64_t timeout_sec);
 
     static Status download_lake_segment_file(const std::string& src_file_path, const std::string& src_file_name,
-                                             size_t src_file_size, std::shared_ptr<FileSystem> src_fs,
+                                             size_t src_file_size, const std::shared_ptr<FileSystem>& src_fs,
                                              const FileConverterCreatorFunc& file_converters);
 
     static constexpr uint32_t kFakeColumnUniqueId = INT_MAX;

@@ -441,14 +441,14 @@ Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnap
     return Status::OK();
 }
 
-StatusOr<TabletMetadataPtr> ReplicationTxnManager::build_source_tablet_meta(int64_t src_tablet_id, int64_t version,
-                                                                            const std::string& meta_dir,
-                                                                            std::shared_ptr<FileSystem> shared_src_fs) {
+StatusOr<TabletMetadataPtr> ReplicationTxnManager::build_source_tablet_meta(
+        int64_t src_tablet_id, int64_t version, const std::string& meta_dir,
+        const std::shared_ptr<FileSystem>& shared_src_fs) {
     LOG(INFO) << "Lake replicate storage task, building source tablet meta for tablet: " << src_tablet_id
               << ", version: " << version;
     auto src_metadata_file_name = tablet_metadata_filename(src_tablet_id, version);
     auto src_tablet_meta_path = join_path(meta_dir, src_metadata_file_name);
-    auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, false, shared_src_fs);
+    auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, false, 0, shared_src_fs);
     if (!src_tablet_meta_or.ok()) {
         LOG(WARNING) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
                      << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta_or;
@@ -459,7 +459,7 @@ StatusOr<TabletMetadataPtr> ReplicationTxnManager::build_source_tablet_meta(int6
 
 Status ReplicationTxnManager::collect_all_rowsets_for_replication(
         bool incremental, int64_t data_version, int64_t src_visible_version, int64_t src_tablet_id,
-        int64_t target_tablet_id, const std::string& src_meta_dir, std::shared_ptr<FileSystem> shared_src_fs,
+        int64_t target_tablet_id, const std::string& src_meta_dir, const std::shared_ptr<FileSystem>& shared_src_fs,
         std::set<RowsetMetadataPB, RowsetMetaComparator>* new_rowsets) {
     if (incremental) {
         // find all rowsets
@@ -492,7 +492,7 @@ Status ReplicationTxnManager::collect_all_rowsets_for_replication(
     }
 
     ASSIGN_OR_RETURN(auto target_data_version_tablet_meta,
-                     _tablet_manager->get_tablet_metadata(target_tablet_id, data_version, true, nullptr));
+                     _tablet_manager->get_tablet_metadata(target_tablet_id, data_version, false, 0, nullptr));
     // remove rowsets that are already existed in `target_data_version_tablet_meta` from `new_rowsets`
     for (const auto& rowset : target_data_version_tablet_meta->rowsets()) {
         auto it = new_rowsets->find(rowset);

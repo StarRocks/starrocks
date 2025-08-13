@@ -339,7 +339,7 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
 }
 
 Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_path, const std::string& src_file_name,
-                                                    size_t src_file_size, std::shared_ptr<FileSystem> src_fs,
+                                                    size_t src_file_size, const std::shared_ptr<FileSystem>& src_fs,
                                                     const FileConverterCreatorFunc& file_converters) {
     ASSIGN_OR_RETURN(auto src_file, src_fs->new_random_access_file(src_file_path));
     if (src_file_size == 0) {
@@ -386,4 +386,5 @@ Status ReplicationUtils::convert_rowset_txn_meta(RowsetTxnMetaPB* rowset_txn_met
     }
     return Status::OK();
 }
+
 } // namespace starrocks
