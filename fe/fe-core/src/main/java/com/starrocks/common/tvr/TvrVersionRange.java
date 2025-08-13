@@ -50,7 +50,7 @@ public abstract class TvrVersionRange {
         return to;
     }
 
-    public Optional<Long> getFrom() {
+    public Optional<Long> start() {
         if (from.isMinOrMax()) {
             return Optional.empty();
         } else {
@@ -58,7 +58,7 @@ public abstract class TvrVersionRange {
         }
     }
 
-    public Optional<Long> getTo() {
+    public Optional<Long> end() {
         if (to.isMinOrMax()) {
             return Optional.empty();
         } else {

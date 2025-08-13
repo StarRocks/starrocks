@@ -22,7 +22,7 @@ import java.util.Optional;
 public class TvrVersionRangeTest {
 
     @Test
-    public void isEmptyReturnsTrueForMinGetToMaxRange() {
+    public void isEmptyReturnsTrueForMinEndMaxRange() {
         TvrVersion minVersion = TvrVersion.MIN;
         TvrVersion maxVersion = TvrVersion.MAX;
         TvrVersionRange range = new TvrVersionRange(minVersion, maxVersion) {
@@ -36,7 +36,7 @@ public class TvrVersionRangeTest {
     }
 
     @Test
-    public void isEmptyReturnsTrueForEqualGetFromAndGetTo() {
+    public void isEmptyReturnsTrueForEqualStartAndEnd() {
         TvrVersion version = new TvrVersion(1L);
         TvrVersionRange range = new TvrVersionRange(version, version) {
             @Override
@@ -63,7 +63,7 @@ public class TvrVersionRangeTest {
     }
 
     @Test
-    public void getFromReturnsEmptyForMinVersion() {
+    public void startReturnsEmptyForMinVersion() {
         TvrVersion minVersion = TvrVersion.MIN;
         TvrVersionRange range = new TvrVersionRange(minVersion, TvrVersion.MAX) {
             @Override
@@ -72,11 +72,11 @@ public class TvrVersionRangeTest {
             }
         };
 
-        Assertions.assertEquals(Optional.empty(), range.getFrom());
+        Assertions.assertEquals(Optional.empty(), range.start());
     }
 
     @Test
-    public void getFromReturnsVersionForNonMinVersion() {
+    public void startReturnsVersionForNonMinVersion() {
         TvrVersion version = new TvrVersion(1L);
         TvrVersionRange range = new TvrVersionRange(version, TvrVersion.MAX) {
             @Override
@@ -85,11 +85,11 @@ public class TvrVersionRangeTest {
             }
         };
 
-        Assertions.assertEquals(Optional.of(1L), range.getFrom());
+        Assertions.assertEquals(Optional.of(1L), range.start());
     }
 
     @Test
-    public void getToReturnsEmptyForMaxVersion() {
+    public void endReturnsEmptyForMaxVersion() {
         TvrVersion maxVersion = TvrVersion.MAX;
         TvrVersionRange range = new TvrVersionRange(TvrVersion.MIN, maxVersion) {
             @Override
@@ -98,11 +98,11 @@ public class TvrVersionRangeTest {
             }
         };
 
-        Assertions.assertEquals(Optional.empty(), range.getTo());
+        Assertions.assertEquals(Optional.empty(), range.end());
     }
 
     @Test
-    public void getToReturnsVersionForNonMaxVersion() {
+    public void endReturnsVersionForNonMaxVersion() {
         TvrVersion version = new TvrVersion(2L);
         TvrVersionRange range = new TvrVersionRange(TvrVersion.MIN, version) {
             @Override
@@ -111,7 +111,7 @@ public class TvrVersionRangeTest {
             }
         };
 
-        Assertions.assertEquals(Optional.of(2L), range.getTo());
+        Assertions.assertEquals(Optional.of(2L), range.end());
     }
 
     @Test

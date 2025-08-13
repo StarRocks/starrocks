@@ -530,7 +530,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             return Collections.emptyList();
         }
         final long fromSnapshotIdExclusive = fromSnapshotExclusive.from.getVersion();
-        final long toSnapshotIdInclusive = toSnapshotInclusive.getTo().orElseThrow(
+        final long toSnapshotIdInclusive = toSnapshotInclusive.end().orElseThrow(
                 () -> new StarRocksConnectorException("Invalid snapshot range: %s", toSnapshotInclusive));
         final IcebergTable icebergTable = (IcebergTable) table;
         final org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
@@ -593,7 +593,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         TvrVersionRange version = params.getTableVersionRange();
-        long snapshotId = version.getTo().isPresent() ? version.getTo().get() : -1;
+        long snapshotId = version.end().isPresent() ? version.end().get() : -1;
         return getRemoteFiles((IcebergTable) table, snapshotId, params.getPredicate(), params.getLimit());
     }
 
@@ -629,11 +629,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         String dbName = icebergTable.getCatalogDBName();
         String tableName = icebergTable.getCatalogTableName();
         TvrVersionRange versionRange = item.getVersion();
-        if (versionRange.getTo().isEmpty()) {
+        if (versionRange.end().isEmpty()) {
             return true;
         }
 
-        key = PredicateSearchKey.of(dbName, tableName, versionRange.getTo().get(), item.getPredicate());
+        key = PredicateSearchKey.of(dbName, tableName, versionRange.end().get(), item.getPredicate());
         if (!preparedTables.add(key)) {
             return true;
         }
@@ -728,11 +728,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         IcebergTable icebergTable = (IcebergTable) table;
         String dbName = icebergTable.getCatalogDBName();
         String tableName = icebergTable.getCatalogTableName();
-        if (version.getTo().isEmpty()) {
+        if (version.end().isEmpty()) {
             return new ArrayList<>();
         }
 
-        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, version.getTo().get(), predicate);
+        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, version.end().get(), predicate);
         triggerIcebergPlanFilesIfNeeded(key, icebergTable, predicate, limit);
 
         List<PartitionKey> partitionKeys = new ArrayList<>();
@@ -888,7 +888,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (tvrVersionRange.isEmpty()) {
             return RemoteFileInfoDefaultSource.EMPTY;
         }
-        Optional<Long> snapshotId = param.getTableVersionRange().getTo();
+        Optional<Long> snapshotId = param.getTableVersionRange().end();
         if (snapshotId.isEmpty()) {
             return RemoteFileInfoDefaultSource.EMPTY;
         }
@@ -991,10 +991,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         scanContext.setLocalParallelism(catalogProperties.getIcebergJobPlanningThreadNum());
         scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
 
-        final long endVersion = tvrVersionRange.getTo().orElseThrow(() ->
+        final long endVersion = tvrVersionRange.end().orElseThrow(() ->
                 new StarRocksConnectorException("Snapshot ID is required for Iceberg table scan"));
         Scan scan;
-        if (tvrVersionRange.getFrom() != null && tvrVersionRange.getFrom().isPresent()) {
+        if (tvrVersionRange.start() != null && tvrVersionRange.start().isPresent()) {
             IncrementalAppendScan incrementalAppendScan = nativeTbl.newIncrementalAppendScan();
             incrementalAppendScan =
                     incrementalAppendScan.fromSnapshotExclusive(tvrVersionRange.from.getVersion());
@@ -1139,8 +1139,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
         IcebergTable icebergTable = (IcebergTable) table;
         long snapshotId;
-        if (version.getTo().isPresent()) {
-            snapshotId = version.getTo().get();
+        if (version.end().isPresent()) {
+            snapshotId = version.end().get();
         } else {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }

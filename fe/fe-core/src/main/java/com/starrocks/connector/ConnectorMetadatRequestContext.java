@@ -39,7 +39,7 @@ public class ConnectorMetadatRequestContext {
     }
 
     public long getSnapshotId() {
-        return tableVersionRange.getTo().isPresent() ? tableVersionRange.getTo().get() : -1;
+        return tableVersionRange.end().isPresent() ? tableVersionRange.end().get() : -1;
     }
 }
 

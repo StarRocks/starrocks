@@ -24,7 +24,7 @@ public class TvrTableSnapshotTest {
     public void testEmptySnapshot() {
         TvrTableSnapshot snapshot = TvrTableSnapshot.empty();
         Assertions.assertTrue(snapshot.isEmpty());
-        Assertions.assertEquals(Optional.empty(), snapshot.getTo());
+        Assertions.assertEquals(Optional.empty(), snapshot.end());
     }
 
     @Test

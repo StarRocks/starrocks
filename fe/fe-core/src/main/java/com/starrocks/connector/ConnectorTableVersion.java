@@ -41,7 +41,7 @@ public class ConnectorTableVersion {
             return Optional.empty();
         } else {
             return Optional.of(new ConnectorTableVersion(PointerType.VERSION,
-                    ConstantOperator.createBigint(tvrVersionRange.getTo().get())));
+                    ConstantOperator.createBigint(tvrVersionRange.end().get())));
         }
     }
 }

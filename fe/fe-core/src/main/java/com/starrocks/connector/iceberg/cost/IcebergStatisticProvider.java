@@ -104,7 +104,7 @@ public class IcebergStatisticProvider {
         Table nativeTable = icebergTable.getNativeTable();
         Statistics.Builder statisticsBuilder = Statistics.builder();
         String uuid = icebergTable.getUUID();
-        if (version.getTo().isPresent()) {
+        if (version.end().isPresent()) {
             Set<Integer> primitiveColumnsFieldIds = nativeTable.schema().columns().stream()
                     .filter(column -> column.type().isPrimitiveType())
                     .map(Types.NestedField::fieldId).collect(Collectors.toSet());
@@ -126,7 +126,7 @@ public class IcebergStatisticProvider {
             }
 
             PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
-                    version.getTo().get(), predicate);
+                    version.end().get(), predicate);
             IcebergFileStats icebergFileStats;
             if (!icebergFileStatistics.containsKey(key)) {
                 icebergFileStats = new IcebergFileStats(1);
@@ -380,8 +380,8 @@ public class IcebergStatisticProvider {
         Set<Integer> remainingColumnIds = new HashSet<>(columnIds);
 
         long snapshotId;
-        if (version.getTo().isPresent()) {
-            snapshotId = version.getTo().get();
+        if (version.end().isPresent()) {
+            snapshotId = version.end().get();
         } else {
             return colIdToNdv;
         }

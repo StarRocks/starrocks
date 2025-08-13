@@ -24,8 +24,8 @@ public class TvrTableDeltaTest {
     public void testEmptyDelta() {
         TvrTableDelta delta = TvrTableDelta.empty();
         Assertions.assertTrue(delta.isEmpty());
-        Assertions.assertEquals(Optional.empty(), delta.getFrom());
-        Assertions.assertEquals(Optional.empty(), delta.getTo());
+        Assertions.assertEquals(Optional.empty(), delta.start());
+        Assertions.assertEquals(Optional.empty(), delta.end());
 
         Assertions.assertEquals(delta.fromSnapshot(), TvrTableSnapshot.empty());
         Assertions.assertEquals(delta.toSnapshot(), TvrTableSnapshot.empty());
