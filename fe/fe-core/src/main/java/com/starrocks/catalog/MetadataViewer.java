@@ -77,7 +77,7 @@ public class MetadataViewer {
 
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            throw new DdlException("Database " + dbName + " does not exsit");
+            throw new DdlException("Database " + dbName + " does not exist");
         }
 
         Locker locker = new Locker();
@@ -206,7 +206,7 @@ public class MetadataViewer {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            throw new DdlException("Database " + dbName + " does not exsit");
+            throw new DdlException("Database " + dbName + " does not exist");
         }
 
         Locker locker = new Locker();
@@ -312,7 +312,7 @@ public class MetadataViewer {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            throw new DdlException("Database " + dbName + " does not exsit");
+            throw new DdlException("Database " + dbName + " does not exist");
         }
 
         Locker locker = new Locker();
