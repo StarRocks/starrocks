@@ -15,6 +15,7 @@ package com.starrocks.epack.http.rest;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.DdlException;
 import com.starrocks.epack.system.InvalidLicenseException;
 import com.starrocks.http.ActionController;
@@ -22,6 +23,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -42,10 +44,14 @@ public class LicenseRegisterAction extends RestBaseAction {
     }
 
     @Override
-    public void execute(BaseRequest request, BaseResponse response) throws DdlException {
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response)
+            throws DdlException, AccessDeniedException {
         if (redirectToLeader(request, response)) {
             return;
         }
+
+        // require admin role
+        checkUserOwnsAdminRole(ConnectContext.get().getCurrentUserIdentity());
 
         String license = null;
         try {

@@ -17,6 +17,8 @@ package com.starrocks.server;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.utframe.UtFrameUtils;
@@ -107,5 +109,86 @@ public class NodeMgrTest {
         Assertions.assertEquals(nodeName, frontends.get(0).getNodeName());
         Assertions.assertEquals(selfNode.first, frontends.get(0).getHost());
         Assertions.assertEquals((int) selfNode.second, frontends.get(0).getEditLogPort());
+    }
+
+    @Test
+    public void testGetAllNodeHosts() {
+        NodeMgr nodeMgr = new NodeMgr();
+
+        // add BE and CN hosts
+        nodeMgr.getClusterInfo().addBackend(new com.starrocks.system.Backend(1L, "be-host", 9050));
+        nodeMgr.getClusterInfo().addComputeNode(new com.starrocks.system.ComputeNode(2L, "cn-host", 9050));
+
+        // add FE hosts
+        Frontend fe1 = new Frontend(FrontendNodeType.FOLLOWER, "fe-node-1", "fe1-host", 9010);
+        fe1.handleHbResponse(new FrontendHbResponse("fe-node-1", 9030, 9020, 1,
+                System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f, 4, "aa:bb"), true);
+        nodeMgr.replayAddFrontend(fe1);
+
+        Frontend fe2 = new Frontend(FrontendNodeType.OBSERVER, "fe-node-2", "fe2-host", 9011);
+        fe2.handleHbResponse(new FrontendHbResponse("fe-node-2", 9031, 9021, 2,
+                System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f, 2, "cc:dd"), true);
+        nodeMgr.replayAddFrontend(fe2);
+
+        java.util.Set<String> hosts = nodeMgr.getAllNodeHosts();
+        Assertions.assertTrue(hosts.contains("be-host"));
+        Assertions.assertTrue(hosts.contains("cn-host"));
+        Assertions.assertTrue(hosts.contains("fe1-host"));
+        Assertions.assertTrue(hosts.contains("fe2-host"));
+        Assertions.assertEquals(4, hosts.size());
+    }
+
+    @Test
+    public void testGetTotalCpuCores() {
+        NodeMgr nodeMgr = new NodeMgr();
+
+        // BE with 8 cores
+        Backend be = new Backend(10L, "host1", 9050);
+        be.setCpuCores(8);
+        nodeMgr.getClusterInfo().addBackend(be);
+
+        // CN with 16 cores
+        ComputeNode cn = new ComputeNode(11L, "host2", 9050);
+        cn.setCpuCores(16);
+        nodeMgr.getClusterInfo().addComputeNode(cn);
+
+        // FE with 4 cores
+        Frontend fe1 = new Frontend(FrontendNodeType.FOLLOWER, "fe-node-3", "host3", 9010);
+        fe1.handleHbResponse(new FrontendHbResponse("fe-node-3", 9030, 9020, 1,
+                System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f, 4, "aa:aa"), true);
+        nodeMgr.replayAddFrontend(fe1);
+
+        // FE with 2 cores
+        Frontend fe2 = new Frontend(FrontendNodeType.OBSERVER, "fe-node-4", "host4", 9011);
+        fe2.handleHbResponse(new FrontendHbResponse("fe-node-4", 9031, 9021, 2,
+                System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f, 2, "bb:bb"), true);
+        nodeMgr.replayAddFrontend(fe2);
+
+        Assertions.assertEquals(30L, nodeMgr.getTotalCpuCores());
+    }
+
+    @Test
+    public void testGetAllFENodesMacAddress() {
+        NodeMgr nodeMgr = new NodeMgr();
+
+        Frontend fe1 = new Frontend(FrontendNodeType.FOLLOWER, "fe-node-5", "host5", 9010);
+        fe1.handleHbResponse(new FrontendHbResponse("fe-node-5", 9030, 9020, 1,
+                System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f, 4, "11:22:33:44:55:66"), true);
+        nodeMgr.replayAddFrontend(fe1);
+
+        Frontend fe2 = new Frontend(FrontendNodeType.OBSERVER, "fe-node-6", "host6", 9011);
+        fe2.handleHbResponse(new FrontendHbResponse("fe-node-6", 9031, 9021, 2,
+                System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f, 2, "aa:bb:cc:dd:ee:ff"), true);
+        nodeMgr.replayAddFrontend(fe2);
+
+        Frontend fe3 = new Frontend(FrontendNodeType.LEADER, "fe-node-7", "host7", 9012);
+        fe3.handleHbResponse(new FrontendHbResponse("fe-node-7", 9032, 9022, 3,
+                System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f, 1, null), true);
+        nodeMgr.replayAddFrontend(fe3);
+
+        java.util.Set<String> macs = nodeMgr.getAllFENodesMacAddress();
+        Assertions.assertTrue(macs.contains("11:22:33:44:55:66"));
+        Assertions.assertTrue(macs.contains("aa:bb:cc:dd:ee:ff"));
+        Assertions.assertEquals(2, macs.size());
     }
 }

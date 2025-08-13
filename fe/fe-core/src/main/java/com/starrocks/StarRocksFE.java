@@ -43,6 +43,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.epack.system.LicenseToggle;
 import com.starrocks.failpoint.FailPoint;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
@@ -519,6 +520,7 @@ public class StarRocksFE {
             System.out.println("Build edition: enterprise");
             System.out.println("Build user: " + Version.STARROCKS_BUILD_USER + "@" + Version.STARROCKS_BUILD_HOST);
             System.out.println("Java compile version: " + Version.STARROCKS_JAVA_COMPILE_VERSION);
+            System.out.println("License limited: " + LicenseToggle.isEnabled);
             System.exit(0);
         }
         if (cmdLineOpts.getBdbToolOpts() != null) {

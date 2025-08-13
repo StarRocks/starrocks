@@ -39,7 +39,7 @@ public class LicenseSystemInfoAction extends RestBaseAction {
     }
 
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         try {
             GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
             // note: do not use Gson.toJson() here, as it will encode the base64 string

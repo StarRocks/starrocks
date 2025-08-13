@@ -22,7 +22,7 @@ def get_license_toggle():
     """Get license toggle value from environment variable"""
     license_toggle = os.getenv("STARROCKS_LICENSE_TOGGLE")
     if not license_toggle:
-        return "false"
+        return "true"
     # Convert to lowercase and check if it's "true"
     return str(license_toggle.lower() == "true").lower()
 

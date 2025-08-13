@@ -99,6 +99,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -745,7 +747,7 @@ public class NodeMgr {
 
     public void addFrontend(FrontendNodeType role, String host, int editLogPort) throws DdlException {
         try {
-            GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddFrontend();
+            GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddFrontend(host);
         } catch (InvalidLicenseException e) {
             LOG.warn("failed to add frontend: {}:{}, {}", host, editLogPort, e.getMessage());
             throw new DdlException(e.getMessage());
@@ -1369,11 +1371,20 @@ public class NodeMgr {
         return nodeName.startsWith(host + "_" + port);
     }
 
+    public Set<String> getAllNodeHosts() {
+        Map<String, Long> totalCpuCores = systemInfo.getTotalCpuCores();
+        for (Frontend fe : frontends.values()) {
+            totalCpuCores.put(fe.getHost(), (long) fe.getCpuCores());
+        }
+        return totalCpuCores.keySet();
+    }
+
     public long getTotalCpuCores() {
-        return frontends.values()
-                .stream()
-                .mapToLong(Frontend::getCpuCores)
-                .sum() + systemInfo.getTotalCpuCores();
+        Map<String, Long> totalCpuCores = systemInfo.getTotalCpuCores();
+        for (Frontend fe : frontends.values()) {
+            totalCpuCores.put(fe.getHost(), (long) fe.getCpuCores());
+        }
+        return totalCpuCores.values().stream().mapToLong(Long::longValue).sum();
     }
 
     public long getAnyFrontendCpuCores() {
@@ -1386,5 +1397,13 @@ public class NodeMgr {
 
     public long getAnyComputeNodeCpuCores() {
         return systemInfo.getAnyComputeNodeCpuCores();
+    }
+
+    public Set<String> getAllFENodesMacAddress() {
+        return frontends.values()
+                .stream()
+                .map(Frontend::getMacAddress)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
     }
 }

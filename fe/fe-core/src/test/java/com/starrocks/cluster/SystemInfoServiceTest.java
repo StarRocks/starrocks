@@ -100,7 +100,7 @@ public class SystemInfoServiceTest {
         WarehouseManager warehouseManager = new WarehouseManager();
         warehouseManager.initDefaultWarehouse();
 
-        LicenseMgr licenseMgr = new LicenseMgr();
+        LicenseMgr licenseMgr = new LicenseMgr(null);
         licenseMgr.applyInitSystemInfo(new SystemInfo(UUIDUtil.genUUID().toString(), System.currentTimeMillis()));
 
         new Expectations() {

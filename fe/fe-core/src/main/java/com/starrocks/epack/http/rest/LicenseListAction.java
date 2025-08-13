@@ -37,7 +37,7 @@ public class LicenseListAction extends RestBaseAction {
     }
 
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         List<LicenseInfo> licenseInfos = GlobalStateMgr.getCurrentState().getLicenseMgr().getAllLicenseInfo();
         response.setContentType("application/json");
         response.getContent().append(new Gson().toJson(licenseInfos));

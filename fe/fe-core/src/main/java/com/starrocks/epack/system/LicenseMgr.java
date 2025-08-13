@@ -18,6 +18,7 @@ import com.starrocks.common.CloseableLock;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.MachineInfo;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.epack.persist.RegisterLicenseLog;
@@ -37,9 +38,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -55,15 +58,7 @@ public class LicenseMgr {
     private static final byte AES_XOR_KEY = 0x7A;
     
     // Obfuscated RSA public key using base64 encoding and XOR
-    private static final String RSA_KEY_ENCODED = "c2wPS3NsDnxtalt1a1Z9bmlqdXJsanJYbA9pZXNsD0tzbA90a2pTdW5UU05ua" +
-            "gp8ZQ1LR154S09tRVMMcnp1fWpqaXhuanlvbg95bXB6eXFsalN8bg1bc24PeW1tankMXmhTb25qCnBcRXIOWndtUGlUakVlRWlm" +
-            "Xm5PCl1US3RxDXVPcntyRWZndVBuDVtKW3oOTnJSWA5uVXV1clNbVltVfXZwZ21waVF5TGtSbXNyDQpnamlcDV5UeXBtDFdHXnd" +
-            "pU2VnUAxld24KXVFbTHxWS2ptUlt0alRtSmxqV2dtUWZIbmhLcGtTeWprem1qXlQHTXBnW0VdeXVzbHpXSmtTZXdsDW1oclRYD3" +
-            "J7aXJcVHlMaQxpUm15V2tpelNGaWtbR3BqdnRuD3VvXlVbZlpTZWlqakdKalFTeWoMZXhxVA8PbWtxV2trcWxyaHlUamp1e1x7a" +
-            "XZleFMKWngHD2tST1dua3FNXHgPDl1FW3Zye3VJcHtySWtoekhbfk9OcQ9uTXJSaVNxDVd9cQ11V25WS0xmVG5IaXlPaWoPSw9r" +
-            "DQ5pXXl1T1pUCk5re21pW3tbVltpfW1oUVdmcHtUD11UR1Jyeml7bA0GZV1pUw5od3F9fFJPS213bW9rVVdQcVVxbVxFegtyRVt" +
-            "WW2l9Xl1FdVZcRXEPaVRLDVp7U2lceXV6a3xMSWV6aXRdDHFHZlR1DmpFbX1yU1dRXnpTZWt4U1RyU1t4XmlmdF1RW3Vtenltbm" +
-            "p2dHNsD0tzbA55a1RuWGp5aXxrelN7dnpLeWhsD0tzbA9LfFgCAg==";
+    private final String rsaKeyEncoded;
     private static final byte RSA_XOR_KEY = 0x3F;
 
     private static final long FREE_TRIAL_EXPIRE_MS = 1000L * 3600 * 24 * 7; // 7 days
@@ -75,8 +70,25 @@ public class LicenseMgr {
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private final AtomicBoolean hasValidLicense = new AtomicBoolean(false);
     private final AtomicBoolean licenseVerified = new AtomicBoolean(false);
+    private Clock clock;
+    private final NodeMgr nodeMgr;
 
-    public LicenseMgr() {
+    public LicenseMgr(NodeMgr nodeMgr) {
+        this(Clock.systemDefaultZone(), nodeMgr, "c2wPS3NsDnxtalt1a1Z9bmlqdXJsanJYbA9pZXNsD0tzbA90a2pTdW5UU05ua" +
+                "gp8ZQ1LR154S09tRVMMcnp1fWpqaXhuanlvbg95bXB6eXFsalN8bg1bc24PeW1tankMXmhTb25qCnBcRXIOWndtUGlUakVlRWlm" +
+                "Xm5PCl1US3RxDXVPcntyRWZndVBuDVtKW3oOTnJSWA5uVXV1clNbVltVfXZwZ21waVF5TGtSbXNyDQpnamlcDV5UeXBtDFdHXnd" +
+                "pU2VnUAxld24KXVFbTHxWS2ptUlt0alRtSmxqV2dtUWZIbmhLcGtTeWprem1qXlQHTXBnW0VdeXVzbHpXSmtTZXdsDW1oclRYD3" +
+                "J7aXJcVHlMaQxpUm15V2tpelNGaWtbR3BqdnRuD3VvXlVbZlpTZWlqakdKalFTeWoMZXhxVA8PbWtxV2trcWxyaHlUamp1e1x7a" +
+                "XZleFMKWngHD2tST1dua3FNXHgPDl1FW3Zye3VJcHtySWtoekhbfk9OcQ9uTXJSaVNxDVd9cQ11V25WS0xmVG5IaXlPaWoPSw9r" +
+                "DQ5pXXl1T1pUCk5re21pW3tbVltpfW1oUVdmcHtUD11UR1Jyeml7bA0GZV1pUw5od3F9fFJPS213bW9rVVdQcVVxbVxFegtyRVt" +
+                "WW2l9Xl1FdVZcRXEPaVRLDVp7U2lceXV6a3xMSWV6aXRdDHFHZlR1DmpFbX1yU1dRXnpTZWt4U1RyU1t4XmlmdF1RW3Vtenltbm" +
+                "p2dHNsD0tzbA55a1RuWGp5aXxrelN7dnpLeWhsD0tzbA9LfFgCAg==");
+    }
+
+    protected LicenseMgr(Clock clock, NodeMgr nodeMgr, String rsaKeyEncoded) {
+        this.clock = clock;
+        this.nodeMgr = nodeMgr;
+        this.rsaKeyEncoded = rsaKeyEncoded;
         licenseChecker = new FrontendDaemon("license-checker", 60L * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
@@ -85,13 +97,14 @@ public class LicenseMgr {
                 }
         
                 verifyAllLicenses();
-                licenseVerified.set(true);
             }
         };
     }
 
     public void start() {
-        licenseChecker.start();
+        if (LicenseToggle.isEnabled) {
+            licenseChecker.start();
+        }
     }
 
     // Obfuscated key retrieval methods
@@ -104,9 +117,9 @@ public class LicenseMgr {
         return new String(decryptedBytes, StandardCharsets.UTF_8);
     }
 
-    protected static String getRsaPubKey() {
+    protected String getRsaPubKey() {
         // Decode the XOR-encoded RSA key
-        byte[] encodedBytes = Base64.getDecoder().decode(RSA_KEY_ENCODED);
+        byte[] encodedBytes = Base64.getDecoder().decode(rsaKeyEncoded);
         byte[] decodedBytes = new byte[encodedBytes.length];
         for (int i = 0; i < encodedBytes.length; i++) {
             decodedBytes[i] = (byte) (encodedBytes[i] ^ RSA_XOR_KEY);
@@ -114,7 +127,7 @@ public class LicenseMgr {
         return new String(base64Decode(new String(decodedBytes)));
     }
 
-    private boolean hasValidLicense() {
+    protected boolean hasValidLicense() {
         // If licenses are not verified yet, we assume it is valid
         return !licenseVerified.get() || hasValidLicense.get() || inFreeTrialPeriod();
     }
@@ -130,12 +143,31 @@ public class LicenseMgr {
         }
     }
 
-    private void verifyAllLicenses() {
+    public void resetSystemInfoIfMachineChanged() {
+        if (!LicenseToggle.isEnabled) {
+            return;
+        }
+
+        String macAddress = MachineInfo.getInstance().getMacAddress();
+        if (macAddress == null) {
+            return;
+        }
+
+        Set<String> allFENodesMacAddress = nodeMgr.getAllFENodesMacAddress();
+        if (allFENodesMacAddress.isEmpty() || allFENodesMacAddress.contains(macAddress)) {
+            return;
+        }
+
+        // reset systemInfo
+        initSystemInfo();
+    }
+
+    protected void verifyAllLicenses() {
         long maxExpire = 0;
         try (CloseableLock ignored = CloseableLock.lock(this.lock.readLock())) {
             for (String license : licenseList) {
                 try {
-                    LicenseInfo licenseInfo = verifyLicense(license, getRsaPubKey());
+                    LicenseInfo licenseInfo = verifyLicense(license);
 
                     verifyLicenseInfo(licenseInfo);
                     // expire time has been verified in verifyLicense, so maxExpire must be a valid time
@@ -159,10 +191,12 @@ public class LicenseMgr {
             }
         }
 
-        if (maxExpire > 0 && maxExpire - System.currentTimeMillis() < LICENSE_TIP_INTERVAL_MS) {
+        if (maxExpire > 0 && maxExpire - clock.millis() < LICENSE_TIP_INTERVAL_MS) {
             LOG.warn("License will expire at {}, please add a new license.",
                     DateUtils.formatTimestampInSeconds(maxExpire / 1000));
         }
+
+        licenseVerified.set(true);
     }
 
     public List<LicenseInfo> getAllLicenseInfo() {
@@ -170,7 +204,7 @@ public class LicenseMgr {
         try (CloseableLock ignored = CloseableLock.lock(this.lock.readLock())) {
             for (String license : licenseList) {
                 try {
-                    LicenseInfo info = verifyLicense(license, getRsaPubKey());
+                    LicenseInfo info = verifyLicense(license);
 
                     verifyLicenseInfo(info);
 
@@ -181,8 +215,7 @@ public class LicenseMgr {
             }
         }
         if (inFreeTrialPeriod() && licenseInfos.isEmpty()) {
-            licenseInfos.add(new LicenseInfo("", systemInfo.getSystemID(),
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getTotalCpuCores(),
+            licenseInfos.add(new LicenseInfo("", systemInfo.getSystemID(), nodeMgr.getTotalCpuCores(),
                     systemInfo.getBuildTime() + FREE_TRIAL_EXPIRE_MS));
         }
         return licenseInfos;
@@ -193,7 +226,7 @@ public class LicenseMgr {
         try (CloseableLock ignored = CloseableLock.lock(this.lock.readLock())) {
             for (String license : licenseList) {
                 try {
-                    LicenseInfo info = verifyLicense(license, getRsaPubKey());
+                    LicenseInfo info = verifyLicense(license);
 
                     verifyLicenseInfo(info);
 
@@ -206,13 +239,17 @@ public class LicenseMgr {
         return maxCpuCores;
     }
 
-    private boolean inFreeTrialPeriod() {
-        long currentTime = System.currentTimeMillis();
+    protected boolean inFreeTrialPeriod() {
+        if (systemInfo == null) {
+            return true;
+        }
+
+        long currentTime = clock.millis();
         return (currentTime - systemInfo.getBuildTime()) < FREE_TRIAL_EXPIRE_MS;
     }
 
     private void initSystemInfo() {
-        SystemInfo info = new SystemInfo(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        SystemInfo info = new SystemInfo(UUIDUtil.genUUID().toString(), clock.millis());
 
         EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
         editLogEPack.logInitSystemInfo(info, wal -> applyInitSystemInfo((SystemInfo) wal));
@@ -227,7 +264,7 @@ public class LicenseMgr {
             return;
         }
 
-        LicenseInfo licenseInfo = verifyLicense(license, getRsaPubKey());
+        LicenseInfo licenseInfo = verifyLicense(license);
         verifyLicenseInfo(licenseInfo);
 
         // update hasValidLicense only on leader node.
@@ -266,18 +303,19 @@ public class LicenseMgr {
                     systemInfo.getSystemID(), licenseInfo.getSystemID());
         }
 
-        if (GlobalStateMgr.getCurrentState().getNodeMgr().getTotalCpuCores() > licenseInfo.getCores()) {
+        if (nodeMgr.getTotalCpuCores() > licenseInfo.getCores()) {
             throw new InvalidLicenseException("cpu cores not enough, current: %d, license: %d",
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getTotalCpuCores(), licenseInfo.getCores());
+                    nodeMgr.getTotalCpuCores(), licenseInfo.getCores());
         }
 
-        if (System.currentTimeMillis() > licenseInfo.getExpire()) {
+        long currentTimeMillis = clock.millis();
+        if (currentTimeMillis > licenseInfo.getExpire()) {
             throw new InvalidLicenseException("license expired, current time: %d, expire time: %d",
-                    System.currentTimeMillis(), licenseInfo.getExpire());
+                    currentTimeMillis, licenseInfo.getExpire());
         }
     }
 
-    protected static LicenseInfo verifyLicense(String l, String rsaPubKey)
+    protected LicenseInfo verifyLicense(String l)
             throws InvalidLicenseException {
         // 1. Base64 decode
         byte[] license = Base64.getDecoder().decode(l);
@@ -309,7 +347,7 @@ public class LicenseMgr {
         // 6. verify
         boolean verifyResult = false;
         try {
-            verifyResult = SecurityUtils.rsaVerifySign(jData, signData, str2Bytes(rsaPubKey));
+            verifyResult = SecurityUtils.rsaVerifySign(jData, signData, str2Bytes(getRsaPubKey()));
         } catch (Exception e) {
             LOG.warn("Failed to verify license signature", e);
             throw new InvalidLicenseException("Failed to verify license signature.");
@@ -321,29 +359,39 @@ public class LicenseMgr {
         return licenseInfo;
     }
 
-    public void checkLicenseForAddBackend() throws InvalidLicenseException {
-        if (!LicenseToggle.isEnabled || inFreeTrialPeriod()) {
-            return;
-        }
-
-        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
-        if (nodeMgr.getTotalCpuCores() + nodeMgr.getAnyComputeNodeCpuCores() > getMaxCpuCores()) {
-            throw new InvalidLicenseException("cpu cores not enough after adding backend/computeNode, " +
-                    "cores after adding: %d, cores in license: %d", 
-                    nodeMgr.getTotalCpuCores() + nodeMgr.getAnyComputeNodeCpuCores(), getMaxCpuCores());
-        }
-    }
-
-    public void checkLicenseForAddFrontend() throws InvalidLicenseException {
-        if (!LicenseToggle.isEnabled || inFreeTrialPeriod()) {
+    public void checkLicenseForAddBackend(String host) throws InvalidLicenseException {
+        if (!LicenseToggle.isEnabled || (!hasValidLicense.get() && inFreeTrialPeriod())) {
             return;
         }
         
-        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
-        if (nodeMgr.getTotalCpuCores() + nodeMgr.getAnyFrontendCpuCores() > getMaxCpuCores()) {
+        if (nodeMgr.getAllNodeHosts().contains(host)) {
+            return;
+        }
+
+        long maxCpuCores = getMaxCpuCores();
+        long totalCpuCores = nodeMgr.getTotalCpuCores() + nodeMgr.getAnyComputeNodeCpuCores();
+        if (totalCpuCores > maxCpuCores) {
+            throw new InvalidLicenseException("cpu cores not enough after adding backend/computeNode, " +
+                    "cores after adding: %d, cores in license: %d", 
+                    totalCpuCores, maxCpuCores);
+        }
+    }
+
+    public void checkLicenseForAddFrontend(String host) throws InvalidLicenseException {
+        if (!LicenseToggle.isEnabled || (!hasValidLicense.get() && inFreeTrialPeriod())) {
+            return;
+        }
+        
+        if (nodeMgr.getAllNodeHosts().contains(host)) {
+            return;
+        }
+        
+        long maxCpuCores = getMaxCpuCores();
+        long totalCpuCores = nodeMgr.getTotalCpuCores() + nodeMgr.getAnyFrontendCpuCores();
+        if (totalCpuCores > maxCpuCores) {
             throw new InvalidLicenseException("cpu cores not enough after adding frontend, " +
                     "cores after adding: %d, cores in license: %d", 
-                    nodeMgr.getTotalCpuCores() + nodeMgr.getAnyFrontendCpuCores(), getMaxCpuCores());
+                    totalCpuCores, maxCpuCores);
         }
     }
 
@@ -402,5 +450,10 @@ public class LicenseMgr {
 
     private static byte[] base64Decode(String src) {
         return Base64.getDecoder().decode(src);
+    }
+
+    // For test
+    protected void setClock(Clock clock) {
+        this.clock = clock;
     }
 }

@@ -218,7 +218,7 @@ public class SystemInfoService implements GsonPostProcessable {
     // Final entry of adding compute node
     public void addComputeNode(String host, int heartbeatPort, String warehouse, String cnGroupName) throws DdlException {
         try {
-            GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddBackend();
+            GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddBackend(host);
         } catch (InvalidLicenseException e) {
             LOG.warn("failed to add compute node: {}:{}, {}", host, heartbeatPort, e.getMessage());
             throw new DdlException(e.getMessage());
@@ -341,7 +341,7 @@ public class SystemInfoService implements GsonPostProcessable {
     // Final entry of adding backend
     private void addBackend(String host, int heartbeatPort, String warehouse, String cnGroupName) throws DdlException {
         try {
-            GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddBackend();
+            GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddBackend(host);
         } catch (InvalidLicenseException e) {
             LOG.warn("failed to add backend: {}:{}, {}", host, heartbeatPort, e.getMessage());
             throw new DdlException(e.getMessage());
@@ -1371,13 +1371,15 @@ public class SystemInfoService implements GsonPostProcessable {
         LOG.debug("update path infos: {}", newPathInfos);
     }
 
-    public long getTotalCpuCores() {
-        return Stream.concat(
-                        idToBackendRef.values().stream(),
-                        idToComputeNodeRef.values().stream()
-                )
-                .mapToLong(ComputeNode::getCpuCores)
-                .sum();
+    public Map<String, Long> getTotalCpuCores() {
+        Map<String, Long> totalCpuCores = new HashMap<>();
+        for (Backend backend : idToBackendRef.values()) {
+            totalCpuCores.put(backend.getHost(), (long) backend.getCpuCores());
+        }
+        for (ComputeNode computeNode : idToComputeNodeRef.values()) {
+            totalCpuCores.put(computeNode.getHost(), (long) computeNode.getCpuCores());
+        }
+        return totalCpuCores;
     }
 
     public int getAnyComputeNodeCpuCores() {

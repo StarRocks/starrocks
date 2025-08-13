@@ -910,7 +910,7 @@ public class GlobalStateMgr {
 
         this.dynamicTabletJobMgr = new DynamicTabletJobMgr();
 
-        this.licenseMgr = new LicenseMgr();
+        this.licenseMgr = new LicenseMgr(nodeMgr);
     }
 
     public static void destroyCheckpoint() {
@@ -1432,6 +1432,10 @@ public class GlobalStateMgr {
         dominationStartTimeMs = System.currentTimeMillis();
 
         try {
+            if (Config.bdbje_reset_election_group) {
+                licenseMgr.resetSystemInfoIfMachineChanged();
+            }
+
             if (Config.bdbje_reset_election_group || nodeMgr.isFirstTimeStartUp()) {
                 nodeMgr.resetFrontends();
             }

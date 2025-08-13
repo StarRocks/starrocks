@@ -427,6 +427,15 @@ tasks.register<Task>("generateByScripts") {
                 "--java", outputDir.toString()
             )
         }
+
+        // Third Python script - build License Toggle
+        project.exec {
+            commandLine(
+                "python3",
+                "${project.rootProject.projectDir}/../build-support/gen_license_toggle.py",
+                "--java", outputDir.toString()
+            )
+        }
     }
 }
 

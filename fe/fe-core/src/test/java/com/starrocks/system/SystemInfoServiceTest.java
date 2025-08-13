@@ -543,4 +543,35 @@ public class SystemInfoServiceTest {
         });
     }
 
+    @Test
+    public void testGetTotalCpuCoresMixedNodes() {
+        Backend be = new Backend(20001, "be-host", 9050);
+        be.setCpuCores(8);
+        service.addBackend(be);
+
+        ComputeNode cn = new ComputeNode(20002, "cn-host", 9051);
+        cn.setCpuCores(16);
+        service.addComputeNode(cn);
+
+        Map<String, Long> total = service.getTotalCpuCores();
+        Assertions.assertEquals(2, total.size());
+        Assertions.assertEquals(8L, total.get("be-host"));
+        Assertions.assertEquals(16L, total.get("cn-host"));
+    }
+
+    @Test
+    public void testGetTotalCpuCoresPreferComputeNodeOnSameHost() {
+        Backend be = new Backend(30001, "same-host", 9060);
+        be.setCpuCores(4);
+        service.addBackend(be);
+
+        ComputeNode cn = new ComputeNode(30002, "same-host", 9061);
+        cn.setCpuCores(6);
+        service.addComputeNode(cn);
+
+        Map<String, Long> total = service.getTotalCpuCores();
+        Assertions.assertEquals(1, total.size());
+        Assertions.assertEquals(6L, total.get("same-host"));
+    }
+
 }
