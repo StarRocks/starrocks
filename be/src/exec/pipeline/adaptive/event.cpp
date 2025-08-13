@@ -20,7 +20,9 @@
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/workgroup/work_group.h"
 #include "util/failpoint/fail_point.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {
 
@@ -103,8 +105,44 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
                 RETURN_IF_ERROR(driver->prepare(state));
             }
         }
+
+        auto* prepare_thread_pool = state->fragment_ctx()->workgroup()->executors()->prepare_thread_pool();
+        DCHECK(prepare_thread_pool != nullptr);
+        std::vector<std::future<Status>> futures;
+        futures.reserve(100);
+
+        std::vector<DriverPtr> all_drivers;
+        all_drivers.reserve(100);
+        for (const auto& pipeline : pipelines) {
+            for (const auto& driver : pipeline->drivers()) {
+                all_drivers.emplace_back(driver);
+            }
+        }
+
+        if (!all_drivers.empty()) {
+            for (const auto& driver : all_drivers) {
+                auto task =
+                        std::make_shared<std::packaged_task<Status()>>([driver_ptr = driver, runtime_state = state]() {
+                            return driver_ptr->prepare_operators_local_state(runtime_state);
+                        });
+
+                auto submit_status = prepare_thread_pool->submit_func([task]() { (*task)(); });
+
+                if (!submit_status.ok()) {
+                    (*task)();
+                }
+
+                futures.push_back(task->get_future());
+            }
+
+            for (auto& future : futures) {
+                RETURN_IF_ERROR(future.get());
+            }
+        }
+
         return Status::OK();
     };
+
     if (const auto status = prepare_drivers(); !status.ok()) {
         LOG(WARNING) << "[ADAPTIVE DOP] failed to prepare pipeline drivers [status=" << status.message() << "]";
         state->fragment_ctx()->cancel(status);
