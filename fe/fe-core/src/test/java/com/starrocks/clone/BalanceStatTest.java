@@ -14,9 +14,12 @@
 
 package com.starrocks.clone;
 
+import com.google.common.collect.Sets;
 import com.starrocks.clone.BalanceStat.BalanceType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.Set;
 
 public class BalanceStatTest {
 
@@ -70,6 +73,19 @@ public class BalanceStatTest {
             Assertions.assertEquals(
                     "{\"maxTabletNum\":9,\"minTabletNum\":1,\"beId\":1,\"maxPath\":\"disk1\",\"minPath\":\"disk2\"," +
                             "\"type\":\"BACKEND_TABLET\",\"balanced\":false}",
+                    stat.toString());
+        }
+
+        {
+            Set<Long> currentBes = Sets.newHashSet(1L, 2L);
+            Set<Long> expectedBes = Sets.newHashSet(2L, 3L);
+            BalanceStat stat = BalanceStat.createColocationGroupBalanceStat(1L, currentBes, expectedBes);
+            Assertions.assertFalse(stat.isBalanced());
+            Assertions.assertEquals(BalanceType.COLOCATION_GROUP, stat.getBalanceType());
+            Assertions.assertEquals("colocation group", stat.getBalanceType().label());
+            Assertions.assertEquals(
+                    "{\"tabletId\":1,\"currentBes\":[1,2],\"expectedBes\":[2,3],\"type\":\"COLOCATION_GROUP\"," +
+                            "\"balanced\":false}",
                     stat.toString());
         }
     }
