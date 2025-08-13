@@ -3670,10 +3670,10 @@ public class OlapTable extends Table {
     }
 
     @Nullable
-    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionId) {
+    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionPathId) {
         FilePathInfo pathInfo = getDefaultFilePathInfo();
         if (pathInfo != null) {
-            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionId);
+            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionPathId);
         }
         return null;
     }

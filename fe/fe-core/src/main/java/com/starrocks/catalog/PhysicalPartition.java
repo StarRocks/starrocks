@@ -60,6 +60,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     @SerializedName(value = "shardGroupId")
     private long shardGroupId = INVALID_SHARD_GROUP_ID;
 
+    // Path id is only for shared-data mode, used to construct storage path.
+    // Default value is physical partition id, but in tablet splitting or merging,
+    // a new physical partition will replace the old physical partition,
+    // the new physical partition will share the same path id with the old one,
+    // and the path id is no longer the same as physical partition id.
+    @SerializedName(value = "pathId")
+    private long pathId;
+
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")
     private AtomicBoolean isImmutable = new AtomicBoolean(false);
@@ -142,6 +150,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.id = id;
         this.name = name;
         this.parentId = parentId;
+        this.pathId = id;
         this.baseIndex = baseIndex;
         this.visibleVersion = PARTITION_INIT_VERSION;
         this.visibleVersionTime = System.currentTimeMillis();
@@ -167,6 +176,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     public void setIdForRestore(long id) {
         this.beforeRestoreId = this.id;
         this.id = id;
+        this.pathId = id;
     }
 
     public long getBeforeRestoreId() {
@@ -183,6 +193,10 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public long getShardGroupId() {
         return this.shardGroupId;
+    }
+
+    public long getPathId() {
+        return this.pathId;
     }
 
     public List<Long> getShardGroupIds() {
@@ -568,6 +582,9 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public void gsonPostProcess() throws IOException {
+        if (pathId == 0) {
+            pathId = id;
+        }
         if (dataVersion == 0) {
             dataVersion = visibleVersion;
         }
