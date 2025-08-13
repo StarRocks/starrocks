@@ -844,8 +844,8 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
         std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_related_rs;
         _txn_mgr->get_txn_related_tablets(txn_id, partition_id, &tablet_related_rs);
         for (auto& tablet_rs : tablet_related_rs) {
-            ASSERT_OK(
-                    _txn_mgr->publish_txn(partition_id, base_tablet, txn_id, version.second, tablet_rs.second.first, 10000));
+            ASSERT_OK(_txn_mgr->publish_txn(partition_id, base_tablet, txn_id, version.second, tablet_rs.second.first,
+                                            10000));
         }
     }
 
