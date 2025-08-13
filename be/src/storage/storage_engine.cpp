@@ -687,7 +687,7 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
     LOG(INFO) << "Clearing transaction task txn_id: " << transaction_id;
 
     for (const TPartitionId& partition_id : partition_ids) {
-        std::map<TabletInfo, RowsetSharedPtr> tablet_infos;
+        std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_infos;
         StorageEngine::instance()->txn_manager()->get_txn_related_tablets(transaction_id, partition_id, &tablet_infos);
 
         // each tablet
