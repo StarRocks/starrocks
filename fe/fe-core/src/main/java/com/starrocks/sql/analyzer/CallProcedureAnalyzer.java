@@ -35,6 +35,8 @@ import java.util.Map;
 
 
 public class CallProcedureAnalyzer {
+    private static final String DEFAULT_DB_NAME = "system";
+
     public static void analyze(CallProcedureStatement stmt, ConnectContext session) {
         new CallProcedureAnalyzer.CallProcedureStmtAnalyzerVisitor().visit(stmt, session);
     }
@@ -145,7 +147,7 @@ public class CallProcedureAnalyzer {
             }
 
             String catalogName;
-            String dbName = "system";
+            String dbName = DEFAULT_DB_NAME;
             String procedureName;
             if (qualifiedName.getParts().size() == 1) {
                 catalogName = context.getCurrentCatalog();

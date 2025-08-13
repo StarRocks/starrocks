@@ -21,7 +21,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import java.util.List;
 import java.util.Map;
 
-public class Procedure {
+public abstract class Procedure {
     private final String databaseName;
     private final String procedureName;
     private final List<Argument> arguments;
@@ -40,9 +40,7 @@ public class Procedure {
         return this.procedureName;
     }
 
-    public void execute(ConnectContext context, Map<String, ConstantOperator> args) {
-        throw new UnsupportedOperationException("Procedure execution not implemented");
-    }
+    public abstract void execute(ConnectContext context, Map<String, ConstantOperator> args);
 
     public List<Argument> getArguments() {
         return this.arguments;

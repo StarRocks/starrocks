@@ -60,8 +60,8 @@ public class CallProcedureStatement extends StatementBase {
     }
 
     public void setAnalyzedArguments(Map<String, ConstantOperator> arguments) {
-        if (arguments == null || arguments.isEmpty()) {
-            throw new IllegalArgumentException("Arguments cannot be null or empty");
+        if (arguments == null) {
+            throw new IllegalArgumentException("Arguments cannot be null");
         }
         this.analyzedArguments = arguments;
     }
