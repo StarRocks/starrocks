@@ -102,7 +102,8 @@ public class CheckpointController extends FrontendDaemon {
     private volatile BlockingQueue<Pair<Boolean, String>> result;
 
     public CheckpointController(String name, Journal journal, String subDir) {
-        super(name, FeConstants.checkpoint_interval_second * 1000L);
+        super(name, Math.min(1800, Math.max(FeConstants.checkpoint_interval_second,
+                Config.checkpoint_interval_second)) * 1000L);
         this.journal = journal;
         this.subDir = subDir;
         this.belongToGlobalStateMgr = Strings.isNullOrEmpty(subDir);

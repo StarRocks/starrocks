@@ -3396,6 +3396,12 @@ public class Config extends ConfigBase {
     public static int deploy_serialization_core_pool_size = 1;
 
     /**
+     * Checkpoint interval, max limit will be 1800 seconds
+     */
+    @ConfField
+    public static int checkpoint_interval_second = 60;
+
+    /**
      * Enable auto create tablet when creating table and add partition
      **/
     @ConfField(mutable = true)

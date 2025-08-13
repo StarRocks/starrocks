@@ -69,7 +69,9 @@ public class FrontendDaemon extends Daemon {
                 LOG.warn("interrupted exception. thread: {}", getName(), e);
             }
         }
+        LOG.debug("{} run after catalog ready", this.getName());
         runAfterCatalogReady();
+        LOG.debug("{} run after catalog ready done", this.getName());
     }
 
     // override by derived classes
