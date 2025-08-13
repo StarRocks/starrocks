@@ -692,7 +692,7 @@ size_t LakePersistentIndex::need_rebuild_file_cnt(const TabletMetadataPB& metada
         cnt += rowset.del_files_size();
         // rowset id + segment id < rebuild_rss_id can be skip.
         // so only some segments in this rowset need to rebuild
-        cnt += std::min(rowset.id() + rowset.segments_size() - rebuild_rss_id + 1, (uint32_t)rowset.segments_size());
+        cnt += std::min(rowset.id() + rowset.segments_size() - rebuild_rss_id, (uint32_t)rowset.segments_size());
     }
     return cnt;
 }
