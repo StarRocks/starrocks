@@ -1445,6 +1445,11 @@ void Tablet::get_compaction_status(std::string* json_result) {
 }
 
 void Tablet::do_tablet_meta_checkpoint() {
+    if (_updates) {
+        // pk tablet only need to calc extra file size. Ignore error.
+        (void)_updates->calc_extra_file_size();
+        return;
+    }
     std::unique_lock store_lock(_meta_store_lock);
     if (_will_be_force_replaced) {
         return;

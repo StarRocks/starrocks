@@ -631,6 +631,15 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_multi_segment_preload_and_c
     int64_t version = 1;
     int64_t version_before_partial_update = 1;
     prepare_tablet(this, tablet, version, version_before_partial_update, N);
+    // calc tablet update extra file size
+    ASSERT_TRUE(tablet->updates()->calc_extra_file_size().ok());
+    // get TabletUpdatesPB
+    TabletUpdatesPB updates_pb;
+    tablet->updates()->to_updates_pb(&updates_pb);
+// check extra file size exist.
+#if !defined(ADDRESS_SANITIZER)
+    ASSERT_TRUE(updates_pb.extra_file_size().col_size() > 0);
+#endif
 }
 
 TEST_P(RowsetColumnPartialUpdateTest, partial_update_index_lock_timeout) {

@@ -73,8 +73,8 @@ struct CompactionInfo {
 };
 
 struct ExtraFileSize {
-    int64_t pindex_size = 0;
-    int64_t col_size = 0;
+    std::atomic<int64_t> pindex_size = 0;
+    std::atomic<int64_t> col_size = 0;
 };
 
 struct EditVersionInfo {
@@ -520,7 +520,7 @@ private:
 
     std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
 
-    StatusOr<ExtraFileSize> _get_extra_file_size() const;
+    Status calc_extra_file_size();
 
     bool _use_light_apply_compaction(Rowset* rowset);
 
@@ -598,6 +598,9 @@ private:
 
     std::atomic<bool> _apply_schedule{false};
     size_t _apply_failed_time = 0;
+
+    // cache of latest ExtraFileSize
+    ExtraFileSize _extra_file_size_cache;
 };
 
 } // namespace starrocks
