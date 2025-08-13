@@ -417,7 +417,8 @@ public class PaimonPredicateConverterTest {
                 BinaryType.EQ, F0, ConstantOperator.createInt(44));
         CaseWhenOperator caseWhenOperator = new CaseWhenOperator(IntegerType.INT, op2, null,
                 Lists.newArrayList(op2, ConstantOperator.createVarchar("test")));
-        BinaryPredicateOperator test = new BinaryPredicateOperator(BinaryType.EQ, caseWhenOperator, ConstantOperator.createVarchar("test"));
+        BinaryPredicateOperator test =
+                new BinaryPredicateOperator(BinaryType.EQ, caseWhenOperator, ConstantOperator.createVarchar("test"));
         ScalarOperator op20 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, op2,
                 test.clone());
 
@@ -445,8 +446,13 @@ public class PaimonPredicateConverterTest {
         // return null
         ScalarOperator op40 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, test.clone(),
                 op21.clone());
-        CompoundPredicate convert1 = (CompoundPredicate) CONVERTER.convert(op40);
+        CompoundPredicate convert1 = (CompoundPredicate) CONVERTER.convert(op40.clone());
         Assertions.assertTrue(convert1 == null);
 
+        // NOT (f0 <= 46 and (case when f0 = 44 then 'test' end) = 'test')
+        // return null
+        ScalarOperator op52 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, op21.clone());
+        Predicate convert2 = CONVERTER.convert(op52);
+        Assertions.assertTrue(convert2 == null);
     }
 }
