@@ -68,6 +68,7 @@ import com.starrocks.analysis.OutFileClause;
 import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Predicate;
+import com.starrocks.analysis.ProcedureArgument;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.SlotRef;
@@ -181,6 +182,7 @@ import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CallProcedureStatement;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
@@ -1606,6 +1608,39 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             where = (Expr) visit(arg.expression());
         }
         return new AlterTableOperationClause(createPos(context), fun.getFnName().getFunction(), fun.getParams().exprs(), where);
+    }
+
+    @Override
+    public ParseNode visitCallProcedureStatement(StarRocksParser.CallProcedureStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        List<Expr> parameters = null;
+        List<ProcedureArgument> procedureArguments = new ArrayList<>();
+        boolean useNamedArgs = false;
+
+        if (context.argumentList() == null) {
+            return new CallProcedureStatement(qualifiedName, Collections.emptyList(), createPos(context));
+        }
+
+        if (context.argumentList().expressionList() != null) {
+            parameters = visit(context.argumentList().expressionList().expression(), Expr.class);
+        } else {
+            parameters = visit(context.argumentList().namedArgumentList().namedArgument(), Expr.class);
+            useNamedArgs = true;
+        }
+        int namedArgNum = parameters.stream().filter(f -> f instanceof NamedArgument).toList().size();
+        if (namedArgNum > 0 && namedArgNum < parameters.size()) {
+            throw new SemanticException("All arguments must be passed by name or all must be passed positionally");
+        }
+
+        if (useNamedArgs) {
+            parameters.forEach(v -> {
+                NamedArgument namedArgument = (NamedArgument) v;
+                procedureArguments.add(new ProcedureArgument(namedArgument.getName(), namedArgument.getExpr()));
+            });
+        } else {
+            parameters.forEach(v -> procedureArguments.add(new ProcedureArgument(null, v)));
+        }
+        return new CallProcedureStatement(qualifiedName, procedureArguments, createPos(context));
     }
 
     @Override

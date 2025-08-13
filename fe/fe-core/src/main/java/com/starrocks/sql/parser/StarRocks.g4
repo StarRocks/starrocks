@@ -361,6 +361,9 @@ statement
     | disableBaselinePlanStatement
     | enableBaselinePlanStatement
 
+    // Procedure Statement
+    | callProcedureStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -2272,6 +2275,11 @@ translateSQL
     : .+
     ;
 
+// ------------------------------------------- Call Procedure Statement ------------------------------------------------
+callProcedureStatement
+    : CALL qualifiedName '(' (argumentList)? ')'
+    ;
+
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
@@ -2418,8 +2426,8 @@ sampleClause
     ;
 
 argumentList
-    : expressionList
-    | namedArgumentList
+    : namedArgumentList
+    | expressionList
     ;
 
 namedArgumentList
@@ -2428,6 +2436,7 @@ namedArgumentList
 
 namedArgument
     : identifier '=>' expression                                                        #namedArguments
+    | identifier '=' expression                                                         #namedArguments
     ;
 
 joinRelation
@@ -3134,7 +3143,7 @@ nonReserved
     | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE | BASELINE
-    | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
+    | CACHE | CALL | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
     | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DIALECT | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
