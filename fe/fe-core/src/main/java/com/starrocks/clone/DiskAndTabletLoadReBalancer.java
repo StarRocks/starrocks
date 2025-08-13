@@ -1692,6 +1692,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         continue;
                     }
 
+                    boolean isLabelLocationTable = olapTbl.getLocation() != null;
+
                     for (Partition partition : globalStateMgr.getLocalMetastore().getAllPartitionsIncludeRecycleBin(olapTbl)) {
                         partitionChecked++;
                         if (partitionChecked % partitionBatchNum == 0) {
@@ -1794,11 +1796,15 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
                                 boolean isTabletBalanced = pStat.skew >= 0 && pStat.skew <= 1;
                                 if (isTabletBalanced) {
-                                    idx.setBalanceStat(BalanceStat.BALANCED_STAT);
+                                    if (isLocalBalance || !isLabelLocationTable) {
+                                        idx.setBalanceStat(BalanceStat.BALANCED_STAT);
+                                    }
                                 } else if (isLocalBalance) {
+                                    // tablet not balanced && is local balance
                                     idx.setBalanceStat(BalanceStat.createBackendTabletBalanceStat(
                                             bePaths.first, getPath(maxKey), getPath(minKey), maxNum, minNum));
-                                } else {
+                                } else if (!isLabelLocationTable) {
+                                    // tablet not balanced && not local balance && table not use label location
                                     idx.setBalanceStat(
                                             BalanceStat.createClusterTabletBalanceStat(maxKey, minKey, maxNum, minNum));
                                 }
