@@ -110,7 +110,9 @@ class StarRocksTypeCompiler(MySQLTypeCompiler):
         return "LARGEINT"
 
     def visit_ARRAY(self, type_, **kw):
-        return "ARRAY<type>"
+        """Compiles the ARRAY type into the correct StarRocks syntax."""
+        inner_type_sql = self.process(type_.item_type, **kw)
+        return f"ARRAY<{inner_type_sql}>"
 
     def visit_MAP(self, type_, **kw):
         return "MAP<keytype,valuetype>"
