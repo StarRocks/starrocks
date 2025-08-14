@@ -28,70 +28,6 @@
 
 namespace starrocks::lake {
 
-static Status vacuum_unspecified_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_loc,
-                                                 const std::set<int64_t>& tablet_ids, int64_t* vacuumed_files,
-                                                 std::list<std::string>* meta_files,
-                                                 std::list<std::string>* bundle_meta_files) {
-    DCHECK(tablet_mgr != nullptr);
-    DCHECK(vacuumed_files != nullptr);
-    DCHECK(meta_files != nullptr);
-    DCHECK(bundle_meta_files != nullptr);
-
-    auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
-        auto cache = tablet_mgr->metacache();
-        DCHECK(cache != nullptr);
-        for (const auto& path : files) {
-            cache->erase(path);
-        }
-    };
-    AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
-    std::vector<std::string> unspecified_metas;
-    std::vector<std::string> bundle_unspecified_metas;
-    const auto metadata_root_location = join_path(root_loc, kMetadataDirectoryName);
-    for (const auto& name : *meta_files) {
-        auto [tablet_id, version] = parse_tablet_metadata_filename(name);
-        const string path = join_path(metadata_root_location, name);
-        ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, version, false));
-        if (!tablet_ids.contains(tablet_id) &&
-            metadata->version() != kInitialVersion /* filtered out meta created from alter job */) {
-            LOG(INFO) << "Try delete for full vacuum: " << path;
-            RETURN_IF_ERROR(metafile_deleter.delete_file(path));
-            unspecified_metas.push_back(name);
-        }
-    }
-    for (const auto& unspecified_meta : unspecified_metas) {
-        meta_files->remove(unspecified_meta);
-    }
-
-    std::vector<int64_t> tablet_ids_vec(tablet_ids.begin(), tablet_ids.end());
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
-    for (const auto& name : *bundle_meta_files) {
-        auto path = join_path(metadata_root_location, name);
-        bool need_clear = true;
-        ASSIGN_OR_RETURN(auto metadatas, TabletManager::get_metas_from_bundle_tablet_metadata(path, fs.get()));
-        for (const auto& metadata : metadatas) {
-            DCHECK(metadata->version() != kInitialVersion);
-            // make sure all reserved tablet ids should not existed in metadata
-            if (tablet_ids.contains(metadata->id())) {
-                need_clear = false;
-                break;
-            }
-        }
-        if (need_clear) {
-            LOG(INFO) << "Try delete for full vacuum: " << path;
-            RETURN_IF_ERROR(metafile_deleter.delete_file(path));
-            bundle_unspecified_metas.push_back(name);
-        }
-    }
-    for (const auto& bundle_unspecified_meta : bundle_unspecified_metas) {
-        bundle_meta_files->remove(bundle_unspecified_meta);
-    }
-
-    RETURN_IF_ERROR(metafile_deleter.finish());
-    (*vacuumed_files) += metafile_deleter.delete_count();
-    return Status::OK();
-}
-
 static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_loc,
                                              int64_t grace_timestamp, int64_t* vacuumed_files,
                                              std::list<std::string>* meta_files,
@@ -207,8 +143,8 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
     if (UNLIKELY(request.partition_id() == 0)) {
         return Status::InvalidArgument("partition_id is unset");
     }
-    if (UNLIKELY(request.tablet_ids_size() == 0)) {
-        return Status::InvalidArgument("tablet_ids is empty");
+    if (UNLIKELY(request.tablet_id() == 0)) {
+        return Status::InvalidArgument("tablet_id is unset");
     }
     if (UNLIKELY(request.min_active_txn_id() <= 0)) {
         return Status::InvalidArgument("value of min_active_txn_id is unset or negative");
@@ -223,11 +159,6 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
         return Status::InvalidArgument("value of max_check_version is unset or negative");
     }
 
-    // init all relative request context
-    std::set<int64_t> tablet_ids_set;
-    for (const auto& tablet_id : request.tablet_ids()) {
-        tablet_ids_set.insert(tablet_id);
-    }
     const auto grace_timestamp = request.grace_timestamp();
     const auto min_active_txn_id = request.min_active_txn_id();
     std::unordered_set<int64_t> retain_versions;
@@ -242,7 +173,7 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
     int64_t vacuumed_files = 0;
     int64_t vacuumed_file_size = 0;
 
-    const std::string root_loc = tablet_mgr->tablet_root_location(request.tablet_ids().at(0));
+    const std::string root_loc = tablet_mgr->tablet_root_location(request.tablet_id());
     const auto metadata_root_location = join_path(root_loc, kMetadataDirectoryName);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
     ASSIGN_OR_RETURN(auto meta_files_and_bundle_files, list_meta_files(fs.get(), metadata_root_location));
@@ -258,13 +189,7 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
     meta_filter(meta_files);
     meta_filter(bundle_meta_files);
 
-    // 1. Before the orphaned data file cleanup even starts, delete metadata files which satisfy the following:
-    // (tablet_id not in request.tablet_ids OR tabletmeta.commit_time < grace_timestamp)
-
-    // 1a. Delete all metadata files associated with the given partition which are not in the list of tablet_ids
-    RETURN_IF_ERROR(vacuum_unspecified_tablet_metadata(tablet_mgr, root_loc, tablet_ids_set, &vacuumed_files,
-                                                       &meta_files, &bundle_meta_files));
-    // 1b. Delete all metadata files associated with the given partition which have tabletmeta.commit_time < grace_timestamp
+    // 1. Delete all metadata files associated with the given partition which have tabletmeta.commit_time < grace_timestamp
     // and the version of tablet meta should not be found in retain_versions
     RETURN_IF_ERROR(vacuum_expired_tablet_metadata(tablet_mgr, root_loc, grace_timestamp, &vacuumed_files, &meta_files,
                                                    &bundle_meta_files, retain_versions));

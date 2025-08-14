@@ -162,7 +162,7 @@ TEST_P(LakeVacuumTest, test_vacuum_full) {
 
     VacuumFullRequest request;
     request.set_partition_id(1);
-    request.add_tablet_ids(66600);
+    request.set_tablet_id(66600);
     request.set_min_active_txn_id(10);
     request.set_grace_timestamp(100);
     request.add_retain_versions(4);
@@ -173,7 +173,8 @@ TEST_P(LakeVacuumTest, test_vacuum_full) {
         {
         "id": 66601,
         "version": 5,
-        "rowsets": []
+        "rowsets": [],
+        "commit_time": 1
         }
         )DEL")));
 
@@ -265,7 +266,7 @@ TEST_P(LakeVacuumTest, test_vacuum_full_with_bundle) {
 
     VacuumFullRequest request;
     request.set_partition_id(1);
-    request.add_tablet_ids(66600);
+    request.set_tablet_id(66600);
     request.set_min_active_txn_id(10);
     request.set_grace_timestamp(100);
     request.set_min_check_version(0);

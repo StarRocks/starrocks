@@ -502,8 +502,8 @@ StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(co
     return bundle_metadata;
 }
 
-StatusOr<MutableTabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadata(const std::string& location,
-                                                                                         FileSystem* input_fs) {
+StatusOr<ImmutableTabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadata(const std::string& location,
+                                                                                           FileSystem* input_fs) {
     std::unique_ptr<RandomAccessFile> input_file;
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     if (input_fs == nullptr) {
@@ -516,7 +516,7 @@ StatusOr<MutableTabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_
 
     auto file_size = serialized_string.size();
     ASSIGN_OR_RETURN(auto bundle_metadata, TabletManager::parse_bundle_tablet_metadata(location, serialized_string));
-    MutableTabletMetadataPtrs metadatas;
+    ImmutableTabletMetadataPtrs metadatas;
     metadatas.reserve(bundle_metadata->tablet_meta_pages().size());
     for (const auto& tablet_page : bundle_metadata->tablet_meta_pages()) {
         const PagePointerPB& page_pointer = tablet_page.second;

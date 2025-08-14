@@ -43,6 +43,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -88,15 +89,7 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
 
             List<Table> tables = new ArrayList<>();
             for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
-                if (table.isCloudNativeTableOrMaterializedView() &&
-                        /*
-                        * Skip full gc for tables which has schema change job after automated cluster snapshot
-                        * This is to prevent the full vacuum from deleting tablets that are still in use.
-                        * We need to skip this table completely because automated cluster snapshot does not
-                        * contains any snapshot info which means there is no enough information to distinguish
-                        * which tablet for this table need to be protected.
-                        */
-                        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(table.getId())) {
+                if (table.isCloudNativeTableOrMaterializedView()) {
                     tables.add(table);
                 }
             }
@@ -181,14 +174,12 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         long visibleVersion;
         long startTime = System.currentTimeMillis();
         long minActiveTxnId = computeMinActiveTxnId(db, table);
-        Set<Long> shardGroupIds = new HashSet<>();
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 tablets.addAll(index.getTablets());
-                shardGroupIds.add(index.getShardGroupId());
             }
             visibleVersion = partition.getVisibleVersion();
         } finally {
@@ -203,8 +194,8 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
 
         ClusterSnapshotMgr clusterSnapshotMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Set<Long> allTabletIds = new HashSet<>();
         Set<ComputeNode> involvedNodes = new HashSet<>();
+        Map<ComputeNode, Tablet> nodeToTablet = new HashMap<>();
 
         for (Tablet tablet : tablets) {
             ComputeNode node = warehouseManager.getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, tablet.getId());
@@ -213,36 +204,12 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
                 LOG.error("Could not get CN for tablet={}, returning early.", tablet.getId());
                 return;
             }
-            allTabletIds.add(tablet.getId());
             involvedNodes.add(node);
-        }
-
-        for (Long shardGroupId : shardGroupIds) {
-            long dbId = db.getId();
-            long tableId = table.getId();
-            long partId = partition.getParentId();
-            long physicalPartId = partition.getId();
-            if (GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isShardGroupIdInClusterSnapshotInfo(
-                    dbId, tableId, partId, physicalPartId, shardGroupId)) {
-                // if the shardGroupId exists in cluster snapshot info, all tablet/shard in this shard group should be
-                // protected
-                List<Long> shardIds = new ArrayList<>();
-                try {
-                    // TODO: check every single tablet/shard if it hits the index id in snapshot info
-                    shardIds = GlobalStateMgr.getCurrentState().getStarOSAgent().listShard(shardGroupId);
-                } catch (Exception e) {
-                    LOG.warn("get shard ids from starMgr failed in full vacuum daemon, shard group: {}, {}",
-                             shardGroupId, e.getMessage());
-                    return;
-                }
-                allTabletIds.addAll(shardIds);
-            }
+            nodeToTablet.put(node, tablet); // save any one tablet of this node
         }
 
         VacuumFullRequest vacuumFullRequest = new VacuumFullRequest();
         vacuumFullRequest.setPartitionId(partition.getId());
-        // All tablet ids must be part of the request, since the CN will delete any + all tablets unspecified by the request.
-        vacuumFullRequest.setTabletIds(new ArrayList<>(allTabletIds));
         vacuumFullRequest.setMinActiveTxnId(minActiveTxnId);
 
         long graceTimestamp = startTime / MILLISECONDS_PER_SECOND - Config.lake_fullvacuum_meta_expired_seconds;
@@ -251,11 +218,10 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         vacuumFullRequest.setGraceTimestamp(graceTimestamp);
 
         List<Long> retainVersions = new ArrayList<>();
-        // always should be inited by current visibleVersion
         retainVersions.addAll(clusterSnapshotMgr.getVacuumRetainVersions(
                               db.getId(), table.getId(), partition.getParentId(), partition.getId()));
         long minCheckVersion = 0;
-        long maxCheckVersion = visibleVersion;
+        long maxCheckVersion = visibleVersion; // always should be inited by current visibleVersion
         vacuumFullRequest.setMinCheckVersion(minCheckVersion);
         vacuumFullRequest.setMaxCheckVersion(maxCheckVersion);
         vacuumFullRequest.setRetainVersions(retainVersions);
@@ -264,6 +230,8 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         if (chosenNode == null) {
             return;
         }
+
+        vacuumFullRequest.setTabletId(nodeToTablet.get(chosenNode).getId());
 
         LOG.info(
                 "Sending full vacuum request to cn={}: table={}, partition={}, tablet_ids={}, max_check_version={}, " +
@@ -287,14 +255,17 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         }
 
         try {
-            VacuumFullResponse response = responseFuture.get();
-            if (response.status.statusCode != 0) {
-                hasError = true;
-                LOG.warn("Vacuumed {}.{}.{} with error: {}", db.getFullName(), table.getName(), partition.getId(),
-                        response.status.errorMsgs.get(0));
-            } else {
-                vacuumedFiles += response.vacuumedFiles;
-                vacuumedFileSize += response.vacuumedFileSize;
+            if (responseFuture != null) {
+                VacuumFullResponse response = responseFuture.get();
+                if (response.status.statusCode != 0) {
+                    hasError = true;
+                    LOG.warn("Vacuumed {}.{}.{} with error: {}", db.getFullName(), table.getName(), partition.getId(),
+                             response.status.errorMsgs != null && !response.status.errorMsgs.isEmpty() ?
+                             response.status.errorMsgs.get(0) : "");
+                } else {
+                    vacuumedFiles += response.vacuumedFiles;
+                    vacuumedFileSize += response.vacuumedFileSize;
+                }
             }
         } catch (InterruptedException e) {
             LOG.warn("thread interrupted");

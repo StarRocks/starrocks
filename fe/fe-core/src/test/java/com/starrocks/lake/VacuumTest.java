@@ -14,7 +14,6 @@
 
 package com.starrocks.lake;
 
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.MaterializedIndex;
@@ -327,26 +326,10 @@ public class VacuumTest {
             }
         };
 
-        new MockUp<MaterializedIndex>() {
-            @Mock
-            public long getShardGroupId() {
-                return 12345L;
-            }
-        };
-
         new MockUp<WarehouseManager>() {
             @Mock
             public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
                 return new ComputeNode();
-            }
-        };
-
-        new MockUp<ClusterSnapshotMgr>() {
-            @Mock
-            public boolean isShardGroupIdInClusterSnapshotInfo(
-                    long dbId, long tableId, long partId, long physicalPartId, long shardGroupId) {
-                Assertions.assertEquals(12345L, shardGroupId);
-                return true;
             }
         };
 
@@ -389,27 +372,10 @@ public class VacuumTest {
             }
         };
 
-        final List<Long> shardIds = Lists.newArrayList();
-        shardIds.add(4444L);
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public List<Long> listShard(long groupId) {
-                return shardIds;
-            }
-        };
-
-        final Set<Long> resultTabletIds = new HashSet<>();
         new MockUp<VacuumFullRequest>() {
             @Mock
             public void setRetainVersions(List<Long> retainVersions) {
                 Assertions.assertEquals(0, retainVersions.size());
-                return;
-            }
-
-            @Mock
-            public void setTabletIds(List<Long> tabletIds) {
-                resultTabletIds.addAll(tabletIds);
-                Assertions.assertTrue(tabletIds.contains(4444L));
                 return;
             }
         };
@@ -427,7 +393,6 @@ public class VacuumTest {
         Config.lake_fullvacuum_parallel_partitions = 1;
         Config.lake_fullvacuum_partition_naptime_seconds = 0;
         Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
-        Assertions.assertTrue(allTabletIds.isEmpty() || resultTabletIds.containsAll(allTabletIds));
         Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
         Config.lake_fullvacuum_parallel_partitions = oldValue1;
         FeConstants.runningUnitTest = true;
