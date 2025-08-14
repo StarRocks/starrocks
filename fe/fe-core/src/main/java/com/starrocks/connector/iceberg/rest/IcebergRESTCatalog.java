@@ -389,6 +389,20 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         }
     }
 
+    @Override
+    public boolean registerTable(ConnectContext context, String dbName, String tableName, String metadataFileLocation) {
+        try {
+            TableIdentifier tableIdentifier = TableIdentifier.of(convertDbNameToNamespace(dbName), tableName);
+            Table table = delegate.registerTable(buildContext(context), tableIdentifier, metadataFileLocation);
+            return table != null;
+        } catch (RESTException re) {
+            LOG.error("Failed to register table using REST Catalog, for dbName {} tableName {} metadataFileLocation {}", 
+                    dbName, tableName, metadataFileLocation, re);
+            throw new StarRocksConnectorException("Failed to register table using REST Catalog",
+                    new RuntimeException("Failed to register table using REST Catalog, exception: " + re.getMessage(), re));
+        }
+    }
+
     public String toString() {
         return delegate.toString();
     }
