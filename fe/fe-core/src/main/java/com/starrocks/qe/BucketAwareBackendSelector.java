@@ -105,7 +105,6 @@ public class BucketAwareBackendSelector implements BackendSelector {
             scanRanges.put(scanNode.getId().asInt(), entry.getValue());
             seqToWorkerId.put(entry.getKey(), bucketSeqToWorkerId.get(entry.getKey()));
         }
-        recordScanRangeStatistic();
 
         if (useIncrementalScanRanges) {
             boolean hasMore = scanNode.hasMoreScanRanges();
@@ -139,6 +138,7 @@ public class BucketAwareBackendSelector implements BackendSelector {
                 }
             }
         }
+        recordScanRangeStatistic();
     }
 
     private void recordScanRangeStatistic() {
@@ -156,7 +156,7 @@ public class BucketAwareBackendSelector implements BackendSelector {
             String host = workerProvider.getWorkerById(entry.getKey()).getAddress().hostname.replace('.', '_');
             long value = entry.getValue();
             String key = String.format("Bucket Placement.%s.assign.%s", scanNode.getTableName(), host);
-            Tracers.count(Tracers.Module.EXTERNAL, key, value);
+            Tracers.record(Tracers.Module.EXTERNAL, key, String.valueOf(value));
         }
     }
 }

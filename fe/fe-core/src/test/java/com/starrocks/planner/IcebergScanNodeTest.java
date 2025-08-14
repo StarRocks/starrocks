@@ -50,7 +50,6 @@ import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -58,8 +57,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSinkCommitInfo;
@@ -101,6 +100,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+<<<<<<< HEAD
+=======
+import javax.swing.text.html.Option;
+import static com.starrocks.common.util.Util.executeCommand;
+import java.util.stream.Stream;
+
+>>>>>>> bbe34c2a55 ([BugFix] fix some minor bugs and add comment (#61902))
 public class IcebergScanNodeTest {
 
     class TestableIcebergConnectorScanRangeSource extends IcebergConnectorScanRangeSource {
@@ -1119,4 +1125,311 @@ public class IcebergScanNodeTest {
 
         metadataMgr.finishSink("unknownCatalog", "db", "tbl", new ArrayList<>(), "branch", new Object());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    void execute_shouldRunNormally_whenPreparedStateAndTasksExist() throws Exception {
+        ConnectContext context = Mockito.mock(ConnectContext.class, Mockito.RETURNS_DEEP_STUBS);
+        AlterTableStmt alter = Mockito.mock(AlterTableStmt.class);
+        IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
+        ExecPlan execPlan = Mockito.mock(ExecPlan.class);
+        IcebergScanNode scanNode = Mockito.mock(IcebergScanNode.class);
+        IcebergRewriteData rewriteData = Mockito.mock(IcebergRewriteData.class);
+        PlanFragment fragment = Mockito.mock(PlanFragment.class);
+        ArrayList<PlanFragment> fragments = new ArrayList<>();
+        Map<PlanNodeId, ScanNode> scanMap = new HashMap<>();
+        scanMap.put(new PlanNodeId(1), scanNode);
+        fragments.add(fragment);
+        Mockito.when(execPlan.getFragments()).thenReturn(fragments);
+        Mockito.when(fragment.collectScanNodes()).thenReturn(scanMap);
+        Mockito.when(rewriteData.hasMoreTaskGroup())
+                .thenReturn(true)
+                .thenReturn(false);
+        List<RemoteFileInfo> oneGroup = Collections.emptyList();
+        Mockito.when(rewriteData.nextTaskGroup()).thenReturn(oneGroup);
+        Mockito.when(scanNode.getPlanNodeName()).thenReturn("IcebergScanNode");
+        RemoteFileInfo remoteFileInfo = Mockito.mock(RemoteFileInfo.class);
+        // --- Mock DataFile ---
+        DataFile dataFile = Mockito.mock(DataFile.class);
+        Mockito.when(dataFile.fileSizeInBytes()).thenReturn(500L);
+
+        // --- Mock FileScanTask ---
+        FileScanTask fileScanTask = Mockito.mock(FileScanTask.class);
+        Mockito.when(fileScanTask.file()).thenReturn(dataFile);
+        Mockito.when(fileScanTask.deletes()).thenReturn(Collections.emptyList());
+
+        // --- Mock IcebergRemoteFileInfo ---
+        IcebergRemoteFileInfo icebergRemoteFileInfo = Mockito.mock(IcebergRemoteFileInfo.class);
+        Mockito.when(icebergRemoteFileInfo.getFileScanTask()).thenReturn(fileScanTask);
+        Mockito.when(remoteFileInfo.cast()).thenReturn(icebergRemoteFileInfo);
+        RemoteFileInfoSource remoteFileInfoSource = new RemoteFileInfoSource() {
+            int count = 0;
+
+            @Override
+            public RemoteFileInfo getOutput() {
+                count++;
+                return remoteFileInfo;
+            }
+
+            @Override
+            public boolean hasMoreOutput() {
+                return count == 0;
+            }
+        };
+
+        IcebergTable icebergTable = Mockito.mock(IcebergTable.class);
+        IcebergMORParams morParams = Mockito.mock(IcebergMORParams.class);
+        TupleDescriptor tupleDesc = Mockito.mock(TupleDescriptor.class);
+
+        IcebergConnectorScanRangeSource fakeSourceRange = new IcebergConnectorScanRangeSource(
+                icebergTable,
+                remoteFileInfoSource,
+                morParams,
+                tupleDesc,
+                Optional.empty()
+        );
+        Mockito.when(scanNode.getSourceRange()).thenReturn(fakeSourceRange);
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
+                return executor;
+            }
+        };
+
+        new MockUp<com.starrocks.sql.parser.SqlParser>() {
+            @Mock
+            public List<com.starrocks.sql.ast.StatementBase> parse(String sql, SessionVariable sessionVariable) {
+                return Collections.singletonList(Mockito.mock(com.starrocks.sql.ast.InsertStmt.class));
+            }
+        };
+
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public ExecPlan plan(StatementBase stmt, ConnectContext session) {
+                return execPlan;
+            }
+        };
+
+        new MockUp<IcebergScanNode>() {
+            @Mock
+            public void rebuildScanRange(List<RemoteFileInfo> splits) {
+                return;
+            }
+        };
+
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) {
+                return;
+            }
+        };
+        new MockUp<IcebergRewriteData>() {
+            @Mock
+            public void buildNewScanNodeRange(long fileSizeThreshold, boolean allFiles) {
+                return;
+            }
+        };
+
+        new MockUp<IcebergRewriteStmt>() {
+            @Mock
+            public void $init(InsertStmt base, boolean rewriteAll) {
+                //do nothing
+            }
+        };
+
+        IcebergRewriteDataJob job = new IcebergRewriteDataJob(
+                "insert into t select * from t", false, 0L, 10L, context, alter);
+
+        job.prepare();
+        Deencapsulation.setField(job, "execPlan", execPlan);
+        Deencapsulation.setField(job, "scanNodes", Arrays.asList(scanNode));
+        Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
+        Deencapsulation.setField(job, "rewriteData", rewriteData);
+        job.execute();
+
+        Mockito.verify(rewriteData, Mockito.times(2)).hasMoreTaskGroup();
+        Mockito.verify(rewriteData, Mockito.times(1)).nextTaskGroup();
+        Mockito.verify(scanNode, Mockito.times(1)).rebuildScanRange(oneGroup);
+        Mockito.verify(executor, Mockito.times(1)).handleDMLStmt(execPlan, rewriteStmt);
+    }
+
+    @Test
+    void execute_shouldSetErrorAndReturn_whenExecutorThrows() throws Exception {
+        ConnectContext context = Mockito.mock(ConnectContext.class, Mockito.RETURNS_DEEP_STUBS);
+        AlterTableStmt alter = Mockito.mock(AlterTableStmt.class);
+        IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
+        ExecPlan execPlan = Mockito.mock(ExecPlan.class);
+        IcebergScanNode scanNode = Mockito.mock(IcebergScanNode.class);
+        IcebergRewriteData rewriteData = Mockito.mock(IcebergRewriteData.class);
+
+        Mockito.when(rewriteData.hasMoreTaskGroup())
+                .thenReturn(true)
+                .thenReturn(false);
+        Mockito.when(rewriteData.nextTaskGroup()).thenReturn(Collections.emptyList());
+
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        Mockito.doThrow(new RuntimeException("boom")).when(executor).handleDMLStmt(execPlan, rewriteStmt);
+
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
+                return executor;
+            }
+        };
+
+        new MockUp<IcebergScanNode>() {
+            @Mock
+            public void rebuildScanRange(List<RemoteFileInfo> splits) {
+                return;
+            }
+        };
+
+        IcebergRewriteDataJob job = new IcebergRewriteDataJob(
+                "insert into t select 1", false, 0L, 10L, context, alter);
+
+        Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
+        Deencapsulation.setField(job, "execPlan", execPlan);
+        Deencapsulation.setField(job, "scanNodes", Arrays.asList(scanNode));
+        Deencapsulation.setField(job, "rewriteData", rewriteData);
+
+        job.execute();
+
+        Mockito.verify(context.getState(), Mockito.times(1)).setError("boom");
+        Mockito.verify(scanNode, Mockito.times(1)).rebuildScanRange(Mockito.anyList());
+    }
+
+    @Test
+    void rewriteDataFiles_shouldBuildSQL_andRunJob(@Mocked org.apache.iceberg.Table table,
+            @Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
+        // --- arrange
+        String catalog = "c1";
+        String db = "db";
+        String tbl = "table";
+
+        AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
+        Mockito.when(stmt.getCatalogName()).thenReturn(catalog);
+        Mockito.when(stmt.getDbName()).thenReturn(db);
+        Mockito.when(stmt.getTableName()).thenReturn(tbl);
+
+        AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
+        Mockito.when(clause.isRewriteAll()).thenReturn(true);
+        Mockito.when(clause.getMinFileSizeBytes()).thenReturn(128L);
+        Mockito.when(clause.getBatchSize()).thenReturn(10L);
+
+        Expr where = Mockito.mock(Expr.class);
+        SlotRef slot = Mockito.mock(SlotRef.class);
+        Mockito.doAnswer(inv -> {
+            @SuppressWarnings("unchecked")
+            List<SlotRef> list = (List<SlotRef>) inv.getArgument(1);
+            list.add(slot);
+            return null;
+        }).when(where).collect(Mockito.eq(SlotRef.class), Mockito.anyList());
+        Mockito.when(where.toSql()).thenReturn("k1 = 1");
+        Mockito.when(clause.getWhere()).thenReturn(where);
+
+        ConnectContext ctx = Mockito.mock(ConnectContext.class);
+        new MockUp<IcebergRewriteDataJob>() {
+            @Mock public void prepare() {}
+            @Mock public void execute() {}
+        };
+
+
+        IcebergAlterTableExecutor target = new IcebergAlterTableExecutor(new AlterTableStmt(
+                new TableName("db", "table"),
+                List.of(clause)),
+                table, icebergHiveCatalog,
+                ctx,
+                HDFS_ENVIRONMENT);
+
+        // --- act
+        target.rewriteDataFiles(clause, ctx);
+    }
+
+    @Test
+    void rewriteDataFiles_shouldWrapAndThrow_whenJobExecuteFails(@Mocked org.apache.iceberg.Table table,
+            @Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
+        // --- arrange
+        String catalog = "c1";
+        String db = "db";
+        String tbl = "table";
+
+        AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
+        Mockito.when(stmt.getCatalogName()).thenReturn(catalog);
+        Mockito.when(stmt.getDbName()).thenReturn(db);
+        Mockito.when(stmt.getTableName()).thenReturn(tbl);
+
+        AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
+        Mockito.when(clause.isRewriteAll()).thenReturn(true);
+        Mockito.when(clause.getMinFileSizeBytes()).thenReturn(128L);
+        Mockito.when(clause.getBatchSize()).thenReturn(10L);
+
+        Expr where = Mockito.mock(Expr.class);
+        SlotRef slot = Mockito.mock(SlotRef.class);
+        Mockito.doAnswer(inv -> {
+            @SuppressWarnings("unchecked")
+            List<SlotRef> list = (List<SlotRef>) inv.getArgument(1);
+            list.add(slot);
+            return null;
+        }).when(where).collect(Mockito.eq(SlotRef.class), Mockito.anyList());
+        Mockito.when(where.toSql()).thenReturn("k1 = 1");
+        Mockito.when(clause.getWhere()).thenReturn(where);
+
+        ConnectContext ctx = Mockito.mock(ConnectContext.class);
+        new MockUp<IcebergRewriteDataJob>() {
+            @Mock public void prepare() {}
+            @Mock public void execute() { throw new RuntimeException("boom"); }
+        };
+
+
+        IcebergAlterTableExecutor target = new IcebergAlterTableExecutor(new AlterTableStmt(
+                new TableName("db", "table"),
+                List.of(clause)),
+                table, icebergHiveCatalog,
+                ctx,
+                HDFS_ENVIRONMENT);
+
+        // --- act + assert
+        StarRocksConnectorException ex =
+                Assertions.assertThrows(StarRocksConnectorException.class, () -> target.rewriteDataFiles(clause, ctx));
+        Assertions.assertTrue(ex.getMessage().contains("db.table"));
+        Assertions.assertTrue(ex.getMessage().contains("boom"));
+    }
+
+    @Test
+    public void testGetBucketNums(@Mocked IcebergTable table) {
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
+
+        // Create three bucket properties
+        List<BucketProperty> bucketProperties = new ArrayList<>();
+        Column column1 = new Column("test_col1", ScalarType.INT);
+        Column column2 = new Column("test_col2", ScalarType.INT);
+        Column column3 = new Column("test_col3", ScalarType.INT);
+        Column column4 = new Column("test_col4", ScalarType.INT);
+        BucketProperty bucketProperty1 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 2, column1);
+        BucketProperty bucketProperty2 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 3, column2);
+        BucketProperty bucketProperty3 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 4, column3);
+        BucketProperty bucketProperty4 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 5, column4);
+        bucketProperties.add(bucketProperty1);
+        bucketProperties.add(bucketProperty2);
+        bucketProperties.add(bucketProperty3);
+        bucketProperties.add(bucketProperty4);
+
+        scanNode.setBucketProperties(bucketProperties);
+
+        // Test
+        int result = scanNode.getBucketNums();
+
+        // Verify: (2 + 1) * (3 + 1) * (4 + 1) * (5 + 1) = 3 * 4 * 5 * 6 = 360
+        Assertions.assertEquals(360, result);
+        // wrong method
+        Assertions.assertEquals(876, Stream.of(2, 3, 4, 5).reduce(1, (a, b) -> (a + 1) * (b + 1)));
+    }
+>>>>>>> bbe34c2a55 ([BugFix] fix some minor bugs and add comment (#61902))
 }
