@@ -15,13 +15,12 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.authorization.GrantType;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
 public class RevokeRoleStmt extends BaseGrantRevokeRoleStmt {
-    public RevokeRoleStmt(List<String> granteeRole, UserIdentity userIdent, NodePosition pos) {
+    public RevokeRoleStmt(List<String> granteeRole, User userIdent, NodePosition pos) {
         super(granteeRole, userIdent, pos);
     }
 

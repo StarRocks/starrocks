@@ -15,38 +15,37 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.authorization.GrantType;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowGrantsStmt extends ShowStmt {
-    private UserIdentity userIdent;
+    private User user;
     private final String groupOrRole;
     private final GrantType grantType;
 
-    public ShowGrantsStmt(UserIdentity userIdent, NodePosition pos) {
+    public ShowGrantsStmt(User userIdent, NodePosition pos) {
         super(pos);
-        this.userIdent = userIdent;
+        this.user = userIdent;
         this.groupOrRole = null;
         grantType = GrantType.USER;
     }
 
     public ShowGrantsStmt(String groupOrRole, GrantType grantType, NodePosition pos) {
         super(pos);
-        this.userIdent = null;
+        this.user = null;
         this.groupOrRole = groupOrRole;
         this.grantType = grantType;
     }
 
-    public UserIdentity getUserIdent() {
-        return userIdent;
+    public User getUser() {
+        return user;
     }
 
     public String getGroupOrRole() {
         return groupOrRole;
     }
 
-    public void setUserIdent(UserIdentity userIdent) {
-        this.userIdent = userIdent;
+    public void setUser(User user) {
+        this.user = user;
     }
 
     public GrantType getGrantType() {

@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -22,23 +21,23 @@ import java.util.List;
 
 public class SetDefaultRoleStmt extends StatementBase {
 
-    private final UserIdentity userIdentity;
+    private final User user;
     private final List<String> roles = new ArrayList<>();
     private final SetRoleType setRoleType;
 
-    public SetDefaultRoleStmt(UserIdentity userIdentity, SetRoleType setRoleType, List<String> roles) {
-        this(userIdentity, setRoleType, roles, NodePosition.ZERO);
+    public SetDefaultRoleStmt(User user, SetRoleType setRoleType, List<String> roles) {
+        this(user, setRoleType, roles, NodePosition.ZERO);
     }
 
-    public SetDefaultRoleStmt(UserIdentity userIdentity, SetRoleType setRoleType, List<String> roles, NodePosition pos) {
+    public SetDefaultRoleStmt(User user, SetRoleType setRoleType, List<String> roles, NodePosition pos) {
         super(pos);
-        this.userIdentity = userIdentity;
+        this.user = user;
         this.roles.addAll(roles);
         this.setRoleType = setRoleType;
     }
 
-    public UserIdentity getUserIdentity() {
-        return userIdentity;
+    public User getUser() {
+        return user;
     }
 
     public SetRoleType getSetRoleType() {
