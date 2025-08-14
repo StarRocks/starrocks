@@ -208,6 +208,66 @@ public class TablePruningTest extends TablePruningTestBase {
             String createTableSql = res.get(0).get(1);
             Assertions.assertTrue(createTableSql.contains(showAndResult[1]), createTableSql);
         }
+
+        String tableA = "CREATE TABLE table_a (\n" +
+                "    col_a BIGINT,\n" +
+                "    col_tenant BIGINT NOT NULL,\n" +
+                "    col_x BIGINT,\n" +
+                "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n" +
+                "    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n" +
+                ") PRIMARY KEY(`col_a`, `col_tenant`)\n" +
+                "DISTRIBUTED BY HASH(col_a, `col_tenant`) BUCKETS 1\n" +
+                "PROPERTIES(\n" +
+                "  \"replication_num\" = \"1\"\n" +
+                ");";
+        String tableB = "CREATE TABLE table_b (\n" +
+                "    col_a BIGINT NOT NULL,\n" +
+                "    col_tenant BIGINT NOT NULL,\n" +
+                "    col_score DECIMAL(10,4),\n" +
+                "    col_version VARCHAR(50),\n" +
+                "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(col_tenant, col_a) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"unique_constraints\" = \"col_a,col_tenant\",\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+
+        String tableC = "CREATE TABLE table_c (\n" +
+                "    col_a BIGINT NOT NULL,\n" +
+                "    col_tenant BIGINT NOT NULL,\n" +
+                "    col_x BIGINT,\n" +
+                "    col_conf DECIMAL(5,4),\n" +
+                "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n" +
+                ")\n" +
+                "PRIMARY KEY(`col_a`, `col_tenant`)\n" +
+                "DISTRIBUTED BY HASH(col_tenant, col_a) BUCKETS 1\n" +
+                "PROPERTIES(\n" +
+                "  \"replication_num\" = \"1\"\n" +
+                ");";
+        String viewA = "CREATE OR REPLACE VIEW view_a (\n" +
+                "        col_a,\n" +
+                "        col_tenant,\n" +
+                "        col_x,\n" +
+                "        col_score\n" +
+                ")\n" +
+                "AS SELECT\n" +
+                "  table_a.col_a,\n" +
+                "  table_a.col_tenant,\n" +
+                "  COALESCE(table_c.col_x, table_a.col_x) AS col_x,\n" +
+                "  table_b.col_score\n" +
+                "FROM\n" +
+                "    table_a\n" +
+                "LEFT JOIN\n" +
+                "    table_b ON table_b.col_a = table_a.col_a\n" +
+                "    AND table_b.col_tenant = table_a.col_tenant\n" +
+                "LEFT JOIN \n" +
+                "    table_c ON table_a.col_a = table_c.col_a\n" +
+                "    AND table_c.col_tenant = table_a.col_tenant;";
+        starRocksAssert.withTable(tableA);
+        starRocksAssert.withTable(tableB);
+        starRocksAssert.withTable(tableC);
+        starRocksAssert.withView(viewA);
         FeConstants.runningUnitTest = true;
     }
 
@@ -946,5 +1006,39 @@ public class TablePruningTest extends TablePruningTestBase {
         starRocksAssert.dropTable("s1");
         starRocksAssert.dropTable("s2");
         starRocksAssert.dropTable("s3");
+    }
+
+    @Test
+    public void testJoinMissingOtherConjuncts() throws Exception {
+        String sql = "SELECT COUNT(col_a)\n" +
+                "FROM view_a\n" +
+                "WHERE col_x = 1002 AND col_tenant = 1001\n" +
+                "LIMIT 10;";
+        checkHashJoinCountWithBothRBOAndCBO(sql, 1);
+        ctx.getSessionVariable().setEnableRboTablePrune(true);
+        ctx.getSessionVariable().setEnableCboTablePrune(true);
+        String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
+        Assertions.assertTrue(plan.contains("  3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: col_a = 11: col_a\n" +
+                "  |  equal join conjunct: 2: col_tenant = 12: col_tenant\n" +
+                "  |  other predicates: coalesce(13: col_x, 3: col_x) = 1002"));
+    }
+
+    @Test
+    public void testSelfInnerJoinWithOtherConjuncts() throws Exception {
+        String sql = "select count(1) from \n" +
+                "table_a a1 inner join table_a a2 \n" +
+                "\ton a1.col_a = a2.col_a and \n" +
+                "\ta1.col_tenant = a2.col_tenant and \n" +
+                "\ta1.created_at < a2.updated_at;";
+        checkHashJoinCountWithOnlyCBO(sql, 0);
+        ctx.getSessionVariable().setEnableCboTablePrune(true);
+        String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
+        Assertions.assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: table_a\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: created_at < 5: updated_at"));
     }
 }
