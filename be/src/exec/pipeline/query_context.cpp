@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "agent/master_info.h"
+#include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
@@ -29,6 +30,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
+#include "util/defer_op.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 
@@ -417,10 +419,20 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
             // lookup query context for the second chance in sc_map
             if (sc_it != sc_map.end()) {
                 auto ctx = std::move(sc_it->second);
-                sc_map.erase(sc_it);
-                RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(ctx);
                 auto* raw_ctx_ptr = ctx.get();
-                context_map.emplace(query_id, std::move(ctx));
+                sc_map.erase(sc_it);
+                auto cancel_status = [ctx]() -> Status {
+                    RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(ctx);
+                    return Status::OK();
+                }();
+                // If there are still active fragments, we cannot directly remove the query context
+                // because the operator is still executing.
+                // We need to wait until the fragment execution is complete,
+                // then call QueryContextManager::remove to safely remove this query context.
+                if (cancel_status.ok() || ctx->has_no_active_instances()) {
+                    context_map.emplace(query_id, std::move(ctx));
+                }
+                RETURN_IF_ERROR(cancel_status);
                 return raw_ctx_ptr;
             }
         }
