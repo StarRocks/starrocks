@@ -129,7 +129,7 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
     }
 }
 
-TEST_F(UtilityFunctionsTest, makeSortKeyBasicOrdering) {
+TEST_F(UtilityFunctionsTest, encodeSortKeyBasicOrdering) {
     FunctionContext* ctx = FunctionContext::create_test_context();
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
 
@@ -180,7 +180,7 @@ TEST_F(UtilityFunctionsTest, makeSortKeyBasicOrdering) {
 
     // verify each column
     for (auto& col : cols) {
-        ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::make_sort_key(ctx, {col}));
+        ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::encode_sort_key(ctx, {col}));
         auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
         ASSERT_EQ(3, bin->size());
 
@@ -190,7 +190,7 @@ TEST_F(UtilityFunctionsTest, makeSortKeyBasicOrdering) {
     }
 
     // verify all columns
-    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::make_sort_key(ctx, cols));
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::encode_sort_key(ctx, cols));
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
     ASSERT_EQ(3, bin->size());
 
@@ -200,7 +200,7 @@ TEST_F(UtilityFunctionsTest, makeSortKeyBasicOrdering) {
     ASSERT_LT(keys[1].compare(keys[2]), 0);
 }
 
-TEST_F(UtilityFunctionsTest, makeSortKeyNullHandling) {
+TEST_F(UtilityFunctionsTest, encodeSortKeyNullHandling) {
     FunctionContext* ctx = FunctionContext::create_test_context();
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
 
@@ -221,7 +221,7 @@ TEST_F(UtilityFunctionsTest, makeSortKeyNullHandling) {
     cols.emplace_back(c_int);
     cols.emplace_back(c_str);
 
-    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::make_sort_key(ctx, cols));
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::encode_sort_key(ctx, cols));
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
     ASSERT_EQ(4, bin->size());
 
@@ -259,7 +259,7 @@ TEST_F(UtilityFunctionsTest, makeSortKeyNullHandling) {
 
     // Verify that the sort keys are deterministic and consistent
     // Running the same operation should produce identical results
-    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out2, UtilityFunctions::make_sort_key(ctx, cols));
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out2, UtilityFunctions::encode_sort_key(ctx, cols));
     auto* bin2 = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out2);
     ASSERT_EQ(4, bin2->size());
 
@@ -269,7 +269,7 @@ TEST_F(UtilityFunctionsTest, makeSortKeyNullHandling) {
     }
 }
 
-TEST_F(UtilityFunctionsTest, makeSortKeyStringEscaping) {
+TEST_F(UtilityFunctionsTest, encodeSortKeyStringEscaping) {
     FunctionContext* ctx = FunctionContext::create_test_context();
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
 
@@ -284,7 +284,7 @@ TEST_F(UtilityFunctionsTest, makeSortKeyStringEscaping) {
     cols.emplace_back(c1);
     cols.emplace_back(c2);
 
-    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::make_sort_key(ctx, cols));
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::encode_sort_key(ctx, cols));
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
     ASSERT_EQ(2, bin->size());
     // Ensure keys are comparable and not identical

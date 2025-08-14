@@ -1,8 +1,8 @@
--- name: test_make_sort_key_json
-CREATE DATABASE test_make_sort_key_json;
+-- name: test_encode_sort_key_json
+CREATE DATABASE test_encode_sort_key_json;
 -- result:
 -- !result
-USE test_make_sort_key_json;
+USE test_encode_sort_key_json;
 -- result:
 -- !result
 CREATE TABLE `json_test_table` (
@@ -11,7 +11,7 @@ CREATE TABLE `json_test_table` (
   `json_array` json ,
   `json_nested` json,
   `sort_key` varbinary(1024) AS (
-    make_sort_key(
+    encode_sort_key(
       get_json_int(json_data, '$.age'),
       get_json_string(json_data, '$.name'),
       get_json_string(json_data, '$.city'),
@@ -118,6 +118,6 @@ ORDER BY sort_key;
 5	{"age": 35, "city": "Seattle", "name": "Eve"}	["blueberry", "raspberry", "blackberry"]
 7	{"age": 40}	[]
 -- !result
-DROP DATABASE test_make_sort_key_json;
+DROP DATABASE test_encode_sort_key_json;
 -- result:
 -- !result

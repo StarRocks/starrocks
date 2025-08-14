@@ -460,7 +460,7 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
                 encode_float32(data[i], &(*buffs)[i]);
             } else if constexpr (std::is_same_v<T, double>) {
                 encode_float64(data[i], &(*buffs)[i]);
-            } else if constexpr (std::is_integral_v<T>) {
+            } else if constexpr (std::is_integral_v<T> && sizeof(T) <= 8) {
                 encoding_utils::encode_integral<T>(data[i], &(*buffs)[i]);
             } else if constexpr (std::is_same_v<T, DateValue>) {
                 encoding_utils::encode_integral<int32_t>(data[i].julian(), &(*buffs)[i]);
@@ -470,7 +470,7 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
                 encoding_utils::encode_integral<int64_t>(data[i].timestamp(), &(*buffs)[i]);
             } else {
                 return Status::NotSupported(
-                        fmt::format("make_sort_key: unsupported argument type: {}", typeid(T).name()));
+                        fmt::format("encode_sort_key: unsupported argument type: {}", typeid(T).name()));
             }
         }
         return Status::OK();
@@ -481,12 +481,12 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     Status do_visit(const T& column) {
         // Even for unsupported types, we should check null mask to be consistent
         // but since we're returning an error anyway, we can skip the null check
-        return Status::NotSupported("make_sort_key: unsupported argument type");
+        return Status::NotSupported("encode_sort_key: unsupported argument type");
     }
 };
 } // namespace detail
 
-// The encoding strategy of make_sort_key is as follows:
+// The encoding strategy of encode_sort_key is as follows:
 //
 // - For each input column, each row's value is encoded into a binary buffer
 //   using an order-preserving encoding. The encoding method depends on the
@@ -512,11 +512,11 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
 //
 // - The result is a composite binary key for each row, which preserves the
 //   original sort order of the input columns when compared lexicographically.
-StatusOr<ColumnPtr> UtilityFunctions::make_sort_key(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, const Columns& columns) {
     const char* NOT_NULL_MARKER = "\1";
     const char* COLUMN_SEPARATOR = "\0";
     int num_args = columns.size();
-    RETURN_IF(num_args < 1, Status::InvalidArgument("make_sort_key requires at least 1 argument"));
+    RETURN_IF(num_args < 1, Status::InvalidArgument("encode_sort_key requires at least 1 argument"));
 
     size_t num_rows = columns[0]->size();
     auto result = ColumnBuilder<TYPE_VARBINARY>(num_rows);

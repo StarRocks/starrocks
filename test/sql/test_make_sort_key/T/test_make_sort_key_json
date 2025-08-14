@@ -1,6 +1,6 @@
--- name: test_make_sort_key_json
-CREATE DATABASE test_make_sort_key_json;
-USE test_make_sort_key_json;
+-- name: test_encode_sort_key_json
+CREATE DATABASE test_encode_sort_key_json;
+USE test_encode_sort_key_json;
 
 -- Create a table with JSON data types and a single generated sort key column
 -- The sort key extracts specific fields from JSON and combines them for efficient sorting
@@ -10,7 +10,7 @@ CREATE TABLE `json_test_table` (
   `json_array` json ,
   `json_nested` json,
   `sort_key` varbinary(1024) AS (
-    make_sort_key(
+    encode_sort_key(
       get_json_int(json_data, '$.age'),
       get_json_string(json_data, '$.name'),
       get_json_string(json_data, '$.city'),
@@ -43,7 +43,7 @@ INSERT INTO json_test_table (id, json_data, json_array, json_nested) VALUES
      parse_json('{"user": {"id": 105, "profile": {"verified": false, "score": 78.9}}}'));
 
 -- Test 1: Verify that the generated sort key column is automatically populated
--- This shows how make_sort_key extracts and combines JSON fields
+-- This shows how encode_sort_key extracts and combines JSON fields
 SELECT id, 
        json_data, 
        get_json_int(json_data, '$.age') as age,
@@ -83,4 +83,4 @@ FROM json_test_table
 ORDER BY sort_key;
 
 -- Clean up
-DROP DATABASE test_make_sort_key_json;
+DROP DATABASE test_encode_sort_key_json;
