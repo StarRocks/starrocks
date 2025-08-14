@@ -330,7 +330,9 @@ int64_t UpdateManager::get_delta_column_group_file_size_by_tablet_id(int64_t tab
     std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
     auto itr = _delta_column_group_cache.lower_bound(TabletSegmentId(tablet_id, 0));
     while (itr != _delta_column_group_cache.end() && itr->first.tablet_id == tablet_id) {
-        file_size += itr->second[0]->file_size(); // only latest dcg file size.
+        if (!itr->second.empty()) {
+            file_size += itr->second[0]->file_size(); // only latest dcg file size.
+        }
         itr++;
     }
     return file_size;

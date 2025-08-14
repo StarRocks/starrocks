@@ -755,7 +755,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     int64_t total_do_update_time = 0;
     int64_t total_finalize_dcg_time = 0;
     int64_t handle_cnt = 0;
-    int64_t total_segment_file_size = 0;
+    std::map<uint32_t, uint64_t> rssid_to_segment_file_size;
     // must record unique column id in delta column group
     // dcg_column_ids and dcg_column_files are mapped one to the other. E.g.
     // {{1,2}, {3,4}} -> {"aaa.cols", "bbb.cols"}
@@ -815,7 +815,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             dcg_column_ids[each.first].push_back(selective_unique_update_column_ids);
             dcg_column_files[each.first].push_back(file_name(delta_column_group_writer->segment_path()));
             handle_cnt++;
-            total_segment_file_size += segment_file_size;
+            rssid_to_segment_file_size[each.first] += segment_file_size;
         }
         idx++;
     }
@@ -824,7 +824,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         _rssid_to_delta_column_group[each.first] = std::make_shared<DeltaColumnGroup>();
         _rssid_to_delta_column_group[each.first]->init(latest_applied_version.major_number() + 1,
                                                        dcg_column_ids[each.first], dcg_column_files[each.first], {},
-                                                       total_segment_file_size);
+                                                       rssid_to_segment_file_size[each.first]);
     }
     cost_str << " [generate delta column group] " << watch.elapsed_time();
     watch.reset();
