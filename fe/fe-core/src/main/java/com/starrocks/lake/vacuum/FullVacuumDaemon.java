@@ -54,6 +54,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static com.starrocks.rpc.LakeService.TIMEOUT_VACUUM_FULL;
 
@@ -63,8 +64,6 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
     private static final long MILLISECONDS_PER_SECOND = 1000;
 
     private final Set<Long> vacuumingPartitions = Sets.newConcurrentHashSet();
-
-    private final Map<Long, AtomicInteger> cnIdToRunningFullVacuum = new ConcurrentHashMap<>();
 
     private final BlockingThreadPoolExecutorService executorService =
             BlockingThreadPoolExecutorService.newInstance(Config.lake_fullvacuum_parallel_partitions, 0, TIMEOUT_VACUUM_FULL,
@@ -142,32 +141,6 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         }
     }
 
-    private ComputeNode selectNodeWithMinVacuum(Collection<ComputeNode> involvedNodes) {
-        ComputeNode chosenNode = null;
-        int minRunning = Integer.MAX_VALUE;
-
-        for (ComputeNode node : involvedNodes) {
-            AtomicInteger currentlyRunningFullVacuum =
-                    cnIdToRunningFullVacuum.computeIfAbsent(node.getId(), id -> new AtomicInteger(0));
-
-            int currentRunning = currentlyRunningFullVacuum.get();
-            if (currentRunning < minRunning) {
-                minRunning = currentRunning;
-                chosenNode = node;
-            }
-        }
-
-        if (chosenNode == null || chosenNode.getHost() == null) {
-            LOG.error("Could not find usable ComputeNode to send full vacuum. Problem: {}",
-                    chosenNode == null ? "ComputeNode is null" : "Host is null");
-            return null;
-        } else {
-            cnIdToRunningFullVacuum.get(chosenNode.getId()).incrementAndGet();
-        }
-
-        return chosenNode;
-    }
-
     private void vacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {
         LOG.info("Running orphan file deletion task for table={}, partition={}.", table.getName(), partition.getId());
         List<Tablet> tablets = new ArrayList<>();
@@ -208,6 +181,16 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
             nodeToTablet.put(node, tablet); // save any one tablet of this node
         }
 
+        if (involvedNodes.isEmpty()) {
+            LOG.error("Could not find any CN node for full vacuum, returning early.");
+            return;
+        }
+
+        // choose a node for full vacuum by random
+        List<ComputeNode> involvedNodesList = involvedNodes.stream().collect(Collectors.toList());
+        Collections.shuffle(involvedNodesList);
+        ComputeNode chosenNode = involvedNodesList.get(0);
+
         VacuumFullRequest vacuumFullRequest = new VacuumFullRequest();
         vacuumFullRequest.setPartitionId(partition.getId());
         vacuumFullRequest.setMinActiveTxnId(minActiveTxnId);
@@ -225,12 +208,6 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         vacuumFullRequest.setMinCheckVersion(minCheckVersion);
         vacuumFullRequest.setMaxCheckVersion(maxCheckVersion);
         vacuumFullRequest.setRetainVersions(retainVersions);
-
-        ComputeNode chosenNode = selectNodeWithMinVacuum(involvedNodes);
-        if (chosenNode == null) {
-            return;
-        }
-
         vacuumFullRequest.setTabletId(nodeToTablet.get(chosenNode).getId());
 
         LOG.info(
@@ -275,8 +252,6 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
             LOG.error("failed to full vacuum {}.{}.{}: {}", db.getFullName(), table.getName(), partition.getId(),
                     e.getMessage());
             hasError = true;
-        } finally {
-            cnIdToRunningFullVacuum.get(chosenNode.getId()).decrementAndGet();
         }
 
         partition.setLastFullVacuumTime(startTime);
