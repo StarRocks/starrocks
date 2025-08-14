@@ -2117,7 +2117,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, con
 // So we need `_check_conflict_with_partial_update` to detect this conflict and cancel this compaction.
 Status TabletUpdates::_check_conflict_with_partial_update(CompactionInfo* info) {
     TEST_SYNC_POINT_CALLBACK("TabletUpdates::_check_conflict_with_partial_update", &info->start_version);
-    if (info->is_empty) {
+    if (info->is_empty_output) {
         return Status::OK();
     }
     // check if compaction's start version is too old to decide whether conflict happens
@@ -3016,7 +3016,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         // delta column back to main segment file too soon, for save compaction IO cost.
         // Separate delta column won't affect query performance.
         if (info->inputs.size() > 1 && has_partial_update_by_column && config::enable_lazy_delta_column_compaction) {
-            info->is_empty = true;
+            info->is_empty_output = true;
             break;
         }
         info->inputs.push_back(e.rowsetid);
@@ -3132,7 +3132,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
                 for (auto& e : candidates) {
                     info->inputs.emplace_back(e.rowsetid);
                 }
-                info->is_empty = true;
+                info->is_empty_output = true;
                 VLOG(1) << "trigger lazy compaction strategy for tablet:" << _tablet.tablet_id()
                         << " because of column update rowset count:" << candidates.size();
                 // only merge empty rowsets, so no need to consider other level
