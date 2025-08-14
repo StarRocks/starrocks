@@ -19,6 +19,16 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
+/*
+* This rule is used to remove Scan Node Output Properties requested by the RequiredPropertyDriver,
+* but ultimately unused.
+* If there are no nodes between the Exchange and the Scan Node requesting these properties,
+* Optional Output Properties on the Scan Node are unused.
+* For example, if both the left and right tables are bucket column partitioned tables,
+* but the number of buckets differs, a bucket shuffle join is required.
+* And then the upstream node of the Scan Node for the right table is an Exchange,
+* the Output Property on the right table is unused and should be removed.
+*/
 public class RemoveUselessScanOutputPropertyRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
@@ -29,7 +39,7 @@ public class RemoveUselessScanOutputPropertyRule implements TreeRewriteRule {
 
     public static class RemoveUselessOutputPropertyVisitor extends OptExpressionVisitor<Void, Boolean> {
         @Override
-        public Void visit(OptExpression optExpression, Boolean context) {
+        public Void visit(OptExpression optExpression, Boolean removeOutputProperty) {
             // set operation except/intersect/union
             // join operation
             if (optExpression.getInputs().size() > 1) {
@@ -38,36 +48,36 @@ public class RemoveUselessScanOutputPropertyRule implements TreeRewriteRule {
                 }
             } else {
                 for (OptExpression opt : optExpression.getInputs()) {
-                    opt.getOp().accept(this, opt, context);
+                    opt.getOp().accept(this, opt, removeOutputProperty);
                 }
             }
             return null;
         }
 
         @Override
-        public Void visitPhysicalHashAggregate(OptExpression optExpression, Boolean context) {
+        public Void visitPhysicalHashAggregate(OptExpression optExpression, Boolean removeOutputProperty) {
             OptExpression opt = optExpression.getInputs().get(0);
             opt.getOp().accept(this, opt, false);
             return null;
         }
 
         @Override
-        public Void visitPhysicalAnalytic(OptExpression optExpression, Boolean context) {
+        public Void visitPhysicalAnalytic(OptExpression optExpression, Boolean removeOutputProperty) {
             OptExpression opt = optExpression.getInputs().get(0);
             opt.getOp().accept(this, opt, false);
             return null;
         }
 
         @Override
-        public Void visitPhysicalDistribution(OptExpression optExpression, Boolean context) {
+        public Void visitPhysicalDistribution(OptExpression optExpression, Boolean removeOutputProperty) {
             OptExpression opt = optExpression.getInputs().get(0);
             opt.getOp().accept(this, opt, true);
             return null;
         }
 
         @Override
-        public Void visitPhysicalIcebergScan(OptExpression optExpression, Boolean context) {
-            if (context && optExpression.getOutputProperty().getDistributionProperty().isShuffle()) {
+        public Void visitPhysicalIcebergScan(OptExpression optExpression, Boolean removeOutputProperty) {
+            if (removeOutputProperty && optExpression.getOutputProperty().getDistributionProperty().isShuffle()) {
                 optExpression.setOutputProperty(PhysicalPropertySet.EMPTY);
             }
             return null;
