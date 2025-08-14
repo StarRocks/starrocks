@@ -29,7 +29,6 @@
 #include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
 #include "storage/lake/filenames.h"
-#include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/pk_tablet_writer.h"
@@ -38,6 +37,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
+#include "storage/load_spill_block_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
@@ -307,9 +307,11 @@ Status DeltaWriterImpl::build_schema_and_writer() {
             !(_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
               (!_merge_condition.empty() || is_partial_update() || _tablet_schema->has_separate_sort_key()))) {
             if (_load_spill_block_mgr == nullptr || !_load_spill_block_mgr->is_initialized()) {
-                _load_spill_block_mgr =
-                        std::make_unique<LoadSpillBlockManager>(UniqueId(_load_id).to_thrift(), _tablet_id, _txn_id,
-                                                                _tablet_manager->tablet_root_location(_tablet_id));
+                _load_spill_block_mgr = std::make_unique<LoadSpillBlockManager>(
+                        UniqueId(_load_id).to_thrift(),
+                        UniqueId(_tablet_id, _txn_id)
+                                .to_thrift(), // use tablet id + txn id to generate fragment instance id
+                        _tablet_manager->tablet_root_location(_tablet_id));
                 RETURN_IF_ERROR(_load_spill_block_mgr->init());
             }
             // Init SpillMemTableSink

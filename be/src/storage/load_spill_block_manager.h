@@ -23,8 +23,6 @@ namespace starrocks {
 
 class ThreadPoolToken;
 
-namespace lake {
-
 class LoadSpillBlockMergeExecutor {
 public:
     LoadSpillBlockMergeExecutor() {}
@@ -60,17 +58,14 @@ private:
 class LoadSpillBlockManager {
 public:
     // Constructor that initializes the LoadSpillBlockManager with a query ID and remote spill path.
-    LoadSpillBlockManager(const TUniqueId& load_id, int64_t tablet_id, int64_t txn_id,
+    LoadSpillBlockManager(const TUniqueId& load_id, const TUniqueId& fragment_instance_id,
                           const std::string& remote_spill_path)
-            : _load_id(load_id), _tablet_id(tablet_id), _txn_id(txn_id) {
+            : _load_id(load_id), _fragment_instance_id(fragment_instance_id) {
         _remote_spill_path = remote_spill_path + "/load_spill";
     }
 
     // Default destructor.
     ~LoadSpillBlockManager();
-
-    int64_t tablet_id() const { return _tablet_id; }
-    int64_t txn_id() const { return _txn_id; }
 
     // Initializes the LoadSpillBlockManager.
     Status init();
@@ -87,10 +82,13 @@ public:
 
     bool has_spill_block() const { return _block_container != nullptr && !_block_container->empty(); }
 
+    const TUniqueId& load_id() const { return _load_id; }
+
+    const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
+
 private:
     TUniqueId _load_id;                                        // Unique ID for the load.
-    int64_t _tablet_id;                                        // ID for the tablet.
-    int64_t _txn_id;                                           // ID for the transaction.
+    TUniqueId _fragment_instance_id;                           // Unique ID for the fragment instance.
     std::string _remote_spill_path;                            // Path for remote spill storage.
     std::unique_ptr<spill::DirManager> _remote_dir_manager;    // Manager for remote directories.
     std::unique_ptr<spill::BlockManager> _block_manager;       // Manager for blocks.
@@ -98,5 +96,4 @@ private:
     bool _initialized = false;                                 // Whether the manager is initialized.
 };
 
-} // namespace lake
 } // namespace starrocks
