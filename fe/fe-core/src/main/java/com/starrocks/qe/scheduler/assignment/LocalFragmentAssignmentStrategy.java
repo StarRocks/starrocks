@@ -163,16 +163,19 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                         Map.Entry::getValue,
                         Collectors.mapping(Map.Entry::getKey, Collectors.toList())
                 ));
+        boolean isNative = execFragment.getColocatedAssignment().isNative();
 
+        // bucket-aware execution on lake doesn't support assign to pipeline driver
+        // TODO, checking shall we support it
         boolean assignPerDriverSeq = usePipeline && workerIdToBucketSeqs.values().stream()
-                .allMatch(bucketSeqs -> enableAssignScanRangesPerDriverSeq(bucketSeqs, pipelineDop));
+                .allMatch(bucketSeqs -> enableAssignScanRangesPerDriverSeq(bucketSeqs, pipelineDop)) && isNative;
 
         if (!assignPerDriverSeq) {
             // these optimize depend on assignPerDriverSeq.
             fragment.disablePhysicalPropertyOptimize();
         }
 
-        long bucketScanRows = bucketScanRows(bucketSeqToScanRange);
+        long bucketScanRows = isNative ? bucketScanRows(bucketSeqToScanRange) : 0;
         int expectedInstanceNum = Math.max(1, parallelExecInstanceNum);
         long instanceAvgScanRows = bucketScanRows / Math.max(1, workerIdToBucketSeqs.size() * expectedInstanceNum);
 
