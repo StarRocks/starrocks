@@ -1525,18 +1525,21 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 if (IcebergTableOperation.fromString(clause.getTableOperationName()) 
                         == IcebergTableOperation.REWRITE_DATA_FILES) {
                     if (!(expr instanceof BinaryPredicate)) {
-                        throw new SemanticException("Invalid arg: " + expr);
+                        throw new SemanticException("Invalid parameter format: expected 'param = value', but got: " + expr);
                     }
                     BinaryPredicate binExpr = (BinaryPredicate) expr;
                     if (binExpr.getOp() != BinaryType.EQ) {
-                        throw new SemanticException("Invalid arg: " + expr);
+                        throw new SemanticException("Invalid expression:" +
+                                "only equality comparisons ('param = value') are supported, but got: " + expr);
                     } else if (!(binExpr.getChild(0) instanceof LiteralExpr) ||
                             !(binExpr.getChild(1) instanceof LiteralExpr)) {
-                        throw new SemanticException("Invalid arg: " + expr);
+                        throw new SemanticException("Invalid expression:" +
+                                "both sides of the predicate must be literals, but got: " + expr);
                     }
                     LiteralExpr constExpr = (LiteralExpr) binExpr.getChild(0);
                     if (!(constExpr instanceof StringLiteral)) {
-                        throw new SemanticException("Invalid arg: " + constExpr);
+                        throw new SemanticException("Invalid expression:" + 
+                                "the left side of the predicate must be a string literal, but got: " + constExpr);
                     } 
                     IcebergTableOperation.RewriteFileOption option = 
                             IcebergTableOperation.RewriteFileOption.fromString(((StringLiteral) constExpr).getValue());
