@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/load_spill_block_manager.h"
+#include "storage/load_spill_block_manager.h"
 
 #include <gtest/gtest.h>
 
@@ -21,7 +21,7 @@
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::lake {
+namespace starrocks {
 
 class LoadSpillBlockManagerTest : public ::testing::Test {
 public:
@@ -35,7 +35,7 @@ protected:
 
 TEST_F(LoadSpillBlockManagerTest, test_basic) {
     std::unique_ptr<LoadSpillBlockManager> block_manager =
-            std::make_unique<LoadSpillBlockManager>(TUniqueId(), 1, 1, kTestDir);
+            std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir);
     ASSERT_OK(block_manager->init());
     ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024));
     ASSERT_OK(block_manager->release_block(block));
@@ -43,7 +43,7 @@ TEST_F(LoadSpillBlockManagerTest, test_basic) {
 
 TEST_F(LoadSpillBlockManagerTest, test_write_read) {
     std::unique_ptr<LoadSpillBlockManager> block_manager =
-            std::make_unique<LoadSpillBlockManager>(TUniqueId(), 1, 1, kTestDir);
+            std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir);
     ASSERT_OK(block_manager->init());
     ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024));
     ASSERT_OK(block->append({Slice("hello"), Slice("world")}));
@@ -57,4 +57,4 @@ TEST_F(LoadSpillBlockManagerTest, test_write_read) {
     ASSERT_OK(block_manager->release_block(block));
 }
 
-} // namespace starrocks::lake
+} // namespace starrocks

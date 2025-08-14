@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/load_spill_block_manager.h"
+#include "storage/load_spill_block_manager.h"
 
 #include <vector>
 
@@ -24,7 +24,7 @@
 #include "runtime/exec_env.h"
 #include "util/threadpool.h"
 
-namespace starrocks::lake {
+namespace starrocks {
 
 static int calc_max_merge_blocks_thread() {
 #ifndef BE_TEST
@@ -117,8 +117,7 @@ Status LoadSpillBlockManager::init() {
 StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size, bool force_remote) {
     spill::AcquireBlockOptions opts;
     opts.query_id = _load_id; // load id as query id
-    opts.fragment_instance_id =
-            UniqueId(_tablet_id, _txn_id).to_thrift(); // use tablet id + txn id to generate fragment instance id
+    opts.fragment_instance_id = _fragment_instance_id;
     opts.plan_node_id = 0;
     opts.name = "load_spill";
     opts.block_size = block_size;
@@ -131,4 +130,4 @@ Status LoadSpillBlockManager::release_block(spill::BlockPtr block) {
     return _block_manager->release_block(std::move(block));
 }
 
-} // namespace starrocks::lake
+} // namespace starrocks
