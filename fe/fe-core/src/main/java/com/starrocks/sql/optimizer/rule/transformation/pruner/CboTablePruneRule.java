@@ -96,6 +96,12 @@ public class CboTablePruneRule extends TransformationRule {
         List<BinaryPredicateOperator> eqOnPredicates = onPredicates.first;
         List<ScalarOperator> otherOnPredicates = onPredicates.second;
 
+        // Sometimes, a JoinOperator may have other predicates on both Operator.predicate and
+        // LogicalJoinOperator.onPredicate, so we must tackle all of them as other predicates together.
+        if (joinOp.getPredicate() != null) {
+            otherOnPredicates.add(joinOp.getPredicate());
+        }
+
         if (eqOnPredicates.isEmpty()) {
             return Collections.emptyList();
         }
