@@ -95,6 +95,7 @@ import com.starrocks.sql.optimizer.rule.transformation.pruner.RboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.UniquenessBasedTablePruneRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.AddIndexOnlyPredicateRule;
+import com.starrocks.sql.optimizer.rule.tree.ApplyMinMaxStatisticRule;
 import com.starrocks.sql.optimizer.rule.tree.ApplyTuningGuideRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.DataCachePopulateRewriteRule;
@@ -976,6 +977,7 @@ public class QueryOptimizer extends Optimizer {
         result = new PhysicalDistributionAggOptRule().rewrite(result, rootTaskContext);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         result = new LowCardinalityRewriteRule().rewrite(result, rootTaskContext);
+        result = new ApplyMinMaxStatisticRule().rewrite(result, rootTaskContext);
         // Put before ScalarOperatorsReuseRule
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
         result = new InlineCteProjectPruneRule().rewrite(result, rootTaskContext);
