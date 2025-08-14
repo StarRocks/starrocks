@@ -43,7 +43,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
@@ -109,8 +108,8 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTableSampleOptions;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -316,6 +315,17 @@ public class OlapScanNode extends ScanNode {
         return bucketExprs;
     }
 
+    @Override
+    public int getBucketNums() {
+        int bucketNum = olapTable.getDefaultDistributionInfo().getBucketNum();
+        if (getSelectedPartitionIds().size() <= 1) {
+            for (Long pid : getSelectedPartitionIds()) {
+                bucketNum = olapTable.getPartition(pid).getDistributionInfo().getBucketNum();
+            }
+        }
+        return bucketNum;
+    }
+
     public void setBucketExprs(List<Expr> bucketExprs) {
         this.bucketExprs = bucketExprs;
     }
@@ -348,13 +358,7 @@ public class OlapScanNode extends ScanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-        super.init(analyzer);
-        computePartitionInfo();
-    }
-
-    @Override
-    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+    public void finalizeStats() throws StarRocksException {
         if (isFinalized) {
             return;
         }
@@ -366,12 +370,12 @@ public class OlapScanNode extends ScanNode {
             throw new StarRocksException(e.getMessage());
         }
 
-        computeStats(analyzer);
+        computeStats();
         isFinalized = true;
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
+    public void computeStats() {
         if (cardinality > 0) {
             long totalBytes = 0;
             avgRowSize = totalBytes / (float) cardinality;
@@ -683,7 +687,7 @@ public class OlapScanNode extends ScanNode {
         }
     }
 
-    private void computePartitionInfo() throws AnalysisException {
+    public void computePartitionInfo() throws AnalysisException {
         long start = System.currentTimeMillis();
         // Step1: compute partition ids
         PartitionNames partitionNames = desc.getRef().getPartitionNames();

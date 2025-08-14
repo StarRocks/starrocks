@@ -101,7 +101,7 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         }
         _files.emplace_back(file_info);
         _data_size += segment_size;
-        _stats.bytes_write += segment_size;
+        collect_writer_stats(_stats, _seg_writer.get());
         _stats.segment_count++;
         if (segment) {
             segment->set_data_size(segment_size);

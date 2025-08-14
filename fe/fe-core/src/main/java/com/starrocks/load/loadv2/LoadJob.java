@@ -50,7 +50,6 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
@@ -95,9 +94,6 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1259,8 +1255,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 && this.jobType.equals(other.jobType);
     }
 
-
-
     public void replayUpdateStateInfo(LoadJobStateUpdateInfo info) {
         state = info.getState();
         transactionId = info.getTransactionId();
@@ -1309,16 +1303,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             return GsonUtils.GSON.toJson(this);
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            String json = GsonUtils.GSON.toJson(this);
-            Text.writeString(out, json);
-        }
 
-        public static LoadJobStateUpdateInfo read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, LoadJobStateUpdateInfo.class);
-        }
+
+
     }
 
     public static class JSONOptions {

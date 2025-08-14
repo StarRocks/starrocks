@@ -531,6 +531,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：用于异步处理 HTTP 请求的线程池大小。别名为 `max_http_sql_service_task_threads_num`。
 - 引入版本：4.0.0
 
+##### enable_https
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：No
+- 描述：是否在 FE 节点上同时启用 HTTPS 服务器和 HTTP 服务器。
+- 引入版本：v4.0
+
+##### https_port
+
+- 默认值：8443
+- 类型：Int
+- 单位：-
+- 是否动态：No
+- 描述：FE 节点中 HTTPS 服务器监听的端口。
+- 引入版本：v4.0
+
 ##### cluster_name
 
 - 默认值：StarRocks Cluster
@@ -2039,17 +2057,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 -->
 
-<!--
-##### prepared_transaction_default_timeout_second
-
-- 默认值：86400
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### max_load_timeout_second
 
 - 默认值：259200
@@ -2066,6 +2073,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：Seconds
 - 是否动态：是
 - 描述：导入作业的最小超时时间，适用于所有导入。
+- 引入版本：-
+
+##### prepared_transaction_default_timeout_second
+
+- 默认值：86400
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：预提交事务的默认超时时间。
 - 引入版本：-
 
 ##### spark_dpp_version
@@ -2494,6 +2510,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：事务标签与coordinator节点映射关系在缓存中的存活时间(TTL)。
 - 引入版本：-
+
+##### enable_file_bundling
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为云原生表启用 File Bundling 优化功能。当启用该功能（设置为 `true`）时，系统会自动将导入、Compaction 或 Publish 操作生成的数据文件进行打包，从而减少因频繁访问外部存储系统而产生的 API 成本。您还可以通过 CREATE TABLE 语句的 `file_bundling` 属性在表级别控制此行为。有关详细说明，请参阅 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
+- 引入版本：v4.0
 
 ### 存储
 

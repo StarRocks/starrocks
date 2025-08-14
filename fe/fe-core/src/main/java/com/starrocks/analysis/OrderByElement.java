@@ -36,11 +36,9 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -119,25 +117,6 @@ public class OrderByElement implements ParseNode {
         return result;
     }
 
-    /**
-     * Returns a new list of order-by elements with the order by exprs of src substituted
-     * according to smap. Preserves the other sort params from src.
-     *
-     * @throws AnalysisException
-     */
-    public static ArrayList<OrderByElement> substitute(List<OrderByElement> src,
-                                                       ExprSubstitutionMap smap, Analyzer analyzer)
-            throws AnalysisException {
-        ArrayList<OrderByElement> result = Lists.newArrayListWithCapacity(src.size());
-
-        for (OrderByElement element : src) {
-            result.add(new OrderByElement(element.getExpr().substitute(smap, analyzer, false),
-                    element.isAsc, element.nullsFirstParam));
-        }
-
-        return result;
-    }
-
     public String toSql() {
         StringBuilder strBuilder = new StringBuilder();
         strBuilder.append(expr.toSql());
@@ -160,6 +139,19 @@ public class OrderByElement implements ParseNode {
     @Override
     public NodePosition getPos() {
         return pos;
+    }
+
+    /**
+     * Try to extract the column name from the `expr`.
+     * If the `expr` represents a valid column, the column name will be returned.
+     * Otherwise, it will return null.
+     */
+    public String castAsSlotRef() {
+        if (!(expr instanceof SlotRef)) {
+            return null;
+        }
+        SlotRef slotRef = (SlotRef) expr;
+        return slotRef.getColumnName();
     }
 
     public String explain() {

@@ -1,0 +1,155 @@
+-- name: test_partition_prune_with_last_day1 @slow
+
+-- set disable_function_fold_constants=true;
+
+CREATE TABLE t1 (
+    dt datetime,
+    province string,
+    num int
+)
+DUPLICATE KEY(dt, province)
+PARTITION BY date_trunc('day', dt)
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO t1(dt, province, num)
+SELECT minutes_add(hours_add(date_add('2025-01-01', x), x%24), x%60), concat('x-', x%3), x
+FROM TABLE(generate_series(0, 500)) as t(x);
+-- Check the number of partitions
+INSERT INTO t1(dt, province, num) SELECT NULL, NULL, NULL;
+function: print_plan_partition_selected_num("select count(*) from t1 where last_day(dt) = '2025-01-01';", "t1")
+
+function: print_table_partitions_num("t1")
+
+select last_day('2025-01-01');
+select last_day('2025-01-02');
+select last_day('2025-02-28');
+select last_day('invalid');
+select last_day(null);
+
+SELECT dt, last_day(dt) AS last_day_val FROM t1 ORDER BY dt limit 10;
+-- check last_day function
+select count(*) from t1 where last_day(dt) = '2025-01-01';
+SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-01-31';
+SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-02-28';
+SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-03-31';
+SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-04-30';
+SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-05-31';
+SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-06-30';
+SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-07-31';
+SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-08-31';
+SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-09-30';
+SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-10-31';
+SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-11-30';
+SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-12-31';
+SELECT count(*) FROM t1 WHERE last_day(dt) is NULL;
+SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-01-31';
+SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-02-28';
+SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-09-28';
+SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-12-28';
+SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-12-31';
+SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-12-31' or last_day(dt) is NULL;
+SELECT count(*) FROM t1 WHERE last_day(dt) = date_trunc('day', dt);
+SELECT count(*) FROM t1 WHERE last_day(dt) = date_trunc('month', dt);
+SELECT count(*) FROM t1 WHERE last_day(dt) = date_trunc('year', dt);
+
+select count(*) from t1 where last_day(dt, 'month') = '2025-01-01';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = '2025-01-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = '2025-02-28';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = '2025-03-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = '2025-04-30';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = '2025-05-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = '2025-06-30';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = '2025-07-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = '2025-08-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = '2025-09-30';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = '2025-10-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = '2025-11-30';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = '2025-12-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') is NULL;
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') BETWEEN '2025-01-01' AND '2025-01-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') BETWEEN '2025-01-01' AND '2025-02-28';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') BETWEEN '2025-01-01' AND '2025-09-28';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') BETWEEN '2025-01-01' AND '2025-12-28';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') BETWEEN '2025-01-01' AND '2025-12-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') BETWEEN '2025-01-01' AND '2025-12-31' or last_day(dt, 'month') is NULL;
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = date_trunc('day', dt);
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = date_trunc('month', dt);
+SELECT count(*) FROM t1 WHERE last_day(dt, 'month') = date_trunc('year', dt);
+select count(*) from t1 where last_day(dt, 'quarter') = '2025-01-01';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = '2025-01-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = '2025-02-28';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = '2025-03-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = '2025-04-30';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = '2025-05-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = '2025-06-30';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = '2025-07-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = '2025-08-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = '2025-09-30';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = '2025-10-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = '2025-11-30';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = '2025-12-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') is NULL;
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') BETWEEN '2025-01-01' AND '2025-01-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') BETWEEN '2025-01-01' AND '2025-02-28';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') BETWEEN '2025-01-01' AND '2025-09-28';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') BETWEEN '2025-01-01' AND '2025-12-28';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') BETWEEN '2025-01-01' AND '2025-12-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') BETWEEN '2025-01-01' AND '2025-12-31' or last_day(dt, 'quarter') is NULL;
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = date_trunc('day', dt);
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = date_trunc('month', dt);
+SELECT count(*) FROM t1 WHERE last_day(dt, 'quarter') = date_trunc('year', dt);
+select count(*) from t1 where last_day(dt, 'year') = '2025-01-01';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = '2025-01-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = '2025-02-28';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = '2025-03-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = '2025-04-30';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = '2025-05-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = '2025-06-30';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = '2025-07-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = '2025-08-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = '2025-09-30';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = '2025-10-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = '2025-11-30';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = '2025-12-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') is NULL;
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') BETWEEN '2025-01-01' AND '2025-01-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') BETWEEN '2025-01-01' AND '2025-02-28';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') BETWEEN '2025-01-01' AND '2025-09-28';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') BETWEEN '2025-01-01' AND '2025-12-28';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') BETWEEN '2025-01-01' AND '2025-12-31';
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') BETWEEN '2025-01-01' AND '2025-12-31' or last_day(dt, 'year') is NULL;
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = date_trunc('day', dt);
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = date_trunc('month', dt);
+SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = date_trunc('year', dt);
+SELECT count(*) FROM t1 WHERE  date_trunc('day', dt) < '2025-05-30' - INTERVAL 2 MONTH AND last_day(date_trunc('day', dt)) != date_trunc('day', dt);
+SELECT count(*) FROM t1 WHERE  date_trunc('day', dt) < '2025-12-30' - INTERVAL 2 MONTH AND last_day(date_trunc('day', dt)) != date_trunc('day', dt);
+
+function: print_plan_partition_selected_num("select count(*) from t1 where last_day(dt) = '2025-01-01';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-01-31';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-02-28';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-03-31';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-04-30';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-05-31';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-06-30';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-07-31';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-08-31';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-09-30';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-10-31';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-11-30';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-12-31';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) is NULL;", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-01-31';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-02-28';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-09-28';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-12-28';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-12-31';", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-12-31' or last_day(dt) is NULL;", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = date_trunc('day', dt);", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = date_trunc('month', dt);", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = date_trunc('year', dt);", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE  date_trunc('day', dt) < '2025-05-30' - INTERVAL 2 MONTH AND last_day(date_trunc('day', dt)) != date_trunc('day', dt);", "t1")
+function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE  date_trunc('day', dt) < '2025-12-30' - INTERVAL 2 MONTH AND last_day(date_trunc('day', dt)) != date_trunc('day', dt);", "t1")
+
+drop table if exists t1;

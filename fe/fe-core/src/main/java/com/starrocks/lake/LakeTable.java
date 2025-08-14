@@ -41,17 +41,13 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.io.DeepCopy;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.lake.LakeTableHelper;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -111,12 +107,6 @@ public class LakeTable extends OlapTable {
             return null;
         }
         return selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
-    }
-
-    public static LakeTable read(DataInput in) throws IOException {
-        // type is already read in Table
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeTable.class);
     }
 
     @Override
@@ -185,6 +175,7 @@ public class LakeTable extends OlapTable {
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
                                           long physicalPartitionId, Database db) {
+        // Use physical partition id as path id when creating a new physical partition
         FilePathInfo fsInfo = getPartitionFilePathInfo(physicalPartitionId);
         FileCacheInfo cacheInfo = getPartitionFileCacheInfo(physicalPartitionId);
         Map<String, String> properties = new HashMap<>();

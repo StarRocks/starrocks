@@ -35,12 +35,8 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -103,13 +99,6 @@ public class DropPartitionsInfo implements Writable {
     public void setPartitionNames(List<String> partitionNames) {
         this.partitionNames = partitionNames;
     }
-
-    public static DropPartitionsInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DropPartitionsInfo.class);
-    }
-
-
 
     @Override
     public boolean equals(Object o) {

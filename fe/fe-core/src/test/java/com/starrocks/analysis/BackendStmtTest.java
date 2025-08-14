@@ -33,11 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class BackendStmtTest {
 
-    private static Analyzer analyzer;
-
     @BeforeAll
     public static void setUp() throws Exception {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer();
     }
 
     public BackendClause createStmt(int type) {

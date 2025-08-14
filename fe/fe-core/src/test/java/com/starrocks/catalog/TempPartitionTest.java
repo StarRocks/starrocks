@@ -38,11 +38,8 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.catalog.MaterializedIndex.IndexExtState;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -61,12 +58,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -631,9 +623,6 @@ public class TempPartitionTest {
         stmtStr = "alter table db2.tbl2 add temporary partition p2 values less than('20') distributed by hash(k2) buckets 1";
         alterTableWithNewAnalyzer(stmtStr, false);
 
-        TempPartitions tempPartitions = Deencapsulation.getField(tbl2, "tempPartitions");
-        testSerializeTempPartitions(tempPartitions);
-
         stmtStr = "alter table db2.tbl2 replace partition (tp1, tp2) " +
                 "with temporary partition (p2) properties('strict_range' = 'false');";
         alterTableWithNewAnalyzer(stmtStr, false);
@@ -772,26 +761,5 @@ public class TempPartitionTest {
             FeConstants.runningUnitTest = flag;
         }
 
-    }
-
-    private void testSerializeTempPartitions(TempPartitions tempPartitionsInstance)
-            throws IOException, AnalysisException {
-        // 1. Write objects to file
-        File file = new File(tempPartitionFile);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        tempPartitionsInstance.write(out);
-        out.flush();
-        out.close();
-
-        // 2. Read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-
-        TempPartitions readTempPartition = TempPartitions.read(in);
-        List<Partition> partitions = readTempPartition.getAllPartitions();
-        Assertions.assertEquals(1, partitions.size());
-        Assertions.assertEquals(2, partitions.get(0).getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.VISIBLE).size());
     }
 }

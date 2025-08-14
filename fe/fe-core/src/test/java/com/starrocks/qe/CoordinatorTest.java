@@ -23,6 +23,7 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
@@ -87,7 +88,8 @@ public class CoordinatorTest extends PlanTestBase {
         return fragment;
     }
 
-    private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
+    private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode)
+            throws IOException, StarRocksException {
         PlanFragment fragment = genFragment();
         ExecutionFragment execFragment = new ExecutionFragment(null, fragment, 0);
         FragmentInstance instance0 = new FragmentInstance(null, execFragment);
@@ -121,12 +123,12 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     @Test
-    public void testColocateRuntimeFilter() throws IOException {
+    public void testColocateRuntimeFilter() throws IOException, StarRocksException {
         testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.COLOCATE);
     }
 
     @Test
-    public void testBucketShuffleRuntimeFilter() throws IOException {
+    public void testBucketShuffleRuntimeFilter() throws IOException, StarRocksException {
         testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.LOCAL_HASH_BUCKET);
     }
 
@@ -158,7 +160,7 @@ public class CoordinatorTest extends PlanTestBase {
 
         BinlogScanNode binlogScan = new BinlogScanNode(planNodeId, tupleDesc);
         binlogScan.setFragmentId(fragmentId);
-        binlogScan.finalizeStats(null);
+        binlogScan.finalizeStats();
 
         List<ScanNode> scanNodes = Arrays.asList(binlogScan);
         CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(Lists.newArrayList(), scanNodes,
@@ -207,7 +209,7 @@ public class CoordinatorTest extends PlanTestBase {
         List<PlanFragment> fragments = new ArrayList<>();
         BinlogScanNode binlogScan = new BinlogScanNode(new PlanNodeId(1), scanTuple);
         binlogScan.setFragmentId(fragmentId);
-        binlogScan.finalizeStats(null);
+        binlogScan.finalizeStats();
         List<ScanNode> scanNodes = Arrays.asList(binlogScan);
 
         // Build agg node

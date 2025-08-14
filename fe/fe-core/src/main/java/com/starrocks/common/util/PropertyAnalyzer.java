@@ -111,6 +111,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -1241,6 +1242,14 @@ public class PropertyAnalyzer {
             properties.remove(propKey);
         }
         return val;
+    }
+
+    public static Optional<Long> analyzeLongProp(Map<String, String> properties, String propKey)
+            throws AnalysisException {
+        if (properties == null || !properties.containsKey(propKey)) {
+            return Optional.empty();
+        }
+        return Optional.of(analyzeLongProp(properties, propKey, 0L));
     }
 
     public static long analyzeLongProp(Map<String, String> properties, String propKey, long defaultVal)

@@ -16,12 +16,7 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class PhysicalPartitionPersistInfoV2 implements Writable {
 
@@ -39,13 +34,6 @@ public class PhysicalPartitionPersistInfoV2 implements Writable {
         this.tableId = tableId;
         this.partitionId = partitionId;
         this.partition = partition;
-    }
-
-
-
-    public static PhysicalPartitionPersistInfoV2 read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, PhysicalPartitionPersistInfoV2.class);
     }
 
     public Long getDbId() {

@@ -131,7 +131,8 @@ Parquet フォーマットの例：
 
 ```SQL
 "format"="parquet",
-"parquet.use_legacy_encoding" = "true" -- アンロード専用
+"parquet.use_legacy_encoding" = "true",   -- アンロード専用
+"parquet.version" = "2.6"                 -- アンロード専用
 ```
 
 ###### parquet.use_legacy_encoding
@@ -153,6 +154,10 @@ DATETIME および DECIMAL データ型に使用されるエンコード技術�
 DECIMAL 128 データ型では、`fixed_len_byte_array` エンコーディングのみが使用可能です。`parquet.use_legacy_encoding` は有効になりません。
 
 :::
+
+###### parquet.version
+
+システムがデータをアンロードする Parquet のバージョンを制御します。v3.4.6 以降でサポートされています。有効な値：`1.0`、`2.4`、および`2.6`（デフォルト）。このプロパティはデータのアンロードでのみサポートされる。
 
 ##### CSV
 
@@ -210,7 +215,7 @@ CSV 形式のデータでスキップするヘッダ行の数を指定します�
 
 サンプリングルールは次のパラメータを使用して設定できます:
 
-- `auto_detect_sample_files`: 各バッチでサンプリングするランダムなデータファイルの数。範囲: [0, + ∞]。デフォルト: `1`。
+- `auto_detect_sample_files`: 各バッチでサンプリングするランダムなデータファイルの数。デフォルトでは、最初と最後のファイルが選択されます。範囲: [0, + ∞]。デフォルト: `2`。
 - `auto_detect_sample_rows`: 各サンプリングされたデータファイルでスキャンするデータ行の数。範囲: [0, + ∞]。デフォルト: `500`。
 
 サンプリング後、StarRocks は次のルールに従ってすべてのデータファイルから列を統合します:

@@ -1,4 +1,4 @@
--- name: test_basic_window_function_2
+-- name: test_basic_window_function_2 @slow
 CREATE TABLE `t0` (
     `v1` int(11) NULL,
     `v2` int(11) NULL,

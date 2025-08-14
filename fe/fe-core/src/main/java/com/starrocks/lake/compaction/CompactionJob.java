@@ -193,6 +193,7 @@ public class CompactionJob {
         stat.readSegmentCount = 0L;
         stat.writeSegmentCount = 0L;
         stat.writeSegmentBytes = 0L;
+        stat.writeTimeRemote = 0L;
         stat.inQueueTimeSec = 0;
         for (CompactionTask task : tasks) {
             List<CompactStat> subStats = task.getCompactStats();
@@ -227,6 +228,9 @@ public class CompactionJob {
                 }
                 if (subStat.writeSegmentBytes != null) {
                     stat.writeSegmentBytes += subStat.writeSegmentBytes;
+                }
+                if (subStat.writeTimeRemote != null) {
+                    stat.writeTimeRemote += subStat.writeTimeRemote;
                 }
             }
             stat.subTaskCount += subTaskCount;

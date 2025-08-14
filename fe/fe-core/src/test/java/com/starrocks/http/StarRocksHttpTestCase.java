@@ -446,7 +446,13 @@ public abstract class StarRocksHttpTestCase {
             }
         }
 
-        httpServer = new HttpServer(HTTP_PORT);
+        try {
+            httpServer = new HttpServer(HTTP_PORT);
+        } catch (Exception e) {
+            System.err.println("Failed to initialize HttpServer: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("HttpServer initialization failed", e);
+        }
         httpServer.setup();
         httpServer.start();
         // must ensure the http server started before any unit test

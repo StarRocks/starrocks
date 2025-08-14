@@ -136,11 +136,6 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
         }
     }
 
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        // Literals require no analysis.
-    }
-
     /*
      * return real object value
      */

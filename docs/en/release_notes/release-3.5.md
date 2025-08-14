@@ -10,7 +10,47 @@ After upgrading StarRocks to v3.5, DO NOT downgrade it directly to v3.4.0 ～ v3
 
 :::
 
-## v3.5.2
+## 3.5.3
+
+Release Date: August 11, 2025
+
+### Improvements
+
+- Lake Compaction adds Segment write time statistics. [#60891](https://github.com/StarRocks/starrocks/pull/60891)
+- Disable inline mode for Data Cache writes to avoid performance degradation. [#60530](https://github.com/StarRocks/starrocks/pull/60530)
+- Iceberg metadata scan supports shared file I/O. [#61012](https://github.com/StarRocks/starrocks/pull/61012)
+- Support termination of all PENDING ANALYZE tasks. [#61118](https://github.com/StarRocks/starrocks/pull/61118)
+- Force reuse when there are too many CTE nodes to avoid excessive optimization time. [#60983](https://github.com/StarRocks/starrocks/pull/60983)
+- Added `BALANCE` type to cluster balance results. [#61081](https://github.com/StarRocks/starrocks/pull/61081)
+- Optimized materialized view rewrite for external tables. [#61037](https://github.com/StarRocks/starrocks/pull/61037)
+- Default value of system variable `enable_materialized_view_agg_pushdown_rewrite` is changed to `true`, enabling aggregation pushdown for materialized view queries by default. [#60976](https://github.com/StarRocks/starrocks/pull/60976)
+- Optimized partition statistics lock competition. [#61041](https://github.com/StarRocks/starrocks/pull/61041)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Inconsistent Chunk column size after column pruning. [#61271](https://github.com/StarRocks/starrocks/pull/61271)
+- Synchronous execution of partition statistics loading may cause deadlocks. [#61300](https://github.com/StarRocks/starrocks/pull/61300)
+- Crash when `array_map` processes constant array columns. [#61309](https://github.com/StarRocks/starrocks/pull/61309)
+- Setting an auto-increment column to NULL results in the system mistakenly rejecting valid data within the same Chunk. [#61255](https://github.com/StarRocks/starrocks/pull/61255)
+- The actual number of JDBC connections may exceed the `jdbc_connection_pool_size` limit. [#61038](https://github.com/StarRocks/starrocks/pull/61038)
+- FQDN mode did not use IP addresses as cache map keys. [#61203](https://github.com/StarRocks/starrocks/pull/61203)
+- Array column cloning error during array comparison. [#61036](https://github.com/StarRocks/starrocks/pull/61036)
+- Deploying serialized thread pool blockage led to query performance degradation. [#61150](https://github.com/StarRocks/starrocks/pull/61150)
+- OK hbResponse not synchronized after heartbeat retry counter reset. [#61249](https://github.com/StarRocks/starrocks/pull/61249)
+- Incorrect result for the `hour_from_unixtime` function. [#61206](https://github.com/StarRocks/starrocks/pull/61206)
+- Conflicts between ALTER TABLE jobs and partition creation. [#60890](https://github.com/StarRocks/starrocks/pull/60890)
+- Cache does not take effect after upgrading from v3.3 to v3.4 or later. [#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- Vector index metric `hit_count` is not set. [#61102](https://github.com/StarRocks/starrocks/pull/61102)
+- Stream Load transactions fail to find the coordinator node. [#60154](https://github.com/StarRocks/starrocks/pull/60154)
+- BE crashes when loading OOM partitions. [#60778](https://github.com/StarRocks/starrocks/pull/60778)
+- INSERT OVERWRITE failed on manually created partitions. [#60750](https://github.com/StarRocks/starrocks/pull/60750)
+- Partition creation failed when partition names matched case-insensitively but had different values. [#60909](https://github.com/StarRocks/starrocks/pull/60909)
+- The system does not support PostgreSQL UUID type. [#61021](https://github.com/StarRocks/starrocks/pull/61021)
+- Case sensitivity issue with column names when loading Parquet data via `FILES()`. [#61059](https://github.com/StarRocks/starrocks/pull/61059)
+
+## 3.5.2
 
 Release Date: July 18, 2025
 
@@ -42,7 +82,7 @@ Fixed the following issues:
 
 - The default value of `lake_compaction_allow_partial_success` is set to `true`. Compaction operations can now be marked as successful even if partially completed, preventing blockage of subsequent compaction tasks. [#60643](https://github.com/StarRocks/starrocks/pull/60643)
 
-## v3.5.1
+## 3.5.1
 
 Release Date: July 1, 2025
 
@@ -83,7 +123,7 @@ Fixed the following issues:
 
 - Some FE metrics include the `is_leader` label. [#59883](https://github.com/StarRocks/starrocks/pull/59883)
 
-## v3.5.0
+## 3.5.0
 
 Release Date: June 13, 2025
 

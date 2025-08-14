@@ -1568,6 +1568,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：生效版本的最大线程数。当该参数被设置为小于或等于 `0` 时，系统默认使用当前节点的 CPU 核数，以避免因使用固定值而导致在导入并行较高时线程资源不足。自 2.5 版本起，默认值由 `8` 变更为 `0`。
 - 引入版本：-
 
+##### transaction_publish_version_thread_pool_idle_time_ms
+
+- 默认值：60000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：否
+- 描述：线程被 Publish Version 线程池回收前的 Idle 时间。
+- 引入版本：-
+
 <!--
 ##### transaction_apply_worker_count
 
@@ -3548,7 +3557,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
-- 配置项描述: `object_storage_request_timeout_ms` 的别名。详细信息请参考配置项 [object_storage_request_timeout_ms](#object_storage_request_timeout_ms)。
+- 描述: `object_storage_request_timeout_ms` 的别名。详细信息请参考配置项 [object_storage_request_timeout_ms](#object_storage_request_timeout_ms)。
 - 引入版本: v3.3.9
 
 ##### starlet_filesystem_instance_cache_capacity
@@ -3557,7 +3566,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 配置项描述: starlet filesystem 实例的缓存容量。
+- 描述: starlet filesystem 实例的缓存容量。
 - 引入版本: v3.2.16, v3.3.11, v3.4.1
 
 ##### starlet_filesystem_instance_cache_ttl_sec
@@ -3566,8 +3575,17 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：秒
 - 是否动态：是
-- 配置项描述: starlet filesystem 实例缓存的过期时间。
+- 描述: starlet filesystem 实例缓存的过期时间。
 - 引入版本: v3.3.15, 3.4.5
+
+##### starlet_write_file_with_tag
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述: 存算分离集群下，是否将写入到对象存储的文件打上对象存储 Tag，方便自定义管理文件。
+- 引入版本: v3.5.3
 
 ##### lake_compaction_stream_buffer_size_bytes
 

@@ -1175,6 +1175,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: バージョンを公開するために使用される最大スレッド数。この値が `0` 以下に設定されている場合、システムは CPU コア数を値として使用し、インポートの同時実行が高いが固定スレッド数しか使用されない場合にスレッドリソースが不足するのを回避します。v2.5 以降、デフォルト値は `8` から `0` に変更されました。
 - 導入バージョン: -
 
+##### transaction_publish_version_thread_pool_idle_time_ms
+
+- デフォルト: 60000
+- タイプ: Int
+- 単位: ミリ秒
+- 可変: いいえ
+- 説明: スレッドが Publish Version スレッドプールによって再利用されるまでの Idle 時間。
+- 導入バージョン: -
+
 ##### clear_transaction_task_worker_count
 
 - デフォルト: 1
@@ -1813,6 +1822,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: starlet filesystem インスタンス キャッシュの有効期限。
 - 導入バージョン: v3.3.15, 3.4.5
+
+##### starlet_write_file_with_tag
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 共有データクラスターにおいて、オブジェクトストレージに書き込まれたファイルにオブジェクトストレージタグを付与し、便利なカスタムファイル管理を行うかどうか。
+- 導入バージョン: v3.5.3
 
 ##### lake_compaction_stream_buffer_size_bytes
 

@@ -14,9 +14,6 @@
 
 #pragma once
 
-#include <rapidjson/document.h>
-
-#include "column/column_builder.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/function_helper.h"
 

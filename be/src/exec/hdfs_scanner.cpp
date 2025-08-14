@@ -237,8 +237,9 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     // short circuit for min/max optimization.
     if (_scanner_ctx.can_use_min_max_optimization()) {
         // 3 means we output 3 values: min, max, and null
-        _scanner_ctx.append_or_update_min_max_column_to_chunk(chunk, 3);
-        size_t row_count = (*chunk)->num_rows();
+        const size_t row_count = 3;
+        (*chunk)->set_num_rows(row_count);
+        _scanner_ctx.append_or_update_min_max_column_to_chunk(chunk, row_count);
         _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, row_count);
         _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, row_count);
         _scanner_ctx.no_more_chunks = true;

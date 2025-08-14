@@ -188,9 +188,14 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 DeleteTabletResponse response = future.get();
                 Set<Long> shards = shardIdsByBeMap.get(entry.getKey());
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                    String errorMsg = "";
+                    if (response.status != null && response.status.errorMsgs != null &&
+                            !response.status.errorMsgs.isEmpty()) {
+                        errorMsg = response.status.errorMsgs.get(0);
+                    }
                     TStatusCode stCode = TStatusCode.findByValue(response.status.statusCode);
-                    LOG.info("Fail to delete tablet from node: {}. StatusCode: {}, failedTablets: {}", nodeId, stCode,
-                            response.failedTablets);
+                    LOG.info("Fail to delete tablet from node: {}. StatusCode: {}, Error: {}, failedTablets: {}",
+                            nodeId, stCode, errorMsg, response.failedTablets);
 
                     // ignore INVALID_ARGUMENT error, treat it as success
                     if (stCode != TStatusCode.INVALID_ARGUMENT) {

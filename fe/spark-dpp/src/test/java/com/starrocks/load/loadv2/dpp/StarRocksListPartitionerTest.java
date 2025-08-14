@@ -15,21 +15,21 @@ public class StarRocksListPartitionerTest {
     public void testListPartitioner() {
         List<List<Object>> inKeys1 = new ArrayList<>();
         String[] arr1 = {"2023-01-01", "us"};
-        inKeys1.add(Arrays.asList(arr1));
+        inKeys1.add(Arrays.asList((Object[]) arr1));
         EtlJobConfig.EtlPartition partition1 = new EtlJobConfig.EtlPartition(
                 10000, inKeys1, 3);
 
         List<List<Object>> inKeys2 = new ArrayList<>();
         String[] arr2 = {"2023-01-01", "cn"};
-        inKeys2.add(Arrays.asList(arr2));
+        inKeys2.add(Arrays.asList((Object[]) arr2));
         EtlJobConfig.EtlPartition partition2 = new EtlJobConfig.EtlPartition(
                 10001, inKeys2, 3);
 
         List<List<Object>> inKeys3 = new ArrayList<>();
         String[] arr3_1 = {"2022-02-01", "cn"};
-        inKeys3.add(Arrays.asList(arr3_1));
+        inKeys3.add(Arrays.asList((Object[]) arr3_1));
         String[] arr3_2 = {"2022-02-01", "us"};
-        inKeys3.add(Arrays.asList(arr3_2));
+        inKeys3.add(Arrays.asList((Object[]) arr3_2));
         EtlJobConfig.EtlPartition partition3 = new EtlJobConfig.EtlPartition(
                 10002, inKeys3, 3);
 

@@ -84,6 +84,13 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
                 slot_desc->type().type = TYPE_DOUBLE;
             }
         }
+    } else if (schema_table->schema_table_type() == TSchemaTableType::SCH_PARTITIONS_META) {
+        for (auto* slot_desc : dest_slot_descs) {
+            const auto& col_name = slot_desc->col_name();
+            if (slot_desc->type().type == TYPE_VARCHAR && boost::iequals(col_name, "DATA_SIZE")) {
+                slot_desc->type().type = TYPE_BIGINT;
+            }
+        }
     }
 
     int slot_num = dest_slot_descs.size();

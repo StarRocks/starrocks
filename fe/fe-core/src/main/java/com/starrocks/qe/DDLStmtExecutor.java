@@ -66,6 +66,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.CallProcedureStatement;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
@@ -404,7 +405,8 @@ public class DDLStmtExecutor {
                 info.add(taskRunId);
             });
 
-            return new ShowResultSet(RefreshMaterializedViewStatement.META_DATA, Arrays.asList(info));
+            ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+            return new ShowResultSet(metaData, Arrays.asList(info));
         }
 
         @Override
@@ -436,6 +438,15 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCancelAlterTableStatement(CancelAlterTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getLocalMetastore().cancelAlter(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCallProcedureStatement(CallProcedureStatement stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                // Execute the procedure
+                context.getGlobalStateMgr().getMetadataMgr().callProcedure(stmt, context);
             });
             return null;
         }

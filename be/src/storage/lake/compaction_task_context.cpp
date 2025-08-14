@@ -26,8 +26,8 @@ static constexpr long TIME_UNIT_NS_PER_SECOND = 1000000000;
 static constexpr long BYTES_UNIT_MB = 1048576;
 
 void CompactionTaskStats::collect(const OlapReaderStatistics& reader_stats) {
-    io_ns_remote = reader_stats.io_ns_remote;
-    io_ns_local_disk = reader_stats.io_ns_read_local_disk;
+    io_ns_read_remote = reader_stats.io_ns_remote;
+    io_ns_read_local_disk = reader_stats.io_ns_read_local_disk;
     io_bytes_read_remote = reader_stats.compressed_bytes_read_remote;
     io_bytes_read_local_disk = reader_stats.compressed_bytes_read_local_disk;
     segment_init_ns = reader_stats.segment_init_ns;
@@ -40,13 +40,14 @@ void CompactionTaskStats::collect(const OlapReaderStatistics& reader_stats) {
 
 void CompactionTaskStats::collect(const OlapWriterStatistics& writer_stats) {
     write_segment_count = writer_stats.segment_count;
-    write_segment_bytes = writer_stats.bytes_write;
+    write_segment_bytes = writer_stats.bytes_write_remote;
+    io_ns_write_remote = writer_stats.write_remote_ns;
 }
 
 CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& that) const {
     CompactionTaskStats diff = *this;
-    diff.io_ns_remote += that.io_ns_remote;
-    diff.io_ns_local_disk += that.io_ns_local_disk;
+    diff.io_ns_read_remote += that.io_ns_read_remote;
+    diff.io_ns_read_local_disk += that.io_ns_read_local_disk;
     diff.io_bytes_read_remote += that.io_bytes_read_remote;
     diff.io_bytes_read_local_disk += that.io_bytes_read_local_disk;
     diff.segment_init_ns += that.segment_init_ns;
@@ -57,6 +58,7 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
     // diff.read_segment_count += that.read_segment_count;
     diff.write_segment_count += that.write_segment_count;
     diff.write_segment_bytes += that.write_segment_bytes;
+    diff.io_ns_write_remote += that.io_ns_write_remote;
     diff.in_queue_time_sec += that.in_queue_time_sec;
     diff.pk_sst_merge_ns += that.pk_sst_merge_ns;
     diff.input_file_size += that.input_file_size;
@@ -65,8 +67,8 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
 
 CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& that) const {
     CompactionTaskStats diff = *this;
-    diff.io_ns_remote -= that.io_ns_remote;
-    diff.io_ns_local_disk -= that.io_ns_local_disk;
+    diff.io_ns_read_remote -= that.io_ns_read_remote;
+    diff.io_ns_read_local_disk -= that.io_ns_read_local_disk;
     diff.io_bytes_read_remote -= that.io_bytes_read_remote;
     diff.io_bytes_read_local_disk -= that.io_bytes_read_local_disk;
     diff.segment_init_ns -= that.segment_init_ns;
@@ -77,6 +79,7 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     // diff.read_segment_count -= that.read_segment_count;
     diff.write_segment_count -= that.write_segment_count;
     diff.write_segment_bytes -= that.write_segment_bytes;
+    diff.io_ns_write_remote -= that.io_ns_write_remote;
     diff.in_queue_time_sec -= that.in_queue_time_sec;
     diff.pk_sst_merge_ns -= that.pk_sst_merge_ns;
     diff.input_file_size -= that.input_file_size;
@@ -88,9 +91,9 @@ std::string CompactionTaskStats::to_json_stats() {
     root.SetObject();
     auto& allocator = root.GetAllocator();
     // add stats
-    root.AddMember("read_local_sec", rapidjson::Value(io_ns_local_disk / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("read_local_sec", rapidjson::Value(io_ns_read_local_disk / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("read_local_mb", rapidjson::Value(io_bytes_read_local_disk / BYTES_UNIT_MB), allocator);
-    root.AddMember("read_remote_sec", rapidjson::Value(io_ns_remote / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("read_remote_sec", rapidjson::Value(io_ns_read_remote / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("read_remote_mb", rapidjson::Value(io_bytes_read_remote / BYTES_UNIT_MB), allocator);
     root.AddMember("read_remote_count", rapidjson::Value(io_count_remote), allocator);
     root.AddMember("read_local_count", rapidjson::Value(io_count_local_disk), allocator);
@@ -99,7 +102,8 @@ std::string CompactionTaskStats::to_json_stats() {
                    allocator);
     root.AddMember("read_segment_count", rapidjson::Value(read_segment_count), allocator);
     root.AddMember("write_segment_count", rapidjson::Value(write_segment_count), allocator);
-    root.AddMember("write_segment_mb", rapidjson::Value(write_segment_bytes / BYTES_UNIT_MB), allocator);
+    root.AddMember("write_remote_mb", rapidjson::Value(write_segment_bytes / BYTES_UNIT_MB), allocator);
+    root.AddMember("write_remote_sec", rapidjson::Value(io_ns_write_remote / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("in_queue_sec", rapidjson::Value(in_queue_time_sec), allocator);
     root.AddMember("pk_sst_merge_sec", rapidjson::Value(pk_sst_merge_ns / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("input_file_size", rapidjson::Value(input_file_size), allocator);

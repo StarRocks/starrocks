@@ -37,8 +37,8 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -89,7 +89,9 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
-import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;;
+import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
+
+
 
 /**
  * used to scan from stream
@@ -103,9 +105,6 @@ public class StreamLoadScanNode extends LoadScanNode {
     private Table dstTable;
     private StreamLoadInfo streamLoadInfo;
     private int numInstances;
-
-    // helper
-    private Analyzer analyzer;
 
     private List<TScanRangeLocations> locationsList = Lists.newArrayList();
 
@@ -141,7 +140,7 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     private ParamCreateContext paramCreateContext;
     private boolean nullExprInAutoIncrement;
-
+    private DescriptorTable descriptorTable;
 
     // used to construct for streaming loading
     public StreamLoadScanNode(TUniqueId loadId, PlanNodeId id, TupleDescriptor tupleDesc, Table dstTable, StreamLoadInfo streamLoadInfo) {
@@ -196,14 +195,13 @@ public class StreamLoadScanNode extends LoadScanNode {
         return nullExprInAutoIncrement;
     }
 
-    @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
+    public void init(DescriptorTable descriptorTable) throws StarRocksException {
         // can't call super.init(), because after super.init, conjuncts would be null
         if (needAssignBE) {
             assignBackends();
         }
-        assignConjuncts(analyzer);
-        this.analyzer = analyzer;
+
+        this.descriptorTable = descriptorTable;
         paramCreateContext = new ParamCreateContext();
         initParams();
     }
@@ -251,19 +249,19 @@ public class StreamLoadScanNode extends LoadScanNode {
             params.setConfluent_schema_registry_url(streamLoadInfo.getConfluentSchemaRegistryUrl());
         }
         initColumns();
-        initWhereExpr(streamLoadInfo.getWhereExpr(), analyzer);
+        initWhereExpr(streamLoadInfo.getWhereExpr());
     }
 
     private void initColumns() throws StarRocksException {
-        paramCreateContext.tupleDescriptor = analyzer.getDescTbl().createTupleDescriptor("StreamLoadScanNode");
+        paramCreateContext.tupleDescriptor = descriptorTable.createTupleDescriptor("StreamLoadScanNode");
         Load.initColumns(dstTable, streamLoadInfo.getColumnExprDescs(), null /* no hadoop function */,
-                exprsByName, analyzer, paramCreateContext.tupleDescriptor, slotDescByName,
+                exprsByName, descriptorTable, paramCreateContext.tupleDescriptor, slotDescByName,
                 paramCreateContext.params, true, useVectorizedLoad, Lists.newArrayList(),
                 streamLoadInfo.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadInfo.isPartialUpdate());
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws StarRocksException, StarRocksException {
+    public void finalizeStats() throws StarRocksException, StarRocksException {
         finalizeParams();
     }
 
@@ -354,7 +352,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                 expr.setType(Type.HLL);
             }
 
-            checkBitmapCompatibility(analyzer, dstSlotDesc, expr);
+            checkBitmapCompatibility(dstSlotDesc, expr);
 
             if (negative && dstSlotDesc.getColumn().getAggregationType() == AggregateType.SUM) {
                 expr = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, expr, new IntLiteral(-1));

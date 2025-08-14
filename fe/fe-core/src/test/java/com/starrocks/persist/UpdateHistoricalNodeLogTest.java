@@ -14,7 +14,9 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.common.io.Text;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.HistoricalNodeMgr;
@@ -61,7 +63,7 @@ public class UpdateHistoricalNodeLogTest {
 
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(Files.newInputStream(file.toPath()));
-        UpdateHistoricalNodeLog readLog = UpdateHistoricalNodeLog.read(in);
+        UpdateHistoricalNodeLog readLog = GsonUtils.GSON.fromJson(Text.readString(in), UpdateHistoricalNodeLog.class);
         Assertions.assertEquals(readLog.getWarehouseId(), warehouseId);
         Assertions.assertEquals(readLog.getWorkerGroupId(), workerGroupId);
         Assertions.assertEquals(readLog.getUpdateTime(), updateTime);

@@ -109,7 +109,7 @@ PROPERTIES
     "type" = "iceberg",
     MetastoreParams,
     StorageCredentialParams,
-    MetadataUpdateParams
+    MetadataRelatedParams
 )
 ```
 
@@ -724,11 +724,11 @@ Google GCS 用の `StorageCredentialParams`:
 
 ---
 
-#### MetadataUpdateParams
+#### MetadataRelatedParams
 
-StarRocks が Iceberg メタデータのキャッシュを更新する方法に関する一連のパラメーターです。このパラメーターセットはオプションです。
+StarRocks における Iceberg メタデータのキャッシュに関するパラメーターのセットです。このパラメーターセットはオプションです。
 
-v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦略](#付録-a-定期的なメタデータリフレッシュ戦略) をサポートしています。ほとんどの場合、`MetadataUpdateParams` を無視し、そのポリシーパラメーターを調整する必要はありません。これらのパラメーターのデフォルト値は、すぐに使用できるパフォーマンスを提供します。システム変数 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) を使用して Iceberg メタデータパースモードを調整できます。
+v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦略](#付録-a-定期的なメタデータリフレッシュ戦略) をサポートしています。ほとんどの場合、以下のパラメーターを無視し、そのポリシーパラメーターを調整する必要はありません。これらのパラメーターのデフォルト値は、すぐに使用できるパフォーマンスを提供します。システム変数 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) を使用して Iceberg メタデータパースモードを調整できます。
 
 | **パラメーター**                                 | **デフォルト**           | **説明**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
@@ -736,6 +736,12 @@ v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦�
 | iceberg_manifest_cache_with_column_statistics | false                 | 列の統計をキャッシュするかどうか。                  |
 | iceberg_manifest_cache_max_num                | 100000                | キャッシュできる Manifest ファイルの最大数。     |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | Data File Cache のリフレッシュをトリガーする最小の Manifest ファイル長。 |
+
+v3.4 以降、StarRocks は、以下のパラメーターを設定することで、Iceberg メタデータを読み取ることで Iceberg テーブルの統計情報を取得できます。これにより、Iceberg テーブルの統計情報の収集を積極的にトリガーする必要はありません。
+
+| **パラメーター**                                 | **デフォルト**           | **説明**                                                   |
+| :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
+| enable_get_stats_from_external_metadata       | false                 | Iceberg メタデータから統計情報を取得するかどうか。この項目を `true` に設定すると、セッション変数 [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata) を通じて、収集する統計情報の種類をさらに制御できます。  |
 
 ### 例
 
@@ -1263,10 +1269,18 @@ col_name col_type [COMMENT 'comment']
 `partition_desc` の構文は次のとおりです。
 
 ```SQL
-PARTITION BY (par_col1[, par_col2...])
+PARTITION BY (partition_expr[, partition_expr...])
 ```
 
-現在、StarRocks は [identity transforms](https://iceberg.apache.org/spec/#partitioning) のみをサポートしており、これは StarRocks が各一意のパーティション値に対してパーティションを作成することを意味します。
+各 `partition_expr` は以下の形式のいずれかです。
+
+```SQL
+column_name
+| transform_expr(column_name)
+| transform_expr(column_name, parameter)
+```
+
+現在、StarRocks は Apache Iceberg 仕様で定義されたパーティション変換式 [transform expr](https://iceberg.apache.org/spec/#partitioning) をサポートしています。これにより、StarRocks は変換された列値に基づいて隠しパーティション (Hidden Partition) を持つ Iceberg テーブルを作成できます。
 
 :::note
 
@@ -1327,6 +1341,17 @@ PARTITION BY (par_col1[, par_col2...])
    CREATE TABLE partition_tbl_2
    PARTITION BY (id, dt)
    AS SELECT * from employee;
+   ```
+
+4. 隠されたパーティションを持つ `partition_tbl_3` という名前のテーブルを作成します。このテーブルには `action`、`id`、`dt` の三つの列が含まれています。そのうち、`id` と `dt` はパーティションキーとして使用されますが、パーティションは変換式によって定義されているため、これらのパーティションは隠されています。
+
+   ```SQL
+   CREATE TABLE partition_tbl_3 (
+     action VARCHAR(20),
+     id INT,
+     dt DATE
+   )
+   PARTITION BY bucket(id, 10), year(dt);
    ```
 
 ---

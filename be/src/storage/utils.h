@@ -179,4 +179,6 @@ bool is_tracker_hit_hard_limit(MemTracker* tracker, double hard_limit_ratio);
 
 int caculate_delta_writer_thread_num(int thread_num_from_config);
 
+int64_t parse_data_size(const std::string& value_str);
+
 } // namespace starrocks

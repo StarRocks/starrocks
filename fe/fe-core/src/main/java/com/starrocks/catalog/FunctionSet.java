@@ -187,6 +187,7 @@ public class FunctionSet {
     public static final String ENDS_WITH = "ends_with";
     public static final String FIND_IN_SET = "find_in_set";
     public static final String GROUP_CONCAT = "group_concat";
+    public static final String FORMAT_BYTES = "format_bytes";
     public static final String INSTR = "instr";
     public static final String LCASE = "lcase";
     public static final String LEFT = "left";
@@ -228,6 +229,7 @@ public class FunctionSet {
     public static final String PARSE_JSON = "parse_json";
     public static final String JSON_QUERY = "json_query";
     public static final String JSON_EXISTS = "json_exists";
+    public static final String JSON_CONTAINS = "json_contains";
     public static final String JSON_EACH = "json_each";
     public static final String GET_JSON_BOOL = "get_json_bool";
     public static final String GET_JSON_DOUBLE = "get_json_double";
@@ -235,6 +237,7 @@ public class FunctionSet {
     public static final String GET_JSON_STRING = "get_json_string";
     public static final String GET_JSON_OBJECT = "get_json_object";
     public static final String JSON_LENGTH = "json_length";
+    public static final String JSON_REMOVE = "json_remove";
 
     // Matching functions:
     public static final String ILIKE = "ilike";
@@ -256,6 +259,9 @@ public class FunctionSet {
     public static final String APPROX_COUNT_DISTINCT_HLL_SKETCH = "approx_count_distinct_hll_sketch";
     public static final String DS_HLL_COUNT_DISTINCT = "ds_hll_count_distinct";
     public static final String DS_THETA_COUNT_DISTINCT = "ds_theta_count_distinct";
+    public static final String DS_HLL_ACCUMULATE = "ds_hll_accumulate";
+    public static final String DS_HLL_COMBINE = "ds_hll_combine";
+    public static final String DS_HLL_ESTIMATE = "ds_hll_estimate";
     public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
@@ -804,6 +810,10 @@ public class FunctionSet {
                     .add(FIRST_VALUE_REWRITE)
                     .add(HISTOGRAM)
                     .add(DICT_MERGE)
+                    // no need to support agg_state
+                    .add(DS_HLL_ACCUMULATE)
+                    .add(DS_HLL_COMBINE)
+                    .add(DS_HLL_ESTIMATE)
                     // Functions with constant contexts in be are not supported.
                     .add(WINDOW_FUNNEL)
                     .add(APPROX_TOP_K)
@@ -1147,6 +1157,17 @@ public class FunctionSet {
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
 
+            // DS_HLL_ACCUMULATE
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ACCUMULATE,
+                    Lists.newArrayList(t), Type.VARBINARY, Type.VARBINARY,
+                    true, false, true));
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ACCUMULATE,
+                    Lists.newArrayList(t, Type.INT), Type.VARBINARY, Type.VARBINARY,
+                    true, false, true));
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ACCUMULATE,
+                    Lists.newArrayList(t, Type.INT, Type.VARCHAR), Type.VARBINARY, Type.VARBINARY,
+                    true, false, true));
+
             // ds_hll_count_distinct(col)
             addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
@@ -1189,6 +1210,13 @@ public class FunctionSet {
                     false, true, true));
 
         }
+
+        addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COMBINE,
+                Lists.newArrayList(Type.VARBINARY), Type.VARBINARY, Type.VARBINARY,
+                true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ESTIMATE,
+                Lists.newArrayList(Type.VARBINARY), Type.BIGINT, Type.VARBINARY,
+                true, false, true));
 
         // Sum
         registerBuiltinSumAggFunction(SUM);
@@ -1464,20 +1492,20 @@ public class FunctionSet {
 
     private void registerBuiltinMapAggFunction() {
         for (ScalarType keyType : Type.getNumericTypes()) {
-                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
-                        Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
-                        false, false, false));
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                    Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
+                    false, false, false));
         }
         for (ScalarType keyType : Type.STRING_TYPES) {
-                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
-                        Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
-                        false, false, false));
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                    Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
+                    false, false, false));
         }
 
         for (ScalarType keyType : Type.DATE_TYPES) {
-                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
-                        Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
-                        false, false, false));
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                    Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
+                    false, false, false));
         }
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
                 Lists.newArrayList(Type.TIME, Type.ANY_ELEMENT), Type.ANY_MAP, null,

@@ -1,4 +1,4 @@
--- name: test_mv_with_iceberg_recreate
+-- name: test_mv_with_iceberg_recreate @sequential @slow
 create external catalog mv_iceberg_${uuid0}
 properties
 (

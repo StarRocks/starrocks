@@ -140,4 +140,16 @@ public class DynamicTabletJobMgrTest {
 
         Assertions.assertEquals(1, jobMgr.getDynamicTabletJobs().size());
     }
+
+    @Test
+    public void testGetDynamicTabletJobsInfo() throws Exception {
+        DynamicTabletJobMgr jobMgr = new DynamicTabletJobMgr();
+
+        TestNormalDynamicTabletJob job1 = new TestNormalDynamicTabletJob(1, DynamicTabletJob.JobType.SPLIT_TABLET, 0, 1);
+        TestNormalDynamicTabletJob job2 = new TestNormalDynamicTabletJob(2, DynamicTabletJob.JobType.MERGE_TABLET, 0, 2);
+        jobMgr.addDynamicTabletJob(job1);
+        jobMgr.addDynamicTabletJob(job2);
+
+        Assertions.assertEquals(2, jobMgr.getAllJobsInfo().getItems().size());
+    }
 }

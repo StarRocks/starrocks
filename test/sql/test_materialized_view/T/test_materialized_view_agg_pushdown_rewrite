@@ -1,4 +1,4 @@
--- name: test_materialized_view_agg_pushdown_rewrite
+-- name: test_materialized_view_agg_pushdown_rewrite @slow
 CREATE TABLE IF NOT EXISTS `lineorder` (
     `lo_orderkey` int(11) NOT NULL COMMENT "",
     `lo_linenumber` int(11) NOT NULL COMMENT "",

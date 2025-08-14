@@ -17,7 +17,6 @@
 #include <fmt/format.h>
 
 #include <atomic>
-#include <condition_variable>
 #include <filesystem>
 #include <memory>
 #include <mutex>
@@ -29,6 +28,7 @@
 
 #include "common/config.h"
 #include "common/statusor.h"
+#include "util/time.h"
 
 namespace starrocks {
 

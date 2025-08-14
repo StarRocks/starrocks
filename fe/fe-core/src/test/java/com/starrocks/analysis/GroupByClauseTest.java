@@ -17,37 +17,18 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Multimap;
 import com.starrocks.common.AnalysisException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 
 public class GroupByClauseTest {
 
-    private Analyzer analyzer;
 
     @BeforeEach
     public void setUp() {
-        Analyzer analyzerBase = AccessTestUtil.fetchTableAnalyzer();
-        analyzer = new Analyzer(analyzerBase.getCatalog(), analyzerBase.getContext());
-        try {
-            Field f = analyzer.getClass().getDeclaredField("tupleByAlias");
-            f.setAccessible(true);
-            Multimap<String, TupleDescriptor> tupleByAlias = ArrayListMultimap.create();
-            TupleDescriptor td = new TupleDescriptor(new TupleId(0));
-            td.setTable(analyzerBase.getTable(new TableName("testdb", "t")));
-            tupleByAlias.put("testdb.t", td);
-            f.set(analyzer, tupleByAlias);
-        } catch (NoSuchFieldException e) {
-            e.printStackTrace();
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        }
     }
 
     @Test
@@ -61,11 +42,6 @@ public class GroupByClauseTest {
 
         GroupByClause groupByClause = new GroupByClause(Expr.cloneList(groupingExprs),
                 GroupByClause.GroupingType.GROUP_BY);
-        try {
-            groupByClause.analyze(analyzer);
-        } catch (AnalysisException execption) {
-            Assertions.assertTrue(false);
-        }
         Assertions.assertEquals("`testdb`.`t`.`k2`, `testdb`.`t`.`k2`, `testdb`.`t`.`k3`, `testdb`.`t`.`k1`",
                 groupByClause.toSql());
         Assertions.assertEquals(3, groupByClause.getGroupingExprs().size());
@@ -85,11 +61,6 @@ public class GroupByClauseTest {
         GroupByClause groupByClause = new GroupByClause(Expr.cloneList(groupingExprs),
                 GroupByClause.GroupingType.GROUP_BY);
         try {
-            groupByClause.analyze(analyzer);
-        } catch (AnalysisException execption) {
-            Assertions.assertTrue(false);
-        }
-        try {
             groupByClause.reset();
         } catch (Exception e) {
             Assertions.fail("reset throw exceptions!" + e);
@@ -106,10 +77,5 @@ public class GroupByClauseTest {
         }
         GroupByClause groupByClause = new GroupByClause(Expr.cloneList(groupingExprs),
                 GroupByClause.GroupingType.GROUP_BY);
-        try {
-            groupByClause.analyze(analyzer);
-        } catch (AnalysisException exception) {
-            Assertions.assertTrue(false);
-        }
     }
 }

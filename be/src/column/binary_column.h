@@ -203,6 +203,9 @@ public:
 
     bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) override;
 
+    void append_bytes(char* const* data, uint32_t* length, size_t size);
+    void append_bytes_overflow(char* const* data, uint32_t* length, size_t size, size_t max_length);
+
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
     void append_value_multiple_times(const void* value, size_t count) override;
@@ -271,6 +274,8 @@ public:
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
     void crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
     void crc32_hash_selective(uint32_t* hashes, uint16_t* sel, uint16_t sel_size) const override;
+
+    void murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 

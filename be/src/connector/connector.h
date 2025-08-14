@@ -157,6 +157,7 @@ public:
     virtual Status init(ObjectPool* pool, RuntimeState* state) { return Status::OK(); }
 
     const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
+    const std::vector<TBucketProperty>& get_bucket_properties() const { return _bucket_properties; }
 
     virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
 
@@ -184,6 +185,7 @@ public:
 
 protected:
     std::vector<ExprContext*> _partition_exprs;
+    std::vector<TBucketProperty> _bucket_properties;
     int64_t scan_dop = 0;
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;

@@ -34,9 +34,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -50,24 +47,6 @@ public class ArraySliceExpr extends Expr {
 
     public ArraySliceExpr(ArraySliceExpr other) {
         super(other);
-    }
-
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        Expr expr = this.children.get(0);
-        Expr lower_bound = this.children.get(1);
-        Expr upper_bound = this.children.get(2);
-        if (!this.children.get(0).getType().isArrayType()) {
-            throw new AnalysisException("cannot subscript type "
-                    + this.children.get(0).getType() + " because it is not an array");
-        }
-        if (lower_bound != null && !lower_bound.getType().isNumericType()) {
-            throw new AnalysisException("array subscript must have type integer");
-        }
-        if (upper_bound != null && upper_bound.getType().getPrimitiveType() != PrimitiveType.INT) {
-            castChild(Type.INT, 1);
-        }
-        this.type = expr.getType();
     }
 
     @Override

@@ -14,8 +14,6 @@
 
 package com.starrocks.http;
 
-import com.starrocks.http.BaseRequest;
-import com.starrocks.http.BaseResponse;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.channel.ChannelHandlerContext;

@@ -306,9 +306,23 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 非同期 HTTP リクエスト処理用のスレッドプールのサイズ。別名は `max_http_sql_service_task_threads_num` である。
 - 導入バージョン: 4.0.0
 
+##### enable_https
 
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: No
+- 説明: FEノードにおいて、HTTP サーバーと並行して HTTPS サーバーを有効化するかどうか。
+- 導入バージョン: v4.0
 
+##### https_port
 
+- デフォルト: 8443
+- タイプ: Int
+- 単位:  -
+- 変更可能: No
+- 説明: FE ノード内の HTTPS サーバーがリスニングするポート番号。
+- 導入バージョン: v4.0
 
 ##### cluster_name
 
@@ -1413,6 +1427,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: ロードジョブに許可される最小タイムアウト期間。この制限はすべてのタイプのロードジョブに適用されます。
 - 導入バージョン: -
 
+##### prepared_transaction_default_timeout_second
+
+- デフォルト: 86400
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 準備済みトランザクションのデフォルトのタイムアウト期間。
+- 導入バージョン: -
+
 ##### spark_dpp_version
 
 - デフォルト: 1.0.0
@@ -1751,6 +1774,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：是
 - 説明：トランザクションタグとcoordinatorノードのマッピング関係がキャッシュ内に保持される生存時間（TTL）。
 - 導入バージョン：-
+
+##### enable_file_bundling
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: クラウドネイティブテーブルに対してファイルバンドリング最適化を有効にするかどうか。この機能を有効に設定（`true` に設定）すると、システムはロード、コンパクション、またはパブリッシュ操作によって生成されたデータファイルを自動的にバンドルし、外部ストレージシステムへの高頻度アクセスによる API コストを削減します。この動作は、CREATE TABLE プロパティ `file_bundling` を使用してテーブルレベルで制御することもできます。詳細な手順については、[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) を参照してください。
+- 導入バージョン: v4.0
 
 ### ストレージ
 

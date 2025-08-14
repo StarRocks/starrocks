@@ -253,6 +253,7 @@ private:
 
     bthreads::singleflight::Group<std::string, StatusOr<TabletSchemaPtr>> _schema_group;
     bthreads::singleflight::Group<std::string, StatusOr<CombinedTxnLogPtr>> _combined_txn_log_group;
+    bthreads::singleflight::Group<std::string, StatusOr<std::string>> _bundle_tablet_metadata_group;
 };
 
 } // namespace starrocks::lake

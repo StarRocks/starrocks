@@ -467,7 +467,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`rowkey`) BUCKETS 64
 PROPERTIES (
     "replication_num" = "1",
-    "bucket_size" = "4294967296",
     "storage_volume" = "builtin_storage_volume",
     "enable_persistent_index" = "true",
     "compression" = "LZ4"
@@ -736,5 +735,125 @@ select c0, c1, c2, strpos(c0, c1, c2) from t_strpos;
 abcabc	abc	2	4
 hello world	world	1	7
 hello world	world	-1	7
+-- !result
+select format_bytes(0);
+-- result:
+0 B
+-- !result
+select format_bytes(123);
+-- result:
+123 B
+-- !result
+select format_bytes(1023);
+-- result:
+1023 B
+-- !result
+select format_bytes(1024);
+-- result:
+1.00 KB
+-- !result
+select format_bytes(4096);
+-- result:
+4.00 KB
+-- !result
+select format_bytes(123456789);
+-- result:
+117.74 MB
+-- !result
+select format_bytes(10737418240);
+-- result:
+10.00 GB
+-- !result
+select format_bytes(-1);
+-- result:
+None
+-- !result
+select format_bytes(-1024);
+-- result:
+None
+-- !result
+select format_bytes(null);
+-- result:
+None
+-- !result
+select format_bytes(1);
+-- result:
+1 B
+-- !result
+select format_bytes(512);
+-- result:
+512 B
+-- !result
+select format_bytes(1536);
+-- result:
+1.50 KB
+-- !result
+select format_bytes(2048);
+-- result:
+2.00 KB
+-- !result
+select format_bytes(1048576);
+-- result:
+1.00 MB
+-- !result
+select format_bytes(1572864);
+-- result:
+1.50 MB
+-- !result
+select format_bytes(1073741824);
+-- result:
+1.00 GB
+-- !result
+select format_bytes(2147483648);
+-- result:
+2.00 GB
+-- !result
+select format_bytes(1099511627776);
+-- result:
+1.00 TB
+-- !result
+select format_bytes(1125899906842624);
+-- result:
+1.00 PB
+-- !result
+select format_bytes(1152921504606846976);
+-- result:
+1.00 EB
+-- !result
+select format_bytes(1024 + 1);
+-- result:
+1.00 KB
+-- !result
+select format_bytes(1024 + 512);
+-- result:
+1.50 KB
+-- !result
+select format_bytes(1024 + 256);
+-- result:
+1.25 KB
+-- !result
+select format_bytes(1048576 + 52429);
+-- result:
+1.05 MB
+-- !result
+create table t_format_bytes(bytes bigint)
+        DUPLICATE KEY(bytes)
+        DISTRIBUTED BY HASH(bytes)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t_format_bytes values (0), (123), (1024), (1048576), (1073741824), (-1), (null);
+-- result:
+-- !result
+select bytes, format_bytes(bytes) from t_format_bytes order by bytes;
+-- result:
+None	None
+-1	None
+0	0 B
+123	123 B
+1024	1.00 KB
+1048576	1.00 MB
+1073741824	1.00 GB
 -- !result
 

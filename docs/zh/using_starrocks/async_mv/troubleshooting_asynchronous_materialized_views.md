@@ -145,7 +145,7 @@ ExecTime      | 2.583 s
 
 #### 刷新任务完成后分析资源消耗
 
-在刷新任务完成后，您可以通过 Query Profile 来分析其资源消耗情况。
+在刷新任务完成后，您可以通过 Query Profile 来分析其资源消耗情况。您可以通过集群 Leader FE 节点的 Web UI 查看物化视图刷新任务的 Profile。
 
 当异步物化视图正在刷新时，会执行 INSERT OVERWRITE 语句。您可以检查相应的 Query Profile，以分析刷新任务所消耗的时间和资源。
 

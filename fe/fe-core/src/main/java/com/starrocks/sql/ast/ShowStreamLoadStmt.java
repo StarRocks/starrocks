@@ -21,11 +21,8 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -62,7 +59,7 @@ import java.util.List;
  */
 public class ShowStreamLoadStmt extends ShowStmt {
 
-    private static final ImmutableList<String> TITLE_NAMES =
+    public static final ImmutableList<String> TITLE_NAMES =
             new ImmutableList.Builder<String>()
                     .add("Label")
                     .add("Id")
@@ -140,16 +137,6 @@ public class ShowStreamLoadStmt extends ShowStmt {
 
     public static List<String> getTitleNames() {
         return TITLE_NAMES;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-
-        for (String title : TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
     }
 
     @Override

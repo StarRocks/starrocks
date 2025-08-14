@@ -16,7 +16,6 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
@@ -66,8 +65,7 @@ public class EsScanNodeTest extends EsTestCase {
     }
 
     @Test
-    public void test(@Mocked Analyzer analyzer,
-                     @Mocked EsTable esTable)  throws Exception {
+    public void test(@Mocked EsTable esTable)  throws Exception {
 
         List<Column> columns = new ArrayList<>();
         Column k1 = new Column("k1", Type.BIGINT);
@@ -80,7 +78,7 @@ public class EsScanNodeTest extends EsTestCase {
         PlanNodeId planNodeId = new PlanNodeId(11);
         EsScanNode scanNode = new EsScanNode(planNodeId, td, "EsScanNode", WarehouseManager.DEFAULT_RESOURCE);
 
-        scanNode.init(analyzer);
+        scanNode.assignNodes();
 
         EsShardPartitions esShardPartitions = EsShardPartitions.findShardPartitions("doe",
                 loadJsonFromFile("data/es/test_search_shards.json"));
@@ -88,7 +86,6 @@ public class EsScanNodeTest extends EsTestCase {
         List<EsShardPartitions> selectedIndex = new ArrayList<>();
         selectedIndex.add(esShardPartitions);
         scanNode.computeShardLocations(selectedIndex);
-
 
         List<EsShardRouting> singleShardRouting = Lists.newArrayList();
         TNetworkAddress addr = new TNetworkAddress("127.0.0.1", 1234);

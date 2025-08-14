@@ -28,14 +28,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.ImageWriter;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -50,8 +48,6 @@ import com.starrocks.transaction.TxnCommitAttachment;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -902,59 +898,8 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
-    public void readFields(DataInputStream dis) throws IOException {
-        // read job
-        String s = Text.readString(dis);
-        SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
 
-        if (null != data) {
-            if (null != data.jobs) {
-                for (NativeAnalyzeJob job : data.jobs) {
-                    replayAddAnalyzeJob(job);
-                }
-            }
 
-            if (null != data.nativeStatus) {
-                for (AnalyzeStatus status : data.nativeStatus) {
-                    replayAddAnalyzeStatus(status);
-                }
-            }
-
-            if (null != data.basicStatsMeta) {
-                for (BasicStatsMeta meta : data.basicStatsMeta) {
-                    replayAddBasicStatsMeta(meta);
-                }
-            }
-
-            if (null != data.histogramStatsMeta) {
-                for (HistogramStatsMeta meta : data.histogramStatsMeta) {
-                    replayAddHistogramStatsMeta(meta);
-                }
-            }
-
-            if (null != data.multiColumnStatsMeta) {
-                for (MultiColumnStatsMeta meta : data.multiColumnStatsMeta) {
-                    replayAddMultiColumnStatsMeta(meta);
-                }
-            }
-        }
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // save history
-        SerializeData data = new SerializeData();
-        data.jobs = getAllNativeAnalyzeJobList();
-        data.nativeStatus = new ArrayList<>(getAnalyzeStatusMap().values().stream().
-                filter(AnalyzeStatus::isNative).
-                map(status -> (NativeAnalyzeStatus) status).collect(Collectors.toSet()));
-        data.basicStatsMeta = new ArrayList<>(getBasicStatsMetaMap().values());
-        data.histogramStatsMeta = new ArrayList<>(getHistogramStatsMetaMap().values());
-        data.multiColumnStatsMeta = new ArrayList<>(getMultiColumnStatsMetaMap().values());
-
-        String s = GsonUtils.GSON.toJson(data);
-        Text.writeString(out, s);
-    }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         List<AnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream()

@@ -15,12 +15,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class DropWarehouseLog implements Writable {
     @SerializedName(value = "name")
@@ -34,10 +29,4 @@ public class DropWarehouseLog implements Writable {
         return warehouseName;
     }
 
-
-
-    public static DropWarehouseLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DropWarehouseLog.class);
-    }
 }

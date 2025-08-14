@@ -131,6 +131,7 @@ import com.starrocks.load.pipe.filelist.RepoAccessor;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
+import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.load.streamload.StreamLoadMgr;
@@ -202,6 +203,8 @@ import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDBPrivDesc;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
+import com.starrocks.thrift.TDynamicTabletJobsRequest;
+import com.starrocks.thrift.TDynamicTabletJobsResponse;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TFeLocksReq;
@@ -1176,7 +1179,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw resp.getException();
         }
 
-        StreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
+        AbstractStreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
         // this should't open
         if (task == null || task.getTxnId() == -1) {
             throw new StarRocksException(String.format("Load label: {} begin transacton failed", request.getLabel()));
@@ -1393,9 +1396,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new StarRocksException("unknown database, database=" + dbName);
         }
 
+        long preparedTimeoutMs = TransactionState.DEFAULT_PREPARED_TIMEOUT_MS;
+        if (request.isSetPrepared_timeout_second() && request.getPrepared_timeout_second() > 0) {
+            preparedTimeoutMs = request.getPrepared_timeout_second() * 1000L;
+        }
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
-                db.getId(), request.getTxnId(),
+                db.getId(), request.getTxnId(), preparedTimeoutMs,
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
                 TabletFailInfo.fromThrift(request.getFailInfos()),
                 attachment);
@@ -2562,16 +2569,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             if (request.isSetJob_id()) {
-                StreamLoadTask task = GlobalStateMgr.getCurrentState().getStreamLoadMgr().getTaskById(request.getJob_id());
+                AbstractStreamLoadTask task = GlobalStateMgr.getCurrentState()
+                        .getStreamLoadMgr().getTaskById(request.getJob_id());
                 if (task != null) {
-                    loads.add(task.toThrift());
+                    loads.addAll(task.toThrift());
                 }
             } else {
-                List<StreamLoadTask> streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
+                List<AbstractStreamLoadTask> streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
                         .getTaskByName(request.getLabel());
                 if (streamLoadTaskList != null) {
-                    loads.addAll(
-                            streamLoadTaskList.stream().map(StreamLoadTask::toThrift).collect(Collectors.toList()));
+                    for (AbstractStreamLoadTask streamLoadTask : streamLoadTaskList) {
+                        loads.addAll(streamLoadTask.toThrift());
+                    }
                 }
             }
 
@@ -2722,15 +2731,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TStreamLoadInfo> loads = Lists.newArrayList();
         try {
             if (request.isSetJob_id()) {
-                StreamLoadTask task = loadManager.getTaskById(request.getJob_id());
+                AbstractStreamLoadTask task = loadManager.getTaskById(request.getJob_id());
                 if (task != null) {
-                    loads.add(task.toStreamLoadThrift());
+                    loads.addAll(task.toStreamLoadThrift());
                 }
             } else {
-                List<StreamLoadTask> streamLoadTaskList = loadManager.getTaskByName(request.getLabel());
+                List<AbstractStreamLoadTask> streamLoadTaskList = loadManager.getTaskByName(request.getLabel());
                 if (streamLoadTaskList != null) {
-                    loads.addAll(
-                            streamLoadTaskList.stream().map(StreamLoadTask::toStreamLoadThrift).collect(Collectors.toList()));
+                    for (AbstractStreamLoadTask task : streamLoadTaskList) {
+                        loads.addAll(task.toStreamLoadThrift());
+                    }
                 }
             }
             result.setLoads(loads);
@@ -3125,6 +3135,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TUpdateFailPointResponse response = new TUpdateFailPointResponse();
         response.setStatus(status);
         return response;
+    }
+
+    @Override
+    public TDynamicTabletJobsResponse getDynamicTabletJobsInfo(TDynamicTabletJobsRequest params) {
+        return GlobalStateMgr.getCurrentState().getDynamicTabletJobMgr().getAllJobsInfo();
     }
 
     @NotNull

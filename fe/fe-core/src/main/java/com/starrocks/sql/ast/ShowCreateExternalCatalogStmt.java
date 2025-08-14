@@ -15,19 +15,12 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW CREATE EXTERNAL CATALOG statement.
 public class ShowCreateExternalCatalogStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Catalog", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Create Catalog", ScalarType.createVarchar(30)))
-                    .build();
-
     private final String catalogName;
 
     public ShowCreateExternalCatalogStmt(String catalogName) {
@@ -36,16 +29,11 @@ public class ShowCreateExternalCatalogStmt extends ShowStmt {
 
     public ShowCreateExternalCatalogStmt(String catalogName, NodePosition pos) {
         super(pos);
-        this.catalogName = catalogName;
+        this.catalogName = normalizeName(catalogName);
     }
 
     public String getCatalogName() {
         return catalogName;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
     }
 
     @Override

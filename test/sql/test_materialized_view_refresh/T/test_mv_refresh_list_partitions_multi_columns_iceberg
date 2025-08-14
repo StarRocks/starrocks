@@ -1,4 +1,4 @@
--- name: test_mv_refresh_list_partitions_multi_columns_iceberg
+-- name: test_mv_refresh_list_partitions_multi_columns_iceberg @slow
 
 set new_planner_optimize_timeout=10000;
 
@@ -89,13 +89,20 @@ select * from test_mv2 order by year, month, province;
 select * from test_mv3 order by year, province;
 select * from test_mv4 order by year, month;
 
+set query_including_mv_names = "test_mv1";
 function: print_hit_materialized_view("SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;", "test_mv1")
-function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;", "test_mv2")
-function: print_hit_materialized_view("SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;", "test_mv3")
-function: print_hit_materialized_view("SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;", "test_mv4")
 SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;
+
+set query_including_mv_names = "test_mv2";
+function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;", "test_mv2")
 SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;
+
+set query_including_mv_names = "test_mv3";
+function: print_hit_materialized_view("SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;", "test_mv3")
 SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;
+
+set query_including_mv_names = "test_mv4";
+function: print_hit_materialized_view("SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;", "test_mv4")
 SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;
 
 insert into t1 values ('beijing', 1, '2024-01-01 00:00:00', '2024', '01', '01', '00'),
@@ -112,13 +119,20 @@ select * from test_mv2 order by year, month, province;
 select * from test_mv3 order by year, province;
 select * from test_mv4 order by year, month;
 
+set query_including_mv_names = "test_mv1";
 function: print_hit_materialized_view("SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;", "test_mv1")
-function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;", "test_mv2")
-function: print_hit_materialized_view("SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;", "test_mv3")
-function: print_hit_materialized_view("SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;", "test_mv4")
 SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;
+
+set query_including_mv_names = "test_mv2";
+function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;", "test_mv2")
 SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;
+
+set query_including_mv_names = "test_mv3";
+function: print_hit_materialized_view("SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;", "test_mv3")
 SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;
+
+set query_including_mv_names = "test_mv4";
+function: print_hit_materialized_view("SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;", "test_mv4")
 SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;
 
 DROP DATABASE IF EXISTS mv_iceberg_${uuid0}.mv_db_${uuid0};

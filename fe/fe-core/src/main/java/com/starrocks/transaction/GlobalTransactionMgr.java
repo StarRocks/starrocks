@@ -286,24 +286,27 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                 txnCommitAttachment);
     }
 
-    public void prepareTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
+    public void prepareTransaction(long dbId, long transactionId, long preparedTimeoutMs,
+                                   List<TabletCommitInfo> tabletCommitInfos,
                                    List<TabletFailInfo> tabletFailInfos,
                                    TxnCommitAttachment txnCommitAttachment)
             throws StarRocksException {
         // timeout is 0, means no timeout
-        prepareTransaction(dbId, transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment, 0);
+        prepareTransaction(dbId, transactionId, preparedTimeoutMs, tabletCommitInfos, tabletFailInfos, txnCommitAttachment, 0);
     }
 
     public void prepareTransaction(
-            @NotNull long dbId, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
+            @NotNull long dbId, long transactionId, long preparedTimeoutMs, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
-            @Nullable TxnCommitAttachment attachment, long timeoutMs) throws StarRocksException {
+            @Nullable TxnCommitAttachment attachment, long lockTimeoutMs) throws StarRocksException {
         TransactionState transactionState = getTransactionState(dbId, transactionId);
         List<Long> tableId = transactionState.getTableIdList();
         LOG.debug("try to pre commit transaction: {}", transactionId);
         Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(dbId, tableId, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
-            throw new StarRocksException("get database write lock timeout, database=" + dbId + ", timeout=" + timeoutMs + "ms");
+        if (!locker.tryLockTablesWithIntensiveDbLock(
+                dbId, tableId, LockType.WRITE, lockTimeoutMs, TimeUnit.MILLISECONDS)) {
+            throw new StarRocksException(
+                    "get database write lock timeout, database=" + dbId + ", timeout=" + lockTimeoutMs + "ms");
         }
         try {
             if (Config.disable_load_job) {
@@ -311,7 +314,8 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             }
 
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-            dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, attachment, true);
+            dbTransactionMgr.prepareTransaction(
+                    transactionId, preparedTimeoutMs, tabletCommitInfos, tabletFailInfos, attachment, true);
             LOG.debug("prepare transaction: {} success", transactionId);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(dbId, tableId, LockType.WRITE);

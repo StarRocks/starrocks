@@ -31,6 +31,7 @@ import java.util.Map;
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_ENDPOINT;
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_SAS_TOKEN;
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.BLOB_ENDPOINT;
+import static com.starrocks.credential.gcp.GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN;
 
 public class CloudConfigurationFactoryTest {
 
@@ -362,7 +363,23 @@ public class CloudConfigurationFactoryTest {
                 "GCPCloudConfiguration{resources='', jars='', hdpuser='', " +
                         "cred=GCPCloudCredential{endpoint='http://xx', useComputeEngineServiceAccount=false, " +
                         "serviceAccountEmail='XX', serviceAccountPrivateKeyId='XX', serviceAccountPrivateKey='XX', " +
-                        "impersonationServiceAccount='XX'}}");
+                        "impersonationServiceAccount='XX', accessToken='', accessTokenExpiresAt=''}}");
+    }
+
+    @Test
+    public void testBuildCloudConfigurationForGCPVendedCredentials() {
+        Map<String, String> map = new HashMap<>();
+        map.put(GCS_ACCESS_TOKEN, "access_token");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map,
+                "gs://iceberg_gcp/iceberg_catalog/path/1/2");
+        Assertions.assertNotNull(cloudConfiguration);
+        Assertions.assertEquals(CloudType.GCP, cloudConfiguration.getCloudType());
+        Assertions.assertEquals(
+                "GCPCloudConfiguration{resources='', jars='', hdpuser='', cred=GCPCloudCredential{endpoint='', " +
+                        "useComputeEngineServiceAccount=false, serviceAccountEmail='', serviceAccountPrivateKeyId='', " +
+                        "serviceAccountPrivateKey='', impersonationServiceAccount='', accessToken='access_token', " +
+                        "accessTokenExpiresAt='9223372036854775807'}}",
+                cloudConfiguration.toConfString());
     }
 
     @Test

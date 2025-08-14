@@ -34,8 +34,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -43,9 +41,7 @@ import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import static com.starrocks.common.util.Util.normalizeName;
 
 // label name used to identify a load job
 public class LabelName implements ParseNode, Writable {
@@ -64,7 +60,7 @@ public class LabelName implements ParseNode, Writable {
 
     public LabelName(String dbName, String labelName, NodePosition pos) {
         this.pos = pos;
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.labelName = labelName;
     }
 
@@ -73,7 +69,7 @@ public class LabelName implements ParseNode, Writable {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public String getLabelName() {
@@ -108,17 +104,8 @@ public class LabelName implements ParseNode, Writable {
         return stringBuilder.toString();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // compatible with old version
-        Text.writeString(out, ClusterNamespace.getFullName(dbName));
-        Text.writeString(out, labelName);
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        labelName = Text.readString(in);
-    }
+
 
     @Override
     public NodePosition getPos() {

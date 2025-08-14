@@ -68,7 +68,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -109,7 +108,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
         FRONTEND_STREAMING(8),          // FE streaming load use this type
         MV_REFRESH(9),                  // Refresh MV
         REPLICATION(10),                // Replication
-        BYPASS_WRITE(11);               // Bypass BE, and write data file directly
+        BYPASS_WRITE(11),               // Bypass BE, and write data file directly
+        MULTI_STATEMENT_STREAMING(12);  // multi statement streaming load
 
         private final int flag;
 
@@ -310,6 +310,17 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     @SerializedName("to")
     private long timeoutMs = Config.stream_load_default_timeout_second * 1000L;
+
+    // The default timeout value (in milliseconds) for a transaction in the PREPARED state.
+    // A value of -1 indicates that the actual timeout will be determined dynamically at
+    // runtime by Config.prepared_transaction_default_timeout_second.
+    public static final long DEFAULT_PREPARED_TIMEOUT_MS = -1;
+
+    // The timeout (in milliseconds) that a transaction can remain in the PREPARED state
+    // before it must be either COMMITTED or ABORTED. This value is lazily set when the
+    // transaction transitions to the PREPARED state.
+    @SerializedName("pto")
+    private long preparedTimeoutMs = DEFAULT_PREPARED_TIMEOUT_MS;
 
     // optional
     @SerializedName("ta")
@@ -756,8 +767,18 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.prepareTime = prepareTime;
     }
 
-    public void setPreparedTime(long preparedTime) {
+    public void setPreparedTimeAndTimeout(long preparedTime, long preparedTimeoutMs) {
         this.preparedTime = preparedTime;
+        this.preparedTimeoutMs = preparedTimeoutMs;
+    }
+
+    public long getPreparedTime() {
+        return preparedTime;
+    }
+
+    public long getPreparedTimeoutMs() {
+        return preparedTimeoutMs == DEFAULT_PREPARED_TIMEOUT_MS ?
+            Config.prepared_transaction_default_timeout_second * 1000L : preparedTimeoutMs;
     }
 
     public void setCommitTime(long commitTime) {
@@ -825,9 +846,15 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     // return true if txn is running but timeout
     public boolean isTimeout(long currentMillis) {
-        return (transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs)
-                || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - preparedTime)
-                / 1000 > Config.prepared_transaction_default_timeout_second);
+        if (transactionStatus == TransactionStatus.PREPARE) {
+            return currentMillis - prepareTime > timeoutMs;
+        }
+        if (transactionStatus == TransactionStatus.PREPARED) {
+            long timeout = preparedTimeoutMs > 0 ?
+                    preparedTimeoutMs : Config.prepared_transaction_default_timeout_second * 1000L;
+            return (currentMillis - preparedTime) > timeout;
+        }
+        return false;
     }
 
     /*
@@ -1196,10 +1223,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return this.isCreatePartitionFailed.get();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
 
-    }
+
 
     @Override
     public void gsonPreProcess() throws IOException {

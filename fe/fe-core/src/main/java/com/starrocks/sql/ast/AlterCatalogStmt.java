@@ -15,13 +15,15 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class AlterCatalogStmt extends DdlStmt {
     private final String catalogName;
     private final AlterClause alterClause;
 
     public AlterCatalogStmt(String catalogName, AlterClause alterClause, NodePosition pos) {
         super(pos);
-        this.catalogName = catalogName;
+        this.catalogName = normalizeName(catalogName);
         this.alterClause = alterClause;
     }
 

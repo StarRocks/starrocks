@@ -17,6 +17,7 @@ package com.starrocks.qe.scheduler.dag;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.JoinNode;
@@ -167,10 +168,19 @@ public class ExecutionFragment {
         return colocatedAssignment;
     }
 
-    public ColocatedBackendSelector.Assignment getOrCreateColocatedAssignment(OlapScanNode scanNode) {
+    public ColocatedBackendSelector.Assignment getOrCreateColocatedAssignment(ScanNode scanNode)
+            throws StarRocksException {
         if (colocatedAssignment == null) {
-            final int numOlapScanNodes = scanNodes.values().stream().mapToInt(node -> node instanceof OlapScanNode ? 1 : 0).sum();
-            colocatedAssignment = new ColocatedBackendSelector.Assignment(scanNode, numOlapScanNodes);
+            final int numScanNodes = scanNodes.size();
+            ColocatedBackendSelector.Assignment.ScanRangeType type;
+            if (scanNode instanceof OlapScanNode olapScanNode) {
+                type = ColocatedBackendSelector.Assignment.ScanRangeType.NATIVE;
+            } else {
+                type = ColocatedBackendSelector.Assignment.ScanRangeType.NONNATIVE;
+            }
+
+            int bucketNum = scanNode.getBucketNums();
+            colocatedAssignment = new ColocatedBackendSelector.Assignment(bucketNum, numScanNodes, type);
         }
         return colocatedAssignment;
     }

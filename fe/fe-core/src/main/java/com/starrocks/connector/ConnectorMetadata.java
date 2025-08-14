@@ -261,6 +261,10 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support sink");
     }
 
+    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch, Object extra) {
+        throw new StarRocksConnectorException("This connector doesn't support sink");
+    }
+
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
@@ -328,6 +332,10 @@ public interface ConnectorMetadata {
     default Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
                                            ScalarOperator predicate, FileContent fileContent) {
         throw new StarRocksConnectorException("This connector doesn't support getting delete files");
+    }
+
+    default Procedure getProcedure(DatabaseTableName procedureName) {
+        throw new StarRocksConnectorException("This connector doesn't support getting procedure");
     }
 
     default void shutdown() {

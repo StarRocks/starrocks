@@ -143,7 +143,7 @@ public class TabletSchedCtxTest {
 
         // mock tabletScheduler
         tabletScheduler = new TabletScheduler(stat);
-        tabletScheduler.setLoadStatistic(clusterLoadStatistic);
+        tabletScheduler.setClusterLoadStatistic(clusterLoadStatistic);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().forEach(be -> {
             List<Long> pathHashes =
                     be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
@@ -159,7 +159,7 @@ public class TabletSchedCtxTest {
         clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex());
         clusterLoadStatistic.init();
-        tabletScheduler.setLoadStatistic(clusterLoadStatistic);
+        tabletScheduler.setClusterLoadStatistic(clusterLoadStatistic);
 
         LocalTablet missedTablet = new LocalTablet(TABLET_ID_1,
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(TABLET_ID_1));
@@ -297,10 +297,10 @@ public class TabletSchedCtxTest {
 
         ctx = new TabletSchedCtx(Type.BALANCE, 1, 2, 3, 4, 1001, System.currentTimeMillis());
         ctx.setOrigPriority(Priority.NORMAL);
-        ctx.setBalanceType(DiskAndTabletLoadReBalancer.BalanceType.TABLET_BETWEEN_BACKENDS);
+        ctx.setBalanceType(BalanceStat.BalanceType.CLUSTER_TABLET);
         results = ctx.getBrief();
         Assertions.assertEquals("1001", results.get(0));
         Assertions.assertEquals("BALANCE", results.get(1));
-        Assertions.assertEquals("TABLET_BETWEEN_BACKENDS", results.get(3));
+        Assertions.assertEquals("CLUSTER_TABLET", results.get(3));
     }
 }

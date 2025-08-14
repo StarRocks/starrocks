@@ -623,7 +623,8 @@ public class DefaultSharedDataWorkerProviderTest {
 
         { // normal case
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(
+                    scanNode.getBucketNums(), 1, ColocatedBackendSelector.Assignment.ScanRangeType.NATIVE);
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, provider, 1);
             // the computation will not fail even though there are non-available locations
@@ -641,7 +642,8 @@ public class DefaultSharedDataWorkerProviderTest {
                     ImmutableMap.of(availNode.getId(), availNode), WarehouseManager.DEFAULT_RESOURCE);
 
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(
+                    scanNode.getBucketNums(), 1, ColocatedBackendSelector.Assignment.ScanRangeType.NATIVE);
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, provider1, 1);
             // the computation will not fail even though there are non-available locations
@@ -658,7 +660,8 @@ public class DefaultSharedDataWorkerProviderTest {
             WorkerProvider providerNoAvailNode = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
                     ImmutableMap.of(), WarehouseManager.DEFAULT_RESOURCE);
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(
+                    scanNode.getBucketNums(), 1, ColocatedBackendSelector.Assignment.ScanRangeType.NATIVE);
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, providerNoAvailNode, 1);
             Assertions.assertThrows(NonRecoverableException.class, selector::computeScanRangeAssignment);

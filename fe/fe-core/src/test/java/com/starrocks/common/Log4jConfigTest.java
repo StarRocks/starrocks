@@ -118,7 +118,6 @@ public class Log4jConfigTest {
         Assertions.assertEquals("testJsonLogOutputFormat", jsonObject.get("method").getAsString());
         Assertions.assertEquals("Log4jConfigTest.java", jsonObject.get("file").getAsString());
         Assertions.assertEquals("WARN", jsonObject.get("level").getAsString());
-        Assertions.assertEquals("main", jsonObject.get("thread.name").getAsString());
         Assertions.assertEquals(logMessage, jsonObject.get("message").getAsString());
     }
 }

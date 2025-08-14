@@ -21,7 +21,6 @@
 #include "exprs/function_helper.h"
 #include "runtime/datetime_value.h"
 #include "types/logical_type.h"
-#include "util/timezone_hsscan.h"
 namespace starrocks {
 
 // TODO:

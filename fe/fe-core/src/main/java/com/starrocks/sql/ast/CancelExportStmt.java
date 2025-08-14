@@ -20,6 +20,8 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.UUID;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 /**
  * syntax:
  * CANCEL EXPORT FROM example_db WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122"
@@ -31,7 +33,7 @@ public class CancelExportStmt extends DdlStmt {
     private UUID queryId;
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public void setQueryId(UUID queryId) {
@@ -56,7 +58,7 @@ public class CancelExportStmt extends DdlStmt {
 
     public CancelExportStmt(String dbName, Expr whereClause, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.whereClause = whereClause;
     }
 

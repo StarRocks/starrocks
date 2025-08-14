@@ -21,6 +21,8 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Objects;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class PipeName extends StatementBase {
 
     private String dbName;
@@ -34,18 +36,18 @@ public class PipeName extends StatementBase {
 
     public PipeName(String dbName, String pipeName) {
         super(NodePosition.ZERO);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.pipeName = pipeName;
     }
 
     public PipeName(NodePosition pos, String dbName, String pipeName) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.pipeName = pipeName;
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public String getDbName() {

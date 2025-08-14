@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
@@ -23,13 +22,9 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
@@ -107,26 +102,9 @@ public class HashDistributionDesc extends DistributionDesc {
         return new HashDistributionInfo(numBucket, distributionColumns);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
 
-        out.writeInt(numBucket);
-        int count = distributionColumnNames.size();
-        out.writeInt(count);
-        for (String colName : distributionColumnNames) {
-            Text.writeString(out, colName);
-        }
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        numBucket = in.readInt();
-        int count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            distributionColumnNames.add(Text.readString(in));
-        }
-    }
- 
+
     @Override
     public String toString() {
         if (numBucket > 0) {

@@ -1,4 +1,4 @@
--- name: test_transparent_mv_iceberg_part1
+-- name: test_transparent_mv_iceberg_part1 @sequential @slow
 create external catalog mv_iceberg_${uuid0}
 properties
 (

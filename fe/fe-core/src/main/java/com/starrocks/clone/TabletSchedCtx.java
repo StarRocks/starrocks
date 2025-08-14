@@ -54,7 +54,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.clone.DiskAndTabletLoadReBalancer.BalanceType;
+import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletScheduler.PathSlot;
 import com.starrocks.common.Config;

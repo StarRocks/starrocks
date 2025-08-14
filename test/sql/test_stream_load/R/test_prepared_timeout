@@ -1,0 +1,225 @@
+-- name: test_prepared_timeout @slow
+create database db_prepared_timeout_normal_${uuid0};
+-- result:
+-- !result
+use db_prepared_timeout_normal_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `id` int
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:test_normal" -H "db:db_prepared_timeout_normal_${uuid0}" -H "table:test_normal" -XPOST ${url}/api/transaction/begin
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "test_normal",
+    "TxnId": 239,
+    "BeginTxnTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:test_normal" -H "Expect:100-continue" -H "db:db_prepared_timeout_normal_${uuid0}" -H "table:test_normal" -d '1' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "test_normal",
+    "TxnId": 239,
+    "LoadBytes": 1,
+    "StreamLoadPlanTimeMs": 1,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:test_normal" -H "db:db_prepared_timeout_normal_${uuid0}" -H "prepared_timeout:300" -XPOST ${url}/api/transaction/prepare
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "test_normal",
+    "TxnId": 239,
+    "NumberTotalRows": 1,
+    "NumberLoadedRows": 1,
+    "NumberFilteredRows": 0,
+    "NumberUnselectedRows": 0,
+    "LoadBytes": 1,
+    "LoadTimeMs": 36,
+    "StreamLoadPlanTimeMs": 1,
+    "ReceivedDataTimeMs": 0,
+    "WriteDataTimeMs": 20,
+    "CommitAndPublishTimeMs": 2
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:test_normal" -H "db:db_prepared_timeout_normal_${uuid0}" -XPOST ${url}/api/transaction/commit
+-- result:
+0
+{
+  "Label": "test_normal",
+  "Status": "OK",
+  "TxnId": 239,
+  "Message": ""
+}
+-- !result
+select * from test_normal order by id;
+-- result:
+1
+-- !result
+function: get_transaction_meta("db_prepared_timeout_normal_${uuid0}", "test_normal", "|", "TransactionStatus", "PreparedTimeoutMs")
+-- result:
+VISIBLE|300000
+-- !result
+create database db_prepared_timeout_default_${uuid0};
+-- result:
+-- !result
+use db_prepared_timeout_default_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `test_default` (
+  `id` int
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:test_default" -H "db:db_prepared_timeout_default_${uuid0}" -H "table:test_default" -XPOST ${url}/api/transaction/begin
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "test_default",
+    "TxnId": 240,
+    "BeginTxnTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:test_default" -H "Expect:100-continue" -H "db:db_prepared_timeout_default_${uuid0}" -H "table:test_default" -d '2' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "test_default",
+    "TxnId": 240,
+    "LoadBytes": 1,
+    "StreamLoadPlanTimeMs": 1,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:test_default" -H "db:db_prepared_timeout_default_${uuid0}" -XPOST ${url}/api/transaction/prepare
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "test_default",
+    "TxnId": 240,
+    "NumberTotalRows": 1,
+    "NumberLoadedRows": 1,
+    "NumberFilteredRows": 0,
+    "NumberUnselectedRows": 0,
+    "LoadBytes": 1,
+    "LoadTimeMs": 33,
+    "StreamLoadPlanTimeMs": 1,
+    "ReceivedDataTimeMs": 0,
+    "WriteDataTimeMs": 19,
+    "CommitAndPublishTimeMs": 2
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:test_default" -H "db:db_prepared_timeout_default_${uuid0}" -XPOST ${url}/api/transaction/commit
+-- result:
+0
+{
+  "Label": "test_default",
+  "Status": "OK",
+  "TxnId": 240,
+  "Message": ""
+}
+-- !result
+select * from test_default order by id;
+-- result:
+2
+-- !result
+function: get_transaction_meta("db_prepared_timeout_default_${uuid0}", "test_default", "|", "TransactionStatus", "PreparedTimeoutMs")
+-- result:
+VISIBLE|86400000
+-- !result
+create database db_prepared_timeout_timeout_${uuid0};
+-- result:
+-- !result
+use db_prepared_timeout_timeout_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `test_timeout` (
+  `id` int
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:test_timeout" -H "db:db_prepared_timeout_timeout_${uuid0}" -H "table:test_timeout" -XPOST ${url}/api/transaction/begin
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "test_timeout",
+    "TxnId": 241,
+    "BeginTxnTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:test_timeout" -H "Expect:100-continue" -H "db:db_prepared_timeout_timeout_${uuid0}" -H "table:test_timeout" -d '3' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "test_timeout",
+    "TxnId": 241,
+    "LoadBytes": 1,
+    "StreamLoadPlanTimeMs": 1,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:test_timeout" -H "db:db_prepared_timeout_timeout_${uuid0}" -H "prepared_timeout:1" -XPOST ${url}/api/transaction/prepare
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "test_timeout",
+    "TxnId": 241,
+    "NumberTotalRows": 1,
+    "NumberLoadedRows": 1,
+    "NumberFilteredRows": 0,
+    "NumberUnselectedRows": 0,
+    "LoadBytes": 1,
+    "LoadTimeMs": 36,
+    "StreamLoadPlanTimeMs": 1,
+    "ReceivedDataTimeMs": 0,
+    "WriteDataTimeMs": 21,
+    "CommitAndPublishTimeMs": 2
+}
+-- !result
+function: wait_db_transaction_finish("db_prepared_timeout_timeout_${uuid0}", 300)
+-- result:
+None
+-- !result
+function: get_transaction_meta("db_prepared_timeout_timeout_${uuid0}", "test_timeout", "|", "TransactionStatus", "PreparedTimeoutMs", "Reason")
+-- result:
+ABORTED|1000|timeout by txn manager
+-- !result

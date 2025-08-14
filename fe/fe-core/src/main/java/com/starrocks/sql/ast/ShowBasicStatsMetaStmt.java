@@ -21,13 +21,10 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.parser.NodePosition;
@@ -47,21 +44,6 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         this.limitElement = limitElement;
         this.orderByElements = orderByElements;
     }
-
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Database", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Table", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Columns", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("UpdateTime", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Healthy", ScalarType.createVarchar(5)))
-                    .addColumn(new Column("ColumnStats", ScalarType.createVarcharType(128)))
-                    .addColumn(new Column("TabletStatsReportTime", ScalarType.createVarcharType(60)))
-                    .addColumn(new Column("TableHealthyMetrics", ScalarType.createVarcharType(128)))
-                    .addColumn(new Column("TableUpdateTime", ScalarType.createVarcharType(60)))
-                    .build();
 
     public static List<String> showBasicStatsMeta(ConnectContext context,
                                                   BasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
@@ -143,11 +125,6 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         row.set(7, basicStatsMeta.getColumnStatsString());
 
         return row;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
     }
 
     @Override

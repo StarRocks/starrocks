@@ -31,6 +31,7 @@ class CompactionProfileTest {
         stat.readSegmentCount = 7L;
         stat.writeSegmentCount = 8L;
         stat.writeSegmentBytes = 9L;
+        stat.writeTimeRemote = 10L;
 
         CompactionProfile profile = new CompactionProfile(stat);
 
@@ -43,6 +44,7 @@ class CompactionProfileTest {
         Assertions.assertTrue(s.contains("read_segment_count"));
         Assertions.assertTrue(s.contains("write_segment_count"));
         Assertions.assertTrue(s.contains("write_segment_mb"));
+        Assertions.assertTrue(s.contains("write_remote_sec"));
         Assertions.assertTrue(s.contains("in_queue_sec"));
     }
 }

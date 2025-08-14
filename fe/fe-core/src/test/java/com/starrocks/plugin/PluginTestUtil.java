@@ -26,10 +26,22 @@ import java.nio.file.FileSystems;
 import java.nio.file.Path;
 
 public class PluginTestUtil {
-
     public static String getTestPathString(String name) {
-        URL now = PluginTestUtil.class.getResource("/");
-        return now.getPath() + "/plugin_test/" + name;
+        URL resourceRoot = PluginTestUtil.class.getResource("/");
+        if (resourceRoot == null) {
+            throw new RuntimeException("Could not find resource root");
+        }
+
+        String path = resourceRoot.getPath();
+        File resourceDir = new File(path + "/plugin_test");
+
+        // If the path doesn't exist, try looking for the resource in Gradle's resource directory
+        if (!resourceDir.exists()) {
+            // Transform from build/classes/java/test to build/resources/test
+            path = path.replaceFirst("build/classes/\\w+/test", "build/resources/test");
+        }
+
+        return path + "/plugin_test/" + name;
     }
 
     public static Path getTestPath(String name) {

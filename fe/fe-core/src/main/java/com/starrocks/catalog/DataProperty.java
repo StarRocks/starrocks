@@ -39,7 +39,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -49,9 +48,6 @@ import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -138,22 +134,8 @@ public class DataProperty implements Writable {
         return cooldownTimeMs;
     }
 
-    public static DataProperty read(DataInput in) throws IOException {
-        DataProperty dataProperty = new DataProperty();
-        dataProperty.readFields(in);
-        return dataProperty;
-    }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, storageMedium.name());
-        out.writeLong(cooldownTimeMs);
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        storageMedium = TStorageMedium.valueOf(Text.readString(in));
-        cooldownTimeMs = in.readLong();
-    }
 
     @Override
     public int hashCode() {

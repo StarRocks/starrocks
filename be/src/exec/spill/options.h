@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <limits>
 #include <memory>
 
 #include "column/vectorized_fwd.h"
@@ -24,7 +23,7 @@
 #include "exec/workgroup/work_group_fwd.h"
 
 namespace starrocks {
-class AggregatorParams;
+struct AggregatorParams;
 using AggregatorParamsPtr = std::shared_ptr<AggregatorParams>;
 }; // namespace starrocks
 

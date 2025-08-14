@@ -51,6 +51,7 @@ set(EXEC_FILES
     aggregator.cpp
     sorted_streaming_aggregator.cpp
     aggregate/agg_hash_variant.cpp
+    aggregate/compress_serializer.cpp
     aggregate/aggregate_base_node.cpp
     aggregate/aggregate_blocking_node.cpp
     aggregate/distinct_blocking_node.cpp
@@ -172,6 +173,7 @@ set(EXEC_FILES
     schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
     schema_scanner/schema_applicable_roles_scanner.cpp
     schema_scanner/schema_keywords_scanner.cpp
+    schema_scanner/schema_dynamic_tablet_jobs_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge.cpp

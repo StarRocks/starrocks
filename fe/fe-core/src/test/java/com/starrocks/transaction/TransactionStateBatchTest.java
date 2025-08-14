@@ -15,19 +15,13 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.system.ComputeNode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -40,52 +34,6 @@ public class TransactionStateBatchTest {
     public void tearDown() {
         File file = new File(fileName);
         file.delete();
-    }
-
-    @Test
-    public void testSerDe() throws IOException, StarRocksException {
-        // 1. Write objects to file
-        File file = new File(fileName);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        Long dbId = 1000L;
-        Long tableId = 20000L;
-        List<TransactionState> transactionStateList = new ArrayList<TransactionState>();
-        TransactionState transactionState1 = new TransactionState(dbId, Lists.newArrayList(tableId),
-                3000, "label1", UUIDUtil.genTUniqueId(),
-                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
-                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
-                60 * 1000L);
-        TransactionState transactionState2 = new TransactionState(dbId, Lists.newArrayList(tableId),
-                3001, "label2", UUIDUtil.genTUniqueId(),
-                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
-                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
-                60 * 1000L);
-        transactionStateList.add(transactionState1);
-        transactionStateList.add(transactionState2);
-
-        TransactionStateBatch stateBatch = new TransactionStateBatch(transactionStateList);
-        stateBatch.write(out);
-        out.flush();
-        out.close();
-
-        // 2. Read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        TransactionStateBatch readTransactionStateBatch = TransactionStateBatch.read(in);
-
-        Assertions.assertEquals(readTransactionStateBatch.getTableId(), tableId.longValue());
-        Assertions.assertEquals(2, readTransactionStateBatch.getTxnIds().size());
-
-        TransactionState state = readTransactionStateBatch.index(0);
-        Assertions.assertEquals(state.getTransactionId(), 3000L);
-        Assertions.assertEquals(state.getTransactionId(), transactionState1.getTransactionId());
-        Assertions.assertEquals(state.getDbId(), dbId.longValue());
-
-        readTransactionStateBatch.setTransactionStatus(TransactionStatus.VISIBLE);
-        Assertions.assertEquals(TransactionStatus.VISIBLE, state.getTransactionStatus());
-
-        in.close();
     }
 
     @Test

@@ -47,7 +47,6 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
-import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -455,8 +454,10 @@ public class InformationSchemaDataSource {
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));
         // DATA_SIZE
-        ByteSizeValue byteSizeValue = new ByteSizeValue(physicalPartition.storageDataSize());
-        partitionMetaInfo.setData_size(byteSizeValue.toString());
+        // DATA_SIZE in PARTITIONS_META is string before, and bigint is more programmer-friendly and change it to bigint
+        // We do not change the field type in `TPartitionMetaInfo` for compatibility and BE will finished the type 
+        // convertion.
+        partitionMetaInfo.setData_size(String.valueOf(physicalPartition.storageDataSize()));
         DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
         // STORAGE_MEDIUM
         partitionMetaInfo.setStorage_medium(dataProperty.getStorageMedium().name());
@@ -489,9 +490,11 @@ public class InformationSchemaDataSource {
             partitionMetaInfo.setMax_cs(compactionScore != null ? compactionScore.getMax() : 0.0);
             // STORAGE_PATH
             partitionMetaInfo.setStorage_path(
-                    table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
+                    table.getPartitionFilePathInfo(physicalPartition.getPathId()).getFullPath());
             // METADATA_SWITCH_VERSION
             partitionMetaInfo.setMetadata_switch_version(physicalPartition.getMetadataSwitchVersion());
+            // PATH_ID
+            partitionMetaInfo.setPath_id(physicalPartition.getPathId());
         }
 
         partitionMetaInfo.setData_version(physicalPartition.getDataVersion());
@@ -499,6 +502,8 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setVersion_txn_type(physicalPartition.getVersionTxnType().toThrift());
         // STORAGE_SIZE
         partitionMetaInfo.setStorage_size(physicalPartition.storageDataSize() + physicalPartition.getExtraFileSize());
+        // TABLET_BALANCED
+        partitionMetaInfo.setTablet_balanced(physicalPartition.isTabletBalanced());
     }
 
     // tables

@@ -17,6 +17,7 @@ ALTER MATERIALIZED VIEW can:
   - `bloom_filter_columns`
   - `partition_ttl_number`
   - `partition_refresh_number`
+  - `partition_refresh_strategy`
   - `resource_group`
   - `auto_refresh_partitions_limit`
   - `excluded_trigger_tables`

@@ -46,14 +46,12 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.persist.ExpressionSerializedObject;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ColumnDef;
@@ -63,7 +61,6 @@ import com.starrocks.thrift.TColumn;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.text.translate.UnicodeUnescaper;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -862,13 +859,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             return false;
         }
         return true;
-    }
-
-
-
-    public static Column read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Column.class);
     }
 
     public String generatedColumnExprToString() {

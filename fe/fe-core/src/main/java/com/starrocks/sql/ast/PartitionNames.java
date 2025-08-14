@@ -12,24 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -118,8 +112,7 @@ public class PartitionNames implements ParseNode, Writable {
         return !partitionColValues.isEmpty();
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
+    public void analyze() throws AnalysisException {
         if (partitionNames.isEmpty()) {
             throw new AnalysisException("No partition specifed in partition lists");
         }
@@ -144,10 +137,4 @@ public class PartitionNames implements ParseNode, Writable {
         return sb.toString();
     }
 
-
-
-    public static PartitionNames read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, PartitionNames.class);
-    }
 }

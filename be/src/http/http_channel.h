@@ -18,6 +18,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -44,6 +45,11 @@ public:
     static void send_reply(HttpRequest* request, HttpStatus status = HttpStatus::OK);
 
     static void send_reply(HttpRequest* request, HttpStatus status, std::string_view content);
+
+    static void send_reply_json(HttpRequest* request, HttpStatus status, std::string_view content);
+
+    static void send_reply(HttpRequest* request, HttpStatus status, std::string_view content,
+                           const std::optional<std::string_view>& content_type);
 
     static void send_file(HttpRequest* request, int fd, size_t off, size_t size);
 };

@@ -821,7 +821,7 @@ public final class SparkDpp implements java.io.Serializable {
                     if (validRow) {
                         Row row = null;
                         if (fileGroup.columnsFromPath == null) {
-                            row = RowFactory.create(attributes);
+                            row = RowFactory.create((Object[]) attributes);
                         } else {
                             // process columns from path
                             // append columns from path to the tail

@@ -31,11 +31,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class AlterLoadStmtTest {
 
-    private Analyzer analyzer;
-
     @BeforeEach
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer();
     }
 
     @Test

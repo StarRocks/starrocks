@@ -361,6 +361,9 @@ statement
     | disableBaselinePlanStatement
     | enableBaselinePlanStatement
 
+    // Procedure Statement
+    | callProcedureStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -477,7 +480,7 @@ keyDesc
     ;
 
 orderByDesc
-    : ORDER BY identifierList
+    : ORDER BY '(' sortItem (',' sortItem)* ')'
     ;
 
 columnNullable
@@ -1156,7 +1159,11 @@ dropTagClause
     ;
 
 tableOperationClause
-    : EXECUTE functionCall
+    : EXECUTE tableOperationArg
+    ;
+
+tableOperationArg
+    : functionCall (WHERE expression)?
     ;
 
 tagOptions
@@ -2268,6 +2275,11 @@ translateSQL
     : .+
     ;
 
+// ------------------------------------------- Call Procedure Statement ------------------------------------------------
+callProcedureStatement
+    : CALL qualifiedName '(' (argumentList)? ')'
+    ;
+
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
@@ -2414,8 +2426,8 @@ sampleClause
     ;
 
 argumentList
-    : expressionList
-    | namedArgumentList
+    : namedArgumentList
+    | expressionList
     ;
 
 namedArgumentList
@@ -2424,6 +2436,7 @@ namedArgumentList
 
 namedArgument
     : identifier '=>' expression                                                        #namedArguments
+    | identifier '=' expression                                                         #namedArguments
     ;
 
 joinRelation
@@ -2624,7 +2637,7 @@ primaryExpression
     | primaryExpression ARROW string                                                      #arrowExpression
     | (identifier | identifierList) '->' expression                                       #lambdaFunctionExpr
     | identifierList '->' '('(expressionList)?')'                                         #lambdaFunctionExpr
-    | left = primaryExpression NOT? MATCH right = primaryExpression                       #matchExpr
+    | left = primaryExpression NOT? matchOperator right = primaryExpression               #matchExpr
     ;
 
 literalExpression
@@ -2964,6 +2977,11 @@ comparisonOperator
     : EQ | NEQ | LT | LTE | GT | GTE | EQ_FOR_NULL
     ;
 
+matchOperator
+    : MATCH
+    | MATCH_ANY
+    ;
+
 booleanValue
     : TRUE | FALSE
     ;
@@ -3125,7 +3143,7 @@ nonReserved
     | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE | BASELINE
-    | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
+    | CACHE | CALL | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
     | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DIALECT | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
@@ -3138,7 +3156,7 @@ nonReserved
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
-    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCH_ANY | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES

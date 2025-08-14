@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ExecPlan;
@@ -32,10 +31,6 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInput;
-import java.io.DataInputStream;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -89,24 +84,6 @@ public class MVMaintenanceJobTest extends PlanTestBase {
 
         job.onSchedule();
         job.stopJob();
-    }
-
-    @Test
-    public void serialize() throws IOException {
-        MaterializedView view = new MaterializedView();
-        view.setId(1024);
-        view.setName("view1");
-        view.setMaintenancePlan(new ExecPlan());
-
-        MVMaintenanceJob job = new MVMaintenanceJob(view);
-        DataOutputBuffer buffer = new DataOutputBuffer(1024);
-        job.write(buffer);
-        byte[] bytes = buffer.getData();
-
-        DataInput input = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
-        MVMaintenanceJob deserialized = MVMaintenanceJob.read(input);
-        assertEquals(job, deserialized);
-
     }
 
     @Test

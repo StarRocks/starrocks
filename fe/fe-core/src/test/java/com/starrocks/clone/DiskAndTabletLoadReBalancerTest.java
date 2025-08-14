@@ -35,6 +35,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.clone.DiskAndTabletLoadReBalancer.BackendBalanceState;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
@@ -201,6 +202,10 @@ public class DiskAndTabletLoadReBalancerTest {
         Assertions.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId3)));
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId1)));
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId2)));
+
+        // check balance stat
+        Assertions.assertFalse(materializedIndex.isTabletBalanced());
+        Assertions.assertEquals(BalanceType.CLUSTER_TABLET, materializedIndex.getBalanceType());
 
         // set table state to schema_change, balance should be ignored
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
@@ -570,6 +575,14 @@ public class DiskAndTabletLoadReBalancerTest {
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash10)));
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash13)));
 
+        // check balance stat
+        BalanceStat stat0 = clusterLoadStatistic.getBackendDiskBalanceStat(TStorageMedium.HDD, beId1);
+        Assertions.assertFalse(stat0.isBalanced());
+        Assertions.assertEquals(BalanceType.BACKEND_DISK, stat0.getBalanceType());
+        BalanceStat stat1 = clusterLoadStatistic.getBackendDiskBalanceStat(TStorageMedium.SSD, beId1);
+        Assertions.assertFalse(stat1.isBalanced());
+        Assertions.assertEquals(BalanceType.BACKEND_DISK, stat1.getBalanceType());
+
         // set Config.balance_load_disk_safe_threshold to 0.9 to trigger backend tablet distribution balance
         Config.tablet_sched_balance_load_disk_safe_threshold = 0.9;
         tablets = rebalancer.selectAlternativeTablets();
@@ -580,6 +593,11 @@ public class DiskAndTabletLoadReBalancerTest {
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash14)));
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash10)));
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash13)));
+
+        // check balance stat
+        BalanceStat stat2 = materializedIndex.getBalanceStat();
+        Assertions.assertFalse(stat2.isBalanced());
+        Assertions.assertEquals(BalanceType.BACKEND_TABLET, stat2.getBalanceType());
 
         // set table state to schema_change, balance should be ignored
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
@@ -761,6 +779,11 @@ public class DiskAndTabletLoadReBalancerTest {
 
         Assertions.assertEquals(4, be1SourceCnt);
         Assertions.assertEquals(4, be2SourceCnt);
+
+        // check balance stat
+        BalanceStat stat = clusterLoadStatistic.getClusterDiskBalanceStat(TStorageMedium.HDD);
+        Assertions.assertFalse(stat.isBalanced());
+        Assertions.assertEquals(BalanceType.CLUSTER_DISK, stat.getBalanceType());
     }
 
     @Test

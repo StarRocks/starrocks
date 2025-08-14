@@ -230,7 +230,7 @@ public class HDFSBackendSelector implements BackendSelector {
         return node;
     }
 
-    class ComputeNodeFunnel implements Funnel<ComputeNode> {
+    static class ComputeNodeFunnel implements Funnel<ComputeNode> {
         @Override
         public void funnel(ComputeNode computeNode, PrimitiveSink primitiveSink) {
             primitiveSink.putString(computeNode.getHost(), StandardCharsets.UTF_8);

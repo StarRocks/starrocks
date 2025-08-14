@@ -100,23 +100,6 @@ ORDER BY (device_id, ts);
     A telemetry table sorted by (device_id, ts) achieved 1.8 × better compression (LZ4) and 25 % lower CPU/scan than the same data ingested unsorted.
 
 ---
-5. Faster Merge‑On‑Write  for  Primary‑Key Tables
-
-    How it works:
-
-    During upsert, the engine rewrites only the slice whose key range overlaps the batch instead of the whole tablet.
-
-    Example:
-
-    ```sql
-    UPDATE balances
-    SET    amount = amount + 100
-    WHERE  account_id = 123;
-    ```
-
-    With `ORDER BY (account_id)` less than 1 % of segment data is touched versus 100 % if unsorted—yielding 2–4 × higher write throughput on update‑heavy workloads.
-
----
 
 ## How the Sort Key Works
 

@@ -180,7 +180,7 @@ public class InsertStmt extends DmlStmt {
     public void setOverwrite(boolean overwrite) {
         isOverwrite = overwrite;
     }
-
+    
     public void setOverwriteJobId(long overwriteJobId) {
         this.overwriteJobId = overwriteJobId;
     }

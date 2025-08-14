@@ -123,6 +123,30 @@ SELECT * FROM <mv_name> [_SYNC_MV_];
 | bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union             |
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                |
 
+除了上述函数外，从 StarRocks v3.4.0 开始，同步物化视图还支持通用聚合函数。有关通用聚合函数的更多信息，请参见[通用聚合函数状态](../../../table_design/table_types/aggregate_table.md#use-generic-aggregate-states-in-materialized-views)。
+
+```SQL
+-- Create a synchronous materialized view test_mv1 to store aggregate states.
+CREATE MATERIALIZED VIEW test_mv1 
+AS
+SELECT 
+    dt,
+    -- Original aggregate functions.
+    min(id) AS min_id,
+    max(id) AS max_id,
+    sum(id) AS sum_id,
+    bitmap_union(to_bitmap(id)) AS bitmap_union_id,
+    hll_union(hll_hash(id)) AS hll_union_id,
+    percentile_union(percentile_hash(id)) AS percentile_union_id,
+    -- Generic aggregate state functions.
+    ds_hll_count_distinct_union(ds_hll_count_distinct_state(id)) AS hll_id,
+    avg_union(avg_state(id)) AS avg_id,
+    array_agg_union(array_agg_state(id)) AS array_agg_id,
+    min_by_union(min_by_state(province, id)) AS min_by_province_id
+FROM t1
+GROUP BY dt;
+```
+
 ## 异步物化视图
 
 ### 语法
@@ -270,6 +294,11 @@ AS
 
 异步物化视图的排序键。如不指定该参数，StarRocks 从 SELECT 列中选择部分前缀作为排序键，例如：`select a, b, c, d` 中, 排序列可能为 `a` 和 `b`。此参数自 StarRocks 3.0 起支持。
 
+> **注意**
+> 物化视图中有两种不同的 `ORDER BY` 用法：
+> - CREATE MATERIALIZED VIEW 语句中的 `ORDER BY` 定义物化视图的排序键，有助于基于排序键加速查询。这不会影响物化视图的基于 SPJG 的透明加速能力，但不保证物化视图查询结果的全局排序。
+> - 物化视图查询定义中的 `ORDER BY` 保证查询结果的全局排序，但会阻止物化视图用于基于 SPJG 的透明查询改写。因此，如果物化视图用于查询改写，则不应在物化视图的查询定义中使用 `ORDER BY`。
+
 **INDEX**（选填）
 
 异步物化视图支持Bitmap和BloomFilter索引以加速查询性能，其使用方式同普通Table一样。关于Bitmap和BloomFilter索引的使用场景及信息，可以参考：[Bitmap 索引](../../../table_design/indexes/Bitmap_index.md)和[Bloom filter 索引](../../../table_design/indexes/Bloomfilter_index.md)。
@@ -313,6 +342,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 - `partition_ttl`: 物化视图分区的生存时间 (TTL)。数据在指定的时间范围内的分区将被保留，过期的分区将被自动删除。单位：`YEAR`、`MONTH`、`DAY`、`HOUR` 和 `MINUTE`。例如，您可以将此属性设置为 `2 MONTH`（2个月）。建议您使用此属性，不推荐使用 `partition_ttl_number`。该属性自 v3.1.5 起支持。
 - `partition_ttl_number`：需要保留的最近的物化视图分区数量。对于分区开始时间小于当前时间的分区，当数量超过该值之后，多余的分区将会被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。在[动态分区](../../../table_design/data_distribution/dynamic_partitioning.md)场景下，提前创建的未来分区将不会被纳入 TTL 考虑。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
 - `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。当值为 `-1` 时，将不会拆分刷新任务。自 v3.3 起，默认值由 `-1` 变为 `1`，表示 StarRocks 每次只刷新一个分区。
+- `partition_refresh_strategy`：单次刷新中物化视图的刷新策略。当值为`adaptive`，会根据基表分区的数据量来自行判断此次刷新需要刷新的分区数，此策略会极大地提高刷新效率。如不指定该属性，默认是`strict`, 即单次刷新完全由`partition_refresh_number`来控制。
 - `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
 
 - `excluded_refresh_tables`：在此项属性中列出的基表，其数据产生变化时不会更新至物化视图。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
@@ -780,8 +810,10 @@ PROPERTIES (
 示例一：从源表创建非分区物化视图
 
 ```SQL
+-- 创建一个按 lo_custkey 排序的非分区物化视图
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC
 AS
 select
@@ -791,16 +823,17 @@ select
     sum(lo_revenue) as total_revenue, 
     count(lo_shipmode) as shipmode_count
 from lineorder 
-group by lo_orderkey, lo_custkey 
-order by lo_orderkey;
+group by lo_orderkey, lo_custkey;
 ```
 
 示例二：从源表创建分区物化视图
 
 ```SQL
+-- 创建一个按 `lo_orderdate` 分区并按 `lo_custkey` 排序的分区物化视图
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -811,8 +844,8 @@ select
     sum(lo_revenue) as total_revenue, 
     count(lo_shipmode) as shipmode_count
 from lineorder 
-group by lo_orderkey, lo_orderdate, lo_custkey
-order by lo_orderkey;
+group by lo_orderkey, lo_orderdate, lo_custkey;
+```
 
 # 使用 date_trunc 函数将 `dt` 列截断至以月为单位进行分区。
 CREATE MATERIALIZED VIEW order_mv1
@@ -982,6 +1015,25 @@ PROPERTIES (
     "query_rewrite_consistency" = "force_mv"
 )
 AS SELECT * from t1;
+```
+
+示例七：创建具有特定排序键的分区物化视图：
+```SQL
+CREATE MATERIALIZED VIEW lo_mv2
+PARTITION BY `lo_orderdate`
+DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
+REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+AS
+select
+    lo_orderkey,
+    lo_orderdate,
+    lo_custkey, 
+    sum(lo_quantity) as total_quantity, 
+    sum(lo_revenue) as total_revenue, 
+    count(lo_shipmode) as shipmode_count
+from lineorder 
+group by lo_orderkey, lo_orderdate, lo_custkey;
 ```
 
 

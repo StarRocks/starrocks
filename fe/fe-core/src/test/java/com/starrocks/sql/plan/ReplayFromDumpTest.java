@@ -1011,6 +1011,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testPushdownSubfield() throws Exception {
         String dumpString = getDumpInfoFromFile("query_dump/pushdown_subfield");
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        queryDumpInfo.getSessionVariable().setEnableJSONV2Rewrite(false);
         Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                 TExplainLevel.NORMAL);
         Assertions.assertTrue(replayPair.second.contains(
@@ -1068,10 +1069,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
         Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                 TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("" +
-                "RESULT SINK\n" +
-                "\n" +
-                "  0:EMPTYSET"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("0:EMPTYSET"), replayPair.second);
     }
 
     @Test
@@ -1149,5 +1147,19 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 1711\n" +
                 "    RANDOM"), replayPair.second);
+    }
+
+    @Test
+    public void testPruneUnionEmpty() throws Exception {
+        try {
+            FeConstants.enablePruneEmptyOutputScan = true;
+            String dumpString = getDumpInfoFromFile("query_dump/prune_union_empty");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                    TExplainLevel.NORMAL);
+            Assertions.assertTrue(replayPair.second.contains("1:EMPTYSET"), replayPair.second);
+        } finally {
+            FeConstants.enablePruneEmptyOutputScan = false;
+        }
     }
 }

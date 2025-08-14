@@ -31,6 +31,28 @@
 
 namespace starrocks::lake {
 
+void collect_writer_stats(OlapWriterStatistics& writer_stats, SegmentWriter* segment_writer) {
+    if (segment_writer == nullptr) {
+        return;
+    }
+    auto stats_or = segment_writer->get_numeric_statistics();
+    if (!stats_or.ok()) {
+        VLOG(3) << "failed to get statistics: " << stats_or.status();
+        return;
+    }
+
+    std::unique_ptr<io::NumericStatistics> stats = std::move(stats_or).value();
+    for (int64_t i = 0, sz = (stats ? stats->size() : 0); i < sz; ++i) {
+        auto&& name = stats->name(i);
+        auto&& value = stats->value(i);
+        if (name == kBytesWriteRemote) {
+            writer_stats.bytes_write_remote += value;
+        } else if (name == kIONsWriteRemote) {
+            writer_stats.write_remote_ns += value;
+        }
+    }
+}
+
 HorizontalGeneralTabletWriter::HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                              std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                                              bool is_compaction, ThreadPool* flush_pool,
@@ -93,7 +115,15 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     auto name = gen_segment_filename(_txn_id);
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
+
+    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
+        metadata && metadata->has_flat_json_config()) {
+        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+        opts.flat_json_config->update(metadata->flat_json_config());
+    }
+
     opts.global_dicts = _global_dicts;
+
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
@@ -137,7 +167,7 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         }
         _files.emplace_back(file_info);
         _data_size += segment_size;
-        _stats.bytes_write += segment_size;
+        collect_writer_stats(_stats, _seg_writer.get());
         _stats.segment_count++;
         if (segment) {
             segment->set_data_size(segment_size);
@@ -284,7 +314,7 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         std::string segment_name = std::string(basename(segment_path));
         _files.emplace_back(FileInfo{segment_name, segment_size, segment_writer->encryption_meta()});
         _data_size += segment_size;
-        _stats.bytes_write += segment_size;
+        collect_writer_stats(_stats, segment_writer.get());
         _stats.segment_count++;
         segment_writer.reset();
     }
@@ -320,6 +350,13 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     auto name = gen_segment_filename(_txn_id);
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
+
+    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
+        metadata && metadata->has_flat_json_config()) {
+        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+        opts.flat_json_config->update(metadata->flat_json_config());
+    }
+
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
