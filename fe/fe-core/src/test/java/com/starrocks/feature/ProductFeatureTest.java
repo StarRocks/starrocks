@@ -24,6 +24,7 @@ public class ProductFeatureTest {
     @Test
     public void testProductFeature() {
         List<ProductFeature> features = ProductFeature.getFeatures();
-        Assertions.assertEquals(4, features.size());
+        Assertions.assertEquals(5, features.size());
+        Assertions.assertEquals("multi-cngroup", features.get(4).getName());
     }
 }

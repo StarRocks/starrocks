@@ -41,5 +41,6 @@ public class FeatureActionTest extends StarRocksHttpTestCase {
     public void testGetFeatures() throws IOException {
         String resp = sendHttp();
         Assertions.assertTrue(resp.contains("OK"));
+        Assertions.assertTrue(resp.contains("multi-cngroup"));
     }
 }

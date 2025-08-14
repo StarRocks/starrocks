@@ -71,6 +71,12 @@ public class ProductFeature {
                 ""
         ));
         features.add(new ProductFeature("license", "license limitation", ""));
+        features.add(new ProductFeature(
+                "multi-cngroup",
+                "Support creating multiple CN groups under the same warehouse.",
+                ""
+        ));
+
         FEATURES = ImmutableList.copyOf(features);
     }
 
