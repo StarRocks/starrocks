@@ -3016,7 +3016,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         // delta column back to main segment file too soon, for save compaction IO cost.
         // Separate delta column won't affect query performance.
         if (info->inputs.size() > 1 && has_partial_update_by_column && config::enable_lazy_delta_column_compaction) {
-            info->is_empty_output = true;
             break;
         }
         info->inputs.push_back(e.rowsetid);
@@ -3037,6 +3036,10 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         VLOG(2) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;
         return Status::OK();
+    }
+    if (total_segments <= 0) {
+        // compaction will generate an empty rowset.
+        info->is_empty_output = true;
     }
     std::sort(info->inputs.begin(), info->inputs.end());
     VLOG(1) << "update compaction start tablet:" << _tablet.tablet_id()
@@ -3132,7 +3135,6 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
                 for (auto& e : candidates) {
                     info->inputs.emplace_back(e.rowsetid);
                 }
-                info->is_empty_output = true;
                 VLOG(1) << "trigger lazy compaction strategy for tablet:" << _tablet.tablet_id()
                         << " because of column update rowset count:" << candidates.size();
                 // only merge empty rowsets, so no need to consider other level
@@ -3203,6 +3205,11 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
                 compaction_level_candidate.insert(-1);
             }
         }
+    }
+
+    if (total_merged_segments <= 0) {
+        // compaction will generate an empty rowset.
+        info->is_empty_output = true;
     }
 
     size_t version_count = rowsets.size() - info->inputs.size() + _pending_commits.size();
