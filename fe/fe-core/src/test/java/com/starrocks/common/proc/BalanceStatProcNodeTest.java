@@ -242,7 +242,8 @@ public class BalanceStatProcNodeTest {
             OlapTable olapTable = new OlapTable(1224L, "location_table", cols, null, listPartition, null);
 
             MaterializedIndex index = new MaterializedIndex(1200L, MaterializedIndex.IndexState.NORMAL);
-            TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), TStorageMedium.HDD);
+            TabletMeta tabletMeta = 
+                    new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), 0, TStorageMedium.HDD);
             long tablet1Id = 1210L;
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1211L;
