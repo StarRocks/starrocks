@@ -226,6 +226,10 @@ Status HiveDataSource::_init_partition_values() {
     if (!(_hive_table != nullptr && _has_partition_columns)) return Status::OK();
 
     auto* partition_desc = _hive_table->get_partition(_scan_range.partition_id);
+    VLOG_FILE << "[xxx] request partition. query_id = " << print_id(_runtime_state->query_id())
+              << ", node_id = " << _provider->_scan_node->id() << ", table_id = " << _hive_table->table_id()
+              << ", partition_id = " << _scan_range.partition_id
+              << ", partition_desc = " << (partition_desc == nullptr ? "nullptr" : "");
     if (partition_desc == nullptr) {
         return Status::InternalError(
                 fmt::format("Plan inconsistency. scan_range.partition_id = {} not found in partition description map",

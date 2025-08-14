@@ -442,6 +442,8 @@ Status HiveTableDescriptor::add_partition_value(RuntimeState* runtime_state, Obj
         std::unique_lock lock(_map_mutex);
         _partition_id_to_desc_map[id] = partition;
     }
+    VLOG_FILE << "[xxx] add partition. query_id = " << print_id(runtime_state->query_id())
+              << ", table_id = " << table_id() << ", partition_id: " << id;
     return Status::OK();
 }
 
