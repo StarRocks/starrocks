@@ -81,6 +81,7 @@ import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.dag.PhasedExecutionSchedule;
+import com.starrocks.qe.scheduler.dag.SingleNodeSchedule;
 import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
@@ -298,6 +299,10 @@ public class DefaultCoordinator extends Coordinator {
         }
         if (enablePhasedScheduler) {
             scheduler = new PhasedExecutionSchedule(connectContext);
+        } else if (context.getSessionVariable().enableSingleNodeSchedule() && 
+                   context.getAliveExecutionNodesNumber() == 1 && 
+                   !jobSpec.isIncrementalScanRanges()) {
+            scheduler = new SingleNodeSchedule();
         } else {
             scheduler = new AllAtOnceExecutionSchedule();
         }

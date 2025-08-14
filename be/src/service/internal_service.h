@@ -198,6 +198,11 @@ public:
                                   const PUpdateTransactionStateRequest* request,
                                   PUpdateTransactionStateResponse* response, google::protobuf::Closure* done) override;
 
+    void exec_single_node_plan_fragments(google::protobuf::RpcController* controller,
+                                         const PExecBatchPlanFragmentsRequest* request,
+                                         PExecBatchPlanFragmentsResult* result,
+                                         google::protobuf::Closure* done) override;
+
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,
@@ -249,6 +254,9 @@ private:
     // short circuit
     Status _exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
                                PExecShortCircuitResult* response);
+
+    Status _prepare_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
+                                              const TExecPlanFragmentParams& t_unique_request);
 
 protected:
     ExecEnv* _exec_env;

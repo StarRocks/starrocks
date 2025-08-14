@@ -294,6 +294,18 @@ void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcContro
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::exec_single_node_plan_fragments(google::protobuf::RpcController* controller,
+                                                                  const PExecBatchPlanFragmentsRequest* request,
+                                                                  PExecBatchPlanFragmentsResult* result,
+                                                                  google::protobuf::Closure* done) {
+    auto task = [=]() { this->_exec_batch_plan_fragments(controller, request, result, done); };
+    if (!_exec_env->pipeline_prepare_pool()->try_offer(std::move(task))) {
+        ClosureGuard closure_guard(done);
+        Status::ServiceUnavailable("submit exec_batch_plan_fragments failed").to_protobuf(result->mutable_status());
+    }
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcController* cntl_base,
                                                       const PExecPlanFragmentRequest* request,
                                                       PExecPlanFragmentResult* response,
@@ -319,10 +331,11 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
                                                             PExecBatchPlanFragmentsResult* response,
                                                             google::protobuf::Closure* done) {
     auto task = [=]() { this->_exec_batch_plan_fragments(cntl_base, request, response, done); };
-    if (!_exec_env->pipeline_prepare_pool()->try_offer(std::move(task))) {
-        ClosureGuard closure_guard(done);
-        Status::ServiceUnavailable("submit exec_batch_plan_fragments failed").to_protobuf(response->mutable_status());
-    }
+    task();
+    // if (!_exec_env->pipeline_prepare_pool()->try_offer(std::move(task))) {
+    //     ClosureGuard closure_guard(done);
+    //     Status::ServiceUnavailable("submit exec_batch_plan_fragments failed").to_protobuf(response->mutable_status());
+    // }
 }
 
 template <typename T>
@@ -339,26 +352,68 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     }
 
     auto ser_request = cntl->request_attachment().to_string();
-    std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
+    std::shared_ptr<TExecSingleNodePlanFragmentsParams> t_batch_requests =
+            std::make_shared<TExecSingleNodePlanFragmentsParams>();
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        if (Status status = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get());
+        if (Status status = deserialize_thrift_msg(buf, &len, request->attachment_protocol(), t_batch_requests.get());
             !status.ok()) {
             status.to_protobuf(response->mutable_status());
             return;
         }
     }
 
-    auto& common_request = t_batch_requests->common_param;
-    auto& unique_requests = t_batch_requests->unique_param_per_instance;
+    TExecBatchPlanFragmentsParams& t_batch_plan_fragments_params = t_batch_requests->batch_params;
+
+    auto& common_request = t_batch_plan_fragments_params.common_param;
+    auto& unique_requests = t_batch_plan_fragments_params.unique_param_per_instance;
 
     if (unique_requests.empty()) {
         Status::OK().to_protobuf(response->mutable_status());
         return;
     }
 
-    Status status = _exec_plan_fragment_by_pipeline(common_request, unique_requests[0]);
+    SignalTimerGuard guard(config::pipeline_prepare_timeout_guard_ms);
+    pipeline::FragmentExecutor fragment_executor;
+    Status status = fragment_executor.prepare_global_state(_exec_env, common_request);
+    if (!status.ok()) {
+        status.to_protobuf(response->mutable_status());
+        return;
+    }
+
+    std::vector<PromiseStatusSharedPtr> promise_statuses;
+    std::vector<pipeline::FragmentExecutor> fragment_executors(unique_requests.size());
+    for (int i = 0; i < unique_requests.size(); ++i) {
+        // auto& unique_request = unique_requests[i];
+        // LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(unique_request.params.fragment_instance_id)
+        //           << ", coord=" << common_request.coord << ", backend=" << unique_request.backend_num
+        //           << ", is_pipeline=1"
+        //           << ", chunk_size=" << common_request.query_options.batch_size;
+
+        PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
+        _exec_env->pipeline_prepare_pool()->offer([ms, i, &fragment_executors, &unique_requests, this] {
+            auto& req = unique_requests[i];
+            ms->set_value(fragment_executors[i].prepare(_exec_env, req, req));
+        });
+        promise_statuses.emplace_back(std::move(ms));
+    }
+
+    for (size_t i = 0; i < unique_requests.size(); ++i) {
+        auto& promise = promise_statuses[i];
+        // When a preparation fails, return error immediately. The other unfinished preparation is safe,
+        // since they can use the shared pointer of promise and t_batch_requests.
+        status = promise->get_future().get();
+        if (status.ok()) {
+            status = fragment_executors[i].execute(_exec_env);
+        } else if (status.is_duplicate_rpc_invocation()) {
+            status = Status::OK();
+        }
+        if (!status.ok()) {
+            break;
+        }
+    }
+
     status.to_protobuf(response->mutable_status());
 }
 
