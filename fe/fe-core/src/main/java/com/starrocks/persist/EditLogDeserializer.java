@@ -25,7 +25,6 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
@@ -38,6 +37,7 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadMultiStmtTask;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
@@ -154,6 +154,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2, RoutineLoadJob.class)
             .put(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2, RoutineLoadOperation.class)
             .put(OperationType.OP_CREATE_STREAM_LOAD_TASK_V2, StreamLoadTask.class)
+            .put(OperationType.OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK, StreamLoadMultiStmtTask.class)
             .put(OperationType.OP_CREATE_LOAD_JOB_V2, LoadJob.class)
             .put(OperationType.OP_END_LOAD_JOB_V2, LoadJobFinalOperation.class)
             .put(OperationType.OP_UPDATE_LOAD_JOB, LoadJob.LoadJobStateUpdateInfo.class)
@@ -279,10 +280,6 @@ public class EditLogDeserializer {
                 ((Text) data).readFields(in);
                 break;
             }
-            case OperationType.OP_ADD_REPLICA: {
-                data = ReplicaPersistInfo.read(in);
-                break;
-            }
             case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME: {
                 data = ChangeMaterializedViewRefreshSchemeLog.read(in);
                 break;
@@ -290,10 +287,6 @@ public class EditLogDeserializer {
             case OperationType.OP_FINISH_CONSISTENCY_CHECK: {
                 data = new ConsistencyCheckInfo();
                 ((ConsistencyCheckInfo) data).readFields(in);
-                break;
-            }
-            case OperationType.OP_META_VERSION_V2: {
-                data = MetaVersion.read(in);
                 break;
             }
             case OperationType.OP_GLOBAL_VARIABLE_V2: {

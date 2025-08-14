@@ -79,7 +79,6 @@ import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -750,13 +749,8 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 log.getDataSourceProperties(), log.getOriginStatement(), true);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeInt(idToRoutineLoadJob.size());
-        for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
-            routineLoadJob.write(out);
-        }
-    }
+
+
 
 
 

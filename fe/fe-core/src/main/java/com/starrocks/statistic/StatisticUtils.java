@@ -34,6 +34,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -222,8 +223,8 @@ public class StatisticUtils {
 
     public static LocalDateTime getTableLastUpdateTime(Table table) {
         if (table.isNativeTableOrMaterializedView()) {
-            long maxTime = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
-                    .max(Long::compareTo).orElse(0L);
+            long maxTime = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
+                        PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else {
             try {
@@ -233,6 +234,21 @@ public class StatisticUtils {
                 return null;
             }
         }
+    }
+
+    /**
+     * Retrieves the last update timestamp of the specified table in milliseconds.
+     *
+     * @param table The table object for which the last update time is to be retrieved.
+     * @return The timestamp in milliseconds since the Unix epoch, or null if the update time is not available.
+     */
+    public static Long getTableLastUpdateTimestamp(Table table) {
+        LocalDateTime updateTime = getTableLastUpdateTime(table);
+        if (updateTime == null) {
+            return null;
+        }
+        Instant instant = updateTime.atZone(Clock.systemDefaultZone().getZone()).toInstant();
+        return instant.toEpochMilli();
     }
 
     public static Set<String> getUpdatedPartitionNames(Table table, LocalDateTime checkTime) {
@@ -438,8 +454,16 @@ public class StatisticUtils {
         List<String> columns = new ArrayList<>();
         for (Column column : table.getBaseSchema()) {
             // disable stats collection for auto generated columns, see SelectAnalyzer#analyzeSelect
-            if (column.isGeneratedColumn() && column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+            if (column.isGeneratedColumn() && column.getName()
+                    .startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 continue;
+            }
+            // generated column doesn't support cross DB use
+            if (column.isGeneratedColumn() && column.generatedColumnExprToString() != null) {
+                String expr = column.generatedColumnExprToString().toLowerCase();
+                if (expr.contains("dict_mapping") || expr.contains("dictionary_get")) {
+                    continue;
+                }
             }
             if (!column.isAggregated()) {
                 columns.add(column.getName());

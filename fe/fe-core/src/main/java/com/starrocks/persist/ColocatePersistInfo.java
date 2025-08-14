@@ -40,8 +40,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -101,21 +99,8 @@ public class ColocatePersistInfo implements Writable {
         return backendsPerBucketSeq;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(tableId);
-        groupId.write(out);
-        // out.writeLong(groupId);
-        // out.writeLong(dbId);
-        int size = backendsPerBucketSeq.size();
-        out.writeInt(size);
-        for (List<Long> beList : backendsPerBucketSeq) {
-            out.writeInt(beList.size());
-            for (Long be : beList) {
-                out.writeLong(be);
-            }
-        }
-    }
+
+
 
     @Override
     public int hashCode() {

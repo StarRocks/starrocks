@@ -877,6 +877,9 @@ struct TAggregationNode {
   29: optional bool enable_pipeline_share_limit = false
 
   30: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters
+
+  31: optional list<Exprs.TExpr> group_by_min_max
+
 }
 
 struct TRepeatNode {
@@ -1250,7 +1253,8 @@ struct TMetaScanNode {
     // column id to column name
     1: optional map<i32, string> id_to_names
     2: optional list<Descriptors.TColumn> columns
-    3: optional i32 low_cardinality_threshold;
+    3: optional i32 low_cardinality_threshold
+    4: optional list<TColumnAccessPath> column_access_paths
 }
 
 struct TDecodeNode {

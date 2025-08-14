@@ -2326,6 +2326,23 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         print("scirpt output:" + str(res))
         tools.assert_true(str(res["result"][0][0]).strip() == "true", "column still could collect dictionary")
 
+    def wait_min_max_stat_ready(self, column_name, table_name):
+        """
+        wait min max stats ready
+        """
+        status = ""
+        count = 0
+        while True:
+            if count > 60:
+                tools.assert_true(False, "acquire min-max timeout for 60s")
+            sql = "explain verbose select distinct %s from %s" % (column_name, table_name)
+            res = self.execute_sql(sql, True)
+            if not res["status"]:
+                tools.assert_true(False, "acquire min-max error")
+            if str(res["result"]).find("min-max stats") > 0:
+                return ""
+            time.sleep(1)
+
     def wait_submit_task_ready(self, task_name):
         """
         wait submit task ready

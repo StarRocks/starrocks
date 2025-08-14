@@ -175,6 +175,7 @@ public class LakeTable extends OlapTable {
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
                                           long physicalPartitionId, Database db) {
+        // Use physical partition id as path id when creating a new physical partition
         FilePathInfo fsInfo = getPartitionFilePathInfo(physicalPartitionId);
         FileCacheInfo cacheInfo = getPartitionFileCacheInfo(physicalPartitionId);
         Map<String, String> properties = new HashMap<>();

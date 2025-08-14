@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/aggregator.h"
+#include "exec/aggregator_fwd.h"
 #include "exec/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
