@@ -32,7 +32,8 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
                                              int64_t grace_timestamp, int64_t* vacuumed_files,
                                              std::list<std::string>* meta_files,
                                              std::list<std::string>* bundle_meta_files,
-                                             const std::unordered_set<int64_t>& retain_versions) {
+                                             const std::unordered_set<int64_t>& retain_versions,
+                                             int64_t min_check_version, int64_t max_check_version) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(meta_files != nullptr);
     DCHECK(bundle_meta_files != nullptr);
@@ -40,6 +41,10 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
         // no expired metadata to be vacuumed
         return Status::OK();
     }
+
+    auto meta_ver_checker = [&](const auto& version) {
+        return version >= min_check_version && version <= max_check_version && !retain_versions.contains(version);
+    };
 
     auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
         auto cache = tablet_mgr->metacache();
@@ -54,7 +59,7 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
     const auto metadata_root_location = join_path(root_loc, kMetadataDirectoryName);
     for (const auto& name : *meta_files) {
         auto [tablet_id, version] = parse_tablet_metadata_filename(name);
-        if (retain_versions.contains(version)) {
+        if (!meta_ver_checker(version)) {
             continue;
         }
         const string path = join_path(metadata_root_location, name);
@@ -72,7 +77,7 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
     for (const auto& name : *bundle_meta_files) {
         auto [tablet_id, version] = parse_tablet_metadata_filename(name);
-        if (retain_versions.contains(version)) {
+        if (!meta_ver_checker(version)) {
             continue;
         }
         auto path = join_path(metadata_root_location, name);
@@ -177,20 +182,11 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
     ASSIGN_OR_RETURN(auto meta_files_and_bundle_files, list_meta_files(fs.get(), metadata_root_location));
     auto& meta_files = meta_files_and_bundle_files.first;
     auto& bundle_meta_files = meta_files_and_bundle_files.second;
-    // filter metas by check version interval
-    auto meta_filter = [min_check_version, max_check_version](auto& metas) {
-        std::erase_if(metas, [&](auto& meta_file) {
-            const auto& [_, version] = parse_tablet_metadata_filename(meta_file);
-            return version < min_check_version || version > max_check_version;
-        });
-    };
-    meta_filter(meta_files);
-    meta_filter(bundle_meta_files);
 
     // 1. Delete all metadata files associated with the given partition which have tabletmeta.commit_time < grace_timestamp
-    // and the version of tablet meta should not be found in retain_versions
+    // and the checked version of tablet meta should not be found in retain_versions and should in [min_check_version, max_check_version]
     RETURN_IF_ERROR(vacuum_expired_tablet_metadata(tablet_mgr, root_loc, grace_timestamp, &vacuumed_files, &meta_files,
-                                                   &bundle_meta_files, retain_versions));
+                                                   &bundle_meta_files, retain_versions, min_check_version, max_check_version));
 
     // 2. Determine and delete orphaned data files. We use min_active_txn_id to filter out new data files, then we open
     // any remaining metadata files and note that the data files referenced are not orphans.

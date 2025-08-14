@@ -165,9 +165,9 @@ TEST_P(LakeVacuumTest, test_vacuum_full) {
     request.set_tablet_id(66600);
     request.set_min_active_txn_id(10);
     request.set_grace_timestamp(100);
-    request.add_retain_versions(4);
+    request.add_retain_versions(3);
     request.set_min_check_version(0);
-    request.set_max_check_version(6);
+    request.set_max_check_version(4);
 
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
@@ -243,16 +243,16 @@ TEST_P(LakeVacuumTest, test_vacuum_full) {
 
     ASSERT_TRUE(response.has_status());
     EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-    EXPECT_EQ(3 + 1, response.vacuumed_files()); // 3 metadata, 1 data
+    EXPECT_EQ(1 + 2, response.vacuumed_files()); // 1 metadata, 2 data
 
-    EXPECT_FALSE(file_exist(tablet_metadata_filename(66601, 5)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(66601, 5)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(66600, 6)));
-    EXPECT_FALSE(file_exist(tablet_metadata_filename(66600, 5)));
-    EXPECT_TRUE(file_exist(tablet_metadata_filename(66600, 4)));
-    EXPECT_FALSE(file_exist(tablet_metadata_filename(66600, 3)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(66600, 5)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(66600, 4)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(66600, 3)));
 
     EXPECT_TRUE(file_exist("0000000000000001_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
-    EXPECT_TRUE(file_exist("0000000000000001_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+    EXPECT_FALSE(file_exist("0000000000000001_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     EXPECT_TRUE(file_exist("000000000000FFFF_a542f95a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     EXPECT_FALSE(file_exist("0000000000000002_a542ff5a-bff5-48a7-a3a7-2ed05691b58c.dat"));
 }
@@ -270,7 +270,7 @@ TEST_P(LakeVacuumTest, test_vacuum_full_with_bundle) {
     request.set_min_active_txn_id(10);
     request.set_grace_timestamp(100);
     request.set_min_check_version(0);
-    request.set_max_check_version(8);
+    request.set_max_check_version(6);
 
     auto tablet_66601_v8 = json_to_pb<TabletMetadataPB>(R"DEL(
         {
@@ -307,7 +307,7 @@ TEST_P(LakeVacuumTest, test_vacuum_full_with_bundle) {
                 "data_size": 4096
             }
         ],
-        "commit_time": 10000,
+        "commit_time": 11,
         "prev_garbage_version": 3
         }
         )DEL");
@@ -324,7 +324,7 @@ TEST_P(LakeVacuumTest, test_vacuum_full_with_bundle) {
                 "data_size": 4096
             }
         ],
-        "commit_time": 10000,
+        "commit_time": 11,
         "prev_garbage_version": 3
         }
         )DEL");

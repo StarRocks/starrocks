@@ -42,18 +42,16 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.starrocks.rpc.LakeService.TIMEOUT_VACUUM_FULL;
@@ -203,6 +201,9 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         List<Long> retainVersions = new ArrayList<>();
         retainVersions.addAll(clusterSnapshotMgr.getVacuumRetainVersions(
                               db.getId(), table.getId(), partition.getParentId(), partition.getId()));
+        if (!retainVersions.contains(visibleVersion)) {
+            retainVersions.add(visibleVersion); // current visibleVersion should be retained 
+        }
         long minCheckVersion = 0;
         long maxCheckVersion = visibleVersion - 1; // always should be inited by current visibleVersion - 1
         vacuumFullRequest.setMinCheckVersion(minCheckVersion);
