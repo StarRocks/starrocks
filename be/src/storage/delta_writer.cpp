@@ -663,8 +663,8 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
         for (; i < ptable_schema_param->indexes_size(); i++) {
             if (ptable_schema_param->indexes(i).id() == index_id) break;
         }
-        _is_shadow = ptable_schema_param->indexes(i).is_shadow();
         if (i < ptable_schema_param->indexes_size()) {
+            _is_shadow = ptable_schema_param->indexes(i).is_shadow();
             if (ptable_schema_param->indexes_size() > 0 && ptable_schema_param->indexes(i).has_column_param() &&
                 ptable_schema_param->indexes(i).column_param().columns_desc_size() != 0 &&
                 ptable_schema_param->indexes(i).column_param().columns_desc(0).unique_id() >= 0 &&
