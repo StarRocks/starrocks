@@ -24,10 +24,14 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.tvr.TvrDeltaStats;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -49,6 +53,7 @@ import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -471,7 +476,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     @Override
     public Statistics getTableStatistics(OptimizerContext session, com.starrocks.catalog.Table table,
                                          Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate, long limit, TableVersionRange version) {
+                                         ScalarOperator predicate, long limit, TvrVersionRange version) {
         MockIcebergTable icebergTable = (MockIcebergTable) table;
         String hiveDb = icebergTable.getCatalogDBName();
         String tblName = icebergTable.getName();
@@ -492,6 +497,23 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         } finally {
             readUnlock();
         }
+    }
+
+    @Override
+    public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, com.starrocks.catalog.Table table) {
+        return TvrTableSnapshot.of(Optional.of(1L));
+    }
+
+    @Override
+    public List<TvrTableDeltaTrait> listTableVersionRanges(String dbName, com.starrocks.catalog.Table table,
+                                                           TvrTableSnapshot fromSnapshotExclusive,
+                                                           TvrTableSnapshot toSnapshotInclusive) {
+
+        TvrDeltaStats stats = TvrDeltaStats.of(1L);
+        TvrVersionRange currentTvrSnapshot = getCurrentTvrSnapshot(dbName, table);
+        TvrTableDelta tvrTableDelta = TvrTableDelta.of(currentTvrSnapshot.from, currentTvrSnapshot.to);
+        TvrTableDeltaTrait tvrTableDeltaTrait = TvrTableDeltaTrait.ofMonotonic(tvrTableDelta, stats);
+        return Lists.newArrayList(tvrTableDeltaTrait);
     }
 
     public void addRowsToPartition(String dbName, String tableName, int rowCount, String partitionName) {
