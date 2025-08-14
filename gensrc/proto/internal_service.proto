@@ -436,6 +436,8 @@ message PExecPlanFragmentResult {
 };
 
 message PExecBatchPlanFragmentsRequest {
+     // describe attachment protocol: binary, compact, json
+    optional string attachment_protocol = 1;
 };
 
 message PExecBatchPlanFragmentsResult {
@@ -794,4 +796,6 @@ service PInternalService {
     rpc stream_load(PStreamLoadRequest) returns (PStreamLoadResponse);
 
     rpc update_transaction_state(PUpdateTransactionStateRequest) returns (PUpdateTransactionStateResponse);
+
+    rpc exec_single_node_plan_fragments(PExecBatchPlanFragmentsRequest) returns (PExecBatchPlanFragmentsResult);
 };

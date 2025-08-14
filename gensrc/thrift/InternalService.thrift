@@ -538,6 +538,11 @@ struct TExecBatchPlanFragmentsParams {
   2: optional list<TExecPlanFragmentParams> unique_param_per_instance
 }
 
+struct TExecSingleNodePlanFragmentsParams {
+  1: optional TExecBatchPlanFragmentsParams batch_params
+  2: optional bool only_prepare
+}
+
 // CancelPlanFragment
 struct TCancelPlanFragmentParams {
   1: required InternalServiceVersion protocol_version

@@ -44,6 +44,7 @@ import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
+import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
@@ -117,6 +118,40 @@ public class BackendServiceClient {
         pRequest.setAttachmentProtocol(protocol);
         pRequest.setRequest(request);
         return sendPlanFragmentAsync(address, pRequest);
+    }
+
+    public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
+            TNetworkAddress address, byte[] serializedRequest, String protocol)
+            throws TException, RpcException {
+        final PExecBatchPlanFragmentsRequest pRequest = new PExecBatchPlanFragmentsRequest();
+        pRequest.setRequest(serializedRequest);
+        pRequest.setAttachmentProtocol(protocol);
+
+        Tracers.count(Tracers.Module.SCHEDULER, "DeployDataSize", pRequest.serializedRequest.length);
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployAsyncSendTime")) {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            TalkTimeoutController.setTalkTimeout(Config.brpc_send_plan_fragment_timeout_ms);
+            return service.execSingleNodePlanFragments(pRequest);
+        } catch (NoSuchElementException e) {
+            try {
+                // retry
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException interruptedException) {
+                    // do nothing
+                }
+                final PBackendService service = BrpcProxy.getBackendService(address);
+                return service.execBatchPlanFragmentsAsync(pRequest);
+            } catch (NoSuchElementException noSuchElementException) {
+                LOG.warn("Execute plan fragment retry failed, address={}:{}",
+                        address.getHostname(), address.getPort(), noSuchElementException);
+                throw new RpcException(address.hostname, e.getMessage());
+            }
+        } catch (Throwable e) {
+            LOG.warn("Execute plan fragment catch a exception, address={}:{}",
+                    address.getHostname(), address.getPort(), e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
     }
 
     public Future<PExecPlanFragmentResult> execPlanFragmentAsync(

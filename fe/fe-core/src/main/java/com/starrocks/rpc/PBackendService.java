@@ -105,5 +105,9 @@ public interface PBackendService {
 
     @ProtobufRPC(serviceName = "PInternalService", methodName = "update_transaction_state", onceTalkTimeout = 600000)
     Future<PUpdateTransactionStateResponse> updateTransactionState(PUpdateTransactionStateRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "exec_single_node_plan_fragments",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
+    Future<PExecBatchPlanFragmentsResult> execSingleNodePlanFragments(PExecBatchPlanFragmentsRequest request);
 }
 

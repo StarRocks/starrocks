@@ -831,6 +831,23 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
     return Status::OK();
 }
 
+Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request) {
+    UnifiedExecPlanFragmentParams request(common_request, common_request);
+    RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
+
+    // Set up desc tbl
+    DescriptorTbl* desc_tbl = nullptr;
+    const auto& t_desc_tbl = request.common().desc_tbl;
+
+    DCHECK(t_desc_tbl.__isset.is_cached && !t_desc_tbl.is_cached);
+    // only dla need runtime state, so only support olap table here
+    RETURN_IF_ERROR(DescriptorTbl::create(nullptr, _query_ctx->object_pool(), t_desc_tbl, &desc_tbl,
+                                          config::vector_chunk_size));
+    _query_ctx->set_desc_tbl(desc_tbl);
+
+    return Status::OK();
+}
+
 Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                                  const TExecPlanFragmentParams& unique_request) {
     DCHECK(common_request.__isset.desc_tbl);
@@ -930,18 +947,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     _query_ctx->mark_prepared();
-    prepare_success = true;
-
-    return Status::OK();
-}
-
-Status FragmentExecutor::execute(ExecEnv* exec_env) {
-    bool prepare_success = false;
-    DeferOp defer([this, &prepare_success]() {
-        if (!prepare_success) {
-            _fail_cleanup(true);
-        }
-    });
 
     auto* profile = _fragment_ctx->runtime_state()->runtime_profile();
     auto* prepare_instance_timer = ADD_TIMER(profile, "FragmentInstancePrepareTime");
@@ -954,8 +959,13 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
         _fragment_ctx->acquire_runtime_filters();
         RETURN_IF_ERROR(_fragment_ctx->prepare_active_drivers());
     }
+
     prepare_success = true;
 
+    return Status::OK();
+}
+
+Status FragmentExecutor::execute(ExecEnv* exec_env) {
     DCHECK(_fragment_ctx->enable_resource_group());
     auto* executor = _wg->executors()->driver_executor();
     RETURN_IF_ERROR(_fragment_ctx->submit_active_drivers(executor));
