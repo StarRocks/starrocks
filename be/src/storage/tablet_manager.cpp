@@ -838,8 +838,8 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
     int64_t highest_score = 0;
     TabletSharedPtr best_tablet;
     for (const auto& tablets_shard : _tablets_shards) {
-        std::shared_lock rlock(tablets_shard.lock);
-        for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+        std::vector<TabletSharedPtr> all_tablets_by_shard = _get_all_tablets_from_shard(tablets_shard);
+        for (const auto& tablet_ptr : all_tablets_by_shard) {
             if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
                 continue;
             }
