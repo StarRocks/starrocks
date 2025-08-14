@@ -15,6 +15,7 @@
 package com.starrocks.authentication;
 
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.AlterUserInfo;
@@ -35,7 +36,6 @@ import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.utframe.UtFrameUtils;

@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
