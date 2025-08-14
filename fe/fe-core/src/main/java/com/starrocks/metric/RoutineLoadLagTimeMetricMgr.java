@@ -160,9 +160,9 @@ public class RoutineLoadLagTimeMetricMgr {
     }
     
     /**
-     * Collect routine load lag time metrics - now uses stored data instead of calculating on-demand
+     * Clean up stale lag time metrics to prevent memory leaks
      */
-    public void collectRoutineLoadLagTimeMetrics(MetricVisitor visitor) {
+    public void cleanupStaleMetrics() {
         if (!Config.enable_routine_load_lag_time_metrics) {
             return;
         }
@@ -171,23 +171,42 @@ public class RoutineLoadLagTimeMetricMgr {
             long now = System.currentTimeMillis();
             long staleThresholdMs = 5 * 60 * 1000; // 5 minutes; to prevent memory leaks
             
-            // Clean up stale data and emit metrics
+            // Clean up stale data
             Iterator<Map.Entry<String, RoutineLoadLagTimeMetric>> jobLagTimeIterator = jobLagTimeMap.entrySet().iterator();
             while (jobLagTimeIterator.hasNext()) {
                 Map.Entry<String, RoutineLoadLagTimeMetric> entry = jobLagTimeIterator.next();
                 String jobKey = entry.getKey();
                 RoutineLoadLagTimeMetric lagTimeMetric = entry.getValue();
                 
-                // Skip metrics that don't have data yet
-                if (!lagTimeMetric.hasData()) {
-                    LOG.debug("Skipping job {} - no data available yet", jobKey);
-                    continue;
-                }
-                
                 // Remove stale data
                 if (lagTimeMetric.isStale(now, staleThresholdMs)) {
                     LOG.debug("Removing stale lag time data for job {}", jobKey);
                     jobLagTimeIterator.remove();
+                }
+            }
+            
+        } catch (Exception e) {
+            LOG.warn("Failed to cleanup stale routine load lag time metrics", e);
+        }
+    }
+
+    /**
+     * Collect routine load lag time metrics - now uses stored data instead of calculating on-demand
+     */
+    public void collectRoutineLoadLagTimeMetrics(MetricVisitor visitor) {
+        if (!Config.enable_routine_load_lag_time_metrics) {
+            return;
+        }
+        
+        try {
+            // Emit metrics for all jobs with data
+            for (Map.Entry<String, RoutineLoadLagTimeMetric> entry : jobLagTimeMap.entrySet()) {
+                String jobKey = entry.getKey();
+                RoutineLoadLagTimeMetric lagTimeMetric = entry.getValue();
+                
+                // Skip metrics that don't have data yet
+                if (!lagTimeMetric.hasData()) {
+                    LOG.debug("Skipping job {} - no data available yet", jobKey);
                     continue;
                 }
                 
@@ -203,10 +222,7 @@ public class RoutineLoadLagTimeMetricMgr {
     private void emitJobMetrics(String jobKey, RoutineLoadLagTimeMetric lagTimeMetric, MetricVisitor visitor) {
         try {            
             if (lagTimeMetric.hasData()) {
-                Map<Integer, GaugeMetricImpl<Long>> partitionMetrics = lagTimeMetric.getPartitionMetrics();
-                for (GaugeMetricImpl<Long> partitionMetric : partitionMetrics.values()) {
-                    visitor.visit(partitionMetric);
-                }
+                // only max lag is emitted; partition-level lag is only available through `SHOW ROUTINE LOAD`
                 visitor.visit(lagTimeMetric.getMaxLagTimeMetric());
             }            
         } catch (Exception e) {
