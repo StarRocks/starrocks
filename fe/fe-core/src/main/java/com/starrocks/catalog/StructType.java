@@ -253,16 +253,6 @@ public class StructType extends Type {
         }
     }
 
-    /**
-     * @return 33 (utf8_general_ci) if type is array
-     * https://dev.mysql.com/doc/internals/en/com-query-response.html#column-definition
-     * character_set (2) -- is the column character set and is defined in Protocol::CharacterSet.
-     */
-    @Override
-    public int getMysqlResultSetFieldCharsetIndex() {
-        return CHARSET_UTF8;
-    }
-
     @Override
     public int hashCode() {
         return Objects.hashCode(fields);
