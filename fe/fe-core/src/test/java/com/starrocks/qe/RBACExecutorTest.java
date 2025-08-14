@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.utframe.StarRocksAssert;
@@ -99,7 +100,7 @@ public class RBACExecutorTest {
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
 
-        ShowGrantsStmt stmt = new ShowGrantsStmt(new UserIdentity("u1", "%"), NodePosition.ZERO);
+        ShowGrantsStmt stmt = new ShowGrantsStmt(new UserRef("u1", "%"), NodePosition.ZERO);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals("[['u1'@'%', default_catalog, GRANT USAGE, CREATE DATABASE, DROP, ALTER " +

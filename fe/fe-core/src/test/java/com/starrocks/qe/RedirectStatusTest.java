@@ -21,7 +21,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TaskName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
@@ -235,6 +234,7 @@ import com.starrocks.sql.ast.UpdateFailPointStatusStatement;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
@@ -1012,8 +1012,8 @@ public class RedirectStatusTest {
 
     @Test
     public void testRevokePrivilegeStmt() {
-        RevokePrivilegeStmt stmt = new RevokePrivilegeStmt(null, null, new GrantRevokeClause(new UserIdentity("", ""), ""),
-                null, null);
+        RevokePrivilegeStmt stmt =
+                new RevokePrivilegeStmt(null, null, new GrantRevokeClause(new UserRef("", ""), ""), null, null);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -1606,8 +1606,8 @@ public class RedirectStatusTest {
 
     @Test
     public void testGrantPrivilegeStmt() {
-        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, null, new GrantRevokeClause(new UserIdentity("", ""), ""), null,
-                false);
+        GrantPrivilegeStmt stmt =
+                new GrantPrivilegeStmt(null, null, new GrantRevokeClause(new UserRef("", ""), ""), null, false);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

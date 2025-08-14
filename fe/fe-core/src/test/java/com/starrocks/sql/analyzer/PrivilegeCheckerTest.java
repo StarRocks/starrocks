@@ -95,6 +95,7 @@ import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.UserAuthOption;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
@@ -139,6 +140,7 @@ import static org.mockito.ArgumentMatchers.eq;
 
 public class PrivilegeCheckerTest {
     private static StarRocksAssert starRocksAssert;
+    private static UserRef user;
     private static UserIdentity testUser;
 
     private static AuthorizationMgr authorizationManager;
@@ -317,7 +319,8 @@ public class PrivilegeCheckerTest {
         AuthenticationMgr authenticationManager =
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
-        testUser = createUserStmt.getUserIdentity();
+        user = createUserStmt.getUser();
+        testUser = new UserIdentity(user.getUser(), user.getHost());
 
         createUserSql = "CREATE USER 'test2' identified with mysql_native_password by '12345'";
         createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
@@ -2083,7 +2086,6 @@ public class PrivilegeCheckerTest {
     }
 
 
-
     @Test
     public void testRoutineLoadStmt() throws Exception {
         String jobName = "routine_load_job";
@@ -3033,7 +3035,7 @@ public class PrivilegeCheckerTest {
     @Test
     public void testShowAuthentication() throws PrivilegeException {
         ctxToTestUser();
-        ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
+        ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(user, false);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
 
         Assertions.assertEquals(4, resultSet.getMetaData().getColumnCount());
@@ -3051,7 +3053,7 @@ public class PrivilegeCheckerTest {
                         "['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
                 resultSet.getResultRows().toString());
 
-        stmt = new ShowAuthenticationStmt(UserIdentity.ROOT, false);
+        stmt = new ShowAuthenticationStmt(new UserRef(AuthenticationMgr.ROOT_USER, "%"), false);
         resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
         Assertions.assertEquals("[['root'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
                 resultSet.getResultRows().toString());
@@ -3768,7 +3770,7 @@ public class PrivilegeCheckerTest {
         Map<String, Expr> e2 = new HashMap<>();
         e2.put("k1", SqlParser.parseSqlToExpr("k1+1", SqlModeHelper.MODE_DEFAULT));
         try (MockedStatic<Authorizer> authorizerMockedStatic =
-                Mockito.mockStatic(Authorizer.class)) {
+                     Mockito.mockStatic(Authorizer.class)) {
             authorizerMockedStatic
                     .when(() -> Authorizer.getRowAccessPolicy(Mockito.any(), eq(tableName)))
                     .thenReturn(e);
@@ -3888,7 +3890,7 @@ public class PrivilegeCheckerTest {
         AuthenticationMgr authenticationManager =
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
-        UserIdentity testNonNativeUser = createUserStmt.getUserIdentity();
+        UserRef testNonNativeUser = createUserStmt.getUser();
         UserAuthOption userAuthOption = new UserAuthOption(null, "01234", true, NodePosition.ZERO);
         SetPassVar setPassVar = new SetPassVar(testNonNativeUser, userAuthOption, NodePosition.ZERO);
         SetStmt setStmt = new SetStmt(Arrays.asList(setPassVar));

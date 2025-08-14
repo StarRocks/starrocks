@@ -21,6 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.UserAuthOptionAnalyzer;
 import com.starrocks.sql.ast.UserAuthOption;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -37,7 +38,7 @@ public class OpenIdConnectAuthenticationTest {
 
         JWTAuthenticationProvider provider =
                 new JWTAuthenticationProvider("jwks.json", "preferred_username", emptyIssuer, emptyAudience);
-        UserAuthOptionAnalyzer.analyzeAuthOption(new UserIdentity("harbor", "%"),
+        UserAuthOptionAnalyzer.analyzeAuthOption(new UserRef("harbor", "%"),
                 new UserAuthOption(null, "", true, NodePosition.ZERO));
         String openIdConnectJson = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
 

@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
@@ -41,6 +42,7 @@ import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 
 import java.util.Map;
@@ -70,8 +72,10 @@ public class SetExecutor {
             ctx.modifyUserVariableCopyInWrite(userVariable);
         } else if (var instanceof SetPassVar setPassVar) {
             // Set password
+            UserRef user = setPassVar.getUser();
+            UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
             GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                    .alterUser(setPassVar.getUserIdent(), setPassVar.getUserAuthenticationInfo(), null);
+                    .alterUser(userIdentity, setPassVar.getUserAuthenticationInfo(), null);
         }
     }
 
