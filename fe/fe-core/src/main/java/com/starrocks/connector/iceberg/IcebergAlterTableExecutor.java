@@ -16,6 +16,9 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.ColumnPosition;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
@@ -63,10 +66,13 @@ import org.apache.iceberg.Transaction;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+import org.apache.velocity.VelocityContext;
+import org.apache.velocity.app.VelocityEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.StringWriter;
 import java.net.URI;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -97,6 +103,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     private IcebergCatalog icebergCatalog;
     private Transaction transaction;
     private HdfsEnvironment hdfsEnvironment;
+    private ConnectContext context;
 
     private static final int DELETE_BATCH_SIZE = 1000;
 
@@ -110,6 +117,18 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         super(stmt);
         this.table = table;
         this.icebergCatalog = icebergCatalog;
+        this.hdfsEnvironment = hdfsEnvironment;
+    }
+
+    public IcebergAlterTableExecutor(AlterTableStmt stmt,
+            Table table,
+            IcebergCatalog icebergCatalog,
+            ConnectContext context,
+            HdfsEnvironment hdfsEnvironment) {
+        super(stmt);
+        this.table = table;
+        this.icebergCatalog = icebergCatalog;
+        this.context = context;
         this.hdfsEnvironment = hdfsEnvironment;
     }
 
@@ -471,6 +490,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                 rollbackToSnapshot(args);
                 break;
             case REWRITE_DATA_FILES:
+                rewriteDataFiles(clause, this.context);
                 break;
             default:
                 throw new StarRocksConnectorException("Unsupported table operation %s", op);
@@ -527,6 +547,54 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         actions.add(() -> {
             transaction.manageSnapshots().rollbackTo(snapshotId).commit();
         });
+    }
+
+    public void rewriteDataFiles(AlterTableOperationClause clause, ConnectContext context) {
+        boolean rewriteAll = clause.isRewriteAll();
+        long minFileSizeBytes = clause.getMinFileSizeBytes();
+        long batchSize = clause.getBatchSize();
+        Expr partitionFilter = clause.getWhere();
+        String catalogName = stmt.getCatalogName();
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTableName();
+
+        VelocityContext velCtx = new VelocityContext();
+        velCtx.put("catalogName", catalogName);
+        velCtx.put("dbName", dbName);
+        velCtx.put("tableName", tableName);
+
+        String partitionFilterSql = null;
+        if (partitionFilter != null) {
+            List<SlotRef> slots = new ArrayList<>();
+            partitionFilter.collect(SlotRef.class, slots);
+            for (SlotRef slot : slots) {
+                slot.setTblName(new TableName(dbName, tableName));
+            }
+            partitionFilterSql = partitionFilter.toSql();
+        }
+        velCtx.put("partitionFilterSql", partitionFilterSql);
+        VelocityEngine defaultVelocityEngine = new VelocityEngine();
+        defaultVelocityEngine.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
+        StringWriter writer = new StringWriter();
+        defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate", 
+                "INSERT INTO $catalogName.$dbName.$tableName" +
+                " SELECT * FROM $catalogName.$dbName.$tableName" +
+                " #if ($partitionFilterSql)" +
+                " WHERE $partitionFilterSql" +
+                " #end"
+        );
+        String executeStmt = writer.toString();
+        IcebergRewriteDataJob job = new IcebergRewriteDataJob(executeStmt, rewriteAll, 
+                minFileSizeBytes, batchSize, context, stmt);
+        try {
+            job.prepare();
+            job.execute();
+        } catch (Exception e) {
+            LOGGER.error("failed to rewrite data files for iceberg table {}.{}",
+                    stmt.getDbName(), stmt.getTableName(), e);
+            throw new StarRocksConnectorException("execute rewrite data files for iceberg table %s.%s failed: %s",
+                    stmt.getDbName(), stmt.getTableName(), e.getMessage(), e);
+        }
     }
 
     private void expireSnapshots(List<ConstantOperator> args) {
