@@ -24,6 +24,12 @@
 #include "exec/hash_join_node.h"
 #include "serde/column_array_serde.h"
 #include "simd/simd.h"
+<<<<<<< HEAD:be/src/exec/join_hash_map.cpp
+=======
+#include "types/logical_type_infra.h"
+#include "util/runtime_profile.h"
+#include "util/stack_util.h"
+>>>>>>> 6b0fd1ee94 ([BugFix] Fix NPE for JoinHashTable::mem_usage (#61872)):be/src/exec/join/join_hash_map.cpp
 
 namespace starrocks {
 
@@ -520,6 +526,15 @@ void JoinHashTable::_init_join_keys() {
 }
 
 int64_t JoinHashTable::mem_usage() const {
+    // Theoretically, `_table_items` may be a nullptr after a cancel, even though in practice we haven’t observed any
+    // cases where `_table_items` was unexpectedly cleared or left uninitialized.
+    // To prevent potential null pointer exceptions, we add a defensive check here.
+    if (_table_items == nullptr) {
+        LOG(WARNING) << "table_items is nullptr in mem_usage, stack:" << get_stack_trace();
+        DCHECK(false);
+        return 0;
+    }
+
     int64_t usage = 0;
     if (_table_items->build_chunk != nullptr) {
         usage += _table_items->build_chunk->memory_usage();
