@@ -394,7 +394,6 @@ inline void encode_float64(double v, std::string* dest) {
 }
 
 struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
-    size_t rows = 0;
     bool is_last_field = false;
     std::vector<std::string>* buffs;
     const Buffer<uint8_t>* null_mask = nullptr; // Track null rows to skip processing
@@ -403,12 +402,9 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
 
     // Nullable wrapper: handle null values and data together
     Status do_visit(const NullableColumn& column) {
-        const auto& null_column = column.null_column();
-        auto& nulls = null_column->get_data();
+        auto& nulls = column.immutable_null_column_data();
 
-        // First, add null markers for all rows
-        // NULL should sort before non-NULL
-        for (size_t i = 0; i < rows; i++) {
+        for (size_t i = 0; i < column.size(); i++) {
             if (nulls[i]) {
                 (*buffs)[i].append("\0", 1);
             } else {
@@ -431,15 +427,16 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
 
     // Const: forward to data
     Status do_visit(const ConstColumn& column) {
-        // For const columns, we don't need to check null mask since const columns
-        // are never null in the context of nullable columns
-        return column.data_column()->accept(this);
+        for (size_t i = 0; i < column.size(); i++) {
+            RETURN_IF_ERROR(column.data_column()->accept(this));
+        }
+        return Status::OK();
     }
 
     // Strings/binary
     template <typename T>
     Status do_visit(const BinaryColumnBase<T>& column) {
-        for (size_t i = 0; i < rows; i++) {
+        for (size_t i = 0; i < column.size(); i++) {
             // Skip processing for null rows
             if (null_mask && (*null_mask)[i]) {
                 continue;
@@ -454,7 +451,7 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     template <typename T>
     Status do_visit(const FixedLengthColumn<T>& column) {
         const auto& data = column.get_data();
-        for (size_t i = 0; i < rows; i++) {
+        for (size_t i = 0; i < column.size(); i++) {
             // Skip processing for null rows
             if (null_mask && (*null_mask)[i]) {
                 continue;
@@ -489,7 +486,35 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
 };
 } // namespace detail
 
+// The encoding strategy of make_sort_key is as follows:
+//
+// - For each input column, each row's value is encoded into a binary buffer
+//   using an order-preserving encoding. The encoding method depends on the
+//   column's type:
+//     * For integral types, values are converted to big-endian and, for signed
+//       types, the sign bit is flipped to preserve order.
+//     * For floating-point types, a custom encoding is used to ensure correct
+//       sort order.
+//     * For string types (Slice), a special encoding is used for non-last fields
+//       to escape 0x00 bytes and append a 0x00 0x00 terminator, while the last
+//       field is appended directly.
+//     * For date/time types, the internal integer representation is encoded as
+//       an integral value.
+//     * Unsupported types return an error.
+//
+// - For each column, a NULL marker (byte value 0x00 or 0x01) is appended for every
+//   row, regardless of the column's nullability, to ensure consistent encoding
+//   even if the column's nullability metadata is lost during processing.
+//
+// - After encoding each column, a separator byte (0x00) is appended between
+//   columns (except after the last column) to delimit fields in the composite
+//   key.
+//
+// - The result is a composite binary key for each row, which preserves the
+//   original sort order of the input columns when compared lexicographically.
 StatusOr<ColumnPtr> UtilityFunctions::make_sort_key(FunctionContext* context, const Columns& columns) {
+    const char* NOT_NULL_MARKER = "\1";
+    const char* COLUMN_SEPARATOR = "\0";
     int num_args = columns.size();
     RETURN_IF(num_args < 1, Status::InvalidArgument("make_sort_key requires at least 1 argument"));
 
@@ -498,17 +523,34 @@ StatusOr<ColumnPtr> UtilityFunctions::make_sort_key(FunctionContext* context, co
 
     std::vector<std::string> buffs(num_rows);
     detail::EncoderVisitor visitor;
-    visitor.rows = num_rows;
     visitor.buffs = &buffs;
     for (int j = 0; j < num_args; ++j) {
+        // Insert NOT_NULL markers for all rows.
+        // This is necessary because the function may receive columns whose nullability
+        // does not accurately reflect the original data source.
+        // For example, a nullable column that contains no null values may be converted
+        // to a non-nullable column during processing. To ensure consistency in the sort key
+        // encoding, we explicitly add NOT_NULL markers for every row.
+        if (!columns[j]->is_nullable()) {
+            for (auto& buff : buffs) {
+                buff.append(NOT_NULL_MARKER, 1);
+            }
+        }
         visitor.is_last_field = (j + 1 == num_args);
         RETURN_IF_ERROR(columns[j]->accept(&visitor));
+
+        // Add a separator between each column
+        if (j < num_args - 1) {
+            for (auto& buff : buffs) {
+                buff.append(COLUMN_SEPARATOR, 1);
+            }
+        }
     }
 
     for (size_t i = 0; i < num_rows; i++) {
-        result.append(buffs[i]);
+        result.append(std::move(buffs[i]));
     }
-    return result.build(false);
+    return result.build(ColumnHelper::is_all_const(columns));
 }
 
 } // namespace starrocks

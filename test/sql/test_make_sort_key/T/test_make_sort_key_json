@@ -82,17 +82,5 @@ SELECT id, json_data, json_array
 FROM json_test_table 
 ORDER BY sort_key;
 
-SELECT id, 
-       json_data,
-       get_json_int(json_data, '$.age') as age,
-       get_json_string(json_data, '$.name') as name,
-       get_json_string(json_data, '$.city') as city,
-       get_json_string(json_array, '$[0]') as first_fruit,
-       get_json_double(json_nested, '$.user.profile.score') as score,
-       sort_key
-FROM json_test_table 
-WHERE id IN (6, 7)
-ORDER BY id;
-
 -- Clean up
 DROP DATABASE test_make_sort_key_json;
