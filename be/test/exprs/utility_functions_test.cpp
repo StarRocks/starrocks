@@ -204,13 +204,18 @@ TEST_F(UtilityFunctionsTest, makeSortKeyNullHandling) {
     FunctionContext* ctx = FunctionContext::create_test_context();
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
 
+    // Create nullable columns with mixed null and non-null values
     auto c_int = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    c_int->append_datum(Datum(int32_t(1)));
-    c_int->append_nulls(1);
+    c_int->append_datum(Datum(int32_t(1))); // non-null
+    c_int->append_nulls(1);                 // null
+    c_int->append_datum(Datum(int32_t(2))); // non-null
+    c_int->append_nulls(1);                 // null
 
     auto c_str = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    c_str->append_datum(Datum(Slice("z")));
-    c_str->append_datum(Datum(Slice("a")));
+    c_str->append_nulls(1);                 // null
+    c_str->append_datum(Datum(Slice("z"))); // non-null
+    c_str->append_nulls(1);                 // null
+    c_str->append_datum(Datum(Slice("a"))); // non-null
 
     Columns cols;
     cols.emplace_back(c_int);
@@ -218,12 +223,50 @@ TEST_F(UtilityFunctionsTest, makeSortKeyNullHandling) {
 
     ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::make_sort_key(ctx, cols));
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
-    ASSERT_EQ(2, bin->size());
+    ASSERT_EQ(4, bin->size());
 
-    // NULL in first column should sort before non-NULL
-    Slice k0 = bin->get_slice(0); // (1,"z")
-    Slice k1 = bin->get_slice(1); // (NULL,"a")
-    ASSERT_LT(k1.compare(k0), 0);
+    // Get the sort keys for each row
+    Slice k0 = bin->get_slice(0); // (1,NULL) - first non-null, second null
+    Slice k1 = bin->get_slice(1); // (NULL,"z") - first null, second non-null
+    Slice k2 = bin->get_slice(2); // (2,NULL) - first non-null, second null
+    Slice k3 = bin->get_slice(3); // (NULL,"a") - first null, second non-null
+
+    // Verify that null values sort before non-null values
+    // Row 1 (NULL,"z") should sort before Row 0 (1,NULL) - null in first column takes precedence
+    ASSERT_LT(k1.compare(k0), 0) << "NULL should sort before non-NULL in first column";
+
+    // Row 3 (NULL,"a") should sort before Row 2 (2,NULL) - null in first column takes precedence
+    ASSERT_LT(k3.compare(k2), 0) << "NULL should sort before non-NULL in first column";
+
+    // Row 3 (NULL,"a") should sort before Row 0 (1,NULL) - null in first column takes precedence
+    ASSERT_LT(k3.compare(k0), 0) << "NULL in first column should sort before any non-NULL";
+
+    // Verify that null values only contain null markers and no underlying data encoding
+    // This tests the fix where null rows don't process underlying data
+    // The first byte should be the null marker (\0 for null, \1 for non-null)
+    ASSERT_EQ('\0', k1.data[0]) << "First column null marker should be \\0";
+    ASSERT_EQ('\1', k0.data[0]) << "First column non-null marker should be \\1";
+    ASSERT_EQ('\0', k3.data[0]) << "First column null marker should be \\0";
+    ASSERT_EQ('\1', k2.data[0]) << "First column non-null marker should be \\1";
+
+    // Verify that rows with null in second column also have correct null markers
+    // The second column null marker should be at position after first column encoding
+    // For row 0: first column is non-null (1), so second column null marker should be after int32 encoding
+    // For row 2: first column is non-null (2), so second column null marker should be after int32 encoding
+    ASSERT_EQ('\0', k0.data[5])
+            << "Second column null marker should be \\0 for row 0"; // After int32 encoding (4 bytes) + null marker (1 byte)
+    ASSERT_EQ('\0', k2.data[5]) << "Second column null marker should be \\0 for row 2";
+
+    // Verify that the sort keys are deterministic and consistent
+    // Running the same operation should produce identical results
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out2, UtilityFunctions::make_sort_key(ctx, cols));
+    auto* bin2 = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out2);
+    ASSERT_EQ(4, bin2->size());
+
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_EQ(bin->get_slice(i).to_string(), bin2->get_slice(i).to_string())
+                << "Sort keys should be deterministic for row " << i;
+    }
 }
 
 TEST_F(UtilityFunctionsTest, makeSortKeyStringEscaping) {

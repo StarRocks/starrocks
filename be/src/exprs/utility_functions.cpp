@@ -397,6 +397,7 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     size_t rows = 0;
     bool is_last_field = false;
     std::vector<std::string>* buffs;
+    const Buffer<uint8_t>* null_mask = nullptr; // Track null rows to skip processing
 
     explicit EncoderVisitor() : ColumnVisitorAdapter(this) {}
 
@@ -404,7 +405,8 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     Status do_visit(const NullableColumn& column) {
         const auto& null_column = column.null_column();
         auto& nulls = null_column->get_data();
-        // NULL value - encode as empty string for sort key purposes
+
+        // First, add null markers for all rows
         // NULL should sort before non-NULL
         for (size_t i = 0; i < rows; i++) {
             if (nulls[i]) {
@@ -414,16 +416,34 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
             }
         }
 
-        return column.data_column()->accept(this);
+        // Set the null mask so that subsequent visitor methods can skip null rows
+        const Buffer<uint8_t>* original_null_mask = null_mask;
+        null_mask = &nulls;
+
+        // Process the underlying data column
+        Status status = column.data_column()->accept(this);
+
+        // Restore the original null mask
+        null_mask = original_null_mask;
+
+        return status;
     }
 
     // Const: forward to data
-    Status do_visit(const ConstColumn& column) { return column.data_column()->accept(this); }
+    Status do_visit(const ConstColumn& column) {
+        // For const columns, we don't need to check null mask since const columns
+        // are never null in the context of nullable columns
+        return column.data_column()->accept(this);
+    }
 
     // Strings/binary
     template <typename T>
     Status do_visit(const BinaryColumnBase<T>& column) {
         for (size_t i = 0; i < rows; i++) {
+            // Skip processing for null rows
+            if (null_mask && (*null_mask)[i]) {
+                continue;
+            }
             Slice s = column.get_slice(i);
             encoding_utils::encode_slice(s, &(*buffs)[i], is_last_field);
         }
@@ -435,6 +455,10 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     Status do_visit(const FixedLengthColumn<T>& column) {
         const auto& data = column.get_data();
         for (size_t i = 0; i < rows; i++) {
+            // Skip processing for null rows
+            if (null_mask && (*null_mask)[i]) {
+                continue;
+            }
             if constexpr (std::is_same_v<T, float>) {
                 encode_float32(data[i], &(*buffs)[i]);
             } else if constexpr (std::is_same_v<T, double>) {
@@ -458,6 +482,8 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     // Unsupported complex types map/array/struct/json/hll/bitmap/percentile
     template <typename T>
     Status do_visit(const T& column) {
+        // Even for unsupported types, we should check null mask to be consistent
+        // but since we're returning an error anyway, we can skip the null check
         return Status::NotSupported("make_sort_key: unsupported argument type");
     }
 };
