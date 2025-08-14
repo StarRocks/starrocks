@@ -128,8 +128,7 @@ struct ZoneMapDatum<TYPE_VARBINARY> final : public ZoneMapDatum<TYPE_CHAR> {
             _length = std::max<int>(BitUtil::next_power_of_two(slice->size), INIT_SIZE);
             raw::stl_string_resize_uninitialized(&_value_container, _length);
             value.data = _value_container.data();
-            // Don't reset size to 0 for VARBINARY - keep the actual data size
-            value.size = slice->size;
+            value.size = 0;
         }
     }
 
