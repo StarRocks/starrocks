@@ -16,7 +16,7 @@
 
 #include <utility>
 
-#include "exec/aggregator.h"
+#include "exec/aggregator_fwd.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
 #include "exec/pipeline/operator.h"

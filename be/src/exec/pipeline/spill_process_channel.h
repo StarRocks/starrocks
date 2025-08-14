@@ -16,17 +16,14 @@
 
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <utility>
 
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "exec/spill/executor.h"
 #include "exec/spill/spiller.h"
 #include "runtime/runtime_state.h"
 #include "util/blocking_queue.hpp"
 #include "util/defer_op.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 class SpillProcessChannel;
@@ -73,7 +70,7 @@ using SpillProcessChannelFactoryPtr = std::shared_ptr<SpillProcessChannelFactory
 // SpillProcessOperator
 class SpillProcessChannel {
 public:
-    SpillProcessChannel() {}
+    SpillProcessChannel() = default;
 
     bool add_spill_task(SpillProcessTask&& task) {
         DCHECK(!_is_finishing);

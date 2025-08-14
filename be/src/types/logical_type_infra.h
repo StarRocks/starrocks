@@ -106,6 +106,14 @@ namespace starrocks {
     M(VARBINARY)                        \
     M(JSON)
 
+#define APPLY_FOR_MIN_MAX_COMPRESSABLE_TYPE(M) \
+    APPLY_FOR_ALL_INT_TYPE(M)                  \
+    M(TYPE_DECIMAL32)                          \
+    M(TYPE_DECIMAL64)                          \
+    M(TYPE_DECIMAL128)                         \
+    M(TYPE_DATE)                               \
+    M(TYPE_DATETIME)
+
 #define APPLY_FOR_BITSET_FILTER_SUPPORTED_TYPE(M) \
     M(TYPE_BOOLEAN)                               \
     M(TYPE_TINYINT)                               \

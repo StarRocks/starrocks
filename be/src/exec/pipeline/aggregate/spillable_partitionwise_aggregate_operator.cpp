@@ -49,9 +49,7 @@ Status SpillablePartitionWiseAggregateSinkOperator::set_finishing(RuntimeState* 
     }
     if (!_agg_op->aggregator()->spill_channel()->has_task()) {
         if (_agg_op->aggregator()->hash_map_variant().size() > 0 || !_streaming_chunks.empty()) {
-            _agg_op->aggregator()->hash_map_variant().visit([&](auto& hash_map_with_key) {
-                _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->_state_allocator.begin();
-            });
+            _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->state_allocator().begin();
             _agg_op->aggregator()->spill_channel()->add_spill_task(_build_spill_task(state));
         }
     }
@@ -279,9 +277,7 @@ ChunkPtr& SpillablePartitionWiseAggregateSinkOperator::_append_hash_column(Chunk
 Status SpillablePartitionWiseAggregateSinkOperator::_spill_all_data(RuntimeState* state, bool should_spill_hash_table) {
     RETURN_IF(_agg_op->aggregator()->hash_map_variant().size() == 0, Status::OK());
     if (should_spill_hash_table) {
-        _agg_op->aggregator()->hash_map_variant().visit([&](auto& hash_map_with_key) {
-            _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->_state_allocator.begin();
-        });
+        _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->state_allocator().begin();
     }
     CHECK(!_agg_op->aggregator()->spill_channel()->has_task());
     RETURN_IF_ERROR(

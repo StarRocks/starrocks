@@ -26,6 +26,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -131,11 +132,13 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
                     if (column == null || (!column.getType().isNumericType() && !column.getType().isDate())) {
                         return Optional.empty();
                     }
+                    // We need the aggregated result, so this constraint is not satisfied.
+                    if (column.isAggregated()) {
+                        return Optional.empty();
+                    }
 
-                    long version = olapTable.getPartitions().stream()
-                            .map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
-                            .max(Long::compareTo).orElse(0L);
-
+                    long version = olapTable.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
+                            PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
                     String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
                     String sql = "select min(" + column.getName() + ") as min, max(" + column.getName() + ") as max"
                             + " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), olapTable.getName())
@@ -148,7 +151,11 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
                         return Optional.empty();
                     }
                     Preconditions.checkState(result.size() == 1);
-                    return Optional.of(new CacheValue(toMinMax(result.get(0)), new StatsVersion(version, version)));
+                    ColumnMinMax minMax = toMinMax(result.get(0));
+                    if (minMax.minValue() == null || minMax.maxValue() == null) {
+                        return Optional.empty();
+                    }
+                    return Optional.of(new CacheValue(minMax, new StatsVersion(version, version)));
                 } catch (Exception e) {
                     LOG.warn("get MinMax for column: {}, error: {}", key, e.getMessage(), e);
                 }
@@ -161,8 +168,19 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
             ByteBuf copied = Unpooled.copiedBuffer(buffer);
             String jsonString = copied.toString(Charset.defaultCharset());
             JsonElement obj = JsonParser.parseString(jsonString);
-            JsonArray data = obj.getAsJsonObject().get("data").getAsJsonArray();
-            return new ColumnMinMax(data.get(0).getAsString(), data.get(1).getAsString());
+            JsonElement dataElement = obj.getAsJsonObject().get("data");
+            if (dataElement == null || dataElement.isJsonNull() || !dataElement.isJsonArray()) {
+                throw new IllegalStateException("Invalid 'data' field");
+            }
+            JsonArray data = dataElement.getAsJsonArray();
+
+            JsonElement minElement = data.get(0);
+            JsonElement maxElement = data.get(1);
+
+            String min = minElement.isJsonNull() ? null : minElement.getAsString();
+            String max = maxElement.isJsonNull() ? null : maxElement.getAsString();
+
+            return new ColumnMinMax(min, max);
         }
     }
 

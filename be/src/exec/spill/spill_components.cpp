@@ -757,8 +757,7 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         auto hash_set_sz = merger->hash_set_variant().size();
         merger->convert_hash_set_to_chunk(hash_set_sz, &chunk_merged);
     } else {
-        merger->hash_map_variant().visit(
-                [&](auto& hash_map_with_key) { merger->it_hash() = merger->_state_allocator.begin(); });
+        merger->it_hash() = merger->state_allocator().begin();
         auto hash_map_sz = merger->hash_map_variant().size();
         RETURN_IF_ERROR(merger->convert_hash_map_to_chunk(hash_map_sz, &chunk_merged, true));
     }
