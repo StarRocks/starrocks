@@ -186,11 +186,14 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         query_ctx->extend_query_lifetime();
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
         // port query_ctx to second map
-        query_ctx->count_down_fragments();
+        query_ctx->count_down_fragments(query_ctx_mgr.get());
 
-        ASSIGN_OR_ASSERT_FAIL(auto* query_ctx1, query_ctx_mgr->get_or_register(query_id));
+        // Single thread cannot reproduce query context registration success,
+        // while this query context is in the second case. So let's simulate it here.
+        query_ctx->increment_num_fragments();
+
         // cancel
-        query_ctx1->cancel(Status::Cancelled("cannelled"), true);
+        query_ctx->cancel(Status::Cancelled("cannelled"), true);
 
         ASSERT_TRUE(query_ctx_mgr->get_or_register(query_id).status().is_cancelled());
 
