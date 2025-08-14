@@ -236,7 +236,7 @@ Status DeltaColumnGroupListSerializer::_deserialize_delta_column_group_list(cons
                 encryption_metas.push_back(dcgs_pb.dcgs(i).encryption_metas(j));
             }
         }
-        dcg->init(dcgs_pb.versions(i), column_ids, column_files, encryption_metas, dcgs_pb.file_size());
+        dcg->init(dcgs_pb.versions(i), column_ids, column_files, encryption_metas, dcgs_pb.dcgs(i).file_size());
         dcgs->push_back(dcg);
     }
     return Status::OK();

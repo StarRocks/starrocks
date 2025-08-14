@@ -278,8 +278,13 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     }
 
     // load extra file size. Include persistent index files and delta column files.
-    _extra_file_size_cache.pindex_size = tablet_updates_pb.extra_file_size().pindex_size();
-    _extra_file_size_cache.col_size = tablet_updates_pb.extra_file_size().col_size();
+    if (tablet_updates_pb.has_extra_file_size()) {
+        _extra_file_size_cache.pindex_size = tablet_updates_pb.extra_file_size().pindex_size();
+        _extra_file_size_cache.col_size = tablet_updates_pb.extra_file_size().col_size();
+    } else {
+        _extra_file_size_cache.pindex_size = 0;
+        _extra_file_size_cache.col_size = 0;
+    }
 
     RETURN_IF_ERROR(_load_meta_and_log(tablet_updates_pb));
 
