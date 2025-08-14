@@ -1115,10 +1115,7 @@ public class FunctionAnalyzer {
                 newFn.setisAnalyticFn(((AggregateFunction) fn).isAnalyticFn());
                 fn = newFn;
             }
-        } else if (fnName.endsWith(FunctionSet.AGG_STATE_SUFFIX)
-                || fnName.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX)
-                || fnName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)
-                || fnName.endsWith(FunctionSet.IF)) {
+        } else if (AggStateUtils.isAggStateCombinator(fnName)) {
             Function func = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (func == null) {
                 return null;

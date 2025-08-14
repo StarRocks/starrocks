@@ -233,7 +233,8 @@ public class AggStateUtils {
                                                          Function inputFunc,
                                                          Type[] argumentTypes,
                                                          NodePosition pos) {
-        Preconditions.checkArgument(argumentTypes.length == 1,
+        // TODO: add more restrictions
+        Preconditions.checkArgument(argumentTypes.length >= 1,
                 "AggState's AggFunc should have only one argument");
         Type arg0Type = argumentTypes[0];
         if (arg0Type.getAggStateDesc() == null) {
@@ -296,5 +297,20 @@ public class AggStateUtils {
 
     public static String aggStateMergeFunctionName(String aggFuncName) {
         return aggFuncName + FunctionSet.AGG_STATE_MERGE_SUFFIX;
+    }
+
+    public static boolean isAggStateCombinator(Function function) {
+        return function instanceof AggStateIf ||
+                function instanceof AggStateUnionCombinator ||
+                function instanceof AggStateMergeCombinator ||
+                // scalar functions
+                function instanceof AggStateCombinator;
+    }
+
+    public static boolean isAggStateCombinator(String functionName) {
+        return functionName.endsWith(FunctionSet.AGG_STATE_SUFFIX) ||
+                functionName.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX) ||
+                functionName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX) ||
+                functionName.endsWith(FunctionSet.AGG_STATE_IF_SUFFIX);
     }
 }

@@ -15,7 +15,9 @@
 #pragma once
 
 #include "common/object_pool.h"
-#include "exprs/agg_state_function.h"
+#include "exprs/agg/combinator/state_function.h"
+#include "exprs/agg/combinator/state_merge_function.h"
+#include "exprs/agg/combinator/state_union_function.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr.h"
 
@@ -64,7 +66,7 @@ private:
     bool _is_returning_random_value = false;
 
     // only set when it's a agg state combinator function to track its lifecycle be with the expr
-    std::shared_ptr<AggStateFunction> _agg_state_func = nullptr;
+    StateCombinatorPtr _agg_state_func = nullptr;
     // only set when it's a agg state combinator function to track its lifecycle be with the expr
     std::shared_ptr<FunctionDescriptor> _agg_func_desc = nullptr;
 };
