@@ -71,15 +71,13 @@ public class BucketProperty {
         List<BucketProperty> bp0 = bucketProperties.get(0);
         for (int i = 1; i < bucketProperties.size(); i++) {
             List<BucketProperty> bp = bucketProperties.get(i);
-            boolean pass = bp.size() == bp0.size();
+            if (bp.size() != bp0.size()) {
+                throw new StarRocksPlannerException("Error when using bucket-aware execution", INTERNAL_ERROR);
+            }
             for (int j = 0; j < bp0.size(); j++) {
                 if (!bp.get(j).satisfy(bp0.get(j))) {
-                    pass = false;
-                    break;
+                    throw new StarRocksPlannerException("Error when using bucket-aware execution", INTERNAL_ERROR);
                 }
-            }
-            if (!pass) {
-                throw new StarRocksPlannerException("Error when using bucket-aware execution", INTERNAL_ERROR);
             }
         }
         return Optional.of(bucketProperties.get(0));

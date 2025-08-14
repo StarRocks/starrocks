@@ -257,8 +257,14 @@ public class IcebergScanNode extends ScanNode {
             throw new StarRocksConnectorException("Error when using bucket-aware execution for table: "
                     + icebergTable.getName());
         }
-        return this.bucketProperties.get().stream().map(
-                BucketProperty::getBucketNum).reduce(1, (a, b) -> (a + 1) * (b + 1));
+
+        List<Integer> bucketNums = this.bucketProperties.get().stream().map(
+                BucketProperty::getBucketNum).toList();
+        int res = bucketNums.get(0) + 1;
+        for (int i = 1; i < bucketNums.size(); i++) {
+            res = res * (bucketNums.get(i) + 1);
+        }
+        return res;
     }
 
     @Override

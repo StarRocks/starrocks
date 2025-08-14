@@ -56,7 +56,6 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -64,8 +63,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSinkCommitInfo;
@@ -109,6 +108,7 @@ import java.util.Optional;
 import java.util.Set;
 import javax.swing.text.html.Option;
 import static com.starrocks.common.util.Util.executeCommand;
+import java.util.stream.Stream;
 
 public class IcebergScanNodeTest {
     public static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
@@ -1219,5 +1219,40 @@ public class IcebergScanNodeTest {
                 Assertions.assertThrows(StarRocksConnectorException.class, () -> target.rewriteDataFiles(clause, ctx));
         Assertions.assertTrue(ex.getMessage().contains("db.table"));
         Assertions.assertTrue(ex.getMessage().contains("boom"));
+    }
+
+    @Test
+    public void testGetBucketNums(@Mocked IcebergTable table) {
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
+
+        // Create three bucket properties
+        List<BucketProperty> bucketProperties = new ArrayList<>();
+        Column column1 = new Column("test_col1", ScalarType.INT);
+        Column column2 = new Column("test_col2", ScalarType.INT);
+        Column column3 = new Column("test_col3", ScalarType.INT);
+        Column column4 = new Column("test_col4", ScalarType.INT);
+        BucketProperty bucketProperty1 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 2, column1);
+        BucketProperty bucketProperty2 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 3, column2);
+        BucketProperty bucketProperty3 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 4, column3);
+        BucketProperty bucketProperty4 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 5, column4);
+        bucketProperties.add(bucketProperty1);
+        bucketProperties.add(bucketProperty2);
+        bucketProperties.add(bucketProperty3);
+        bucketProperties.add(bucketProperty4);
+
+        scanNode.setBucketProperties(bucketProperties);
+
+        // Test
+        int result = scanNode.getBucketNums();
+
+        // Verify: (2 + 1) * (3 + 1) * (4 + 1) * (5 + 1) = 3 * 4 * 5 * 6 = 360
+        Assertions.assertEquals(360, result);
+        // wrong method
+        Assertions.assertEquals(876, Stream.of(2, 3, 4, 5).reduce(1, (a, b) -> (a + 1) * (b + 1)));
     }
 }
