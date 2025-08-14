@@ -17,7 +17,7 @@
 #include <cstdint>
 #include <memory_resource>
 
-#include "gutil/dynamic_annotations.h"
+#include "util/posion.h"
 
 namespace starrocks {
 // memory resource provide for PMR
@@ -36,11 +36,11 @@ public:
               _stack_addr_end((uint8_t*)_stack_addr_start + sz),
               _current_addr(_stack_addr_start),
               _upstream(upstream) {
-        ASAN_POISON_MEMORY_REGION(_stack_addr_start, sz);
+        SR_ASAN_POISON_MEMORY_REGION(_stack_addr_start, sz);
     }
     ~stack_memory_resource() override {
         size_t sz = (uint8_t*)_stack_addr_end - (uint8_t*)_stack_addr_start;
-        ASAN_UNPOISON_MEMORY_REGION(_stack_addr_start, sz);
+        SR_ASAN_UNPOISON_MEMORY_REGION(_stack_addr_start, sz);
     }
 
 private:
@@ -55,7 +55,7 @@ private:
         if (res == nullptr) {
             return _upstream->allocate(__bytes, __alignment);
         }
-        ASAN_UNPOISON_MEMORY_REGION(res, __bytes);
+        SR_ASAN_UNPOISON_MEMORY_REGION(res, __bytes);
         _current_addr = (uint8_t*)_current_addr + __bytes;
 
         return res;
@@ -64,7 +64,7 @@ private:
     void do_deallocate(void* __p, size_t __bytes, size_t __alignment) override {
         if (__p >= _stack_addr_start && __p <= _stack_addr_end) {
             // nothing todo
-            ASAN_POISON_MEMORY_REGION(__p, __bytes);
+            SR_ASAN_POISON_MEMORY_REGION(__p, __bytes);
         } else {
             return _upstream->deallocate(__p, __bytes, __alignment);
         }

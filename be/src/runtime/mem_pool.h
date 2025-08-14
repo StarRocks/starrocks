@@ -37,18 +37,14 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
-#include <new>
 #include <string>
 #include <vector>
 
 #include "common/compiler_util.h"
 #include "common/config.h"
-#include "common/logging.h"
-#include "common/status.h"
-#include "gutil/dynamic_annotations.h"
 #include "runtime/memory/mem_chunk.h"
-#include "storage/olap_define.h"
 #include "util/bit_util.h"
+#include "util/posion.h"
 
 namespace starrocks {
 
@@ -208,7 +204,7 @@ private:
                 // Ensure the requested alignment is respected.
                 int64_t padding = aligned_allocated_bytes - info.allocated_bytes;
                 uint8_t* result = info.chunk.data + aligned_allocated_bytes;
-                ASAN_UNPOISON_MEMORY_REGION(result, size);
+                SR_ASAN_UNPOISON_MEMORY_REGION(result, size);
                 DCHECK_LE(info.allocated_bytes + size, info.chunk.size);
                 info.allocated_bytes += padding + size;
                 total_allocated_bytes_ += padding + size;
@@ -226,7 +222,7 @@ private:
 
         ChunkInfo& info = chunks_[current_chunk_idx_];
         uint8_t* result = info.chunk.data + info.allocated_bytes;
-        ASAN_UNPOISON_MEMORY_REGION(result, size);
+        SR_ASAN_UNPOISON_MEMORY_REGION(result, size);
         DCHECK_LE(info.allocated_bytes + size, info.chunk.size);
         info.allocated_bytes += size;
         total_allocated_bytes_ += size;

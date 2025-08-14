@@ -45,17 +45,17 @@ void faststring::GrowArray(size_t newcapacity) {
     if (data_ != initial_data_) {
         delete[] data_;
     } else {
-        ASAN_POISON_MEMORY_REGION(initial_data_, arraysize(initial_data_));
+        SR_ASAN_POISON_MEMORY_REGION(initial_data_, arraysize(initial_data_));
     }
 
     data_ = newdata.release();
-    ASAN_POISON_MEMORY_REGION(data_ + len_, capacity_ - len_);
+    SR_ASAN_POISON_MEMORY_REGION(data_ + len_, capacity_ - len_);
 }
 
 void faststring::ShrinkToFitInternal() {
     DCHECK_NE(data_, initial_data_);
     if (len_ <= kInitialCapacity) {
-        ASAN_UNPOISON_MEMORY_REGION(initial_data_, len_);
+        SR_ASAN_UNPOISON_MEMORY_REGION(initial_data_, len_);
         memcpy(initial_data_, &data_[0], len_);
         delete[] data_;
         data_ = initial_data_;

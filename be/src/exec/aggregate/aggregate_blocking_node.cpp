@@ -16,13 +16,10 @@
 
 #include <memory>
 #include <type_traits>
-#include <variant>
 
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
-#include "exec/pipeline/aggregate/aggregate_streaming_sink_operator.h"
-#include "exec/pipeline/aggregate/aggregate_streaming_source_operator.h"
 #include "exec/pipeline/aggregate/sorted_aggregate_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/sorted_aggregate_streaming_source_operator.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
@@ -32,12 +29,8 @@
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/spill_process_operator.h"
-#include "exec/sorted_streaming_aggregator.h"
-#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 
@@ -121,8 +114,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
         if (_aggregator->hash_map_variant().size() == 0) {
             _aggregator->set_ht_eos();
         }
-        _aggregator->hash_map_variant().visit(
-                [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
+        _aggregator->it_hash() = _aggregator->state_allocator().begin();
     } else if (_aggregator->is_none_group_by_exprs()) {
         // for aggregate no group by, if _num_input_rows is 0,
         // In update phase, we directly return empty chunk.

@@ -70,7 +70,7 @@ void MemPool::clear() {
     current_chunk_idx_ = -1;
     for (auto& chunk : chunks_) {
         chunk.allocated_bytes = 0;
-        ASAN_POISON_MEMORY_REGION(chunk.chunk.data, chunk.chunk.size);
+        SR_ASAN_POISON_MEMORY_REGION(chunk.chunk.data, chunk.chunk.size);
     }
     total_allocated_bytes_ = 0;
     DCHECK(check_integrity(false));
@@ -139,7 +139,7 @@ bool MemPool::find_chunk(size_t min_size, bool check_limits) {
             return false;
         }
     }
-    ASAN_POISON_MEMORY_REGION(chunk.data, chunk_size);
+    SR_ASAN_POISON_MEMORY_REGION(chunk.data, chunk_size);
     // Put it before the first free chunk. If no free chunks, it goes at the end.
     if (first_free_idx == static_cast<int>(chunks_.size())) {
         chunks_.emplace_back(chunk);
