@@ -527,7 +527,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                                         new PriorityQueue<>(Math.max(index.getTablets().size(), 1), COMPARATOR);
                                 long cooldownedTimeMs = startTime - Config.consistency_check_cooldown_time_second * 1000;
                                 List<Tablet> cooldownedTablets = index.getTablets().stream()
-                                        .filter(t -> t.getLastCheckTime() < cooldonwedTimeMs)
+                                        .filter(t -> t.getLastCheckTime() < cooldownedTimeMs)
                                         .toList();
                                 tabletQueue.addAll(cooldownedTablets);
 
