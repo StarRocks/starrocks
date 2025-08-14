@@ -18,8 +18,6 @@ package com.starrocks.leader;
 import com.starrocks.common.Config;
 import com.starrocks.common.InvalidMetaDirException;
 import com.starrocks.persist.ImageFormatVersion;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -37,50 +35,6 @@ public class MetaHelperTest {
     @AfterEach
     public void teardown() {
         deleteDir(new File(testDir));
-    }
-
-    @Test
-    public void testHasTwoMetaDir() {
-        assertThrows(InvalidMetaDirException.class, () -> {
-            Config.start_with_incomplete_meta = false;
-            new MockUp<System>() {
-                @Mock
-                public String getenv(String name) {
-                    return testDir;
-                }
-            };
-
-            mkdir(testDir + "/doris-meta/");
-            mkdir(testDir + "/meta/");
-            Config.meta_dir = testDir + "/meta";
-            try {
-                MetaHelper.checkMetaDir();
-            } finally {
-                deleteDir(new File(testDir));
-            }
-        });
-    }
-
-    @Test
-    public void testUseOldMetaDir() throws IOException,
-            InvalidMetaDirException {
-        Config.start_with_incomplete_meta = false;
-        new MockUp<System>() {
-            @Mock
-            public String getenv(String name) {
-                return testDir;
-            }
-        };
-
-        mkdir(testDir + "/doris-meta/");
-        Config.meta_dir = testDir + "/meta";
-        try {
-            MetaHelper.checkMetaDir();
-        } finally {
-            deleteDir(new File(testDir));
-        }
-
-        Assertions.assertEquals(Config.meta_dir, testDir + "/doris-meta");
     }
 
     @Test

@@ -31,8 +31,6 @@ curdir=`dirname "$0"`
 curdir=`cd "$curdir"; pwd`
 
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
-# compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
-export DORIS_HOME="$STARROCKS_HOME"
 export PID_DIR=`cd "$curdir"; pwd`
 
 source $STARROCKS_HOME/bin/common.sh
