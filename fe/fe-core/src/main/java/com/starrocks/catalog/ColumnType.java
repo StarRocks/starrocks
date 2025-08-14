@@ -34,6 +34,8 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.mysql.MysqlCodec;
+
 public abstract class ColumnType {
     private static Boolean[][] schemaChangeMatrix;
 
@@ -121,7 +123,7 @@ public abstract class ColumnType {
             }
             // change decimalv3 to varchar type, the string must be sufficient to hold decimalv3
             if (rhs.isVarchar()) {
-                return lhsScalarType.getMysqlResultSetFieldLength() <= rhsScalarType.getLength();
+                return MysqlCodec.getMysqlResultSetFieldLength(lhsScalarType) <= rhsScalarType.getLength();
             }
             // decimalv3 to decimalv3 schema change must guarantee invariant:
             // 1. rhs's fraction part is wide enough to hold lhs's, namely lhs.scale <= rhs.scale;
