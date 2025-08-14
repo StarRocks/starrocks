@@ -587,6 +587,12 @@ public class MockedBackend {
         public Future<PUpdateTransactionStateResponse> updateTransactionState(PUpdateTransactionStateRequest request) {
             throw new NotImplementedException("TODO");
         }
+
+        @Override
+        public Future<PExecBatchPlanFragmentsResult> execSingleNodePlanFragments(
+                PExecBatchPlanFragmentsRequest request) {
+            return null;
+        }
     }
 
     public static class MockLakeService implements LakeService {

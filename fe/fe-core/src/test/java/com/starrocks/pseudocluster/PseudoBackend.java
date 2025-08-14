@@ -1116,6 +1116,12 @@ public class PseudoBackend {
         public Future<PUpdateTransactionStateResponse> updateTransactionState(PUpdateTransactionStateRequest request) {
             throw new org.apache.commons.lang.NotImplementedException("TODO");
         }
+
+        @Override
+        public Future<PExecBatchPlanFragmentsResult> execSingleNodePlanFragments(
+                PExecBatchPlanFragmentsRequest request) {
+            return null;
+        }
     }
 
     public static class PseudoLakeService implements LakeService {

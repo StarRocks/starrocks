@@ -632,6 +632,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PHASED_SCHEDULER = "enable_phased_scheduler";
     public static final String PHASED_SCHEDULER_MAX_CONCURRENCY = "phased_scheduler_max_concurrency";
+    public static final String ENABLE_SINGLE_NODE_SCHEDULE = "enable_single_node_schedule";
 
     public static final String CUSTOM_QUERY_ID = "custom_query_id";
 
@@ -2832,6 +2833,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PHASED_SCHEDULER)
     private boolean enablePhasedScheduler = false;
 
+    @VarAttr(name = ENABLE_SINGLE_NODE_SCHEDULE)
+    private boolean enableSingleNodeSchedule = true;
+
     @VarAttr(name = ENABLE_PIPELINE_EVENT_SCHEDULER)
     private boolean enablePipelineEventScheduler = true;
 
@@ -2858,6 +2862,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePhasedScheduler(boolean enablePhasedScheduler) {
         this.enablePhasedScheduler = enablePhasedScheduler;
+    }
+
+    public boolean enableSingleNodeSchedule() {
+        return enableSingleNodeSchedule;
+    }
+
+    public void setEnableSingleNodeSchedule(boolean enableSingleNodeSchedule) {
+        this.enableSingleNodeSchedule = enableSingleNodeSchedule;
     }
 
     public void setFollowerQueryForwardMode(String mode) {
