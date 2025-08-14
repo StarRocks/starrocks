@@ -167,8 +167,6 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
     }
     int64_t min_check_version = request.min_check_version();
     int64_t max_check_version = request.max_check_version();
-    // protect the max check version
-    retain_versions.insert(max_check_version);
 
     int64_t vacuumed_files = 0;
     int64_t vacuumed_file_size = 0;
