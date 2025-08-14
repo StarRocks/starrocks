@@ -110,10 +110,12 @@ std::string AggStateDesc::debug_string() const {
     return ss.str();
 }
 
-const AggregateFunction* AggStateDesc::get_agg_state_func(AggStateDesc* agg_state_desc) {
+const AggregateFunction* AggStateDesc::get_agg_state_func(const AggStateDesc* agg_state_desc,
+                                                          bool is_result_nullable_hint) {
     DCHECK(agg_state_desc);
+    bool is_result_nullable = agg_state_desc->is_result_nullable() || is_result_nullable_hint;
     auto* agg_function = get_aggregate_function(agg_state_desc->get_func_name(), agg_state_desc->get_return_type(),
-                                                agg_state_desc->get_arg_types(), agg_state_desc->is_result_nullable(),
+                                                agg_state_desc->get_arg_types(), is_result_nullable,
                                                 TFunctionBinaryType::BUILTIN, agg_state_desc->get_func_version());
     if (agg_function == nullptr) {
         LOG(WARNING) << "Failed to get aggregate function for " << agg_state_desc->debug_string();

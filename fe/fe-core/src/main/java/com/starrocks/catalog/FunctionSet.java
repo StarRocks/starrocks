@@ -44,10 +44,14 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import com.starrocks.catalog.combinator.AggStateCombinator;
+import com.starrocks.catalog.combinator.AggStateCombineCombinator;
+import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
+import com.starrocks.catalog.combinator.StateMergeCombinator;
+import com.starrocks.catalog.combinator.StateUnionCombinator;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -156,6 +160,7 @@ public class FunctionSet {
     public static final String MD5_SUM_NUMERIC = "md5sum_numeric";
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
+    public static final String ROW_FINGERPRINT= "row_fingerprint";
 
     // Vector Index functions:
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
@@ -551,7 +556,12 @@ public class FunctionSet {
     public static final String CURRENT_ROLE = "current_role";
     public static final String CURRENT_GROUP = "current_group";
 
+    // scalar function
     public static final String AGG_STATE_SUFFIX = "_state";
+    public static final String STATE_UNION_SUFFIX = "_state_union";
+    public static final String STATE_MERGE_SUFFIX = "_state_merge";
+    // agg function
+    public static final String AGG_STATE_COMBINE_SUFFIX = "_combine";
     public static final String AGG_STATE_UNION_SUFFIX = "_union";
     public static final String AGG_STATE_MERGE_SUFFIX = "_merge";
     public static final String AGG_STATE_IF_SUFFIX = "_if";
@@ -897,7 +907,7 @@ public class FunctionSet {
 
     public boolean isNotAlwaysNullResultWithNullParamFunctions(String funcName) {
         return notAlwaysNullResultWithNullParamFunctions.contains(funcName)
-                || alwaysReturnNonNullableFunctions.contains(funcName);
+                || isAlwaysReturnNonNullableFunction(funcName);
     }
 
     private Function matchFuncCandidates(Function desc, Function.CompareMode mode, List<Function> fns) {
@@ -1005,12 +1015,21 @@ public class FunctionSet {
         return matchCastFunction(desc, mode, standFns);
     }
 
+    public static boolean isAlwaysReturnNonNullableFunction(String functionName) {
+        if (alwaysReturnNonNullableFunctions.contains(functionName)) {
+            return true;
+        }
+        // for agg state functions, we also consider them as non-nullable functions
+        String origFuncName = AggStateUtils.getAggFuncNameOfCombinator(functionName);
+        return !AggStateDesc.isAggFuncResultNullable(origFuncName);
+    }
+
     private void addBuiltInFunction(Function fn) {
         Preconditions.checkArgument(!fn.getReturnType().isPseudoType() || fn.isPolymorphic(), fn.toString());
         if (!fn.isPolymorphic() && getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
             return;
         }
-        fn.setIsNullable(!alwaysReturnNonNullableFunctions.contains(fn.functionName()));
+        fn.setIsNullable(!isAlwaysReturnNonNullableFunction(fn.functionName()));
         List<Function> fns = vectorizedFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
         fns.add(fn);
     }
@@ -1025,7 +1044,7 @@ public class FunctionSet {
 
     private void addVectorizedBuiltin(Function fn) {
         fn.setCouldApplyDictOptimize(couldApplyDictOptimizationFunctions.contains(fn.functionName()));
-        fn.setIsNullable(!alwaysReturnNonNullableFunctions.contains(fn.functionName()));
+        fn.setIsNullable(!isAlwaysReturnNonNullableFunction(fn.functionName()));
         List<Function> fns = vectorizedFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
         fns.add(fn);
     }
@@ -1046,9 +1065,12 @@ public class FunctionSet {
         if (AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
             // register `_state` combinator
             AggStateCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
+            StateMergeCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
+            StateUnionCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
             // register `_merge`/`_union` combinator for aggregate functions
             AggStateUnionCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
             AggStateMergeCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
+            AggStateCombineCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
         }
 
         if (AggStateUtils.isSupportedAggStateFunction(aggFunc, true)) {
@@ -1067,6 +1089,18 @@ public class FunctionSet {
 
     public static String getAggStateMergeName(String name) {
         return String.format("%s%s", name, AGG_STATE_MERGE_SUFFIX);
+    }
+
+    public static String getAggStateCombineName(String name) {
+        return String.format("%s%s", name, AGG_STATE_COMBINE_SUFFIX);
+    }
+
+    public static String getStateMergeName(String name) {
+        return String.format("%s%s", name, STATE_MERGE_SUFFIX);
+    }
+
+    public static String getStateUnionName(String name) {
+        return String.format("%s%s", name, STATE_UNION_SUFFIX);
     }
 
     public static String getAggStateIfName(String name) {

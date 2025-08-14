@@ -202,7 +202,8 @@ Status StarCacheEngine::update_disk_spaces(const std::vector<DirSpace>& spaces) 
 }
 
 Status StarCacheEngine::update_inline_cache_count_limit(int32_t limit) {
-    return to_status(_cache->update_inline_cache_count_limit(limit));
+    // return to_status(_cache->update_inline_cache_count_limit(limit));
+    return Status::OK();
 }
 
 const StarCacheMetrics StarCacheEngine::starcache_metrics(int level) const {

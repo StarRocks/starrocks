@@ -16,37 +16,23 @@
 
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/combinator/agg_state_combinator.h"
 
 namespace starrocks {
 struct AggStateMergeState {};
 
-/**
- * @brief Merge combinator for aggregate function to merge the agg state to return the final result of aggregate function.
- * DESC: return_type {agg_func}_merge(immediate_type)
- *  input type          : aggregate function's immediate_type
- *  intermediate type   : aggregate function's immediate_type
- *  return type         : aggregate function's return type
- */
-class AggStateMerge final : public AggregateFunctionBatchHelper<AggStateMergeState, AggStateMerge> {
+// An aggregate merge combinator that merges aggregate intermediate states to compute the final result of aggregate function.
+//
+// DESC: return_type {agg_func}_merge(immediate_type)
+//  input type          : aggregate function's immediate_type
+//  intermediate type   : aggregate function's immediate_type
+//  return type         : aggregate function's return type
+class AggStateMerge final : public AggStateCombinator<AggStateMergeState, AggStateMerge> {
 public:
     AggStateMerge(AggStateDesc agg_state_desc, const AggregateFunction* function)
-            : _agg_state_desc(std::move(agg_state_desc)), _function(function) {
+            : AggStateCombinator(agg_state_desc, function) {
         DCHECK(_function != nullptr);
-    }
-    const AggStateDesc* get_agg_state_desc() const { return &_agg_state_desc; }
-
-    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { _function->create(ctx, ptr); }
-
-    void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { _function->destroy(ctx, ptr); }
-
-    size_t size() const override { return _function->size(); }
-
-    size_t alignof_size() const override { return _function->alignof_size(); }
-
-    bool is_pod_state() const override { return _function->is_pod_state(); }
-
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
-        _function->reset(ctx, args, state);
+        VLOG_ROW << "AggStateMerge constructor:" << _agg_state_desc.debug_string();
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -81,10 +67,6 @@ public:
     }
 
     std::string get_name() const override { return "agg_state_merge"; }
-
-private:
-    const AggStateDesc _agg_state_desc;
-    const AggregateFunction* _function;
 };
 
 } // namespace starrocks
