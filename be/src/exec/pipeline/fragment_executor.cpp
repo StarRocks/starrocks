@@ -676,7 +676,8 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                             delete ctx;
                         }
                     });
-                    RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+                    RETURN_IF_ERROR(
+                            exec_env->stream_context_mgr()->put_channel_context(label, table_name, channel_id, ctx));
                 }
                 stream_load_contexts.push_back(ctx);
             }

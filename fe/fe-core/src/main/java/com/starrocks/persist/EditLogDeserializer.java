@@ -37,6 +37,7 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadMultiStmtTask;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
@@ -153,6 +154,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2, RoutineLoadJob.class)
             .put(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2, RoutineLoadOperation.class)
             .put(OperationType.OP_CREATE_STREAM_LOAD_TASK_V2, StreamLoadTask.class)
+            .put(OperationType.OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK, StreamLoadMultiStmtTask.class)
             .put(OperationType.OP_CREATE_LOAD_JOB_V2, LoadJob.class)
             .put(OperationType.OP_END_LOAD_JOB_V2, LoadJobFinalOperation.class)
             .put(OperationType.OP_UPDATE_LOAD_JOB, LoadJob.LoadJobStateUpdateInfo.class)

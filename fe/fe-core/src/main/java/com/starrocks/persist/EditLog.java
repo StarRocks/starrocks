@@ -76,6 +76,7 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadMultiStmtTask;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
@@ -611,6 +612,11 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_STREAM_LOAD_TASK_V2: {
                     StreamLoadTask streamLoadTask = (StreamLoadTask) journal.data();
+                    globalStateMgr.getStreamLoadMgr().replayCreateLoadTask(streamLoadTask);
+                    break;
+                }
+                case OperationType.OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK: {
+                    StreamLoadMultiStmtTask streamLoadTask = (StreamLoadMultiStmtTask) journal.data();
                     globalStateMgr.getStreamLoadMgr().replayCreateLoadTask(streamLoadTask);
                     break;
                 }
@@ -1712,6 +1718,10 @@ public class EditLog {
 
     public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
         logJsonObject(OperationType.OP_CREATE_STREAM_LOAD_TASK_V2, streamLoadTask);
+    }
+
+    public void logCreateMultiStmtStreamLoadJob(StreamLoadMultiStmtTask streamLoadTask) {
+        logJsonObject(OperationType.OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK, streamLoadTask);
     }
 
     public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob) {
