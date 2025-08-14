@@ -186,7 +186,8 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
     // 1. Delete all metadata files associated with the given partition which have tabletmeta.commit_time < grace_timestamp
     // and the checked version of tablet meta should not be found in retain_versions and should in [min_check_version, max_check_version]
     RETURN_IF_ERROR(vacuum_expired_tablet_metadata(tablet_mgr, root_loc, grace_timestamp, &vacuumed_files, &meta_files,
-                                                   &bundle_meta_files, retain_versions, min_check_version, max_check_version));
+                                                   &bundle_meta_files, retain_versions, min_check_version,
+                                                   max_check_version));
 
     // 2. Determine and delete orphaned data files. We use min_active_txn_id to filter out new data files, then we open
     // any remaining metadata files and note that the data files referenced are not orphans.
