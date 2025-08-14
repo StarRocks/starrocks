@@ -48,8 +48,8 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         return Status::InternalError("invalid wildcard query for builtin inverted index");
     }
 
-    std::pair<rowid_t, Slice> lower = std::make_pair(0, Slice::min_value());
-    std::pair<rowid_t, Slice> upper = std::make_pair(_bitmap_itr->bitmap_nums(), Slice(""));
+    std::pair<rowid_t, std::string> lower = std::make_pair(0, Slice::min_value().to_string());
+    std::pair<rowid_t, std::string> upper = std::make_pair(_bitmap_itr->bitmap_nums(), Slice::max_value().to_string());
 
     if (first_wildcard_pos != 0) {
         Slice prefix_s(search_query->data, first_wildcard_pos);
@@ -72,12 +72,13 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         }
         Slice next_prefix_s(next_prefix);
 
-        auto seek = [&](const Slice& bound) -> StatusOr<std::pair<rowid_t, Slice>> {
+        auto seek = [&](const Slice& bound) -> StatusOr<std::pair<rowid_t, std::string>> {
             bool exact_match;
             auto st = _bitmap_itr->seek_dictionary(&bound, &exact_match);
+            auto cur_ordinal = _bitmap_itr->current_ordinal();
             if (st.is_not_found()) {
                 // hit the end of dictionary set
-                return std::make_pair(_bitmap_itr->bitmap_nums(), Slice(""));
+                return std::make_pair(_bitmap_itr->bitmap_nums(), Slice::max_value().to_string());
             } else if (!st.ok()) {
                 return st;
             } else {
@@ -85,7 +86,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
                 size_t read_num = 1;
                 RETURN_IF_ERROR(_bitmap_itr->next_batch_dictionary(&read_num, column.get()));
                 Slice s = down_cast<BinaryColumn*>(column.get())->get_data()[0];
-                return std::make_pair(_bitmap_itr->current_ordinal(), s);
+                return std::make_pair(cur_ordinal, s.to_string());
             }
         };
 
@@ -113,7 +114,9 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         cols.push_back(this->_like_context->get_constant_column(1));
         return LikePredicate::like(this->_like_context.get(), cols);
     };
-    auto res = _bitmap_itr->seek_dictionary_by_predicate(predicate, lower.second, upper.first - lower.first);
+    Slice from_value = Slice(lower.second);
+    size_t search_size = upper.first - lower.first;
+    auto res = _bitmap_itr->seek_dictionary_by_predicate(predicate, from_value, search_size);
     Status st = res.status();
     if (st.ok()) {
         auto hit_rowids = std::move(res.value());

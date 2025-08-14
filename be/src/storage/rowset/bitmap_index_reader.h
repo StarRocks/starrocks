@@ -129,9 +129,9 @@ public:
     // Returns other error status otherwise.
     Status seek_dictionary(const void* value, bool* exact_match);
 
-    StatusOr<Buffer<rowid_t>> seek_dictionary_by_predicate(const DictPredicate& predicate, const Slice& from, uint32_t size);
+    StatusOr<Buffer<rowid_t>> seek_dictionary_by_predicate(const DictPredicate& predicate, const Slice& from_value, size_t search_size);
 
-    Status next_batch_dictionary(size_t* n, Column* column) { return _dict_column_iter->next_batch(n, column); }
+    Status next_batch_dictionary(size_t* n, Column* column);
 
     // Read bitmap at the given ordinal into `result`.
     Status read_bitmap(rowid_t ordinal, Roaring* result);
