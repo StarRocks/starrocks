@@ -247,6 +247,10 @@ public class IcebergScanNode extends ScanNode {
         this.bucketProperties = Optional.of(bucketProperties);
     }
 
+    public Optional<List<BucketProperty>> getBucketProperties() {
+        return this.bucketProperties;
+    }
+
     @Override
     public int getBucketNums() {
         if (bucketProperties.isEmpty()) {
