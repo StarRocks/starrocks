@@ -167,7 +167,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
         }
         Status commit_status = StorageEngine::instance()->txn_manager()->commit_txn(
                 request.partition_id, tablet_var.tablet, request.transaction_id, load_id, tablet_var.rowset_to_add,
-                false);
+                false, false);
         if (!commit_status.ok() && !commit_status.is_already_exist()) {
             LOG(WARNING) << "fail to commit txn. res=" << commit_status << ", table=" << tablet->full_name()
                          << ", txn_id: " << request.transaction_id;
