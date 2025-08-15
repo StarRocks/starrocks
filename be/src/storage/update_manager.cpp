@@ -325,7 +325,7 @@ void UpdateManager::clear_cached_delta_column_group_by_tablet_id(int64_t tablet_
     }
 }
 
-int64_t UpdateManager::get_delta_column_group_file_size_by_tablet_id(int64_t tablet_id) const {
+int64_t UpdateManager::get_delta_column_group_file_size_by_tablet_id(int64_t tablet_id) {
     int64_t file_size = 0;
     std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
     auto itr = _delta_column_group_cache.lower_bound(TabletSegmentId(tablet_id, 0));
