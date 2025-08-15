@@ -26,6 +26,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
+#include "service/backend_options.h"
 #include "storage/delta_writer.h"
 #include "util/brpc_stub_cache.h"
 #include "util/raw_container.h"
