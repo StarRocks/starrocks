@@ -212,10 +212,9 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         vacuumFullRequest.setTabletId(nodeToTablet.get(chosenNode).getId());
 
         LOG.info(
-                "Sending full vacuum request to cn={}: table={}, partition={}, tablet_ids={}, max_check_version={}, " +
-                        "min_active_txn_id={}",
-                chosenNode.getHost(), table.getName(), vacuumFullRequest.getPartitionId(), vacuumFullRequest.getTabletIds(),
-                vacuumFullRequest.maxCheckVersion, vacuumFullRequest.minActiveTxnId);
+                "Sending full vacuum request to cn={}: table={}, partition={}, max_check_version={}, " + "min_active_txn_id={}",
+                chosenNode.getHost(), table.getName(), vacuumFullRequest.getPartitionId(), vacuumFullRequest.maxCheckVersion,
+                vacuumFullRequest.minActiveTxnId);
 
 
         boolean hasError = false;
