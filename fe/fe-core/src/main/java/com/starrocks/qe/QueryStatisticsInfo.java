@@ -40,10 +40,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.proc.CurrentQueryInfoProvider;
 import com.starrocks.common.util.QueryStatisticsFormatter;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.http.WebUtils;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TQueryStatisticsInfo;
 import org.apache.http.HttpStatus;
@@ -401,10 +401,7 @@ public class QueryStatisticsInfo {
     public static String getExecProgress(String feIp, String queryId, HttpClient httpClient) {
         String result = "";
         try {
-            String protocol = Config.enable_https ? "https" : "http";
-            int port = Config.enable_https ? Config.https_port : Config.http_port;
-            String url = String.format("%s://%s:%s/api/query/progress?query_id=%s",
-                    protocol, feIp, port, queryId);
+            String url = WebUtils.buildEndpoint(feIp, "/api/query/progress", "query_id=" + queryId);
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .GET()

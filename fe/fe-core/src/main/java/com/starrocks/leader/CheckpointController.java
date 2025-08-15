@@ -40,7 +40,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.common.util.NetUtils;
+import com.starrocks.http.WebUtils;
 import com.starrocks.http.meta.MetaService;
 import com.starrocks.journal.CheckpointException;
 import com.starrocks.journal.CheckpointWorker;
@@ -270,12 +270,10 @@ public class CheckpointController extends FrontendDaemon {
             throw new IOException(errMessage);
         }
         File dir = new File(imageDir);
-        String protocol = Config.enable_https ? "https" : "http";
-        int port = Config.enable_https ? Config.https_port : Config.http_port;
-        String url = protocol + "://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), port) +
-                "/image?version=" + journalId
-                + "&subdir=" + subDir
-                + "&image_format_version=" + imageFormatVersion;
+        String url = WebUtils.buildEndpoint(frontend.getHost(), "/image",
+                "version=" + journalId,
+                "subdir=" + subDir,
+                "image_format_version=" + imageFormatVersion);
         MetaHelper.downloadImageFile(url, MetaService.DOWNLOAD_TIMEOUT_SECOND * 1000, String.valueOf(journalId), dir);
 
         // clean the old images
@@ -409,14 +407,13 @@ public class CheckpointController extends FrontendDaemon {
 
             boolean pushSuccess = true;
             ImageFormatVersion formatVersion = belongToGlobalStateMgr ? ImageFormatVersion.v2 : ImageFormatVersion.v1;
-            String protocol = Config.enable_https ? "https" : "http";
             int port = Config.enable_https ? Config.https_port : Config.http_port;
-            String url = protocol + "://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), port)
-                    + "/put?version=" + imageVersion
-                    + "&port=" + port
-                    + "&subdir=" + subDir
-                    + "&for_global_state=" + belongToGlobalStateMgr
-                    + "&image_format_version=" + formatVersion.toString();
+            String url = WebUtils.buildEndpoint(frontend.getHost(), "/put",
+                    "version=" + imageVersion,
+                    "port=" + port,
+                    "subdir=" + subDir,
+                    "for_global_state=" + belongToGlobalStateMgr,
+                    "image_format_version=" + formatVersion.toString());
             try {
                 MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000);
 
@@ -442,8 +439,6 @@ public class CheckpointController extends FrontendDaemon {
         long minReplayedJournalId = Long.MAX_VALUE;
         for (Frontend fe : GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends()) {
             String host = fe.getHost();
-            String protocol = Config.enable_https ? "https" : "http";
-            int port = Config.enable_https ? Config.https_port : Config.http_port;
             URL idURL;
             HttpURLConnection conn = null;
             try {
@@ -453,7 +448,8 @@ public class CheckpointController extends FrontendDaemon {
                  * any non-master node's current replayed journal id. otherwise,
                  * this lagging node can never get the deleted journal.
                  */
-                idURL = new URL(protocol + "://" + NetUtils.getHostPortInAccessibleFormat(host, port) + "/journal_id?prefix=" + journal.getPrefix());
+                String urlStr = WebUtils.buildEndpoint(host, "/journal_id", "prefix=" + journal.getPrefix());
+                idURL = new URL(urlStr);
                 conn = (HttpURLConnection) idURL.openConnection();
                 conn.setConnectTimeout(CONNECT_TIMEOUT_SECOND * 1000);
                 conn.setReadTimeout(READ_TIMEOUT_SECOND * 1000);
@@ -463,8 +459,8 @@ public class CheckpointController extends FrontendDaemon {
                     minReplayedJournalId = id;
                 }
             } catch (IOException e) {
-                LOG.error("Exception when getting current replayed journal id. host={}, port={}",
-                        host, port, e);
+                LOG.error("Exception when getting current replayed journal id. host={}",
+                        host, e);
                 minReplayedJournalId = 0;
                 break;
             } finally {

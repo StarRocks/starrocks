@@ -49,6 +49,7 @@ import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
+import com.starrocks.http.WebUtils;
 import com.starrocks.http.meta.MetaBaseAction;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.ImageWriter;
@@ -105,7 +106,7 @@ public class NodeMgr {
     private volatile int leaderRpcPort;
     @SerializedName(value = "h")
     private volatile int leaderHttpPort;
-    @SerializedName(value = "s")
+    @SerializedName(value = "hs")
     private volatile int leaderHttpsPort;
     @SerializedName(value = "ip")
     private volatile String leaderIp;
@@ -442,10 +443,7 @@ public class NodeMgr {
                     isVersionFileChanged = true;
                 }
                 try {
-                    String protocol = Config.enable_https ? "https" : "http";
-                    int port = Config.enable_https ? Config.https_port : Config.http_port;
-                    URL idURL = new URL(protocol + "://" + NetUtils.getHostPortInAccessibleFormat(
-                            rightHelperNode.first, port) + "/check");
+                    URL idURL = new URL(WebUtils.buildEndpoint(rightHelperNode.first, "/check"));
                     HttpURLConnection conn = null;
                     conn = (HttpURLConnection) idURL.openConnection();
                     conn.setConnectTimeout(2 * 1000);
@@ -526,13 +524,10 @@ public class NodeMgr {
         Pair<String, Integer> rightHelperNode = null;
         for (Pair<String, Integer> helperNode : helperNodes) {
             try {
-                String protocol = Config.enable_https ? "https" : "http";
-                int port = Config.enable_https ? Config.https_port : Config.http_port;
-                String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, port);
                 String encodedAddress = URLEncoder.encode(selfNode.first,
                         StandardCharsets.UTF_8.toString());
-                URL url = new URL(protocol + "://" + accessibleHostPort + "/role?host=" + encodedAddress +
-                        "&port=" + selfNode.second);
+                URL url = new URL(WebUtils.buildEndpoint(helperNode.first, "/role",
+                        "host=" + encodedAddress, "port=" + selfNode.second));
                 HttpURLConnection conn = null;
                 conn = (HttpURLConnection) url.openConnection();
                 if (conn.getResponseCode() != 200) {
@@ -720,17 +715,14 @@ public class NodeMgr {
         Storage storage = new Storage(imageFileDir);
         long localImageJournalId = storage.getImageJournalId();
 
-        String protocol = Config.enable_https ? "https" : "http";
-        int port = Config.enable_https ? Config.https_port : Config.http_port;
-        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, port);
-        URL infoUrl = new URL(protocol + "://" + accessibleHostPort + "/info?subdir=" + subDir);
+        URL infoUrl = new URL(WebUtils.buildEndpoint(helperNode.first, "/info", "subdir=" + subDir));
         StorageInfo remoteStorageInfo = getStorageInfo(infoUrl);
         long remoteImageJournalId = remoteStorageInfo.getImageJournalId();
         if (remoteImageJournalId > localImageJournalId) {
-            String url = protocol + "://" + accessibleHostPort + "/image?"
-                    + "version=" + remoteImageJournalId
-                    + "&subdir=" + subDir
-                    + "&image_format_version=" + remoteStorageInfo.getImageFormatVersion();
+            String url = WebUtils.buildEndpoint(helperNode.first, "/image",
+                    "version=" + remoteImageJournalId,
+                    "subdir=" + subDir,
+                    "image_format_version=" + remoteStorageInfo.getImageFormatVersion());
             LOG.info("start to download image.{} version:{}, from {}", remoteImageJournalId,
                     remoteStorageInfo.getImageFormatVersion(), url);
             MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000,
