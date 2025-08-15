@@ -825,7 +825,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             Optional<Table> optTable = MvUtils.getTable(baseTableInfo);
             if (optTable.isEmpty()) {
-                logger.warn("table {} do not exist when refreshing materialized view", baseTableInfo.getTableInfoStr());
+                logger.warn("table {}.{} do not exist when refreshing materialized view", baseTableInfo.getDbName(),
+                        baseTableInfo.getTableInfoStr());
                 mv.setInactiveAndReason(
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
@@ -860,7 +861,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             // check new table
             Optional<Table> optNewTable = MvUtils.getTable(baseTableInfo);
             if (optNewTable.isEmpty()) {
-                logger.warn("table {} does not exist after refreshing materialized view", baseTableInfo.getTableInfoStr());
+                logger.warn("table {}.{} does not exist after refreshing materialized view", baseTableInfo.getDbName(),
+                        baseTableInfo.getTableInfoStr());
                 mv.setInactiveAndReason(
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
@@ -1268,7 +1270,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 Optional<Table> tableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
                 if (tableOpt.isEmpty()) {
-                    logger.warn("table {} doesn't exist", baseTableInfo.getTableInfoStr());
+                    logger.warn("table {}.{} doesn't exist", baseTableInfo.getDbName(), baseTableInfo.getTableInfoStr());
                     throw new DmlException("Materialized view base table: %s not exist.",
                             baseTableInfo.getTableInfoStr());
                 }
@@ -1358,8 +1360,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     // It's ok to add empty set for a table, means no partition corresponding to this mv partition
                     needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(snapshotTable));
                 } else {
-                    logger.info("ref-base-table {} is not found in `mvRefBaseTableIntersectedPartitions` " +
-                            "because of empty update", snapshotTable.getName());
+                    logger.info("ref-base-table {}.{} is not found in `mvRefBaseTableIntersectedPartitions` " +
+                            "because of empty update", snapshotInfo.getBaseTableInfo().getDbName(), snapshotTable.getName());
                 }
             }
             if (needRefreshTablePartitionNames != null) {
@@ -1406,8 +1408,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 Partition partition = olapTable.getPartition(partitionName);
                 // it's ok to skip because only existed partitions are updated in the version map.
                 if (partition == null) {
-                    logger.warn("partition {} not found in base table {}, refreshedPartitionNames:{}",
-                            partitionName, baseTable.getName(), refreshedPartitionNames);
+                    logger.warn("partition {} not found in base table {}.{}, refreshedPartitionNames:{}",
+                            partitionName, baseTableInfo.getDbName(), baseTable.getName(), refreshedPartitionNames);
                     continue;
                 }
                 MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
@@ -1417,7 +1419,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 partitionInfos.put(partition.getName(), basePartitionInfo);
             }
             if (logger.isDebugEnabled()) {
-                logger.debug("Collect olap base table {}'s refreshed partition infos: {}", baseTable.getName(), partitionInfos);
+                logger.debug("Collect olap base table {}.{}'s refreshed partition infos: {}", baseTableInfo.getDbName(),
+                        baseTable.getName(), partitionInfos);
             }
             return partitionInfos;
         } else if (MVPCTRefreshPartitioner.isPartitionRefreshSupported(baseTable)) {
@@ -1425,7 +1428,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         } else {
             // FIXME: base table does not support partition-level refresh and does not update the meta
             //  in materialized view.
-            logger.warn("refresh mv with non-supported-partition-level refresh base table {}", baseTable.getName());
+            logger.warn("refresh mv with non-supported-partition-level refresh base table {}.{}", baseTableInfo.getDbName(),
+                    baseTable.getName());
             return Maps.newHashMap();
         }
     }
