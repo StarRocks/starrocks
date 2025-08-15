@@ -52,6 +52,19 @@
 
 namespace starrocks {
 
+// Limit the serialized string length of ZoneMap's min/max to avoid excessive metadata.
+// If max is truncated, append 0xFF to make sure it is still an upper bound.
+static inline std::string _zonemap_truncate_and_pad(const std::string& input, size_t prefix_len, bool is_max_side) {
+    if (prefix_len == 0 || input.size() <= prefix_len) {
+        return input;
+    }
+    std::string out = input.substr(0, prefix_len);
+    if (is_max_side) {
+        out.push_back(static_cast<char>(0xFF));
+    }
+    return out;
+}
+
 template <LogicalType type>
 struct ZoneMapDatumBase {
     using CppType = typename TypeTraits<type>::CppType;
@@ -154,8 +167,27 @@ struct ZoneMap {
     bool has_not_null = false;
 
     void to_proto(ZoneMapPB* dst, TypeInfo* type_info) const {
-        dst->set_min(min_value.to_zone_map_string(type_info));
-        dst->set_max(max_value.to_zone_map_string(type_info));
+        // For string-like types, serialize only a fixed-length prefix to reduce memory footprint.
+        // Truncate both min and max to kPrefixLen; if max is truncated, append 0xFF for safety.
+        constexpr size_t kPrefixLen = 64;
+        const auto lt = delegate_type(type_info->type());
+        if (is_string_type(lt)) {
+            std::string min_str = min_value.to_zone_map_string(type_info);
+            std::string max_str = max_value.to_zone_map_string(type_info);
+            min_str = _zonemap_truncate_and_pad(min_str, kPrefixLen, /*is_max_side=*/false);
+            bool truncated_max = max_str.size() > kPrefixLen;
+            max_str = _zonemap_truncate_and_pad(max_str, kPrefixLen, /*is_max_side=*/true);
+            // If not truncated, keep original to avoid unnecessary 0xFF suffix.
+            if (!truncated_max) {
+                // ensure we didn't add 0xFF when not truncated
+                // (helper only adds when size > kPrefixLen)
+            }
+            dst->set_min(min_str);
+            dst->set_max(max_str);
+        } else {
+            dst->set_min(min_value.to_zone_map_string(type_info));
+            dst->set_max(max_value.to_zone_map_string(type_info));
+        }
         dst->set_has_null(has_null);
         dst->set_has_not_null(has_not_null);
     }
