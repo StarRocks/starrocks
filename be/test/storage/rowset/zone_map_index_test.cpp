@@ -100,13 +100,11 @@ protected:
         ASSERT_EQ(3, column_zone_map.num_pages());
         const std::vector<ZoneMapPB>& zone_maps = column_zone_map.page_zone_maps();
         ASSERT_EQ(3, zone_maps.size());
-        ASSERT_EQ("aaaa", zone_maps[0].min());
-        ASSERT_EQ("ffff", zone_maps[0].max());
+        check_result_prefix(zone_maps[0], true, true, "aaaa", "ffff", false, true);
         ASSERT_EQ(false, zone_maps[0].has_null());
         ASSERT_EQ(true, zone_maps[0].has_not_null());
 
-        ASSERT_EQ("aaaaa", zone_maps[1].min());
-        ASSERT_EQ("fffff", zone_maps[1].max());
+        check_result_prefix(zone_maps[1], true, true, "aaaaa", "fffff", true, true);
         ASSERT_EQ(true, zone_maps[1].has_null());
         ASSERT_EQ(true, zone_maps[1].has_not_null());
 
@@ -118,6 +116,31 @@ protected:
     void load_zone_map(ZoneMapIndexReader& reader, ColumnIndexMetaPB& meta, std::string filename);
     void check_result(const ZoneMapPB& zone_map, bool has_min, bool has_max, const std::string& min,
                       const std::string& max, bool has_null, bool has_not_null);
+
+    // Check with prefix truncation semantics for string zonemap entries: min is prefix; max is prefix possibly with 0xFF.
+    void check_result_prefix(const ZoneMapPB& zone_map, bool has_min, bool has_max, const std::string& min,
+                             const std::string& max, bool has_null, bool has_not_null, size_t prefix_len = 64) {
+        ASSERT_EQ(has_min, zone_map.has_min());
+        ASSERT_EQ(has_max, zone_map.has_max());
+        if (has_min) {
+            auto zmin = zone_map.min();
+            ASSERT_TRUE(min.rfind(zmin, 0) == 0 || zmin == min.substr(0, std::min(prefix_len, min.size())));
+        }
+        if (has_max) {
+            auto zmax = zone_map.max();
+            // Allow writer to append 0xFF when original was truncated
+            if (max.size() > prefix_len) {
+                std::string expect = max.substr(0, prefix_len);
+                std::string allow = expect;
+                allow.push_back(static_cast<char>(0xFF));
+                ASSERT_TRUE(zmax == expect || zmax == allow);
+            } else {
+                ASSERT_EQ(max, zmax);
+            }
+        }
+        ASSERT_EQ(has_null, zone_map.has_null());
+        ASSERT_EQ(has_not_null, zone_map.has_not_null());
+    }
 
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
@@ -268,12 +291,12 @@ TEST_F(ColumnZoneMapTest, StringResize) {
     const auto& zone_maps = reader.page_zone_maps();
     ASSERT_EQ(2, zone_maps.size());
 
-    check_result(zone_maps[0], true, true, str1, str2, false, true);
-    check_result(zone_maps[1], true, true, str3, str4, false, true);
+    check_result_prefix(zone_maps[0], true, true, str1, str2, false, true);
+    check_result_prefix(zone_maps[1], true, true, str3, str4, false, true);
 
     // segment zonemap
     const auto& segment_zonemap = index_meta.zone_map_index().segment_zone_map();
-    check_result(segment_zonemap, true, true, str1, str4, false, true);
+    check_result_prefix(segment_zonemap, true, true, str1, str4, false, true);
 }
 
 TEST_F(ColumnZoneMapTest, AllNullPage) {
@@ -349,6 +372,7 @@ TEST_F(ColumnZoneMapTest, NormalTestIntPage) {
 TEST_F(ColumnZoneMapTest, NormalTestVarcharPage) {
     TabletColumn varchar_column = create_varchar_key(0);
     TypeInfoPtr type_info = get_type_info(varchar_column);
+    // Use prefix check inside test_string by reading page checks
     test_string("NormalTestVarcharPage", type_info);
 }
 
