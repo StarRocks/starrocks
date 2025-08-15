@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "agent/master_info.h"
+#include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
@@ -29,6 +30,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
+#include "util/defer_op.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 
@@ -421,6 +423,8 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
             // lookup query context for the second chance in sc_map
             if (sc_it != sc_map.end()) {
                 auto ctx = std::move(sc_it->second);
+                auto* raw_ctx_ptr = ctx.get();
+
                 sc_map.erase(sc_it);
                 auto cancel_status = [ctx]() -> Status {
                     RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(ctx);

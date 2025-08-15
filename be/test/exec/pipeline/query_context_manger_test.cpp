@@ -171,6 +171,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         sleep(2);
         ASSERT_TRUE(query_ctx_mgr->get(query_id) == nullptr);
     }
+
     {
         auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
         ASSERT_TRUE(query_ctx_mgr->init().ok());
