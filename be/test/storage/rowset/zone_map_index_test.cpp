@@ -44,6 +44,7 @@
 #include "fs/fs_memory.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
+#include "common/config.h"
 
 namespace starrocks {
 
