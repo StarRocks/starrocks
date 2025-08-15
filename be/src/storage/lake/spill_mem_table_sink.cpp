@@ -24,6 +24,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/merge_iterator.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::lake {
 

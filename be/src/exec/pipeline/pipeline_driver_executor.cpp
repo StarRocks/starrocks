@@ -318,20 +318,22 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
         auto* query_peak_memory = profile->add_counter(
                 "QueryPeakMemoryUsage", TUnit::BYTES,
                 RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
-        query_peak_memory->set(query_ctx->mem_cost_bytes());
+        COUNTER_SET(query_peak_memory, query_ctx->mem_cost_bytes());
         auto* query_cumulative_cpu = profile->add_counter(
                 "QueryCumulativeCpuTime", TUnit::TIME_NS,
                 RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
-        query_cumulative_cpu->set(query_ctx->cpu_cost());
+        COUNTER_SET(query_cumulative_cpu, query_ctx->cpu_cost());
+
         auto* query_spill_bytes = profile->add_counter(
                 "QuerySpillBytes", TUnit::BYTES,
                 RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
-        query_spill_bytes->set(query_ctx->get_spill_bytes());
+        COUNTER_SET(query_spill_bytes, query_ctx->get_spill_bytes());
+
         // Add execution wall time
         auto* query_exec_wall_time = profile->add_counter(
                 "QueryExecutionWallTime", TUnit::TIME_NS,
                 RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
-        query_exec_wall_time->set(query_ctx->lifetime());
+        COUNTER_SET(query_exec_wall_time, query_ctx->lifetime());
     }
 
     const auto& fe_addr = fragment_ctx->fe_addr();
