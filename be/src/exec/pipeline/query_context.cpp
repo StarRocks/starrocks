@@ -85,7 +85,7 @@ QueryContext::~QueryContext() noexcept {
     }
 }
 
-void QueryContext::count_down_fragments() {
+void QueryContext::count_down_fragments(QueryContextManager* query_context_mgr) {
     size_t old = _num_active_fragments.fetch_sub(1);
     DCHECK_GE(old, 1);
     bool all_fragments_finished = old == 1;
@@ -95,13 +95,17 @@ void QueryContext::count_down_fragments() {
 
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = shared_query_trace();
-    ExecEnv::GetInstance()->query_context_mgr()->remove(_query_id);
+    query_context_mgr->remove(_query_id);
     // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
     // considering that this feature is generally used for debugging,
     // I think it should not have a big impact now
     if (query_trace != nullptr) {
         (void)query_trace->dump();
     }
+}
+
+void QueryContext::count_down_fragments() {
+    return this->count_down_fragments(ExecEnv::GetInstance()->query_context_mgr());
 }
 
 FragmentContextManager* QueryContext::fragment_mgr() {
@@ -429,7 +433,7 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
                 // because the operator is still executing.
                 // We need to wait until the fragment execution is complete,
                 // then call QueryContextManager::remove to safely remove this query context.
-                if (cancel_status.ok() || ctx->has_no_active_instances()) {
+                if (cancel_status.ok() || !ctx->has_no_active_instances()) {
                     context_map.emplace(query_id, std::move(ctx));
                 }
                 RETURN_IF_ERROR(cancel_status);
