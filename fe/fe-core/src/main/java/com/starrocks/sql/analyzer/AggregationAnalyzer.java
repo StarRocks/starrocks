@@ -58,6 +58,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -96,8 +97,9 @@ public class AggregationAnalyzer {
         this.orderByScope = orderByScope;
         this.analyzeState = analyzeState;
         this.groupingExpressions = groupingExpressions;
+        // We need to filter out subfields of struct type SlotRef here.
         this.groupingFields = groupingExpressions.stream()
-                .filter(analyzeState.getColumnReferences()::containsKey)
+                .filter(filterSubfieldsFromColumnReference(analyzeState.getColumnReferences())::containsKey)
                 .map(analyzeState.getColumnReferences()::get)
                 .collect(toImmutableSet());
     }
@@ -106,6 +108,20 @@ public class AggregationAnalyzer {
         if (!new VerifyExpressionVisitor().visit(expression)) {
             throw new SemanticException(PARSER_ERROR_MSG.shouldBeAggFunc(expression.toSql()), expression.getPos());
         }
+    }
+
+    /**
+     * subfields (a.b, a.c) with the same SlotRef (a) as parent share the same FieldId, which allows subfields to pass
+     * the check in isGroupingKey function, even though they might not be actually grouping keys. This could result into
+     * BE crash. The following SQL is an example.
+     * Select a.b, a.c, count(1) from tbl group by 1.
+     * @param columnReferences
+     * @return
+     */
+    private Map<Expr, FieldId> filterSubfieldsFromColumnReference(Map<Expr, FieldId> columnReferences) {
+        return columnReferences.entrySet().stream()
+                .filter(entry -> entry.getKey() instanceof SlotRef && !((SlotRef) entry.getKey()).isSubField())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     /**
