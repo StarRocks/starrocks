@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.spark.util.SizeEstimator;
 
 import java.io.IOException;
 import java.util.List;
@@ -48,9 +49,12 @@ public class CachingRemoteFileIO implements RemoteFileIO {
                                   Executor executor,
                                   long expireAfterWriteSec,
                                   long refreshIntervalSec,
-                                  long maxSize) {
+                                  double cacheMemorySizeRatio) {
         this.fileIO = fileIO;
-        this.cache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
+        long cacheMemSize = Math.round(Runtime.getRuntime().maxMemory() * cacheMemorySizeRatio);
+        this.cache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec)
+                .maximumWeight(cacheMemSize)
+                .weigher((key, value) -> Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
                 .build(asyncReloading(new CacheLoader<RemotePathKey, List<RemoteFileDesc>>() {
                     @Override
                     public List<RemoteFileDesc> load(RemotePathKey key) throws Exception {
@@ -61,17 +65,17 @@ public class CachingRemoteFileIO implements RemoteFileIO {
     }
 
     public static CachingRemoteFileIO createCatalogLevelInstance(RemoteFileIO fileIO, Executor executor,
-                                                                 long expireAfterWrite, long refreshInterval, long maxSize) {
-        return new CachingRemoteFileIO(fileIO, executor, expireAfterWrite, refreshInterval, maxSize);
+                                                        long expireAfterWrite, long refreshInterval, double memSizeRatio) {
+        return new CachingRemoteFileIO(fileIO, executor, expireAfterWrite, refreshInterval, memSizeRatio);
     }
 
-    public static CachingRemoteFileIO createQueryLevelInstance(RemoteFileIO fileIO, long maxSize) {
+    public static CachingRemoteFileIO createQueryLevelInstance(RemoteFileIO fileIO, double memSizeRatio) {
         return new CachingRemoteFileIO(
                 fileIO,
                 newDirectExecutorService(),
                 NEVER_EVICT,
                 NEVER_REFRESH,
-                maxSize);
+                memSizeRatio);
     }
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey) {
@@ -132,7 +136,7 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         }
     }
 
-    private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec, long maximumSize) {
+    private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec) {
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
         if (expiresAfterWriteSec >= 0) {
             cacheBuilder.expireAfterWrite(expiresAfterWriteSec, SECONDS);
@@ -142,7 +146,6 @@ public class CachingRemoteFileIO implements RemoteFileIO {
             cacheBuilder.refreshAfterWrite(refreshSec, SECONDS);
         }
 
-        cacheBuilder.maximumSize(maximumSize);
         return cacheBuilder;
     }
 
