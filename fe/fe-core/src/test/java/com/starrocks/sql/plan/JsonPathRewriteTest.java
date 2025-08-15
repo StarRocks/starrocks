@@ -189,8 +189,7 @@ public class JsonPathRewriteTest extends PlanTestBase {
                 Arguments.of(
                         "select get_json_string(c2, 'f1.f2.f3.f4.f5.f6.f7.f8.f9.f10.f11.f12.f13.f14.f15.f16.f17.f18" +
                                 ".f19.f20.f21') from extend_predicate",
-                        "  |  <slot 3> : get_json_string(2: c2, 'f1.f2.f3.f4.f5.f6.f7.f8.f9.f10.f11.f12.f13.f14.f1.." +
-                                ".')",
+                        "<slot 3> : 4: c2.f1.f2.f3.f4.f5.f6.f7.f8.f9.f10.f11.f12.f13.f14.f15.f16.f17.f18.f19.f20.f21\n",
                         ""
                 ),
                 // JSON path with mixed data types should not be rewritten

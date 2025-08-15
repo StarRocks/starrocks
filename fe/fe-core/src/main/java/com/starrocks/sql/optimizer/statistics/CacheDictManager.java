@@ -269,8 +269,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
         // Remove all subfields' dicts if the column is a JSON type
         try {
-            List<String> parts = Lists.newArrayList();
-            SubfieldAccessPathNormalizer.parseSimpleJsonPath(columnName.getId(), parts);
+            List<String> parts = SubfieldAccessPathNormalizer.parseSimpleJsonPath(columnName.getId());
             if (parts.size() > 1) {
                 String rootColumn = parts.get(0);
                 columnIdentifier = new ColumnIdentifier(tableId, ColumnId.create(rootColumn));
@@ -379,8 +378,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
             if (column.getTableId() != tableId) {
                 return false;
             }
-            List<String> parts = Lists.newArrayList();
-            SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnName().getId(), parts);
+            List<String> parts = SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnName().getId());
             if (parts.size() > 1 && parts.get(0).equalsIgnoreCase(columnName.getId())) {
                 return true;
             }
@@ -397,8 +395,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
             if (column.getTableId() != tableId) {
                 return false;
             }
-            List<String> parts = Lists.newArrayList();
-            SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnName().getId(), parts);
+            List<String> parts = SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnName().getId());
             if (parts.size() > 1 && parts.get(0).equalsIgnoreCase(columnName.getId())) {
                 return true;
             }
@@ -420,8 +417,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
             if (column.getTableId() != tableId) {
                 continue;
             }
-            List<String> parts = Lists.newArrayList();
-            SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnName().getId(), parts);
+            List<String> parts = SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnName().getId());
             if (parts.size() > 1 && parts.get(0).equalsIgnoreCase(columnName.getId())) {
                 toRemove.add(column);
             }

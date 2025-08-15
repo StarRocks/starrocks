@@ -73,7 +73,6 @@ import java.util.regex.Pattern;
 public class JsonPathRewriteRule implements TreeRewriteRule {
 
     private static final Logger LOG = LogManager.getLogger(JsonPathRewriteRule.class);
-    private static final int DEFAULT_JSON_FLATTEN_DEPTH = 20;
     private static final Pattern JSON_PATH_VALID_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
     public static final String COLUMN_REF_HINT = "JsonPathExtended";
 
@@ -405,11 +404,9 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
          * Returns null if the path was truncated due to exceeding depth limit.
          */
         private static List<String> parseJsonPath(String path) {
-            List<String> result = Lists.newArrayList();
-            boolean wasTruncated =
-                    SubfieldAccessPathNormalizer.parseSimpleJsonPath(DEFAULT_JSON_FLATTEN_DEPTH, path, result);
+            List<String> result = SubfieldAccessPathNormalizer.parseSimpleJsonPath(path);
             // If the path was truncated, return null to prevent incorrect rewriting
-            if (wasTruncated) {
+            if (result.isEmpty()) {
                 return null;
             }
             return result;

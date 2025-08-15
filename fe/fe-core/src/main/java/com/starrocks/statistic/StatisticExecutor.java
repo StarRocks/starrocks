@@ -324,8 +324,7 @@ public class StatisticExecutor {
 
         long version = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
                 PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
-        List<String> pieces = Lists.newArrayList();
-        SubfieldAccessPathNormalizer.parseSimpleJsonPath(columnId.getId(), pieces);
+        List<String> pieces = SubfieldAccessPathNormalizer.parseSimpleJsonPath(columnId.getId());
         if (pieces.size() == 1) {
             String columnName = MetaUtils.getColumnNameByColumnId(dbId, tableId, columnId);
             String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
@@ -344,8 +343,7 @@ public class StatisticExecutor {
                                                                            ColumnId columnId,
                                                                            long version,
                                                                            Database db, Table table) throws TException {
-        List<String> pieces = Lists.newArrayList();
-        SubfieldAccessPathNormalizer.parseSimpleJsonPath(columnId.getId(), pieces);
+        List<String> pieces = SubfieldAccessPathNormalizer.parseSimpleJsonPath(columnId.getId());
         if (pieces.isEmpty()) {
             throw new RuntimeException("invalid json path: " + columnId);
         }
