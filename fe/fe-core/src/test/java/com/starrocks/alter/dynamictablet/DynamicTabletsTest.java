@@ -19,13 +19,13 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 public class DynamicTabletsTest {
     @Test
     public void testSplittingTablets() {
         {
-            DynamicTablets splittingTablets = new DynamicTablets(Collections.emptyMap(), Collections.emptyList());
+            DynamicTablets splittingTablets = new DynamicTablets(
+                    Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
             Assertions.assertTrue(splittingTablets.isEmpty());
             Assertions.assertTrue(splittingTablets.getSplittingTablets().isEmpty());
             Assertions.assertTrue(splittingTablets.getMergingTablets().isEmpty());
@@ -37,13 +37,14 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets splittingTablets = new DynamicTablets(
-                    Map.of(
-                            1L, new SplittingTablet(1L,
+                    List.of(
+                            new SplittingTablet(1L,
                                     List.of(101L,
                                             102L)),
-                            2L, new SplittingTablet(2L,
+                            new SplittingTablet(2L,
                                     List.of(201L,
                                             202L))),
+                    Collections.emptyList(),
                     Collections.emptyList());
 
             Assertions.assertThrows(IllegalStateException.class,
@@ -52,7 +53,8 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets identicalTablets = new DynamicTablets(
-                    Collections.emptyMap(),
+                    Collections.emptyList(),
+                    Collections.emptyList(),
                     List.of(
                             new IdenticalTablet(1, 1L),
                             new IdenticalTablet(2, 2L),
@@ -69,13 +71,14 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets splittingTablets = new DynamicTablets(
-                    Map.of(
-                            1L, new SplittingTablet(1L,
+                    List.of(
+                            new SplittingTablet(1L,
                                     List.of(101L,
                                             102L)),
-                            2L, new SplittingTablet(2L,
+                            new SplittingTablet(2L,
                                     List.of(201L,
                                             202L))),
+                    Collections.emptyList(),
                     List.of(
                             new IdenticalTablet(3, 3L),
                             new IdenticalTablet(4, 4L),
@@ -91,13 +94,14 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets splittingTablets = new DynamicTablets(
-                    Map.of(
-                            1L, new SplittingTablet(1L,
+                    List.of(
+                            new SplittingTablet(1L,
                                     List.of(101L,
                                             102L)),
-                            2L, new SplittingTablet(2L,
+                            new SplittingTablet(2L,
                                     List.of(201L,
                                             202L))),
+                    Collections.emptyList(),
                     List.of(
                             new IdenticalTablet(301, 301L),
                             new IdenticalTablet(302, 302L),
@@ -114,13 +118,14 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets splittingTablets = new DynamicTablets(
-                    Map.of(
-                            1L, new SplittingTablet(1L,
+                    List.of(
+                            new SplittingTablet(1L,
                                     List.of(101L,
                                             102L)),
-                            2L, new SplittingTablet(2L,
+                            new SplittingTablet(2L,
                                     List.of(201L,
                                             202L))),
+                    Collections.emptyList(),
                     List.of(
                             new IdenticalTablet(301, 301L),
                             new IdenticalTablet(302, 302L),
@@ -143,15 +148,16 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets splittingTablets = new DynamicTablets(
-                    Map.of(
-                            2L, new SplittingTablet(2L,
+                    List.of(
+                            new SplittingTablet(2L,
                                     List.of(201L,
                                             202L,
                                             203L,
                                             204L)),
-                            3L, new SplittingTablet(3L,
+                            new SplittingTablet(3L,
                                     List.of(301L,
                                             302L))),
+                    Collections.emptyList(),
                     List.of(
                             new IdenticalTablet(1, 1L),
                             new IdenticalTablet(4, 4L),
@@ -167,15 +173,16 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets splittingTablets = new DynamicTablets(
-                    Map.of(
-                            2L, new SplittingTablet(2L,
+                    List.of(
+                            new SplittingTablet(2L,
                                     List.of(201L,
                                             202L,
                                             203L,
                                             204L)),
-                            3L, new SplittingTablet(3L,
+                            new SplittingTablet(3L,
                                     List.of(301L,
                                             302L))),
+                    Collections.emptyList(),
                     List.of(
                             new IdenticalTablet(101, 101L),
                             new IdenticalTablet(102, 102L),
@@ -194,15 +201,16 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets splittingTablets = new DynamicTablets(
-                    Map.of(
-                            2L, new SplittingTablet(2L,
+                    List.of(
+                            new SplittingTablet(2L,
                                     List.of(201L,
                                             202L,
                                             203L,
                                             204L)),
-                            3L, new SplittingTablet(3L,
+                            new SplittingTablet(3L,
                                     List.of(301L,
                                             302L))),
+                    Collections.emptyList(),
                     List.of(
                             new IdenticalTablet(101, 101L),
                             new IdenticalTablet(102, 102L),
@@ -225,15 +233,16 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets splittingTablets = new DynamicTablets(
-                    Map.of(
-                            2L, new SplittingTablet(2L,
+                    List.of(
+                            new SplittingTablet(2L,
                                     List.of(201L,
                                             202L,
                                             203L,
                                             204L)),
-                            3L, new SplittingTablet(3L,
+                            new SplittingTablet(3L,
                                     List.of(301L,
                                             302L))),
+                    Collections.emptyList(),
                     List.of(
                             new IdenticalTablet(101, 101L),
                             new IdenticalTablet(102, 102L),
@@ -267,17 +276,19 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(Map.of(
-                    101L, new SplittingTablet(101L,
-                            List.of(10101L,
-                                    10102L,
-                                    10103L,
-                                    10104L)),
-                    2L, new SplittingTablet(2L,
-                            List.of(201L,
-                                    202L,
-                                    203L,
-                                    204L))),
+            DynamicTablets splittingTablets = new DynamicTablets(
+                    List.of(
+                            new SplittingTablet(101L,
+                                    List.of(10101L,
+                                            10102L,
+                                            10103L,
+                                            10104L)),
+                            new SplittingTablet(2L,
+                                    List.of(201L,
+                                            202L,
+                                            203L,
+                                            204L))),
+                    Collections.emptyList(),
                     List.of(
                             new IdenticalTablet(102, 102L),
                             new IdenticalTablet(3, 3L),
@@ -299,17 +310,19 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(Map.of(
-                    101L, new SplittingTablet(101L,
-                            List.of(10101L,
-                                    10102L,
-                                    10103L,
-                                    10104L)),
-                    2L, new SplittingTablet(2L,
-                            List.of(201L,
-                                    202L,
-                                    203L,
-                                    204L))),
+            DynamicTablets splittingTablets = new DynamicTablets(
+                    List.of(
+                            new SplittingTablet(101L,
+                                    List.of(10101L,
+                                            10102L,
+                                            10103L,
+                                            10104L)),
+                            new SplittingTablet(2L,
+                                    List.of(201L,
+                                            202L,
+                                            203L,
+                                            204L))),
+                    Collections.emptyList(),
                     List.of(
                             new IdenticalTablet(102, 102L),
                             new IdenticalTablet(301, 301L),
@@ -336,17 +349,19 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(Map.of(
-                    101L, new SplittingTablet(101L,
-                            List.of(10101L,
-                                    10102L,
-                                    10103L,
-                                    10104L)),
-                    2L, new SplittingTablet(2L,
-                            List.of(201L,
-                                    202L,
-                                    203L,
-                                    204L))),
+            DynamicTablets splittingTablets = new DynamicTablets(
+                    List.of(
+                            new SplittingTablet(101L,
+                                    List.of(10101L,
+                                            10102L,
+                                            10103L,
+                                            10104L)),
+                            new SplittingTablet(2L,
+                                    List.of(201L,
+                                            202L,
+                                            203L,
+                                            204L))),
+                    Collections.emptyList(),
                     List.of(
                             new IdenticalTablet(102, 102L),
                             new IdenticalTablet(301, 301L),
@@ -382,17 +397,19 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(Map.of(
-                    101L, new SplittingTablet(101L,
-                            List.of(10101L,
-                                    10102L,
-                                    10103L,
-                                    10104L)),
-                    2L, new SplittingTablet(2L,
-                            List.of(201L,
-                                    202L,
-                                    203L,
-                                    204L))),
+            DynamicTablets splittingTablets = new DynamicTablets(
+                    List.of(
+                            new SplittingTablet(101L,
+                                    List.of(10101L,
+                                            10102L,
+                                            10103L,
+                                            10104L)),
+                            new SplittingTablet(2L,
+                                    List.of(201L,
+                                            202L,
+                                            203L,
+                                            204L))),
+                    Collections.emptyList(),
                     List.of(
                             new IdenticalTablet(102, 102L),
                             new IdenticalTablet(301, 301L),
@@ -454,7 +471,8 @@ public class DynamicTabletsTest {
     @Test
     public void testMergingTablets() {
         {
-            DynamicTablets mergingTablets = new DynamicTablets(Collections.emptyList(), Collections.emptyList());
+            DynamicTablets mergingTablets = new DynamicTablets(
+                    Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
             Assertions.assertTrue(mergingTablets.isEmpty());
             Assertions.assertTrue(mergingTablets.getSplittingTablets().isEmpty());
             Assertions.assertTrue(mergingTablets.getMergingTablets().isEmpty());
@@ -464,6 +482,7 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets mergingTablets = new DynamicTablets(
+                    Collections.emptyList(),
                     List.of(
                             new MergingTablet(
                                     List.of(101L, 102L),
@@ -481,6 +500,7 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets mergingTablets = new DynamicTablets(
+                    Collections.emptyList(),
                     List.of(
                             new MergingTablet(
                                     List.of(101L, 102L),
@@ -504,6 +524,7 @@ public class DynamicTabletsTest {
         {
 
             DynamicTablets mergingTablets = new DynamicTablets(
+                    Collections.emptyList(),
                     List.of(
                             new MergingTablet(
                                     List.of(101L, 102L),
@@ -527,6 +548,7 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets mergingTablets = new DynamicTablets(
+                    Collections.emptyList(),
                     List.of(
                             new MergingTablet(
                                     List.of(101L, 102L),
@@ -555,13 +577,15 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(List.of(
-                    new MergingTablet(
-                            List.of(201L, 202L, 203L, 204L),
-                            2L),
-                    new MergingTablet(
-                            List.of(301L, 302L),
-                            3L)),
+            DynamicTablets mergingTablets = new DynamicTablets(
+                    Collections.emptyList(),
+                    List.of(
+                            new MergingTablet(
+                                    List.of(201L, 202L, 203L, 204L),
+                                    2L),
+                            new MergingTablet(
+                                    List.of(301L, 302L),
+                                    3L)),
                     List.of(
                             new IdenticalTablet(1, 1L),
                             new IdenticalTablet(4, 4L),
@@ -576,13 +600,15 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(List.of(
-                    new MergingTablet(
-                            List.of(201L, 202L, 203L, 204L),
-                            2L),
-                    new MergingTablet(
-                            List.of(301L, 302L),
-                            3L)),
+            DynamicTablets mergingTablets = new DynamicTablets(
+                    Collections.emptyList(),
+                    List.of(
+                            new MergingTablet(
+                                    List.of(201L, 202L, 203L, 204L),
+                                    2L),
+                            new MergingTablet(
+                                    List.of(301L, 302L),
+                                    3L)),
                     List.of(
                             new IdenticalTablet(101, 101L),
                             new IdenticalTablet(102, 102L),
@@ -600,13 +626,15 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(List.of(
-                    new MergingTablet(
-                            List.of(201L, 202L, 203L, 204L),
-                            2L),
-                    new MergingTablet(
-                            List.of(301L, 302L),
-                            3L)),
+            DynamicTablets mergingTablets = new DynamicTablets(
+                    Collections.emptyList(),
+                    List.of(
+                            new MergingTablet(
+                                    List.of(201L, 202L, 203L, 204L),
+                                    2L),
+                            new MergingTablet(
+                                    List.of(301L, 302L),
+                                    3L)),
                     List.of(
                             new IdenticalTablet(101, 101L),
                             new IdenticalTablet(102, 102L),
@@ -628,13 +656,15 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(List.of(
-                    new MergingTablet(
-                            List.of(201L, 202L, 203L, 204L),
-                            2L),
-                    new MergingTablet(
-                            List.of(301L, 302L),
-                            3L)),
+            DynamicTablets mergingTablets = new DynamicTablets(
+                    Collections.emptyList(),
+                    List.of(
+                            new MergingTablet(
+                                    List.of(201L, 202L, 203L, 204L),
+                                    2L),
+                            new MergingTablet(
+                                    List.of(301L, 302L),
+                                    3L)),
                     List.of(
                             new IdenticalTablet(101, 101L),
                             new IdenticalTablet(102, 102L),
@@ -669,6 +699,7 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets mergingTablets = new DynamicTablets(
+                    Collections.emptyList(),
                     List.of(
                             new MergingTablet(
                                     List.of(10101L, 10102L, 10103L, 10104L),
@@ -698,6 +729,7 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets mergingTablets = new DynamicTablets(
+                    Collections.emptyList(),
                     List.of(
                             new MergingTablet(
                                     List.of(10101L, 10102L, 10103L, 10104L),
@@ -732,6 +764,7 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets mergingTablets = new DynamicTablets(
+                    Collections.emptyList(),
                     List.of(
                             new MergingTablet(
                                     List.of(10101L, 10102L, 10103L, 10104L),
@@ -774,6 +807,7 @@ public class DynamicTabletsTest {
 
         {
             DynamicTablets mergingTablets = new DynamicTablets(
+                    Collections.emptyList(),
                     List.of(
                             new MergingTablet(
                                     List.of(10101L, 10102L, 10103L, 10104L),
