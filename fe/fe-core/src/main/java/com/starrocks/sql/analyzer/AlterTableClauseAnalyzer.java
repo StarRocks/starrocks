@@ -679,7 +679,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             if (table.isOlapOrCloudNativeTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
                 columnDef.setAggregateType(AggregateType.REPLACE);
             }
-            columnDef.analyze(true);
+            ColumnDefAnalyzer.analyze(columnDef, true);
         } catch (AnalysisException e) {
             throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
         }
@@ -734,7 +734,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(columnDef.toColumn(table));
+            clause.setColumn(Column.fromColumnDef(table, columnDef));
             return null;
         }
 
@@ -771,7 +771,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         // Make sure return null if rollup name is empty.
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        clause.setColumn(columnDef.toColumn(table));
+        clause.setColumn(Column.fromColumnDef(table, columnDef));
         return null;
     }
 
@@ -788,7 +788,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 if (table.isOlapOrCloudNativeTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
                     colDef.setAggregateType(AggregateType.REPLACE);
                 }
-                colDef.analyze(true);
+                ColumnDefAnalyzer.analyze(colDef, true);
             } catch (AnalysisException e) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), colDef.getPos());
             }
@@ -866,7 +866,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         // Make sure return null if rollup name is empty.
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        columnDefs.forEach(columnDef -> clause.addColumn(columnDef.toColumn(table)));
+        columnDefs.forEach(columnDef -> clause.addColumn(Column.fromColumnDef(table, columnDef)));
         return null;
     }
 
@@ -944,7 +944,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             if (table.isOlapOrCloudNativeTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
                 columnDef.setAggregateType(AggregateType.REPLACE);
             }
-            columnDef.analyze(true);
+            ColumnDefAnalyzer.analyze(columnDef, true);
         } catch (AnalysisException e) {
             throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
         }
@@ -999,7 +999,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(columnDef.toColumn(table));
+            clause.setColumn(Column.fromColumnDef(table, columnDef));
             return null;
         }
 
@@ -1020,7 +1020,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        clause.setColumn(columnDef.toColumn(table));
+        clause.setColumn(Column.fromColumnDef(table, columnDef));
         return null;
     }
 
