@@ -35,9 +35,6 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -96,7 +93,6 @@ public class CatalogRecycleBinTest {
     private VariableMgr variableMgr = new VariableMgr();
     private SessionVariable defSessionVariable = new SessionVariable();
 
-    @BeforeClass
     public static void beforeClass() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -739,15 +735,15 @@ public class CatalogRecycleBinTest {
 
         // 1. recycle 2 dbs
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        recycleBin.recycleDatabase(db1, new HashSet<>());
-        recycleBin.recycleDatabase(db2SameName, new HashSet<>());  // will remove same name
-        recycleBin.recycleDatabase(db2, new HashSet<>());
+        recycleBin.recycleDatabase(db1, new HashSet<>(), false);
+        recycleBin.recycleDatabase(db2SameName, new HashSet<>(), false);  // will remove same name
+        recycleBin.recycleDatabase(db2, new HashSet<>(), false);
 
-        Assert.assertEquals(recycleBin.getDatabase(db1.getId()), db1);
-        Assert.assertEquals(recycleBin.getDatabase(db2.getId()), db2);
-        Assert.assertEquals(recycleBin.getDatabase(999), null);
-        Assert.assertEquals(2, recycleBin.idToRecycleTime.size());
-        Assert.assertEquals(0, recycleBin.enableEraseLater.size());
+        Assertions.assertEquals(recycleBin.getDatabase(db1.getId()), db1);
+        Assertions.assertEquals(recycleBin.getDatabase(db2.getId()), db2);
+        Assertions.assertEquals(recycleBin.getDatabase(999), null);
+        Assertions.assertEquals(2, recycleBin.idToRecycleTime.size());
+        Assertions.assertEquals(0, recycleBin.enableEraseLater.size());
 
         // 2. manually set db expire time & recycle db1
         Config.catalog_trash_expire_second = 3600;
@@ -803,15 +799,15 @@ public class CatalogRecycleBinTest {
 
         recycleBin.eraseDatabase(now);
 
-        Assert.assertEquals(recycleBin.getDatabase(db1.getId()), null);
-        Assert.assertEquals(recycleBin.getDatabase(db2.getId()), db2);
-        Assert.assertEquals(1, recycleBin.idToRecycleTime.size());
-        Assert.assertEquals(0, recycleBin.enableEraseLater.size());
+        Assertions.assertEquals(recycleBin.getDatabase(db1.getId()), null);
+        Assertions.assertEquals(recycleBin.getDatabase(db2.getId()), db2);
+        Assertions.assertEquals(1, recycleBin.idToRecycleTime.size());
+        Assertions.assertEquals(0, recycleBin.enableEraseLater.size());
 
         List<List<String>> recyclebininfo = recycleBin.getCatalogRecycleBinInfo();
-        Assert.assertEquals(recyclebininfo.size(), 1);
+        Assertions.assertEquals(recyclebininfo.size(), 1);
         String actual = rowsToString(recyclebininfo);
-        Assert.assertTrue(actual.contains("222"));
+        Assertions.assertTrue(actual.contains("222"));
     }
 
     @Test
@@ -873,11 +869,11 @@ public class CatalogRecycleBinTest {
         recycleBin.recycleTable(dbId, table2SameName, true);
         recycleBin.recycleTable(dbId, table2, true);
 
-        Assert.assertEquals(recycleBin.getTables(dbId), Arrays.asList(table1, table2SameName, table2));
-        Assert.assertSame(recycleBin.getTable(dbId, table1.getId()), table1);
-        Assert.assertSame(recycleBin.getTable(dbId, table2.getId()), table2);
-        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(table1.getId()));
-        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(table2.getId()));
+        Assertions.assertEquals(recycleBin.getTables(dbId), Arrays.asList(table1, table2SameName, table2));
+        Assertions.assertSame(recycleBin.getTable(dbId, table1.getId()), table1);
+        Assertions.assertSame(recycleBin.getTable(dbId, table2.getId()), table2);
+        Assertions.assertTrue(recycleBin.idToRecycleTime.containsKey(table1.getId()));
+        Assertions.assertTrue(recycleBin.idToRecycleTime.containsKey(table2.getId()));
 
         // 2. manually set table expire time & recycle table1
         Config.catalog_trash_expire_second = 3600;
@@ -886,14 +882,14 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(table1.getId(), expireFromNow - 1000);
         recycleBin.eraseTable(now);
 
-        Assert.assertEquals(recycleBin.getTables(dbId), List.of(table2));
-        Assert.assertNull(recycleBin.getTable(dbId, table1.getId()));
-        Assert.assertSame(recycleBin.getTable(dbId, table2.getId()), table2);
+        Assertions.assertEquals(recycleBin.getTables(dbId), List.of(table2));
+        Assertions.assertNull(recycleBin.getTable(dbId, table1.getId()));
+        Assertions.assertSame(recycleBin.getTable(dbId, table2.getId()), table2);
 
         List<List<String>> recyclebininfo = recycleBin.getCatalogRecycleBinInfo();
-        Assert.assertEquals(recyclebininfo.size(), 1);
+        Assertions.assertEquals(recyclebininfo.size(), 1);
         String actual = rowsToString(recyclebininfo);
-        Assert.assertTrue(actual.contains("222"));        
+        Assertions.assertTrue(actual.contains("222"));        
     }
 
     @Test
@@ -961,10 +957,10 @@ public class CatalogRecycleBinTest {
                 new RecycleRangePartitionInfo(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null));
         recycleBin.recyclePartition(new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, false, null));
 
-        Assert.assertEquals(recycleBin.getPartition(p1.getId()), p1);
-        Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
-        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(p1.getId()));
-        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(p2.getId()));
+        Assertions.assertEquals(recycleBin.getPartition(p1.getId()), p1);
+        Assertions.assertEquals(recycleBin.getPartition(p2.getId()), p2);
+        Assertions.assertTrue(recycleBin.idToRecycleTime.containsKey(p1.getId()));
+        Assertions.assertTrue(recycleBin.idToRecycleTime.containsKey(p2.getId()));
 
         // 2. manually set table expire time & recycle table1
         Config.catalog_trash_expire_second = 3600;
@@ -975,6 +971,6 @@ public class CatalogRecycleBinTest {
 
         List<List<String>> recyclebininfo = recycleBin.getCatalogRecycleBinInfo();
         String actual = rowsToString(recyclebininfo);
-        Assert.assertTrue(actual.contains("222"));          
+        Assertions.assertTrue(actual.contains("222"));          
     }
 }

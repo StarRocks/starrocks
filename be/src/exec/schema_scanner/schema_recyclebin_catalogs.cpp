@@ -18,18 +18,17 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaRecycleBinCatalogs::_s_columns[] = {
-        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DBID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
-        {"TABLEID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
-        {"PARTID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
-        {"DROPTIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), false},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"TABLE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"PARTITION_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"DROP_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), false},
 };
 
 SchemaRecycleBinCatalogs::SchemaRecycleBinCatalogs()

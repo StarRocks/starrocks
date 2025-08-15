@@ -1481,7 +1481,7 @@ public class FrontendServiceImplTest {
                 matched = true;
             }
         }
-        Assert.assertEquals(true, matched);
+        Assertions.assertEquals(true, matched);
     }
 
     public void testGetPartitionMeta() throws Exception {
