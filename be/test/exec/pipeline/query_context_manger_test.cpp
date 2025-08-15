@@ -171,9 +171,6 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         sleep(2);
         ASSERT_TRUE(query_ctx_mgr->get(query_id) == nullptr);
     }
-<<<<<<< HEAD
-=======
-
     {
         auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
         ASSERT_TRUE(query_ctx_mgr->init().ok());
@@ -201,7 +198,6 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
 
         ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
     }
->>>>>>> 9000728aa5 ([BugFix] Correct add query context to context conditions (#61929))
 }
 
 TEST(QueryContextManagerTest, testMulitiThreadOperations) {
