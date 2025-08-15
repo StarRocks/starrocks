@@ -130,6 +130,13 @@ public class HashJoinNode extends JoinNode {
             }
             sqlJoinPredicatesBuilder.append(eqJoinPredicate.toSql());
         }
+        if (joinOp.isAsofJoin()) {
+            msg.hash_join_node.setAsof_join_conjunct(otherJoinConjuncts.get(0).treeToThrift());
+            msg.hash_join_node.setAsof_join_conjunct_left(otherJoinConjuncts.get(0).getChild(0).treeToThrift());
+            msg.hash_join_node.setAsof_join_conjunct_right(otherJoinConjuncts.get(0).getChild(1).treeToThrift());
+            otherJoinConjuncts.clear();
+        }
+
         for (Expr e : otherJoinConjuncts) {
             msg.hash_join_node.addToOther_join_conjuncts(e.treeToThrift());
             if (sqlJoinPredicatesBuilder.length() > 0) {

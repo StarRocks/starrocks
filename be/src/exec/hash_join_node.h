@@ -97,8 +97,13 @@ private:
     const THashJoinNode& _hash_join_node;
     std::vector<ExprContext*> _probe_expr_ctxs;
     std::vector<ExprContext*> _build_expr_ctxs;
+    ExprContext* _asof_left_expr_ctx;
+    ExprContext* _asof_right_expr_ctx;
     std::vector<ExprContext*> _other_join_conjunct_ctxs;
     std::vector<bool> _is_null_safes;
+    
+    // AsOf Join support
+    ExprContext* _asof_join_conjunct_ctx = nullptr;
 
     // If distribution type is SHUFFLE_HASH_BUCKET, local shuffle can use the
     // equivalence of ExchagneNode's partition colums

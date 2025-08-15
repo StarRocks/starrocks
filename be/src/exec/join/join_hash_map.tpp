@@ -45,6 +45,7 @@ void JoinHashMap<LT, CT, MT>::probe_prepare(RuntimeState* state) {
     _probe_state->probe_match_filter.resize(chunk_size);
     _probe_state->buckets.resize(chunk_size);
 
+
     if (_table_items->join_type == TJoinOp::RIGHT_OUTER_JOIN || _table_items->join_type == TJoinOp::FULL_OUTER_JOIN ||
         _table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN) {
         _probe_state->build_match_index.resize(_table_items->row_count + 1, 0);
@@ -383,6 +384,107 @@ void JoinHashMap<LT, CT, MT>::_copy_build_nullable_column(const ColumnPtr& src_c
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::extract_asof_values_from_column(const Column* column, int64_t* output_values,
+                                                              size_t row_count) {
+    if (column == nullptr || output_values == nullptr) {
+        return;
+    }
+
+    const Column* data_column = column;
+    const uint8_t* null_data = nullptr;
+
+    if (column->is_nullable()) {
+        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
+        data_column = nullable_column->data_column().get();
+        if (column->has_null()) {
+            null_data = nullable_column->null_column()->get_data().data();
+        }
+    }
+
+    for (size_t i = 0; i < row_count; i++) {
+        if (null_data && null_data[i]) {
+            output_values[i] = INT64_MIN;
+        } else {
+            try {
+                Datum datum = data_column->get(i);
+                if (datum.is_null()) {
+                    output_values[i] = INT64_MIN;
+                } else {
+                    output_values[i] = convert_datum_to_int64_safely(datum);
+                }
+            } catch (...) {
+                output_values[i] = INT64_MIN;
+            }
+        }
+    }
+}
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+int64_t JoinHashMap<LT, CT, MT>::convert_datum_to_int64_safely(const Datum& datum) {
+    try {
+        if (!datum.is_null()) {
+            try {
+                TimestampValue ts = datum.get_timestamp();
+                return ts.timestamp();
+            } catch (const std::bad_variant_access&) {
+            }
+
+            try {
+                DateValue date = datum.get_date();
+                return static_cast<int64_t>(date.julian());
+            } catch (const std::bad_variant_access&) {
+            }
+
+            try {
+                return datum.get_int64();
+            } catch (const std::bad_variant_access&) {
+            }
+
+            try {
+                return static_cast<int64_t>(datum.get_int32());
+            } catch (const std::bad_variant_access&) {
+            }
+        }
+    } catch (...) {
+    }
+
+    return INT64_MIN;
+}
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+uint32_t JoinHashMap<LT, CT, MT>::find_best_asof_match_in_bucket(uint32_t probe_row_index, int64_t probe_asof_value) {
+    LOG(INFO) << "=== Entering find_best_asof_match_in_bucket ===";
+    LOG(INFO) << "probe_row_index: " << probe_row_index;
+    LOG(INFO) << "probe_asof_value: " << probe_asof_value;
+
+    if (_table_items->join_type != TJoinOp::ASOF_INNER_JOIN) {
+        LOG(WARNING) << "join_type is not ASOF_INNER_JOIN";
+        return 0;
+    }
+    
+    uint32_t bucket_id = _probe_state->probe_bucket_ids[probe_row_index];
+    LOG(INFO) << "Retrieved bucket_id: " << bucket_id << " for probe_row_index: " << probe_row_index;
+    
+    if (bucket_id == UINT32_MAX) {
+        LOG(INFO) << "Invalid bucket (UINT32_MAX) for probe row " << probe_row_index;
+        return 0;
+    }
+    
+    if (bucket_id >= _table_items->asof_buckets.size()) {
+        LOG(WARNING) << "Invalid bucket_id >= asof_buckets.size(): " << bucket_id << " >= " << _table_items->asof_buckets.size();
+        return 0;
+    }
+
+    LOG(INFO) << "Performing binary search in bucket " << bucket_id << "...";
+    uint32_t best_match = _table_items->asof_buckets[bucket_id].find_asof_match(probe_asof_value);
+    LOG(INFO) << "Best AsOf match found: " << best_match;
+
+    LOG(INFO) << "=== Exiting find_best_asof_match_in_bucket ===";
+    return best_match;
+}
+
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 void JoinHashMap<LT, CT, MT>::_search_ht(RuntimeState* state, ChunkPtr* probe_chunk) {
     if (_table_items->enable_late_materialization) {
         _probe_state->probe_index.resize(state->chunk_size() + 8);
@@ -402,6 +504,41 @@ void JoinHashMap<LT, CT, MT>::_search_ht(RuntimeState* state, ChunkPtr* probe_ch
         auto& probe_data = ProbeKeyConstructor().get_key_data(*_probe_state);
         HashMapMethod().lookup_init(*_table_items, _probe_state, probe_data, _probe_state->null_array);
         _probe_state->consider_probe_time_locality();
+
+        if (_table_items->join_type == TJoinOp::ASOF_INNER_JOIN && _table_items->asof_probe_slot_id != -1) {
+            LOG(INFO) << "=== ASOF PROBE DEBUG ===";
+            LOG(INFO) << "AsOf Inner Join detected in probe phase";
+            LOG(INFO) << "probe_row_count: " << _probe_state->probe_row_count;
+            LOG(INFO) << "asof_probe_slot_id: " << _table_items->asof_probe_slot_id;
+            
+            _probe_state->probe_asof_values.resize(_probe_state->probe_row_count);
+
+            std::stringstream slot_ids_str;
+            slot_ids_str << "Probe chunk slot_ids: [";
+            bool first = true;
+            for (const auto& pair : (*probe_chunk)->get_slot_id_to_index_map()) {
+                if (!first) slot_ids_str << ", ";
+                slot_ids_str << pair.first;
+                first = false;
+            }
+            slot_ids_str << "], Looking for AsOf probe slot_id: " << _table_items->asof_probe_slot_id;
+            LOG(INFO) << slot_ids_str.str();
+
+            auto asof_column = (*probe_chunk)->get_column_by_slot_id(_table_items->asof_probe_slot_id);
+            if (asof_column && asof_column->size() == _probe_state->probe_row_count) {
+                extract_asof_values_from_column(asof_column.get(), _probe_state->probe_asof_values.data(),
+                                                _probe_state->probe_row_count);
+                LOG(INFO) << "Successfully extracted AsOf values from probe column";
+                for (size_t i = 0; i < std::min(3UL, static_cast<size_t>(_probe_state->probe_row_count)); i++) {
+                    LOG(INFO) << "  Probe AsOf value[" << i << "]: " << _probe_state->probe_asof_values[i];
+                }
+            } else {
+                LOG(WARNING) << "Failed to extract AsOf values: column size "
+                            << (asof_column ? asof_column->size() : 0) 
+                            << " vs probe_row_count " << _probe_state->probe_row_count;
+                std::fill(_probe_state->probe_asof_values.begin(), _probe_state->probe_asof_values.end(), INT64_MIN);
+            }
+        }
 
         if (_table_items->is_collision_free_and_unique) {
             _search_ht_impl<true, true>(state, build_data, probe_data);
@@ -507,6 +644,13 @@ void JoinHashMap<LT, CT, MT>::_search_ht_impl(RuntimeState* state, const Buffer<
             break;
         case TJoinOp::FULL_OUTER_JOIN:
             DO_PROBE(_probe_from_ht_for_full_outer_join);
+            break;
+        case TJoinOp::ASOF_INNER_JOIN:
+            LOG(INFO) << "=== ASOF SWITCH CASE DEBUG ===";
+            LOG(INFO) << "Entering ASOF_INNER_JOIN case in _search_ht_impl";
+            LOG(INFO) << "probe_row_count: " << _probe_state->probe_row_count;
+            LOG(INFO) << "probe_asof_values size: " << _probe_state->probe_asof_values.size();
+            DO_PROBE(_probe_from_ht_for_asof_inner_join);
             break;
         default:
             DO_PROBE(_probe_from_ht);
@@ -648,12 +792,15 @@ void JoinHashMap<LT, CT, MT>::_search_ht_impl(RuntimeState* state, const Buffer<
         }                                                             \
     }
 
-#define PROBE_OVER()                   \
-    _probe_state->has_remain = false;  \
-    _probe_state->cur_probe_index = 0; \
-    _probe_state->cur_build_index = 0; \
-    _probe_state->count = match_count; \
-    _probe_state->cur_row_match_count = 0;
+#define PROBE_OVER()                                \
+    _probe_state->has_remain = false;               \
+    _probe_state->cur_probe_index = 0;              \
+    _probe_state->cur_build_index = 0;              \
+    _probe_state->count = match_count;              \
+    _probe_state->cur_row_match_count = 0;          \
+    if (!_probe_state->probe_asof_values.empty()) { \
+        _probe_state->probe_asof_values.clear();    \
+    }
 
 #define MATCH_RIGHT_TABLE_ROWS()                \
     _probe_state->probe_index[match_count] = i; \
@@ -994,6 +1141,158 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join(RuntimeState* st
         }
     }
 
+    PROBE_OVER()
+}
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_inner_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                 const Buffer<CppType>& probe_data) {
+    LOG(INFO) << "=== _probe_from_ht_for_asof_inner_join START ===";
+    LOG(INFO) << "first_probe: " << first_probe;
+    LOG(INFO) << "is_collision_free_and_unique: " << is_collision_free_and_unique;
+    LOG(INFO) << "probe_row_count: " << _probe_state->probe_row_count;
+    LOG(INFO) << "cur_probe_index: " << _probe_state->cur_probe_index;
+    LOG(INFO) << "probe_asof_values size: " << _probe_state->probe_asof_values.size();
+    
+    _probe_state->match_flag = JoinMatchFlag::NORMAL;
+    size_t match_count = 0;
+    constexpr bool one_to_many = false;
+    size_t i = _probe_state->cur_probe_index;
+
+    if constexpr (!first_probe) {
+        _probe_state->probe_index[0] = _probe_state->cur_probe_index;
+        _probe_state->build_index[0] = _probe_state->cur_build_index;
+        match_count = 1;
+        if (_probe_state->next[i] == 0) {
+            i++;
+            _probe_state->cur_row_match_count = 0;
+        }
+    }
+
+    [[maybe_unused]] size_t probe_cont = 0;
+
+    if constexpr (first_probe) {
+        memset(_probe_state->probe_match_filter.data(), 0, _probe_state->probe_row_count * sizeof(uint8_t));
+    }
+
+    const size_t probe_row_count = _probe_state->probe_row_count;
+    const auto* probe_buckets = _probe_state->next.data();
+    uint32_t cur_row_match_count = _probe_state->cur_row_match_count;
+
+    if (_probe_state->probe_asof_values.empty()) {
+        LOG(WARNING) << "AsOf Inner Join called without precomputed AsOf values";
+        PROBE_OVER()
+        return;
+    }
+
+    LOG(INFO) << "Starting probe loop from i=" << i << " to " << probe_row_count;
+    
+    for (; i < probe_row_count; i++) {
+        uint32_t build_index = probe_buckets[i];
+        
+        LOG(INFO) << "--- Probing row " << i << " ---";
+        LOG(INFO) << "build_index: " << build_index;
+
+        if (build_index == 0) {
+            LOG(INFO) << "No build data for probe row " << i << " (build_index=0), skipping";
+            continue;
+        }
+
+        int64_t probe_asof_value = _probe_state->probe_asof_values[i];
+        LOG(INFO) << "probe_asof_value[" << i << "]: " << probe_asof_value;
+
+        if constexpr (is_collision_free_and_unique) {
+            LOG(INFO) << "Using collision_free_and_unique path";
+            LOG(INFO) << "Comparing build_data[" << build_index << "] with probe_data[" << i << "]";
+            
+            if (HashMapMethod().equal(build_data[build_index], probe_data[i])) {
+                LOG(INFO) << "Key match found! Searching for AsOf match";
+                uint32_t best_asof_build_index = find_best_asof_match_in_bucket(i, probe_asof_value);
+                LOG(INFO) << "find_best_asof_match_in_bucket returned: " << best_asof_build_index;
+
+                if (best_asof_build_index != 0) {
+                    LOG(INFO) << "AsOf match found! Adding to result set";
+                    LOG(INFO) << "  probe_index: " << i;
+                    LOG(INFO) << "  build_index: " << best_asof_build_index;
+                    LOG(INFO) << "  match_count: " << match_count;
+                    
+                    _probe_state->probe_index[match_count] = i;
+                    _probe_state->build_index[match_count] = best_asof_build_index;
+                    match_count++;
+                    _probe_state->probe_match_filter[i] = 1;
+                } else {
+                    LOG(INFO) << "No AsOf match found for probe row " << i << " with AsOf value " << probe_asof_value;
+                }
+            } else {
+                LOG(INFO) << "Key does not match, skipping probe row " << i;
+            }
+
+            continue;
+        }
+
+        LOG(INFO) << "Using chained hash map path (not collision_free_and_unique)";
+        
+        do {
+            LOG(INFO) << "Checking build_index " << build_index << " in chain";
+            LOG(INFO) << "Comparing build_data[" << build_index << "] with probe_data[" << i << "]";
+            
+            if (HashMapMethod().equal(build_data[build_index], probe_data[i])) {
+                LOG(INFO) << "Key match found in chain! Searching for AsOf match";
+                // Found equal key, now find best AsOf match in this bucket
+                uint32_t best_asof_build_index = find_best_asof_match_in_bucket(i, probe_asof_value);
+                LOG(INFO) << "find_best_asof_match_in_bucket returned: " << best_asof_build_index;
+
+                if (best_asof_build_index != 0) {
+                    LOG(INFO) << "AsOf match found in chain! Adding to result set";
+                    LOG(INFO) << "  probe_index: " << i;
+                    LOG(INFO) << "  build_index: " << best_asof_build_index;
+                    LOG(INFO) << "  match_count: " << match_count;
+                    
+                    _probe_state->probe_index[match_count] = i;
+                    _probe_state->build_index[match_count] = best_asof_build_index;
+                    match_count++;
+
+                    if constexpr (first_probe) {
+                        cur_row_match_count++;
+                        _probe_state->probe_match_filter[i] = 1;
+                    }
+
+                    LOG(INFO) << "Short-circuiting chain search (AsOf match found)";
+                    break;
+                } else {
+                    LOG(INFO) << "Key matched but no AsOf match found for probe row " << i;
+                }
+            } else {
+                LOG(INFO) << "Key does not match in chain for build_index " << build_index;
+            }
+
+            probe_cont++;
+            build_index = _table_items->next[build_index];
+            LOG(INFO) << "Moving to next in chain: build_index=" << build_index;
+        } while (build_index != 0);
+        
+        LOG(INFO) << "Finished chain search for probe row " << i;
+
+        if constexpr (first_probe) {
+            cur_row_match_count = 0;
+        }
+
+        RETURN_IF_CHUNK_FULL2()
+    }
+
+    // COUNTER_UPDATE(_probe_state->probe_counter, probe_cont);
+
+    _probe_state->cur_row_match_count = cur_row_match_count;
+    
+    LOG(INFO) << "=== _probe_from_ht_for_asof_inner_join END ===";
+    LOG(INFO) << "Total matches found: " << match_count;
+    LOG(INFO) << "Final probe index: " << i;
+    LOG(INFO) << "cur_row_match_count: " << cur_row_match_count;
+
+    if constexpr (first_probe) {
+        CHECK_MATCH()
+    }
     PROBE_OVER()
 }
 
@@ -1581,6 +1880,42 @@ Status JoinHashTable::lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, Ch
         RETURN_IF_ERROR((*result_chunk)->downgrade());
     }
     return Status::OK();
+}
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_inner_join(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+         i = _probe_state->cur_probe_index++) {
+        uint32_t build_index = _probe_state->next[i];
+        if (build_index == 0) {
+            continue;
+        }
+
+        int64_t probe_asof_value = (_probe_state->probe_asof_values.empty()) ?
+                                   INT64_MIN : _probe_state->probe_asof_values[i];
+
+        do {
+            if (HashMapMethod().equal(build_data[build_index], probe_data[i])) {
+                uint32_t best_asof_build_index = find_best_asof_match_in_bucket(i, probe_asof_value);
+                
+                if (best_asof_build_index != 0) {
+                    _probe_state->probe_index[_probe_state->match_count] = i;
+                    _probe_state->build_index[_probe_state->match_count] = best_asof_build_index;
+                    _probe_state->match_count++;
+                    _probe_state->probe_match_filter[i] = 1;
+                    
+                    if (_probe_state->match_count == state->chunk_size()) {
+                        co_return;
+                    }
+                    break;
+                }
+            }
+            build_index = _table_items->next[build_index];
+        } while (build_index != 0);
+    }
+    auto match_count = _probe_state->match_count;
+    PROBE_OVER()
 }
 
 #undef JOIN_HASH_MAP_TPP

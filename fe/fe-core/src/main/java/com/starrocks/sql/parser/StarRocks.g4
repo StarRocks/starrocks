@@ -2444,6 +2444,8 @@ joinRelation
             LATERAL? rightRelation=relationPrimary joinCriteria?
     | outerAndSemiJoinType bracketHint?
             LATERAL? rightRelation=relationPrimary joinCriteria
+    | asofJoinType bracketHint?
+            rightRelation=relationPrimary joinCriteria
     ;
 
 crossOrInnerJoinType
@@ -2458,6 +2460,12 @@ outerAndSemiJoinType
     | LEFT SEMI JOIN | RIGHT SEMI JOIN
     | LEFT ANTI JOIN | RIGHT ANTI JOIN
     | NULL AWARE LEFT ANTI JOIN
+    ;
+
+asofJoinType
+    : ASOF JOIN
+    | ASOF LEFT JOIN
+    | ASOF LEFT OUTER JOIN
     ;
 
 bracketHint
@@ -3139,7 +3147,7 @@ number
     ;
 
 nonReserved
-    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
+    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | ASOF | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
     | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE | BASELINE
