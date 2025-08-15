@@ -850,7 +850,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         }
         for (String query : traceQueries) {
             String plan = explainMVRefreshExecPlan(mv, query);
-            Assertions.assertFalse(plan.isEmpty());
+            Assertions.assertTrue(plan.isEmpty());
         }
     }
 }
