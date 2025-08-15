@@ -1311,7 +1311,7 @@ public class Config extends ConfigBase {
      * tablet can be checked only one time on one day, to avoid too many disk io in be
      */
     @ConfField(mutable = true)
-    public static long consistency_check_cooldown_time_second = 24 * 3600; // every 1 day
+    public static long consistency_check_cooldown_time_second = 24 * 3600L; // every 1 day
 
     // Configurations for query engine
     /**
