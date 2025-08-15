@@ -40,7 +40,7 @@ Status SchemaRecycleBinCatalogs::start(RuntimeState* state) {
     return SchemaScanner::start(state);
 }
 
-Status SchemaRecycleBinCatalogs::_listRecycleBinCatalogs() {
+Status SchemaRecycleBinCatalogs::_list_recyclebin_catalogs() {
     RETURN_IF(_param->ip == nullptr || _param->port == 0, Status::InternalError("unknown frontend address"));
 
     TListRecycleBinCatalogsParams params;
@@ -54,7 +54,7 @@ Status SchemaRecycleBinCatalogs::get_next(ChunkPtr* chunk, bool* eos) {
     while (_cur_row >= _recyclebin_catalogs_result.recyclebin_catalogs.size()) {
         if (!_fetched) {
             _fetched = true;
-            RETURN_IF_ERROR(_listRecycleBinCatalogs());
+            RETURN_IF_ERROR(_list_recyclebin_catalogs());
         } else {
             *eos = true;
             return Status::OK();
@@ -68,12 +68,11 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     auto& info = _recyclebin_catalogs_result.recyclebin_catalogs.at(_cur_row++);
     for (const auto& [slot_id, index] : slot_id_map) {
-        LOG(ERROR) << "xxx1:" << slot_id;
+        ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
         switch (slot_id) {
         case 1: {
             // type
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
                 const std::string* str = &info.type;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -83,7 +82,6 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
         case 2: {
             // name
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
                 const std::string* str = &info.name;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -93,7 +91,6 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
         case 3: {
             // dbid
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
                 if (info.__isset.dbid) {
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.dbid);
                 } else {
@@ -105,7 +102,6 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
         case 4: {
             // tableid
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
                 if (info.__isset.tableid) {
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.tableid);
                 } else {
@@ -117,7 +113,6 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
         case 5: {
             // partitionid
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
                 if (info.__isset.partitionid) {
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.partitionid);
                 } else {
@@ -129,7 +124,6 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
         case 6: {
             // droptime
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
                 DateTimeValue t;
                 t.from_unixtime(info.droptime, _runtime_state->timezone_obj());
                 fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);

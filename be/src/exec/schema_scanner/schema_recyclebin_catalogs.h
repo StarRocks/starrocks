@@ -33,7 +33,7 @@ public:
 private:
     Status _fill_chunk(ChunkPtr* chunk);
     DatumArray _build_row();
-    Status _listRecycleBinCatalogs();
+    Status _list_recyclebin_catalogs();
 
     size_t _cur_row = 0;
     bool _fetched = false;

@@ -29,10 +29,10 @@ public class RecycleBinCatalogsTable {
                 SystemTable.builder()
                         .column("TYPE", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("DBID", ScalarType.BIGINT)
-                        .column("TABLEID", ScalarType.BIGINT)
-                        .column("PARTID", ScalarType.BIGINT)
-                        .column("DROPTIME", ScalarType.DATETIME)
+                        .column("DB_ID", ScalarType.BIGINT)
+                        .column("TABLE_ID", ScalarType.BIGINT)
+                        .column("PARTITION_ID", ScalarType.BIGINT)
+                        .column("DROP_TIME", ScalarType.DATETIME)
                         .build(),
                 TSchemaTableType.SCH_RECYCLEBIN_CATALOGS);
     }
