@@ -104,8 +104,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             if (!(func instanceof AggregateFunction)) {
                 continue;
             }
-            if ((func instanceof AggStateMergeCombinator) || (func instanceof AggStateUnionCombinator) ||
-                    (func instanceof AggStateIf)) {
+            if (AggStateUtils.isAggStateCombinator(func)) {
                 continue;
             }
             builtInAggregateFunctions.add((AggregateFunction) func);
@@ -367,7 +366,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             supportedAggFunctions.add(aggFunc.functionName());
             Function result = getAggStateFunc(aggFunc);
             Assertions.assertNotNull(result);
-            Assertions.assertTrue(result instanceof AggStateCombinator);
+            Assertions.assertTrue(result instanceof StateFunctionCombinator);
             Assertions.assertFalse(result.getReturnType().isWildcardDecimal());
             Assertions.assertFalse(result.getReturnType().isPseudoType());
         }

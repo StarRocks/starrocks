@@ -47,8 +47,8 @@ class FunctionUtils {
 public:
     FunctionUtils();
     FunctionUtils(RuntimeState* state);
-    FunctionUtils(RuntimeState* state, FunctionContext::TypeDesc return_type,
-                  std::vector<FunctionContext::TypeDesc> arg_types);
+    FunctionUtils(RuntimeState* state, const FunctionContext::TypeDesc& return_type,
+                  const std::vector<FunctionContext::TypeDesc>& arg_types);
     ~FunctionUtils();
 
     FunctionContext* get_fn_ctx() { return _fn_ctx; }

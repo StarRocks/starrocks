@@ -15,9 +15,7 @@
 #pragma once
 
 #include "common/object_pool.h"
-#include "exprs/agg/combinator/state_function.h"
-#include "exprs/agg/combinator/state_merge_function.h"
-#include "exprs/agg/combinator/state_union_function.h"
+#include "exprs/agg/combinator/state_combinator.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr.h"
 

@@ -43,7 +43,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
-import com.starrocks.catalog.combinator.AggStateCombinator;
+import com.starrocks.catalog.combinator.StateFunctionCombinator;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
@@ -553,7 +553,7 @@ public class FunctionSet {
     public static final String CURRENT_GROUP = "current_group";
 
     // scalar function
-    public static final String AGG_STATE_SUFFIX = "_state";
+    public static final String STATE_SUFFIX = "_state";
     // agg function
     public static final String AGG_STATE_UNION_SUFFIX = "_union";
     public static final String AGG_STATE_MERGE_SUFFIX = "_merge";
@@ -1057,7 +1057,7 @@ public class FunctionSet {
 
         if (AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
             // register `_state` combinator
-            AggStateCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
+            StateFunctionCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
             // register `_merge`/`_union` combinator for aggregate functions
             AggStateUnionCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
             AggStateMergeCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
@@ -1070,7 +1070,7 @@ public class FunctionSet {
     }
 
     public static String getAggStateName(String name) {
-        return String.format("%s%s", name, AGG_STATE_SUFFIX);
+        return String.format("%s%s", name, STATE_SUFFIX);
     }
 
     public static String getAggStateUnionName(String name) {

@@ -709,8 +709,8 @@ public class Function implements Writable {
     public static String rectifyFunctionName(String s) {
         return Optional.ofNullable(ACTUAL_NAMES.get(s)).orElseGet(() -> {
             Optional<String> optSuffix = Optional.empty();
-            if (s.endsWith(FunctionSet.AGG_STATE_SUFFIX)) {
-                optSuffix = Optional.of(FunctionSet.AGG_STATE_SUFFIX);
+            if (s.endsWith(FunctionSet.STATE_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.STATE_SUFFIX);
             } else if (s.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)) {
                 optSuffix = Optional.of(FunctionSet.AGG_STATE_MERGE_SUFFIX);
             } else if (s.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX)) {

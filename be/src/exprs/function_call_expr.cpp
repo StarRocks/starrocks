@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/agg/combinator/state_function.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
