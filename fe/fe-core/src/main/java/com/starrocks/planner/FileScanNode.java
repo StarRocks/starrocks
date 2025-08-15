@@ -79,6 +79,7 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileScanNode;
@@ -92,6 +93,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -632,7 +634,32 @@ public class FileScanNode extends LoadScanNode {
         rangeDesc.setFile_size(fileStatus.size);
         rangeDesc.setNum_of_columns_from_file(numberOfColumnsFromFile);
         rangeDesc.setColumns_from_path(columnsFromPath);
+        // Infer compression for JSON by suffix so BE can decompress
+        if (formatType == TFileFormatType.FORMAT_JSON) {
+            rangeDesc.setCompression_type(inferCompressionByName(fileStatus.getPath()));
+        }
         return rangeDesc;
+    }
+
+    public static TCompressionType inferCompressionByName(String fileName) {
+        if (StringUtils.isEmpty(fileName)) {
+            return null;
+        }
+        String lower = fileName.toLowerCase();
+        if (lower.endsWith(".gz") || lower.endsWith(".gzip")) {
+            return TCompressionType.GZIP;
+        } else if (lower.endsWith(".bz2")) {
+            return TCompressionType.BZIP2;
+        } else if (lower.endsWith(".zst") || lower.endsWith(".zstd")) {
+            return TCompressionType.ZSTD;
+        } else if (lower.endsWith(".lz4")) {
+            return TCompressionType.LZ4_FRAME;
+        } else if (lower.endsWith(".deflate")) {
+            return TCompressionType.DEFLATE;
+        } else if (lower.endsWith(".snappy")) {
+            return TCompressionType.SNAPPY;
+        }
+        return null;
     }
 
     private void createScanRangeLocations(ParamCreateContext context, List<TBrokerFileStatus> fileStatuses)

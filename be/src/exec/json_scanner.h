@@ -118,6 +118,8 @@ private:
     Status _read_and_parse_json();
     Status _read_file_stream();
     Status _read_file_broker();
+    Status _read_seekable_stream(io::SeekableInputStream* seekable_stream);
+    Status _read_non_seekable_stream();
     Status _parse_payload();
 
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk);
