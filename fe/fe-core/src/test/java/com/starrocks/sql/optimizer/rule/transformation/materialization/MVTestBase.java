@@ -45,7 +45,6 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
-import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
