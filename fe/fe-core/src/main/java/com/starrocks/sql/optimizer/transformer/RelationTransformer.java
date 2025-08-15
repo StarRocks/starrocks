@@ -39,9 +39,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.PointerType;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
@@ -615,16 +615,22 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                     new ExpressionMapping(node.getScope(), outputVariables), columnRefFactory);
         }
 
-        QueryPeriod queryPeriod = node.getQueryPeriod();
-        Optional<ConnectorTableVersion> startVersion = Optional.empty();
-        Optional<ConnectorTableVersion> endVersion = Optional.empty();
-        if (queryPeriod != null) {
-            QueryPeriod.PeriodType periodType = queryPeriod.getPeriodType();
-            startVersion = resolveQueryPeriod(queryPeriod.getStart(), periodType);
-            endVersion = resolveQueryPeriod(queryPeriod.getEnd(), periodType);
+        // TODO: merge with tableVersionRange
+        TvrVersionRange tableVersionRange;
+        if (node.getTvrVersionRange() != null) {
+            tableVersionRange = node.getTvrVersionRange();
+        } else {
+            QueryPeriod queryPeriod = node.getQueryPeriod();
+            Optional<ConnectorTableVersion> startVersion = Optional.empty();
+            Optional<ConnectorTableVersion> endVersion = Optional.empty();
+            if (queryPeriod != null) {
+                QueryPeriod.PeriodType periodType = queryPeriod.getPeriodType();
+                startVersion = resolveQueryPeriod(queryPeriod.getStart(), periodType);
+                endVersion = resolveQueryPeriod(queryPeriod.getEnd(), periodType);
+            }
+            tableVersionRange = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTableVersionRange(node.getName().getDb(), node.getTable(), startVersion, endVersion);
         }
-        TableVersionRange tableVersionRange = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTableVersionRange(node.getName().getDb(), node.getTable(), startVersion, endVersion);
 
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTableOrMaterializedView()) {
