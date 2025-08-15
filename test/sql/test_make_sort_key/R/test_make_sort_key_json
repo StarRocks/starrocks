@@ -1,0 +1,123 @@
+-- name: test_encode_sort_key_json
+CREATE DATABASE test_encode_sort_key_json;
+-- result:
+-- !result
+USE test_encode_sort_key_json;
+-- result:
+-- !result
+CREATE TABLE `json_test_table` (
+  `id` int(11) NOT NULL COMMENT "",
+  `json_data` json ,
+  `json_array` json ,
+  `json_nested` json,
+  `sort_key` varbinary(1024) AS (
+    encode_sort_key(
+      get_json_int(json_data, '$.age'),
+      get_json_string(json_data, '$.name'),
+      get_json_string(json_data, '$.city'),
+      get_json_string(json_array, '$[0]'),
+      get_json_double(json_nested, '$.user.profile.score')
+    )
+  ) COMMENT "Auto-generated sort key from extracted JSON fields"
+) ENGINE=OLAP 
+DISTRIBUTED BY HASH(sort_key) BUCKETS 2
+ORDER BY (sort_key)
+PROPERTIES ( "replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO json_test_table (id, json_data, json_array, json_nested) VALUES
+(1, parse_json('{"name": "Alice", "age": 25, "city": "New York"}'), 
+     parse_json('["apple", "banana", "cherry"]'),
+     parse_json('{"user": {"id": 101, "profile": {"verified": true, "score": 95.5}}}')),
+(2, parse_json('{"name": "Bob", "age": 30, "city": "Los Angeles"}'), 
+     parse_json('["orange", "grape"]'),
+     parse_json('{"user": {"id": 102, "profile": {"verified": false, "score": 87.2}}}')),
+(3, parse_json('{"name": "Charlie", "age": 28, "city": "Chicago"}'), 
+     parse_json('["mango", "pineapple", "kiwi", "strawberry"]'),
+     parse_json('{"user": {"id": 103, "profile": {"verified": true, "score": 92.8}}}')),
+(4, parse_json('{"name": "Diana", "age": 22, "city": "Miami"}'), 
+     parse_json('["pear"]'),
+     parse_json('{"user": {"id": 104, "profile": {"verified": true, "score": 89.1}}}')),
+(5, parse_json('{"name": "Eve", "age": 35, "city": "Seattle"}'), 
+     parse_json('["blueberry", "raspberry", "blackberry"]'),
+     parse_json('{"user": {"id": 105, "profile": {"verified": false, "score": 78.9}}}'));
+-- result:
+-- !result
+SELECT id, 
+       json_data, 
+       get_json_int(json_data, '$.age') as age,
+       get_json_string(json_data, '$.name') as name,
+       get_json_string(json_data, '$.city') as city,
+       get_json_string(json_array, '$[0]') as first_fruit,
+       get_json_double(json_nested, '$.user.profile.score') as score,
+       sort_key,
+       length(sort_key) as sort_key_length
+FROM json_test_table 
+ORDER BY id;
+-- result:
+1	{"age": 25, "city": "New York", "name": "Alice"}	25	Alice	New York	apple	95.5	b'\x01\x80\x00\x00\x00\x00\x00\x00\x19\x00\x01Alice\x00\x00\x00\x01New York\x00\x00\x00\x01apple\x00\x00\x00\x01\xc0W\xe0\x00\x00\x00\x00\x00'	49
+2	{"age": 30, "city": "Los Angeles", "name": "Bob"}	30	Bob	Los Angeles	orange	87.2	b'\x01\x80\x00\x00\x00\x00\x00\x00\x1e\x00\x01Bob\x00\x00\x00\x01Los Angeles\x00\x00\x00\x01orange\x00\x00\x00\x01\xc0U\xcc\xcc\xcc\xcc\xcc\xcd'	51
+3	{"age": 28, "city": "Chicago", "name": "Charlie"}	28	Charlie	Chicago	mango	92.8	b'\x01\x80\x00\x00\x00\x00\x00\x00\x1c\x00\x01Charlie\x00\x00\x00\x01Chicago\x00\x00\x00\x01mango\x00\x00\x00\x01\xc0W333333'	50
+4	{"age": 22, "city": "Miami", "name": "Diana"}	22	Diana	Miami	pear	89.1	b'\x01\x80\x00\x00\x00\x00\x00\x00\x16\x00\x01Diana\x00\x00\x00\x01Miami\x00\x00\x00\x01pear\x00\x00\x00\x01\xc0VFfffff'	45
+5	{"age": 35, "city": "Seattle", "name": "Eve"}	35	Eve	Seattle	blueberry	78.9	b'\x01\x80\x00\x00\x00\x00\x00\x00#\x00\x01Eve\x00\x00\x00\x01Seattle\x00\x00\x00\x01blueberry\x00\x00\x00\x01\xc0S\xb9\x99\x99\x99\x99\x9a'	50
+-- !result
+SELECT id, json_data, json_array
+FROM json_test_table 
+ORDER BY sort_key;
+-- result:
+4	{"age": 22, "city": "Miami", "name": "Diana"}	["pear"]
+1	{"age": 25, "city": "New York", "name": "Alice"}	["apple", "banana", "cherry"]
+3	{"age": 28, "city": "Chicago", "name": "Charlie"}	["mango", "pineapple", "kiwi", "strawberry"]
+2	{"age": 30, "city": "Los Angeles", "name": "Bob"}	["orange", "grape"]
+5	{"age": 35, "city": "Seattle", "name": "Eve"}	["blueberry", "raspberry", "blackberry"]
+-- !result
+SELECT id, json_data, json_array
+FROM json_test_table 
+ORDER BY sort_key DESC;
+-- result:
+5	{"age": 35, "city": "Seattle", "name": "Eve"}	["blueberry", "raspberry", "blackberry"]
+2	{"age": 30, "city": "Los Angeles", "name": "Bob"}	["orange", "grape"]
+3	{"age": 28, "city": "Chicago", "name": "Charlie"}	["mango", "pineapple", "kiwi", "strawberry"]
+1	{"age": 25, "city": "New York", "name": "Alice"}	["apple", "banana", "cherry"]
+4	{"age": 22, "city": "Miami", "name": "Diana"}	["pear"]
+-- !result
+SELECT id, json_data, json_array
+FROM json_test_table 
+WHERE sort_key > (SELECT sort_key FROM json_test_table WHERE id = 2)
+ORDER BY id;
+-- result:
+5	{"age": 35, "city": "Seattle", "name": "Eve"}	["blueberry", "raspberry", "blackberry"]
+-- !result
+INSERT INTO json_test_table (id, json_data, json_array, json_nested) VALUES
+(6, NULL, parse_json('["test"]'), parse_json('{"test": null}')),
+(7, parse_json('{"age": 40}'), parse_json('[]'), parse_json('{"user": {"id": 106}}'));
+-- result:
+-- !result
+SELECT id, 
+       get_json_int(json_data, '$.age') as age
+FROM json_test_table 
+ORDER BY id;
+-- result:
+1	25
+2	30
+3	28
+4	22
+5	35
+6	None
+7	40
+-- !result
+SELECT id, json_data, json_array
+FROM json_test_table 
+ORDER BY sort_key;
+-- result:
+6	None	["test"]
+4	{"age": 22, "city": "Miami", "name": "Diana"}	["pear"]
+1	{"age": 25, "city": "New York", "name": "Alice"}	["apple", "banana", "cherry"]
+3	{"age": 28, "city": "Chicago", "name": "Charlie"}	["mango", "pineapple", "kiwi", "strawberry"]
+2	{"age": 30, "city": "Los Angeles", "name": "Bob"}	["orange", "grape"]
+5	{"age": 35, "city": "Seattle", "name": "Eve"}	["blueberry", "raspberry", "blackberry"]
+7	{"age": 40}	[]
+-- !result
+DROP DATABASE test_encode_sort_key_json;
+-- result:
+-- !result

@@ -820,7 +820,7 @@ public abstract class Type implements Cloneable {
             return true;
         }
 
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
     }
 
     public boolean canGroupBy() {
@@ -838,7 +838,7 @@ public abstract class Type implements Cloneable {
             }
             return true;
         }
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
     }
 
     public boolean canOrderBy() {
@@ -846,8 +846,7 @@ public abstract class Type implements Cloneable {
         if (isArrayType()) {
             return ((ArrayType) this).getItemType().canOrderBy();
         }
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() && !isMapType();
     }
 
     public boolean canPartitionBy() {
@@ -882,8 +881,9 @@ public abstract class Type implements Cloneable {
 
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
+        // Allow VARBINARY as distribution key
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType()
-                && !isFunctionType() && !isBinaryType();
+                && !isFunctionType();
     }
 
     public boolean canBeWindowFunctionArgumentTypes() {

@@ -164,6 +164,18 @@ inline TabletColumn create_varchar_key(int32_t id, bool is_nullable = true, int 
     return column;
 }
 
+inline TabletColumn create_varbinary_key(int32_t id, bool is_nullable = true, int length = 8) {
+    TabletColumn column;
+    column.set_unique_id(id);
+    column.set_name(std::to_string(id));
+    column.set_type(TYPE_VARBINARY);
+    column.set_is_key(true);
+    column.set_is_nullable(is_nullable);
+    column.set_length(length);
+    column.set_index_length(4);
+    return column;
+}
+
 inline TabletColumn create_array(int32_t id, bool is_nullable = true, int length = 24) {
     TabletColumn column;
     column.set_unique_id(id);
