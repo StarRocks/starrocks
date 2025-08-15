@@ -765,17 +765,8 @@ Status DeltaWriter::commit() {
         }
     }
     auto replica_ts = watch.elapsed_time();
-<<<<<<< HEAD
-
     auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
-                                                          _cur_rowset, false);
-=======
-    Status res;
-    FAIL_POINT_TRIGGER_ASSIGN_STATUS_OR_DEFAULT(
-            load_commit_txn, res, COMMIT_TXN_FP_ACTION(_opt.txn_id, _opt.tablet_id),
-            _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
-                                                       _cur_rowset, false, _is_shadow));
->>>>>>> bb99b62b44 ([BugFix] Disable sync_publish for shadow tablet (#61887))
+                                                          _cur_rowset, false, _is_shadow);
     auto commit_txn_ts = watch.elapsed_time();
 
     if (!res.ok()) {
