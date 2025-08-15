@@ -21,12 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.OlapTable;
-<<<<<<< HEAD
-import com.starrocks.catalog.Partition;
-=======
 import com.starrocks.catalog.PhysicalPartition;
->>>>>>> e533a34694 ([BugFix] fix dict version of random distribution table (#61933))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AuditLog;
@@ -265,14 +260,8 @@ public class StatisticExecutor {
                     table.getName());
         }
 
-        OlapTable olapTable = (OlapTable) table;
-<<<<<<< HEAD
-        long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
-                .max(Long::compareTo).orElse(0L);
-=======
         long version = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
                 PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
->>>>>>> e533a34694 ([BugFix] fix dict version of random distribution table (#61933))
         String columnName = MetaUtils.getColumnNameByColumnId(dbId, tableId, columnId);
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
