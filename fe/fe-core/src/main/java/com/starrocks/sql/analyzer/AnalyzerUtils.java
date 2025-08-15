@@ -1254,7 +1254,7 @@ public class AnalyzerUtils {
                     PrimitiveType.CHAR == srcType.getPrimitiveType() ||
                     PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
                 int len = ScalarType.getOlapMaxVarcharLength();
-                if (srcType instanceof ScalarType) {
+                if (!Config.transform_type_prefer_string_for_varchar && srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
                     if (scalarType.getLength() > 0) {
                         // Catalog's varchar length may larger than olap's max varchar length
