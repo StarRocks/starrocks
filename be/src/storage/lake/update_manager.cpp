@@ -717,7 +717,10 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
                 auto dcg_col_iter_result = new_lake_dcg_column_iterator(*dcg_ctx, fs, iter_opts, col, tablet_schema);
                 if (dcg_col_iter_result.ok() && dcg_col_iter_result.value() != nullptr) {
                     col_iter = std::move(dcg_col_iter_result.value());
-                }
+                } else if (!dcg_col_iter_result.ok()) {
+                    return Status::InternalError(fmt::format("Failed to create DCG column iterator for column {}: {}", 
+                                                           col.name(), dcg_col_iter_result.status()))
+                };
             }
 
             // read from original segment if no dcg data available
