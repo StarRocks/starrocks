@@ -89,7 +89,7 @@ import java.util.stream.Collectors;
 public class TabletChecker extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletChecker.class);
     // 1 min
-    private static final long LOG_PRINT_INTERVAL = 60000;
+    private static final long LOG_PRINT_INTERVAL = 60000L;
 
     private final TabletScheduler tabletScheduler;
     private final TabletSchedulerStat stat;
@@ -450,6 +450,7 @@ public class TabletChecker extends FrontendDaemon {
                         localTablet.setLastStatusCheckTime(System.currentTimeMillis());
                         continue;
                     } else if (statusWithPrio.first == TabletHealthStatus.LOCATION_MISMATCH && balanceStat.isBalanced()) {
+                        Preconditions.checkState(isLabelLocationTable);
                         balanceStat = BalanceStat.createLabelLocationBalanceStat(
                                 tabletId, localTablet.getBackendIds(), locations.asMap());
                     }
@@ -491,7 +492,7 @@ public class TabletChecker extends FrontendDaemon {
                     if (!tryChooseSrcBeforeSchedule(tabletSchedCtx)) {
                         if (System.currentTimeMillis() - lastLogPrintTime > LOG_PRINT_INTERVAL) {
                             LOG.warn("tablet: {} is in unhealthy state: {}, but there are no healthy replicas, " +
-                                    "can not repair", tablet.getId(), statusWithPrio.first);
+                                    "can not repair", tabletId, statusWithPrio.first);
                             lastLogPrintTime = System.currentTimeMillis();
                         }
                         continue;
