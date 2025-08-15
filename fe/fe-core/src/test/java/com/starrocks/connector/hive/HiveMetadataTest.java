@@ -26,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
@@ -278,7 +279,7 @@ public class HiveMetadataTest {
         columns.put(dataColumnRefOperator, null);
         Statistics statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TableVersionRange.empty());
-        Assertions.assertEquals(1, statistics.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(Config.default_statistics_output_row_count, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
         Assertions.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
         Assertions.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());

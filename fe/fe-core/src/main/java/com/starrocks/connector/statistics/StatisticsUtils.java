@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -79,7 +80,7 @@ public class StatisticsUtils {
 
     public static Statistics buildDefaultStatistics(Set<ColumnRefOperator> columns) {
         Statistics.Builder statisticsBuilder = Statistics.builder();
-        statisticsBuilder.setOutputRowCount(1);
+        statisticsBuilder.setOutputRowCount(Config.default_statistics_output_row_count);
         statisticsBuilder.addColumnStatistics(
                 columns.stream().collect(Collectors.toMap(column -> column, column -> ColumnStatistic.unknown())));
         return statisticsBuilder.build();
