@@ -840,20 +840,20 @@ public class CTEPlanTest extends PlanTestBase {
     public void testEnableLambdaPushdownFalse() throws Exception {
         String sql =
                 "with input1 as (\n" +
-                "  select [1,2,3] as x\n" +
-                "),\n" +
-                "input2 AS (\n" +
-                "  SELECT\n" +
-                "    array_min( array_map(x -> coalesce(x, 0), x )) AS x\n" +
-                "  FROM\n" +
-                "    input1\n" +
-                "),\n" +
-                "input3 as (\n" +
-                "  select x+1 as a, x+2 as b, x+3 as c\n" +
-                "  from input2\n" +
-                ")\n" +
-                "SELECT * from input3\n" +
-                "where a + b + c <10";
+                        "  select [1,2,3] as x\n" +
+                        "),\n" +
+                        "input2 AS (\n" +
+                        "  SELECT\n" +
+                        "    array_min( array_map(x -> coalesce(x, 0), x )) AS x\n" +
+                        "  FROM\n" +
+                        "    input1\n" +
+                        "),\n" +
+                        "input3 as (\n" +
+                        "  select x+1 as a, x+2 as b, x+3 as c\n" +
+                        "  from input2\n" +
+                        ")\n" +
+                        "SELECT * from input3\n" +
+                        "where a + b + c <10";
 
         connectContext.getSessionVariable().setEnableLambdaPushdown(false);
         defaultCTEReuse();
