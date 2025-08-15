@@ -214,7 +214,7 @@ Status SchemaHelper::get_partitions_meta(const SchemaScannerState& state, const 
 }
 
 Status SchemaHelper::listRecycleBinCatalogs(const SchemaScannerState& state, const TListRecycleBinCatalogsParams& req,
-                                     TListRecycleBinCatalogsResult* res) {
+                                           TListRecycleBinCatalogsResult* res) {
     return _call_rpc(state,
                      [&req, &res](FrontendServiceConnection& client) { client->listRecycleBinCatalogs(*res, req); });
 }
