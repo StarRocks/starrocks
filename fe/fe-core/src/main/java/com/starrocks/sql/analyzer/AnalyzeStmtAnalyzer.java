@@ -87,6 +87,7 @@ public class AnalyzeStmtAnalyzer {
             StatsConstants.HISTOGRAM_BUCKET_NUM,
             StatsConstants.HISTOGRAM_MCV_SIZE,
             StatsConstants.HISTOGRAM_SAMPLE_RATIO,
+            StatsConstants.HISTOGRAM_COLLECT_NDV,
             StatsConstants.INIT_SAMPLE_STATS_JOB,
 
             //Deprecated , just not throw exception
@@ -380,6 +381,8 @@ public class AnalyzeStmtAnalyzer {
                         p -> String.valueOf(Config.histogram_mcv_size));
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_SAMPLE_RATIO,
                         p -> String.valueOf(Config.histogram_sample_ratio));
+                properties.computeIfAbsent(StatsConstants.HISTOGRAM_COLLECT_NDV,
+                        p -> String.valueOf(Config.histogram_collect_ndv));
 
                 double totalRows = 0;
                 if (analyzeTable.isNativeTableOrMaterializedView()) {
