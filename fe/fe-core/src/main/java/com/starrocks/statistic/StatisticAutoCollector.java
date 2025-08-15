@@ -64,6 +64,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
 
         // check statistic table state
         if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            LOG.warn("Statistic table state check failed, skip auto collection");
             return;
         }
 
