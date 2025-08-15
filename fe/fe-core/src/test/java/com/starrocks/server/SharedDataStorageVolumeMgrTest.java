@@ -204,6 +204,7 @@ public class SharedDataStorageVolumeMgrTest {
                 .getEndpoint());
         StorageVolume sv1 = svm.getStorageVolume(sv.getId());
         Assertions.assertEquals(sv1.getId(), sv.getId());
+        Assertions.assertEquals(sv1.getUniqueId(), sv.getUniqueId());
         try {
             svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
             Assertions.fail();
@@ -212,29 +213,32 @@ public class SharedDataStorageVolumeMgrTest {
         }
 
         // update
+        StorageVolume svBeforeUpdate = svm.getStorageVolumeByName(svName);
         storageParams.put(AWS_S3_REGION, "region1");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint1");
         storageParams.put(AWS_S3_ACCESS_KEY, "ak");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         try {
-            svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(false), "test update");
+            svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(false), "test update", -1);
             Assertions.fail();
         } catch (IllegalStateException e) {
             Assertions.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
         storageParams.put("aaa", "bbb");
         Assertions.assertThrows(DdlException.class, () ->
-                svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update"));
+                svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update", -1));
         storageParams.remove("aaa");
-        svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update");
-        sv = svm.getStorageVolumeByName(svName);
-        cloudConfiguration = sv.getCloudConfiguration();
+        svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update", -1);
+        StorageVolume svUpdated = svm.getStorageVolumeByName(svName);
+        cloudConfiguration = svUpdated.getCloudConfiguration();
         Assertions.assertEquals("region1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getRegion());
         Assertions.assertEquals("endpoint1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getEndpoint());
-        Assertions.assertEquals("test update", sv.getComment());
-        Assertions.assertEquals(true, sv.getEnabled());
+        Assertions.assertEquals("test update", svUpdated.getComment());
+        Assertions.assertEquals(true, svUpdated.getEnabled());
+        Assertions.assertEquals(svBeforeUpdate.getId(), svUpdated.getId());
+        Assertions.assertEquals(svBeforeUpdate.getUniqueId(), svUpdated.getUniqueId());
 
         // set default storage volume
         try {
@@ -244,10 +248,10 @@ public class SharedDataStorageVolumeMgrTest {
             Assertions.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
         svm.setDefaultStorageVolume(svName);
-        Assertions.assertEquals(sv.getId(), svm.getDefaultStorageVolumeId());
+        Assertions.assertEquals(svUpdated.getId(), svm.getDefaultStorageVolumeId());
 
         Throwable ex = Assertions.assertThrows(IllegalStateException.class,
-                () -> svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(false), ""));
+                () -> svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(false), "", -1));
         Assertions.assertEquals("Default volume can not be disabled", ex.getMessage());
 
         // remove
@@ -262,7 +266,7 @@ public class SharedDataStorageVolumeMgrTest {
         Assertions.assertEquals("Storage volume 'test1' does not exist", ex.getMessage());
 
         svm.createStorageVolume(svName1, "S3", locations, storageParams, Optional.of(false), "");
-        svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(true), "test update");
+        svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(true), "test update", -1);
         svm.setDefaultStorageVolume(svName1);
 
         sv = svm.getStorageVolumeByName(svName);
@@ -286,14 +290,14 @@ public class SharedDataStorageVolumeMgrTest {
             Map<String, String> modifyParams = new HashMap<>();
             modifyParams.put(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX, "true");
             Assertions.assertThrows(DdlException.class, () ->
-                    svm.updateStorageVolume(svName, null, null, modifyParams, Optional.of(false), ""));
+                    svm.updateStorageVolume(svName, null, null, modifyParams, Optional.of(false), "", -1));
         }
 
         {
             Map<String, String> modifyParams = new HashMap<>();
             modifyParams.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX, "12");
             Assertions.assertThrows(DdlException.class, () ->
-                    svm.updateStorageVolume(svName, null, null, modifyParams, Optional.of(false), ""));
+                    svm.updateStorageVolume(svName, null, null, modifyParams, Optional.of(false), "", -1));
         }
     }
 
@@ -314,7 +318,7 @@ public class SharedDataStorageVolumeMgrTest {
         Assertions.assertTrue(svm.bindDbToStorageVolume(svName, 1L));
         Assertions.assertTrue(svm.bindTableToStorageVolume(svName, 1L, 1L));
 
-        svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(false), "test update");
+        svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(false), "test update", -1);
         // disabled storage volume can not be bound.
         Throwable ex = Assertions.assertThrows(DdlException.class, () -> svm.bindDbToStorageVolume(svName, 1L));
         Assertions.assertEquals(String.format("Storage volume %s is disabled", svName), ex.getMessage());
@@ -924,7 +928,7 @@ public class SharedDataStorageVolumeMgrTest {
 
         storageParams.put("dfs.client.failover.proxy.provider",
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
-        svm.updateStorageVolume("test", null, null, storageParams, Optional.of(false), "");
+        svm.updateStorageVolume("test", null, null, storageParams, Optional.of(false), "", -1);
         Assertions.assertEquals(false, svm.getStorageVolumeByName(svName).getEnabled());
     }
 
