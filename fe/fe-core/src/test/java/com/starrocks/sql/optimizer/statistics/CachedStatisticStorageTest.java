@@ -393,12 +393,7 @@ public class CachedStatisticStorageTest {
 
         partitionStatsMap =
                 cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
-<<<<<<< HEAD
         Assert.assertEquals(0, partitionStatsMap.size());
-
-=======
-        Assertions.assertEquals(0, partitionStatsMap.size());
->>>>>>> 60fc0bd892 ([BugFix] Fix NullPoinitException when doesn't found column partition statis (#61935))
     }
 
     @Test
