@@ -184,6 +184,72 @@ public:
 
     uint64_t size() const override { return _estimated_size; }
 
+    bool should_write_for_strings(double overlap_threshold, int32_t min_pages) const override {
+        // only meaningful for string types
+        if constexpr (type != TYPE_CHAR && type != TYPE_VARCHAR) {
+            return true;
+        }
+        // require enough pages to judge quality
+        if (_values.size() < static_cast<size_t>(std::max(0, min_pages))) {
+            return true;
+        }
+        // Compute overlap ratio across consecutive page zone maps: sum(overlap)/sum(width)
+        // Parse cached serialized page zone maps (_values)
+        double total_width = 0.0;
+        double total_overlap = 0.0;
+        ZoneMapPB prev;
+        bool has_prev = false;
+        for (const std::string& s : _values) {
+            ZoneMapPB curr;
+            if (!curr.ParseFromString(s)) {
+                // if parse fails, fallback to writing
+                return true;
+            }
+            if (!curr.has_has_not_null() || !curr.has_not_null()) {
+                // all nulls page, ignore in quality metric
+                has_prev = false;
+                continue;
+            }
+            if (!has_prev) {
+                prev = curr;
+                has_prev = true;
+                continue;
+            }
+            // width = max - min, overlap = min(prev.max, curr.max) - max(prev.min, curr.min)
+            // for strings, compare lexicographically
+            const std::string& prev_min = prev.min();
+            const std::string& prev_max = prev.max();
+            const std::string& curr_min = curr.min();
+            const std::string& curr_max = curr.max();
+            // skip if any string empty due to legacy all-null handling
+            if (prev_min.empty() && prev_max.empty()) {
+                prev = curr;
+                continue;
+            }
+            if (curr_min.empty() && curr_max.empty()) {
+                prev = curr;
+                continue;
+            }
+            // width of current page
+            // Use 1 when min==max to avoid zero-width causing divide-by-zero or bias.
+            double width = (curr_min < curr_max) ? 1.0 : 1.0; // width normalization for strings
+            // For strings, we can’t measure actual numeric width; treat each page as width 1
+            total_width += width;
+            // overlap: consider if ranges intersect
+            bool intersects = !(curr_min > prev_max || prev_min > curr_max);
+            if (intersects) {
+                // If intersect, count full overlap of 1 (same normalization)
+                total_overlap += 1.0;
+            }
+            prev = curr;
+        }
+        if (total_width <= 0.0) {
+            return true;
+        }
+        double overlap_ratio = total_overlap / total_width;
+        return overlap_ratio <= overlap_threshold;
+    }
+
 private:
     void _truncate_string_minmax_if_needed(ZoneMap<type>* zm);
 

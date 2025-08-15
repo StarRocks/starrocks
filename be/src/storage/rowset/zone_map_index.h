@@ -74,6 +74,10 @@ public:
     virtual Status finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) = 0;
 
     virtual uint64_t size() const = 0;
+
+    // Decide whether to write index for string types based on overlap quality.
+    // Default: always write.
+    virtual bool should_write_for_strings(double overlap_threshold, int32_t min_pages) const { return true; }
 };
 
 class ZoneMapIndexReader {

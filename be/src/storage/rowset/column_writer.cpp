@@ -553,6 +553,12 @@ Status ScalarColumnWriter::write_ordinal_index() {
 
 Status ScalarColumnWriter::write_zone_map() {
     if (_zone_map_index_builder != nullptr) {
+        // Adaptive zonemap creation for strings based on overlap quality
+        double threshold = config::string_zonemap_overlap_threshold;
+        int32_t min_pages = config::string_zonemap_min_pages_for_adaptive_check;
+        if (!_zone_map_index_builder->should_write_for_strings(threshold, min_pages)) {
+            return Status::OK();
+        }
         return _zone_map_index_builder->finish(_wfile, _opts.meta->add_indexes());
     }
     return Status::OK();

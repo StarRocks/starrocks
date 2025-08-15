@@ -1736,4 +1736,11 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
+
+// Adaptive creation of string zonemap index based on page overlap quality.
+// If the estimated overlap ratio across consecutive pages is greater than this threshold,
+// skip writing the page-level string zonemap index. Range: [0.0, 1.0].
+CONF_mDouble(string_zonemap_overlap_threshold, "0.95");
+// Minimum number of non-empty pages before applying the adaptive check.
+CONF_mInt32(string_zonemap_min_pages_for_adaptive_check, "8");
 } // namespace starrocks::config
