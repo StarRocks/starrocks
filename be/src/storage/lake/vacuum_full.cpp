@@ -43,7 +43,7 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
     }
 
     auto meta_ver_checker = [&](const auto& version) {
-        return version >= min_check_version && version <= max_check_version && !retain_versions.contains(version);
+        return version >= min_check_version && version < max_check_version && !retain_versions.contains(version);
     };
 
     auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
@@ -184,7 +184,7 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
     auto& bundle_meta_files = meta_files_and_bundle_files.second;
 
     // 1. Delete all metadata files associated with the given partition which have tabletmeta.commit_time < grace_timestamp
-    // and the checked version of tablet meta should not be found in retain_versions and should in [min_check_version, max_check_version]
+    // and the checked version of tablet meta should not be found in retain_versions and should in [min_check_version, max_check_version)
     RETURN_IF_ERROR(vacuum_expired_tablet_metadata(tablet_mgr, root_loc, grace_timestamp, &vacuumed_files, &meta_files,
                                                    &bundle_meta_files, retain_versions, min_check_version,
                                                    max_check_version));

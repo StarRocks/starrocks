@@ -167,7 +167,7 @@ TEST_P(LakeVacuumTest, test_vacuum_full) {
     request.set_grace_timestamp(100);
     request.add_retain_versions(3);
     request.set_min_check_version(0);
-    request.set_max_check_version(4);
+    request.set_max_check_version(5);
 
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
@@ -270,7 +270,7 @@ TEST_P(LakeVacuumTest, test_vacuum_full_with_bundle) {
     request.set_min_active_txn_id(10);
     request.set_grace_timestamp(100);
     request.set_min_check_version(0);
-    request.set_max_check_version(6);
+    request.set_max_check_version(7);
 
     auto tablet_66601_v8 = json_to_pb<TabletMetadataPB>(R"DEL(
         {

@@ -102,8 +102,8 @@ public:
     static StatusOr<BundleTabletMetadataPtr> parse_bundle_tablet_metadata(const std::string& path,
                                                                           const std::string& serialized_string);
 
-    static StatusOr<ImmutableTabletMetadataPtrs> get_metas_from_bundle_tablet_metadata(const std::string& location,
-                                                                                       FileSystem* input_fs = nullptr);
+    static StatusOr<TabletMetadataPtrs> get_metas_from_bundle_tablet_metadata(const std::string& location,
+                                                                              FileSystem* input_fs = nullptr);
 
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
