@@ -464,4 +464,62 @@ TEST_F(ColumnZoneMapTest, VarbinaryWithBinaryData) {
                  true, true);
 }
 
+TEST_F(ColumnZoneMapTest, StringPrefixZonemapVariants) {
+    // Enable string prefix zonemap for this test context
+    bool old_switch = config::enable_string_prefix_zonemap;
+    int old_len = config::string_prefix_zonemap_prefix_len;
+    config::enable_string_prefix_zonemap = true;
+    config::string_prefix_zonemap_prefix_len = 16;
+
+    // Build a segment with various string lengths and patterns
+    std::string filename = kTestDir + "/StringPrefixZonemapVariants";
+
+    TabletColumn varchar_column = create_varchar_key(0);
+    TypeInfoPtr type_info = get_type_info(varchar_column);
+
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    // Short strings
+    std::vector<Slice> shorts = {{"a", 1}, {"b", 1}, {"c", 1}};
+    writer->add_values(shorts.data(), shorts.size());
+    writer->flush();
+
+    // Common prefix strings
+    std::vector<std::string> cp = {"prefix_0001", "prefix_0002", "prefix_9999"};
+    std::vector<Slice> cp_slices;
+    for (auto& s : cp) cp_slices.push_back({s.data(), s.size()});
+    writer->add_values(cp_slices.data(), cp_slices.size());
+    writer->flush();
+
+    // Random long strings (> 64 to ensure truncation even if config changes)
+    std::string long1(80, 'X');
+    std::string long2(120, 'Y');
+    std::vector<Slice> longs = {{long1.data(), long1.size()}, {long2.data(), long2.size()}};
+    writer->add_values(longs.data(), longs.size());
+    writer->flush();
+
+    // Write index out
+    ColumnIndexMetaPB index_meta;
+    write_file(*writer, index_meta, filename);
+
+    // Read back
+    ZoneMapIndexReader reader;
+    load_zone_map(reader, index_meta, filename);
+
+    ASSERT_EQ(3, reader.num_pages());
+    const auto& zone_maps = reader.page_zone_maps();
+    size_t pfx = (size_t)config::string_prefix_zonemap_prefix_len;
+
+    // Page 0: shorts
+    check_result_prefix(zone_maps[0], true, true, "a", "c", false, true, pfx);
+    // Page 1: common prefix
+    check_result_prefix(zone_maps[1], true, true, cp.front(), cp.back(), false, true, pfx);
+    // Page 2: long strings
+    check_result_prefix(zone_maps[2], true, true, long1, long2, false, true, pfx);
+
+    // Restore config
+    config::enable_string_prefix_zonemap = old_switch;
+    config::string_prefix_zonemap_prefix_len = old_len;
+}
+
 } // namespace starrocks
