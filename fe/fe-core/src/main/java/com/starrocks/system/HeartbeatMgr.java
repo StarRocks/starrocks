@@ -47,6 +47,7 @@ import com.starrocks.common.util.MachineInfo;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.encryption.KeyMgr;
+import com.starrocks.http.WebUtils;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.BootstrapFinishAction.BootstrapResult;
 import com.starrocks.monitor.jvm.JvmStats;
@@ -367,9 +368,8 @@ public class HeartbeatMgr extends FrontendDaemon {
                 }
             }
 
-            String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(fe.getHost(), Config.http_port);
-            String url = "http://" + accessibleHostPort
-                    + "/api/bootstrap?cluster_id=" + clusterId + "&token=" + token;
+            String url = WebUtils.buildEndpoint(fe.getHost(), "/api/bootstrap",
+                    "cluster_id=" + clusterId, "token=" + token);
             try {
                 String resultStr = Util.getResultForUrl(url, null,
                         Config.heartbeat_timeout_second * 1000, Config.heartbeat_timeout_second * 1000);

@@ -60,8 +60,8 @@ public class FrontendsProcNode implements ProcNodeInterface {
     private static final Logger LOG = LogManager.getLogger(FrontendsProcNode.class);
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("Id").add("Name").add("IP").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
-            .add("Role").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
+            .add("Id").add("Name").add("IP").add("EditLogPort").add("HttpPort").add("HttpsPort").add("QueryPort")
+            .add("RpcPort").add("Role").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
             .add("LastHeartbeat").add("IsHelper").add("ErrMsg").add("StartTime").add("Version")
             .build();
 
@@ -109,6 +109,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
 
             info.add(Integer.toString(fe.getEditLogPort()));
             info.add(Integer.toString(Config.http_port));
+            info.add(Integer.toString(Config.https_port));
 
             if (fe.getHost().equals(globalStateMgr.getNodeMgr().getSelfNode().first)) {
                 info.add(Integer.toString(Config.query_port));

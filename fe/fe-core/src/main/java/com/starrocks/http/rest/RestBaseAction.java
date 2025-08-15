@@ -39,6 +39,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
@@ -56,6 +57,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.ssl.SslHandler;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -197,6 +199,20 @@ public class RestBaseAction extends BaseAction {
         sendResult(request, response);
     }
 
+    /**
+     * Get the protocol from the request, defaulting to "http"
+     * @param request the base request
+     * @return the protocol string ("http" or "https")
+     */
+    protected String getProtocolFromRequest(BaseRequest request) {
+        if (request.getContext() != null
+                && request.getContext().pipeline() != null
+                && request.getContext().pipeline().get(SslHandler.class) != null) {
+            return "https";
+        }
+        return "http";
+    }
+
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr)
             throws DdlException {
         String urlStr = request.getRequest().uri();
@@ -204,7 +220,9 @@ public class RestBaseAction extends BaseAction {
         URI resultUriObj;
         try {
             urlObj = new URI(urlStr);
-            resultUriObj = new URI("http", null, addr.getHostname(),
+            // Detect the original protocol from the request with proper defaults
+            String originalProtocol = getProtocolFromRequest(request);
+            resultUriObj = new URI(originalProtocol, null, addr.getHostname(),
                     addr.getPort(), urlObj.getPath(), urlObj.getQuery(), null);
         } catch (URISyntaxException e) {
             LOG.warn(e.getMessage(), e);
@@ -219,7 +237,15 @@ public class RestBaseAction extends BaseAction {
         if (globalStateMgr.isLeader()) {
             return false;
         }
-        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getNodeMgr().getLeaderIpAndHttpPort();
+
+        // Detect the original protocol from the request
+        String originalProtocol = getProtocolFromRequest(request);
+
+        // Choose the appropriate port and protocol based on the original request
+        Pair<String, Integer> leaderIpAndPort = ("https".equals(originalProtocol) && Config.enable_https)
+                ? globalStateMgr.getNodeMgr().getLeaderIpAndHttpsPort()
+                : globalStateMgr.getNodeMgr().getLeaderIpAndHttpPort();
+
         redirectTo(request, response,
                 new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
         return true;

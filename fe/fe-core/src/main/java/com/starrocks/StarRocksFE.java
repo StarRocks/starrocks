@@ -41,12 +41,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
-import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.failpoint.FailPoint;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.http.HttpServer;
+import com.starrocks.http.WebUtils;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.journal.Journal;
@@ -313,11 +313,9 @@ public class StarRocksFE {
     }
 
     private static boolean isNewLeaderReady(String leaderHost) {
-        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(leaderHost, Config.http_port);
-        String url = "http://" + accessibleHostPort
-                + "/api/bootstrap"
-                + "?cluster_id=" + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId()
-                + "&token=" +  GlobalStateMgr.getCurrentState().getNodeMgr().getToken();
+        String url = WebUtils.buildEndpoint(leaderHost, "/api/bootstrap",
+                "cluster_id=" + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(),
+                "token=" + GlobalStateMgr.getCurrentState().getNodeMgr().getToken());
         try {
             String resultStr = Util.getResultForUrl(url, null,
                     Config.heartbeat_timeout_second * 1000,
