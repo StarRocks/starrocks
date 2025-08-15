@@ -603,7 +603,7 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_lake_dcg_column_iterator(
         // Other errors should be propagated
         return dcg_segment_result.status();
     }
-    
+
     auto dcg_segment = dcg_segment_result.value();
     if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(dcg_segment->file_info()));
@@ -726,8 +726,8 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
                     col_iter = std::move(dcg_col_iter_result.value());
                 } else if (!dcg_col_iter_result.status().is_not_found()) {
                     // NotFound is expected when column doesn't exist in DCG, other errors are real issues
-                    return Status::InternalError(fmt::format("Failed to create DCG column iterator for column {}: {}", 
-                                                           col.name(), dcg_col_iter_result.status().to_string()));
+                    return Status::InternalError(fmt::format("Failed to create DCG column iterator for column {}: {}",
+                                                             col.name(), dcg_col_iter_result.status().to_string()));
                 }
                 // If status is NotFound, col_iter remains nullptr and we'll read from original segment
             }
