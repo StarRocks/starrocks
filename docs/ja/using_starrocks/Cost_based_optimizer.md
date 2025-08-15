@@ -215,6 +215,8 @@ v3.5.0 以降、StarRocks は自動収集中に、テーブルのデータが前
 | statistic_auto_collect_predicate_columns_threshold | INT     | 32       | 自動収集中にテーブルの列数がこの設定を超えた場合、Predicate Columnの列統計のみが収集されます。 |
 | statistic_predicate_columns_persist_interval_sec   | LONG    | 60       | FE が Predicate Column の統計情報を同期し、永続化する間隔。 |
 | statistic_predicate_columns_ttl_hours       | LONG    | 24       | FE にキャッシュされた Predicate Column 統計の消去時間。 |
+| enable_manual_collect_array_ndv             | BOOLEAN | FALSE        | ARRAY タイプの NDV 情報の手動収集を有効にするかどうか。 |
+| enable_auto_collect_array_ndv               | BOOLEAN | FALSE        | ARRAY タイプの NDV 情報の自動収集を有効にするかどうか。 |
 
 統計収集の大部分は自動ジョブに依存できますが、特定の要件がある場合は、ANALYZE TABLE ステートメントを実行して手動でタスクを作成するか、CREATE ANALYZE ステートメントを実行して自動タスクをカスタマイズできます。
 
