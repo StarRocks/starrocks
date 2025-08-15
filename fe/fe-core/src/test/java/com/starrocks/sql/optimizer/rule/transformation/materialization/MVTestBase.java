@@ -42,6 +42,7 @@ import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunProcessor;
@@ -647,5 +648,31 @@ public abstract class MVTestBase extends StarRocksTestBase {
         starRocksAssert.withMaterializedView(ddl);
         MaterializedView mv = getMv("test_mv1");
         runner.run(mv);
+    }
+
+    /**
+     * Get the explain plan for the MV refresh task.
+     */
+    protected String explainMVRefreshExecPlan(MaterializedView mv, String explainQuery) {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
+        StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
+        Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
+        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        return taskManager.getMVRefreshExplain(task, executeOption, stmt);
+    }
+
+    /**
+     * Get the execution plan for the MV refresh task.
+     */
+    protected ExecPlan getMVRefreshExecPlan(MaterializedView mv, String explainQuery) {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
+        StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
+        Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
+        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        return taskManager.getMVRefreshExecPlan(task, executeOption, stmt);
     }
 }

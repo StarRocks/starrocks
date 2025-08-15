@@ -223,6 +223,7 @@ import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
@@ -3305,13 +3306,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                           EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc,
                                           int priority, boolean mergeRedundant, boolean isManual)
             throws DdlException, MetaNotFoundException {
-        return refreshMaterializedView(dbName, mvName, force, partitionDesc, priority, mergeRedundant, isManual, false);
+        return refreshMaterializedView(dbName, mvName, force, partitionDesc, priority, mergeRedundant, isManual, false,
+                null);
     }
 
     public String refreshMaterializedView(String dbName, String mvName, boolean force,
                                           EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc,
-                                          int priority, boolean mergeRedundant, boolean isManual, boolean isSync)
-            throws DdlException, MetaNotFoundException {
+                                          int priority, boolean mergeRedundant, boolean isManual, boolean isSync,
+                                          StatementBase statement) throws DdlException, MetaNotFoundException {
         MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
         String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
@@ -3335,7 +3337,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         ExecuteOption executeOption = new ExecuteOption(priority, mergeRedundant, taskRunProperties);
         executeOption.setManual(isManual);
         executeOption.setSync(isSync);
-        return executeRefreshMvTask(dbName, materializedView, executeOption);
+        if (statement != null && statement.isExplain()) {
+            return taskManager.getMVRefreshExplain(task, executeOption, statement);
+        } else {
+            return executeRefreshMvTask(dbName, materializedView, executeOption);
+        }
     }
 
     @Override
@@ -3348,7 +3354,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         int priority = refreshMaterializedViewStatement.getPriority() != null ?
                 refreshMaterializedViewStatement.getPriority() : Constants.TaskRunPriority.HIGH.value();
         return refreshMaterializedView(dbName, mvName, force, partitionDesc, priority,
-                Config.enable_mv_refresh_sync_refresh_mergeable, true, refreshMaterializedViewStatement.isSync());
+                Config.enable_mv_refresh_sync_refresh_mergeable, true, refreshMaterializedViewStatement.isSync(),
+                refreshMaterializedViewStatement);
     }
 
     @Override
