@@ -19,9 +19,9 @@ import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.UserPrivilegeCollectionV2;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.IOException;
 
