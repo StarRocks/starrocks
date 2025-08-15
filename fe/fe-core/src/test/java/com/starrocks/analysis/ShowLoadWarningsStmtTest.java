@@ -87,10 +87,4 @@ public class ShowLoadWarningsStmtTest {
         analyzeFail("SHOW LOAD WARNINGS ON 'xxx'", "Invalid url: no protocol: xxx");
         analyzeFail("SHOW LOAD WARNINGS ON ''", "Error load url is missing");
     }
-
-    @Test
-    public void testGetRedirectStatus() {
-        ShowLoadWarningsStmt stmt = new ShowLoadWarningsStmt(null, null, null, null);
-        Assertions.assertEquals(stmt.getRedirectStatus(), RedirectStatus.NO_FORWARD);
-    }
 }

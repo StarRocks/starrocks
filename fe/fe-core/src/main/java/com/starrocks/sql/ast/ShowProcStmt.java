@@ -16,9 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.parser.NodePosition;
 
 // SHOW PROC statement. Used to show proc information, only admin can use.
@@ -59,22 +57,6 @@ public class ShowProcStmt extends ShowStmt {
 
     public String getPath() {
         return path;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
-            return RedirectStatus.FORWARD_NO_SYNC;
-        } else {
-            if (path.equals("/") || !path.contains("/")) {
-                return RedirectStatus.NO_FORWARD;
-            }
-            String[] pathGroup = path.split("/");
-            if (NEED_FORWARD_PATH_ROOT.contains(pathGroup[1])) {
-                return RedirectStatus.FORWARD_NO_SYNC;
-            }
-            return RedirectStatus.NO_FORWARD;
-        }
     }
 
     @Override

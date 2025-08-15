@@ -35,7 +35,6 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;

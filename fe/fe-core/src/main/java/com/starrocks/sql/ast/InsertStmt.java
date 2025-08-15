@@ -18,7 +18,6 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BlackHoleTable;
 import com.starrocks.catalog.Column;
@@ -319,15 +318,6 @@ public class InsertStmt extends DmlStmt {
 
     public void setPartitionNotSpecifiedInOverwrite(boolean partitionNotSpecifiedInOverwrite) {
         this.partitionNotSpecifiedInOverwrite = partitionNotSpecifiedInOverwrite;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        if (isExplain() && !StatementBase.ExplainLevel.ANALYZE.equals(getExplainLevel())) {
-            return RedirectStatus.NO_FORWARD;
-        } else {
-            return RedirectStatus.FORWARD_WITH_SYNC;
-        }
     }
 
     public boolean isForCTAS() {
