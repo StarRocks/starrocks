@@ -28,6 +28,7 @@ enum ArraySelectorType {
     SINGLE,
     WILDCARD,
     SLICE,
+    FILTER,
 };
 
 namespace vpack = arangodb::velocypack;
@@ -109,6 +110,20 @@ struct ArraySelectorSlice final : public ArraySelector {
     };
 
     std::string to_string() const override { return "[" + std::to_string(left) + ":" + std::to_string(right) + "]"; }
+};
+
+// Filter selector: arr[?(@.field op literal)]
+// Supports operators: =, !=, >, <, >=, <= and logical connectors && and ||.
+struct ArraySelectorFilter final : public ArraySelector {
+    std::string expr;
+
+    explicit ArraySelectorFilter(std::string e) : expr(std::move(e)) { type = FILTER; }
+
+    static bool match(const std::string& input);
+
+    void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;
+
+    std::string to_string() const override { return "[" + expr + "]"; }
 };
 
 // JsonPath implement that support array building
