@@ -62,6 +62,7 @@ private:
         add_mapping<TYPE_DECIMALV2>();
         add_mapping<TYPE_CHAR>();
         add_mapping<TYPE_VARCHAR>();
+        add_mapping<TYPE_VARBINARY>();
         add_mapping<TYPE_BOOLEAN>();
     }
 

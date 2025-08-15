@@ -409,4 +409,8 @@ public:
     }
 };
 
+// Reuse VARCHAR's key coder behavior for VARBINARY
+template <>
+class KeyCoderTraits<TYPE_VARBINARY> : public KeyCoderTraits<TYPE_VARCHAR> {};
+
 } // namespace starrocks

@@ -435,8 +435,8 @@ public class CreateTableAnalyzer {
                     }
                     ColumnDef cd = columnDefs.get(idx);
                     Type t = cd.getType();
-                    if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
-                            t.isDatetime())) {
+                    if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isBinaryType() ||
+                            t.isDate() || t.isDatetime())) {
                         throw new SemanticException("sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
                     }
                 }

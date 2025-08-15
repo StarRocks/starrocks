@@ -119,6 +119,25 @@ struct ZoneMapDatum<TYPE_CHAR> : public ZoneMapDatumBase<TYPE_CHAR> {
 template <>
 struct ZoneMapDatum<TYPE_VARCHAR> final : public ZoneMapDatum<TYPE_CHAR> {};
 
+template <>
+struct ZoneMapDatum<TYPE_VARBINARY> final : public ZoneMapDatum<TYPE_CHAR> {
+    void resize_container_for_fit(TypeInfo* type_info, const void* v) override {
+        static const int INIT_SIZE = 64;
+        const Slice* slice = reinterpret_cast<const Slice*>(v);
+        if (slice->size > _length) {
+            _length = std::max<int>(BitUtil::next_power_of_two(slice->size), INIT_SIZE);
+            raw::stl_string_resize_uninitialized(&_value_container, _length);
+            value.data = _value_container.data();
+            value.size = 0;
+        }
+    }
+
+    void reset(TypeInfo* type_info) override {
+        value.data = _value_container.data();
+        value.size = 0;
+    }
+};
+
 template <LogicalType type>
 struct ZoneMap {
     ZoneMapDatum<type> min_value;
