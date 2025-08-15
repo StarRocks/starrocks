@@ -1169,6 +1169,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The interval at which the Automated Cluster Snapshot tasks are triggered.
 - Introduced in: v3.4.2
 
+##### enable_table_name_case_insensitive
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable case-insensitive processing on catalog names, database names, table names, view names, and materialized view names. Currently, table names are case-sensitive by default.
+  - After enabling this feature, all related names will be stored in lowercase, and all SQL commands containing these names will automatically convert them to lowercase.
+  - You can enable this feature only when creating a cluster. **After the cluster is started, the value of this configuration cannot be modified by any means**. Any attempt to modify it will result in an error. FE will fail to start when it detects that the value of this configuration item is inconsistent with that when the cluster was first started.
+  - Currently, this feature does not support JDBC catalog and table names. Do not enable this feature if you want to perform case-insensitive processing on JDBC or ODBC data sources.
+- Introduced in: v4.0
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
