@@ -25,6 +25,7 @@ public class CachingHiveMetastoreConf {
     private long cacheMaxNum = 1000000;
     private final int perQueryCacheMaxNum = 10000;
     private final int cacheRefreshThreadMaxNum = 20;
+    private double cacheMemorySizeRatio = 0.1; // 10% of the total memory
 
     private final boolean enableListNamesCache;
 
@@ -36,7 +37,9 @@ public class CachingHiveMetastoreConf {
         String enableListNamesCacheDefaultValue = catalogType.equalsIgnoreCase("hive") ? "true" : "false";
         this.enableListNamesCache = Boolean.parseBoolean(conf.getOrDefault("enable_cache_list_names",
                 enableListNamesCacheDefaultValue));
-        this.cacheMaxNum = Long.parseLong(conf.getOrDefault("metastore_cache_max_num", String.valueOf(cacheMaxNum)));
+        this.cacheMaxNum = Long.parseLong(conf.getOrDefault("metastore_cache_max_num", String.valueOf(cacheMaxNum))); //deprecated
+        this.cacheMemorySizeRatio = Double.parseDouble(
+                    conf.getOrDefault("metastore_cache_memory_ratio", String.valueOf(cacheMemorySizeRatio)));
     }
 
     public long getCacheTtlSec() {
@@ -49,6 +52,10 @@ public class CachingHiveMetastoreConf {
 
     public long getCacheMaxNum() {
         return cacheMaxNum;
+    }
+
+    public double getCacheMemorySizeRatio() {
+        return cacheMemorySizeRatio;
     }
 
     public int getCacheRefreshThreadMaxNum() {

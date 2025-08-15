@@ -47,6 +47,7 @@ import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
+import org.apache.spark.util.SizeEstimator;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -100,15 +101,31 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                     .setNativeTable(nativeTable).build();
                     return delegate.getPartitions(icebergTable, key.snapshotId, null);
                 }));
-        this.dataFileCache = enableCache ?
-                newCacheBuilder(
-                        icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
-                : null;
-        this.deleteFileCache = enableCache ?
-                newCacheBuilder(
-                        icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
-                : null;
+        // this.dataFileCache = enableCache ?
+        //         newCacheBuilder(
+        //                 icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
+        //         : null;
+        // this.deleteFileCache = enableCache ?
+        //         newCacheBuilder(
+        //                 icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
+        //         : null;
         this.backgroundExecutor = executorService;
+
+        long dataFileCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                icebergProperties.getIcebergDataFileCacheMemoryUsageRatio());
+        long deleteFileCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                icebergProperties.getIcebergDeleteFileCacheMemoryUsageRatio());
+
+        this.dataFileCache = enableCache ? CacheBuilder.newBuilder()
+                .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
+                .weigher((key, value) -> Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+                .maximumWeight(dataFileCacheSize)
+                .build() : null;
+        this.deleteFileCache = enableCache ? CacheBuilder.newBuilder()
+                .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
+                .weigher((key, value) -> Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+                .maximumWeight(deleteFileCacheSize)
+                .build() : null;
     }
 
     @Override
@@ -151,6 +168,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
         if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
             tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
+        }
+
+        DataFile firstDataFile = null;
+        for (Map.Entry<String, Set<DataFile>> entry : dataFileCache.asMap().entrySet()) {
+            Set<DataFile> fileSet = entry.getValue();
+            if (fileSet != null && !fileSet.isEmpty()) {
+                firstDataFile = fileSet.iterator().next();  // 返回第一个 DataFile
+                break;
+            }
+        }
+        if (firstDataFile != null) {
+            System.out.println("data file size: " + SizeEstimator.estimate(firstDataFile));
         }
 
         if (tables.getIfPresent(icebergTableName) != null) {
