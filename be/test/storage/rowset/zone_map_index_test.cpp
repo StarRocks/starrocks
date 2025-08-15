@@ -43,6 +43,7 @@
 #include "fs/fs_memory.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
+#include "common/config.h"
 
 namespace starrocks {
 
@@ -100,11 +101,12 @@ protected:
         ASSERT_EQ(3, column_zone_map.num_pages());
         const std::vector<ZoneMapPB>& zone_maps = column_zone_map.page_zone_maps();
         ASSERT_EQ(3, zone_maps.size());
-        check_result_prefix(zone_maps[0], true, true, "aaaa", "ffff", false, true);
+        size_t pfx = config::enable_string_prefix_zonemap ? (size_t)config::string_prefix_zonemap_prefix_len : 64;
+        check_result_prefix(zone_maps[0], true, true, "aaaa", "ffff", false, true, pfx);
         ASSERT_EQ(false, zone_maps[0].has_null());
         ASSERT_EQ(true, zone_maps[0].has_not_null());
 
-        check_result_prefix(zone_maps[1], true, true, "aaaaa", "fffff", true, true);
+        check_result_prefix(zone_maps[1], true, true, "aaaaa", "fffff", true, true, pfx);
         ASSERT_EQ(true, zone_maps[1].has_null());
         ASSERT_EQ(true, zone_maps[1].has_not_null());
 
@@ -290,12 +292,13 @@ TEST_F(ColumnZoneMapTest, StringResize) {
     const auto& zone_maps = reader.page_zone_maps();
     ASSERT_EQ(2, zone_maps.size());
 
-    check_result_prefix(zone_maps[0], true, true, str1, str2, false, true);
-    check_result_prefix(zone_maps[1], true, true, str3, str4, false, true);
+    size_t pfx = config::enable_string_prefix_zonemap ? (size_t)config::string_prefix_zonemap_prefix_len : 64;
+    check_result_prefix(zone_maps[0], true, true, str1, str2, false, true, pfx);
+    check_result_prefix(zone_maps[1], true, true, str3, str4, false, true, pfx);
 
     // segment zonemap
     const auto& segment_zonemap = index_meta.zone_map_index().segment_zone_map();
-    check_result_prefix(segment_zonemap, true, true, str1, str4, false, true);
+    check_result_prefix(segment_zonemap, true, true, str1, str4, false, true, pfx);
 }
 
 TEST_F(ColumnZoneMapTest, AllNullPage) {
