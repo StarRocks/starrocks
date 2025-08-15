@@ -1009,12 +1009,7 @@ public class FunctionSet {
     }
 
     public static boolean isAlwaysReturnNonNullableFunction(String functionName) {
-        if (alwaysReturnNonNullableFunctions.contains(functionName)) {
-            return true;
-        }
-        // for agg state functions, we also consider them as non-nullable functions
-        String origFuncName = AggStateUtils.getAggFuncNameOfCombinator(functionName);
-        return !AggStateDesc.isAggFuncResultNullable(origFuncName);
+        return alwaysReturnNonNullableFunctions.contains(functionName);
     }
 
     private void addBuiltInFunction(Function fn) {

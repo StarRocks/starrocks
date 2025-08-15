@@ -32,7 +32,6 @@ public:
     AggStateUnion(AggStateDesc agg_state_desc, const AggregateFunction* function)
             : AggStateCombinator(agg_state_desc, function) {
         DCHECK(_function != nullptr);
-        VLOG_ROW << "AggStateUnion constructor:" << _agg_state_desc.debug_string();
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,

@@ -97,8 +97,7 @@ public:
     // Convert thrift TAggStateDesc to protobuf AggStateDescPB.
     static void thrift_to_protobuf(const TAggStateDesc& desc, AggStateDescPB* pb);
     // Get the aggregate function state descriptor.
-    static const AggregateFunction* get_agg_state_func(const AggStateDesc* agg_state_desc,
-                                                       bool is_result_nullable_hint = false);
+    static const AggregateFunction* get_agg_state_func(const AggStateDesc* agg_state_desc);
 
 private:
     // nested aggregate function name

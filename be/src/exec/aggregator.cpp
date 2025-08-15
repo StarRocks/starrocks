@@ -582,7 +582,9 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
     if (fn.__isset.agg_state_desc) {
         auto agg_state_desc = AggStateDesc::from_thrift(fn.agg_state_desc);
         // Ensure agg_state_desc's nullable is compatible with the result type.
-        agg_state_desc.set_is_result_nullable(is_result_nullable);
+        if (!AggStateUtils::is_agg_state_if(func_name)) {
+            agg_state_desc.set_is_result_nullable(is_result_nullable);
+        }
         ASSIGN_OR_RETURN(auto agg_state_func,
                          AggStateUtils::get_agg_state_function(agg_state_desc, func_name, arg_types));
         *ret = agg_state_func.get();
