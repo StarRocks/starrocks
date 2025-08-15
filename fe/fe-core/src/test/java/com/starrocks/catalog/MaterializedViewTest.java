@@ -1218,4 +1218,25 @@ public class MaterializedViewTest extends StarRocksTestBase {
         Assertions.assertEquals(baseTable.getName(), baseTableInfo.getTableName());
         Assertions.assertEquals(baseTable.getId(), baseTableInfo.getTableId());
     }
+
+    @Test
+    public void testPartitionRefreshStrategy() {
+        Assertions.assertEquals(MaterializedView.PartitionRefreshStrategy.defaultValue(),
+                MaterializedView.PartitionRefreshStrategy.valueOf("STRICT"));
+        String sql = "create materialized view test_mv1 " +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES " +
+                "("
+                + "\"replication_num\" = \"1\""
+                + ")" +
+                "as select k2, sum(v1) as total from base_t1 group by k2;";
+        starRocksAssert.withMaterializedView(sql, (obj) -> {
+            String mvName = (String) obj;
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_mv1"));
+            Assertions.assertEquals(mv.getPartitionRefreshStrategy(), MaterializedView.PartitionRefreshStrategy.STRICT);
+        });
+    }
 }

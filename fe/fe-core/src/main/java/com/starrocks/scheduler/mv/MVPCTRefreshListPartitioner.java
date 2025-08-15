@@ -40,7 +40,6 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.scheduler.MvTaskRunContext;
-import com.starrocks.scheduler.TableSnapshotInfo;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
@@ -345,7 +344,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public Set<String> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
-                                                Map<Long, TableSnapshotInfo> snapshotBaseTables,
+                                                Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
                                                 MVRefreshParams mvRefreshParams,
                                                 Set<String> mvPotentialPartitionNames) {
         // list partitioned materialized view

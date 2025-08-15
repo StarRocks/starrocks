@@ -40,7 +40,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.scheduler.MvTaskRunContext;
-import com.starrocks.scheduler.TableSnapshotInfo;
 import com.starrocks.scheduler.TableWithPartitions;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunContext;
@@ -243,7 +242,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
 
     @Override
     public Set<String> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
-                                                Map<Long, TableSnapshotInfo> snapshotBaseTables,
+                                                Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
                                                 MVRefreshParams mvRefreshParams,
                                                 Set<String> mvPotentialPartitionNames) throws AnalysisException {
         // range partitioned materialized views
