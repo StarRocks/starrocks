@@ -57,6 +57,7 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
     std::vector<std::string> expired_metas;
     std::vector<std::string> bundle_expired_metas;
     const auto metadata_root_location = join_path(root_loc, kMetadataDirectoryName);
+    std::unordered_map<int64_t, bool> has_expired_by_tablet;
     for (const auto& name : *meta_files) {
         auto [tablet_id, version] = parse_tablet_metadata_filename(name);
         if (!meta_ver_checker(version)) {
@@ -64,10 +65,13 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
         }
         const string path = join_path(metadata_root_location, name);
         ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, version, false));
-        if (metadata->commit_time() < grace_timestamp) {
+        if ((metadata->has_commit_time() && metadata->commit_time() < grace_timestamp) ||
+            /* version 1 does not has commit time */
+            (has_expired_by_tablet[tablet_id] && !metadata->has_commit_time() && version == 1)) {
             LOG(INFO) << "Try delete for full vacuum: " << path;
             RETURN_IF_ERROR(metafile_deleter.delete_file(path));
             expired_metas.push_back(name);
+            has_expired_by_tablet[tablet_id] = true;
         }
     }
     for (const auto& expired_meta : expired_metas) {

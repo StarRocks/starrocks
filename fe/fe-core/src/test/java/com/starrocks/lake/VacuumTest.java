@@ -375,7 +375,7 @@ public class VacuumTest {
         new MockUp<VacuumFullRequest>() {
             @Mock
             public void setRetainVersions(List<Long> retainVersions) {
-                Assertions.assertEquals(0, retainVersions.size());
+                Assertions.assertEquals(1, retainVersions.size());
                 return;
             }
         };

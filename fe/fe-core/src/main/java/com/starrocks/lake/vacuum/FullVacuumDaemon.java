@@ -42,12 +42,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -186,8 +186,8 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
 
         // choose a node for full vacuum by random
         List<ComputeNode> involvedNodesList = involvedNodes.stream().collect(Collectors.toList());
-        Collections.shuffle(involvedNodesList);
-        ComputeNode chosenNode = involvedNodesList.get(0);
+        Random random = new Random();
+        ComputeNode chosenNode = involvedNodesList.get(random.nextInt(involvedNodesList.size()));
 
         VacuumFullRequest vacuumFullRequest = new VacuumFullRequest();
         vacuumFullRequest.setPartitionId(partition.getId());
