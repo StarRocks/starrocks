@@ -422,11 +422,6 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
             if (sc_it != sc_map.end()) {
                 auto ctx = std::move(sc_it->second);
                 sc_map.erase(sc_it);
-<<<<<<< HEAD
-                RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(ctx);
-                auto* raw_ctx_ptr = ctx.get();
-                context_map.emplace(query_id, std::move(ctx));
-=======
                 auto cancel_status = [ctx]() -> Status {
                     RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(ctx);
                     return Status::OK();
@@ -439,7 +434,6 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
                     context_map.emplace(query_id, std::move(ctx));
                 }
                 RETURN_IF_ERROR(cancel_status);
->>>>>>> 9000728aa5 ([BugFix] Correct add query context to context conditions (#61929))
                 return raw_ctx_ptr;
             }
         }
