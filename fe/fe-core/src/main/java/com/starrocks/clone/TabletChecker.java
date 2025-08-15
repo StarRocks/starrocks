@@ -413,16 +413,25 @@ public class TabletChecker extends FrontendDaemon {
                                                   int replicaNum, List<Long> aliveBeIdsInCluster,
                                                   boolean isPartitionUrgent) {
         TabletCheckerStat partitionTabletCheckerStat = new TabletCheckerStat();
+        Multimap<String, String> locations = olapTbl.getLocation();
+        boolean isLabelLocationTable = locations != null;
+        boolean enoughLocationMatchedBackends = preCheckEnoughLocationMatchedBackends(locations, replicaNum);
+
         // Tablet in SHADOW index can not be repaired or balanced
         if (physicalPartition != null) {
             for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(
                     IndexExtState.VISIBLE)) {
+                BalanceStat balanceStat = BalanceStat.BALANCED_STAT;
+                boolean allTabletsChecked = true;
+
                 for (Tablet tablet : idx.getTablets()) {
                     LocalTablet localTablet = (LocalTablet) tablet;
                     partitionTabletCheckerStat.totalTabletNum++;
 
-                    if (tabletScheduler.containsTablet(tablet.getId())) {
+                    long tabletId = tablet.getId();
+                    if (tabletScheduler.containsTablet(tabletId)) {
                         partitionTabletCheckerStat.tabletInScheduler++;
+                        allTabletsChecked = false;
                         continue;
                     }
 
@@ -434,13 +443,18 @@ public class TabletChecker extends FrontendDaemon {
                                     physicalPartition.getVisibleVersion(),
                                     replicaNum,
                                     aliveBeIdsInCluster,
-                                    olapTbl.getLocation());
+                                    locations);
 
                     if (statusWithPrio.first == TabletHealthStatus.HEALTHY) {
                         // Only set last status check time when status is healthy.
                         localTablet.setLastStatusCheckTime(System.currentTimeMillis());
                         continue;
-                    } else if (isPartitionUrgent) {
+                    } else if (statusWithPrio.first == TabletHealthStatus.LOCATION_MISMATCH && balanceStat.isBalanced()) {
+                        balanceStat = BalanceStat.createLabelLocationBalanceStat(
+                                tabletId, localTablet.getBackendIds(), locations.asMap());
+                    }
+
+                    if (isPartitionUrgent) {
                         statusWithPrio.second = TabletSchedCtx.Priority.VERY_HIGH;
                         partitionTabletCheckerStat.isUrgentPartitionHealthy = false;
                     }
@@ -452,13 +466,12 @@ public class TabletChecker extends FrontendDaemon {
                         continue;
                     }
 
-                    if (statusWithPrio.first == TabletHealthStatus.LOCATION_MISMATCH &&
-                            !preCheckEnoughLocationMatchedBackends(olapTbl.getLocation(), replicaNum)) {
+                    if (statusWithPrio.first == TabletHealthStatus.LOCATION_MISMATCH && !enoughLocationMatchedBackends) {
                         if (System.currentTimeMillis() - lastLogPrintTime > LOG_PRINT_INTERVAL) {
                             LOG.warn("tablet: {} is in unhealthy state: {}, " +
                                             "but there are not enough backends to meet its location requirements: {}, "
                                             + "can not repair",
-                                    tablet.getId(), statusWithPrio.first, olapTbl.getLocation());
+                                    tabletId, statusWithPrio.first, locations);
                             lastLogPrintTime = System.currentTimeMillis();
                         }
                         continue;
@@ -467,13 +480,13 @@ public class TabletChecker extends FrontendDaemon {
                     TabletSchedCtx tabletSchedCtx = new TabletSchedCtx(
                             TabletSchedCtx.Type.REPAIR,
                             db.getId(), olapTbl.getId(),
-                            physicalPartition.getId(), idx.getId(), tablet.getId(),
+                            physicalPartition.getId(), idx.getId(), tabletId,
                             System.currentTimeMillis());
                     // the tablet status will be set again when being scheduled
                     tabletSchedCtx.setTabletStatus(statusWithPrio.first);
                     tabletSchedCtx.setOrigPriority(statusWithPrio.second);
                     tabletSchedCtx.setTablet(localTablet);
-                    tabletSchedCtx.setRequiredLocation(olapTbl.getLocation());
+                    tabletSchedCtx.setRequiredLocation(locations);
                     tabletSchedCtx.setReplicaNum(replicaNum);
                     if (!tryChooseSrcBeforeSchedule(tabletSchedCtx)) {
                         if (System.currentTimeMillis() - lastLogPrintTime > LOG_PRINT_INTERVAL) {
@@ -490,6 +503,13 @@ public class TabletChecker extends FrontendDaemon {
                     partitionTabletCheckerStat.waitTotalTime += result.second;
                     if (result.first) {
                         partitionTabletCheckerStat.addToSchedulerTabletNum++;
+                    }
+                }
+
+                if (isLabelLocationTable) {
+                    // set label location balance stat in materialized index if not balanced or all tablets check balanced.
+                    if (!balanceStat.isBalanced() || (balanceStat.isBalanced() && allTabletsChecked)) {
+                        idx.setBalanceStat(balanceStat);
                     }
                 }
             } // indices

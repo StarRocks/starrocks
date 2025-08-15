@@ -16,6 +16,8 @@ package com.starrocks.clone;
 
 import com.google.gson.Gson;
 
+import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 
 public abstract class BalanceStat {
@@ -24,7 +26,8 @@ public abstract class BalanceStat {
         CLUSTER_TABLET("inter-node tablet distribution"),
         BACKEND_DISK("intra-node disk usage"),
         BACKEND_TABLET("intra-node tablet distribution"),
-        COLOCATION_GROUP("colocation group");
+        COLOCATION_GROUP("colocation group"),
+        LABEL_LOCATION("label-aware location");
 
         private final String label;
 
@@ -81,6 +84,11 @@ public abstract class BalanceStat {
 
     public static BalanceStat createColocationGroupBalanceStat(long tabletId, Set<Long> currentBes, Set<Long> bucketSeq) {
         return new ColocationGroupBalanceStat(tabletId, currentBes, bucketSeq);
+    }
+
+    public static BalanceStat createLabelLocationBalanceStat(long tabletId, Set<Long> currentBes,
+                                                             Map<String, Collection<String>> expectedLocations) {
+        return new LabelLocationBalanceStat(tabletId, currentBes, expectedLocations);
     }
 
     /**
@@ -212,6 +220,22 @@ public abstract class BalanceStat {
             this.tabletId = tabletId;
             this.currentBes = currentBes;
             this.expectedBes = expectedBes;
+        }
+    }
+
+    /**
+     * Balance stat for label-aware location mismatch
+     */
+    private static class LabelLocationBalanceStat extends UnbalancedStat {
+        private long tabletId;
+        private Set<Long> currentBes;
+        private Map<String, Collection<String>> expectedLocations;
+
+        public LabelLocationBalanceStat(long tabletId, Set<Long> currentBes, Map<String, Collection<String>> expectedLocations) {
+            super(BalanceType.LABEL_LOCATION);
+            this.tabletId = tabletId;
+            this.currentBes = currentBes;
+            this.expectedLocations = expectedLocations;
         }
     }
 }
