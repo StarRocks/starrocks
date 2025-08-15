@@ -21,6 +21,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -47,6 +49,10 @@ public class UpdateHistoricalNodeLogTest {
     public void testNormal() throws IOException {
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
+        ComputeResource computeResource = computeResourceProvider.ofComputeResource(warehouseId, workerGroupId);
+
         List<Long> backendIds = Arrays.asList(101L, 102L, 103L);
         List<Long> computeNodeIds = Arrays.asList(201L, 202L, 203L);
         long updateTime = System.currentTimeMillis();
@@ -56,7 +62,7 @@ public class UpdateHistoricalNodeLogTest {
         file.createNewFile();
         DataOutputStream out = new DataOutputStream(Files.newOutputStream(file.toPath()));
         UpdateHistoricalNodeLog writeLog =
-                new UpdateHistoricalNodeLog(warehouseId, workerGroupId, updateTime, backendIds, computeNodeIds);
+                new UpdateHistoricalNodeLog(computeResource, updateTime, backendIds, computeNodeIds);
         writeLog.write(out);
         out.flush();
         out.close();
@@ -64,8 +70,8 @@ public class UpdateHistoricalNodeLogTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(Files.newInputStream(file.toPath()));
         UpdateHistoricalNodeLog readLog = GsonUtils.GSON.fromJson(Text.readString(in), UpdateHistoricalNodeLog.class);
-        Assertions.assertEquals(readLog.getWarehouseId(), warehouseId);
-        Assertions.assertEquals(readLog.getWorkerGroupId(), workerGroupId);
+        Assertions.assertEquals(readLog.getComputeResource().getWarehouseId(), warehouseId);
+        Assertions.assertEquals(readLog.getComputeResource().getWorkerGroupId(), workerGroupId);
         Assertions.assertEquals(readLog.getUpdateTime(), updateTime);
         Assertions.assertEquals(readLog.getBackendIds(), backendIds);
         Assertions.assertEquals(readLog.getComputeNodeIds(), computeNodeIds);
@@ -75,8 +81,8 @@ public class UpdateHistoricalNodeLogTest {
         SystemInfoService systemInfoService = new SystemInfoService();
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
         systemInfoService.replayUpdateHistoricalNode(readLog);
-        Assertions.assertEquals(historicalNodeMgr.getHistoricalBackendIds(warehouseId, workerGroupId).size(), backendIds.size());
-        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouseId, workerGroupId).size(),
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalBackendIds(computeResource).size(), backendIds.size());
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(computeResource).size(),
                 computeNodeIds.size());
     }
 }
