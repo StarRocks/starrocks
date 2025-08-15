@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
@@ -154,7 +153,6 @@ public class StatisticExecutor {
                     table.getName());
         }
 
-        OlapTable olapTable = (OlapTable) table;
         long version = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
                 PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
