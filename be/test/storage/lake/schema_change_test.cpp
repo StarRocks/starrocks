@@ -25,6 +25,7 @@
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/publish_dynamic_tablet.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -99,7 +100,7 @@ protected:
         txn_info.set_txn_id(txn_id);
         txn_info.set_combined_txn_log(false);
         txn_info.set_commit_time(time(NULL));
-        return publish_version(_tablet_manager.get(), tablet_id, 1, new_version,
+        return publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), 1, new_version,
                                std::span<const TxnInfoPB>(&txn_info, 1), false)
                 .status();
     }
