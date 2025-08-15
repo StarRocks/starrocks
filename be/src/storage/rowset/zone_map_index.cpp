@@ -48,6 +48,7 @@
 #include "storage/type_traits.h"
 #include "storage/types.h"
 #include "util/unaligned_access.h"
+#include "common/config.h"
 
 namespace starrocks {
 
@@ -55,7 +56,8 @@ namespace starrocks {
 // For max values that are truncated, append 0xFF to preserve an upper bound.
 template <LogicalType LT>
 static inline void _truncate_string_minmax_if_needed(ZoneMap<LT>* zm) {
-    constexpr size_t kPrefixLen = 64;
+    if (!config::enable_string_prefix_zonemap) return;
+    const size_t kPrefixLen = std::max<int32_t>(0, config::string_prefix_zonemap_prefix_len);
     if constexpr (LT == TYPE_CHAR || LT == TYPE_VARCHAR) {
         auto& min_slice = zm->min_value.value;
         auto& max_slice = zm->max_value.value;
@@ -64,8 +66,11 @@ static inline void _truncate_string_minmax_if_needed(ZoneMap<LT>* zm) {
         }
         if (max_slice.size > kPrefixLen) {
             // Safe, original buffer has length > kPrefixLen
-            max_slice.data[kPrefixLen] = static_cast<char>(0xFF);
-            max_slice.size = kPrefixLen + 1;
+            // Ensure buffer has room for 0xFF; if exactly kPrefixLen length, keep as is.
+            if (max_slice.size > kPrefixLen) {
+                max_slice.data[kPrefixLen] = static_cast<char>(0xFF);
+                max_slice.size = kPrefixLen + 1;
+            }
         }
     }
 }
