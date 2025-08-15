@@ -1826,6 +1826,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 tableName,
                 List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()), icebergHiveCatalog,
+                connectContext,
                 HDFS_ENVIRONMENT);
         executor.execute();
 
@@ -1838,6 +1839,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 tableName,
                 List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()), icebergHiveCatalog,
+                connectContext,
                 HDFS_ENVIRONMENT);
         IcebergAlterTableExecutor finalExecutor = executor;
         Assertions.assertThrows(DdlException.class, finalExecutor::execute);
@@ -1851,6 +1853,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 tableName,
                 List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()), icebergHiveCatalog,
+                connectContext,
                 HDFS_ENVIRONMENT);
         finalExecutor = executor;
         Assertions.assertThrows(DdlException.class, finalExecutor::execute);
@@ -1891,6 +1894,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 tableName,
                 List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()), icebergHiveCatalog,
+                connectContext,
                 HDFS_ENVIRONMENT);
         executor.execute();
     }
@@ -1945,11 +1949,12 @@ public class IcebergMetadataTest extends TableTestBase {
         AlterTableOperationClause clause = new AlterTableOperationClause(
                 NodePosition.ZERO, ROLLBACK_TO_SNAPSHOT.toString(),
                 List.of(new IntLiteral(1, NodePosition.ZERO)), null);
-        clause.setArgs(List.of(ConstantOperator.createBigint(1))); // 建议改用 bigint
+        clause.setArgs(List.of(ConstantOperator.createBigint(1)));
         IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(
                 new AlterTableStmt(tableName, List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()),
                 icebergHiveCatalog,
+                connectContext,
                 HDFS_ENVIRONMENT);
         executor.execute();
     }

@@ -355,7 +355,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Failed to load iceberg table: " + stmt.getTbl().toString());
         }
 
-        IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(stmt, table, icebergCatalog, hdfsEnvironment);
+        IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(stmt, table, icebergCatalog, context, hdfsEnvironment);
         executor.execute();
 
         synchronized (this) {
