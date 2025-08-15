@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.DropBackendInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.UpdateHistoricalNodeLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -142,15 +143,6 @@ public class SystemInfoServiceTest {
         Backend backend = service.getBackendWithHeartbeatPort("originalHost", 1000);
         Assertions.assertNotNull(backend);
         Assertions.assertEquals("{rack=rack1}", backend.getLocation().toString());
-    }
-
-    @Test
-    public void testUpdateBackend() throws Exception {
-        Backend be = new Backend(10001, "newHost", 1000);
-        service.addBackend(be);
-        service.updateInMemoryStateBackend(be);
-        Backend newBe = service.getBackend(10001);
-        Assertions.assertTrue(newBe.getHost().equals("newHost"));
     }
 
     @Test
@@ -379,7 +371,7 @@ public class SystemInfoServiceTest {
         };
 
         service.addBackend(be);
-        service.replayDropBackend(be);
+        service.replayDropBackend(new DropBackendInfo(be.getId()));
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assertions.assertTrue(beIP == null);
     }

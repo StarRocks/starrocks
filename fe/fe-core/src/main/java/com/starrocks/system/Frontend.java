@@ -72,6 +72,7 @@ public class Frontend extends JsonWriter {
     private String heartbeatErrMsg = "";
     private String feVersion;
 
+    @SerializedName("alive")
     private boolean isAlive = false;
 
     private int heartbeatRetryTimes = 0;
@@ -149,9 +150,8 @@ public class Frontend extends JsonWriter {
         return heapUsedPercent;
     }
 
-    public void updateHostAndEditLogPort(String host, int editLogPort) {
+    public void updateHost(String host) {
         this.host = host;
-        this.editLogPort = editLogPort;
     }
 
     @VisibleForTesting
