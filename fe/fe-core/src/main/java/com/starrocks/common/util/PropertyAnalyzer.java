@@ -261,6 +261,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_COMPACTION_STRATEGY = "compaction_strategy";
 
+    public static final String PROPERTIES_ENABLE_DYNAMIC_TABLET = "enable_dynamic_tablet";
+
     public static final String PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE = "dynamic_tablet_split_size";
 
     /**
@@ -1568,6 +1570,40 @@ public class PropertyAnalyzer {
             }
         }
         return TCompactionStrategy.DEFAULT;
+    }
+
+    public static Boolean analyzeEnableDynamicTablet(Map<String, String> properties, boolean removeProperties)
+            throws AnalysisException {
+        Boolean enableDynamicTablet = Config.enable_dynamic_tablet;
+        if (properties != null) {
+            String value = removeProperties ? properties.remove(PROPERTIES_ENABLE_DYNAMIC_TABLET)
+                    : properties.get(PROPERTIES_ENABLE_DYNAMIC_TABLET);
+            if (value != null) {
+                try {
+                    enableDynamicTablet = Boolean.parseBoolean(value);
+                } catch (Exception e) {
+                    throw new AnalysisException("Invalid " + PROPERTIES_ENABLE_DYNAMIC_TABLET + ": " + value, e);
+                }
+            }
+        }
+        return enableDynamicTablet;
+    }
+
+    public static long analyzeDynamicTabletSplitSize(Map<String, String> properties, boolean removeProperties)
+            throws AnalysisException {
+        long dynamicTabletSplitSize = Config.dynamic_tablet_split_size;
+        if (properties != null) {
+            String value = removeProperties ? properties.remove(PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE)
+                    : properties.get(PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE);
+            if (value != null) {
+                try {
+                    dynamicTabletSplitSize = Long.parseLong(value);
+                } catch (Exception e) {
+                    throw new AnalysisException("Invalid " + PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE + ": " + value, e);
+                }
+            }
+        }
+        return dynamicTabletSplitSize;
     }
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
