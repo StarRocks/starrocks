@@ -231,7 +231,7 @@ public class PaimonConnector implements Connector {
             Configuration configuration = new Configuration();
             hdfsEnvironment.getCloudConfiguration().applyToConfiguration(configuration);
             Catalog paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(
-                    getPaimonOptions(), configuration, new HadoopFileIOLoader(), new HadoopFileIOLoader()));
+                    getPaimonOptions(), configuration, null, new HadoopFileIOLoader()));
             this.nativePaimonCatalogs.put(catalogKey, paimonNativeCatalog);
             if (paimonNativeCatalog instanceof CachingCatalog) {
                 GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
