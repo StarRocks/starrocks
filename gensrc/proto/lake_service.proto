@@ -335,13 +335,14 @@ message VacuumResponse {
 // commit_time < grace_timestamp. retain_versions must contains the lastest visible version.
 // 4. all tabletMetadata with versions NOT in [min_check_version, max_check_version) should not be vacuumed.
 message VacuumFullRequest {
-    repeated int64 tablet_ids = 1; // Full vacuum do not depends on this field now.
-    optional int64 min_check_version = 2;
-    optional int64 max_check_version = 3;
-    // Don't delete files with txn_id >= min_active_txn_id
-    optional int64 min_active_txn_id = 4;
     // The id of the partition to vacuum
-    optional int64 partition_id = 5;
+    optional int64 partition_id = 1;
+    // tablet_id can be the id of any of the tablet belongs to the table to be dropped.
+    optional int64 tablet_id = 2;
+    optional int64 min_check_version = 3;
+    optional int64 max_check_version = 4;
+    // Don't delete files with txn_id >= min_active_txn_id
+    optional int64 min_active_txn_id = 5;
     // Delete metadata files with commit_time < grace_timestamp (set by FE)
     optional int64 grace_timestamp = 6;
     // retain version info of tablet metadata
@@ -350,8 +351,6 @@ message VacuumFullRequest {
     // All tablet metadata and their data files of these verisons should be retained and can not be
     // vaccummed.
     repeated int64 retain_versions = 7;
-    // tablet_id can be the id of any of the tablet belongs to the table to be dropped.
-    optional int64 tablet_id = 8;
 }
 
 message VacuumFullResponse {

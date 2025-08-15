@@ -57,7 +57,7 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
     std::vector<std::string> expired_metas;
     std::vector<std::string> bundle_expired_metas;
     const auto metadata_root_location = join_path(root_loc, kMetadataDirectoryName);
-    std::unordered_map<int64_t, bool> has_expired_by_tablet;
+    bool has_expired = false;
     for (const auto& name : *meta_files) {
         auto [tablet_id, version] = parse_tablet_metadata_filename(name);
         if (!meta_ver_checker(version)) {
@@ -66,12 +66,12 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
         const string path = join_path(metadata_root_location, name);
         ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, version, false));
         if ((metadata->has_commit_time() && metadata->commit_time() < grace_timestamp) ||
-            /* version 1 does not has commit time */
-            (has_expired_by_tablet[tablet_id] && !metadata->has_commit_time() && version == 1)) {
+            /* init version does not has commit time, delete it if there is any meta has been expired. */
+            (has_expired && !metadata->has_commit_time())) {
             LOG(INFO) << "Try delete for full vacuum: " << path;
             RETURN_IF_ERROR(metafile_deleter.delete_file(path));
             expired_metas.push_back(name);
-            has_expired_by_tablet[tablet_id] = true;
+            has_expired = true;
         }
     }
     for (const auto& expired_meta : expired_metas) {
@@ -87,6 +87,7 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
         auto path = join_path(metadata_root_location, name);
         bool need_clear = true;
         ASSIGN_OR_RETURN(auto metadatas, TabletManager::get_metas_from_bundle_tablet_metadata(path, fs.get()));
+        // metadatas parsed from bundle files should alwasy have version >= 2
         for (const auto& metadata : metadatas) {
             if (metadata->commit_time() >= grace_timestamp) {
                 need_clear = false;
