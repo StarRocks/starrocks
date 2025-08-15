@@ -88,6 +88,8 @@ import java.util.stream.Collectors;
  */
 public class TabletChecker extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletChecker.class);
+    // 1 min
+    private static final long LOG_PRINT_INTERVAL = 60000L;
 
     private final TabletScheduler tabletScheduler;
     private final TabletSchedulerStat stat;
@@ -95,6 +97,7 @@ public class TabletChecker extends FrontendDaemon {
     // db id -> (tbl id -> PrioPart)
     // priority of replicas of partitions in this table will be set to VERY_HIGH if unhealthy
     private com.google.common.collect.Table<Long, Long, Set<PrioPart>> urgentTable = HashBasedTable.create();
+    private long lastLogPrintTime = -1L;
 
     // represent a partition which need to be repaired preferentially
     public static class PrioPart {
@@ -447,6 +450,7 @@ public class TabletChecker extends FrontendDaemon {
                         localTablet.setLastStatusCheckTime(System.currentTimeMillis());
                         continue;
                     } else if (statusWithPrio.first == TabletHealthStatus.LOCATION_MISMATCH && balanceStat.isBalanced()) {
+                        Preconditions.checkState(isLabelLocationTable);
                         balanceStat = BalanceStat.createLabelLocationBalanceStat(
                                 tabletId, localTablet.getBackendIds(), locations.asMap());
                     }
@@ -464,6 +468,13 @@ public class TabletChecker extends FrontendDaemon {
                     }
 
                     if (statusWithPrio.first == TabletHealthStatus.LOCATION_MISMATCH && !enoughLocationMatchedBackends) {
+                        if (System.currentTimeMillis() - lastLogPrintTime > LOG_PRINT_INTERVAL) {
+                            LOG.warn("tablet: {} is in unhealthy state: {}, " +
+                                            "but there are not enough backends to meet its location requirements: {}, "
+                                            + "can not repair",
+                                    tabletId, statusWithPrio.first, locations);
+                            lastLogPrintTime = System.currentTimeMillis();
+                        }
                         continue;
                     }
 
@@ -479,6 +490,11 @@ public class TabletChecker extends FrontendDaemon {
                     tabletSchedCtx.setRequiredLocation(locations);
                     tabletSchedCtx.setReplicaNum(replicaNum);
                     if (!tryChooseSrcBeforeSchedule(tabletSchedCtx)) {
+                        if (System.currentTimeMillis() - lastLogPrintTime > LOG_PRINT_INTERVAL) {
+                            LOG.warn("tablet: {} is in unhealthy state: {}, but there are no healthy replicas, " +
+                                    "can not repair", tabletId, statusWithPrio.first);
+                            lastLogPrintTime = System.currentTimeMillis();
+                        }
                         continue;
                     }
 
