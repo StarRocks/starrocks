@@ -15,26 +15,25 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.authentication.UserAuthenticationInfo;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 
 public class SetPassVar extends SetListItem {
-    private UserIdentity userIdent;
+    private User user;
     private final UserAuthOption authOption;
     private UserAuthenticationInfo userAuthenticationInfo;
 
-    public SetPassVar(UserIdentity userIdentity, UserAuthOption authOption, NodePosition pos) {
+    public SetPassVar(User user, UserAuthOption authOption, NodePosition pos) {
         super(pos);
-        this.userIdent = userIdentity;
+        this.user = user;
         this.authOption = authOption;
     }
 
-    public UserIdentity getUserIdent() {
-        return userIdent;
+    public User getUser() {
+        return user;
     }
 
-    public void setUserIdent(UserIdentity userIdent) {
-        this.userIdent = userIdent;
+    public void setUser(User user) {
+        this.user = user;
     }
 
     public UserAuthOption getAuthOption() {

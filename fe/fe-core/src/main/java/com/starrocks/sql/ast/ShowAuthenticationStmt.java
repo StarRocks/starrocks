@@ -12,39 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowAuthenticationStmt extends ShowStmt {
     private final boolean isAll;
-    private UserIdentity userIdent;
+    private User user;
 
     // SHOW AUTHENTICATION -> (null, false)
     // SHOW ALL AUTHENTICATION -> (null, true)
     // SHOW AUTHENTICATION FOR xx -> (xx, false)
-    public ShowAuthenticationStmt(UserIdentity userIdent, boolean isAll) {
+    public ShowAuthenticationStmt(User userIdent, boolean isAll) {
         this(userIdent, isAll, NodePosition.ZERO);
     }
 
-    public ShowAuthenticationStmt(UserIdentity userIdent, boolean isAll, NodePosition pos) {
+    public ShowAuthenticationStmt(User userIdent, boolean isAll, NodePosition pos) {
         super(pos);
-        this.userIdent = userIdent;
+        this.user = userIdent;
         this.isAll = isAll;
     }
 
-    public UserIdentity getUserIdent() {
-        return userIdent;
+    public User getUser() {
+        return user;
     }
 
     public boolean isAll() {
         return isAll;
     }
 
-    public void setUserIdent(UserIdentity userIdent) {
-        this.userIdent = userIdent;
+    public void setUser(User user) {
+        this.user = user;
     }
 
     @Override
