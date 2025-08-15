@@ -73,8 +73,16 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             LOADS_HISTORY_TABLE_NAME);
 
     private static final String LOADS_HISTORY_SYNC =
-            "INSERT INTO %s " +
-            "SELECT * FROM information_schema.loads " +
+            "INSERT INTO %s " + "(id, label, profile_id, db_name, table_name, user, warehouse, state, progress, type, " +
+                    "priority, scan_rows, scan_bytes, filtered_rows, unselected_rows, sink_rows, runtime_details, " +
+                    "create_time, load_start_time, load_commit_time, load_finish_time, properties, error_msg, " +
+                    "tracking_sql, rejected_record_path, job_id) " +
+                    "SELECT " +
+                    "ID, LABEL, PROFILE_ID, DB_NAME, TABLE_NAME, USER, WAREHOUSE, STATE, PROGRESS, TYPE, " +
+                    "PRIORITY, SCAN_ROWS, SCAN_BYTES, FILTERED_ROWS, UNSELECTED_ROWS, SINK_ROWS, RUNTIME_DETAILS, " +
+                    "CREATE_TIME, LOAD_START_TIME, LOAD_COMMIT_TIME, LOAD_FINISH_TIME, PROPERTIES, ERROR_MSG, " +
+                    "TRACKING_SQL, REJECTED_RECORD_PATH, JOB_ID " +
+                    "FROM information_schema.loads " +
             "WHERE load_finish_time IS NOT NULL " +
             "AND load_finish_time < NOW() - INTERVAL 1 MINUTE " +
             "AND load_finish_time > ( " +
