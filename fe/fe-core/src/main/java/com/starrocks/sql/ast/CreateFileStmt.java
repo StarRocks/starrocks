@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -121,11 +120,6 @@ public class CreateFileStmt extends DdlStmt {
             }
             */
         }
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     @Override

@@ -46,7 +46,6 @@ import com.starrocks.alter.AlterJobException;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.Parameter;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -575,7 +574,7 @@ public class StmtExecutor {
             // execPlan is the output of planner
             ExecPlan execPlan = null;
             try (Timer ignored = Tracers.watchScope("Total")) {
-                redirectStatus = parsedStmt.getRedirectStatus();
+                redirectStatus = RedirectStatus.getRedirectStatus(parsedStmt);
                 if (!isForwardToLeader()) {
                     if (context.shouldDumpQuery()) {
                         if (context.getDumpInfo() == null) {

@@ -46,16 +46,4 @@ public class ShowProcStmtTest {
                 (ShowProcStmt)com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         Assertions.assertEquals("/dbs/10001", stmt.getPath());
     }
-
-    @Test
-    public void testgetRedirectStatus() {
-        ShowProcStmt stmt = new ShowProcStmt("/");
-        Assertions.assertEquals(RedirectStatus.NO_FORWARD, stmt.getRedirectStatus());
-        stmt = new ShowProcStmt("/routine_loads");
-        Assertions.assertEquals(RedirectStatus.FORWARD_NO_SYNC, stmt.getRedirectStatus());
-        stmt = new ShowProcStmt("/routine_loads/");
-        Assertions.assertEquals(RedirectStatus.FORWARD_NO_SYNC, stmt.getRedirectStatus());
-        stmt = new ShowProcStmt("/routine_loads/1");
-        Assertions.assertEquals(RedirectStatus.FORWARD_NO_SYNC, stmt.getRedirectStatus());
-    }
 }

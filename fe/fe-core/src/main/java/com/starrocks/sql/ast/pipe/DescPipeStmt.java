@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast.pipe;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.sql.ast.AstVisitor;
@@ -45,11 +44,6 @@ public class DescPipeStmt extends ShowStmt {
 
     public PipeName getName() {
         return name;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

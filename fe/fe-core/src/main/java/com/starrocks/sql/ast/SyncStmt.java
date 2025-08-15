@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 public class SyncStmt extends DdlStmt {
@@ -26,11 +25,6 @@ public class SyncStmt extends DdlStmt {
 
     public SyncStmt(NodePosition pos) {
         super(pos);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     @Override

@@ -14,7 +14,6 @@
 
 package com.starrocks.server;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.meta.BlackListSql;
@@ -132,18 +131,6 @@ public class SqlBlacklistTest {
         Mockito.verify(editLog).logDeleteSQLBlackList(deleteBlacklistsEditLogArgument.capture());
 
         Assertions.assertEquals(List.of(id1, id2), deleteBlacklistsEditLogArgument.getValue().ids);
-    }
-
-    @Test
-    public void testRedirectStatus() {
-        Assertions.assertEquals(
-                new AddSqlBlackListStmt("ADD SQLBLACKLIST \".+\";").getRedirectStatus(),
-                RedirectStatus.FORWARD_NO_SYNC
-        );
-        Assertions.assertEquals(
-                new DelSqlBlackListStmt(List.of(1L, 2L)).getRedirectStatus(),
-                RedirectStatus.FORWARD_NO_SYNC
-        );
     }
 
     @Test

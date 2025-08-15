@@ -14,7 +14,6 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;

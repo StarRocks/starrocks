@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
@@ -106,11 +105,6 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
         row.set(5, histogramStatsMeta.getProperties() == null ? "{}" : histogramStatsMeta.getProperties().toString());
 
         return row;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

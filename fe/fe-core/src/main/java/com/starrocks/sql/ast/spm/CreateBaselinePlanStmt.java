@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast.spm;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.QueryRelation;
@@ -44,12 +43,6 @@ public class CreateBaselinePlanStmt extends DdlStmt {
 
     public QueryRelation getPlanStmt() {
         return planStmt;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        // @todo: check is global
-        return RedirectStatus.NO_FORWARD;
     }
 
     @Override

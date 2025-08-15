@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast.feedback;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -22,10 +21,5 @@ public abstract class PlanAdvisorStmt extends StatementBase {
 
     protected PlanAdvisorStmt(NodePosition pos) {
         super(pos);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 }

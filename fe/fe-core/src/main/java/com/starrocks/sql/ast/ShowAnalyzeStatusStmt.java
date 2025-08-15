@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
@@ -100,11 +99,6 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         }
 
         return row;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

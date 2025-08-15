@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -52,11 +51,6 @@ public class AdminSetPartitionVersionStmt extends DdlStmt {
 
     public long getVersion() {
         return version;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

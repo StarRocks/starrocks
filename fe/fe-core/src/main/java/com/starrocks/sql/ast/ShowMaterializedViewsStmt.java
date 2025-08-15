@@ -21,7 +21,6 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -160,11 +159,6 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                 where);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
                 finalWhere, null, null), this.getOrigStmt());
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override
