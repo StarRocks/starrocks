@@ -421,7 +421,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     /**
      * Finalize plan tree and create stream sink, if needed.
      */
-    public void createDataSink(TResultSinkType resultSinkType) {
+    public void createDataSink(TResultSinkType resultSinkType, boolean isInfNanConvertToNull) {
         if (sink != null) {
             return;
         }
@@ -440,7 +440,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             }
             // add ResultSink
             // we're streaming to an result sink
-            sink = new ResultSink(planRoot.getId(), resultSinkType);
+            sink = new ResultSink(planRoot.getId(), resultSinkType, isInfNanConvertToNull);
         }
     }
 

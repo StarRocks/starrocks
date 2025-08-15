@@ -132,7 +132,8 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
-    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is) const override;
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol,
+                              bool is_inf_nan_convert_to_null = false) const override;
 
     std::string debug_item(size_t idx) const override;
 

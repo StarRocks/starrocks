@@ -61,7 +61,8 @@ int DecimalV3Column<T>::scale() const {
 }
 
 template <typename T>
-void DecimalV3Column<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+void DecimalV3Column<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol,
+                                              bool is_inf_nan_convert_to_null) const {
     auto& data = this->get_data();
     auto s = DecimalV3Cast::to_string<T>(data[idx], _precision, _scale);
     buf->push_decimal(s);
