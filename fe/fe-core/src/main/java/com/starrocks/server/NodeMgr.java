@@ -51,10 +51,11 @@ import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.http.meta.MetaBaseAction;
 import com.starrocks.leader.MetaHelper;
+import com.starrocks.persist.DropFrontendInfo;
 import com.starrocks.persist.ImageWriter;
-import com.starrocks.persist.OperationType;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
+import com.starrocks.persist.UpdateFrontendInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -756,16 +757,11 @@ public class NodeMgr {
             if (fid == 0) {
                 throw new DdlException("No available frontend ID can allocate to new frontend");
             }
-            Frontend fe = new Frontend(fid, role, nodeName, host, editLogPort);
-            frontends.put(nodeName, fe);
-            frontendIds.put(fid, fe);
-            if (role == FrontendNodeType.FOLLOWER) {
-                helperNodes.add(Pair.create(host, editLogPort));
-            }
+
             if (GlobalStateMgr.getCurrentState().getHaProtocol() instanceof BDBHA) {
                 BDBHA bdbha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
                 if (role == FrontendNodeType.FOLLOWER) {
-                    bdbha.addUnstableNode(host, getFollowerCnt());
+                    bdbha.addUnstableNode(nodeName, getFollowerCnt() + 1);
                 }
 
                 // In some cases, for example, fe starts with the outdated meta, the node name that has been dropped
@@ -776,7 +772,26 @@ public class NodeMgr {
                 bdbha.removeNodeIfExist(host, editLogPort, nodeName);
             }
 
-            GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_ADD_FRONTEND_V2, fe);
+            Frontend fe = new Frontend(fid, role, nodeName, host, editLogPort);
+            GlobalStateMgr.getCurrentState().getEditLog().logAddFrontend(fe, wal -> applyAddFrontend((Frontend) wal));
+        } finally {
+            unlock();
+        }
+    }
+
+    private void applyAddFrontend(Frontend fe) {
+        frontends.put(fe.getNodeName(), fe);
+        frontendIds.put(fe.getFid(), fe);
+        if (fe.getRole() == FrontendNodeType.FOLLOWER) {
+            helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
+        }
+    }
+    
+    // relay function reuse the apply logic
+    public void replayAddFrontend(Frontend fe) {
+        tryLock(true);
+        try {
+            applyAddFrontend(fe);
         } finally {
             unlock();
         }
@@ -808,41 +823,37 @@ public class NodeMgr {
     }
 
     public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
-        String toBeModifyHost = modifyFrontendAddressClause.getSrcHost();
-        String fqdn = modifyFrontendAddressClause.getDestHost();
-        if (toBeModifyHost.equals(selfNode.first) && role == FrontendNodeType.LEADER) {
+        String srcHost = modifyFrontendAddressClause.getSrcHost();
+        String destHost = modifyFrontendAddressClause.getDestHost();
+        if (srcHost.equals(selfNode.first) && role == FrontendNodeType.LEADER) {
             throw new DdlException("can not modify current master node.");
         }
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            Frontend preUpdateFe = getFeByHost(toBeModifyHost);
-            if (preUpdateFe == null) {
-                throw new DdlException(String.format("frontend [%s] not found", toBeModifyHost));
+            Frontend frontend = getFeByHost(srcHost);
+            if (frontend == null) {
+                throw new DdlException(String.format("frontend [%s] not found", srcHost));
             }
 
-            Frontend existFe = null;
             for (Frontend fe : frontends.values()) {
-                if (fe.getHost().equals(fqdn)) {
-                    existFe = fe;
+                if (fe.getHost().equals(destHost)) {
+                    throw new DdlException("frontend with host [" + destHost + "] already exists ");
                 }
             }
 
-            if (null != existFe) {
-                throw new DdlException("frontend with host [" + fqdn + "] already exists ");
+            // update the fe information stored in bdb
+            HAProtocol haProtocol = GlobalStateMgr.getCurrentState().getHaProtocol();
+            if (haProtocol instanceof BDBHA bdbha) {
+                bdbha.updateFrontendHostAndPort(frontend.getNodeName(), destHost, frontend.getEditLogPort());
             }
 
-            // step 1 update the fe information stored in bdb
-            BDBHA bdbha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
-            bdbha.updateFrontendHostAndPort(preUpdateFe.getNodeName(), fqdn, preUpdateFe.getEditLogPort());
-            // step 2 update the fe information stored in memory
-            preUpdateFe.updateHostAndEditLogPort(fqdn, preUpdateFe.getEditLogPort());
-            frontends.put(preUpdateFe.getNodeName(), preUpdateFe);
-
             // editLog
-            GlobalStateMgr.getCurrentState().getEditLog().logUpdateFrontend(preUpdateFe);
-            LOG.info("send update fe editlog success, fe info is [{}]", preUpdateFe.toString());
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateFrontend(
+                    new UpdateFrontendInfo(frontend.getNodeName(), destHost),
+                    wal -> applyModifyFrontend((UpdateFrontendInfo) wal));
+            LOG.info("send update fe editlog success, fe info is [{}]", frontend.toString());
         } finally {
             unlock();
         }
@@ -867,18 +878,14 @@ public class NodeMgr {
                 throw new DdlException(role.toString() + " does not exist[" +
                         NetUtils.getHostPortInAccessibleFormat(host, port) + "]");
             }
-            frontends.remove(fe.getNodeName());
-            frontendIds.remove(fe.getFid());
-            removedFrontends.add(fe.getNodeName());
 
             if (fe.getRole() == FrontendNodeType.FOLLOWER) {
                 GlobalStateMgr.getCurrentState().getHaProtocol().removeElectableNode(fe.getNodeName());
-                helperNodes.remove(Pair.create(host, port));
-
-                HAProtocol ha = GlobalStateMgr.getCurrentState().getHaProtocol();
-                ha.removeUnstableNode(host, getFollowerCnt());
+                GlobalStateMgr.getCurrentState().getHaProtocol().removeUnstableNode(fe.getNodeName(), getFollowerCnt() - 1);
             }
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveFrontend(fe);
+            Frontend finalFE = fe;
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveFrontend(
+                    new DropFrontendInfo(fe.getNodeName()), wal -> applyDropFrontend(finalFE));
         } finally {
             unlock();
 
@@ -897,69 +904,46 @@ public class NodeMgr {
         }
     }
 
-    public void replayAddFrontend(Frontend fe) {
+    public void replayUpdateFrontend(UpdateFrontendInfo info) {
         tryLock(true);
         try {
-            Frontend existFe = unprotectCheckFeExist(fe.getHost(), fe.getEditLogPort());
-            if (existFe != null) {
-                LOG.warn("fe {} already exist.", existFe);
-                if (existFe.getRole() != fe.getRole()) {
-                    /*
-                     * This may happen if:
-                     * 1. first, add a FE as OBSERVER.
-                     * 2. This OBSERVER is restarted with ROLE and VERSION file being DELETED.
-                     *    In this case, this OBSERVER will be started as a FOLLOWER, and add itself to the frontends.
-                     * 3. this "FOLLOWER" begin to load image or replay journal,
-                     *    then find the origin OBSERVER in image or journal.
-                     * This will cause UNDEFINED behavior, so it is better to exit and fix it manually.
-                     */
-                    System.err.println("Try to add an already exist FE with different role" + fe.getRole());
-                    System.exit(-1);
-                }
-                return;
-            }
-            frontends.put(fe.getNodeName(), fe);
-            frontendIds.put(fe.getFid(), fe);
-            if (fe.getRole() == FrontendNodeType.FOLLOWER) {
-                helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
-            }
+            applyModifyFrontend(info);
+            LOG.info("update fe {} successfully", info.getNodeName());
         } finally {
             unlock();
         }
     }
 
-    public void replayUpdateFrontend(Frontend frontend) {
-        tryLock(true);
-        try {
-            Frontend fe = frontends.get(frontend.getNodeName());
-            if (fe == null) {
-                LOG.error("try to update frontend, but " + frontend.toString() + " does not exist.");
-                return;
-            }
-            fe.updateHostAndEditLogPort(frontend.getHost(), frontend.getEditLogPort());
-            frontends.put(fe.getNodeName(), fe);
-            LOG.info("update fe successfully, fe info is [{}]", frontend.toString());
-        } finally {
-            unlock();
+    // caller should hold the lock
+    public void applyModifyFrontend(UpdateFrontendInfo info) {
+        Frontend fe = frontends.get(info.getNodeName());
+        if (fe == null) {
+            LOG.error("try to update frontend, but {} does not exist.", info.getNodeName());
+            return;
+        }
+        fe.updateHost(info.getHost());
+    }
+
+    // caller should hold the lock
+    public void applyDropFrontend(Frontend frontend) {
+        frontends.remove(frontend.getNodeName());
+        frontendIds.remove(frontend.getFid());
+        removedFrontends.add(frontend.getNodeName());
+        if (frontend.getRole() == FrontendNodeType.FOLLOWER) {
+            helperNodes.remove(Pair.create(frontend.getHost(), frontend.getEditLogPort()));
         }
     }
 
-    public void replayDropFrontend(Frontend frontend) {
+    public void replayDropFrontend(DropFrontendInfo dropFrontendInfo) {
         tryLock(true);
         Frontend removedFe = null;
         try {
-            removedFe = frontends.remove(frontend.getNodeName());
+            removedFe = frontends.remove(dropFrontendInfo.getNodeName());
             if (removedFe == null) {
-                LOG.error(frontend.toString() + " does not exist.");
+                LOG.error(dropFrontendInfo + " does not exist.");
                 return;
             }
-            if (removedFe.getRole() == FrontendNodeType.FOLLOWER) {
-                helperNodes.remove(Pair.create(removedFe.getHost(), removedFe.getEditLogPort()));
-            }
-
-            frontendIds.remove(removedFe.getFid());
-
-            removedFrontends.add(removedFe.getNodeName());
+            applyDropFrontend(removedFe);
         } finally {
             unlock();
 
@@ -1185,22 +1169,14 @@ public class NodeMgr {
     }
 
     public void resetFrontends() {
-        frontends.clear();
-        frontendIds.clear();
-
         int fid = allocateNextFrontendId();
         Frontend self = new Frontend(fid, role, nodeName, selfNode.first, selfNode.second);
         self.setAlive(true);
-        frontends.put(self.getNodeName(), self);
-        frontendIds.put(fid, self);
-        // reset helper nodes
-        helperNodes.clear();
-        helperNodes.add(selfNode);
 
-        GlobalStateMgr.getCurrentState().getEditLog().logResetFrontends(self);
+        GlobalStateMgr.getCurrentState().getEditLog().logResetFrontends(self, wal -> applyResetFrontends((Frontend) wal));
     }
 
-    public void replayResetFrontends(Frontend frontend) {
+    public void applyResetFrontends(Frontend frontend) {
         frontends.clear();
         frontendIds.clear();
 
