@@ -516,7 +516,7 @@ CONF_mInt32(load_rpc_slow_log_frequency_threshold_seconds, "60");
 // from LoadChannel. It will send rpc to LoadChannel to check the status.
 CONF_mBool(enable_load_diagnose, "true");
 // The timeout of the diagnosis rpc sent from OlapTableSink to LoadChannel
-CONF_mInt32(load_diagnose_send_rpc_timeout_ms, "2000");
+CONF_mInt32(load_diagnose_send_rpc_timeout_ms, "5000");
 // If the rpc timeout exceeds this threshold, then profile diagnostics will be performed every time
 // a timeout occurs; if it is below this threshold, diagnostics will be performed once every 20 timeouts.
 // This is used to avoid frequent diagnostics for real-time loads which have a smaller brpc timeout.
