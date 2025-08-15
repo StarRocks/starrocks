@@ -128,7 +128,6 @@ protected:
         }
         if (has_max) {
             auto zmax = zone_map.max();
-            // Allow writer to append 0xFF when original was truncated
             if (max.size() > prefix_len) {
                 std::string expect = max.substr(0, prefix_len);
                 std::string allow = expect;
