@@ -1957,6 +1957,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Threshold of low cardinality dictionary.
 - Introduced in: v3.5.0
 
+##### enable_manual_collect_array_ndv
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable manual collection for the NDV information of the ARRAY type.
+- Introduced in: v4.0
+
+##### enable_auto_collect_array_ndv
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable automatic collection for the NDV information of the ARRAY type.
+- Introduced in: v4.0
+
 ### Loading and unloading
 
 ##### load_straggler_wait_second
