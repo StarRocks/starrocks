@@ -99,4 +99,14 @@ public class ThriftRPCRequestExecutor {
     public interface MethodCallable<T, R> {
         R apply(T client) throws TException;
     }
+
+    public static <SERVER_CLIENT extends org.apache.thrift.TServiceClient> void invalidateClient(
+            ThriftConnectionPool<SERVER_CLIENT> genericPool, TNetworkAddress address, int timeoutMs) throws TException {
+        try {
+            SERVER_CLIENT client = genericPool.borrowObject(address, timeoutMs);
+            genericPool.invalidateObject(address, client);
+        } catch (Exception e) {
+            throw new TException(e.getMessage());
+        }
+    }
 }
