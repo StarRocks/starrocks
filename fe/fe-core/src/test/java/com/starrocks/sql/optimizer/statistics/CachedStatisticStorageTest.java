@@ -394,7 +394,6 @@ public class CachedStatisticStorageTest {
         partitionStatsMap =
                 cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
         Assert.assertEquals(0, partitionStatsMap.size());
-
     }
 
     @Test
