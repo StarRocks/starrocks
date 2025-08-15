@@ -261,7 +261,7 @@ public class TaskRun implements Comparable<TaskRun> {
         return context;
     }
 
-    public Constants.TaskRunState executeTaskRun() throws Exception {
+    public TaskRunContext buildTaskRunContext() {
         TaskRunContext taskRunContext = new TaskRunContext();
 
         // Definition will cause a lot of repeats and cost a lot of metadata memory resources, so
@@ -313,6 +313,11 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setStatus(status);
         taskRunContext.setExecuteOption(executeOption);
         taskRunContext.setTaskRun(this);
+        return taskRunContext;
+    }
+
+    public Constants.TaskRunState executeTaskRun() throws Exception {
+        TaskRunContext taskRunContext = buildTaskRunContext();
 
         // prepare to execute task run, move it here so that we can catch the exception and set the status
         processor.prepare(taskRunContext);
