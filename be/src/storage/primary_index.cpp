@@ -1049,8 +1049,8 @@ PrimaryIndex::~PrimaryIndex() {
             LOG(WARNING) << "bad primary index released table:" << _table_id << " tablet:" << _tablet_id
                          << " memory: " << memory_usage();
         } else {
-            LOG(INFO) << "primary index released table:" << _table_id << " tablet:" << _tablet_id
-                      << " memory: " << memory_usage();
+            VLOG(1) << "primary index released table:" << _table_id << " tablet:" << _tablet_id
+                    << " memory: " << memory_usage();
         }
     }
 }
@@ -1104,6 +1104,11 @@ void PrimaryIndex::unload() {
     _status = Status::OK();
     _loaded = false;
     _calc_memory_usage();
+}
+
+bool PrimaryIndex::is_loaded() {
+    std::lock_guard<std::mutex> lg(_lock);
+    return _loaded && _status.ok();
 }
 
 static string int_list_to_string(const vector<uint32_t>& l) {

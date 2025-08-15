@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CREATE TABLE LIKE
 
-## Description
-
-Creates an identical empty table based on the definition of another table. The definition includes column definition, partitions, and table properties. You can copy an external table such as MySQL.
+CREATE TABLE LIKE creates an identical empty table based on the definition of another table. The definition includes column definition, partitions, and table properties. You can copy an external table such as MySQL.
 
 v3.2 allows you to specify a different partitioning method, bucketing method, and properties for the new table than the source table.
 

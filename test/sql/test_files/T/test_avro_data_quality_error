@@ -1,0 +1,57 @@
+-- name: test_avro_data_quality_error
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/avro_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ./sql/test_files/avro_format/user.avro oss://${oss_bucket}/test_files/avro_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/*",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/*",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
+create table t1 (id int, name varchar(5));
+-- result:
+-- !result
+
+insert into t1
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/*",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+[UC]id=select id from information_schema.loads where db_name = "db_${uuid0}";
+select tracking_log from information_schema.load_tracking_logs where job_id = ${id};
+select * from t1;
+
+insert into t1 properties("max_filter_ratio" = "1")
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/*",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+select * from t1;
+truncate table t1;
+
+insert into t1 properties("strict_mode" = "false")
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/*",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+select * from t1;
+truncate table t1;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/avro_format/${uuid0}/ > /dev/null

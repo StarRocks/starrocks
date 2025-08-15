@@ -20,19 +20,26 @@ import java.util.List;
 
 public class AddBackendClause extends BackendClause {
     private final String warehouse;
+    private final String cngroupName;
 
     public AddBackendClause(List<String> hostPorts, String warehouse) {
         super(hostPorts, NodePosition.ZERO);
         this.warehouse = warehouse;
+        this.cngroupName = "";
     }
 
-    public AddBackendClause(List<String> hostPorts, String warehouse, NodePosition pos) {
+    public AddBackendClause(List<String> hostPorts, String warehouse, String cngroupName, NodePosition pos) {
         super(hostPorts, pos);
         this.warehouse = warehouse;
+        this.cngroupName = cngroupName;
     }
 
     public String getWarehouse() {
         return warehouse;
+    }
+
+    public String getCNGroupName() {
+        return cngroupName;
     }
 
     @Override

@@ -13,6 +13,9 @@
 // limitations under the License.
 package com.starrocks.sql.spm;
 
+import com.starrocks.analysis.Expr;
+
+import java.util.Collections;
 import java.util.List;
 
 public interface SQLPlanStorage {
@@ -20,16 +23,26 @@ public interface SQLPlanStorage {
         return isGlobal ? new SQLPlanGlobalStorage() : new SQLPlanSessionStorage();
     }
 
-    List<BaselinePlan> getAllBaselines();
+    List<BaselinePlan> getBaselines(Expr where);
 
-    void storeBaselinePlan(BaselinePlan plan);
+    void storeBaselinePlan(List<BaselinePlan> plan);
 
     List<BaselinePlan> findBaselinePlan(String sqlDigest, long hash);
 
-    void dropBaselinePlan(long baseLineId);
+    void dropBaselinePlan(List<Long> baseLineIds);
 
     // for ut test use
     void dropAllBaselinePlans();
 
+    default void replayBaselinePlan(BaselinePlan.Info info, boolean isCreate) {}
+
+    default void replayUpdateBaselinePlan(BaselinePlan.Info info, boolean isEnable) {}
+
+    void controlBaselinePlan(boolean isEnable, List<Long> baseLineIds);
+
     default void replayBaselinePlan(BaselinePlan plan, boolean isCreate) {}
+
+    default List<BaselinePlan> queryBaselinePlan(List<String> sqlDigest, String source) {
+        return Collections.emptyList();
+    }
 }

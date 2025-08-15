@@ -183,7 +183,7 @@ public class PseudoFrontend {
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
-                FrontendOptions.init(new String[0]);
+                FrontendOptions.init(null);
                 ExecuteEnv.setup();
 
                 if (frontend.fakeJournal) {
@@ -196,7 +196,7 @@ public class PseudoFrontend {
                     };
                 }
 
-                GlobalStateMgr.getCurrentState().initialize(args);
+                GlobalStateMgr.getCurrentState().initialize(null);
                 GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
                 StateChangeExecutor.getInstance().registerStateChangeExecution(
                         GlobalStateMgr.getCurrentState().getStateChangeExecution());

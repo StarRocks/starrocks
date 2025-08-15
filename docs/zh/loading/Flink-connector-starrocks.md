@@ -18,12 +18,13 @@ StarRocks 提供的 Flink connector，相比于 Flink 提供的 [flink-connector
 
 ## 版本要求
 
-| Connector | Flink                    | StarRocks  | Java | Scala      |
-| --------- | ------------------------ | ---------- | ---- | ---------- |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19 | 2.1 及以上  | 8    | 2.11,2.12  |
-| 1.2.9     | 1.15,1.16,1.17,1.18      | 2.1 及以上  | 8    | 2.11,2.12  |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 及以上  | 8    | 2.11,2.12  |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 及以上  | 8    | 2.11,2.12  |
+| Connector | Flink                         | StarRocks     | Java | Scala     |
+|-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.9     | 1.15,1.16,1.17,1.18           | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17      | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15      | 2.1 及以上     | 8    | 2.11,2.12 |
 
 ## 获取 Flink connector
 
@@ -122,7 +123,7 @@ Flink connector JAR 文件的命名格式如下：
 | sink.properties.partial_update    | No       | false         | 是否使用部分更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。 |
 | sink.properties.partial_update_mode | No     | row           | 指定部分更新的模式，取值包括 `row` 和 `column`。<ul><li>`row`（默认值），指定使用行模式执行部分更新，比较适用于较多列且小批量的实时更新场景。</li><li>`column`，指定使用列模式执行部分更新，比较适用于少数列并且大量行的批处理更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul>  |
 | sink.properties.strict_mode       | No       | false         | 是否为 Stream Load 启用严格模式。在导入数据中出现不合格行（如列值不一致）时，严格模式会影响导入行为。有效值： `true` 和 `false`。具体参考 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
-| sink.properties.compression       | No       | NONE          | 此参数自 Flink connector 1.2.10 开始支持。指定用于 Stream Load 的压缩算法。目前只支持 JSON 格式的压缩。有效值：`lz4_frame`。仅 StarRocks v3.2.7 及更高版本支持 JSON 格式的压缩。 |
+| sink.properties.compression       | No       | NONE          | 用于 Stream Load 的压缩算法。有效值：`lz4_frame`。压缩 JSON 格式需要 Flink Connector 1.2.10+ 和 StarRocks v3.2.7+。压缩 CSV 格式仅需要 Flink Connector 1.2.11+。 |
 
 ## 数据类型映射
 

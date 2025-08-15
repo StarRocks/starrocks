@@ -109,18 +109,28 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
 
     if (!context->status.ok()) {
         _response->add_failed_tablets(context->tablet_id);
+    } else {
+        _success_compaction_input_file_size += context->stats->input_file_size;
     }
 
     // process compact stat
     auto compact_stat = _response->add_compact_stats();
     compact_stat->set_tablet_id(context->tablet_id);
-    compact_stat->set_read_time_remote(context->stats->io_ns_remote);
+    compact_stat->set_read_time_remote(context->stats->io_ns_read_remote);
     compact_stat->set_read_bytes_remote(context->stats->io_bytes_read_remote);
-    compact_stat->set_read_time_local(context->stats->io_ns_local_disk);
+    compact_stat->set_read_time_local(context->stats->io_ns_read_local_disk);
     compact_stat->set_read_bytes_local(context->stats->io_bytes_read_local_disk);
+    compact_stat->set_read_segment_count(context->stats->read_segment_count);
+    compact_stat->set_write_segment_count(context->stats->write_segment_count);
+    compact_stat->set_write_segment_bytes(context->stats->write_segment_bytes);
+    compact_stat->set_write_time_remote(context->stats->io_ns_write_remote);
     compact_stat->set_in_queue_time_sec(context->stats->in_queue_time_sec);
     compact_stat->set_sub_task_count(_request->tablet_ids_size());
-
+    compact_stat->set_total_compact_input_file_size(context->stats->input_file_size);
+    if (context->skip_write_txnlog && context->txn_log != nullptr) {
+        // context->txn_log could be nullptr if the task is failed before writing txn log.
+        _response->add_txn_logs()->CopyFrom(*context->txn_log);
+    }
     DCHECK(_request != nullptr);
     _status.update(context->status);
 
@@ -131,6 +141,7 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
 
     if (_contexts.size() == _request->tablet_ids_size()) { // All tasks finished, send RPC response to FE
         _status.to_protobuf(_response->mutable_status());
+        _response->set_success_compaction_input_file_size(_success_compaction_input_file_size);
         if (_done != nullptr) {
             _done->Run();
             _done = nullptr;
@@ -254,7 +265,8 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     std::vector<std::unique_ptr<CompactionTaskContext>> contexts_vec;
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
-                                                               request->force_base_compaction(), cb);
+                                                               request->force_base_compaction(),
+                                                               request->skip_write_txnlog(), cb);
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
     }

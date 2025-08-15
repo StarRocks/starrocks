@@ -24,15 +24,16 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,11 +41,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class ShowCreateTableStmtTest {
     private static ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
@@ -74,8 +77,8 @@ public class ShowCreateTableStmtTest {
         String sql = "show create view test_mv";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
-        Assert.assertEquals("test_mv", resultSet.getResultRows().get(0).get(0));
-        Assert.assertEquals("CREATE VIEW `test_mv` AS SELECT `test`.`base`.`k1`\n" +
+        Assertions.assertEquals("test_mv", resultSet.getResultRows().get(0).get(0));
+        Assertions.assertEquals("CREATE VIEW `test_mv` AS SELECT `test`.`base`.`k1`\n" +
                 "FROM `test`.`base`", resultSet.getResultRows().get(0).get(1));
     }
 
@@ -85,18 +88,20 @@ public class ShowCreateTableStmtTest {
         ShowCreateTableStmt stmt =
                 new ShowCreateTableStmt(new TableName("testDb", "testTbl"), ShowCreateTableStmt.CreateTableType.TABLE);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("testDb", stmt.getDb());
-        Assert.assertEquals("testTbl", stmt.getTable());
-        Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("Table", stmt.getMetaData().getColumn(0).getName());
-        Assert.assertEquals("Create Table", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals("testDb", stmt.getDb());
+        Assertions.assertEquals("testTbl", stmt.getTable());
+        Assertions.assertEquals(2, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Table", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
+        Assertions.assertEquals("Create Table", new ShowResultMetaFactory().getMetadata(stmt).getColumn(1).getName());
     }
 
-    @Test(expected = SemanticException.class)
-    public void testNoTbl() throws Exception {
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(null, ShowCreateTableStmt.CreateTableType.TABLE);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.fail("No Exception throws.");
+    @Test
+    public void testNoTbl() {
+        assertThrows(SemanticException.class, () -> {
+            ShowCreateTableStmt stmt = new ShowCreateTableStmt(null, ShowCreateTableStmt.CreateTableType.TABLE);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+            Assertions.fail("No Exception throws.");
+        });
     }
 
     @Test
@@ -115,8 +120,8 @@ public class ShowCreateTableStmtTest {
         String sql = "show create table test_pk_current_timestamp";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
-        Assert.assertEquals("test_pk_current_timestamp", resultSet.getResultRows().get(0).get(0));
-        Assert.assertTrue(resultSet.getResultRows().get(0).get(1).contains("datetime NOT NULL DEFAULT CURRENT_TIMESTAMP"));
+        Assertions.assertEquals("test_pk_current_timestamp", resultSet.getResultRows().get(0).get(0));
+        Assertions.assertTrue(resultSet.getResultRows().get(0).get(1).contains("datetime NOT NULL DEFAULT CURRENT_TIMESTAMP"));
     }
 
     @Test
@@ -131,10 +136,10 @@ public class ShowCreateTableStmtTest {
                 props, new HashMap<>(),  HiveStorageFormat.ORC, HiveTable.HiveTableType.MANAGED_TABLE);
         List<String> result = new ArrayList<>();
         AstToStringBuilder.getDdlStmt(table, result, null, null, false, true);
-        Assert.assertEquals(result.size(), 1);
+        Assertions.assertEquals(result.size(), 1);
         String value = result.get(0);
         System.out.println(value);
-        Assert.assertTrue(value.contains("\"COLUMN_STATS_ACCURATE\"  =  \"{\\\"BASIC_STATS\\\":\\\"true\\\"}\""));
+        Assertions.assertTrue(value.contains("\"COLUMN_STATS_ACCURATE\"  =  \"{\\\"BASIC_STATS\\\":\\\"true\\\"}\""));
     }
 
     @Test
@@ -154,6 +159,6 @@ public class ShowCreateTableStmtTest {
         String sql = "show create table test.aaa";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
-        Assert.assertTrue(resultSet.getResultRows().get(0).get(1).contains("partition_live_number"));
+        Assertions.assertTrue(resultSet.getResultRows().get(0).get(1).contains("partition_live_number"));
     }
 }

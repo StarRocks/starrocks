@@ -22,16 +22,16 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 
 public class ModifyBrokerClauseTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
         AnalyzeTestUtil.init();
@@ -44,10 +44,10 @@ public class ModifyBrokerClauseTest {
         String stmt = String.format("ALTER SYSTEM ADD BROKER %s \"%s\"", brokerName, hostPort);
         ModifyBrokerClause clause = (ModifyBrokerClause)(
                 (AlterSystemStmt)UtFrameUtils.parseStmtWithNewParser(stmt, connectContext)).getAlterClause();
-        Assert.assertEquals(ModifyBrokerClause.ModifyOp.OP_ADD, clause.getOp());
-        Assert.assertEquals(AlterOpType.ALTER_OTHER, clause.getOpType());
-        Assert.assertEquals(brokerName, clause.getBrokerName());
-        Assert.assertEquals(ImmutableSet.of(Pair.create("127.0.0.1", 8000)), clause.getHostPortPairs());
+        Assertions.assertEquals(ModifyBrokerClause.ModifyOp.OP_ADD, clause.getOp());
+        Assertions.assertEquals(AlterOpType.ALTER_OTHER, clause.getOpType());
+        Assertions.assertEquals(brokerName, clause.getBrokerName());
+        Assertions.assertEquals(ImmutableSet.of(Pair.create("127.0.0.1", 8000)), clause.getHostPortPairs());
     }
 
     @Test
@@ -58,10 +58,10 @@ public class ModifyBrokerClauseTest {
         String stmt = String.format("ALTER SYSTEM DROP BROKER %s \"%s\", \"%s\"", brokerName, hostPort1, hostPort2);
         ModifyBrokerClause clause = (ModifyBrokerClause)(
                 (AlterSystemStmt)UtFrameUtils.parseStmtWithNewParser(stmt, connectContext)).getAlterClause();
-        Assert.assertEquals(ModifyBrokerClause.ModifyOp.OP_DROP, clause.getOp());
-        Assert.assertEquals(AlterOpType.ALTER_OTHER, clause.getOpType());
-        Assert.assertEquals(brokerName, clause.getBrokerName());
-        Assert.assertEquals(ImmutableSet.of(Pair.create("127.0.0.1", 8000), Pair.create("127.0.0.1", 8001)), clause.getHostPortPairs());
+        Assertions.assertEquals(ModifyBrokerClause.ModifyOp.OP_DROP, clause.getOp());
+        Assertions.assertEquals(AlterOpType.ALTER_OTHER, clause.getOpType());
+        Assertions.assertEquals(brokerName, clause.getBrokerName());
+        Assertions.assertEquals(ImmutableSet.of(Pair.create("127.0.0.1", 8000), Pair.create("127.0.0.1", 8001)), clause.getHostPortPairs());
     }
 
     @Test
@@ -70,10 +70,10 @@ public class ModifyBrokerClauseTest {
         String stmt = String.format("ALTER SYSTEM DROP ALL BROKER %s", brokerName);
         ModifyBrokerClause clause = (ModifyBrokerClause)(
                 (AlterSystemStmt)UtFrameUtils.parseStmtWithNewParser(stmt, connectContext)).getAlterClause();
-        Assert.assertEquals(ModifyBrokerClause.ModifyOp.OP_DROP_ALL, clause.getOp());
-        Assert.assertEquals(AlterOpType.ALTER_OTHER, clause.getOpType());
-        Assert.assertEquals(brokerName, clause.getBrokerName());
-        Assert.assertTrue(clause.getHostPortPairs().isEmpty());
+        Assertions.assertEquals(ModifyBrokerClause.ModifyOp.OP_DROP_ALL, clause.getOp());
+        Assertions.assertEquals(AlterOpType.ALTER_OTHER, clause.getOpType());
+        Assertions.assertEquals(brokerName, clause.getBrokerName());
+        Assertions.assertTrue(clause.getHostPortPairs().isEmpty());
     }
 
     @Test

@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW ANALYZE STATUS
 
-## Description
-
-Views the status of collection tasks.
+SHOW ANALYZE STATUS views the status of collection tasks.
 
 This statement cannot be used to view the status of custom collection tasks. To view the status of custom collection tasks, use SHOW ANALYZE JOB.
 

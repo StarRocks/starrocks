@@ -52,7 +52,8 @@ public:
                          const int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
                          const std::vector<ExprContext*>& partition_expr_ctxs, bool enable_exchange_pass_through,
                          bool enable_exchange_perf, FragmentContext* const fragment_ctx,
-                         const std::vector<int32_t>& output_columns);
+                         const std::vector<int32_t>& output_columns,
+                         const std::vector<TBucketProperty>& bucket_properties, std::atomic<int32_t>& num_sinkers);
 
     ~ExchangeSinkOperator() override = default;
 
@@ -92,6 +93,7 @@ private:
         // ref olap_scan_node.cpp release_large_columns
         return sz > runtime_state()->chunk_size() * 512;
     }
+    void _calc_hash_values_and_bucket_ids();
 
 private:
     class Channel;
@@ -211,8 +213,14 @@ private:
     FragmentContext* const _fragment_ctx;
 
     const std::vector<int32_t>& _output_columns;
+    const std::vector<TBucketProperty>& _bucket_properties;
+    std::vector<uint32_t> _round_hashes;
+    std::vector<uint32_t> _round_ids;
+    std::vector<uint32_t> _bucket_ids;
 
     std::unique_ptr<Shuffler> _shuffler;
+
+    std::atomic<int32_t>& _num_sinkers;
 };
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {
@@ -223,7 +231,8 @@ public:
                                 bool is_pipeline_level_shuffle, int32_t num_shuffles_per_channel, int32_t sender_id,
                                 PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
                                 bool enable_exchange_pass_through, bool enable_exchange_perf,
-                                FragmentContext* const fragment_ctx, std::vector<int32_t> output_columns);
+                                FragmentContext* const fragment_ctx, std::vector<int32_t> output_columns,
+                                std::vector<TBucketProperty> bucket_properties);
 
     ~ExchangeSinkOperatorFactory() override = default;
 
@@ -236,6 +245,8 @@ public:
     void close(RuntimeState* state) override;
 
 private:
+    void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
+
     std::shared_ptr<SinkBuffer> _buffer;
     const TPartitionType::type _part_type;
 
@@ -254,6 +265,9 @@ private:
     FragmentContext* const _fragment_ctx;
 
     const std::vector<int32_t> _output_columns;
+    const std::vector<TBucketProperty> _bucket_properties;
+
+    std::atomic<int32_t> _num_sinkers = 0;
 };
 
 } // namespace pipeline

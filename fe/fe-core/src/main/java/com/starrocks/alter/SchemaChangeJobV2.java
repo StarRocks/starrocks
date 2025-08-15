@@ -74,14 +74,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.Status;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -112,8 +110,6 @@ import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
@@ -179,6 +175,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     private List<Integer> sortKeyIdxes;
     @SerializedName(value = "sortKeyUniqueIds")
     private List<Integer> sortKeyUniqueIds;
+    // If disableReplicatedStorageForGIN is true, which means this job is adding gin index and table's replicated_storage is true,
+    // and we need to disable it.
+    @SerializedName(value = "disableReplicatedStorageForGIN")
+    private boolean disableReplicatedStorageForGIN = false;
 
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
@@ -268,6 +268,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     public void setWatershedTxnId(long txnId) {
         this.watershedTxnId = txnId;
+    }
+
+    public void setDisableReplicatedStorageForGIN(boolean disableReplicatedStorageForGIN) {
+        this.disableReplicatedStorageForGIN = disableReplicatedStorageForGIN;
     }
 
     /**
@@ -442,6 +446,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         try {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             addShadowIndexToCatalog(tbl);
+            if (disableReplicatedStorageForGIN) {
+                tbl.setEnableReplicatedStorage(false);
+            }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
@@ -836,7 +843,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 List<Column> differences = originSchema.stream().filter(element ->
                         !shadowSchema.contains(element)).collect(Collectors.toList());
                 // can just drop one column one time, so just one element in differences
-                Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
+                Integer dropIdx = Integer.valueOf(originSchema.indexOf(differences.get(0)));
                 modifiedColumns.add(originSchema.get(dropIdx).getName());
             } else {
                 // add column should not affect old mv, just ignore.
@@ -889,7 +896,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     // log may be replayed to the image, and the image will not persist the TabletInvertedIndex. So we
                     // should add the tablet to TabletInvertedIndex again on finish state.
                     TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, physicalPartition.getId(), shadowIdxId,
-                            indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash, medium);
+                            medium);
                     for (Tablet tablet : shadowIdx.getTablets()) {
                         invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
                         for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -1013,6 +1020,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         tbl.deleteIndexInfo(shadowIndexName);
                     }
                     tbl.setState(OlapTableState.NORMAL);
+                    if (disableReplicatedStorageForGIN) {
+                        tbl.setEnableReplicatedStorage(true);
+                    }
                 } finally {
                     locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
                 }
@@ -1058,7 +1068,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                 TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
                 TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId,
-                        indexSchemaVersionAndHashMap.get(shadowIndexId).schemaHash, medium);
+                        medium);
 
                 for (Tablet shadownTablet : shadowIndex.getTablets()) {
                     invertedIndex.addTablet(shadownTablet.getId(), shadowTabletMeta);
@@ -1070,6 +1080,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
             // set table state
             tbl.setState(OlapTableState.SCHEMA_CHANGE);
+            if (disableReplicatedStorageForGIN) {
+                tbl.setEnableReplicatedStorage(false);
+            }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
@@ -1213,11 +1226,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         return taskInfos;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this, AlterJobV2.class);
-        Text.writeString(out, json);
-    }
+
+
 
     @Override
     public Optional<Long> getTransactionId() {

@@ -18,16 +18,12 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TTabletMetaType;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Set;
 
 public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
@@ -40,6 +36,12 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     @SerializedName(value = "persistentIndexType")
     private String persistentIndexType;
 
+    @SerializedName(value = "enableFileBundling")
+    private boolean enableFileBundling;
+
+    @SerializedName(value = "compactionStrategy")
+    private String compactionStrategy;
+
     // for deserialization
     public LakeTableAlterMetaJob() {
         super(JobType.SCHEMA_CHANGE);
@@ -48,22 +50,49 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue,
                                  String persistentIndexType) {
+        this(jobId, dbId, tableId, tableName, timeoutMs, metaType, metaValue, persistentIndexType,
+                false, "DEFAULT");
+    }
+
+    public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
+                                 long timeoutMs, TTabletMetaType metaType, boolean metaValue,
+                                 String persistentIndexType,
+                                 boolean enableFileBundling,
+                                 String compactionStrategy) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         this.metaType = metaType;
         this.metaValue = metaValue;
         this.persistentIndexType = persistentIndexType;
+        this.enableFileBundling = enableFileBundling;
+        this.compactionStrategy = compactionStrategy;
     }
 
     @Override
     protected TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition,
             MaterializedIndex index, long nodeId, Set<Long> tablets) {
-        return TabletMetadataUpdateAgentTaskFactory.createLakePersistentIndexUpdateTask(nodeId, tablets,
-                metaValue, persistentIndexType);
+        if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
+            return TabletMetadataUpdateAgentTaskFactory.createLakePersistentIndexUpdateTask(nodeId, tablets,
+                        metaValue, persistentIndexType);
+        }
+        if (metaType == TTabletMetaType.ENABLE_FILE_BUNDLING) {
+            return TabletMetadataUpdateAgentTaskFactory.createUpdateFileBundlingTask(nodeId, tablets,
+                        enableFileBundling);
+        }
+        if (metaType == TTabletMetaType.COMPACTION_STRATEGY) {
+            return TabletMetadataUpdateAgentTaskFactory.createUpdateCompactionStrategyTask(nodeId, tablets,
+                        compactionStrategy);
+        }
+        return null;
     }
 
     @Override
-    protected LakeTableAlterMetaJob getShadowCopy() {
-        return this;
+    protected boolean enableFileBundling() {
+        return metaType == TTabletMetaType.ENABLE_FILE_BUNDLING && enableFileBundling;
+    }
+
+    @Override
+    protected boolean disableFileBundling() {
+        return metaType == TTabletMetaType.ENABLE_FILE_BUNDLING && !enableFileBundling;
     }
 
     @Override
@@ -77,6 +106,14 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
                     String.valueOf(persistentIndexType));
             table.getTableProperty().buildPersistentIndexType();
         }
+        if (metaType == TTabletMetaType.ENABLE_FILE_BUNDLING) {
+            table.setFileBundling(enableFileBundling);
+        }
+        if (metaType == TTabletMetaType.COMPACTION_STRATEGY) {
+            table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
+                    String.valueOf(compactionStrategy));
+            table.getTableProperty().buildCompactionStrategy();
+        }
     }
 
     @Override
@@ -85,11 +122,10 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.metaType = other.metaType;
         this.metaValue = other.metaValue;
         this.persistentIndexType = other.persistentIndexType;
+        this.enableFileBundling = other.enableFileBundling;
+        this.compactionStrategy = other.compactionStrategy;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this, AlterJobV2.class);
-        Text.writeString(out, json);
-    }
+
+
 }

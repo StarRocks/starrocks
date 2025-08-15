@@ -14,7 +14,7 @@ import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-ac
 
 ロールをユーザーまたは他のロールに付与します。
 
-付与可能な権限の詳細については、[Privilege items](../../../administration/user_privs/privilege_overview.md) を参照してください。
+付与可能な権限の詳細については、[Privilege items](../../../administration/user_privs/authorization/user_privs.md) を参照してください。
 
 GRANT 操作が実行された後、[SHOW GRANTS](./SHOW_GRANTS.md) を実行して詳細な権限情報を表示するか、[REVOKE](REVOKE.md) を実行して権限またはロールを取り消すことができます。
 
@@ -35,7 +35,7 @@ GRANT 操作を実行する前に、関連するユーザーまたはロール�
 
 ```SQL
 GRANT
-    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME } 
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME | SECURITY } 
     ON SYSTEM
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```

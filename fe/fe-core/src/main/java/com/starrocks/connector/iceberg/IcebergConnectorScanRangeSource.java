@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.Lists;
@@ -30,9 +31,11 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.ConnectorScanRangeSource;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfo;
@@ -40,6 +43,7 @@ import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
@@ -50,6 +54,7 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.ContentFile;
+import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
@@ -57,6 +62,7 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -70,6 +76,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -83,11 +90,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final IcebergTable table;
     private final TupleDescriptor desc;
     private final IcebergMORParams morParams;
+    private final Optional<List<BucketProperty>> bucketProperties;
     private final RemoteFileInfoSource remoteFileInfoSource;
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     private final Map<Long, DescriptorTable.ReferencedPartitionInfo> referencedPartitions = new HashMap<>();
-    private final Map<StructLike, Long> partitionKeyToId = Maps.newHashMap();
+    private final Map<StructLikeWrapper, Long> partitionKeyToId = Maps.newHashMap();
 
     // spec_id -> Map(partition_field_index_in_partitionSpec, PartitionField)
     private final Map<Integer, BiMap<Integer, PartitionField>> indexToFieldCache = Maps.newHashMap();
@@ -99,15 +107,53 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final Map<Integer, List<Integer>> indexesCache = Maps.newHashMap();
     private final Set<String> seenEqDeleteFiles = new HashSet<>();
     private final List<Integer> extendedColumnSlotIds = new ArrayList<>();
+    // index -> field pos & bucket num
+    private final List<Pair<Integer, Integer>> bucketInfo = new ArrayList<>();
+
+    private final Set<DataFile> scannedDataFiles;
+    private final Set<DeleteFile> appliedPosDeleteFiles;
+    private final Set<DeleteFile> appliedEqualDeleteFiles;
+    private final boolean recordScanFiles;
 
     public IcebergConnectorScanRangeSource(IcebergTable table,
                                            RemoteFileInfoSource remoteFileInfoSource,
                                            IcebergMORParams morParams,
-                                           TupleDescriptor desc) {
+                                           TupleDescriptor desc,
+                                           Optional<List<BucketProperty>> bucketProperties,
+                                           boolean recordScanFiles) {
         this.table = table;
         this.remoteFileInfoSource = remoteFileInfoSource;
         this.morParams = morParams;
         this.desc = desc;
+        this.bucketProperties = bucketProperties;
+        initBucketInfo();
+        this.recordScanFiles = recordScanFiles;
+        this.scannedDataFiles = new HashSet<>();
+        this.appliedPosDeleteFiles = new HashSet<>();
+        this.appliedEqualDeleteFiles = new HashSet<>();
+    }
+
+    public IcebergConnectorScanRangeSource(IcebergTable table,
+                                           RemoteFileInfoSource remoteFileInfoSource,
+                                           IcebergMORParams morParams,
+                                           TupleDescriptor desc,
+                                           Optional<List<BucketProperty>> bucketProperties) {
+        this.table = table;
+        this.remoteFileInfoSource = remoteFileInfoSource;
+        this.morParams = morParams;
+        this.desc = desc;
+        this.bucketProperties = bucketProperties;
+        initBucketInfo();
+        this.recordScanFiles = false;
+        this.scannedDataFiles = new HashSet<>();
+        this.appliedPosDeleteFiles = new HashSet<>();
+        this.appliedEqualDeleteFiles = new HashSet<>();
+    }
+
+    public void clearScannedFiles() {
+        this.scannedDataFiles.clear();
+        this.appliedPosDeleteFiles.clear();
+        this.appliedEqualDeleteFiles.clear();
     }
 
     @Override
@@ -126,12 +172,68 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
                 FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
                 res.addAll(toScanRanges(fileScanTask));
+                if (recordScanFiles) {
+                    scannedDataFiles.add(fileScanTask.file());
+                    for (DeleteFile del : fileScanTask.deletes()) {
+                        if (del.content() == FileContent.POSITION_DELETES) {
+                            appliedPosDeleteFiles.add(del);
+                        } else if (del.content() == FileContent.EQUALITY_DELETES) {
+                            appliedEqualDeleteFiles.add(del);
+                        }
+                    }
+                }
             }
             return res;
         }
     }
 
-    private List<TScanRangeLocations> toScanRanges(FileScanTask fileScanTask) {
+    public List<FileScanTask> getSourceFileScanOutputs(int maxSize, long fileSizeThreshold, boolean allFiles) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
+            List<FileScanTask> res = new ArrayList<>();
+            while (hasMoreOutput() && res.size() < maxSize) {
+                RemoteFileInfo remoteFileInfo = remoteFileInfoSource.getOutput();
+                IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
+                FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
+                if (allFiles || fileScanTask.file().fileSizeInBytes() <= fileSizeThreshold) {
+                    res.add(fileScanTask);
+                } else {
+                    for (DeleteFile del : fileScanTask.deletes()) {
+                        if (del.content() == FileContent.POSITION_DELETES) {
+                            // if the pos delete is a file level pos delete, then we may skip the data file scan if 
+                            // the condition does not match. Otherwise(partition-level delete file), 
+                            // we scan the data file anyway, to make sure the pos delete can be eliminated any way
+                            int filePathId = 2147483546; //https://iceberg.apache.org/spec/#reserved-field-ids
+                            if (del.referencedDataFile() == null && (del.lowerBounds() != null && del.upperBounds() != null &&
+                                    !del.lowerBounds().get(filePathId).equals(del.upperBounds().get(filePathId)))) {
+                                //partition pos delete file related files
+                                res.add(fileScanTask);
+                            }
+                        } else if (del.content() == FileContent.EQUALITY_DELETES) {
+                            // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure that 
+                            // we can eliminate the equality delete files.
+                        }
+                    }
+                }
+            }
+            return res;
+        }
+    }
+
+    private void initBucketInfo() {
+        if (bucketProperties.isPresent()) {
+            List<PartitionField> fields = table.getNativeTable().spec().fields();
+            for (BucketProperty bucket : bucketProperties.get()) {
+                for (int i = 0; i < fields.size(); i++) {
+                    if (fields.get(i).name().equals(bucket.getColumn().getName() + "_bucket")) {
+                        bucketInfo.add(new Pair<>(i, bucket.getBucketNum()));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    protected List<TScanRangeLocations> toScanRanges(FileScanTask fileScanTask) {
         long partitionId;
         try {
             partitionId = addPartition(fileScanTask);
@@ -190,6 +292,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
         return res;
     }
+
     protected THdfsScanRange buildScanRange(FileScanTask task, ContentFile<?> file, Long partitionId) throws AnalysisException {
         DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo = referencedPartitions.get(partitionId);
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
@@ -201,6 +304,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         hdfsScanRange.setOffset(file.content() == FileContent.DATA ? task.start() : 0);
         hdfsScanRange.setLength(file.content() == FileContent.DATA ? task.length() : file.fileSizeInBytes());
+
+        boolean isFirstSplit = (hdfsScanRange.getOffset() == 0);
+        // But sometimes first task offset is 4. For example, the first four bytes are magic bytes in parquet file.
+        if (file.splitOffsets() != null && !file.splitOffsets().isEmpty()) {
+            isFirstSplit |= (file.splitOffsets().get(0) == hdfsScanRange.getOffset());
+        }
 
         if (!partitionSlotIdsCache.containsKey(file.specId())) {
             hdfsScanRange.setPartition_id(-1);
@@ -242,8 +351,39 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             }
         }
 
+        if (bucketProperties.isPresent()) {
+            hdfsScanRange.setBucket_id(extractBucketId(task));
+        }
+
         hdfsScanRange.setExtended_columns(extendedColumns);
+        hdfsScanRange.setRecord_count(file.recordCount());
+        hdfsScanRange.setIs_first_split(isFirstSplit);
+
+        if (file.nullValueCounts() != null && file.valueCounts() != null) {
+            // fill min/max value
+            Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
+                    table.getNativeTable().schema(), file.lowerBounds(), file.upperBounds(),
+                    file.nullValueCounts(), file.valueCounts(), slots);
+            hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
+        }
         return hdfsScanRange;
+    }
+
+    private int getCurBucketId(FileScanTask task, int i) {
+        Integer ret = task.partition().get(bucketInfo.get(i).first, Integer.class);
+        return ret == null ? bucketInfo.get(i).second : ret;
+    }
+
+    @VisibleForTesting
+    int extractBucketId(FileScanTask task) {
+        int bucketValue = 0;
+        int i = 0;
+        for (; i < bucketInfo.size() - 1; i++) {
+            int cur = getCurBucketId(task, i);
+            bucketValue = (bucketValue + cur) * (bucketInfo.get(i + 1).second + 1);
+        }
+        bucketValue = bucketValue + getCurBucketId(task, i);
+        return bucketValue;
     }
 
     protected TScanRangeLocations buildTScanRangeLocations(THdfsScanRange hdfsScanRange) {
@@ -259,8 +399,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     private long addPartition(FileScanTask task) throws AnalysisException {
         PartitionSpec spec = task.spec();
-
-        StructLike partition = task.partition();
+        //Make sure the parttion data with byte[], decimal value object and etc. can get the same hash code.
+        StructLike origPartition = task.partition();
+        StructLikeWrapper partitionWrapper = StructLikeWrapper.forType(spec.partitionType());
+        StructLikeWrapper partition = partitionWrapper.copyFor(task.file().partition());
         if (partitionKeyToId.containsKey(partition)) {
             return partitionKeyToId.get(partition);
         }
@@ -270,7 +412,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         List<Integer> partitionFieldIndexes = indexesCache.computeIfAbsent(spec.specId(),
                 ignore -> getPartitionFieldIndexes(spec, indexToPartitionField));
-        PartitionKey partitionKey = getPartitionKey(partition, task.spec(), partitionFieldIndexes, indexToPartitionField);
+        PartitionKey partitionKey = getPartitionKey(origPartition, task.spec(), partitionFieldIndexes, indexToPartitionField);
         long partitionId = partitionIdGen.getAndIncrement();
 
         Path filePath = new Path(URLDecoder.decode(task.file().path().toString(), StandardCharsets.UTF_8));
@@ -319,7 +461,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     }
 
     private PartitionKey getPartitionKey(StructLike partition, PartitionSpec spec, List<Integer> indexes,
-                                           BiMap<Integer, PartitionField> indexToField) throws AnalysisException {
+                                         BiMap<Integer, PartitionField> indexToField) throws AnalysisException {
         List<String> partitionValues = new ArrayList<>();
         List<Column> cols = new ArrayList<>();
         indexes.forEach((index) -> {
@@ -362,5 +504,17 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     public Set<String> getSeenEqDeleteFiles() {
         return seenEqDeleteFiles;
+    }
+
+    public Set<DataFile> getScannedDataFiles() {
+        return scannedDataFiles;
+    }
+
+    public Set<DeleteFile> getPosAppliedDeleteFiles() {
+        return appliedPosDeleteFiles;
+    }
+
+    public Set<DeleteFile> getEqualAppliedDeleteFiles() {
+        return appliedEqualDeleteFiles;
     }
 }

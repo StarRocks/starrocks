@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -30,6 +31,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -53,6 +55,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
@@ -74,6 +77,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.spm.SPMPlanner;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.BeginTransactionException;
@@ -117,6 +121,9 @@ public class StatementPlanner {
             }
         }
 
+        SPMPlanner spmPlanner = new SPMPlanner(session);
+        stmt = spmPlanner.plan(stmt);
+
         boolean needWholePhaseLock = true;
         // 1. For all queries, we need db lock when analyze phase
         PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(session, stmt);
@@ -146,6 +153,9 @@ public class StatementPlanner {
                     unLock(plannerMetaLocker);
                     plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker, planStartTime);
                 }
+                if (spmPlanner.getBaseline() != null) {
+                    plan.setUseBaseline(spmPlanner.getBaseline().getId());
+                }
                 setOutfileSink(queryStmt, plan);
                 setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.SELECT);
                 return plan;
@@ -163,7 +173,10 @@ public class StatementPlanner {
             throw e;
         } catch (Throwable e) {
             if (stmt instanceof DmlStmt) {
-                abortTransaction((DmlStmt) stmt, session, e.getMessage());
+                //If it is an explicit transaction, the transaction will not be aborted automatically.
+                if (session.getTxnId() == 0) {
+                    abortTransaction((DmlStmt) stmt, session, e.getMessage());
+                }
             }
             throw e;
         } finally {
@@ -200,7 +213,9 @@ public class StatementPlanner {
      * 1. Optimization for INSERT-SELECT: if the SELECT doesn't need the lock, we can defer the lock acquisition
      * after analyzing the SELECT. That can help the case which SELECT is a time-consuming external table access.
      */
-    private static void analyzeStatement(StatementBase statement, ConnectContext session, PlannerMetaLocker locker) {
+    @VisibleForTesting
+    protected static boolean analyzeStatement(StatementBase statement, ConnectContext session,
+                                              PlannerMetaLocker locker) {
         boolean deferredLock = false;
         Runnable takeLock = () -> {
             try (Timer lockerTime = Tracers.watchScope("Lock")) {
@@ -208,22 +223,34 @@ public class StatementPlanner {
             }
         };
         try (Timer ignored = Tracers.watchScope("Analyzer")) {
-            if (statement instanceof InsertStmt) {
-                InsertStmt insertStmt = (InsertStmt) statement;
+            InsertStmt insertStmt = null;
+            if (statement instanceof SubmitTaskStmt submitTaskStmt && submitTaskStmt.getInsertStmt() != null) {
+                insertStmt = ((SubmitTaskStmt) statement).getInsertStmt();
+            } else if (statement instanceof InsertStmt) {
+                insertStmt = (InsertStmt) statement;
+            }
+            if (insertStmt != null) {
                 Map<Long, Database> dbs = Maps.newHashMap();
                 Map<Long, Set<Long>> tables = Maps.newHashMap();
                 PlannerMetaLocker.collectTablesNeedLock(insertStmt.getQueryStatement(), session, dbs, tables);
 
-                if (tables.isEmpty()) {
+                if (tables.isEmpty() || FeConstants.runningUnitTest) {
                     deferredLock = true;
                 }
             }
 
             if (deferredLock) {
-                InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock);
+                if (statement instanceof SubmitTaskStmt) {
+                    InsertAnalyzer.analyzeWithDeferredLock(insertStmt, session, takeLock);
+                    Analyzer.AnalyzerVisitor.analyzeSubmitTaskOnly(insertStmt, (SubmitTaskStmt) statement, session);
+                } else {
+                    InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock);
+                }
+                return true;
             } else {
                 takeLock.run();
                 Analyzer.analyze(statement, session);
+                return false;
             }
         }
     }
@@ -455,8 +482,8 @@ public class StatementPlanner {
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
             throws BeginTransactionException, RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException,
             DuplicatedRequestException {
-        if (session.getExplicitTxnState() != null) {
-            stmt.setTxnId(session.getExplicitTxnState().getTransactionState().getTransactionId());
+        if (session.getTxnId() != 0) {
+            stmt.setTxnId(session.getTxnId());
             return;
         }
 
@@ -541,7 +568,6 @@ public class StatementPlanner {
                 || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn
         } else {
-            long warehouseId = session.getCurrentWarehouseId();
             long dbId = db.getId();
             txnId = transactionMgr.beginTransaction(
                     dbId,
@@ -551,7 +577,7 @@ public class StatementPlanner {
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
                     session.getExecTimeout(),
-                    warehouseId);
+                    session.getCurrentComputeResource());
 
             // add table indexes to transaction state
             if (targetTable instanceof OlapTable) {

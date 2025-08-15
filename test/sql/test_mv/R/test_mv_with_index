@@ -1,0 +1,169 @@
+-- name: test_mv_with_index
+create database test_mv_with_index;
+-- result:
+-- !result
+use test_mv_with_index;
+-- result:
+-- !result
+admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+-- result:
+-- !result
+CREATE TABLE t1 (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 SELECT generate_series % 100, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 
+DISTRIBUTED BY hash(c0, c1) 
+AS 
+SELECT * from t1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT * FROM test_mv1 order by c0, c1 limit 3;
+-- result:
+0	100	100	100
+0	1000	1000	1000
+0	1100	1100	1100
+-- !result
+ALTER MATERIALIZED VIEW test_mv1 SET ("bloom_filter_columns" = "c1, c2");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+
+-- !result
+SHOW CREATE MATERIALIZED VIEW test_mv1;
+-- result:
+test_mv1	CREATE MATERIALIZED VIEW `test_mv1` (`c0`, `c1`, `c2`, `c3`)
+DISTRIBUTED BY HASH(`c0`, `c1`)
+REFRESH MANUAL
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1",
+"storage_medium" = "HDD",
+"bloom_filter_columns" = "c1, c2"
+)
+AS SELECT `t1`.`c0`, `t1`.`c1`, `t1`.`c2`, `t1`.`c3`
+FROM `test_mv_with_index`.`t1`;
+-- !result
+CREATE INDEX idx1 ON test_mv1(c0) USING BITMAP COMMENT 'bitmap index on c0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+CREATE INDEX idx2 ON test_mv1(c1) USING BITMAP COMMENT 'bitmap index on c1';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SHOW INDEXES FROM test_mv1;
+-- result:
+test_mv_with_index.test_mv1		idx1		c0						BITMAP	bitmap index on c0
+test_mv_with_index.test_mv1		idx2		c1						BITMAP	bitmap index on c1
+-- !result
+SELECT count(1) FROM test_mv1 where c1 = '1';
+-- result:
+1
+-- !result
+SELECT count(1) FROM test_mv1 where c1 = '1' or c2 = '10';
+-- result:
+2
+-- !result
+SELECT count(1) FROM test_mv1 where c0 = 10;
+-- result:
+41
+-- !result
+SELECT count(1) FROM test_mv1 where c0 = 10 or c1 = 10;
+-- result:
+41
+-- !result
+insert into t1 SELECT generate_series % 100, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+SELECT count(1) FROM test_mv1 where c1 = '1';
+-- result:
+1
+-- !result
+SELECT count(1) FROM test_mv1 where c1 = '1' or c2 = '10';
+-- result:
+2
+-- !result
+SELECT count(1) FROM test_mv1 where c0 = 10;
+-- result:
+41
+-- !result
+SELECT count(1) FROM test_mv1 where c0 = 10 or c1 = 10;
+-- result:
+41
+-- !result
+ALTER MATERIALIZED VIEW test_mv1 SET ("bloom_filter_columns" = "");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SHOW CREATE MATERIALIZED VIEW test_mv1;
+-- result:
+test_mv1	CREATE MATERIALIZED VIEW `test_mv1` (`c0`, `c1`, `c2`, `c3`,
+  INDEX idx1 (`c0`) USING BITMAP COMMENT 'bitmap index on c0',
+  INDEX idx2 (`c1`) USING BITMAP COMMENT 'bitmap index on c1')
+DISTRIBUTED BY HASH(`c0`, `c1`)
+REFRESH MANUAL
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1",
+"storage_medium" = "HDD"
+)
+AS SELECT `t1`.`c0`, `t1`.`c1`, `t1`.`c2`, `t1`.`c3`
+FROM `test_mv_with_index`.`t1`;
+-- !result
+DROP INDEX idx2 ON test_mv1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SHOW INDEXES FROM test_mv1;
+-- result:
+test_mv_with_index.test_mv1		idx1		c0						BITMAP	bitmap index on c0
+-- !result
+insert into t1 SELECT generate_series % 100, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+SELECT count(1) FROM test_mv1 where c1 = '1';
+-- result:
+1
+-- !result
+SELECT count(1) FROM test_mv1 where c1 = '1' or c2 = '10';
+-- result:
+2
+-- !result
+SELECT count(1) FROM test_mv1 where c0 = 10;
+-- result:
+41
+-- !result
+SELECT count(1) FROM test_mv1 where c0 = 10 or c1 = 10;
+-- result:
+41
+-- !result
+DROP database test_mv_with_index;
+-- result:
+-- !result

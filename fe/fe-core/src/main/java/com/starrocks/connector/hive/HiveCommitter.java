@@ -120,7 +120,8 @@ public class HiveCommitter {
         List<Pair<PartitionUpdate, HivePartitionStats>> insertExistsPartitions = new ArrayList<>();
         for (PartitionUpdate pu : partitionUpdates) {
             PartitionUpdate.UpdateMode mode = pu.getUpdateMode();
-            HivePartitionStats updateStats = fromCommonStats(pu.getRowCount(), pu.getTotalSizeInBytes());
+            HivePartitionStats updateStats =
+                    fromCommonStats(pu.getRowCount(), pu.getTotalSizeInBytes(), pu.getFileCount());
             if (table.isUnPartitioned()) {
                 if (partitionUpdates.size() != 1) {
                     throw new StarRocksConnectorException("There are multiple updates in the unpartition table: %s.%s",

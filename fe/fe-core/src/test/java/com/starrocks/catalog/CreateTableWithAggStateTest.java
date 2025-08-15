@@ -22,16 +22,16 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 public class CreateTableWithAggStateTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         Config.enable_strict_storage_medium_check = true;
@@ -80,7 +80,7 @@ public class CreateTableWithAggStateTest {
                             "`k7` varbinary avg(smallint(6)) NULL COMMENT \"\", " +
                             "`k8` varbinary avg(int(11)) NULL COMMENT \"\", " +
                             "`k9` varbinary avg(bigint(20)) NULL COMMENT \"\"]";
-                    Assert.assertEquals(expect, columns);
+                    Assertions.assertEquals(expect, columns);
                     // avg_union
                     {
                         String sql = "select k1, " +
@@ -165,7 +165,7 @@ public class CreateTableWithAggStateTest {
                             "`k7` bigint(20) sum(smallint(6)) NULL COMMENT \"\", " +
                             "`k8` bigint(20) sum(int(11)) NULL COMMENT \"\", " +
                             "`k9` bigint(20) sum(bigint(20)) NULL COMMENT \"\"]";
-                    Assert.assertEquals(expect, columns);
+                    Assertions.assertEquals(expect, columns);
                 });
     }
 
@@ -192,7 +192,7 @@ public class CreateTableWithAggStateTest {
                             "`hll_dt` varbinary ds_hll_count_distinct(varchar, int(11), varchar) NULL COMMENT \"\", " +
                             "`hll_id` varbinary ds_hll_count_distinct(varchar) NULL COMMENT \"\", " +
                             "`hll_province` varbinary ds_hll_count_distinct(varchar) NULL COMMENT \"\"]";
-                    Assert.assertEquals(expect, columns);
+                    Assertions.assertEquals(expect, columns);
                 });
     }
 
@@ -229,7 +229,7 @@ public class CreateTableWithAggStateTest {
                             "`k7` varbinary min_by(smallint(6), date) NULL COMMENT \"\", " +
                             "`k8` varbinary min_by(int(11), date) NULL COMMENT \"\", " +
                             "`k9` varbinary min_by(bigint(20), date) NULL COMMENT \"\"]";
-                    Assert.assertEquals(expect, columns);
+                    Assertions.assertEquals(expect, columns);
                 });
     }
 
@@ -266,11 +266,11 @@ public class CreateTableWithAggStateTest {
                             "`k7` struct<col1 array<smallint(6)>> array_agg(smallint(6)) NULL COMMENT \"\", " +
                             "`k8` struct<col1 array<int(11)>> array_agg(int(11)) NULL COMMENT \"\", " +
                             "`k9` struct<col1 array<bigint(20)>> array_agg(bigint(20)) NULL COMMENT \"\"]";
-                    Assert.assertEquals(expect, columns);
+                    Assertions.assertEquals(expect, columns);
                 });
     }
 
-    @Ignore
+    @Disabled
     public void testCreateTableWithAggStateGroupConcat() {
         starRocksAssert.withTable("\n" +
                         "CREATE TABLE test_agg_tbl1(\n" +
@@ -303,7 +303,7 @@ public class CreateTableWithAggStateTest {
                             "`k7` struct<col1 array<varchar(1048576)>> group_concat(smallint(6)) NULL COMMENT \"\", " +
                             "`k8` struct<col1 array<varchar(1048576)>> group_concat(int(11)) NULL COMMENT \"\", " +
                             "`k9` struct<col1 array<varchar(1048576)>> group_concat(bigint(20)) NULL COMMENT \"\"]";
-                    Assert.assertEquals(expect, columns);
+                    Assertions.assertEquals(expect, columns);
                 });
     }
 
@@ -322,10 +322,10 @@ public class CreateTableWithAggStateTest {
             final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
                     .getDb(connectContext.getDatabase())
                     .getTable("test_agg_tbl1");
-            Assert.assertEquals(null, table);
+            Assertions.assertEquals(null, table);
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.assertTrue(e.getMessage().contains("AggStateType function sum with input DECIMAL64(10,0) has " +
+            Assertions.assertTrue(e.getMessage().contains("AggStateType function sum with input DECIMAL64(10,0) has " +
                     "wildcard decimal."));
         }
     }
@@ -345,10 +345,10 @@ public class CreateTableWithAggStateTest {
             final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
                     .getDb(connectContext.getDatabase())
                     .getTable("test_agg_tbl1");
-            Assert.assertEquals(null, table);
+            Assertions.assertEquals(null, table);
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.assertTrue(e.getMessage().contains("Agg state column k2 must be nullable column."));
+            Assertions.assertTrue(e.getMessage().contains("Agg state column k2 must be nullable column."));
         }
     }
 

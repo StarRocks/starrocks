@@ -68,4 +68,43 @@ public class CostPredictorTest extends PlanTestBase {
 
         server.stop(0);
     }
+
+    @Test
+    public void testServiceBasedPredictorTry() throws Exception {
+        String sql = "select count(*) from t0 where v1 < 100 limit 100 ";
+        Pair<String, ExecPlan> planAndFragment = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        var instance = CostPredictor.ServiceBasedCostPredictor.getInstance();
+
+        Assertions.assertTrue(instance.tryPredictMemoryBytes(planAndFragment.second) == 0L);
+
+        // Create a simple HTTP server to mock the prediction service
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        int port = server.getAddress().getPort();
+        final long predictedResult = 10000L;
+        server.createContext(CostPredictor.ServiceBasedCostPredictor.PREDICT_URL, exchange -> {
+            String response = String.valueOf(predictedResult);
+            exchange.sendResponseHeaders(200, response.length());
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response.getBytes());
+            }
+        });
+        server.createContext(CostPredictor.ServiceBasedCostPredictor.HEALTH_URL, exchange -> {
+            exchange.sendResponseHeaders(200, 0);
+        });
+        server.start();
+        Config.query_cost_prediction_service_address = "http://localhost:" + port;
+
+        Assertions.assertEquals(predictedResult, instance.tryPredictMemoryBytes(planAndFragment.second));
+
+        // test health check
+        Config.enable_query_cost_prediction = true;
+        instance.doHealthCheck();
+        Assertions.assertTrue(instance.isAvailable());
+
+        server.removeContext(CostPredictor.ServiceBasedCostPredictor.HEALTH_URL);
+        instance.doHealthCheck();
+        Assertions.assertFalse(instance.isAvailable());
+
+        server.stop(0);
+    }
 }

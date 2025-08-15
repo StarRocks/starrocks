@@ -21,8 +21,8 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MultiColumnCombinedStatistics;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import mockit.Expectations;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -33,7 +33,7 @@ import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.POSITIVE_INFINITY;
 
 public class MultipleEqualityPredicateCardinalityEstimationTest extends PlanWithCostTestBase {
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_all_type");

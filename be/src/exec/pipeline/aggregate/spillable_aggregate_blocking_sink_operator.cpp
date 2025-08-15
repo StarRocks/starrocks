@@ -66,8 +66,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
     }
     if (!_aggregator->spill_channel()->has_task()) {
         if (_aggregator->hash_map_variant().size() > 0 || !_streaming_chunks.empty()) {
-            _aggregator->hash_map_variant().visit(
-                    [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
+            _aggregator->it_hash() = _aggregator->state_allocator().begin();
             _aggregator->spill_channel()->add_spill_task(_build_spill_task(state));
         }
     }
@@ -194,7 +193,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         // use force streaming mode and spill all data
         SCOPED_TIMER(_aggregator->streaming_timer());
         ChunkPtr res = std::make_shared<Chunk>();
-        RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
+        RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res, true));
         _add_streaming_chunk(res);
         return _spill_all_data(state, true);
     } else if (build_hash_table) {
@@ -221,7 +220,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         if (hit_count == 0) {
             // put all data into buffer
             ChunkPtr tmp = std::make_shared<Chunk>();
-            RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &tmp));
+            RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &tmp, true));
             _add_streaming_chunk(std::move(tmp));
         } else if (hit_count == _aggregator->streaming_selection().size()) {
             // very high reduction
@@ -236,7 +235,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
             {
                 SCOPED_TIMER(_aggregator->streaming_timer());
                 ChunkPtr res = std::make_shared<Chunk>();
-                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(chunk.get(), &res));
+                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(chunk.get(), &res, true));
                 _add_streaming_chunk(std::move(res));
             }
         }
@@ -270,8 +269,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
 Status SpillableAggregateBlockingSinkOperator::_spill_all_data(RuntimeState* state, bool should_spill_hash_table) {
     RETURN_IF(_aggregator->hash_map_variant().size() == 0, Status::OK());
     if (should_spill_hash_table) {
-        _aggregator->hash_map_variant().visit(
-                [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
+        _aggregator->it_hash() = _aggregator->state_allocator().begin();
     }
     CHECK(!_aggregator->spill_channel()->has_task());
     RETURN_IF_ERROR(_aggregator->spill_aggregate_data(state, _build_spill_task(state, should_spill_hash_table)));

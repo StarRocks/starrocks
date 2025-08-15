@@ -47,7 +47,18 @@ Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& gua
                     << ",spiller:" << this;
 
     if (_chunk_builder.chunk_schema()->empty()) {
-        _chunk_builder.chunk_schema()->set_schema(chunk);
+        if (!_opts.splittable && _opts.init_partition_nums > 0) {
+            // For splittable spiller, we need to set the schema before spilling.
+            // This is because the partitioned spiller needs to know the schema of the chunk.
+            std::shared_ptr<Chunk> new_chunk = chunk->clone_empty(0);
+            new_chunk->remove_column_by_slot_id(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
+            _chunk_builder.chunk_schema()->set_schema(new_chunk);
+        } else {
+            // For non-splittable spiller, we can set the schema after spilling.
+            // This is because the raw spiller does not need to know the schema of the chunk.
+            _chunk_builder.chunk_schema()->set_schema(chunk);
+        }
+
         RETURN_IF_ERROR(_serde->prepare());
         _init_max_block_nums();
     }
@@ -99,6 +110,9 @@ Status Spiller::flush(RuntimeState* state, MemGuard&& guard) {
 template <class TaskExecutor, class MemGuard>
 StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, MemGuard&& guard) {
     RETURN_IF_ERROR(task_status());
+    if (is_cancel()) {
+        return Status::Cancelled("cancelled by pipeline");
+    }
 
     ASSIGN_OR_RETURN(auto chunk, _reader->restore<TaskExecutor>(state, guard));
     chunk->check_or_die();
@@ -160,7 +174,8 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
         DCHECK(has_pending_data());
         //
         if (!yield_ctx.task_context_data.has_value()) {
-            yield_ctx.task_context_data = SpillIOTaskContextPtr(std::make_shared<FlushContext>());
+            yield_ctx.task_context_data =
+                    SpillIOTaskContextPtr(std::make_shared<FlushContext>(_spiller->shared_from_this()));
         }
         auto defer = CancelableDefer([&]() {
             {
@@ -226,6 +241,9 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
             DEFER_GUARD_END(guard);
             {
                 auto defer = CancelableDefer([&]() { _running_restore_tasks--; });
+                if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
+                    return;
+                }
                 Status res;
                 SerdeContext serd_ctx;
                 if (!yield_ctx.task_context_data.has_value()) {
@@ -304,7 +322,6 @@ template <class TaskExecutor, class MemGuard>
 Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush, MemGuard&& guard) {
     std::vector<SpilledPartition*> splitting_partitions, spilling_partitions;
     RETURN_IF_ERROR(_choose_partitions_to_flush(is_final_flush, splitting_partitions, spilling_partitions));
-
     if (spilling_partitions.empty() && splitting_partitions.empty()) {
         return Status::OK();
     }
@@ -313,6 +330,13 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         _need_final_flush = true;
         return Status::OK();
     }
+
+    std::vector<SpilledPartition*> flushing_partitions;
+    flushing_partitions.reserve(spilling_partitions.size() + splitting_partitions.size());
+    flushing_partitions.insert(flushing_partitions.end(), splitting_partitions.begin(), splitting_partitions.end());
+    flushing_partitions.insert(flushing_partitions.end(), spilling_partitions.begin(), spilling_partitions.end());
+    RETURN_IF_ERROR(_pick_and_compact_skew_partitions(flushing_partitions));
+
     DCHECK_EQ(_running_flush_tasks, 0);
     _running_flush_tasks++;
 
@@ -332,7 +356,8 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         yield_ctx.time_spent_ns = 0;
         yield_ctx.need_yield = false;
         if (!yield_ctx.task_context_data.has_value()) {
-            yield_ctx.task_context_data = SpillIOTaskContextPtr(std::make_shared<PartitionedFlushContext>());
+            yield_ctx.task_context_data =
+                    SpillIOTaskContextPtr(std::make_shared<PartitionedFlushContext>(_spiller->shared_from_this()));
         }
         _spiller->update_spilled_task_status(
                 yieldable_flush_task(yield_ctx, splitting_partitions, spilling_partitions));

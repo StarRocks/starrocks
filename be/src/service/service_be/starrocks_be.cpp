@@ -22,17 +22,17 @@
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
 #include "cache/block_cache/block_cache.h"
+#include "cache/datacache.h"
 #include "common/config.h"
 #include "common/daemon.h"
 #include "common/process_exit.h"
 #include "common/status.h"
-#include "exec/pipeline/query_context.h"
 #include "fs/s3/poco_common.h"
-#include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/global_variables.h"
 #include "runtime/jdbc_driver_manager.h"
+#include "service/backend_options.h"
 #include "service/brpc.h"
 #include "service/service.h"
 #include "service/service_be/arrow_flight_sql_service.h"
@@ -46,6 +46,10 @@
 #include "util/mem_info.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
+
+#ifdef WITH_STARCACHE
+#include "cache/starcache_engine.h"
+#endif
 
 namespace brpc {
 
@@ -106,7 +110,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
 
-    auto* cache_env = CacheEnv::GetInstance();
+    auto* cache_env = DataCache::GetInstance();
     EXIT_IF_ERROR(cache_env->init(paths));
     LOG(INFO) << process_name << " start step " << start_step++ << ": cache env init successfully";
 
@@ -120,9 +124,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine start bg threads successfully";
 
 #ifdef USE_STAROS
-    auto* block_cache = cache_env->block_cache();
-    if (config::datacache_unified_instance_enable && block_cache->is_initialized()) {
-        init_staros_worker(block_cache->starcache_instance());
+    auto* local_cache = cache_env->local_cache();
+    if (config::datacache_unified_instance_enable && local_cache->is_initialized()) {
+        auto* starcache = reinterpret_cast<StarCacheEngine*>(local_cache);
+        init_staros_worker(starcache->starcache_instance());
     } else {
         init_staros_worker(nullptr);
     }
@@ -168,12 +173,28 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     if (config::brpc_num_threads != -1) {
         options.num_threads = config::brpc_num_threads;
     }
+    if (config::enable_https) {
+        auto sslOptions = options.mutable_ssl_options();
+        sslOptions->default_cert.certificate = config::ssl_certificate_path;
+        sslOptions->default_cert.private_key = config::ssl_private_key_path;
+    }
+
     const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
     const auto service_name = "starrocks.LakeService";
-    const auto methods = {
-            "abort_txn",     "abort_compaction", "compact",         "drop_table",          "delete_data",
-            "delete_tablet", "get_tablet_stats", "publish_version", "publish_log_version", "publish_log_version_batch",
-            "vacuum",        "vacuum_full"};
+    const auto methods = {"abort_txn",
+                          "abort_compaction",
+                          "compact",
+                          "drop_table",
+                          "delete_data",
+                          "delete_tablet",
+                          "get_tablet_stats",
+                          "publish_version",
+                          "publish_log_version",
+                          "publish_log_version_batch",
+                          "vacuum",
+                          "vacuum_full",
+                          "aggregate_publish_version",
+                          "aggregate_compact"};
     for (auto method : methods) {
         brpc_server->MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
     }

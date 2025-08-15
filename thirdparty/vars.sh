@@ -217,10 +217,10 @@ KRB5_SOURCE=krb5-1.19.4
 KRB5_MD5SUM="ef76083e58f8c49066180642d7c2814a"
 
 # librdkafka
-LIBRDKAFKA_DOWNLOAD="https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.0.2.tar.gz"
-LIBRDKAFKA_NAME=librdkafka-2.0.2.tar.gz
-LIBRDKAFKA_SOURCE=librdkafka-2.0.2
-LIBRDKAFKA_MD5SUM="c0120dc32acc129bfb4656fe17568da1"
+LIBRDKAFKA_DOWNLOAD="https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.11.0.tar.gz"
+LIBRDKAFKA_NAME=librdkafka-2.11.0.tar.gz
+LIBRDKAFKA_SOURCE=librdkafka-2.11.0
+LIBRDKAFKA_MD5SUM="bc611d0340e269abaa8886d42ff9c558"
 
 # pulsar
 PULSAR_DOWNLOAD="https://github.com/apache/pulsar-client-cpp/archive/refs/tags/v3.3.0.tar.gz"
@@ -229,10 +229,10 @@ PULSAR_SOURCE=pulsar-client-cpp-3.3.0
 PULSAR_MD5SUM="348b7e5ec39e50547668520d13a417a1"
 
 # zstd
-ZSTD_DOWNLOAD="https://github.com/facebook/zstd/archive/v1.5.0.tar.gz"
-ZSTD_NAME=zstd-1.5.0.tar.gz
-ZSTD_SOURCE=zstd-1.5.0
-ZSTD_MD5SUM="d5ac89d5df9e81243ce40d0c6a66691d"
+ZSTD_DOWNLOAD="https://github.com/facebook/zstd/archive/v1.5.7.tar.gz"
+ZSTD_NAME=zstd-1.5.7.tar.gz
+ZSTD_SOURCE=zstd-1.5.7
+ZSTD_MD5SUM="619a019adbbc4536e7fb93cdbb01af3e"
 
 # brotli
 BROTLI_DOWNLOAD="https://github.com/google/brotli/archive/v1.0.9.tar.gz"
@@ -295,10 +295,10 @@ RYU_SOURCE="ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc"
 RYU_MD5SUM="cb82b6da904d919470fe3f5a01ca30ff"
 
 # breakpad
-BREAK_PAD_DOWNLOAD="https://github.com/google/breakpad/archive/refs/tags/v2022.07.12.tar.gz"
-BREAK_PAD_NAME="breakpad-2022.07.12.tar.gz"
-BREAK_PAD_SOURCE="breakpad-2022.07.12"
-BREAK_PAD_MD5SUM="d5bcfd3f7b361ef5bda96123c3abdd0a"
+BREAK_PAD_DOWNLOAD="https://github.com/google/breakpad/archive/refs/tags/v2024.02.16.tar.gz"
+BREAK_PAD_NAME="breakpad-2024.02.16.tar.gz"
+BREAK_PAD_SOURCE="breakpad-2024.02.16"
+BREAK_PAD_MD5SUM="ae8c55b23c157771922b5ddca3803055"
 
 # RAGEL
 # ragel-6.9+ is used by hyperscan, so we build it first
@@ -368,10 +368,10 @@ JANSSON_SOURCE="jansson-2.14"
 JANSSON_MD5SUM="6cbfc54c2ab3b4d7284e188e185c2b0b"
 
 # avro
-AVRO_DOWNLOAD="https://github.com/apache/avro/archive/refs/tags/release-1.10.2.tar.gz"
-AVRO_NAME="avro-release-1.10.2.tar.gz"
-AVRO_SOURCE="avro-release-1.10.2"
-AVRO_MD5SUM="55b9c200976366fd62f1201231f3a5eb"
+AVRO_DOWNLOAD="https://github.com/apache/avro/archive/refs/tags/release-1.12.0.tar.gz"
+AVRO_NAME="avro-release-1.12.0.tar.gz"
+AVRO_SOURCE="avro-release-1.12.0"
+AVRO_MD5SUM="0657ab3ab89d264ccccbca317dbfa54b"
 
 # serdes
 SERDES_DOWNLOAD="https://github.com/confluentinc/libserdes/archive/refs/tags/v7.3.1.tar.gz"
@@ -452,9 +452,33 @@ ICU_NAME="icu4c-76_1-src.zip"
 ICU_SOURCE="icu"
 ICU_MD5SUM="f5f5c827d94af8445766c7023aca7f6b"
 
+# xsimd
+XSIMD_DOWNLOAD="https://github.com/xtensor-stack/xsimd/archive/refs/tags/13.2.0.tar.gz"
+XSIMD_NAME="xsimd-13.2.0.tar.gz"
+XSIMD_SOURCE="xsimd-13.2.0"
+XSIMD_MD5SUM="f451a1c57d2a4fdc0ba663be438dced4"
+
+# libxml2
+LIBXML2_DOWNLOAD="https://github.com/GNOME/libxml2/archive/refs/tags/v2.11.7.tar.gz"
+LIBXML2_NAME="libxml2-2.11.7.tar.gz"
+LIBXML2_SOURCE="libxml2-2.11.7"
+LIBXML2_MD5SUM="929dade129bbe7072e65c3121fbf12c2"
+
+# azure
+AZURE_DOWNLOAD="https://github.com/Azure/azure-sdk-for-cpp/archive/refs/tags/azure-storage-files-shares_12.12.0.tar.gz"
+AZURE_NAME="azure-storage-files-shares_12.12.0.tar.gz"
+AZURE_SOURCE="azure-storage-files-shares_12.12.0"
+AZURE_MD5SUM="cb38786198aa103295d4d670604a9a60"
+
+# libdivide
+LIBDIVIDE_DOWNLOAD="https://github.com/ridiculousfish/libdivide/archive/refs/tags/v5.2.0.tar.gz"
+LIBDIVIDE_NAME="libdivide-v5.2.0.tar.gz"
+LIBDIVIDE_SOURCE="libdivide-v5.2.0"
+LIBDIVIDE_MD5SUM="4ba77777192c295d6de2b86d88f3239a"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
-            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU"
+            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE"

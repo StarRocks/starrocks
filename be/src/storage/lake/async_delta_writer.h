@@ -22,6 +22,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "util/runtime_profile.h"
 
@@ -33,6 +34,7 @@ class SlotDescriptor;
 namespace starrocks {
 class Chunk;
 class TxnLogPB;
+class BundleWritableFileContext;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -114,6 +116,8 @@ public:
     [[nodiscard]] int64_t last_write_ts() const;
 
     DeltaWriter* delta_writer();
+
+    const DictColumnsValidMap* global_dict_columns_valid_info() const;
 
 private:
     AsyncDeltaWriterImpl* _impl;
@@ -204,6 +208,16 @@ public:
         return *this;
     }
 
+    AsyncDeltaWriterBuilder& set_bundle_writable_file_context(BundleWritableFileContext* bundle_writable_file_context) {
+        _bundle_writable_file_context = bundle_writable_file_context;
+        return *this;
+    }
+
+    AsyncDeltaWriterBuilder& set_global_dicts(GlobalDictByNameMaps* global_dicts) {
+        _global_dicts = global_dicts;
+        return *this;
+    }
+
     StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
@@ -222,6 +236,8 @@ private:
     const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
     PUniqueId _load_id;
     RuntimeProfile* _profile{nullptr};
+    BundleWritableFileContext* _bundle_writable_file_context{nullptr};
+    GlobalDictByNameMaps* _global_dicts = nullptr;
 };
 
 } // namespace starrocks::lake

@@ -20,6 +20,8 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
+#include <string>
+
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
@@ -72,6 +74,7 @@ public:
         _env._transaction_mgr = new TransactionMgr(&_env);
 
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
+        _evhttp_req->remote_host = nullptr;
     }
     void TearDown() override {
         delete _env._transaction_mgr;
@@ -161,6 +164,10 @@ TEST_F(TransactionStreamLoadActionTest, txn_begin_normal) {
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("OK", doc["Status"].GetString());
+
+    auto* val = evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), "Content-Type");
+    ASSERT_NE(val, nullptr);
+    ASSERT_STREQ("application/json", val);
 }
 
 TEST_F(TransactionStreamLoadActionTest, txn_commit_fail) {
@@ -314,10 +321,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_success) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
-
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_LABEL_KEY, "123");
@@ -343,55 +346,148 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_success) {
     }
 }
 
-TEST_F(TransactionStreamLoadActionTest, txn_prepared_success) {
+// Setup transaction stream load flow for prepare testing
+void setup_prepare_txn_test(TransactionManagerAction& txn_action, ExecEnv* env, evhttp_request* ev_request) {
+    // Begin transaction
+    HttpRequest b(ev_request);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+
+    // Perform load
+    TransactionStreamLoadAction action(env);
+    HttpRequest request(ev_request);
+    request.set_handler(&action);
+
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+    request._headers.emplace(HTTP_LABEL_KEY, "123");
+    action.on_header(&request);
+    action.handle(&request);
+
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_prepared_success_without_timeout) {
     TransactionManagerAction txn_action(&_env);
+    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
 
-    {
-        HttpRequest b(_evhttp_req);
-        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
-        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
-        b._headers.emplace(HTTP_LABEL_KEY, "123");
-        b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
-        txn_action.handle(&b);
+    // Enable sync point to capture the prepared_timeout_second value
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("StreamLoadExecutor::prepare_txn:rpc");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
 
-        rapidjson::Document doc;
-        doc.Parse(k_response_str.c_str());
-        ASSERT_STREQ("OK", doc["Status"].GetString());
-    }
+    SyncPoint::GetInstance()->SetCallBack("StreamLoadExecutor::prepare_txn:rpc", [&](void* arg) {
+        auto* request = static_cast<TLoadTxnCommitRequest*>(arg);
+        EXPECT_FALSE(request->__isset.prepared_timeout_second);
+    });
 
-    {
-        TransactionStreamLoadAction action(&_env);
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
+    txn_action.handle(&b);
 
-        HttpRequest request(_evhttp_req);
-        request.set_handler(&action);
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+}
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
+TEST_F(TransactionStreamLoadActionTest, txn_prepared_success_with_timeout) {
+    TransactionManagerAction txn_action(&_env);
+    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
 
-        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
-        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
-        request._headers.emplace(HTTP_LABEL_KEY, "123");
-        action.on_header(&request);
-        action.handle(&request);
+    // Enable sync point to capture the prepared_timeout_second value
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("StreamLoadExecutor::prepare_txn:rpc");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
 
-        rapidjson::Document doc;
-        doc.Parse(k_response_str.c_str());
-        ASSERT_STREQ("OK", doc["Status"].GetString());
-    }
+    SyncPoint::GetInstance()->SetCallBack("StreamLoadExecutor::prepare_txn:rpc", [&](void* arg) {
+        auto* request = static_cast<TLoadTxnCommitRequest*>(arg);
+        EXPECT_TRUE(request->__isset.prepared_timeout_second);
+        EXPECT_EQ(300, request->prepared_timeout_second);
+    });
 
-    {
-        HttpRequest b(_evhttp_req);
-        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
-        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
-        b._headers.emplace(HTTP_LABEL_KEY, "123");
-        b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
-        txn_action.handle(&b);
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._headers.emplace(HTTP_PREPARED_TIMEOUT, "300");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
+    txn_action.handle(&b);
 
-        rapidjson::Document doc;
-        doc.Parse(k_response_str.c_str());
-        ASSERT_STREQ("OK", doc["Status"].GetString());
-    }
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_prepared_with_invalid_timeout) {
+    TransactionManagerAction txn_action(&_env);
+    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
+
+    // Test invalid timeout format
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._headers.emplace(HTTP_PREPARED_TIMEOUT, "invalid_timeout");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid prepared_timeout: invalid_timeout"));
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_prepared_with_negative_timeout) {
+    TransactionManagerAction txn_action(&_env);
+    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
+
+    // Test negative timeout value
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._headers.emplace(HTTP_PREPARED_TIMEOUT, "-1");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid prepared_timeout: -1"));
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_prepared_with_zero_timeout) {
+    TransactionManagerAction txn_action(&_env);
+    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
+
+    // Test zero timeout value
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._headers.emplace(HTTP_PREPARED_TIMEOUT, "0");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid prepared_timeout: 0"));
 }
 
 TEST_F(TransactionStreamLoadActionTest, txn_put_fail) {
@@ -415,10 +511,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_put_fail) {
 
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
-
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
 
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
@@ -468,10 +560,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_fe_fail) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
-
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_LABEL_KEY, "123");
@@ -520,10 +608,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_prepare_fe_fail) {
 
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
-
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
 
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
@@ -596,10 +680,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_plan_fail) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
-
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_LABEL_KEY, "123");
@@ -670,10 +750,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_idle_timeout) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
-
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_LABEL_KEY, "123");
@@ -708,10 +784,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
-
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_DB_KEY, "db");
@@ -729,10 +801,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
 
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
-
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_DB_KEY, "db");
@@ -749,10 +817,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
     {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
-
-        struct evhttp_request ev_req;
-        ev_req.remote_host = nullptr;
-        request._ev_req = &ev_req;
 
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
@@ -785,7 +849,6 @@ TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
     ctx->ref();
     ctx->body_sink = std::make_shared<StreamLoadPipe>();
     bool remove_from_stream_context_mgr = false;
-    auto evb = evbuffer_new();
     DeferOp defer([&]() {
         if (remove_from_stream_context_mgr) {
             _env.stream_context_mgr()->remove(ctx->label);
@@ -793,7 +856,6 @@ TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
         if (ctx->unref()) {
             delete ctx;
         }
-        evbuffer_free(evb);
     });
     ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
     remove_from_stream_context_mgr = true;
@@ -802,11 +864,7 @@ TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
     request.set_handler(&action);
     std::string content = "abc";
 
-    struct evhttp_request ev_req;
-    ev_req.remote_host = nullptr;
-    ev_req.input_buffer = evb;
-    request._ev_req = &ev_req;
-
+    auto evb = request.get_evhttp_request()->input_buffer;
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
     request._headers.emplace(HTTP_DB_KEY, ctx->db);
@@ -885,13 +943,8 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_success_request) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
         std::string content = "abc";
-        auto evb = evbuffer_new();
+        auto evb = request.get_evhttp_request()->input_buffer;
         evbuffer_add(evb, content.data(), content.size());
-        DeferOp free_evb([&]() { evbuffer_free(evb); });
-        struct evhttp_request ev_req {
-            .remote_host = nullptr, .input_buffer = evb
-        };
-        request._ev_req = &ev_req;
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
         request._headers.emplace(HTTP_DB_KEY, ctx->db);
@@ -952,13 +1005,8 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_on_header_failure) 
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
         std::string content = "abc";
-        auto evb = evbuffer_new();
+        auto evb = request.get_evhttp_request()->input_buffer;
         evbuffer_add(evb, content.data(), content.size());
-        DeferOp free_evb([&]() { evbuffer_free(evb); });
-        struct evhttp_request ev_req {
-            .remote_host = nullptr, .input_buffer = evb
-        };
-        request._ev_req = &ev_req;
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
         request._headers.emplace(HTTP_DB_KEY, ctx->db);
@@ -1014,13 +1062,8 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
         std::string content = "abc";
-        auto evb = evbuffer_new();
+        auto evb = request.get_evhttp_request()->input_buffer;
         evbuffer_add(evb, content.data(), content.size());
-        DeferOp free_evb([&]() { evbuffer_free(evb); });
-        struct evhttp_request ev_req {
-            .remote_host = nullptr, .input_buffer = evb
-        };
-        request._ev_req = &ev_req;
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
         request._headers.emplace(HTTP_DB_KEY, ctx->db);

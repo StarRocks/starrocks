@@ -69,6 +69,7 @@ ExchangeSourceOperatorFactory::~ExchangeSourceOperatorFactory() {
         // `_stream_recvr` design, moves the responsibility from the operator to the operator factory.
         LOG(INFO) << "ExchangeSourceOperatorFactory::_stream_recvr_cnt=" << _stream_recvr_cnt
                   << ", the _stream_recvr is created without properly cleaned. Force close it!";
+        _stream_recvr->detach_observer();
         _stream_recvr->close();
     }
 }

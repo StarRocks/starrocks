@@ -321,6 +321,33 @@ protected:
                 ASSERT_EQ("{f2:'Column2'}", dst_column->debug_item(0));
             }
         }
+
+        {
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::FIELD, "f2", 1));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            auto dst_f1_column = Int32Column::create();
+            auto dst_f2_column = BinaryColumn::create();
+            Columns dst_columns;
+            dst_columns.emplace_back(std::move(dst_f1_column));
+            dst_columns.emplace_back(std::move(dst_f2_column));
+            ColumnPtr dst_column = StructColumn::create(dst_columns, names);
+            SparseRange<> range;
+            range.add(Range<>(0, src_column->size()));
+            auto status_or = iter->get_io_range_vec(range, dst_column.get());
+            ASSERT_TRUE(status_or.ok());
+            ASSERT_EQ((*status_or).size(), 1);
+        }
     }
 
 private:

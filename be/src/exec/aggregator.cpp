@@ -16,26 +16,31 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <type_traits>
-#include <variant>
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
+#include "common/logging.h"
 #include "common/status.h"
+#include "exec/agg_runtime_filter_builder.h"
+#include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
 #include "exec/exec_node.h"
 #include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/operator.h"
-#include "exec/spill/spiller.hpp"
+#include "exprs/agg/agg_state_if.h"
 #include "exprs/agg/agg_state_merge.h"
 #include "exprs/agg/agg_state_union.h"
+#include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
+#include "exprs/literal.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/memory/roaring_hook.h"
 #include "types/logical_type.h"
 #include "udf/java/utils.h"
 #include "util/runtime_profile.h"
@@ -47,7 +52,62 @@ static const std::unordered_set<std::string> ALWAYS_NULLABLE_RESULT_AGG_FUNCS = 
 
 static const std::string AGG_STATE_UNION_SUFFIX = "_union";
 static const std::string AGG_STATE_MERGE_SUFFIX = "_merge";
+static const std::string AGG_STATE_IF_SUFFIX = "_if";
 static const std::string FUNCTION_COUNT = "count";
+
+template <class HashMapWithKey>
+struct AllocateState {
+    AllocateState(Aggregator* aggregator_) : aggregator(aggregator_) {}
+    inline AggDataPtr operator()(const typename HashMapWithKey::KeyType& key);
+    inline AggDataPtr operator()(std::nullptr_t);
+
+private:
+    Aggregator* aggregator;
+};
+
+template <class HashMapWithKey>
+inline AggDataPtr AllocateState<HashMapWithKey>::operator()(const typename HashMapWithKey::KeyType& key) {
+    AggDataPtr agg_state = aggregator->_state_allocator.allocate();
+    *reinterpret_cast<typename HashMapWithKey::KeyType*>(agg_state) = key;
+    size_t created = 0;
+    size_t aggregate_function_sz = aggregator->_agg_fn_ctxs.size();
+    try {
+        for (int i = 0; i < aggregate_function_sz; i++) {
+            aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
+                                                  agg_state + aggregator->_agg_states_offsets[i]);
+            created++;
+        }
+        return agg_state;
+    } catch (std::bad_alloc& e) {
+        for (size_t i = 0; i < created; ++i) {
+            aggregator->_agg_functions[i]->destroy(aggregator->_agg_fn_ctxs[i],
+                                                   agg_state + aggregator->_agg_states_offsets[i]);
+        }
+        aggregator->_state_allocator.rollback();
+        throw;
+    }
+}
+
+template <class HashMapWithKey>
+inline AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
+    AggDataPtr agg_state = aggregator->_state_allocator.allocate_null_key_data();
+    size_t created = 0;
+    size_t aggregate_function_sz = aggregator->_agg_fn_ctxs.size();
+    try {
+        for (int i = 0; i < aggregate_function_sz; i++) {
+            aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
+                                                  agg_state + aggregator->_agg_states_offsets[i]);
+            created++;
+        }
+        return agg_state;
+    } catch (std::bad_alloc& e) {
+        for (int i = 0; i < created; i++) {
+            aggregator->_agg_functions[i]->destroy(aggregator->_agg_fn_ctxs[i],
+                                                   agg_state + aggregator->_agg_states_offsets[i]);
+        }
+        throw;
+    }
+}
 
 template <bool UseIntermediateAsOutput>
 bool AggFunctionTypes::is_result_nullable() const {
@@ -140,6 +200,9 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
         params->intermediate_aggr_exprs = tnode.agg_node.intermediate_aggr_exprs;
         params->enable_pipeline_share_limit =
                 tnode.agg_node.__isset.enable_pipeline_share_limit ? tnode.agg_node.enable_pipeline_share_limit : false;
+        params->grouping_min_max =
+                tnode.agg_node.__isset.group_by_min_max ? tnode.agg_node.group_by_min_max : std::vector<TExpr>{};
+
         break;
     }
     default:
@@ -159,8 +222,8 @@ void AggregatorParams::init() {
         VLOG_ROW << fn.name.function_name << ", arg nullable " << desc.nodes[0].has_nullable_child
                  << ", result nullable " << desc.nodes[0].is_nullable;
 
-        auto& func_name = fn.name.function_name;
-        if (func_name == FUNCTION_COUNT) {
+        if (fn.name.function_name == FUNCTION_COUNT ||
+            fn.name.function_name == (FUNCTION_COUNT + AGG_STATE_IF_SUFFIX)) {
             // count function is always not nullable
             agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), {}, false, false};
         } else {
@@ -176,8 +239,12 @@ void AggregatorParams::init() {
             TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
             agg_fn_types[i] = {return_type, serde_type, arg_typedescs, has_nullable_child, is_nullable};
-            agg_fn_types[i].is_always_nullable_result = ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(func_name);
-            if (func_name == "array_agg" || func_name == "group_concat") {
+            agg_fn_types[i].is_always_nullable_result =
+                    ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(fn.name.function_name);
+            if (fn.__isset.agg_state_desc && fn.name.function_name.ends_with(AGG_STATE_IF_SUFFIX)) {
+                agg_fn_types[i].is_always_nullable_result = true;
+            }
+            if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
                 // set order by info
                 if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
                     !fn.aggregate_fn.is_asc_order.empty()) {
@@ -351,6 +418,16 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->conjuncts, &_conjunct_ctxs, state, true));
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->grouping_exprs, &_group_by_expr_ctxs, state, true));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->grouping_min_max, &_group_by_min_max, state, true));
+    _ranges.resize(_group_by_expr_ctxs.size());
+    if (_group_by_min_max.size() == _group_by_expr_ctxs.size() * 2) {
+        for (size_t i = 0; i < _group_by_expr_ctxs.size(); ++i) {
+            std::pair<VectorizedLiteral*, VectorizedLiteral*> range;
+            range.first = down_cast<VectorizedLiteral*>(_group_by_min_max[i * 2]->root());
+            range.second = down_cast<VectorizedLiteral*>(_group_by_min_max[i * 2 + 1]->root());
+            _ranges[i] = range;
+        }
+    }
 
     // add profile attributes
     if (!_params->sql_grouping_keys.empty()) {
@@ -460,7 +537,11 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         } else if (dynamic_cast<const AggStateMerge*>(agg_func)) {
             auto* agg_state_merge = down_cast<const AggStateMerge*>(agg_func);
             agg_state_desc = agg_state_merge->get_agg_state_desc();
+        } else if (dynamic_cast<const AggStateIf*>(agg_func)) {
+            auto* agg_state_if = down_cast<const AggStateIf*>(agg_func);
+            agg_state_desc = agg_state_if->get_agg_state_desc();
         }
+
         if (agg_state_desc != nullptr) {
             return_type = agg_state_desc->get_return_type();
             arg_types = agg_state_desc->get_arg_types();
@@ -513,12 +594,15 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
     // check whether it's _merge/_union combinator if it contains agg state type
     auto& func_name = fn.name.function_name;
     if (fn.__isset.agg_state_desc) {
-        if (arg_types.size() != 1) {
+        auto agg_state_desc = AggStateDesc::from_thrift(fn.agg_state_desc);
+        auto nested_func_name = agg_state_desc.get_func_name();
+        bool isMergeOrUnion = nested_func_name + AGG_STATE_MERGE_SUFFIX == func_name ||
+                              nested_func_name + AGG_STATE_UNION_SUFFIX == func_name;
+        if (arg_types.size() != 1 && isMergeOrUnion) {
             return Status::InternalError(strings::Substitute("Invalid agg function plan: $0 with (arg type $1)",
                                                              func_name, arg_types.size()));
         }
-        auto agg_state_desc = AggStateDesc::from_thrift(fn.agg_state_desc);
-        auto nested_func_name = agg_state_desc.get_func_name();
+
         if (nested_func_name + AGG_STATE_MERGE_SUFFIX == func_name) {
             // aggregate _merge combinator
             auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
@@ -541,6 +625,17 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
             auto union_agg_func = std::make_shared<AggStateUnion>(std::move(agg_state_desc), nested_func);
             *ret = union_agg_func.get();
             _combinator_function.emplace_back(std::move(union_agg_func));
+        } else if (nested_func_name + AGG_STATE_IF_SUFFIX == func_name) {
+            // aggregate _if combinator
+            auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
+            if (nested_func == nullptr) {
+                return Status::InternalError(
+                        strings::Substitute("if combinator function $0 fails to get the nested agg func: $1 ",
+                                            func_name, nested_func_name));
+            }
+            auto if_agg_func = std::make_shared<AggStateIf>(std::move(agg_state_desc), nested_func);
+            *ret = if_agg_func.get();
+            _combinator_function.emplace_back(std::move(if_agg_func));
         } else {
             return Status::InternalError(
                     strings::Substitute("Agg function combinator is not implemented: $0 ", func_name));
@@ -557,7 +652,7 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
             TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
             DCHECK_LE(1, fn.arg_types.size());
-            TypeDescriptor arg_type = arg_types[0];
+            const TypeDescriptor& arg_type = arg_types[0];
             auto* func = get_aggregate_function(func_name, return_type, arg_types, is_result_nullable, fn.binary_type,
                                                 state->func_version());
             if (func == nullptr) {
@@ -877,6 +972,13 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
     return Status::OK();
 }
 
+RuntimeFilter* Aggregator::build_in_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc) {
+    int expr_order = desc->build_expr_order();
+    const auto& group_type_type = _group_by_types[expr_order].result_type.type;
+    AggInRuntimeFilterBuilder in_builder(desc, group_type_type);
+    return in_builder.build(this, state->obj_pool());
+}
+
 Status Aggregator::_evaluate_const_columns(int i) {
     // used for const columns.
     Columns const_columns;
@@ -942,12 +1044,14 @@ Status Aggregator::evaluate_groupby_exprs(Chunk* chunk) {
     return _evaluate_group_by_exprs(chunk);
 }
 
-Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk) {
-    return output_chunk_by_streaming(input_chunk, chunk, input_chunk->num_rows(), false);
+Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk,
+                                             bool force_use_intermediate_as_output) {
+    return output_chunk_by_streaming(input_chunk, chunk, input_chunk->num_rows(), false,
+                                     force_use_intermediate_as_output);
 }
 
 Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows,
-                                             bool use_selection) {
+                                             bool use_selection, bool force_use_intermediate_as_output) {
     // The input chunk is already intermediate-typed, so there is no need to convert it again.
     // Only when the input chunk is input-typed, we should convert it into intermediate-typed chunk.
     // is_passthrough is on indicate that the chunk is input-typed.
@@ -976,7 +1080,6 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
     // build aggregate function values
     if (!_agg_fn_ctxs.empty()) {
         DCHECK(!_group_by_columns.empty());
-
         RETURN_IF_ERROR(evaluate_agg_fn_exprs(input_chunk));
         if (use_selection) {
             for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -1001,6 +1104,11 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
             auto slot_id = slots[id]->id();
             if (_is_merge_funcs[i] || use_intermediate_as_input) {
                 DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
+                if (force_use_intermediate_as_output) {
+                    if (agg_result_column[i]->is_nullable()) {
+                        _agg_input_columns[i][0] = ColumnHelper::cast_to_nullable_column(_agg_input_columns[i][0]);
+                    }
+                }
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
             } else {
                 {
@@ -1069,7 +1177,8 @@ Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) 
     return Status::OK();
 }
 
-Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk) {
+Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk,
+                                                            bool force_use_intermediate_as_output) {
     // Streaming aggregate at least has one group by column
     const size_t num_input_rows = _group_by_columns[0]->size();
     for (auto& _group_by_column : _group_by_columns) {
@@ -1085,20 +1194,21 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
         }
     }
 
-    RETURN_IF_ERROR(output_chunk_by_streaming(input_chunk, chunk, num_input_rows, true));
+    RETURN_IF_ERROR(
+            output_chunk_by_streaming(input_chunk, chunk, num_input_rows, true, force_use_intermediate_as_output));
     return Status::OK();
 }
 
 void Aggregator::try_convert_to_two_level_map() {
     auto current_size = _hash_map_variant.reserved_memory_usage(mem_pool());
-    if (current_size > two_level_memory_threshold) {
+    if (current_size > get_two_level_threahold()) {
         _hash_map_variant.convert_to_two_level(_state);
     }
 }
 
 void Aggregator::try_convert_to_two_level_set() {
     auto current_size = _hash_set_variant.reserved_memory_usage(mem_pool());
-    if (current_size > two_level_memory_threshold) {
+    if (current_size > get_two_level_threahold()) {
         _hash_set_variant.convert_to_two_level(_state);
     }
 }
@@ -1135,7 +1245,7 @@ Columns Aggregator::_create_agg_result_columns(size_t num_rows, bool use_interme
     return agg_result_columns;
 }
 
-Columns Aggregator::_create_group_by_columns(size_t num_rows) {
+Columns Aggregator::_create_group_by_columns(size_t num_rows) const {
     Columns group_by_columns(_group_by_types.size());
     for (size_t i = 0; i < _group_by_types.size(); ++i) {
         group_by_columns[i] =
@@ -1247,19 +1357,54 @@ Status Aggregator::evaluate_agg_fn_exprs(Chunk* chunk, bool use_intermediate) {
     return Status::OK();
 }
 
-bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs, std::vector<ColumnType>& group_by_types,
-                                 size_t* max_size, bool* has_null) {
+bool could_apply_bitcompress_opt(
+        const std::vector<ColumnType>& group_by_types,
+        const std::vector<std::optional<std::pair<VectorizedLiteral*, VectorizedLiteral*>>>& ranges,
+        std::vector<std::any>& base, std::vector<int>& used_bytes, size_t* max_size, bool* has_null) {
+    size_t accumulated = 0;
+    for (size_t i = 0; i < group_by_types.size(); i++) {
+        size_t size = 0;
+        // 1 bytes for null flag.
+        if (group_by_types[i].is_nullable) {
+            *has_null = true;
+            size += 1;
+        }
+        if (group_by_types[i].result_type.is_complex_type()) {
+            return false;
+        }
+        LogicalType ltype = group_by_types[i].result_type.type;
+
+        size_t fixed_base_size = get_size_of_fixed_length_type(ltype);
+        if (fixed_base_size == 0) return false;
+
+        if (!ranges[i].has_value()) {
+            return false;
+        }
+        auto used_bits = get_used_bits(ltype, *ranges[i]->first, *ranges[i]->second, base[i]);
+        if (!used_bits.has_value()) {
+            return false;
+        }
+        size += used_bits.value();
+
+        accumulated += size;
+        used_bytes[i] = accumulated;
+    }
+    *max_size = accumulated;
+    return true;
+}
+
+bool is_group_columns_fixed_size(std::vector<ColumnType>& group_by_types, size_t* max_size, bool* has_null) {
     size_t size = 0;
     *has_null = false;
 
-    for (size_t i = 0; i < group_by_expr_ctxs.size(); i++) {
-        ExprContext* ctx = group_by_expr_ctxs[i];
+    for (size_t i = 0; i < group_by_types.size(); i++) {
+        // 1 bytes for null flag.
         if (group_by_types[i].is_nullable) {
             *has_null = true;
-            size += 1; // 1 bytes for  null flag.
+            size += 1;
         }
-        LogicalType ltype = ctx->root()->type().type;
-        if (ctx->root()->type().is_complex_type()) {
+        LogicalType ltype = group_by_types[i].result_type.type;
+        if (group_by_types[i].result_type.is_complex_type()) {
             return false;
         }
         size_t byte_size = get_size_of_fixed_length_type(ltype);
@@ -1270,95 +1415,31 @@ bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs, 
     return true;
 }
 
-#define CHECK_AGGR_PHASE_DEFAULT()                                                                                    \
-    {                                                                                                                 \
-        type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice : HashVariantType::Type::phase2_slice; \
-        break;                                                                                                        \
+template <typename HashVariantType>
+typename HashVariantType::Type Aggregator::_get_hash_table_type() {
+    auto type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice : HashVariantType::Type::phase2_slice;
+    if (_group_by_types.empty()) {
+        return type;
     }
+    // using one key hash table
+    if (_group_by_types.size() == 1) {
+        bool nullable = _group_by_types[0].is_nullable;
+        LogicalType type = _group_by_types[0].result_type.type;
+        return HashVariantResolver<HashVariantType>::instance().get_unary_type(_aggr_phase, type, nullable);
+    }
+    return type;
+}
 
 template <typename HashVariantType>
-void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
-    auto type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice : HashVariantType::Type::phase2_slice;
-    if (_has_nullable_key) {
-        switch (_group_by_expr_ctxs.size()) {
-        case 0:
-            break;
-        case 1: {
-            auto group_by_expr = _group_by_expr_ctxs[0];
-            switch (group_by_expr->root()->type().type) {
-#define CHECK_AGGR_PHASE(TYPE, VALUE)                                                  \
-    case TYPE: {                                                                       \
-        type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_null_##VALUE  \
-                                         : HashVariantType::Type::phase2_null_##VALUE; \
-        break;                                                                         \
-    }
-                CHECK_AGGR_PHASE(TYPE_BOOLEAN, uint8);
-                CHECK_AGGR_PHASE(TYPE_TINYINT, int8);
-                CHECK_AGGR_PHASE(TYPE_SMALLINT, int16);
-                CHECK_AGGR_PHASE(TYPE_INT, int32);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL32, decimal32);
-                CHECK_AGGR_PHASE(TYPE_BIGINT, int64);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL64, decimal64);
-                CHECK_AGGR_PHASE(TYPE_DATE, date);
-                CHECK_AGGR_PHASE(TYPE_DATETIME, timestamp);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL128, decimal128);
-                CHECK_AGGR_PHASE(TYPE_LARGEINT, int128);
-                CHECK_AGGR_PHASE(TYPE_CHAR, string);
-                CHECK_AGGR_PHASE(TYPE_VARCHAR, string);
-
-#undef CHECK_AGGR_PHASE
-            default:
-                CHECK_AGGR_PHASE_DEFAULT();
-            }
-        } break;
-        default:
-            CHECK_AGGR_PHASE_DEFAULT();
-        }
-    } else {
-        switch (_group_by_expr_ctxs.size()) {
-        case 0:
-            break;
-        case 1: {
-            auto group_by_expr = _group_by_expr_ctxs[0];
-            switch (group_by_expr->root()->type().type) {
-#define CHECK_AGGR_PHASE(TYPE, VALUE)                                             \
-    case TYPE: {                                                                  \
-        type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_##VALUE  \
-                                         : HashVariantType::Type::phase2_##VALUE; \
-        break;                                                                    \
-    }
-                CHECK_AGGR_PHASE(TYPE_BOOLEAN, uint8);
-                CHECK_AGGR_PHASE(TYPE_TINYINT, int8);
-                CHECK_AGGR_PHASE(TYPE_SMALLINT, int16);
-                CHECK_AGGR_PHASE(TYPE_INT, int32);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL32, decimal32);
-                CHECK_AGGR_PHASE(TYPE_BIGINT, int64);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL64, decimal64);
-                CHECK_AGGR_PHASE(TYPE_DATE, date);
-                CHECK_AGGR_PHASE(TYPE_DATETIME, timestamp);
-                CHECK_AGGR_PHASE(TYPE_LARGEINT, int128);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL128, decimal128);
-                CHECK_AGGR_PHASE(TYPE_CHAR, string);
-                CHECK_AGGR_PHASE(TYPE_VARCHAR, string);
-
-#undef CHECK_AGGR_PHASE
-
-            default:
-                CHECK_AGGR_PHASE_DEFAULT();
-            }
-        } break;
-        default:
-            CHECK_AGGR_PHASE_DEFAULT();
-        }
-    }
-
+typename HashVariantType::Type Aggregator::_try_to_apply_fixed_size_opt(typename HashVariantType::Type type,
+                                                                        bool* has_null, int* fixed_size) {
     bool has_null_column = false;
     int fixed_byte_size = 0;
     // this optimization don't need to be limited to multi-column group by.
     // single column like float/double/decimal/largeint could also be applied to.
     if (type == HashVariantType::Type::phase1_slice || type == HashVariantType::Type::phase2_slice) {
         size_t max_size = 0;
-        if (is_group_columns_fixed_size(_group_by_expr_ctxs, _group_by_types, &max_size, &has_null_column)) {
+        if (is_group_columns_fixed_size(_group_by_types, &max_size, &has_null_column)) {
             // we need reserve a byte for serialization length for nullable columns
             if (max_size < 4 || (!has_null_column && max_size == 4)) {
                 type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_fx4
@@ -1374,6 +1455,102 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
                 fixed_byte_size = max_size;
             }
         }
+    }
+    *has_null = has_null_column;
+    *fixed_size = fixed_byte_size;
+    return type;
+}
+
+template <typename HashVariantType>
+typename HashVariantType::Type Aggregator::_try_to_apply_compressed_key_opt(typename HashVariantType::Type input_type,
+                                                                            CompressKeyContext* ctx) {
+    typename HashVariantType::Type type = input_type;
+    if (_group_by_types.empty()) {
+        return type;
+    }
+    for (size_t i = 0; i < _ranges.size(); ++i) {
+        if (!_ranges[i].has_value()) {
+            return type;
+        }
+    }
+
+    // check apply bit compress opt
+    {
+        bool has_null_column;
+        size_t new_max_bit_size = 0;
+        std::vector<int>& offsets = ctx->offsets;
+        std::vector<int>& used_bits = ctx->used_bits;
+        std::vector<std::any>& bases = ctx->bases;
+
+        size_t group_by_keys = _group_by_types.size();
+        used_bits.resize(group_by_keys);
+        offsets.resize(group_by_keys);
+        bases.resize(group_by_keys);
+
+        if (could_apply_bitcompress_opt(_group_by_types, _ranges, bases, used_bits, &new_max_bit_size,
+                                        &has_null_column)) {
+            if (new_max_bit_size <= 8 && _group_by_types.size() == 1) {
+                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_cx1
+                                                 : HashVariantType::Type::phase2_slice_cx1;
+            } else if (_group_by_types.size() > 1) {
+                if (new_max_bit_size <= 8) {
+                    type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_cx1
+                                                     : HashVariantType::Type::phase2_slice_cx1;
+                } else if (new_max_bit_size <= 4 * 8) {
+                    type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_cx4
+                                                     : HashVariantType::Type::phase2_slice_cx4;
+                } else if (new_max_bit_size <= 8 * 8) {
+                    type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_cx8
+                                                     : HashVariantType::Type::phase2_slice_cx8;
+                } else if (new_max_bit_size <= 16 * 8) {
+                    type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_cx16
+                                                     : HashVariantType::Type::phase2_slice_cx16;
+                }
+            }
+        }
+
+        offsets[0] = 0;
+        for (size_t i = 1; i < group_by_keys; ++i) {
+            offsets[i] = used_bits[i - 1];
+        }
+    }
+    return type;
+}
+
+template <typename HashVariantType>
+void Aggregator::_build_hash_variant(HashVariantType& hash_variant, typename HashVariantType::Type type,
+                                     CompressKeyContext&& context) {
+    hash_variant.init(_state, type, _agg_stat);
+    hash_variant.visit([&](auto& variant) {
+        if constexpr (is_compressed_fixed_size_key<std::decay_t<decltype(*variant)>>) {
+            variant->offsets = std::move(context.offsets);
+            variant->used_bits = std::move(context.used_bits);
+            variant->bases = std::move(context.bases);
+        }
+    });
+}
+
+template <typename HashVariantType>
+void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
+    auto type = _get_hash_table_type<HashVariantType>();
+
+    CompressKeyContext compress_key_ctx;
+    bool apply_compress_key_opt = false;
+    typename HashVariantType::Type prev_type = type;
+    type = _try_to_apply_compressed_key_opt<HashVariantType>(type, &compress_key_ctx);
+    apply_compress_key_opt = prev_type != type;
+    if (apply_compress_key_opt) {
+        // build with compressed key
+        VLOG_ROW << "apply compressed key";
+        _build_hash_variant<HashVariantType>(hash_variant, type, std::move(compress_key_ctx));
+        return;
+    }
+
+    bool has_null_column = false;
+    int fixed_byte_size = 0;
+
+    if (_group_by_types.size() > 1) {
+        type = _try_to_apply_fixed_size_opt<HashVariantType>(type, &has_null_column, &fixed_byte_size);
     }
 
     VLOG_ROW << "hash type is "
@@ -1420,12 +1597,13 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
         build_hash_map_with_selection(chunk_size);
         return;
     } else {
-        _streaming_selection.assign(chunk_size, 0);
+        _streaming_selection.resize(chunk_size);
     }
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        hash_map_with_key->build_hash_map(chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this),
-                                          &_tmp_agg_states);
+        hash_map_with_key->build_hash_map_with_limit(chunk_size, _group_by_columns, _mem_pool.get(),
+                                                     AllocateState<MapType>(this), &_tmp_agg_states,
+                                                     &_streaming_selection, _limit);
     });
     shared_limit_countdown.fetch_sub(_hash_map_variant.size() - start_size, std::memory_order_relaxed);
 }

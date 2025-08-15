@@ -17,11 +17,15 @@
 
 #include "util/thrift_client.h"
 
+#include <sys/poll.h>
+#include <sys/types.h>
+
 #include <ostream>
 #include <string>
 
 #include "gutil/strings/substitute.h"
 #include "util/monotime.h"
+#include "util/time.h"
 
 namespace starrocks {
 
@@ -89,6 +93,23 @@ void ThriftClientImpl::close() {
                       << ")";
         }
     }
+}
+
+void ThriftClientImpl::update_active_time() {
+    _last_active_time = MonotonicMillis();
+}
+
+bool ThriftClientImpl::is_active() {
+    if (MonotonicMillis() - _last_active_time > config::thrift_rpc_connection_max_valid_time_ms) {
+        return false;
+    }
+    // The server side does not actively send requests to the client.
+    // If the POLLIN event is triggered, then the server side is actively disconnecting.
+    pollfd fds[1];
+    fds[0].fd = _socket->getSocketFD();
+    fds[0].events = POLLIN;
+    int ret = poll(fds, 1, 0);
+    return ret == 0;
 }
 
 } // namespace starrocks

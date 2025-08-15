@@ -45,16 +45,12 @@ import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -399,69 +395,8 @@ public class Backend extends ComputeNode {
         return true;
     }
 
-    public static Backend read(DataInput in) throws IOException {
-        Backend backend = new Backend();
-        backend.readFields(in);
-        return backend;
-    }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(getId());
-        Text.writeString(out, getHost());
-        out.writeInt(getHeartbeatPort());
-        out.writeInt(getBePort());
-        out.writeInt(getHttpPort());
-        out.writeInt(getBeRpcPort());
-        out.writeBoolean(getIsAlive().get());
-        out.writeBoolean(isDecommissioned());
-        out.writeLong(getLastUpdateMs());
 
-        out.writeLong(getLastStartTime());
-
-        out.writeInt(disksRef.size());
-        for (Map.Entry<String, DiskInfo> entry : disksRef.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            entry.getValue().write(out);
-        }
-
-        Text.writeString(out, SystemInfoService.DEFAULT_CLUSTER);
-        out.writeInt(getBackendState().ordinal());
-        out.writeInt(getDecommissionType().ordinal());
-
-        out.writeInt(getBrpcPort());
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        setId(in.readLong());
-        setHost(Text.readString(in));
-        setHeartbeatPort(in.readInt());
-        setBePort(in.readInt());
-        setHttpPort(in.readInt());
-        setBeRpcPort(in.readInt());
-        setAlive(in.readBoolean());
-        setDecommissioned(in.readBoolean());
-
-        setLastUpdateMs(in.readLong());
-
-        setLastStartTime(in.readLong());
-
-        Map<String, DiskInfo> disks = Maps.newHashMap();
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String rootPath = Text.readString(in);
-            DiskInfo diskInfo = DiskInfo.read(in);
-            disks.put(rootPath, diskInfo);
-        }
-
-        disksRef = new ConcurrentHashMap<>(disks);
-        // ignore clusterName
-        Text.readString(in);
-        setBackendState(in.readInt());
-        setDecommissionType(in.readInt());
-
-        setBrpcPort(in.readInt());
-    }
 
     @Override
     public int hashCode() {

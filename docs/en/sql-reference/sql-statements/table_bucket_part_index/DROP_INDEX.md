@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DROP INDEX
 
-## Description
-
-This statement is used to drop a specified index on a table. Currently, only bitmap index is supported in this version.
+DROP INDEX is used to drop a specified index on a table. Currently, only bitmap index is supported in this version.
 
 :::tip
 

@@ -34,7 +34,6 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.mv.MVRepairHandler.PartitionRepairInfo;
 import com.starrocks.proto.TxnInfoPB;
@@ -62,6 +61,7 @@ import javax.validation.constraints.NotNull;
 
 public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     private static final Logger LOG = LogManager.getLogger(LakeTableAlterMetaJobBase.class);
+
     @SerializedName(value = "watershedTxnId")
     private long watershedTxnId = -1;
     @SerializedName(value = "watershedGtid")
@@ -72,6 +72,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     @SerializedName(value = "commitVersionMap")
     private Map<Long, Long> commitVersionMap = new HashMap<>();
     private AgentBatchTask batchTask = null;
+    private boolean isFileBundling = false;
 
     public LakeTableAlterMetaJobBase(JobType jobType) {
         super(jobType);
@@ -110,7 +111,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.watershedTxnId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator()
                     .getNextTransactionId();
             this.watershedGtid = globalStateMgr.getGtidGenerator().nextGtid();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this.getShadowCopy());
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         }
 
         try {
@@ -130,6 +131,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     protected abstract void updateCatalog(Database db, LakeTable table);
 
     protected abstract void restoreState(LakeTableAlterMetaJobBase job);
+
+    protected abstract boolean enableFileBundling();
+
+    protected abstract boolean disableFileBundling();
 
     @Override
     protected void runWaitingTxnJob() throws AlterCancelException {
@@ -166,7 +171,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.jobState = JobState.FINISHED_REWRITING;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this.getShadowCopy());
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
 
             // NOTE: !!! below this point, this update meta job must success unless the database or table been dropped. !!!
             updateNextVersion(table);
@@ -209,7 +214,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             updateCatalog(db, table);
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this.getShadowCopy());
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
             // set visible version
             updateVisibleVersion(table);
             table.setState(OlapTable.OlapTableState.NORMAL);
@@ -237,6 +242,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
+            isFileBundling = table.isFileBundling();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(partition != null, partitionId);
@@ -262,12 +268,26 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             txnInfo.commitTime = finishedTimeMs / 1000;
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.gtid = watershedGtid;
+            // there are two scenario we should use aggregate_publish
+            // 1. this task is change `file_bundling` to true
+            // 2. the table is enable `file_bundling` and this task is not change `file_bundling`
+            //    to false.
+            boolean useAggregatePublish = enableFileBundling() || (isFileBundling && !disableFileBundling());
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
+                List<Tablet> tablets = new ArrayList<>();
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
-                            warehouseId);
+                    if (!useAggregatePublish) {
+                        Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
+                                computeResource, false);
+                    } else {
+                        tablets.addAll(index.getTablets());
+                    }
+                }
+                if (useAggregatePublish) {
+                    Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion, 
+                                null, null, computeResource, null);
                 }
             }
             return true;
@@ -327,9 +347,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         for (Tablet tablet : tablets) {
-            Long backendId = warehouseManager.getComputeNodeId(warehouseId, (LakeTablet) tablet);
+            Long backendId = warehouseManager.getAliveComputeNodeId(computeResource, tablet.getId());
             if (backendId == null) {
                 throw new AlterCancelException("no alive node");
             }
@@ -405,6 +425,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             Preconditions.checkState(partition.getVisibleVersion() == commitVersion - 1,
                     "partitionVisitionVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             partition.updateVisibleVersion(commitVersion, finishedTimeMs);
+            if (enableFileBundling() || disableFileBundling()) {
+                partition.setMetadataSwitchVersion(commitVersion);
+            }
             LOG.info("partitionVisibleVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             LOG.info("LakeTableAlterMetaJob id: {} update visible version of partition: {}, visible Version: {}",
                     jobId, partition.getId(), commitVersion);
@@ -418,9 +441,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     protected long getWatershedTxnId() {
         return watershedTxnId;
     }
-
-    // Only for reducing data writing after the first log, so we don't do deep copy
-    protected abstract LakeTableAlterMetaJobBase getShadowCopy();
 
     @Override
     protected boolean cancelImpl(String errMsg) {
@@ -518,25 +538,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
-    }
-
-    protected void copyOnlyForNonFirstLog(LakeTableAlterMetaJobBase copied) {
-        copied.watershedTxnId = this.watershedTxnId;
-        copied.watershedGtid = this.watershedGtid;
-        copied.physicalPartitionIndexMap = this.physicalPartitionIndexMap;
-        copied.commitVersionMap = this.commitVersionMap;
-
-        copied.type = this.type;
-        copied.jobId = this.jobId;
-        copied.jobState = this.jobState;
-        copied.dbId = this.dbId;
-        copied.tableId = this.tableId;
-        copied.tableName = this.tableName;
-        copied.errMsg = this.errMsg;
-        copied.createTimeMs = this.createTimeMs;
-        copied.finishedTimeMs = this.finishedTimeMs;
-        copied.timeoutMs = this.timeoutMs;
-        copied.warehouseId = this.warehouseId;
     }
 
     // for test

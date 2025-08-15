@@ -329,7 +329,7 @@ Enter host password for user 'root':
 }%
 ```
 
-If there was an error the output provides a URL to see the error messages. The error message also contains the backend node that the Stream Load job was assigned to (`starrocks-cn`). Because you added an entry for `starrocks-cn` to the `/etc/hosts` file, you should be able to nvigate to it and read the error message.
+If there was an error the output provides a URL to see the error messages. The error message also contains the backend node that the Stream Load job was assigned to (`starrocks-cn`). Because you added an entry for `starrocks-cn` to the `/etc/hosts` file, you should be able to navigate to it and read the error message.
 
 Expand the summary for the content seen while developing this tutorial:
 

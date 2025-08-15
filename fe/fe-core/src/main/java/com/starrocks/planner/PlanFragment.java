@@ -43,6 +43,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.Utils;
@@ -68,6 +69,7 @@ import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -371,7 +373,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
         root.fillLocalRfWaitingSet(runtimeFilterBuildNodeIds);
         // TopN Filter should't wait
-        if (root instanceof RuntimeFilterBuildNode && !(root instanceof SortNode)) {
+        if (root instanceof RuntimeFilterBuildNode && !(root instanceof SortNode) && !(root instanceof AggregationNode)) {
             runtimeFilterBuildNodeIds.add(root.getId().asInt());
         }
         if (clearGlobalRuntimeFilter) {
@@ -747,6 +749,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             HashJoinNode hashJoinNode = (HashJoinNode) root;
             if (hashJoinNode.isSkewBroadJoin()) {
                 HashJoinNode shuffleJoinNode = hashJoinNode.getSkewJoinFriend();
+                // TODO(fixme): ensure broadcast jion 's rf size is equal to shuffle join's rf size, if not clear the specific
+                //  broadcast's rf.
+                if (shuffleJoinNode.getBuildRuntimeFilters().size() != hashJoinNode.getBuildRuntimeFilters().size()) {
+                    shuffleJoinNode.clearBuildRuntimeFilters();
+                    hashJoinNode.clearBuildRuntimeFilters();
+                    return;
+                }
                 for (RuntimeFilterDescription description : hashJoinNode.getBuildRuntimeFilters()) {
                     int filterId = shuffleJoinNode.getRfIdByEqJoinConjunctsIndex(description.getExprOrder());
                     // skew join's boradcast join rf need to remember the filter id of corresponding skew shuffle join
@@ -765,6 +774,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             JoinNode joinNode = (JoinNode) root;
             for (RuntimeFilterDescription description : joinNode.getBuildRuntimeFilters()) {
                 description.addMergeNode(host);
+            }
+        }
+        if (root instanceof AggregationNode aggNode) {
+            for (RuntimeFilterDescription description : aggNode.getBuildRuntimeFilters()) {
+                if (description.isHasRemoteTargets()) {
+                    description.addMergeNode(host);
+                }
             }
         }
 
@@ -864,6 +880,15 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
 
         return scanNodes;
+    }
+
+    public Optional<List<BucketProperty>> extractBucketProperties() {
+        List<List<BucketProperty>> properties = collectScanNodes().values().stream()
+                .filter(scanNode -> scanNode instanceof IcebergScanNode)
+                .map(scanNode -> ((IcebergScanNode) scanNode).getBucketProperties())
+                .filter(Optional::isPresent).map(Optional::get).toList();
+        return BucketProperty.checkAndGetBucketProperties(properties);
+
     }
 
     public boolean isUnionFragment() {

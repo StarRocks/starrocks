@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
 import java.util.Objects;
@@ -36,6 +37,8 @@ public class CaseWhenOperator extends CallOperator {
         this.hasElse = other.hasElse;
         this.whenStart = other.whenStart;
         this.whenEnd = other.whenEnd;
+        checkMaxFlatChildren();
+        incrDepth(arguments);
     }
 
     public CaseWhenOperator(Type returnType, CaseWhenOperator other) {
@@ -44,6 +47,8 @@ public class CaseWhenOperator extends CallOperator {
         this.hasElse = other.hasElse;
         this.whenStart = other.whenStart;
         this.whenEnd = other.whenEnd;
+        checkMaxFlatChildren();
+        this.depth = other.depth;
     }
 
     public CaseWhenOperator(Type returnType, ScalarOperator caseClause, ScalarOperator elseClause,
@@ -66,6 +71,16 @@ public class CaseWhenOperator extends CallOperator {
         if (null != elseClause) {
             this.hasElse = true;
             this.arguments.add(elseClause);
+        }
+        checkMaxFlatChildren();
+        incrDepth(arguments);
+    }
+
+    private void checkMaxFlatChildren() {
+        if (Config.max_scalar_operator_flat_children > 0 &&
+                getNumFlatChildren() > Config.max_scalar_operator_flat_children) {
+            throw new SemanticException(
+                    "The flat children of the case when statement exceeds the FE Config.max_scalar_operator_flat_children");
         }
     }
 
@@ -200,14 +215,8 @@ public class CaseWhenOperator extends CallOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         CaseWhenOperator that = (CaseWhenOperator) o;
@@ -217,12 +226,10 @@ public class CaseWhenOperator extends CallOperator {
                 whenEnd == that.whenEnd;
     }
 
-
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), hasCase, hasElse, whenStart, whenEnd);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), hasCase, hasElse, whenStart, whenEnd);
     }
-
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
         return visitor.visitCaseWhenOperator(this, context);

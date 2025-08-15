@@ -16,9 +16,9 @@
 package com.starrocks.lake.compaction;
 
 import com.starrocks.common.Config;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -32,7 +32,7 @@ public class SimpleSelectorTest {
     public SimpleSelectorTest() {
     }
 
-    @Before
+    @BeforeEach
     public void init() {
         Config.lake_compaction_simple_selector_threshold_versions = MIN_COMPACTION_VERSIONS;
         selector = new SimpleSelector();
@@ -41,7 +41,7 @@ public class SimpleSelectorTest {
     @Test
     public void testEmpty() {
         List<PartitionStatistics> statisticsList = new ArrayList<>();
-        Assert.assertEquals(0, selector.select(statisticsList, new HashSet<Long>()).size());
+        Assertions.assertEquals(0, selector.select(statisticsList, new HashSet<Long>()).size());
     }
 
     @Test
@@ -54,7 +54,7 @@ public class SimpleSelectorTest {
         statistics.setCompactionVersion(new PartitionVersion(1, 0));
         statisticsList.add(statistics);
 
-        Assert.assertEquals(0, selector.select(statisticsList, new HashSet<Long>()).size());
+        Assertions.assertEquals(0, selector.select(statisticsList, new HashSet<Long>()).size());
     }
 
     @Test
@@ -76,7 +76,7 @@ public class SimpleSelectorTest {
         statisticsList.add(statistics2);
 
         PartitionStatisticsSnapshot stat = new PartitionStatisticsSnapshot(statistics2);
-        Assert.assertEquals(stat.getPartition(),
+        Assertions.assertEquals(stat.getPartition(),
                             selector.select(statisticsList, new HashSet<Long>()).get(0).getPartition());
     }
 
@@ -92,11 +92,11 @@ public class SimpleSelectorTest {
         statisticsList.add(statistics);
 
         statistics.setNextCompactionTime(System.currentTimeMillis() + 60 * 1000);
-        Assert.assertEquals(0, selector.select(statisticsList, new HashSet<Long>()).size());
+        Assertions.assertEquals(0, selector.select(statisticsList, new HashSet<Long>()).size());
 
         statistics.setNextCompactionTime(System.currentTimeMillis() - 10);
         PartitionStatisticsSnapshot stat = new PartitionStatisticsSnapshot(statistics);
-        Assert.assertEquals(stat.getPartition(),
+        Assertions.assertEquals(stat.getPartition(),
                             selector.select(statisticsList, new HashSet<Long>()).get(0).getPartition());
     }
 }

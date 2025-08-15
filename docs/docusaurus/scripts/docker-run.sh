@@ -1,6 +1,6 @@
 #! /bin/bash
 
-echo -n "Docusaurus builds only one locale in dev mode, please enter a locale (zh or en): "
+echo -n "Docusaurus builds only one locale in dev mode, please enter a locale (zh, ja, or en): "
 read locale
 
 DOCUSAURUS_DIR=`pwd`
@@ -10,5 +10,6 @@ docker run --rm --interactive --tty \
 	--volume $DOCS_DIR/docusaurus/sidebars.json:/app/docusaurus/sidebars.json \
 	--volume $DOCS_DIR/en:/app/docusaurus/docs \
 	--volume "$DOCS_DIR/zh:/app/docusaurus/i18n/zh/docusaurus-plugin-content-docs/current" \
+	--volume "$DOCS_DIR/ja:/app/docusaurus/i18n/ja/docusaurus-plugin-content-docs/current" \
 	-p 3000:3000 \
 	docs-build yarn start -p 3000 -h 0.0.0.0 --locale $locale

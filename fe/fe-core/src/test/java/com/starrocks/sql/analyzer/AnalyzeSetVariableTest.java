@@ -17,22 +17,21 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.ResourceGroupMgr;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.uber.m3.util.ImmutableMap;
 import mockit.Expectations;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSetUserVariableFail;
@@ -43,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class AnalyzeSetVariableTest {
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -95,20 +94,20 @@ public class AnalyzeSetVariableTest {
         UserVariable userVariable = (UserVariable) setStmt.getSetListItems().get(0);
         SetExecutor executor = new SetExecutor(ctx, setStmt);
         executor.execute();
-        Assert.assertNotNull(userVariable.getEvaluatedExpression());
-        Assert.assertEquals("3", ((LiteralExpr) userVariable.getEvaluatedExpression()).getStringValue());
+        Assertions.assertNotNull(userVariable.getEvaluatedExpression());
+        Assertions.assertEquals("3", ((LiteralExpr) userVariable.getEvaluatedExpression()).getStringValue());
 
         sql = "set @var = abs(1.2)";
         setStmt = (SetStmt) analyzeSuccess(sql);
         userVariable = (UserVariable) setStmt.getSetListItems().get(0);
         SetStmtAnalyzer.calcuteUserVariable(userVariable);
-        Assert.assertTrue(userVariable.getUnevaluatedExpression() instanceof Subquery);
+        Assertions.assertTrue(userVariable.getUnevaluatedExpression() instanceof Subquery);
 
         sql = "set @var =JSON_ARRAY(1, 2, 3)";
         setStmt = (SetStmt) analyzeSuccess(sql);
         userVariable = (UserVariable) setStmt.getSetListItems().get(0);
         SetStmtAnalyzer.calcuteUserVariable(userVariable);
-        Assert.assertTrue(userVariable.getUnevaluatedExpression() instanceof Subquery);
+        Assertions.assertTrue(userVariable.getUnevaluatedExpression() instanceof Subquery);
 
         sql = "set @var = (select 1)";
         analyzeSuccess(sql);
@@ -122,15 +121,16 @@ public class AnalyzeSetVariableTest {
         sql = "set @var = (select sum(v1) from test.t0 group by v2)";
         setStmt = (SetStmt) analyzeSuccess(sql);
         SetStmtAnalyzer.calcuteUserVariable((UserVariable) setStmt.getSetListItems().get(0));
-        Assert.assertTrue(((UserVariable) setStmt.getSetListItems().get(0)).getUnevaluatedExpression().getType().isIntegerType());
+        Assertions.assertTrue(
+                ((UserVariable) setStmt.getSetListItems().get(0)).getUnevaluatedExpression().getType().isIntegerType());
 
         sql = "set @var1 = 1, @var2 = 2";
         setStmt = (SetStmt) analyzeSuccess(sql);
-        Assert.assertEquals(2, setStmt.getSetListItems().size());
+        Assertions.assertEquals(2, setStmt.getSetListItems().size());
 
         sql = "set @var = [1,2,3]";
         setStmt = (SetStmt) analyzeSuccess(sql);
-        Assert.assertEquals(1, setStmt.getSetListItems().size());
+        Assertions.assertEquals(1, setStmt.getSetListItems().size());
 
         sql = "set @var = to_binary('abab', 'hex')";
         analyzeSetUserVariableFail(sql, "Can't set variable with type VARBINARY");
@@ -187,42 +187,17 @@ public class AnalyzeSetVariableTest {
     }
 
     @Test
-    public void testSetPassword() {
-        String sql = "SET PASSWORD FOR 'testUser' = PASSWORD('testPass')";
-        SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
-        SetPassVar setPassVar = (SetPassVar) setStmt.getSetListItems().get(0);
-        String password = new String(setPassVar.getPassword());
-        Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", password);
-
-        sql = "SET PASSWORD = PASSWORD('testPass')";
-        setStmt = (SetStmt) analyzeSuccess(sql);
-        setPassVar = (SetPassVar) setStmt.getSetListItems().get(0);
-        password = new String(setPassVar.getPassword());
-        Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", password);
-
-        sql = "SET PASSWORD = '*88EEBA7D913688E7278E2AD071FDB5E76D76D34B'";
-        setStmt = (SetStmt) analyzeSuccess(sql);
-        setPassVar = (SetPassVar) setStmt.getSetListItems().get(0);
-        password = new String(setPassVar.getPassword());
-        Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", password);
-    }
-
-    @Test
-    public void testSetResourceGroupName() {
+    public void testSetResourceGroupName() throws Exception {
         String rg1Name = "rg1";
-        TWorkGroup rg1 = new TWorkGroup();
-        ResourceGroupMgr mgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
-        new Expectations(mgr) {
-            {
-                mgr.chooseResourceGroupByName(rg1Name);
-                result = rg1;
-            }
 
-            {
-                mgr.chooseResourceGroupByName(anyString);
-                result = null;
-            }
-        };
+        String createRgSql = "create resource group rg1\n" +
+                "to (user='rg1_user1')\n" +
+                "   with (" +
+                "   'mem_limit' = '20%'," +
+                "   'cpu_core_limit' = '17'," +
+                "   'concurrency_limit' = '11'" +
+                "   );";
+        starRocksAssert.executeResourceGroupDdlSql(createRgSql);
 
         String sql;
 
@@ -251,6 +226,12 @@ public class AnalyzeSetVariableTest {
             {
                 mgr.chooseResourceGroupByID(anyLong);
                 result = null;
+            }
+
+            {
+                mgr.createBuiltinResourceGroupsIfNotExist();
+                result = null;
+                minTimes = 0;
             }
         };
 

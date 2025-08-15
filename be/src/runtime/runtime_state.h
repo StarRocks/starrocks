@@ -45,7 +45,7 @@
 #include <vector>
 
 #include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/datacache_utils.h"
+#include "cache/datacache_utils.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -137,6 +137,7 @@ public:
     int64_t timestamp_us() const { return _timestamp_us; }
     const std::string& timezone() const { return _timezone; }
     const cctz::time_zone& timezone_obj() const { return _timezone_obj; }
+    bool set_timezone(const std::string& tz);
     const std::string& user() const { return _user; }
     const std::string& last_query_id() const { return _last_query_id; }
     const TUniqueId& query_id() const { return _query_id; }
@@ -336,13 +337,29 @@ public:
     }
 
     bool enable_agg_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG); }
-    bool enable_agg_distinct_spill() const {
+    bool enable_spill_partitionwise_agg() const { return enable_agg_spill() && spill_partitionwise_agg(); }
+    int spill_partitionwise_agg_partition_num() const {
+        if (_spill_options->spill_partitionwise_agg_partition_num <= 0) {
+            return config::spill_init_partition;
+        } else {
+            return std::max(std::min(_spill_options->spill_partitionwise_agg_partition_num, 256), 4);
+        }
+    }
+    bool enable_spill_partitionwise_agg_skew_elimination() const {
+        return enable_agg_spill() && spill_partitionwise_agg_skew_elimination();
+    }
+    bool enable_agg_distint_spill() const {
         return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG_DISTINCT);
     }
     bool enable_sort_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::SORT); }
     bool enable_nl_join_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::NL_JOIN); }
     bool enable_multi_cast_local_exchange_spill() const {
         return spillable_operator_mask() & (1LL << TSpillableOperatorType::MULTI_CAST_LOCAL_EXCHANGE);
+    }
+
+    bool spill_partitionwise_agg() const { return _spill_options->spill_partitionwise_agg; }
+    bool spill_partitionwise_agg_skew_elimination() const {
+        return _spill_options->spill_partitionwise_agg_skew_elimination;
     }
 
     int32_t spill_mem_table_size() const {
@@ -399,6 +416,25 @@ public:
 
     bool enable_hyperscan_vec() const {
         return _query_options.__isset.enable_hyperscan_vec && _query_options.enable_hyperscan_vec;
+    }
+
+    long column_view_concat_rows_limit() const {
+        return _query_options.__isset.column_view_concat_rows_limit ? _query_options.column_view_concat_rows_limit
+                                                                    : -1L;
+    }
+
+    long column_view_concat_bytes_limit() const {
+        return _query_options.__isset.column_view_concat_bytes_limit ? _query_options.column_view_concat_bytes_limit
+                                                                     : -1L;
+    }
+
+    bool enable_column_view() const {
+        return column_view_concat_bytes_limit() > 0 || column_view_concat_rows_limit() > 0;
+    }
+
+    bool enable_hash_join_range_direct_mapping_opt() const {
+        return _query_options.__isset.enable_hash_join_range_direct_mapping_opt &&
+               _query_options.enable_hash_join_range_direct_mapping_opt;
     }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }

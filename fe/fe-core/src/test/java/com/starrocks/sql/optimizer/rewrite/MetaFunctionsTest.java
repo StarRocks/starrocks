@@ -17,53 +17,40 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Config;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.thrift.TResultBatch;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.nio.ByteBuffer;
 import java.util.List;
 
-public class MetaFunctionsTest {
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+@TestMethodOrder(MethodName.class)
+public class MetaFunctionsTest extends MVTestBase {
 
     static {
         MemoryUsageTracker.registerMemoryTracker("Report", new ReportHandler());
     }
 
-    private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.alter_scheduler_interval_millisecond = 100;
-        Config.dynamic_partition_enable = true;
-        Config.dynamic_partition_check_interval_seconds = 1;
-        Config.enable_strict_storage_medium_check = false;
-        UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
-        // create connect context
-        connectContext = UtFrameUtils.createDefaultCtx();
-        starRocksAssert = new StarRocksAssert(connectContext);
-
+        MVTestBase.beforeClass();
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
@@ -103,9 +90,9 @@ public class MetaFunctionsTest {
         MetaFunctions.inspectMemory(new ConstantOperator("report", Type.VARCHAR));
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testInspectMemoryFailed() {
-        MetaFunctions.inspectMemory(new ConstantOperator("abc", Type.VARCHAR));
+        assertThrows(SemanticException.class, () -> MetaFunctions.inspectMemory(new ConstantOperator("abc", Type.VARCHAR)));
     }
 
     @Test
@@ -115,21 +102,21 @@ public class MetaFunctionsTest {
             MetaFunctions.inspectMemoryDetail(
                     new ConstantOperator("abc", Type.VARCHAR),
                     new ConstantOperator("def", Type.VARCHAR));
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception ex) {
         }
         try {
             MetaFunctions.inspectMemoryDetail(
                     new ConstantOperator("report", Type.VARCHAR),
                     new ConstantOperator("def", Type.VARCHAR));
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception ex) {
         }
         try {
             MetaFunctions.inspectMemoryDetail(
                     new ConstantOperator("report", Type.VARCHAR),
                     new ConstantOperator("reportHandler.abc", Type.VARCHAR));
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception ex) {
         }
         MetaFunctions.inspectMemoryDetail(
@@ -142,18 +129,24 @@ public class MetaFunctionsTest {
 
     private UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
 
-    @Test(expected = ErrorReportException.class)
+    @Test
     public void testInspectTableAccessDeniedException() {
-        connectContext.setCurrentUserIdentity(testUser);
-        connectContext.setCurrentRoleIds(testUser);
-        MetaFunctions.inspectTable(new TableName("test", "tbl1"));
+        assertThrows(ErrorReportException.class, () -> {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setThreadLocalInfo();
+            MetaFunctions.inspectTable(new TableName("test", "tbl1"));
+        });
     }
 
-    @Test(expected = ErrorReportException.class)
+    @Test
     public void testInspectExternalTableAccessDeniedException() {
-        connectContext.setCurrentUserIdentity(testUser);
-        connectContext.setCurrentRoleIds(testUser);
-        MetaFunctions.inspectTable(new TableName("test", "mysql_external_table"));
+        assertThrows(ErrorReportException.class, () -> {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setThreadLocalInfo();
+            MetaFunctions.inspectTable(new TableName("test", "mysql_external_table"));
+        });
     }
 
     private String lookupString(String tableName, String key, String column) {
@@ -175,26 +168,26 @@ public class MetaFunctionsTest {
         // 2. column not found
         // 3. key not exists
         {
-            Exception e = Assert.assertThrows(SemanticException.class, () ->
+            Exception e = Assertions.assertThrows(SemanticException.class, () ->
                     lookupString("t1", "v1", "c1")
             );
-            Assert.assertEquals("Getting analyzing error. Detail message: Unknown table 'test.t1'.",
+            Assertions.assertEquals("Getting analyzing error. Detail message: Unknown table 'test.t1'.",
                     e.getMessage());
         }
         {
             starRocksAssert.withTable("create table t1(c1 string, c2 bigint) duplicate key(c1) " +
                     "properties('replication_num'='1')");
-            Exception e = Assert.assertThrows(SemanticException.class, () ->
+            Exception e = Assertions.assertThrows(SemanticException.class, () ->
                     lookupString("t1", "v1", "c1")
             );
-            Assert.assertEquals("Getting analyzing error. Detail message: " +
+            Assertions.assertEquals("Getting analyzing error. Detail message: " +
                             "Invalid parameter must be PRIMARY_KEY.", e.getMessage());
             starRocksAssert.dropTable("t1");
         }
         {
             starRocksAssert.withTable("create table t1(c1 string, c2 bigint auto_increment) primary key(c1) " +
                     "properties('replication_num'='1')");
-            Assert.assertNull(lookupString("t1", "v1", "c1"));
+            Assertions.assertNull(lookupString("t1", "v1", "c1"));
 
             // normal
             new MockUp<SimpleExecutor>() {
@@ -210,7 +203,7 @@ public class MetaFunctionsTest {
                     return Lists.newArrayList(resultBatch);
                 }
             };
-            Assert.assertEquals("v1", lookupString("t1", "v1", "c1"));
+            Assertions.assertEquals("v1", lookupString("t1", "v1", "c1"));
 
             // record not found
             new MockUp<SimpleExecutor>() {
@@ -219,8 +212,80 @@ public class MetaFunctionsTest {
                     throw new RuntimeException("query failed if record not exist in dict table");
                 }
             };
-            Assert.assertNull(lookupString("t1", "v1", "c1"));
+            Assertions.assertNull(lookupString("t1", "v1", "c1"));
         }
+    }
 
+    @Test
+    public void inspectMVRefreshInfoReturnsValidJsonForMaterializedView() throws Exception {
+        starRocksAssert.withRefreshedMaterializedView("create materialized view mv1 distributed by random " +
+                "as select k1, sum(v1) from test.tbl1 group by k1");
+        ConstantOperator result = MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar("test.mv1"));
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.getVarchar().contains("tableToUpdatePartitions"));
+        starRocksAssert.dropMaterializedView("mv1");
+    }
+
+    @Test
+    public void inspectMVRefreshInfoThrowsExceptionForNonMaterializedView() {
+        assertThrows(SemanticException.class, () -> {
+            starRocksAssert.withTable("create table tbl2(k1 int, v1 int) properties('replication_num'='1')");
+            MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar("test.tbl2"));
+            starRocksAssert.dropTable("tbl2");
+        });
+    }
+
+    @Test
+    public void inspectTablePartitionInfoReturnsValidJsonForOlapTable() throws Exception {
+        starRocksAssert.withTable("create table tbl3(k1 int, v1 int) partition by range(k1) " +
+                "(partition p1 values less than('10'), partition p2 values less than('20')) " +
+                "properties('replication_num'='1')");
+        ConstantOperator result = MetaFunctions.inspectTablePartitionInfo(ConstantOperator.createVarchar("test.tbl3"));
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.getVarchar().contains("p1"));
+        Assertions.assertTrue(result.getVarchar().contains("p2"));
+        starRocksAssert.dropTable("tbl3");
+    }
+
+    @Test
+    public void inspectTablePartitionInfoThrowsExceptionForInvalidTable() {
+        assertThrows(SemanticException.class,
+                () -> MetaFunctions.inspectTablePartitionInfo(ConstantOperator.createVarchar("test.invalid_table")));
+    }
+
+    @Test
+    public void inspectMVRefreshInfoHandlesEmptyBaseTables() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view mv_empty distributed by random " +
+                "   as select k1 from test.tbl1 group by k1");
+        ConstantOperator result = MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar("test.mv_empty"));
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.getVarchar().contains("{}")); // Ensure empty base tables are handled
+        starRocksAssert.dropMaterializedView("mv_empty");
+    }
+
+    @Test
+    public void inspectMVRefreshInfoThrowsExceptionForNullInput() {
+        assertThrows(SemanticException.class, () -> MetaFunctions.inspectMVRefreshInfo(null));
+    }
+
+    @Test
+    public void inspectTablePartitionInfoHandlesEmptyPartitions() throws Exception {
+        starRocksAssert.withTable("create table empty_partition_table(k1 int, v1 int) properties('replication_num'='1')");
+        ConstantOperator result = MetaFunctions.inspectTablePartitionInfo(
+                ConstantOperator.createVarchar("test.empty_partition_table"));
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.getVarchar().contains("empty_partition_table"));
+        starRocksAssert.dropTable("empty_partition_table");
+    }
+
+    @Test
+    public void inspectTablePartitionInfoThrowsExceptionForNullInput() {
+        assertThrows(SemanticException.class, () -> MetaFunctions.inspectTablePartitionInfo(null));
+    }
+
+    @Test
+    public void inspectTablePartitionInfoThrowsExceptionForNonExistentTable() {
+        assertThrows(SemanticException.class,
+                () -> MetaFunctions.inspectTablePartitionInfo(ConstantOperator.createVarchar("test.non_existent_table")));
     }
 }

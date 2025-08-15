@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW INDEX
 
-## Description
-
-This statement is used to show information related to index in a table. It currently only supports bitmap index.
+SHOW INDEX is used to show information related to index in a table. It currently only supports bitmap index.
 
 :::tip
 

@@ -4,6 +4,25 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.16
+
+リリース日：2025年4月30日
+
+### 改善点
+
+- Stream Loadタスクスケジューリングは、BE ノードのブラックリストをサポートするようになりました。ブラックリスト内のノードは、タスクスケジューリングから除外されます。[#57919](https://github.com/StarRocks/starrocks/pull/57919)
+
+### バグ修正
+
+以下の問題が修正されました：
+
+- Tablet 作成時のタイムアウト。[#55808](https://github.com/StarRocks/starrocks/pull/55808)
+- `files()` 関数を使ってビューを作成する際、認証情報が失われる問題。[#56606](https://github.com/StarRocks/starrocks/pull/56606)
+- 空集合を処理する際、最適化器が定数比較を正しく処理できず、クエリが失敗する問題。[#57735](https://github.com/StarRocks/starrocks/pull/57735)
+- プレアグリゲーション戦略がデータオーバーフローを処理する際に BE クラッシュを引き起こす問題。[#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- 基本テーブルの一部のパーティションが削除された後、関連するマテリアライズドビューを削除しようとすると例外が発生し、削除操作が失敗する問題。[#58037](https://github.com/StarRocks/starrocks/pull/58037)
+- 主キー表の Tablet をロードする際、優先度評価ロジックに欠陥があり、バージョン認識エラーによりデータが失われる問題。[#58404](https://github.com/StarRocks/starrocks/pull/58404)
+
 ## 3.2.15
 
 リリース日: 2025年2月14日

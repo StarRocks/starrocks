@@ -10,17 +10,17 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class ShowColumnStmtTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.alter_scheduler_interval_millisecond = 100;
@@ -44,7 +44,7 @@ public class ShowColumnStmtTest {
                 "c bitmap bitmap_union,d percentile percentile_union) distributed by hash(a);");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table test_default";
@@ -62,7 +62,7 @@ public class ShowColumnStmtTest {
         String sql = "show full columns from test_default;";
         ShowColumnStmt showColumnStmt = (ShowColumnStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowResultSet resultSet = ShowExecutor.execute(showColumnStmt, ctx);
-        Assert.assertEquals("uuid()", resultSet.getResultRows().get(0).get(5));
+        Assertions.assertEquals("uuid()", resultSet.getResultRows().get(0).get(5));
     }
 
     @Test
@@ -72,10 +72,10 @@ public class ShowColumnStmtTest {
         ShowColumnStmt showColumnStmt = (ShowColumnStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowResultSet resultSet = ShowExecutor.execute(showColumnStmt, ctx);
         // here must set null not \N
-        Assert.assertNull(resultSet.getResultRows().get(0).get(5));
-        Assert.assertNull(resultSet.getResultRows().get(1).get(5));
-        Assert.assertNull(resultSet.getResultRows().get(2).get(5));
-        Assert.assertNull(resultSet.getResultRows().get(3).get(5));
+        Assertions.assertNull(resultSet.getResultRows().get(0).get(5));
+        Assertions.assertNull(resultSet.getResultRows().get(1).get(5));
+        Assertions.assertNull(resultSet.getResultRows().get(2).get(5));
+        Assertions.assertNull(resultSet.getResultRows().get(3).get(5));
     }
 
 }

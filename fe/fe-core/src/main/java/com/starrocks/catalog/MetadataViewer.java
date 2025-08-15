@@ -47,9 +47,11 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
@@ -75,7 +77,7 @@ public class MetadataViewer {
 
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            throw new DdlException("Database " + dbName + " does not exsit");
+            throw new DdlException("Database " + dbName + " does not exist");
         }
 
         Locker locker = new Locker();
@@ -204,7 +206,7 @@ public class MetadataViewer {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            throw new DdlException("Database " + dbName + " does not exsit");
+            throw new DdlException("Database " + dbName + " does not exist");
         }
 
         Locker locker = new Locker();
@@ -283,10 +285,10 @@ public class MetadataViewer {
         if (RunMode.isSharedDataMode()) {
             // check warehouse
             long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            List<Long> computeNodeIs =
-                    GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            List<Long> computeNodeIs = warehouseManager.getAllComputeNodeIds(warehouseId);
             if (computeNodeIs.isEmpty()) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                final Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                 throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
             }
             allComputeNodeIds.addAll(computeNodeIs);
@@ -295,6 +297,97 @@ public class MetadataViewer {
 
         }
         return allComputeNodeIds;
+    }
+
+    public static List<List<String>> getDataDistribution(ShowDataDistributionStmt stmt) throws DdlException {
+        return getDataDistribution(stmt.getDbName(), stmt.getTblName(), stmt.getPartitionNames());
+    }
+
+    public static List<List<String>> getDataDistribution(
+            String dbName, String tblName, PartitionNames partitionNames) throws DdlException {
+
+        DecimalFormat df = new DecimalFormat("00.00 %");
+        List<List<String>> result = Lists.newArrayList();
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            throw new DdlException("Database " + dbName + " does not exist");
+        }
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+            if (tbl == null || !tbl.isNativeTableOrMaterializedView()) {
+                throw new DdlException("Table does not exist or is not native table: " + tblName);
+            }
+
+            OlapTable olapTable = (OlapTable) tbl;
+
+            List<Long> partitionIds = Lists.newArrayList();
+            if (partitionNames == null) {
+                for (Partition partition : olapTable.getPartitions()) {
+                    partitionIds.add(partition.getId());
+                }
+            } else {
+                for (String partitionName : partitionNames.getPartitionNames()) {
+                    Partition partition = olapTable.getPartition(partitionName, partitionNames.isTemp());
+                    if (partition == null) {
+                        throw new DdlException("Partition does not exist: " + partitionName);
+                    }
+                    partitionIds.add(partition.getId());
+                }
+            }
+
+            Collections.sort(partitionIds);
+
+            for (long partitionId : partitionIds) {
+                Partition partition = olapTable.getPartition(partitionId);
+                if (partition == null) {
+                    continue;
+                }
+
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        List<Tablet> tablets = index.getTablets();
+
+                        List<Long> rowCountStatistics = Lists.newArrayListWithCapacity(tablets.size());
+                        List<Long> dataSizeStatistics = Lists.newArrayListWithCapacity(tablets.size());
+
+                        long totalRowCount = 0;
+                        long totalDataSize = 0;
+                        long version = physicalPartition.getVisibleVersion();
+                        for (Tablet tablet : tablets) {
+                            long rowCount = tablet.getRowCount(version);
+                            long dataSize = tablet.getDataSize(true);
+                            rowCountStatistics.add(rowCount);
+                            dataSizeStatistics.add(dataSize);
+                            totalRowCount += rowCount;
+                            totalDataSize += dataSize;
+                        }
+
+                        for (int i = 0; i < tablets.size(); i++) {
+                            List<String> row = Lists.newArrayList();
+                            row.add(partition.getName());
+                            row.add(String.valueOf(physicalPartition.getId()));
+                            row.add(olapTable.getIndexNameById(index.getId()));
+                            row.add(index.getVirtualBucketsByTabletId(tablets.get(i).getId()).toString());
+                            row.add(String.valueOf(rowCountStatistics.get(i)));
+                            row.add(totalRowCount == 0L ? "0.00 %"
+                                    : df.format((double) rowCountStatistics.get(i) / totalRowCount));
+                            row.add(String.valueOf(dataSizeStatistics.get(i)));
+                            row.add(totalDataSize == 0L ? "0.00 %"
+                                    : df.format((double) dataSizeStatistics.get(i) / totalDataSize));
+                            result.add(row);
+                        }
+                    }
+                }
+            }
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+        return result;
     }
 
     private static String graph(int num, int totalNum, int mod) {

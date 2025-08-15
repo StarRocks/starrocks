@@ -71,11 +71,19 @@ import com.starrocks.alter.OnlineOptimizeJobV2;
 import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.alter.dynamictablet.DynamicTablet;
+import com.starrocks.alter.dynamictablet.DynamicTabletJob;
+import com.starrocks.alter.dynamictablet.IdenticalTablet;
+import com.starrocks.alter.dynamictablet.MergingTablet;
+import com.starrocks.alter.dynamictablet.SplitTabletJob;
+import com.starrocks.alter.dynamictablet.SplittingTablet;
 import com.starrocks.authentication.FileGroupProvider;
 import com.starrocks.authentication.GroupProvider;
+import com.starrocks.authentication.JWTSecurityIntegration;
 import com.starrocks.authentication.LDAPGroupProvider;
-import com.starrocks.authentication.OIDCSecurityIntegration;
+import com.starrocks.authentication.OAuth2SecurityIntegration;
 import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.authentication.SimpleLDAPSecurityIntegration;
 import com.starrocks.authentication.UnixGroupProvider;
 import com.starrocks.authorization.CatalogPEntryObject;
 import com.starrocks.authorization.DbPEntryObject;
@@ -197,6 +205,8 @@ import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -352,7 +362,9 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<SecurityIntegration> SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(SecurityIntegration.class, "clazz")
-                    .registerSubtype(OIDCSecurityIntegration.class, "OIDCSecurityIntegration");
+                    .registerSubtype(JWTSecurityIntegration.class, "JWTSecurityIntegration")
+                    .registerSubtype(SimpleLDAPSecurityIntegration.class, "SimpleLDAPSecurityIntegration")
+                    .registerSubtype(OAuth2SecurityIntegration.class, "OAuth2SecurityIntegration");
 
     private static final RuntimeTypeAdapterFactory<GroupProvider> GROUP_PROVIDER_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(GroupProvider.class, "clazz")
@@ -419,6 +431,20 @@ public class GsonUtils {
                     .registerSubtype(NativeAnalyzeJob.class, "NativeAnalyzeJob", true)
                     .registerSubtype(ExternalAnalyzeJob.class, "ExternalAnalyzeJob");
 
+    public static final RuntimeTypeAdapterFactory<ComputeResource> COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(ComputeResource.class, "clazz")
+                    .registerSubtype(WarehouseComputeResource.class, "WarehouseComputeResource", true);
+
+    public static final RuntimeTypeAdapterFactory<DynamicTabletJob> DYNAMIC_TABLET_JOB_RUNTIME_TYPE_ADAPTER_FACTORY = 
+            RuntimeTypeAdapterFactory.of(DynamicTabletJob.class, "clazz")
+                    .registerSubtype(SplitTabletJob.class, "SplitTabletJob");
+
+    public static final RuntimeTypeAdapterFactory<DynamicTablet> DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY = 
+            RuntimeTypeAdapterFactory.of(DynamicTablet.class, "clazz")
+                    .registerSubtype(SplittingTablet.class, "SplittingTablet")
+                    .registerSubtype(MergingTablet.class, "MergingTablet")
+                    .registerSubtype(IdenticalTablet.class, "IdenticalTablet");
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -480,6 +506,9 @@ public class GsonUtils {
             .registerTypeAdapterFactory(STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(DYNAMIC_TABLET_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

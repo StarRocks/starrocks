@@ -44,7 +44,7 @@ public:
                     const std::vector<std::vector<ColumnUID>>& unique_column_id_list);
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
-                       const std::vector<std::string>& orphan_files);
+                       const std::vector<FileMetaPB>& orphan_files);
     void apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
                             int64_t output_rowset_schema_id);
@@ -53,7 +53,7 @@ public:
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
     // the garbage collection module relies on this value to check if a delvec file can be safely
     // deleted.
-    Status finalize(int64_t txn_id);
+    Status finalize(int64_t txn_id, bool skip_write_tablet_metadata = false);
     // find delvec in builder's buffer, used for batch txn log precess.
     StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const;
 

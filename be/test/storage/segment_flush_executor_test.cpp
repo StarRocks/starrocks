@@ -180,11 +180,11 @@ public:
     }
 
     Status get_prepared_rowset(int64_t tablet_id, int64_t txn_id, int64_t partition_id, RowsetSharedPtr* rowset) {
-        std::map<TabletInfo, RowsetSharedPtr> tablet_infos;
+        std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_infos;
         StorageEngine::instance()->txn_manager()->get_txn_related_tablets(txn_id, partition_id, &tablet_infos);
         for (auto& [tablet_info, rs] : tablet_infos) {
             if (tablet_info.tablet_id == tablet_id) {
-                (*rowset) = rs;
+                (*rowset) = rs.first;
                 return Status::OK();
             }
         }

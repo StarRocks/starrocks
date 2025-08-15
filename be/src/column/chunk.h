@@ -53,7 +53,8 @@ public:
         HASH_JOIN_SPILL_HASH_SLOT_ID = -1,
         SORT_ORDINAL_COLUMN_SLOT_ID = -2,
         HASH_JOIN_BUILD_INDEX_SLOT_ID = -3,
-        HASH_JOIN_PROBE_INDEX_SLOT_ID = -4
+        HASH_JOIN_PROBE_INDEX_SLOT_ID = -4,
+        HASH_AGG_SPILL_HASH_SLOT_ID = -5
     };
 
     using ChunkPtr = std::shared_ptr<Chunk>;
@@ -285,6 +286,8 @@ public:
         }
         return Status::OK();
     }
+
+    bool has_capacity_limit_reached() const { return !capacity_limit_reached().ok(); }
 
     query_cache::owner_info& owner_info() { return _owner_info; }
     const ChunkExtraDataPtr& get_extra_data() const { return _extra_data; }

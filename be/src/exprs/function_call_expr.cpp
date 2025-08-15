@@ -144,16 +144,6 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
         RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::THREAD_LOCAL));
     }
 
-    // Todo: We will use output_scale in the result_writer to format the
-    //  output in row engine, but we need set output scale in vectorized engine?
-    if (_fn.name.function_name == "round" && _type.type == TYPE_DOUBLE) {
-        if (_children[1]->is_constant()) {
-            ASSIGN_OR_RETURN(ColumnPtr ptr, _children[1]->evaluate_checked(context, nullptr));
-            _output_scale = Int32Column::static_pointer_cast(ConstColumn::static_pointer_cast(ptr)->data_column())
-                                    ->get_data()[0];
-        }
-    }
-
     return Status::OK();
 }
 

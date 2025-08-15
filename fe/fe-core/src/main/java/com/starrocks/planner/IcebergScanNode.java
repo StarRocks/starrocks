@@ -21,6 +21,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -29,6 +30,7 @@ import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergConnectorScanRangeSource;
 import com.starrocks.connector.iceberg.IcebergGetRemoteFilesParams;
 import com.starrocks.connector.iceberg.IcebergMORParams;
@@ -46,6 +48,8 @@ import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DeleteFile;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -69,6 +73,7 @@ public class IcebergScanNode extends ScanNode {
     private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
     private int selectedPartitionCount = -1;
+    private Optional<List<BucketProperty>> bucketProperties = Optional.empty();
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
                            IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams) {
@@ -97,7 +102,41 @@ public class IcebergScanNode extends ScanNode {
         if (maxScanRangeLength == 0) {
             return scanRangeSource.getAllOutputs();
         }
+
         return scanRangeSource.getOutputs((int) maxScanRangeLength);
+    }
+
+    public IcebergConnectorScanRangeSource getSourceRange() {
+        return scanRangeSource;
+    }
+
+    public void rebuildScanRange(List<RemoteFileInfo> splits) throws StarRocksException {
+        Preconditions.checkNotNull(snapshotId, "snapshot id is null");
+        if (snapshotId.isEmpty()) {
+            LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
+            return;
+        }
+        
+        if (splits.isEmpty()) {
+            LOG.warn("There is no scan tasks after splits",
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), icebergJobPlanningPredicate);
+            return;
+        }
+        if (getSourceRange() != null) {
+            getSourceRange().clearScannedFiles();
+        }
+        RemoteFileInfoSource remoteFileInfoSource;
+        remoteFileInfoSource = new RemoteFileInfoDefaultSource(splits);
+        if (morParams != IcebergMORParams.EMPTY) {
+            boolean needToCheckEqualityIds = tableFullMORParams.size() != 3;
+            IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(
+                    remoteFileInfoSource, morParams, needToCheckEqualityIds);
+            Deque<RemoteFileInfo> remoteFileInfoDeque = trigger.getQueue(morParams);
+            remoteFileInfoSource = new QueueIcebergRemoteFileInfoSource(trigger, remoteFileInfoDeque);
+        }
+
+        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, 
+                remoteFileInfoSource, morParams, desc, bucketProperties, true);
     }
 
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
@@ -113,6 +152,7 @@ public class IcebergScanNode extends ScanNode {
                         .setParams(morParams)
                         .setTableVersionRange(TableVersionRange.withEnd(snapshotId))
                         .setPredicate(icebergJobPlanningPredicate)
+                        .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt())
                         .build();
 
         RemoteFileInfoSource remoteFileInfoSource;
@@ -135,7 +175,8 @@ public class IcebergScanNode extends ScanNode {
             }
         }
 
-        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, remoteFileInfoSource, morParams, desc);
+        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, 
+                remoteFileInfoSource, morParams, desc, bucketProperties);
     }
 
     private void setupCloudCredential() {
@@ -147,7 +188,8 @@ public class IcebergScanNode extends ScanNode {
         // Hard coding here
         // Try to get tabular signed temporary credential
         CloudConfiguration vendedCredentialsCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties());
+                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties(),
+                        icebergTable.getNativeTable().location());
         if (vendedCredentialsCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             // If we get CloudConfiguration succeed from iceberg FileIO's properties, we just using it.
             cloudConfiguration = vendedCredentialsCloudConfiguration;
@@ -199,6 +241,30 @@ public class IcebergScanNode extends ScanNode {
 
     public HDFSScanNodePredicates getScanNodePredicates() {
         return scanNodePredicates;
+    }
+
+    public void setBucketProperties(List<BucketProperty> bucketProperties) {
+        this.bucketProperties = Optional.of(bucketProperties);
+    }
+
+    public Optional<List<BucketProperty>> getBucketProperties() {
+        return this.bucketProperties;
+    }
+
+    @Override
+    public int getBucketNums() {
+        if (bucketProperties.isEmpty()) {
+            throw new StarRocksConnectorException("Error when using bucket-aware execution for table: "
+                    + icebergTable.getName());
+        }
+
+        List<Integer> bucketNums = this.bucketProperties.get().stream().map(
+                BucketProperty::getBucketNum).toList();
+        int res = bucketNums.get(0) + 1;
+        for (int i = 1; i < bucketNums.size(); i++) {
+            res = res * (bucketNums.get(i) + 1);
+        }
+        return res;
     }
 
     @Override
@@ -304,6 +370,7 @@ public class IcebergScanNode extends ScanNode {
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+        bucketProperties.ifPresent(properties -> HdfsScanNode.setBucketProperties(tHdfsScanNode, properties));
     }
 
     @Override
@@ -319,5 +386,17 @@ public class IcebergScanNode extends ScanNode {
     @Override
     public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
         scanRangeSource.setSampleStrategy(strategy);
+    }
+
+    public Set<DataFile> getScannedDataFiles() {
+        return scanRangeSource.getScannedDataFiles();
+    }
+
+    public Set<DeleteFile> getPosAppliedDeleteFiles() {
+        return scanRangeSource.getPosAppliedDeleteFiles();
+    }
+
+    public Set<DeleteFile> getEqualAppliedDeleteFiles() {
+        return scanRangeSource.getEqualAppliedDeleteFiles();
     }
 }

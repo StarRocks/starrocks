@@ -533,19 +533,19 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
 - 停止 FE 节点。
 
   ```Bash
-  ./fe/bin/stop_fe.sh --daemon
+  ./fe/bin/stop_fe.sh
   ```
 
 - 停止 BE 节点。
 
   ```Bash
-  ./be/bin/stop_be.sh --daemon
+  ./be/bin/stop_be.sh
   ```
 
 - 停止 CN 节点。
 
   ```Bash
-  ./be/bin/stop_cn.sh --daemon
+  ./be/bin/stop_cn.sh
   ```
 
 ## 故障排除

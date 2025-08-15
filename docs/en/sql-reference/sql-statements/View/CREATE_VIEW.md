@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CREATE VIEW
 
-## Description
-
-Creates a view.
+CREATE VIEW creates a logical view.
 
 A view, or a logical view, is a virtual table whose data is derived from a query against other existing physical tables. Therefore, a view uses no physical storage, and all queries against the view are equivalent to sub-queries of the query statement used to build the view.
 

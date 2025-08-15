@@ -228,6 +228,58 @@ TEST_F(VecBitmapFunctionsTest, bitmapHashTest) {
     }
 }
 
+TEST_F(VecBitmapFunctionsTest, bitmapHash64Test) {
+    {
+        Columns columns;
+
+        BinaryColumn::Ptr s = BinaryColumn::create();
+
+        s->append(Slice("12312313"));
+        s->append(Slice("1"));
+        s->append(Slice("0"));
+
+        columns.push_back(s);
+
+        auto column = BitmapFunctions::bitmap_hash64(ctx, columns).value();
+
+        ASSERT_TRUE(column->is_object());
+
+        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+
+        ASSERT_EQ(9, p->get_object(0)->serialize_size());
+        ASSERT_EQ(9, p->get_object(1)->serialize_size());
+        ASSERT_EQ(9, p->get_object(2)->serialize_size());
+    }
+
+    {
+        Columns columns;
+
+        BinaryColumn::Ptr s = BinaryColumn::create();
+        NullColumn::Ptr n = NullColumn::create();
+
+        s->append(Slice("-1"));
+        s->append(Slice("1"));
+        s->append(Slice("0"));
+
+        n->append(0);
+        n->append(0);
+        n->append(1);
+
+        columns.push_back(NullableColumn::create(s, n));
+
+        auto v = BitmapFunctions::bitmap_hash64(ctx, columns).value();
+
+        ASSERT_FALSE(v->is_nullable());
+        ASSERT_TRUE(v->is_object());
+
+        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(v);
+
+        ASSERT_EQ(9, p->get_object(0)->serialize_size());
+        ASSERT_EQ(9, p->get_object(1)->serialize_size());
+        ASSERT_EQ(1, p->get_object(2)->serialize_size());
+    }
+}
+
 TEST_F(VecBitmapFunctionsTest, bitmapCountTest) {
     BitmapValue b1;
     BitmapValue b2;
@@ -2060,7 +2112,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
     { // Single Bitmap
         Columns columns;
         BitmapColumn::Ptr s = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         s->append(&single);
 
         columns.push_back(s);
@@ -2398,7 +2450,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     // single bitmap
     {
         BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -2418,7 +2470,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     // single bitmap
     {
         BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -2437,7 +2489,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     // single bitmap
     {
         BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -2508,7 +2560,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     {
         BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
-        BitmapValue bmp32bit({1});
+        BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
@@ -2529,7 +2581,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     {
         BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
-        BitmapValue bmp32bit({1});
+        BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
@@ -2846,7 +2898,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     // single bitmap
     {
         BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -2866,7 +2918,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     // single bitmap
     {
         BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -2886,7 +2938,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     // single bitmap
     {
         BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -2956,7 +3008,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     {
         BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
-        BitmapValue bmp32bit({1});
+        BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
@@ -2977,7 +3029,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     {
         BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
-        BitmapValue bmp32bit({1});
+        BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
@@ -2997,7 +3049,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     {
         BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
-        BitmapValue bmp32bit({1});
+        BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
@@ -3314,7 +3366,7 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
     // single bitmap
     {
         BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -3334,7 +3386,7 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
     // single bitmap
     {
         BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;

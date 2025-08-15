@@ -1,0 +1,45 @@
+-- name: test_avro_logical_type
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/avro_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/avro_format/logical.avro oss://${oss_bucket}/test_files/avro_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 1,287. OK num: 1(upload 1 files).
+-- !result
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/*",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+decimal_bytes	decimal(10,2)	YES
+decimal_fixed	decimal(10,2)	YES
+uuid_string	varchar(1048576)	YES
+date	date	YES
+time_millis	int	YES
+time_micros	bigint	YES
+timestamp_millis	datetime	YES
+timestamp_micros	datetime	YES
+local_timestamp_millis	bigint	YES
+local_timestamp_micros	bigint	YES
+duration	varbinary(12)	YES
+-- !result
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/*",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+1234.56	1234.56	61ed1775-2ce2-4f88-8352-1da6847512d6	2025-04-11	55543806	55543806481	2025-04-11 15:25:43.806000	2025-04-11 15:25:43.806481	1744356343806	1744356343806481	b'\x02\x00\x00\x00\x05\x00\x00\x00Na\xbc\x00'
+-- !result
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/avro_format/${uuid0}/ > /dev/null

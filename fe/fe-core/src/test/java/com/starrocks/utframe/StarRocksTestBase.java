@@ -24,8 +24,8 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.After;
-import org.junit.Before;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.util.List;
 import java.util.Set;
@@ -41,17 +41,21 @@ public abstract class StarRocksTestBase {
     // existedTables is a set that contains all tables that have been created.
     protected static Set<Table> existedTables = Sets.newHashSet();
 
-    @Before
+    @BeforeEach
     public void before() {
         if (starRocksAssert != null) {
             collectTables(starRocksAssert, existedTables);
         }
     }
 
-    @After
+    @AfterEach
     public void after() throws Exception {
         if (starRocksAssert != null) {
-            cleanup(starRocksAssert, existedTables);
+            try {
+                cleanup(starRocksAssert, existedTables);
+            } catch (Exception e) {
+                // ignore exception
+            }
         }
     }
 

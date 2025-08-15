@@ -16,13 +16,13 @@ package com.starrocks.encryption;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class EncryptionClusterSetupTest {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         Config.default_master_key = "plain:aes_128:enwSdCUAiCLLx2Bs9E/neQ==";
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
@@ -30,7 +30,7 @@ public class EncryptionClusterSetupTest {
         Thread.sleep(1000);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(true);
         Config.default_master_key = "";
@@ -38,10 +38,10 @@ public class EncryptionClusterSetupTest {
 
     @Test
     public void testNormalSetup() throws Exception {
-        Assert.assertTrue(KeyMgr.isEncrypted());
+        Assertions.assertTrue(KeyMgr.isEncrypted());
         KeyMgr keyMgr = GlobalStateMgr.getCurrentState().getKeyMgr();
-        Assert.assertEquals(2, keyMgr.numKeys());
-        Assert.assertEquals(2, keyMgr.getCurrentKEK().getId());
-        Assert.assertEquals(2, keyMgr.getKeyById(2).getId());
+        Assertions.assertEquals(2, keyMgr.numKeys());
+        Assertions.assertEquals(2, keyMgr.getCurrentKEK().getId());
+        Assertions.assertEquals(2, keyMgr.getKeyById(2).getId());
     }
 }

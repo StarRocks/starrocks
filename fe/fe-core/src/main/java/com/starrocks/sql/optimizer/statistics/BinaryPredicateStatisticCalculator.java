@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -32,6 +33,8 @@ import java.util.Optional;
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.NaN;
 import static java.lang.Double.POSITIVE_INFINITY;
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 
 public class BinaryPredicateStatisticCalculator {
     public static Statistics estimateColumnToConstantComparison(Optional<ColumnRefOperator> columnRefOperator,
@@ -81,7 +84,7 @@ public class BinaryPredicateStatisticCalculator {
                                                             ColumnStatistic columnStatistic,
                                                             Optional<ConstantOperator> constant,
                                                             Statistics statistics) {
-        if (columnStatistic.getHistogram() == null || !constant.isPresent()) {
+        if (columnStatistic.getHistogram() == null || constant.isEmpty()) {
             StatisticRangeValues predicateRange;
 
             if (constant.isPresent()) {
@@ -102,53 +105,75 @@ public class BinaryPredicateStatisticCalculator {
             double max = StatisticUtils.convertStatisticsToDouble(constantOperator.getType(), constantOperator.toString())
                     .orElse(POSITIVE_INFINITY);
 
-            ColumnStatistic estimatedColumnStatistic = ColumnStatistic.buildFrom(columnStatistic)
+            ColumnStatistic.Builder estimatedColumnStatisticBuilder = ColumnStatistic.buildFrom(columnStatistic)
                     .setNullsFraction(0)
                     .setMinValue(min)
                     .setMaxValue(max)
-                    .setDistinctValuesCount(columnStatistic.getDistinctValuesCount())
-                    .build();
+                    .setDistinctValuesCount(columnStatistic.getDistinctValuesCount());
 
-            double predicateFactor;
             double rows;
-            Histogram hist = columnStatistic.getHistogram();
-            Map<String, Long> histogramTopN = columnStatistic.getHistogram().getMCV();
+            Histogram columnHist = columnStatistic.getHistogram();
+            Optional<Histogram> hist = updateHistWithEqual(columnStatistic, constant);
+            if (hist.isPresent()) {
+                estimatedColumnStatisticBuilder.setHistogram(hist.get());
+                double rowCountInHistogram = hist.get().getTotalRows();
+                double nonNullFraction = 1.0 - columnStatistic.getNullsFraction();
+                double outputRows = statistics.getOutputRowCount();
 
-            String constantStringValue = constantOperator.toString();
-            if (constantOperator.getType() == Type.BOOLEAN) {
-                constantStringValue = constantOperator.getBoolean() ? "1" : "0";
-            }
-            // If there is a constant key in MCV, we use the MCV count to estimate the row count.
-            // If it is not in MCV but in a bucket, we use the bucket info to estimate the row count.
-            // If it is not in MCV and not in any bucket, we combine hist row count, total row count and bucket number
-            // to estimate the row count.
-            if (histogramTopN.containsKey(constantStringValue)) {
-                double rowCountInHistogram = histogramTopN.get(constantStringValue);
-                predicateFactor = rowCountInHistogram / columnStatistic.getHistogram().getTotalRows();
-                double estimatedRows = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
-                        * predicateFactor;
-                rows = Math.min(rowCountInHistogram, estimatedRows);
+                double factor = rowCountInHistogram <= 1
+                        ? 1.0 / Math.max(1.0, columnStatistic.getDistinctValuesCount())
+                        : rowCountInHistogram / (double) columnHist.getTotalRows();
+
+                rows = rowCountInHistogram <= 1
+                        ? Math.max(1.0, outputRows * nonNullFraction * factor)
+                        : Math.min(rowCountInHistogram, outputRows * nonNullFraction * factor);
             } else {
-                Optional<Long> rowCounts = hist.getRowCountInBucket(constantOperator, columnStatistic.getDistinctValuesCount());
-                if (rowCounts.isPresent()) {
-                    predicateFactor = rowCounts.get() * 1.0 / columnStatistic.getHistogram().getTotalRows();
-                    double estimatedRows = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
-                            * predicateFactor;
-                    rows = Math.min(rowCounts.get(), estimatedRows);
-                } else {
-                    Long mostCommonValuesCount = histogramTopN.values().stream().reduce(Long::sum).orElse(0L);
-                    double f = 1 / Math.max(columnStatistic.getDistinctValuesCount() - histogramTopN.size(),
-                            hist.getBuckets().size());
-                    predicateFactor = (columnStatistic.getHistogram().getTotalRows() - mostCommonValuesCount)
-                            * f / columnStatistic.getHistogram().getTotalRows();
-                    rows = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
-                            * predicateFactor;
-                }
+                // The constant was not found in the column histogram.
+                Long mostCommonValuesCount = columnHist.getMCV().values().stream().reduce(Long::sum).orElse(0L);
+                double f = 1 / Math.max(columnStatistic.getDistinctValuesCount() - columnHist.getMCV().size(),
+                        columnHist.getBuckets().size());
+                double predicateFactor = (columnHist.getTotalRows() - mostCommonValuesCount) * f / columnHist.getTotalRows();
+                rows = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
             }
-            return columnRefOperator.map(operator -> Statistics.buildFrom(statistics)
-                            .setOutputRowCount(rows).addColumnStatistic(operator, estimatedColumnStatistic).build())
+
+            return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rows)
+                            .addColumnStatistic(operator, estimatedColumnStatisticBuilder.build()).build())
                     .orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rows).build());
         }
+    }
+
+    public static Optional<Histogram> updateHistWithEqual(ColumnStatistic columnStatistic,
+                                                          Optional<ConstantOperator> constant) {
+        if (constant.isEmpty() || columnStatistic.getHistogram() == null) {
+            return Optional.empty();
+        }
+
+        Map<String, Long> estimatedMcv = new HashMap<>();
+        ConstantOperator constantOperator = constant.get();
+        Histogram hist = columnStatistic.getHistogram();
+        Map<String, Long> histogramTopN = columnStatistic.getHistogram().getMCV();
+
+        String constantStringValue = constantOperator.toString();
+        if (constantOperator.getType() == Type.BOOLEAN) {
+            constantStringValue = constantOperator.getBoolean() ? "1" : "0";
+        }
+        // If there is a constant key in MCV, we use the MCV count to estimate the row count.
+        // If it is not in MCV but in a bucket, we use the bucket info to estimate the row count.
+        // If it is not in MCV and not in any bucket, we combine hist row count, total row count and bucket number
+        // to estimate the row count.
+        if (histogramTopN.containsKey(constantStringValue)) {
+            Long rowCountInHistogram = histogramTopN.get(constantStringValue);
+            estimatedMcv.put(constantOperator.toString(), rowCountInHistogram);
+        } else {
+            Optional<Long> rowCountInHistogram =
+                    hist.getRowCountInBucket(constantOperator, columnStatistic.getDistinctValuesCount());
+            if (rowCountInHistogram.isEmpty()) {
+                return Optional.empty();
+            }
+
+            estimatedMcv.put(constantOperator.toString(), rowCountInHistogram.get());
+        }
+        return Optional.of(new Histogram(new ArrayList<>(), estimatedMcv));
     }
 
     private static Statistics estimateColumnNotEqualToConstant(Optional<ColumnRefOperator> columnRefOperator,
@@ -207,7 +232,7 @@ public class BinaryPredicateStatisticCalculator {
                                                              BinaryType binaryType) {
         Optional<Histogram> hist = updateHistWithLessThan(columnStatistic, constant,
                 binaryType.equals(BinaryType.LE));
-        if (!hist.isPresent()) {
+        if (hist.isEmpty()) {
             StatisticRangeValues predicateRange;
             if (constant.isPresent()) {
                 Optional<Double> d = StatisticUtils.convertStatisticsToDouble(
@@ -230,8 +255,12 @@ public class BinaryPredicateStatisticCalculator {
 
             ColumnStatistic newEstimateColumnStatistics =
                     estimateColumnStatisticsWithHistogram(columnStatistic, estimatedHistogram);
+
+            ColumnStatistic finalNewEstimateColumnStatistics = adjustColumnStatisticsMinMax(
+                    newEstimateColumnStatistics, constant, statistics, columnRefOperator, true);
+
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
-                            addColumnStatistic(operator, newEstimateColumnStatistics).build()).
+                            addColumnStatistic(operator, finalNewEstimateColumnStatistics).build()).
                     orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
         }
     }
@@ -267,10 +296,47 @@ public class BinaryPredicateStatisticCalculator {
             ColumnStatistic newEstimateColumnStatistics =
                     estimateColumnStatisticsWithHistogram(columnStatistic, estimatedHistogram);
 
-            return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
-                            addColumnStatistic(operator, newEstimateColumnStatistics).build()).
-                    orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
+            ColumnStatistic finalNewEstimateColumnStatistics = adjustColumnStatisticsMinMax(
+                    newEstimateColumnStatistics, constant, statistics, columnRefOperator, false);
+            return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount)
+                                    .addColumnStatistic(operator, finalNewEstimateColumnStatistics).build())
+                    .orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
         }
+    }
+
+    private static ColumnStatistic adjustColumnStatisticsMinMax(
+            ColumnStatistic newEstimateColumnStatistics,
+            Optional<ConstantOperator> constant,
+            Statistics statistics,
+            Optional<ColumnRefOperator> columnRefOperator,
+            boolean isLessThan) {
+
+        ColumnStatistic.Builder builder = ColumnStatistic.buildFrom(newEstimateColumnStatistics);
+
+        if (constant.isPresent()) {
+            double constValue = StatisticUtils.convertStatisticsToDouble(
+                            constant.get().getType(), constant.get().toString())
+                    .orElse(isLessThan ? POSITIVE_INFINITY : NEGATIVE_INFINITY);
+
+            if (isLessThan && Double.isNaN(newEstimateColumnStatistics.getMaxValue())) {
+                builder.setMaxValue(constValue);
+            } else if (!isLessThan && Double.isNaN(newEstimateColumnStatistics.getMinValue())) {
+                builder.setMinValue(constValue);
+            }
+        }
+
+        if (columnRefOperator.isPresent()) {
+            ColumnStatistic stats = statistics.getColumnStatistics().get(columnRefOperator.get());
+            if (stats != null) {
+                if (isLessThan && Double.isNaN(newEstimateColumnStatistics.getMinValue())) {
+                    builder.setMinValue(stats.getMinValue());
+                } else if (!isLessThan && Double.isNaN(newEstimateColumnStatistics.getMaxValue())) {
+                    builder.setMaxValue(stats.getMaxValue());
+                }
+            }
+        }
+
+        return builder.build();
     }
 
     public static Statistics estimateColumnToColumnComparison(ScalarOperator leftColumn,
@@ -306,48 +372,223 @@ public class BinaryPredicateStatisticCalculator {
                                                          ColumnStatistic rightColumnStatistic,
                                                          Statistics statistics,
                                                          boolean isEqualForNull) {
-        double leftDistinctValuesCount = leftColumnStatistic.getDistinctValuesCount();
-        double rightDistinctValuesCount = rightColumnStatistic.getDistinctValuesCount();
-        double selectivity = 1.0 / Math.max(1, Math.max(leftDistinctValuesCount, rightDistinctValuesCount));
-        double rowCount = statistics.getOutputRowCount() * selectivity *
-                (isEqualForNull ? 1 :
-                        (1 - leftColumnStatistic.getNullsFraction()) * (1 - rightColumnStatistic.getNullsFraction()));
-
         StatisticRangeValues intersect = StatisticRangeValues.from(leftColumnStatistic)
                 .intersect(StatisticRangeValues.from(rightColumnStatistic));
-        ColumnStatistic.Builder newEstimateColumnStatistics = ColumnStatistic.builder().
-                setMaxValue(intersect.getHigh()).
-                setMinValue(intersect.getLow()).
-                setDistinctValuesCount(intersect.getDistinctValues());
+        ColumnStatistic.Builder newEstimateColumnStatistics = ColumnStatistic.builder()
+                .setMaxValue(intersect.getHigh())
+                .setMinValue(intersect.getLow())
+                .setDistinctValuesCount(intersect.getDistinctValues());
 
-        ColumnStatistic newLeftStatistic;
-        ColumnStatistic newRightStatistic;
-        if (!isEqualForNull) {
-            newEstimateColumnStatistics.setNullsFraction(0);
-            newLeftStatistic = newEstimateColumnStatistics
-                    .setAverageRowSize(leftColumnStatistic.getAverageRowSize()).build();
-            newRightStatistic = newEstimateColumnStatistics
-                    .setAverageRowSize(rightColumnStatistic.getAverageRowSize()).build();
+        boolean enableJoinHistogram =
+                ConnectContext.get() != null &&
+                        ConnectContext.get().getSessionVariable() != null &&
+                        ConnectContext.get().getSessionVariable().isCboEnableHistogramJoinEstimation();
+
+        double rowCount;
+        Optional<Histogram> hist = enableJoinHistogram ?
+                updateHistWithJoin(leftColumnStatistic, leftColumn.getType(), rightColumnStatistic, rightColumn.getType()) :
+                Optional.empty();
+        if (hist.isEmpty()) {
+            double selectivity = 1.0 /
+                    max(1, max(leftColumnStatistic.getDistinctValuesCount(), rightColumnStatistic.getDistinctValuesCount()));
+            rowCount = statistics.getOutputRowCount() * selectivity *
+                    (isEqualForNull ? 1 :
+                            (1 - leftColumnStatistic.getNullsFraction()) * (1 - rightColumnStatistic.getNullsFraction()));
         } else {
-            newLeftStatistic = newEstimateColumnStatistics
+            double selectivity = hist.get().getTotalRows() / (double)
+                    (leftColumnStatistic.getHistogram().getTotalRows() * rightColumnStatistic.getHistogram().getTotalRows());
+            rowCount = statistics.getOutputRowCount() * selectivity;
+        }
+
+        ColumnStatistic.Builder newLeftStatisticBuilder = ColumnStatistic.buildFrom(newEstimateColumnStatistics.build());
+        ColumnStatistic.Builder newRightStatisticBuilder = ColumnStatistic.buildFrom(newEstimateColumnStatistics.build());
+        if (!isEqualForNull) {
+            newLeftStatisticBuilder.setNullsFraction(0).setAverageRowSize(leftColumnStatistic.getAverageRowSize());
+            newRightStatisticBuilder.setNullsFraction(0).setAverageRowSize(rightColumnStatistic.getAverageRowSize());
+        } else {
+            newLeftStatisticBuilder
                     .setAverageRowSize(leftColumnStatistic.getAverageRowSize())
-                    .setNullsFraction(leftColumnStatistic.getNullsFraction())
-                    .build();
-            newRightStatistic = newEstimateColumnStatistics
+                    .setNullsFraction(leftColumnStatistic.getNullsFraction());
+            newRightStatisticBuilder
                     .setAverageRowSize(rightColumnStatistic.getAverageRowSize())
-                    .setNullsFraction(rightColumnStatistic.getNullsFraction())
-                    .build();
+                    .setNullsFraction(rightColumnStatistic.getNullsFraction());
+        }
+
+        if (hist.isEmpty()) {
+            newLeftStatisticBuilder.setHistogram(leftColumnStatistic.getHistogram());
+            newRightStatisticBuilder.setHistogram(rightColumnStatistic.getHistogram());
+        } else {
+            newLeftStatisticBuilder.setHistogram(hist.get());
+            newRightStatisticBuilder.setHistogram(hist.get());
         }
 
         Statistics.Builder builder = Statistics.buildFrom(statistics);
-        if (leftColumn instanceof ColumnRefOperator) {
-            builder.addColumnStatistic((ColumnRefOperator) leftColumn, newLeftStatistic);
+        if (leftColumn instanceof ColumnRefOperator column) {
+            builder.addColumnStatistic(column, newLeftStatisticBuilder.build());
         }
-        if (rightColumn instanceof ColumnRefOperator) {
-            builder.addColumnStatistic((ColumnRefOperator) rightColumn, newRightStatistic);
+        if (rightColumn instanceof ColumnRefOperator column) {
+            builder.addColumnStatistic(column, newRightStatisticBuilder.build());
         }
         builder.setOutputRowCount(rowCount);
         return builder.build();
+    }
+
+    public static Optional<Histogram> updateHistWithJoin(ColumnStatistic leftColumnStatistic, Type leftColumnType,
+                                                         ColumnStatistic rightColumnStatistic, Type rightColumnType) {
+        if (leftColumnStatistic.getHistogram() == null || rightColumnStatistic.getHistogram() == null) {
+            return Optional.empty();
+        }
+
+        Histogram leftHistogram = leftColumnStatistic.getHistogram();
+        Histogram rightHistogram = rightColumnStatistic.getHistogram();
+        double leftColumnDistinctCount = min(leftHistogram.getTotalRows(), leftColumnStatistic.getDistinctValuesCount());
+        double rightColumnDistinctCount = min(rightHistogram.getTotalRows(), rightColumnStatistic.getDistinctValuesCount());
+
+        Map<String, Long> estimatedMcv = estimateMcvToMcv(leftHistogram.getMCV(), rightHistogram.getMCV());
+        estimateMcvToBucket(leftHistogram.getMCV(), estimatedMcv, rightHistogram, rightColumnDistinctCount, leftColumnType);
+        estimateMcvToBucket(rightHistogram.getMCV(), estimatedMcv, leftHistogram, leftColumnDistinctCount, rightColumnType);
+        List<Bucket> estimatedBuckets =
+                estimateBucketToBucket(leftHistogram, leftColumnDistinctCount, leftColumnType, rightHistogram,
+                        rightColumnDistinctCount, rightColumnType);
+
+        if (estimatedMcv.isEmpty() && estimatedBuckets.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new Histogram(estimatedBuckets, estimatedMcv));
+    }
+
+    private static Map<String, Long> estimateMcvToMcv(Map<String, Long> leftMcv, Map<String, Long> rightMcv) {
+        Map<String, Long> mcvIntersection = new HashMap<>();
+        leftMcv.forEach((value, leftFreq) -> {
+            if (rightMcv.containsKey(value)) {
+                mcvIntersection.put(value, leftFreq * rightMcv.get(value));
+            }
+        });
+        return mcvIntersection;
+    }
+
+    private static void estimateMcvToBucket(Map<String, Long> leftMcv, Map<String, Long> estimatedMcv,
+                                            Histogram rightHistogram, double distinctValuesCount, Type dataType) {
+        if (rightHistogram.getBuckets() == null) {
+            return;
+        }
+
+        for (Map.Entry<String, Long> entry : leftMcv.entrySet()) {
+            if (estimatedMcv.containsKey(entry.getKey())) {
+                continue;
+            }
+
+            Optional<Double> value = StatisticUtils.convertStatisticsToDouble(dataType, entry.getKey());
+            if (value.isEmpty()) {
+                continue;
+            }
+
+            Long leftFreq = entry.getValue();
+            Optional<Long> rowCountInBucketOpt = rightHistogram.getRowCountInBucket(value.get(), distinctValuesCount,
+                    dataType.isFixedPointType());
+            rowCountInBucketOpt.ifPresent(rowCountInBucket -> estimatedMcv.put(entry.getKey(), leftFreq * rowCountInBucket));
+        }
+    }
+
+    private static List<Bucket> estimateBucketToBucket(Histogram leftHistogram, double leftColumnDistinctValue, Type dataTypeLeft,
+                                                       Histogram rightHistogram, double rightColumnDistinctValue,
+                                                       Type dataTypeRight) {
+        if (leftHistogram == null || rightHistogram == null) {
+            return null;
+        }
+
+        List<Bucket> leftBuckets = leftHistogram.getBuckets();
+        List<Bucket> rightBuckets = rightHistogram.getBuckets();
+        if (leftBuckets == null || leftBuckets.isEmpty() || rightBuckets == null || rightBuckets.isEmpty()) {
+            return null;
+        }
+
+        // Assume the distinct values are uniformly distributed.
+        long leftBucketDistinctRowCount = (long) (leftColumnDistinctValue / leftBuckets.size());
+        long rightBucketDistinctRowCount = (long) (rightColumnDistinctValue / rightBuckets.size());
+
+        List<Bucket> mergedBuckets = new ArrayList<>();
+
+        long rowCount = 0;
+        Long prevLeftBucketRowCount = 0L;
+        Long prevRightBucketRowCount = 0L;
+        int leftBucketIndex = 0;
+        int rightBucketIndex = 0;
+        while (leftBucketIndex < leftBuckets.size() && rightBucketIndex < rightBuckets.size()) {
+            Bucket leftBucket = leftBuckets.get(leftBucketIndex);
+            Bucket rightBucket = rightBuckets.get(rightBucketIndex);
+
+            Optional<StatisticRangeValues> bucketIntersectionRangeOpt = computeBucketIntersection(leftBucket, rightBucket);
+            if (bucketIntersectionRangeOpt.isPresent()) {
+                StatisticRangeValues bucketIntersectionRange = bucketIntersectionRangeOpt.get();
+                long leftBucketRowCount = leftBucket.getCount() - prevLeftBucketRowCount;
+                long rightBucketRowCount = rightBucket.getCount() - prevRightBucketRowCount;
+                if (dataTypeLeft.isFixedPointType()) {
+                    leftBucketDistinctRowCount = (long) (leftBucket.getUpper() - leftBucket.getLower());
+                }
+                if (dataTypeRight.isFixedPointType()) {
+                    rightBucketDistinctRowCount = (long) (rightBucket.getUpper() - rightBucket.getLower());
+                }
+
+                // merge the upper repeats.
+                long upperRepeats = 0L;
+                if (bucketIntersectionRange.getHigh() == leftBucket.getUpper()) {
+                    Optional<Long> countInRightBucket = rightBucket.getRowCountInBucket(leftBucket.getUpper(),
+                            prevRightBucketRowCount, rightBucketDistinctRowCount, dataTypeRight.isFixedPointType());
+                    if (countInRightBucket.isPresent()) {
+                        upperRepeats = leftBucket.getUpperRepeats() * countInRightBucket.get();
+                    }
+                } else {
+                    Optional<Long> countInLeftBucket = leftBucket.getRowCountInBucket(rightBucket.getUpper(),
+                            prevLeftBucketRowCount, leftBucketDistinctRowCount, dataTypeLeft.isFixedPointType());
+                    if (countInLeftBucket.isPresent()) {
+                        upperRepeats = countInLeftBucket.get() * rightBucket.getUpperRepeats();
+                    }
+                }
+
+                // merge the row count.
+                long rowCountInBucket = upperRepeats;
+                if (bucketIntersectionRange.getLow() < bucketIntersectionRange.getHigh()) {
+                    double leftIntersectionFraction = computeBucketIntersectionFraction(leftBucket, bucketIntersectionRange);
+                    double rightIntersectionFraction = computeBucketIntersectionFraction(rightBucket, bucketIntersectionRange);
+
+                    // compute the number of matches in the buckets intersection assuming uniform distribution.
+                    rowCountInBucket = max(rowCountInBucket, (long) (
+                            leftBucketRowCount * leftIntersectionFraction * rightBucketRowCount * rightIntersectionFraction /
+                                    max(leftBucketDistinctRowCount * leftIntersectionFraction,
+                                            rightBucketDistinctRowCount * rightIntersectionFraction)));
+                }
+
+                rowCount += rowCountInBucket;
+                mergedBuckets.add(
+                        new Bucket(bucketIntersectionRange.getLow(), bucketIntersectionRange.getHigh(), rowCount, upperRepeats));
+            }
+
+            if (leftBucket.getUpper() <= rightBucket.getUpper()) {
+                ++leftBucketIndex;
+                prevLeftBucketRowCount = leftBucket.getCount();
+            }
+            if (rightBucket.getUpper() <= leftBucket.getUpper()) {
+                ++rightBucketIndex;
+                prevRightBucketRowCount = rightBucket.getCount();
+            }
+        }
+
+        return mergedBuckets;
+    }
+
+    private static Optional<StatisticRangeValues> computeBucketIntersection(Bucket leftBucket, Bucket rightBucket) {
+        if (leftBucket.getUpper() < rightBucket.getLower() || rightBucket.getUpper() < leftBucket.getLower()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new StatisticRangeValues(max(leftBucket.getLower(), rightBucket.getLower()),
+                min(leftBucket.getUpper(), rightBucket.getUpper()), 0.0));
+    }
+
+    private static double computeBucketIntersectionFraction(Bucket bucket, StatisticRangeValues intersectionRange) {
+        return (intersectionRange.getHigh() - intersectionRange.getLow()) / (bucket.getUpper() - bucket.getLower());
     }
 
     public static Statistics estimateColumnNotEqualToColumn(
@@ -356,7 +597,7 @@ public class BinaryPredicateStatisticCalculator {
             Statistics statistics) {
         double leftDistinctValuesCount = leftColumn.getDistinctValuesCount();
         double rightDistinctValuesCount = rightColumn.getDistinctValuesCount();
-        double selectivity = 1.0 / Math.max(1, Math.max(leftDistinctValuesCount, rightDistinctValuesCount));
+        double selectivity = 1.0 / max(1, max(leftDistinctValuesCount, rightDistinctValuesCount));
 
         double rowCount = statistics.getOutputRowCount();
         // If any ColumnStatistic is default, give a default selectivity

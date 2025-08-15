@@ -19,38 +19,34 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <new>
-#include <queue>
 #include <utility>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/object_pool.h"
 #include "common/statusor.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
-#include "exec/chunk_buffer_memory_manager.h"
+#include "exec/aggregator_fwd.h"
 #include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/spill_process_channel.h"
-#include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/aggregate.h"
 #include "exprs/expr.h"
-#include "gen_cpp/QueryPlanExtra_types.h"
-#include "gutil/strings/substitute.h"
-#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "runtime/memory/counting_allocator.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
-
+class RuntimeFilter;
+class AggInRuntimeFilterMerger;
 struct HashTableKeyAllocator;
+class VectorizedLiteral;
 
 struct RawHashTableIterator {
     RawHashTableIterator(HashTableKeyAllocator* alloc_, size_t x_, int y_) : alloc(alloc_), x(x_), y(y_) {}
@@ -115,19 +111,6 @@ inline uint8_t* RawHashTableIterator::value() {
     return static_cast<uint8_t*>(alloc->vecs[x].first) + alloc->aggregate_key_size * y;
 }
 
-class Aggregator;
-class SortedStreamingAggregator;
-
-template <class HashMapWithKey>
-struct AllocateState {
-    AllocateState(Aggregator* aggregator_) : aggregator(aggregator_) {}
-    inline AggDataPtr operator()(const typename HashMapWithKey::KeyType& key);
-    inline AggDataPtr operator()(std::nullptr_t);
-
-private:
-    Aggregator* aggregator;
-};
-
 struct AggFunctionTypes {
     TypeDescriptor result_type;
     TypeDescriptor serde_type; // for serialize
@@ -151,7 +134,6 @@ struct ColumnType {
     bool is_nullable;
 };
 
-enum AggrPhase { AggrPhase1, AggrPhase2 };
 enum AggrMode {
     AM_DEFAULT, // normal mode(cache feature turn off)
     // A blocking operator is split into a pair {blocking operator(before cache), blocking operator(after cache)]
@@ -226,6 +208,7 @@ struct AggregatorParams {
     std::vector<TExpr> grouping_exprs;
     std::vector<TExpr> aggregate_functions;
     std::vector<TExpr> intermediate_aggr_exprs;
+    std::vector<TExpr> grouping_min_max;
 
     // Incremental MV
     // Whether it's testing, use MemStateTable in testing, instead use IMTStateTable.
@@ -254,12 +237,6 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
 // it contains common data struct and algorithm of aggregation
 class Aggregator : public pipeline::ContextWithDependency {
 public:
-#ifdef NDEBUG
-    static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
-#else
-    static constexpr size_t two_level_memory_threshold = 64;
-#endif
-
     Aggregator(AggregatorParamsPtr params);
 
     ~Aggregator() noexcept override {
@@ -307,6 +284,13 @@ public:
             return 0;
         }
     }
+    size_t size() const {
+        if (is_hash_set()) {
+            return _hash_set_variant.size();
+        } else {
+            return _hash_map_variant.size();
+        }
+    }
 
     TStreamingPreaggregationMode::type& streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() const { return _streaming_preaggregation_mode; }
@@ -338,6 +322,7 @@ public:
     Status compute_batch_agg_states(Chunk* chunk, size_t chunk_size);
     Status compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size);
 
+    RuntimeFilter* build_in_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc);
     // Convert one row agg states to chunk
     Status convert_to_chunk_no_groupby(ChunkPtr* chunk);
 
@@ -348,8 +333,10 @@ public:
     Status evaluate_agg_fn_exprs(Chunk* chunk, bool use_intermediate);
     Status evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i);
 
-    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
-    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows, bool use_selection);
+    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk,
+                                     bool force_use_intermediate_as_output = false);
+    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows, bool use_selection,
+                                     bool force_use_intermediate_as_output = false);
 
     // convert input chunk to spill format
     Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);
@@ -359,7 +346,8 @@ public:
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     // selection[i] = 0: found in hash table
     // selection[1] = 1: not found in hash table
-    Status output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk);
+    Status output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk,
+                                                    bool force_use_intermediate_as_output = false);
 
     // At first, we use single hash map, if hash map is too big,
     // we convert the single hash map to two level hash map.
@@ -402,7 +390,7 @@ public:
 
     bool is_streaming_all_states() const { return _streaming_all_states; }
 
-    HashTableKeyAllocator _state_allocator;
+    HashTableKeyAllocator& state_allocator() { return _state_allocator; }
 
     void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
         _pip_observable.attach_sink_observer(state, observer);
@@ -423,6 +411,8 @@ protected:
     std::unique_ptr<MemPool> _mem_pool;
     // used to count heap memory usage of agg states
     std::unique_ptr<CountingAllocatorWithHook> _allocator;
+
+    HashTableKeyAllocator _state_allocator;
     // The open phase still relies on the TFunction object for some initialization operations
     std::vector<TFunction> _fns;
 
@@ -489,6 +479,8 @@ protected:
 
     // Exprs used to evaluate group by column
     std::vector<ExprContext*> _group_by_expr_ctxs;
+    std::vector<ExprContext*> _group_by_min_max;
+    std::vector<std::optional<std::pair<VectorizedLiteral*, VectorizedLiteral*>>> _ranges;
     Columns _group_by_columns;
     std::vector<ColumnType> _group_by_types;
 
@@ -536,6 +528,7 @@ public:
     void convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk);
 
     bool is_pre_cache() { return _aggr_mode == AM_BLOCKING_PRE_CACHE || _aggr_mode == AM_STREAMING_PRE_CACHE; }
+    Columns create_group_by_columns(size_t num_rows) const { return _create_group_by_columns(num_rows); }
 
 protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
@@ -563,7 +556,7 @@ protected:
 
     // Create new aggregate function result column by type
     Columns _create_agg_result_columns(size_t num_rows, bool use_intermediate);
-    Columns _create_group_by_columns(size_t num_rows);
+    Columns _create_group_by_columns(size_t num_rows) const;
 
     void _serialize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns);
     void _finalize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns);
@@ -585,6 +578,24 @@ protected:
     // Choose different agg hash map/set by different group by column's count, type, nullable
     template <typename HashVariantType>
     void _init_agg_hash_variant(HashVariantType& hash_variant);
+    // get spec hash table/set type
+    template <typename HashVariantType>
+    typename HashVariantType::Type _get_hash_table_type();
+
+    template <typename HashVariantType>
+    typename HashVariantType::Type _try_to_apply_fixed_size_opt(typename HashVariantType::Type type,
+                                                                bool* has_null_column, int* fixed_byte_size);
+    struct CompressKeyContext {
+        std::vector<int> offsets;
+        std::vector<int> used_bits;
+        std::vector<std::any> bases;
+    };
+    template <typename HashVariantType>
+    typename HashVariantType::Type _try_to_apply_compressed_key_opt(typename HashVariantType::Type input_type,
+                                                                    CompressKeyContext* ctx);
+    template <typename HashVariantType>
+    void _build_hash_variant(HashVariantType& hash_variant, typename HashVariantType::Type type,
+                             CompressKeyContext&& context);
 
     void _release_agg_memory();
 
@@ -593,53 +604,16 @@ protected:
     Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
                                       const AggregateFunction** ret);
 
+    int64_t get_two_level_threahold() {
+        if (config::two_level_memory_threshold < 0) {
+            return agg::two_level_memory_threshold;
+        }
+        return config::two_level_memory_threshold;
+    }
+
     template <class HashMapWithKey>
     friend struct AllocateState;
 };
-
-template <class HashMapWithKey>
-inline AggDataPtr AllocateState<HashMapWithKey>::operator()(const typename HashMapWithKey::KeyType& key) {
-    AggDataPtr agg_state = aggregator->_state_allocator.allocate();
-    *reinterpret_cast<typename HashMapWithKey::KeyType*>(agg_state) = key;
-    size_t created = 0;
-    size_t aggregate_function_sz = aggregator->_agg_fn_ctxs.size();
-    try {
-        for (int i = 0; i < aggregate_function_sz; i++) {
-            aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
-                                                  agg_state + aggregator->_agg_states_offsets[i]);
-            created++;
-        }
-        return agg_state;
-    } catch (std::bad_alloc& e) {
-        for (size_t i = 0; i < created; ++i) {
-            aggregator->_agg_functions[i]->destroy(aggregator->_agg_fn_ctxs[i],
-                                                   agg_state + aggregator->_agg_states_offsets[i]);
-        }
-        aggregator->_state_allocator.rollback();
-        throw;
-    }
-}
-
-template <class HashMapWithKey>
-inline AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
-    AggDataPtr agg_state = aggregator->_state_allocator.allocate_null_key_data();
-    size_t created = 0;
-    size_t aggregate_function_sz = aggregator->_agg_fn_ctxs.size();
-    try {
-        for (int i = 0; i < aggregate_function_sz; i++) {
-            aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
-                                                  agg_state + aggregator->_agg_states_offsets[i]);
-            created++;
-        }
-        return agg_state;
-    } catch (std::bad_alloc& e) {
-        for (int i = 0; i < created; i++) {
-            aggregator->_agg_functions[i]->destroy(aggregator->_agg_fn_ctxs[i],
-                                                   agg_state + aggregator->_agg_states_offsets[i]);
-        }
-        throw;
-    }
-}
 
 inline bool LimitedMemAggState::has_limited(const Aggregator& aggregator) const {
     return limited_memory_size > 0 && aggregator.memory_usage() >= limited_memory_size;
@@ -681,12 +655,5 @@ private:
     AggrMode _aggr_mode = AggrMode::AM_DEFAULT;
     std::atomic<int64_t> _shared_limit_countdown;
 };
-
-using AggregatorFactory = AggregatorFactoryBase<Aggregator>;
-using AggregatorFactoryPtr = std::shared_ptr<AggregatorFactory>;
-
-using SortedStreamingAggregatorPtr = std::shared_ptr<SortedStreamingAggregator>;
-using StreamingAggregatorFactory = AggregatorFactoryBase<SortedStreamingAggregator>;
-using StreamingAggregatorFactoryPtr = std::shared_ptr<StreamingAggregatorFactory>;
 
 } // namespace starrocks

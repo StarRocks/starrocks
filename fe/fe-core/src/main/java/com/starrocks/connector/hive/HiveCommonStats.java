@@ -12,29 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 public class HiveCommonStats {
-    private static final HiveCommonStats EMPTY = new HiveCommonStats(-1, -1);
+    private static final HiveCommonStats EMPTY = new HiveCommonStats(-1, -1, 0);
 
     // Row num is first obtained from the table or partition's parameters.
     // If the num is null or -1, it will be estimated from total size of the partition or table's files.
     private final long rowNums;
 
-    private long totalFileBytes;
+    private final long totalFileBytes;
 
-    public HiveCommonStats(long rowNums, long totalSize) {
+    private final long numFiles;
+
+    public HiveCommonStats(long rowNums, long totalSize, long numFiles) {
         this.rowNums = rowNums;
         this.totalFileBytes = totalSize;
+        this.numFiles = numFiles;
     }
 
     public static HiveCommonStats empty() {
         return EMPTY;
-    }
-
-    public void setTotalFileBytes(long totalFileBytes) {
-        this.totalFileBytes = totalFileBytes;
     }
 
     public long getRowNums() {
@@ -45,11 +43,16 @@ public class HiveCommonStats {
         return totalFileBytes;
     }
 
+    public long getNumFiles() {
+        return numFiles;
+    }
+
     @Override
     public String toString() {
         final StringBuffer sb = new StringBuffer("HiveCommonStats{");
         sb.append("rowNums=").append(rowNums);
         sb.append(", totalFileBytes=").append(totalFileBytes);
+        sb.append(", numFiles=").append(numFiles);
         sb.append('}');
         return sb.toString();
     }

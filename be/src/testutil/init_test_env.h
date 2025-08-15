@@ -15,6 +15,7 @@
 #pragma once
 
 #include "butil/file_util.h"
+#include "cache/datacache.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
@@ -63,7 +64,7 @@ int init_test_env(int argc, char** argv) {
     config::spill_local_storage_dir = spill_path.value();
 
     FLAGS_alsologtostderr = true;
-    init_glog("be_test", true);
+    init_glog(argv[0], true);
     CpuInfo::init();
     DiskInfo::init();
     MemInfo::init();
@@ -76,6 +77,11 @@ int init_test_env(int argc, char** argv) {
 
     std::vector<StorePath> paths;
     paths.emplace_back(config::storage_root_path);
+
+    auto* global_env = GlobalEnv::GetInstance();
+    config::disable_storage_page_cache = true;
+    auto st = global_env->init();
+    CHECK(st.ok()) << st;
 
     auto compaction_mem_tracker = std::make_unique<MemTracker>();
     auto update_mem_tracker = std::make_unique<MemTracker>();
@@ -92,16 +98,12 @@ int init_test_env(int argc, char** argv) {
         return -1;
     }
     engine->start_schedule_apply_thread();
-    auto* global_env = GlobalEnv::GetInstance();
-    config::disable_storage_page_cache = true;
-    auto st = global_env->init();
-    CHECK(st.ok()) << st;
 
     // Pagecache is turned off by default, and some test cases require cache to be turned on,
     // and some test cases do not. For easy management, we turn cache off during unit test
     // initialization. If there are test cases that require Pagecache, it must be responsible
     // for managing it.
-    auto* cache_env = CacheEnv::GetInstance();
+    auto* cache_env = DataCache::GetInstance();
     config::datacache_enable = false;
     st = cache_env->init(paths);
     CHECK(st.ok()) << st;

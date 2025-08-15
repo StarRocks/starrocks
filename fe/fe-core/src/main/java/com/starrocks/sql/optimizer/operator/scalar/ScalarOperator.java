@@ -35,7 +35,8 @@ public abstract class ScalarOperator implements Cloneable {
     protected boolean notEvalEstimate = false;
     // Used to determine if it is derive from predicate range extractor
     protected boolean fromPredicateRangeDerive = false;
-    // Check weather the scalar operator is redundant which will not affect the final
+    // Check weather the scalar operator is redundant which will not affect the
+    // final
     // if it's not considered. eg, `IsNullPredicateOperator` which is pushed down
     // from JoinNode.
     protected boolean isRedundant = false;
@@ -45,9 +46,20 @@ public abstract class ScalarOperator implements Cloneable {
 
     protected boolean isCorrelated = false;
 
+    protected boolean isJoinDerived = false;
+
     private List<String> hints = Collections.emptyList();
 
     private boolean isIndexOnlyFilter = false;
+
+    // 1. depth is scalar operator's nested depth, it starts from 0(eg:
+    // ColumnRefOperator/ConstantOperator), incr +1 for each
+    // child nested; if it contains multi children, the max depth of children will
+    // be added to this operator's depth.
+    // 2. depth is marked to avoid infinite loop in some cases.
+    protected int depth = 0;
+
+    protected Optional<Integer> numberFlatChildren = Optional.empty();
 
     public ScalarOperator(OperatorType opType, Type type) {
         this.opType = requireNonNull(opType, "opType is null");
@@ -139,10 +151,77 @@ public abstract class ScalarOperator implements Cloneable {
     public abstract String toString();
 
     @Override
-    public abstract int hashCode();
+    public int hashCode() {
+        return hashCodeSelf();
+    }
+
+    /**
+     * Calculate hashCode based on the operator's own properties, excluding
+     * children/arguments.
+     * This method should be implemented by subclasses to provide a hashCode that
+     * only considers
+     * the operator's intrinsic properties, not its children.
+     */
+    public abstract int hashCodeSelf();
+
+    /**
+     * Check equality based on the operator's own properties, excluding
+     * children/arguments.
+     * This method should be implemented by subclasses to provide an equals that
+     * only considers
+     * the operator's intrinsic properties, not its children.
+     */
+    public abstract boolean equalsSelf(Object other);
 
     @Override
-    public abstract boolean equals(Object other);
+    public boolean equals(Object other) {
+        return equalsSelf(other);
+    }
+
+    public int getDepth() {
+        return depth;
+    }
+
+    public int getNumFlatChildren() {
+        if (numberFlatChildren.isPresent()) {
+            return numberFlatChildren.get();
+        }
+        int numFlatChildren = 1;
+        for (ScalarOperator child : getChildren()) {
+            numFlatChildren += child.getNumFlatChildren();
+        }
+        numberFlatChildren = Optional.of(numFlatChildren);
+        return numberFlatChildren.get();
+    }
+
+    /**
+     * Incr depth for this operator: this.depth = 1 + max(depth of children)
+     */
+    public void incrDepth(List<ScalarOperator> args) {
+        // always add 1 for self
+        this.depth += 1;
+        if (args == null) {
+            return;
+        }
+        this.depth += args.stream().map(ScalarOperator::getDepth).max(Integer::compareTo).orElse(0);
+    }
+
+    /**
+     * Incr depth for this operator: this.depth = 1 + max(depth of children)
+     */
+    public void incrDepth(ScalarOperator... args) {
+        // always add 1 for self
+        this.depth += 1;
+
+        if (args == null) {
+            return;
+        }
+        int ans = 0;
+        for (ScalarOperator arg : args) {
+            ans = Math.max(ans, arg.getDepth());
+        }
+        this.depth += ans;
+    }
 
     /**
      * equivalent means logical equals, but may physical different, such as with different id
@@ -253,6 +332,14 @@ public abstract class ScalarOperator implements Cloneable {
 
     public void setCorrelated(boolean correlated) {
         isCorrelated = correlated;
+    }
+
+    public boolean isJoinDerived() {
+        return isJoinDerived;
+    }
+
+    public void setJoinDerived(boolean isJoinDerived) {
+        this.isJoinDerived = isJoinDerived;
     }
 
     // whether ScalarOperator are equals without id

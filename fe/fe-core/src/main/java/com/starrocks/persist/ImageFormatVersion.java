@@ -15,6 +15,6 @@
 package com.starrocks.persist;
 
 public enum ImageFormatVersion {
-    v1,
-    v2
+    v1,   // staros is v1
+    v2    // global state is v2
 }

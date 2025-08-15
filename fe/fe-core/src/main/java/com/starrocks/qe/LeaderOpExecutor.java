@@ -35,7 +35,6 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -54,6 +53,9 @@ import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuditStatistics;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -75,6 +77,7 @@ public class LeaderOpExecutor {
     private final OriginStatement originStmt;
     private StatementBase parsedStmt;
     private final ConnectContext ctx;
+    private final boolean isInternalStmt;
     private TMasterOpResult result;
 
     private int waitTimeoutMs;
@@ -83,17 +86,17 @@ public class LeaderOpExecutor {
     private final Pair<String, Integer> ipAndPort;
 
     public LeaderOpExecutor(OriginStatement originStmt, ConnectContext ctx, RedirectStatus status) {
-        this(null, originStmt, ctx, status);
+        this(null, originStmt, ctx, status, false);
     }
 
     public LeaderOpExecutor(StatementBase parsedStmt, OriginStatement originStmt,
-                            ConnectContext ctx, RedirectStatus status) {
+                            ConnectContext ctx, RedirectStatus status, boolean isInternalStmt) {
         this(GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort(), parsedStmt, originStmt, ctx,
-                status);
+                status, isInternalStmt);
     }
 
     public LeaderOpExecutor(Pair<String, Integer> ipAndPort, StatementBase parsedStmt, OriginStatement originStmt,
-                            ConnectContext ctx, RedirectStatus status) {
+                            ConnectContext ctx, RedirectStatus status, boolean isInternalStmt) {
         this.ipAndPort = ipAndPort;
         this.originStmt = originStmt;
         this.ctx = ctx;
@@ -109,6 +112,7 @@ public class LeaderOpExecutor {
             this.thriftTimeoutMs = ctx.getExecTimeout() * 1000;
         }
         this.parsedStmt = parsedStmt;
+        this.isInternalStmt = isInternalStmt;
     }
 
     public void execute() throws Exception {
@@ -138,6 +142,14 @@ public class LeaderOpExecutor {
             TAuditStatistics tAuditStatistics = result.getAudit_statistics();
             if (ctx.getExecutor() != null) {
                 ctx.getExecutor().setQueryStatistics(AuditStatisticsUtil.toProtobuf(tAuditStatistics));
+            }
+        }
+
+        // Put the result of leader execution into the connectContext of the current follower
+        // to mark the transaction being executed in the current connection
+        if (parsedStmt instanceof BeginStmt || parsedStmt instanceof CommitStmt || parsedStmt instanceof RollbackStmt) {
+            if (result.isSetTxn_id()) {
+                ctx.setTxnId(result.getTxn_id());
             }
         }
     }
@@ -268,8 +280,11 @@ public class LeaderOpExecutor {
             params.setModified_variables_sql(AstToSQLBuilder.toSQL(setStmt));
         }
 
+        params.setTxn_id(ctx.getTxnId());
+
         params.setWarehouse_id(ctx.getCurrentWarehouseId());
 
+        params.setIsInternalStmt(isInternalStmt);
         return params;
     }
 }

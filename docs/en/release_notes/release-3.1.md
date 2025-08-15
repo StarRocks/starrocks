@@ -455,7 +455,13 @@ Fixed the following issues:
 - From v3.1.4 onwards, persistent indexing is enabled by default for Primary Key tables created in new StarRocks clusters (this does not apply to existing StarRocks clusters whose versions are upgraded to v3.1.4 from an earlier version). [#33374](https://github.com/StarRocks/starrocks/pull/33374)
 - A new FE parameter `enable_sync_publish` which is set to `true` by default is added. When this parameter is set to `true`, the Publish phase of a data load into a Primary Key table returns the execution result only after the Apply task finishes. As such, the data loaded can be queried immediately after the load job returns a success message. However, setting this parameter to `true` may cause data loads into Primary Key tables to take a longer time. (Before this parameter is added, the Apply task is asynchronous with the Publish phase.) [#27055](https://github.com/StarRocks/starrocks/pull/27055)
 
-## 3.1.3
+## 3.1.3 (Yanked)
+
+:::tip
+
+This version has been taken offline.
+
+:::
 
 Release date: September 25, 2023
 

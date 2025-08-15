@@ -39,7 +39,6 @@ public class TestHudiSliceScanner {
     }
 
     /*
-
 CREATE TABLE `test_hudi_mor` (
   `uuid` STRING,
   `ts` int,
@@ -53,7 +52,6 @@ TBLPROPERTIES (
   'primaryKey' = 'uuid',
   'preCombineField' = 'ts',
   'type' = 'mor');
-
 spark-sql> select a,b,c,d,e from test_hudi_mor;
 a       b       c       d       e
 1       hello   [10,20,30]      {"key1":1,"key2":2}     {"a":10,"b":"world"}
@@ -201,7 +199,6 @@ TBLPROPERTIES (
   'primaryKey' = 'uuid',
   'preCombineField' = 'ts',
   'type' = 'mor');
-
 insert into test_hudi_mor2 values
  ('AA0', 10, 0, "hello", array(array(10,20,30), array(40,50,60,70) ),
         map('key1', array(1,10), 'key2', array(2, 20), 'key3', null),
@@ -209,7 +206,6 @@ insert into test_hudi_mor2 values
  ('AA1', 10, 0, "hello", null, null , struct(null, map('key1', 10), struct(array(10, 20), struct(10, "world")))),
  ('AA2', 10, 0, null, array(array(30, 40), array(10,20,30)), null ,
         struct(null, map('key1', 10), struct(array(10, 20), null)));
-
 spark-sql> select a,b,c,d,e from test_hudi_mor2;
 a       b       c       d       e
 0       hello   NULL    NULL    {"a":null,"b":{"key1":10},"c":{"a":[10,20],"b":{"a":10,"b":"world"}}}
@@ -288,7 +284,6 @@ a       b       c       d       e
     }
 
     /*
-
 ```
 CREATE TABLE `test_hudi_mor5` (
   `uuid` STRING,
@@ -301,7 +296,6 @@ TBLPROPERTIES (
   'primaryKey' = 'uuid',
   'preCombineField' = 'ts',
   'type' = 'mor');
-
 ```
 ```
 insert into test_hudi_mor5 values('AA1', 20, 1, "1",

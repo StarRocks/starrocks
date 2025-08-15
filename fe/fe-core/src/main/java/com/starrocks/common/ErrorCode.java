@@ -258,6 +258,10 @@ public enum ErrorCode {
             "Connections using insecure transport are prohibited"),
     ERR_GROUP_ACCESS_DENY(5206, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; User %s's group[%s] is not in the group_allowed_login_list"),
+    ERR_OAUTH2_NOT_AUTHENTICATED(5207, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; Need to access the URL [%s] to complete the OAuth2 authentication operation"),
+    ERR_AUTHENTICATION_FAIL_IN_AUTH_CHAIN(5208, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; No authentication was successful in the authentication chain : [%s]"),
 
     /**
      * 5300 - 5399: Lock and Transaction
@@ -269,6 +273,8 @@ public enum ErrorCode {
             "NOT allowed to read or write tables that have been subjected to DML operations before"),
     ERR_TXN_FORBID_CROSS_DB(5304, new byte[] {'2', '5', 'P', '0', '1'},
             "Cannot execute cross-database transactions. All DML target tables must belong to the same db"),
+    ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT(5305, new byte[] {'2', '5', 'P', '0', '1'},
+            "Explicit transaction only support insert statement"),
 
     /**
      * 5400 - 5499: Internal error
@@ -309,6 +315,7 @@ public enum ErrorCode {
     ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE(5513, new byte[] {'4', '2', '0', '0', '0'},
             "Can not rename column of table in %s state"),
     ERR_CATALOG_EXISTED_ERROR(5514, new byte[] {'4', '2', '0', '0', '0'}, "Catalog '%s' already exists"),
+    ERR_ANLZ_JOB_EXISTED_ERROR(5515, new byte[] {'4', '2', '0', '0', '0'}, "Analyze job create failed; already exists"),
 
     /**
      * 5600 - 5699: DML operation failure
@@ -375,6 +382,14 @@ public enum ErrorCode {
     ERR_INVALID_WAREHOUSE_NAME(5906, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
     ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(5907, new byte[] {'4', '2', '0', '0', '0'},
             "unsupported statement in shared_nothing mode"),
+    ERR_INVALID_CNGROUP_NAME(5911, new byte[] {'0', 'A', '0', '0', '0'}, "CNGroup name can not be null or empty"),
+    ERR_CNGROUP_NOT_IMPLEMENTED(5912, new byte[] {'0', 'A', '0', '0', '0'}, "CNGroup feature not implemented"),
+    ERR_UNKNOWN_CNGROUP(5913, new byte[] {'4', '2', '0', '0', '0'}, "CNGroup %s doesn't exist."),
+    ERR_CNGROUP_EXISTS(5914, new byte[] {'4', '2', '0', '0', '0'}, "CNGroup %s already exist."),
+    ERR_NODE_CNGROUP_MISMATCH(5915, new byte[] {'4', '2', '0', '0', '0'},
+            "the node's cngroup doesn't match the provided cngroup name"),
+    ERR_CNGROUP_NOT_EMPTY(5916, new byte[] {'4', '2', '0', '0', '0'},
+            "the cngroup %s is not empty, either drop all nodes in the cngroup or drop the the cngroup with `force` option"),
 
     /**
      * 6000 - 6100: Planner

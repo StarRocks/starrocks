@@ -48,6 +48,7 @@
 
 #include "agent/master_info.h"
 #include "common/logging.h"
+#include "common/process_exit.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -81,6 +82,7 @@
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
 #include "util/uid_util.h"
+#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -146,7 +148,7 @@ static void _send_reply(HttpRequest* req, const std::string& str) {
     if (config::enable_stream_load_verbose_log) {
         LOG(INFO) << "streaming load response: " << str;
     }
-    HttpChannel::send_reply(req, str);
+    HttpChannel::send_reply_json(req, HttpStatus::OK, str);
 }
 
 void StreamLoadAction::handle(HttpRequest* req) {
@@ -182,7 +184,6 @@ void StreamLoadAction::handle(HttpRequest* req) {
     streaming_load_requests_total.increment(1);
     streaming_load_duration_ms.increment(ctx->load_cost_nanos / 1000000);
     streaming_load_bytes.increment(ctx->receive_bytes);
-    streaming_load_current_processing.increment(-1);
 }
 
 Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
@@ -224,17 +225,27 @@ Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, S
 }
 
 int StreamLoadAction::on_header(HttpRequest* req) {
-    streaming_load_current_processing.increment(1);
-
-    auto* ctx = new StreamLoadContext(_exec_env);
+    auto* ctx = new StreamLoadContext(_exec_env, &streaming_load_current_processing);
     ctx->ref();
     req->set_handler_ctx(ctx);
 
     ctx->load_type = TLoadType::MANUAL_LOAD;
     ctx->load_src_type = TLoadSourceType::RAW;
 
-    ctx->db = req->param(HTTP_DB_KEY);
-    ctx->table = req->param(HTTP_TABLE_KEY);
+    auto res = url_decode(req->param(HTTP_DB_KEY));
+    if (!res.ok()) {
+        ctx->status = res.status();
+        _send_reply(req, ctx->to_json());
+        return -1;
+    }
+    ctx->db = res.value();
+    res = url_decode(req->param(HTTP_TABLE_KEY));
+    if (!res.ok()) {
+        ctx->status = res.status();
+        _send_reply(req, ctx->to_json());
+        return -1;
+    }
+    ctx->table = res.value();
     ctx->label = req->header(HTTP_LABEL_KEY);
     if (ctx->label.empty()) {
         ctx->label = generate_uuid_string();
@@ -270,7 +281,6 @@ int StreamLoadAction::on_header(HttpRequest* req) {
         }
         auto str = ctx->to_json();
         _send_reply(req, str);
-        streaming_load_current_processing.increment(-1);
         return -1;
     }
     return 0;
@@ -358,6 +368,12 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 
     if (ctx->enable_batch_write) {
         return Status::OK();
+    }
+
+    // Check if the process is going to quit before beginning the transaction, to avoid
+    // creating a dangling transaction on FE side.
+    if (process_exit_in_progress()) {
+        return Status::ServiceUnavailable("Service is shutting down, please retry later!");
     }
 
     // begin transaction

@@ -71,7 +71,6 @@ class Executor;
 
 namespace starrocks::lake {
 class LocalPkIndexManager;
-class LoadSpillBlockMergeExecutor;
 } // namespace starrocks::lake
 
 namespace starrocks {
@@ -85,6 +84,7 @@ class UpdateManager;
 class CompactionManager;
 class PublishVersionManager;
 class DictionaryCacheManager;
+class LoadSpillBlockMergeExecutor;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 
@@ -236,9 +236,7 @@ public:
 
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
-    lake::LoadSpillBlockMergeExecutor* load_spill_block_merge_executor() {
-        return _load_spill_block_merge_executor.get();
-    }
+    LoadSpillBlockMergeExecutor* load_spill_block_merge_executor() { return _load_spill_block_merge_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
@@ -463,7 +461,6 @@ private:
 
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
-    std::thread _adjust_cache_thread;
     std::vector<std::thread> _path_gc_threads;
     // threads to scan disk paths
     std::vector<std::thread> _path_scan_threads;
@@ -497,7 +494,7 @@ private:
 
     std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
 
-    std::unique_ptr<lake::LoadSpillBlockMergeExecutor> _load_spill_block_merge_executor;
+    std::unique_ptr<LoadSpillBlockMergeExecutor> _load_spill_block_merge_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
 

@@ -50,6 +50,7 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include "cache/datacache.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -198,6 +199,15 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
     }
 
     _runtime_filter_port = _obj_pool->add(new RuntimeFilterPort(this));
+}
+
+bool RuntimeState::set_timezone(const std::string& tz) {
+    if (TimezoneUtils::find_cctz_time_zone(tz, _timezone_obj)) {
+        _timezone = tz;
+        return true;
+    } else {
+        return false;
+    }
 }
 
 void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* parent) {
@@ -513,8 +523,8 @@ void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_p
         }
 #endif // USE_STAROS
     } else {
-        if (config::datacache_enable) {
-            const BlockCache* cache = BlockCache::instance();
+        const LocalCacheEngine* cache = DataCache::GetInstance()->local_cache();
+        if (cache != nullptr && cache->is_initialized()) {
             TDataCacheMetrics t_metrics{};
             DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
             metrics.__set_metrics(t_metrics);

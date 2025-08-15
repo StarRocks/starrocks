@@ -44,7 +44,7 @@ DEFINE_FAIL_POINT(force_allocate_remote_block);
 StatusOr<BlockPtr> HyBirdBlockManager::acquire_block(const AcquireBlockOptions& opts) {
     bool enable_allocate_local_block = true;
     FAIL_POINT_TRIGGER_EXECUTE(force_allocate_remote_block, { enable_allocate_local_block = false; });
-    if (enable_allocate_local_block) {
+    if (enable_allocate_local_block && !opts.force_remote) {
         auto local_block = _local_block_manager->acquire_block(opts);
         if (local_block.ok()) {
             return local_block;

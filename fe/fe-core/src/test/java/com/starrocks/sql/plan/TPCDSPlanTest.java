@@ -16,29 +16,29 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 public class TPCDSPlanTest extends TPCDSPlanTestBase {
     Map<String, Long> tpcdsStats = null;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TPCDSPlanTestBase.beforeClass();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         super.setUp();
         tpcdsStats = getTPCDSTableStats();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         setTPCDSTableStats(tpcdsStats);
     }
@@ -541,13 +541,13 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
     @Test
     public void testQ80_2() throws Exception {
         String planFragment = getFragmentPlan(Q80);
-        Assert.assertFalse(planFragment.contains("cross join"));
+        Assertions.assertFalse(planFragment.contains("cross join"));
     }
 
     @Test
     public void testQ95_2() throws Exception {
         String planFragment = getFragmentPlan(Q95);
-        Assert.assertFalse(planFragment.contains("cross join"));
+        Assertions.assertFalse(planFragment.contains("cross join"));
     }
 
     @Test
@@ -565,8 +565,8 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
         FeConstants.USE_MOCK_DICT_MANAGER = false;
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
 
-        Assert.assertTrue(plan.contains("dict_col=c_birth_country"));
-        Assert.assertTrue(plan.contains("  13:Decode\n" +
+        Assertions.assertTrue(plan.contains("dict_col=c_birth_country"));
+        Assertions.assertTrue(plan.contains("  13:Decode\n" +
                 "  |  <dict id 73> : <string id 15>"));
     }
 
@@ -599,7 +599,7 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
         FeConstants.USE_MOCK_DICT_MANAGER = false;
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
 
-        Assert.assertTrue(plan.contains("dict_col=c_birth_country"));
+        Assertions.assertTrue(plan.contains("dict_col=c_birth_country"));
     }
 
     @Test

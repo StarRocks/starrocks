@@ -1,0 +1,21 @@
+-- name: test_cast_json_to_map
+CREATE TABLE t (
+    c1 int,
+    c2 json
+) PROPERTIES ("replication_num" = "1");
+
+insert into t values
+(1, '[1,2,3]'),
+(2, '"abc"'),
+(3, 'null'),
+(4, 'true'),
+(5, '1'),
+(6, '{"1":1, "2":true, "3":null, "4":[5,6,7], "5":{"k51":"v51","k52":"v52"}}');
+
+select c1, cast(c2 as map<string,json>) as m from t order by c1;
+select c1, cast(c2 as map<int,json>) as m from t order by c1;
+select c1, cast(c2 as map<string,string>) as m from t order by c1;
+select c1, cast(c2 as map<int,string>) as m from t order by c1;
+select c1, cast(c2 as map<string,array<int>>) as m from t order by c1;
+select c1, cast(c2 as map<string,struct<k51 string,k52 string>>) as m from t order by c1;
+select c1, cast(c2 as map<string,map<string,string>>) as m from t order by c1;

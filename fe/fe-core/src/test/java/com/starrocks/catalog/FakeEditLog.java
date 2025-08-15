@@ -37,12 +37,13 @@ package com.starrocks.catalog;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.backup.BackupJob;
-import com.starrocks.cluster.Cluster;
+import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStateBatch;
 import mockit.Mock;
@@ -82,7 +83,7 @@ public class FakeEditLog extends MockUp<EditLog> {
     }
 
     @Mock
-    public void logCreateCluster(Cluster cluster) {
+    public void logCreateCluster() {
     }
 
     @Mock
@@ -115,6 +116,22 @@ public class FakeEditLog extends MockUp<EditLog> {
 
     @Mock
     public void logBackupJob(BackupJob job) {
+    }
+
+    @Mock
+    public void logAddBackend(Backend be) {
+    }
+
+    @Mock
+    public void logAddComputeNode(ComputeNode cn) {
+    }
+
+    @Mock
+    public void logDropBackend(Backend be) {
+    }
+
+    @Mock
+    public void logDropComputeNode(DropComputeNodeLog log) {
     }
 
     public TransactionState getTransaction(long transactionId) {

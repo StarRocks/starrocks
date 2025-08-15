@@ -20,12 +20,14 @@
 #include <vector>
 
 #include "gutil/macros.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/tablet_writer.h"
 
 namespace starrocks {
 class ConcurrencyLimitedThreadPoolToken;
 class SegmentWriter;
 class ThreadPool;
+class BundleWritableFileContext;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -34,7 +36,9 @@ class HorizontalGeneralTabletWriter : public TabletWriter {
 public:
     explicit HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                            std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                           bool is_compaction, ThreadPool* flush_pool = nullptr);
+                                           bool is_compaction, ThreadPool* flush_pool = nullptr,
+                                           BundleWritableFileContext* bundle_file_context = nullptr,
+                                           GlobalDictByNameMaps* global_dicts = nullptr);
 
     ~HorizontalGeneralTabletWriter() override;
 
@@ -42,7 +46,7 @@ public:
 
     Status open() override;
 
-    Status write(const Chunk& data, SegmentPB* segment = nullptr) override;
+    Status write(const Chunk& data, SegmentPB* segment = nullptr, bool eos = false) override;
 
     Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) {
         return Status::NotSupported("HorizontalGeneralTabletWriter write not support");
@@ -74,10 +78,12 @@ public:
     RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
 
 protected:
-    Status reset_segment_writer();
+    Status reset_segment_writer(bool eos);
     virtual Status flush_segment_writer(SegmentPB* segment = nullptr);
 
     std::unique_ptr<SegmentWriter> _seg_writer;
+    BundleWritableFileContext* _bundle_file_context = nullptr;
+    GlobalDictByNameMaps* _global_dicts = nullptr;
 };
 
 class VerticalGeneralTabletWriter : public TabletWriter {
@@ -93,7 +99,7 @@ public:
 
     Status open() override;
 
-    Status write(const Chunk& data, SegmentPB* segment = nullptr) override {
+    Status write(const Chunk& data, SegmentPB* segment = nullptr, bool eos = false) override {
         return Status::NotSupported("VerticalGeneralTabletWriter write not support");
     }
 
@@ -140,5 +146,7 @@ protected:
     std::unique_ptr<ConcurrencyLimitedThreadPoolToken> _segment_writer_finalize_token;
     std::vector<std::future<Status>> _futures;
 };
+
+void collect_writer_stats(OlapWriterStatistics& writer_stats, SegmentWriter* segment_writer);
 
 } // namespace starrocks::lake

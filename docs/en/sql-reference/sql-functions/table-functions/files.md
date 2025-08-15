@@ -22,8 +22,9 @@ Currently, the FILES() function supports the following data sources and file for
   - NFS(NAS)
 - **File formats:**
   - Parquet
-  - ORC
-  - CSV
+  - ORC (Supported from v3.3 onwards)
+  - CSV (Supported from v3.3 onwards)
+  - Avro (Supported from v3.4.4 onwards and for loading only)
 
 From v3.2 onwards, FILES() further supports complex data types including ARRAY, JSON, MAP, and STRUCT in addition to basic data types.
 
@@ -34,7 +35,7 @@ From v3.1.0 onwards, StarRocks supports defining read-only files in remote stora
 ### Syntax
 
 ```SQL
-FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ])
+FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ] [, list_recursively])
 ```
 
 ### Parameters
@@ -116,11 +117,49 @@ Wildcards can also be used to specify intermediate paths.
 
 #### data_format
 
-The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
+The format of the data file. Valid values:
+- `parquet`
+- `orc` (Supported from v3.3 onwards)
+- `csv` (Supported from v3.3 onwards)
+- `avro` (Supported from v3.4.4 onwards and for loading only)
 
 You must set detailed options for specific data file formats.
 
 When `list_files_only` is set to `true`, you do not need to specify `data_format`.
+
+##### Parquet
+
+Example of the Parquet format:
+
+```SQL
+"format"="parquet",
+"parquet.use_legacy_encoding" = "true",   -- for unloading only
+"parquet.version" = "2.6"                 -- for unloading only
+```
+
+###### parquet.use_legacy_encoding
+
+Controls the encoding technique used for DATETIME and DECIMAL data types. Valid values: `true` and `false` (default). This property is only supported for data unloading.
+
+If this item is set to `true`:
+
+- For DATETIME type, the system uses `INT96` encoding.
+- For DECIMAL type, the system uses `fixed_len_byte_array` encoding.
+
+If this item is set to `false`:
+
+- For DATETIME type, the system uses `INT64` encoding.
+- For DECIMAL type, the system uses `INT32` or `INT64` encoding.
+
+:::note
+
+For DECIMAL 128 data type, only `fixed_len_byte_array` encoding is available. `parquet.use_legacy_encoding` does not take effect.
+
+:::
+
+###### parquet.version
+
+Controls the Parquet version into which the system unloads data. Supported from v3.4.6 onwards. Valid values: `1.0`, `2.4`, and `2.6` (default). This property is only supported for data unloading.
 
 ##### CSV
 
@@ -178,7 +217,7 @@ From v3.2 onwards, FILES() supports automatic schema detection and unionization 
 
 You can configure the sampling rule using the following parameters:
 
-- `auto_detect_sample_files`: the number of random data files to sample in each batch. Range: [0, + ∞]. Default: `1`.
+- `auto_detect_sample_files`: the number of random data files to sample in each batch. By default, the first and last files are selected. Range: [0, + ∞]. Default: `2`.
 - `auto_detect_sample_rows`: the number of data rows to scan in each sampled data file. Range: [0, + ∞]. Default: `500`.
 
 After the sampling, StarRocks unionizes the columns from all the data files according to these rules:
@@ -226,7 +265,9 @@ From v3.4.0 onwards, FILES() supports inferring the STRUCT type data from Parque
 
 The authentication information used by StarRocks to access your storage system.
 
-StarRocks currently supports accessing HDFS with the simple authentication, accessing AWS S3 and GCS with the IAM user-based authentication, and accessing Azure Blob Storage with Shared Key.
+StarRocks currently supports accessing HDFS with the simple authentication, accessing AWS S3 and GCS with the IAM user-based authentication, and accessing Azure Blob Storage with Shared Key, SAS Token, Managed Identity, and Service Principal.
+
+##### HDFS
 
 - Use the simple authentication to access HDFS:
 
@@ -242,45 +283,309 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
   | username                       | Yes          | The username of the account that you want to use to access the NameNode of the HDFS cluster. |
   | password                       | Yes          | The password of the account that you want to use to access the NameNode of the HDFS cluster. |
 
-- Use the IAM user-based authentication to access AWS S3:
+- Use the Kerberos authentication to access HDFS:
 
-  ```SQL
-  "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
-  "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-  "aws.s3.region" = "<s3_region>"
+  Currently, FILES() supports Kerberos authentication with HDFS only via the configuration file **hdfs-site.xml** placed under the **fe/conf**, **be/conf**, and **cn/conf** directories.
+
+  In addition, you need to append the following option in the configuration item `JAVA_OPTS` in each FE configuration file **fe.conf**, BE configuration file **be.conf**, and CN configuration file **cn.conf**:
+
+  ```Plain
+  # Specify the local path to which the Kerberos configuration file is stored.
+  -Djava.security.krb5.conf=<path_to_kerberos_conf_file>
   ```
 
-  | **Key**           | **Required** | **Description**                                              |
-  | ----------------- | ------------ | ------------------------------------------------------------ |
-  | aws.s3.access_key | Yes          | The Access Key ID that you can use to access the Amazon S3 bucket. |
-  | aws.s3.secret_key | Yes          | The Secret Access Key that you can use to access the Amazon S3 bucket. |
-  | aws.s3.region     | Yes          | The region in which your AWS S3 bucket resides. Example: `us-west-2`. |
+  Example:
 
-- Use the IAM user-based authentication to access GCS:
-
-  ```SQL
-  "fs.s3a.access.key" = "AAAAAAAAAAAAAAAAAAAA",
-  "fs.s3a.secret.key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
-  "fs.s3a.endpoint" = "<gcs_endpoint>"
+  ```Properties
+  JAVA_OPTS="-Xlog:gc*:${LOG_DIR}/be.gc.log.$DATE:time -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log -Djava.security.krb5.conf=/etc/krb5.conf"
   ```
 
-  | **Key**           | **Required** | **Description**                                              |
-  | ----------------- | ------------ | ------------------------------------------------------------ |
-  | fs.s3a.access.key | Yes          | The Access Key ID that you can use to access the GCS bucket. |
-  | fs.s3a.secret.key | Yes          | The Secret Access Key that you can use to access the GCS bucket.|
-  | fs.s3a.endpoint   | Yes          | The endpoint that you can use to access the GCS bucket. Example: `storage.googleapis.com`. Do not specify `https` in the endpoint address. |
+  You also need to run the `kinit` command on each FE, BE, and CN node to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC).
+
+  ```Bash
+  kinit -kt <path_to_keytab_file> <principal>
+  ```
+
+  To run this command, the principal you use must have the write access to your HDFS cluster. In addition, you need to set a crontab for the command to schedule the task by a specific interval, thus preventing the authentication from expiring.
+
+  Example:
+
+  ```Bash
+  # Renew TGT every 6 hours.
+  0 */6 * * * kinit -kt sr.keytab sr/test.starrocks.com@STARROCKS.COM > /tmp/kinit.log
+  ```
+
+- Access HDFS with HA mode enabled:
+
+  Currently, FILES() supports access to HDFS with HA mode enabled only via the configuration file **hdfs-site.xml** placed under the **fe/conf**, **be/conf**, and **cn/conf** directories.
+
+##### AWS S3
+
+If you choose AWS S3 as your storage system, take one of the following actions:
+
+- To choose the instance profile-based authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+- To choose the assumed role-based authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.iam_role_arn" = "<iam_role_arn>",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+- To choose the IAM user-based authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "false",
+  "aws.s3.access_key" = "<iam_user_access_key>",
+  "aws.s3.secret_key" = "<iam_user_secret_key>",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+| Parameter                   | Required | Description                                                  |
+| --------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.use_instance_profile | Yes      | Specifies whether to enable the credential methods instance profile and assumed role. Valid values: `true` and `false`. Default value: `false`. |
+| aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. |
+| aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
+| aws.s3.access_key           | No       | The access key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
+| aws.s3.secret_key           | No       | The secret key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
+
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+
+##### Google GCS
+
+If you choose Google GCS as your storage system, take one of the following actions:
+
+- To choose the VM-based authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "gcp.gcs.use_compute_engine_service_account" = "true"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+  | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+  | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
+
+- To choose the service account-based authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+  | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | gcp.gcs.service_account_email          | ""                | `"user@hello.iam.gserviceaccount.com"` | The email address in the JSON file generated at the creation of the service account. |
+  | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the service account. |
+  | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the service account. |
+
+- To choose the impersonation-based authentication method, configure `StorageCredentialParams` as follows:
+
+  - Make a VM instance impersonate a service account:
+
+    ```SQL
+    "gcp.gcs.use_compute_engine_service_account" = "true",
+    "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+    ```
+
+    The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+    | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+    | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+    | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
+    | gcp.gcs.impersonation_service_account      | ""                | "hello"               | The service account that you want to impersonate.            |
+
+  - Make a service account (named as meta service account) impersonate another service account (named as data service account):
+
+    ```SQL
+    "gcp.gcs.service_account_email" = "<google_service_account_email>",
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+    "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
+    ```
+
+    The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+    | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+    | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+    | gcp.gcs.service_account_email          | ""                | `"user@hello.iam.gserviceaccount.com"` | The email address in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | The data service account that you want to impersonate.       |
+
+##### Azure Blob Storage
 
 - Use Shared Key to access Azure Blob Storage:
 
   ```SQL
-  "azure.blob.storage_account" = "<storage_account>",
   "azure.blob.shared_key" = "<shared_key>"
   ```
 
   | **Key**                    | **Required** | **Description**                                              |
   | -------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.blob.storage_account | Yes          | The name of the Azure Blob Storage account.                  |
   | azure.blob.shared_key      | Yes          | The Shared Key that you can use to access the Azure Blob Storage account. |
+
+- Use SAS Token to access Azure Blob Storage:
+
+  ```SQL
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
+  ```
+
+  | **Key**                    | **Required** | **Description**                                              |
+  | -------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.sas_token       | Yes          | The SAS token that you can use to access the Azure Blob Storage account. |
+
+- Use Managed Identity to access Azure Blob Storage (Supported from v3.4.4 onwards):
+
+  :::note
+  - Only User-assigned Managed Identities with Client ID credentials are supported.
+  - The FE dynamic configuration `azure_use_native_sdk` (Default: `true`) controls whether to allow the system to use authentication with Managed Identity and Service Principals.
+  :::
+
+  ```SQL
+  "azure.blob.oauth2_use_managed_identity" = "true",
+  "azure.blob.oauth2_client_id" = "<oauth2_client_id>"
+  ```
+
+  | **Key**                                | **Required** | **Description**                                              |
+  | -------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.oauth2_use_managed_identity | Yes          | Whether to use Managed Identity to access the Azure Blob Storage account. Set it to `true`.                  |
+  | azure.blob.oauth2_client_id            | Yes          | The Client ID of the Managed Identity that you can use to access the Azure Blob Storage account.                |
+
+- Use Service Principal to access Azure Blob Storage (Supported from v3.4.4 onwards):
+
+  :::note
+  - Only Client Secret credentials are supported.
+  - The FE dynamic configuration `azure_use_native_sdk` (Default: `true`) controls whether to allow the system to use authentication with Managed Identity and Service Principals.
+  :::
+
+  ```SQL
+  "azure.blob.oauth2_client_id" = "<oauth2_client_id>",
+  "azure.blob.oauth2_client_secret" = "<oauth2_client_secret>",
+  "azure.blob.oauth2_tenant_id" = "<oauth2_tenant_id>"
+  ```
+
+  | **Key**                                | **Required** | **Description**                                              |
+  | -------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.oauth2_client_id            | Yes          | The Client ID of the Service Principal that you can use to access the Azure Blob Storage account.                    |
+  | azure.blob.oauth2_client_secret        | Yes          | The Client Secret of the Service Principal that you can use to access the Azure Blob Storage account.          |
+  | azure.blob.oauth2_tenant_id            | Yes          | The Tenant ID of the Service Principal that you can use to access the Azure Blob Storage account.                |
+
+##### Azure Data Lake Storage Gen2
+
+If you choose Data Lake Storage Gen2 as your storage system, take one of the following actions:
+
+- To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_use_managed_identity | Yes          | Specifies whether to enable the Managed Identity authentication method. Set the value to `true`. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client (application) ID of the managed identity.         |
+
+- To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**               | **Required** | **Description**                                              |
+  | --------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.storage_account | Yes          | The username of your Data Lake Storage Gen2 storage account. |
+  | azure.adls2.shared_key      | Yes          | The shared key of your Data Lake Storage Gen2 storage account. |
+
+- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  The following table describes the parameters you need to configure `in StorageCredentialParams`.
+
+  | **Parameter**                      | **Required** | **Description**                                              |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | Yes          | The client (application) ID of the service principal.        |
+  | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
+  | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+
+##### Azure Data Lake Storage Gen1
+
+If you choose Data Lake Storage Gen1 as your storage system, take one of the following actions:
+
+- To choose the Managed Service Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls1.use_managed_service_identity" = "true"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                            | **Required** | **Description**                                              |
+  | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.use_managed_service_identity | Yes          | Specifies whether to enable the Managed Service Identity authentication method. Set the value to `true`. |
+
+- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls1.oauth2_client_id" = "<application_client_id>",
+  "azure.adls1.oauth2_credential" = "<application_client_credential>",
+  "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                 | **Required** | **Description**                                              |
+  | ----------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.oauth2_client_id  | Yes          | The client (application) ID of the .                         |
+  | azure.adls1.oauth2_credential | Yes          | The value of the new client (application) secret created.    |
+  | azure.adls1.oauth2_endpoint   | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+
+##### Other S3-compatible storage system
+
+If you choose other S3-compatible storage system, such as MinIO, configure `StorageCredentialParams` as follows:
+
+```SQL
+"aws.s3.enable_ssl" = "false",
+"aws.s3.enable_path_style_access" = "true",
+"aws.s3.endpoint" = "<s3_endpoint>",
+"aws.s3.access_key" = "<iam_user_access_key>",
+"aws.s3.secret_key" = "<iam_user_secret_key>"
+```
+
+The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+| Parameter                        | Required | Description                                                  |
+| -------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection. Valid values: `true` and `false`. Default value: `true`. |
+| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style URL access. Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`. |
+| aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3. |
+| aws.s3.access_key                | Yes      | The access key of your IAM user. |
+| aws.s3.secret_key                | Yes      | The secret key of your IAM user. |
 
 #### columns_from_path
 
@@ -909,4 +1214,120 @@ INSERT INTO FILES(
     'format' = 'parquet'
 )
 SELECT * FROM sales_records;
+```
+
+#### Example 8: Avro files
+
+Load an Avro file:
+
+```SQL
+INSERT INTO avro_tbl
+  SELECT * FROM FILES(
+    "path" = "hdfs://xxx.xx.xx.x:yyyy/avro/primitive.avro", 
+    "format" = "avro"
+);
+```
+
+Query the data from an Avro file:
+
+```SQL
+SELECT * FROM FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/complex.avro", "format" = "avro")\G
+*************************** 1. row ***************************
+record_field: {"id":1,"name":"avro"}
+  enum_field: HEARTS
+ array_field: ["one","two","three"]
+   map_field: {"a":1,"b":2}
+ union_field: 100
+ fixed_field: 0x61626162616261626162616261626162
+1 row in set (0.05 sec)
+```
+
+View the schema of an Avro file:
+
+```SQL
+DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avro");
++------------------------+------------------+------+
+| Field                  | Type             | Null |
++------------------------+------------------+------+
+| decimal_bytes          | decimal(10,2)    | YES  |
+| decimal_fixed          | decimal(10,2)    | YES  |
+| uuid_string            | varchar(1048576) | YES  |
+| date                   | date             | YES  |
+| time_millis            | int              | YES  |
+| time_micros            | bigint           | YES  |
+| timestamp_millis       | datetime         | YES  |
+| timestamp_micros       | datetime         | YES  |
+| local_timestamp_millis | bigint           | YES  |
+| local_timestamp_micros | bigint           | YES  |
+| duration               | varbinary(12)    | YES  |
++------------------------+------------------+------+
+```
+
+#### Example 9: Access Azure Blob Storage using Managed Identity and Service Principal
+
+```SQL
+-- Managed Identity
+SELECT * FROM FILES(
+    "path" = "wasbs://storage-container@storage-account.blob.core.windows.net/ssb_1g/customer/*",
+    "format" = "parquet",
+    "azure.blob.oauth2_use_managed_identity" = "true",
+    "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-aaaaaaaaaaaa"
+);
+-- Service Principal
+SELECT * FROM FILES(
+    "path" = "wasbs://storage-container@storage-account.blob.core.windows.net/ssb_1g/customer/*",
+    "format" = "parquet",
+    "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-bbbbbbbbbbbb",
+    "azure.blob.oauth2_client_secret" = "C2M8Q~ZXXXXXX_5XsbDCeL2dqP7hIR60xxxxxxxx",
+    "azure.blob.oauth2_tenant_id" = "540e19cc-386b-4a44-a7b8-cccccccccccc"
+);
+```
+
+#### Example 10: CSV file
+
+Query the data from a CSV file:
+
+```SQL
+SELECT * FROM FILES(                                                                                                                                                     "path" = "s3://test-bucket/file1.csv",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\r\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
++------+---------+--------------+
+| $1   | $2      | $3           |
++------+---------+--------------+
+|    1 | 0.71173 | 2017-11-20   |
+|    2 | 0.16145 | 2017-11-21   |
+|    3 | 0.80524 | 2017-11-22   |
+|    4 | 0.91852 | 2017-11-23   |
+|    5 | 0.37766 | 2017-11-24   |
+|    6 | 0.34413 | 2017-11-25   |
+|    7 | 0.40055 | 2017-11-26   |
+|    8 | 0.42437 | 2017-11-27   |
+|    9 | 0.67935 | 2017-11-27   |
+|   10 | 0.22783 | 2017-11-29   |
++------+---------+--------------+
+10 rows in set (0.33 sec)
+```
+
+Load a CSV file:
+
+```SQL
+INSERT INTO csv_tbl
+  SELECT * FROM FILES(
+    "path" = "s3://test-bucket/file1.csv",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\r\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
 ```

@@ -16,15 +16,15 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AdminSetTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -41,9 +41,9 @@ public class AdminSetTest {
     public void testAdminSetReplicaStatus() {
         AdminSetReplicaStatusStmt stmt = (AdminSetReplicaStatusStmt) analyzeSuccess(
                 "admin set replica status properties(\"tablet_id\" = \"10003\",\"backend_id\" = \"10001\",\"status\" = \"ok\");");
-        Assert.assertEquals(10003, stmt.getTabletId());
-        Assert.assertEquals(10001, stmt.getBackendId());
-        Assert.assertEquals("OK", stmt.getStatus().name());
+        Assertions.assertEquals(10003, stmt.getTabletId());
+        Assertions.assertEquals(10001, stmt.getBackendId());
+        Assertions.assertEquals("OK", stmt.getStatus().name());
 
         analyzeFail("admin set replica status properties(\"backend_id\" = \"10001\",\"status\" = \"ok\");",
                 "Getting analyzing error from line 1, column 59 to line 1, column 70. Detail message: " +

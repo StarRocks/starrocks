@@ -56,6 +56,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -67,9 +69,9 @@ import mockit.Mocked;
 import mockit.Verifications;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -97,7 +99,7 @@ public class KafkaRoutineLoadJobTest {
     @Mocked
     TResourceInfo tResourceInfo;
 
-    @Before
+    @BeforeEach
     public void init() {
         List<String> partitionNameList = Lists.newArrayList();
         partitionNameList.add("p1");
@@ -137,19 +139,19 @@ public class KafkaRoutineLoadJobTest {
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
                 1L, "127.0.0.1:9020", "topic1");
         Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", partitionList2);
-        Assert.assertEquals(3, routineLoadJob.calculateCurrentConcurrentTaskNum());
+        Assertions.assertEquals(3, routineLoadJob.calculateCurrentConcurrentTaskNum());
 
         // 4 partitions, 4 be
         routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
                 1L, "127.0.0.1:9020", "topic1");
         Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", partitionList3);
-        Assert.assertEquals(4, routineLoadJob.calculateCurrentConcurrentTaskNum());
+        Assertions.assertEquals(4, routineLoadJob.calculateCurrentConcurrentTaskNum());
 
         // 7 partitions, 4 be
         routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
                 1L, "127.0.0.1:9020", "topic1");
         Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", partitionList4);
-        Assert.assertEquals(4, routineLoadJob.calculateCurrentConcurrentTaskNum());
+        Assertions.assertEquals(4, routineLoadJob.calculateCurrentConcurrentTaskNum());
     }
 
     @Test 
@@ -160,7 +162,7 @@ public class KafkaRoutineLoadJobTest {
         String sourceString = routineLoadJob1.dataSourcePropertiesJsonToString();
         String expected = "{\"topic\":\"topic1\",\"confluent.schema.registry.url\":\"http://addr.com\"," + 
                                             "\"currentKafkaPartitions\":\"\",\"brokerList\":\"127.0.0.1:9020\"}";
-        Assert.assertEquals(expected, sourceString);
+        Assertions.assertEquals(expected, sourceString);
 
         KafkaRoutineLoadJob routineLoadJob2 = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
                 1L, "127.0.0.1:9020", "topic1");
@@ -168,7 +170,7 @@ public class KafkaRoutineLoadJobTest {
         sourceString = routineLoadJob2.dataSourcePropertiesJsonToString();
         expected = "{\"topic\":\"topic1\",\"confluent.schema.registry.url\":\"https://addr.com\"," + 
                                     "\"currentKafkaPartitions\":\"\",\"brokerList\":\"127.0.0.1:9020\"}";
-        Assert.assertEquals(expected, sourceString);
+        Assertions.assertEquals(expected, sourceString);
 
         KafkaRoutineLoadJob routineLoadJob3 = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
                 1L, "127.0.0.1:9020", "topic1");
@@ -176,7 +178,7 @@ public class KafkaRoutineLoadJobTest {
         sourceString = routineLoadJob3.dataSourcePropertiesJsonToString();
         expected = "{\"topic\":\"topic1\",\"confluent.schema.registry.url\":\"https://addr.com\"," + 
                                     "\"currentKafkaPartitions\":\"\",\"brokerList\":\"127.0.0.1:9020\"}";
-        Assert.assertEquals(expected, sourceString);
+        Assertions.assertEquals(expected, sourceString);
 
         KafkaRoutineLoadJob routineLoadJob4 = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
                 1L, "127.0.0.1:9020", "topic1");
@@ -184,7 +186,7 @@ public class KafkaRoutineLoadJobTest {
         sourceString = routineLoadJob4.dataSourcePropertiesJsonToString();
         expected = "{\"topic\":\"topic1\",\"confluent.schema.registry.url\":\"http://addr.com\"," + 
                                     "\"currentKafkaPartitions\":\"\",\"brokerList\":\"127.0.0.1:9020\"}";
-        Assert.assertEquals(expected, sourceString);
+        Assertions.assertEquals(expected, sourceString);
     }
 
     @Test
@@ -216,17 +218,17 @@ public class KafkaRoutineLoadJobTest {
         // todo(ml): assert
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList =
                 Deencapsulation.getField(routineLoadJob, "routineLoadTaskInfoList");
-        Assert.assertEquals(2, routineLoadTaskInfoList.size());
+        Assertions.assertEquals(2, routineLoadTaskInfoList.size());
         for (RoutineLoadTaskInfo routineLoadTaskInfo : routineLoadTaskInfoList) {
             KafkaTaskInfo kafkaTaskInfo = (KafkaTaskInfo) routineLoadTaskInfo;
-            Assert.assertEquals(false, kafkaTaskInfo.isRunning());
+            Assertions.assertEquals(false, kafkaTaskInfo.isRunning());
             if (kafkaTaskInfo.getPartitions().size() == 2) {
-                Assert.assertTrue(kafkaTaskInfo.getPartitions().contains(1));
-                Assert.assertTrue(kafkaTaskInfo.getPartitions().contains(6));
+                Assertions.assertTrue(kafkaTaskInfo.getPartitions().contains(1));
+                Assertions.assertTrue(kafkaTaskInfo.getPartitions().contains(6));
             } else if (kafkaTaskInfo.getPartitions().size() == 1) {
-                Assert.assertTrue(kafkaTaskInfo.getPartitions().contains(4));
+                Assertions.assertTrue(kafkaTaskInfo.getPartitions().contains(4));
             } else {
-                Assert.fail();
+                Assertions.fail();
             }
         }
     }
@@ -264,8 +266,8 @@ public class KafkaRoutineLoadJobTest {
             {
                 List<RoutineLoadTaskInfo> idToRoutineLoadTask =
                         Deencapsulation.getField(routineLoadJob, "routineLoadTaskInfoList");
-                Assert.assertNotEquals("1", idToRoutineLoadTask.get(0).getId().toString());
-                Assert.assertEquals(1, idToRoutineLoadTask.size());
+                Assertions.assertNotEquals("1", idToRoutineLoadTask.get(0).getId().toString());
+                Assertions.assertEquals(1, idToRoutineLoadTask.size());
             }
         };
     }
@@ -287,7 +289,7 @@ public class KafkaRoutineLoadJobTest {
 
         try {
             KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
-            Assert.fail();
+            Assertions.fail();
         } catch (StarRocksException e) {
             LOG.info(e.getMessage());
         }
@@ -337,13 +339,13 @@ public class KafkaRoutineLoadJobTest {
         };
 
         KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
-        Assert.assertEquals(jobName, kafkaRoutineLoadJob.getName());
-        Assert.assertEquals(dbId, kafkaRoutineLoadJob.getDbId());
-        Assert.assertEquals(tableId, kafkaRoutineLoadJob.getTableId());
-        Assert.assertEquals(serverAddress, Deencapsulation.getField(kafkaRoutineLoadJob, "brokerList"));
-        Assert.assertEquals(topicName, Deencapsulation.getField(kafkaRoutineLoadJob, "topic"));
+        Assertions.assertEquals(jobName, kafkaRoutineLoadJob.getName());
+        Assertions.assertEquals(dbId, kafkaRoutineLoadJob.getDbId());
+        Assertions.assertEquals(tableId, kafkaRoutineLoadJob.getTableId());
+        Assertions.assertEquals(serverAddress, Deencapsulation.getField(kafkaRoutineLoadJob, "brokerList"));
+        Assertions.assertEquals(topicName, Deencapsulation.getField(kafkaRoutineLoadJob, "topic"));
         List<Integer> kafkaPartitionResult = Deencapsulation.getField(kafkaRoutineLoadJob, "customKafkaPartitions");
-        Assert.assertEquals(kafkaPartitionString, Joiner.on(",").join(kafkaPartitionResult));
+        Assertions.assertEquals(kafkaPartitionString, Joiner.on(",").join(kafkaPartitionResult));
     }
 
     private CreateRoutineLoadStmt initCreateRoutineLoadStmt() {
@@ -377,6 +379,8 @@ public class KafkaRoutineLoadJobTest {
         jobProperties.put("enclose", "'");
         jobProperties.put("escape", "\\");
         jobProperties.put("timezone", "Asia/Shanghai");
+        jobProperties.put("max_filter_ratio", "0");
+        jobProperties.put("max_error_number", "10");
         createRoutineLoadStmt.checkJobProperties();
 
         RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
@@ -405,6 +409,9 @@ public class KafkaRoutineLoadJobTest {
                 table.isOlapOrCloudNativeTable();
                 minTimes = 0;
                 result = true;
+                globalStateMgr.getSqlParser();
+                minTimes = 0;
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -418,21 +425,23 @@ public class KafkaRoutineLoadJobTest {
         };
 
         String createSQL = "CREATE ROUTINE LOAD db1.job1 ON table1 " +
-                "PROPERTIES('format' = 'csv', 'trim_space' = 'true') " +
+                "PROPERTIES('format' = 'csv', 'trim_space' = 'true', 'max_filter_ratio' = '0', 'max_error_number' = '10') " +
                 "FROM KAFKA('kafka_broker_list' = 'http://127.0.0.1:8080','kafka_topic' = 'topic1');";
         KafkaRoutineLoadJob job = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
         job.setOrigStmt(new OriginStatement(createSQL, 0));
-        Assert.assertEquals("csv", job.getFormat());
-        Assert.assertTrue(job.isTrimspace());
-        Assert.assertEquals((byte) "'".charAt(0), job.getEnclose());
-        Assert.assertEquals((byte) "\\".charAt(0), job.getEscape());
+        Assertions.assertEquals("csv", job.getFormat());
+        Assertions.assertTrue(job.isTrimspace());
+        Assertions.assertEquals((byte) "'".charAt(0), job.getEnclose());
+        Assertions.assertEquals((byte) "\\".charAt(0), job.getEscape());
 
         String data = GsonUtils.GSON.toJson(job, KafkaRoutineLoadJob.class);
         KafkaRoutineLoadJob newJob = GsonUtils.GSON.fromJson(data, KafkaRoutineLoadJob.class);
-        Assert.assertEquals("csv", newJob.getFormat());
-        Assert.assertTrue(newJob.isTrimspace());
-        Assert.assertEquals((byte) "'".charAt(0), newJob.getEnclose());
-        Assert.assertEquals((byte) "\\".charAt(0), newJob.getEscape());
+        Assertions.assertEquals("csv", newJob.getFormat());
+        Assertions.assertTrue(newJob.isTrimspace());
+        Assertions.assertEquals((byte) "'".charAt(0), newJob.getEnclose());
+        Assertions.assertEquals((byte) "\\".charAt(0), newJob.getEscape());
+        Assertions.assertEquals(0, newJob.getMaxFilterRatio());
+        Assertions.assertEquals(10, newJob.maxErrorNum);
     }
 
     @Test
@@ -474,6 +483,9 @@ public class KafkaRoutineLoadJobTest {
                 table.isOlapOrCloudNativeTable();
                 minTimes = 0;
                 result = true;
+                globalStateMgr.getSqlParser();
+                minTimes = 0;
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -491,17 +503,17 @@ public class KafkaRoutineLoadJobTest {
                 "FROM KAFKA('kafka_broker_list' = 'http://127.0.0.1:8080','kafka_topic' = 'topic1');";
         KafkaRoutineLoadJob job = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
         job.setOrigStmt(new OriginStatement(createSQL, 0));
-        Assert.assertEquals("json", job.getFormat());
-        Assert.assertTrue(job.isStripOuterArray());
-        Assert.assertEquals("['$.category','$.price','$.author']", job.getJsonPaths());
-        Assert.assertEquals("", job.getJsonRoot());
+        Assertions.assertEquals("json", job.getFormat());
+        Assertions.assertTrue(job.isStripOuterArray());
+        Assertions.assertEquals("['$.category','$.price','$.author']", job.getJsonPaths());
+        Assertions.assertEquals("", job.getJsonRoot());
 
         String data = GsonUtils.GSON.toJson(job, KafkaRoutineLoadJob.class);
         KafkaRoutineLoadJob newJob = GsonUtils.GSON.fromJson(data, KafkaRoutineLoadJob.class);
-        Assert.assertEquals("json", newJob.getFormat());
-        Assert.assertTrue(newJob.isStripOuterArray());
-        Assert.assertEquals("['$.category','$.price','$.author']", newJob.getJsonPaths());
-        Assert.assertEquals("", newJob.getJsonRoot());
+        Assertions.assertEquals("json", newJob.getFormat());
+        Assertions.assertTrue(newJob.isStripOuterArray());
+        Assertions.assertEquals("['$.category','$.price','$.author']", newJob.getJsonPaths());
+        Assertions.assertEquals("", newJob.getJsonRoot());
     }
 
     @Test
@@ -513,8 +525,8 @@ public class KafkaRoutineLoadJobTest {
         Deencapsulation.setField(job, "unselectedRows", 2);
         Deencapsulation.setField(job, "totalTaskExcutionTimeMs", 1000);
         String statistic = job.getStatistic();
-        Assert.assertTrue(statistic.contains("\"receivedBytesRate\":10"));
-        Assert.assertTrue(statistic.contains("\"loadRowsRate\":16"));
+        Assertions.assertTrue(statistic.contains("\"receivedBytesRate\":10"));
+        Assertions.assertTrue(statistic.contains("\"loadRowsRate\":16"));
     }
 
     @Test
@@ -563,12 +575,12 @@ public class KafkaRoutineLoadJobTest {
 
         {
             KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
-            Assert.assertFalse(kafkaRoutineLoadJob.isPauseOnFatalParseError());
+            Assertions.assertFalse(kafkaRoutineLoadJob.isPauseOnFatalParseError());
         }
         {
             Deencapsulation.setField(createRoutineLoadStmt, "pauseOnFatalParseError", true);
             KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
-            Assert.assertTrue(kafkaRoutineLoadJob.isPauseOnFatalParseError());
+            Assertions.assertTrue(kafkaRoutineLoadJob.isPauseOnFatalParseError());
         }
     }
 
@@ -578,42 +590,42 @@ public class KafkaRoutineLoadJobTest {
         // check empty value
         String progressJsonStr = null;
         String sourceLagString = job.getSourceLagString(progressJsonStr);
-        Assert.assertTrue(sourceLagString.contains("null"));
+        Assertions.assertTrue(sourceLagString.contains("null"));
 
         progressJsonStr = "{\"0\":\"100\"}";
         Map<Integer, Long> latestPartitionOffsets = null;
         Deencapsulation.setField(job, "latestPartitionOffsets", latestPartitionOffsets);
         sourceLagString = job.getSourceLagString(progressJsonStr);
-        Assert.assertTrue(sourceLagString.contains("null"));
+        Assertions.assertTrue(sourceLagString.contains("null"));
 
         progressJsonStr = "{\"0\":null}";
         latestPartitionOffsets = Maps.newHashMap();
         latestPartitionOffsets.put(0, 200L);
         Deencapsulation.setField(job, "latestPartitionOffsets", latestPartitionOffsets);
         sourceLagString = job.getSourceLagString(progressJsonStr);
-        Assert.assertTrue(sourceLagString.contains("{}"));
+        Assertions.assertTrue(sourceLagString.contains("{}"));
 
         progressJsonStr = "{\"0\":\"" + KafkaProgress.OFFSET_ZERO + "\"}";
         sourceLagString = job.getSourceLagString(progressJsonStr);
-        Assert.assertTrue(sourceLagString.contains("{}"));
+        Assertions.assertTrue(sourceLagString.contains("{}"));
 
         progressJsonStr = "{\"0\":\"XXX\"}";
         sourceLagString = job.getSourceLagString(progressJsonStr);
-        Assert.assertTrue(sourceLagString.contains("{}"));
+        Assertions.assertTrue(sourceLagString.contains("{}"));
 
         progressJsonStr = "{\"0\":\"100\"}";
         latestPartitionOffsets = Maps.newHashMap();
         latestPartitionOffsets.put(0, 200L);
         Deencapsulation.setField(job, "latestPartitionOffsets", latestPartitionOffsets);
         sourceLagString = job.getSourceLagString(progressJsonStr);
-        Assert.assertTrue(sourceLagString.contains("\"0\":\"100\""));
+        Assertions.assertTrue(sourceLagString.contains("\"0\":\"100\""));
 
         //check  progress > latestPartitionOffsets
         progressJsonStr = "{\"0\":\"200\"}";
         latestPartitionOffsets.put(0, 100L);
         Deencapsulation.setField(job, "latestPartitionOffsets", latestPartitionOffsets);
         sourceLagString = job.getSourceLagString(progressJsonStr);
-        Assert.assertTrue(sourceLagString.contains("\"0\":\"0\""));
+        Assertions.assertTrue(sourceLagString.contains("\"0\":\"0\""));
 
     }
 

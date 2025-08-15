@@ -220,9 +220,11 @@ public class PolymorphicFunctionAnalyzer {
             .put(FunctionSet.getAggStateName(FunctionSet.ANY_VALUE), types -> types[0])
             .put(FunctionSet.getAggStateUnionName(FunctionSet.ANY_VALUE), types -> types[0])
             .put(FunctionSet.getAggStateMergeName(FunctionSet.ANY_VALUE), types -> types[0])
+            .put(FunctionSet.getAggStateIfName(FunctionSet.ANY_VALUE), types -> types[0])
             .put(FunctionSet.getAggStateName(FunctionSet.ARRAY_AGG), new ArrayAggStateDeduce())
             .put(FunctionSet.getAggStateUnionName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.getAggStateMergeName(FunctionSet.ARRAY_AGG), new ArrayAggMergeDeduce())
+            .put(FunctionSet.getAggStateIfName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.MAP_AGG, new MapAggDeduce())
             .build();
 

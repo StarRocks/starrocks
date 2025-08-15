@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.qe.ConnectContext;
 import org.apache.iceberg.Table;
 
 import java.util.List;
@@ -29,26 +30,27 @@ public class MockIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public List<String> listAllDatabases() {
+    public List<String> listAllDatabases(ConnectContext context) {
         return null;
     }
 
     @Override
-    public Database getDB(String dbName) {
+    public Database getDB(ConnectContext context, String dbName) {
         return null;
     }
 
     @Override
-    public List<String> listTables(String dbName) {
+    public List<String> listTables(ConnectContext context, String dbName) {
         return null;
     }
 
     @Override
-    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
+    public void renameTable(ConnectContext context, String dbName, String tblName, String newTblName)
+            throws StarRocksConnectorException {
     }
 
     @Override
-    public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+    public Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
         return null;
     }
 }

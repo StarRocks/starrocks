@@ -62,7 +62,7 @@ OutPut Exchange Id: 07
 |  25 <-> [25: L_SHIPMODE, VARCHAR, false]
 |  28 <-> if[((6: O_ORDERPRIORITY = '1-URGENT') OR (6: O_ORDERPRIORITY = '2-HIGH'), 1, 0); args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: true; result nullable: true]
 |  29 <-> if[((6: O_ORDERPRIORITY != '1-URGENT') AND (6: O_ORDERPRIORITY != '2-HIGH'), 1, 0); args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: true; result nullable: true]
-|  cardinality: 6508504
+|  cardinality: 5055334
 |  column statistics:
 |  * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 |  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
@@ -74,11 +74,11 @@ OutPut Exchange Id: 07
 |  build runtime filters:
 |  - filter_id = 0, build_expr = (11: L_ORDERKEY), remote = false
 |  output columns: 6, 25
-|  cardinality: 6508504
+|  cardinality: 5055334
 |  column statistics:
-|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 6508504.027934344] ESTIMATE
+|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5055334.309012595] ESTIMATE
 |  * O_ORDERPRIORITY-->[-Infinity, Infinity, 0.0, 15.0, 5.0] ESTIMATE
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 6508504.027934344] ESTIMATE
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5055334.309012595] ESTIMATE
 |  * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 |  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
 |  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
@@ -86,7 +86,7 @@ OutPut Exchange Id: 07
 |----3:EXCHANGE
 |       distribution type: SHUFFLE
 |       partition exprs: [11: L_ORDERKEY, INT, false]
-|       cardinality: 6508504
+|       cardinality: 5055334
 |
 0:OlapScanNode
 table: orders, rollup: orders
@@ -110,22 +110,22 @@ OutPut Exchange Id: 03
 |  output columns:
 |  11 <-> [11: L_ORDERKEY, INT, false]
 |  25 <-> [25: L_SHIPMODE, CHAR, false]
-|  cardinality: 6508504
+|  cardinality: 5055334
 |  column statistics:
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 6508504.027934344] ESTIMATE
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5055334.309012595] ESTIMATE
 |  * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 |
 1:OlapScanNode
 table: lineitem, rollup: lineitem
 preAggregation: on
-Predicates: 25: L_SHIPMODE IN ('REG AIR', 'MAIL'), [22: L_COMMITDATE, DATE, false] < [23: L_RECEIPTDATE, DATE, false], [21: L_SHIPDATE, DATE, false] < [22: L_COMMITDATE, DATE, false], [23: L_RECEIPTDATE, DATE, false] >= '1997-01-01', [23: L_RECEIPTDATE, DATE, false] < '1998-01-01'
+Predicates: 25: L_SHIPMODE IN ('REG AIR', 'MAIL'), [22: L_COMMITDATE, DATE, false] < [23: L_RECEIPTDATE, DATE, false], [21: L_SHIPDATE, DATE, false] < [22: L_COMMITDATE, DATE, false], [23: L_RECEIPTDATE, DATE, false] >= '1997-01-01', [23: L_RECEIPTDATE, DATE, false] < '1998-01-01', [22: L_COMMITDATE, DATE, false] < '1998-01-01', [21: L_SHIPDATE, DATE, false] < '1998-01-01'
 partitionsRatio=1/1, tabletsRatio=20/20
 actualRows=0, avgRowSize=30.0
-cardinality: 6508504
+cardinality: 5055334
 column statistics:
-* L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 6508504.027934344] ESTIMATE
-* L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] MCV: [[1997-06-01:270700][1998-01-17:269100][1995-09-18:267300][1996-11-29:266400][1995-09-26:265700]] ESTIMATE
-* L_COMMITDATE-->[6.967872E8, 9.097632E8, 0.0, 4.0, 2466.0] ESTIMATE
+* L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5055334.309012595] ESTIMATE
+* L_SHIPDATE-->[6.942816E8, 8.83584E8, 0.0, 4.0, 2526.0] MCV: [[1997-06-01:270700][1995-09-18:267300][1996-11-29:266400][1995-09-26:265700][1996-04-13:265400]] ESTIMATE
+* L_COMMITDATE-->[6.967872E8, 8.83584E8, 0.0, 4.0, 2466.0] ESTIMATE
 * L_RECEIPTDATE-->[8.52048E8, 8.83584E8, 0.0, 4.0, 2554.0] MCV: [[1997-08-08:266100][1997-06-05:266000][1997-01-01:263800][1997-07-31:261800][1997-07-09:261400]] ESTIMATE
 * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 [end]

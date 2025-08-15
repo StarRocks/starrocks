@@ -24,6 +24,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
@@ -122,7 +123,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
+    public void createDb(ConnectContext context, String dbName, Map<String, String> properties) throws AlreadyExistsException {
         if (dbExists(new ConnectContext(), dbName)) {
             throw new AlreadyExistsException("Database Already Exists");
         }
@@ -157,7 +158,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+    public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException {
         return hmsOps.createTable(stmt);
     }
 
@@ -167,7 +168,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void dropTable(DropTableStmt stmt) throws DdlException {
+    public void dropTable(ConnectContext context, DropTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         if (isResourceMappingCatalog(catalogName)) {
@@ -321,7 +322,7 @@ public class HiveMetadata implements ConnectorMetadata {
             if (session.getSessionVariable().enableHiveColumnStats()) {
                 statistics = statisticsProvider.getTableStatistics(session, table, columnRefOperators, partitionKeys);
             } else {
-                statistics = Statistics.builder().build();
+                statistics = Statistics.builder().setOutputRowCount(Config.default_statistics_output_row_count).build();
                 LOG.warn("Session variable {} is false when getting table statistics on table {}",
                         SessionVariable.ENABLE_HIVE_COLUMN_STATS, table);
             }

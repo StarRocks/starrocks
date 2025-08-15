@@ -2788,6 +2788,96 @@ StatusOr<ColumnPtr> StringFunctions::strcmp(FunctionContext* context, const Colu
     return VectorizedStrictBinaryFunction<strcmpImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0], columns[1]);
 }
 
+// strpos without instance parameter
+StatusOr<ColumnPtr> StringFunctions::strpos(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const ColumnPtr& haystack = columns[0];
+    const ColumnPtr& needle = columns[1];
+    ColumnPtr instance = ColumnHelper::create_const_column<TYPE_INT>(1, columns[0]->size());
+    return strpos_instance(context, {haystack, needle, instance});
+}
+
+// strpos with instance parameter
+StatusOr<ColumnPtr> StringFunctions::strpos_instance(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const ColumnPtr& haystack = columns[0];
+    const ColumnPtr& needle = columns[1];
+    const ColumnPtr& instance = columns[2];
+
+    ColumnViewer<TYPE_VARCHAR> haystack_viewer(haystack);
+    ColumnViewer<TYPE_VARCHAR> needle_viewer(needle);
+    ColumnViewer<TYPE_INT> instance_viewer(instance);
+
+    size_t size = haystack->size();
+    ColumnBuilder<TYPE_BIGINT> builder(size);
+
+    for (size_t i = 0; i < size; ++i) {
+        if (haystack_viewer.is_null(i) || needle_viewer.is_null(i) || instance_viewer.is_null(i)) {
+            builder.append_null();
+            continue;
+        }
+
+        const Slice& haystack_slice = haystack_viewer.value(i);
+        const Slice& needle_slice = needle_viewer.value(i);
+        int32_t instance_value = instance_viewer.value(i);
+
+        // instance is 0, return 0
+        if (instance_value == 0) {
+            builder.append(0);
+            continue;
+        }
+
+        // needle is empty, return 1
+        if (needle_slice.size == 0) {
+            builder.append(1);
+            continue;
+        }
+
+        if (instance_value > 0) {
+            int pos = -1;
+            int count = 0;
+            int from_index = 0;
+
+            while (count < instance_value) {
+                pos = StringFunctions::index_of(haystack_slice.data, haystack_slice.size, needle_slice.data,
+                                                needle_slice.size, from_index);
+                if (pos == -1) {
+                    break;
+                }
+                count++;
+                from_index = pos + 1;
+            }
+            builder.append(count == instance_value ? pos + 1 : 0);
+        } else {
+            // instance is negative, search from end
+            std::vector<int> positions;
+            int pos = -1;
+            int from_index = 0;
+
+            while (true) {
+                pos = StringFunctions::index_of(haystack_slice.data, haystack_slice.size, needle_slice.data,
+                                                needle_slice.size, from_index);
+                if (pos == -1) {
+                    break;
+                }
+                positions.push_back(pos);
+                from_index = pos + 1;
+            }
+
+            int abs_instance = std::abs(instance_value);
+            if (abs_instance <= static_cast<int>(positions.size())) {
+                builder.append(positions[positions.size() - abs_instance] + 1);
+            } else {
+                builder.append(0);
+            }
+        }
+    }
+
+    return builder.build(ColumnHelper::is_all_const({haystack, needle, instance}));
+}
+
 static inline ColumnPtr concat_const_not_null(Columns const& columns, const BinaryColumn* src,
                                               const ConcatState* state) {
     NullableBinaryColumnBuilder builder;
@@ -2955,7 +3045,7 @@ static inline ColumnPtr concat_not_const(Columns const& columns) {
  */
 StatusOr<ColumnPtr> StringFunctions::concat(FunctionContext* context, const Columns& columns) {
     if (columns.size() == 1) {
-        return columns[0];
+        return columns[0]->clone();
     }
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -4068,6 +4158,163 @@ StatusOr<ColumnPtr> StringFunctions::regexp_split(FunctionContext* context, cons
     return regexp_split_general(context, options, columns);
 }
 
+Status StringFunctions::regexp_count_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    if (context->get_num_args() != 2) {
+        return Status::InvalidArgument("regexp_count requires 2 arguments");
+    }
+
+    StringFunctionsState* state = new StringFunctionsState();
+    context->set_function_state(scope, state);
+
+    if (context->is_constant_column(1)) {
+        const auto pattern_col = context->get_constant_column(1);
+        if (!pattern_col->only_null()) {
+            Slice pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(pattern_col);
+            state->pattern = std::string(pattern.data, pattern.size);
+            state->const_pattern = true;
+
+            state->options = std::make_unique<re2::RE2::Options>();
+            state->options->set_log_errors(false);
+            state->regex = std::make_unique<re2::RE2>(state->pattern, *state->options);
+            if (!state->regex->ok()) {
+                std::stringstream error;
+                error << "Invalid regex expression: " << state->pattern;
+                context->set_error(error.str().c_str());
+                return Status::InvalidArgument(error.str());
+            }
+        }
+    }
+
+    return Status::OK();
+}
+
+static ColumnPtr regexp_count_const_pattern(re2::RE2* const_re, const Columns& columns) {
+    auto size = columns[0]->size();
+
+    // return NULL if patern empty
+    if (const_re->pattern().empty()) {
+        return ColumnHelper::create_const_null_column(size);
+    }
+
+    ColumnBuilder<TYPE_BIGINT> result(size);
+    ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
+
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto value = str_viewer.value(row);
+        re2::StringPiece input(value.data, value.size);
+
+        int count = 0;
+        re2::StringPiece match;
+        size_t start_pos = 0;
+
+        // count
+        while (start_pos <= input.size() &&
+               const_re->Match(input, start_pos, input.size(), re2::RE2::UNANCHORED, &match, 1)) {
+            count++;
+            if (match.size() == 0) {
+                start_pos++;
+            } else {
+                start_pos = match.data() - input.data() + match.size();
+            }
+        }
+
+        result.append(count);
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+static ColumnPtr regexp_count_general(FunctionContext* context, re2::RE2::Options* options, const Columns& columns) {
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_BIGINT> result(size);
+
+    ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
+    ColumnViewer<TYPE_VARCHAR> pattern_viewer(columns[1]);
+
+    bool all_patterns_empty = true;
+    for (int row = 0; row < size; ++row) {
+        if (pattern_viewer.is_null(row)) continue;
+        if (pattern_viewer.value(row).size > 0) {
+            all_patterns_empty = false;
+            break;
+        }
+    }
+
+    if (all_patterns_empty) {
+        return ColumnHelper::create_const_null_column(size);
+    }
+
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row) || pattern_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto value = str_viewer.value(row);
+        auto pattern = pattern_viewer.value(row);
+
+        // return null if pattern empty
+        if (pattern.size == 0) {
+            result.append_null();
+            continue;
+        }
+
+        std::string pattern_str(pattern.data, pattern.size);
+        re2::RE2 re(pattern_str, *options);
+
+        // return null invalid pattern
+        if (!re.ok()) {
+            result.append_null();
+            continue;
+        }
+
+        re2::StringPiece input(value.data, value.size);
+
+        int count = 0;
+        re2::StringPiece match;
+        size_t start_pos = 0;
+
+        // count
+        while (start_pos <= input.size() && re.Match(input, start_pos, input.size(), re2::RE2::UNANCHORED, &match, 1)) {
+            count++;
+            if (match.size() == 0) {
+                start_pos++;
+            } else {
+                start_pos = match.data() - input.data() + match.size();
+            }
+        }
+
+        result.append(count);
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_count(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto* state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
+    if (state != nullptr && state->const_pattern && state->regex != nullptr) {
+        // Const col
+        return regexp_count_const_pattern(state->get_or_prepare_regex(), columns);
+    } else {
+        // Multi
+        re2::RE2::Options options;
+        options.set_log_errors(false);
+        return regexp_count_general(context, &options, columns);
+    }
+}
+
 struct ReplaceState {
     bool only_null{false};
 
@@ -4285,7 +4532,7 @@ Status StringFunctions::parse_url_prepare(FunctionContext* context, FunctionCont
     auto column = context->get_constant_column(1);
     auto part = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     state->url_part = std::make_unique<UrlParser::UrlPart>();
-    *(state->url_part) = UrlParser::get_url_part(StringValue::from_slice(part));
+    *(state->url_part) = UrlParser::get_url_part(part);
 
     if (*(state->url_part) == UrlParser::INVALID) {
         std::stringstream error;
@@ -4320,7 +4567,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
         }
 
         auto part = part_viewer.value(row);
-        UrlParser::UrlPart url_part = UrlParser::get_url_part(StringValue::from_slice(part));
+        UrlParser::UrlPart url_part = UrlParser::get_url_part(part);
 
         if (url_part == UrlParser::INVALID) {
             std::stringstream ss;
@@ -4330,15 +4577,15 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
             continue;
         }
         auto str_value = str_viewer.value(row);
-        StringValue value;
-        if (!UrlParser::parse_url(StringValue::from_slice(str_value), url_part, &value)) {
+        Slice value;
+        if (!UrlParser::parse_url(str_value, url_part, &value)) {
             std::stringstream ss;
             ss << "Could not parse URL: " << str_value.to_string();
             context->add_warning(ss.str().c_str());
             result.append_null();
             continue;
         }
-        result.append(Slice(value.ptr, value.len));
+        result.append(value);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -4357,8 +4604,8 @@ StatusOr<ColumnPtr> StringFunctions::parse_const_urlpart(UrlParser::UrlPart* url
         }
 
         auto str_value = str_viewer.value(row);
-        StringValue value;
-        if (!UrlParser::parse_url(StringValue::from_slice(str_value), *url_part, &value)) {
+        Slice value;
+        if (!UrlParser::parse_url(str_value, *url_part, &value)) {
             std::stringstream ss;
             ss << "Could not parse URL: " << str_value.to_string();
             context->add_warning(ss.str().c_str());
@@ -4366,7 +4613,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_const_urlpart(UrlParser::UrlPart* url
             continue;
         }
 
-        result.append(Slice(value.ptr, value.len));
+        result.append(value);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -4390,14 +4637,14 @@ StatusOr<ColumnPtr> StringFunctions::url_extract_host(FunctionContext* context, 
     return parse_const_urlpart(url_part, context, columns);
 }
 
-static bool seek_param_key_in_query_params(const StringValue& query_params, const StringValue& param_key,
+static bool seek_param_key_in_query_params(const Slice& query_params, const Slice& param_key,
                                            std::string* param_value) {
     const StringSearch param_search(&param_key);
-    auto pos = param_search.search(&query_params);
-    auto* begin = query_params.ptr;
-    auto* end = query_params.ptr + query_params.len;
+    auto pos = param_search.search(query_params);
+    auto* begin = query_params.data;
+    auto* end = query_params.data + query_params.size;
     auto* p_prev_char = begin + pos - 1;
-    auto* p_next_char = begin + pos + param_key.len;
+    auto* p_next_char = begin + pos + param_key.size;
     // NOT FOUND
     // case 1: just not found
     // case 2: suffix found, seek "k1" in "abck1=2", prev char must be '&' if it exists
@@ -4421,11 +4668,11 @@ static bool seek_param_key_in_query_params(const StringValue& query_params, cons
 }
 
 static bool seek_param_key_in_url(const Slice& url, const Slice& param_key, std::string* param_value) {
-    StringValue query_params;
-    if (!UrlParser::parse_url(StringValue::from_slice(url), UrlParser::UrlPart::QUERY, &query_params)) {
+    Slice query_params;
+    if (!UrlParser::parse_url(url, UrlParser::UrlPart::QUERY, &query_params)) {
         return false;
     }
-    return seek_param_key_in_query_params(query_params, StringValue::from_slice(param_key), param_value);
+    return seek_param_key_in_query_params(query_params, param_key, param_value);
 }
 
 static StatusOr<ColumnPtr> url_extract_parameter_const_param_key(const starrocks::Columns& columns,
@@ -4483,7 +4730,7 @@ static StatusOr<ColumnPtr> url_extract_parameter_const_query_params(const starro
                                                                     const std::string& query_params) {
     auto param_key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto num_rows = columns[1]->size();
-    StringValue query_params_str(query_params);
+    Slice query_params_str(query_params);
     ColumnBuilder<TYPE_VARCHAR> result(num_rows);
     std::string param_value;
     for (auto i = 0; i < num_rows; ++i) {
@@ -4497,7 +4744,7 @@ static StatusOr<ColumnPtr> url_extract_parameter_const_query_params(const starro
             result.append_null();
             continue;
         }
-        auto found = seek_param_key_in_query_params(query_params_str, StringValue::from_slice(param_key), &param_value);
+        auto found = seek_param_key_in_query_params(query_params_str, param_key, &param_value);
         if (!found) {
             result.append_null();
         } else {
@@ -4541,11 +4788,10 @@ Status StringFunctions::url_extract_parameter_prepare(starrocks::FunctionContext
     if (url_is_const) {
         auto url_column = context->get_constant_column(0);
         auto url = ColumnHelper::get_const_value<TYPE_VARCHAR>(url_column);
-        StringValue query_params;
-        auto parse_success =
-                UrlParser::parse_url(StringValue::from_slice(url), UrlParser::UrlPart::QUERY, &query_params);
+        Slice query_params;
+        auto parse_success = UrlParser::parse_url(url, UrlParser::UrlPart::QUERY, &query_params);
         state->opt_const_query_params = query_params.to_string();
-        ill_formed |= !parse_success || query_params.len == 0;
+        ill_formed |= !parse_success || query_params.size == 0;
     }
 
     // result is const null is either url or param_key is ill-formed
@@ -4556,8 +4802,8 @@ Status StringFunctions::url_extract_parameter_prepare(starrocks::FunctionContext
     }
 
     if (state->opt_const_query_params.has_value() && state->opt_const_param_key.has_value()) {
-        StringValue query_params(state->opt_const_query_params.value());
-        StringValue param_key(state->opt_const_param_key.value());
+        Slice query_params(state->opt_const_query_params.value());
+        Slice param_key(state->opt_const_param_key.value());
         std::string result;
         state->result_is_null = !seek_param_key_in_query_params(query_params, param_key, &result);
         state->opt_const_result = std::move(result);
@@ -4602,4 +4848,71 @@ DEFINE_UNARY_FN_WITH_IMPL(crc32Impl, str) {
 StatusOr<ColumnPtr> StringFunctions::crc32(FunctionContext* context, const Columns& columns) {
     return VectorizedStrictUnaryFunction<crc32Impl>::evaluate<TYPE_VARCHAR, TYPE_BIGINT>(columns[0]);
 }
+
+// format_bytes
+StatusOr<ColumnPtr> StringFunctions::format_bytes(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto num_rows = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    ColumnViewer<TYPE_BIGINT> bytes_viewer(columns[0]);
+
+    // Unit constants (1024-based)
+    static const int64_t KB = 1024L;
+    static const int64_t MB = KB * 1024L;
+    static const int64_t GB = MB * 1024L;
+    static const int64_t TB = GB * 1024L;
+    static const int64_t PB = TB * 1024L;
+    static const int64_t EB = PB * 1024L;
+
+    static const char* units[] = {"B", "KB", "MB", "GB", "TB", "PB", "EB"};
+    static const int64_t thresholds[] = {1, KB, MB, GB, TB, PB, EB};
+
+    for (int row = 0; row < num_rows; ++row) {
+        if (bytes_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        int64_t bytes = bytes_viewer.value(row);
+
+        // Handle edge cases
+        if (bytes < 0) {
+            result.append_null();
+            continue;
+        }
+
+        if (bytes == 0) {
+            result.append("0 B");
+            continue;
+        }
+
+        // Find appropriate unit
+        int unit_index = 0;
+        for (int i = 6; i >= 0; --i) {
+            if (bytes >= thresholds[i]) {
+                unit_index = i;
+                break;
+            }
+        }
+
+        std::string formatted;
+        if (unit_index == 0) {
+            // Bytes - no decimal places
+            formatted = std::to_string(bytes) + " B";
+        } else {
+            // Higher units - 2 decimal places
+            double value = static_cast<double>(bytes) / thresholds[unit_index];
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(2) << value << " " << units[unit_index];
+            formatted = oss.str();
+        }
+
+        result.append(Slice(formatted.data(), formatted.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
 } // namespace starrocks
+
+#include "gen_cpp/opcode/StringFunctions.inc"

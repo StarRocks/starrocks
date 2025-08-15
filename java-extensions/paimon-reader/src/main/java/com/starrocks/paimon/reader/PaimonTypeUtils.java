@@ -30,6 +30,7 @@ import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
+import org.apache.paimon.types.TimeType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarBinaryType;
@@ -99,6 +100,10 @@ public class PaimonTypeUtils {
 
         public String visit(DateType dateType) {
             return "date";
+        }
+
+        public String visit(TimeType timeType) {
+            return "time";
         }
 
         public String visit(TimestampType timestampType) {

@@ -28,7 +28,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -100,7 +99,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getLocalMetastore().getDb("test").getTable("mv9");
         List<String> createTableStmt = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv9` (`k1`, `k2`)\n" +
+        Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv9` (`k1`, `k2`)\n" +
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
@@ -128,7 +127,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getLocalMetastore().getDb("test").getTable("mv10");
         List<String> createTableStmt = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv10` (`c1`, `c2`)\n" +
+        Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv10` (`c1`, `c2`)\n" +
                         "DISTRIBUTED BY HASH(`c1`) BUCKETS 10 \n" +
                         "REFRESH MANUAL\n" +
                         "PROPERTIES (\n" +
@@ -157,7 +156,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getLocalMetastore().getDb("test").getTable("mv8");
         List<String> createTableStmt = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0),
+        Assertions.assertEquals(createTableStmt.get(0),
                 "CREATE MATERIALIZED VIEW `mv8` (`l_orderkey`, `l_partkey`, `l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10 \n" +
                         "REFRESH MANUAL\n" +
@@ -238,7 +237,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Assertions.assertEquals("k1", table.getUniqueConstraints().get(0).getUniqueColumnNames(table).get(0));
 
         starRocksAssert.dropTable("tbl_constraint_test");
-        Assert.assertThrows(SemanticException.class, () -> table.getUniqueConstraints().get(0).getUniqueColumnNames(table));
+        Assertions.assertThrows(SemanticException.class, () -> table.getUniqueConstraints().get(0).getUniqueColumnNames(table));
     }
 
     public static Stream<Arguments> genTestArguments() {

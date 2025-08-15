@@ -27,6 +27,7 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -40,6 +41,7 @@ import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.Instant;
@@ -81,10 +83,10 @@ public class JobSpec {
     private TQueryOptions queryOptions;
     private TWorkGroup resourceGroup;
 
-    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
-    public long getWarehouseId() {
-        return warehouseId;
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     private String planProtocol;
@@ -129,7 +131,7 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
-                    .warehouseId(context.getCurrentWarehouseId())
+                    .computeResource(context.getCurrentComputeResource())
                     .setPlanProtocol(context.getSessionVariable().getThriftPlanProtocol())
                     .build();
         }
@@ -184,7 +186,7 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
-                    .warehouseId(loadPlanner.getWarehouseId())
+                    .computeResource(loadPlanner.getComputeResource())
                     .build();
         }
 
@@ -219,7 +221,7 @@ public class JobSpec {
                     .needReport(true)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
-                    .warehouseId(context.getCurrentWarehouseId())
+                    .computeResource(context.getCurrentComputeResource())
                     .commonProperties(context)
                     .build();
         }
@@ -284,7 +286,7 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
-                    .warehouseId(warehouseId)
+                    .computeResource(context.getCurrentComputeResource())
                     .build();
         }
 
@@ -304,7 +306,7 @@ public class JobSpec {
                     .queryOptions(null)
                     .enablePipeline(false)
                     .resourceGroup(null)
-                    .warehouseId(planner.getWarehouseId())
+                    .computeResource(planner.getComputeResource())
                     .setSyncStreamLoad()
                     .build();
         }
@@ -388,7 +390,7 @@ public class JobSpec {
                 ", enableStreamPipeline=" + enableStreamPipeline +
                 ", isBlockQuery=" + isBlockQuery +
                 ", resourceGroup=" + resourceGroup +
-                ", warehouseId=" + warehouseId +
+                ", cnGroup=" + computeResource +
                 '}';
     }
 
@@ -496,6 +498,10 @@ public class JobSpec {
         return queryOptions.getLoad_job_type() == TLoadJobType.BROKER;
     }
 
+    public boolean isQueryType() {
+        return queryOptions.getQuery_type() == TQueryType.SELECT;
+    }
+
     public String getPlanProtocol() {
         return planProtocol;
     }
@@ -527,6 +533,14 @@ public class JobSpec {
             }
         }
         return isSyncStreamLoad;
+    }
+
+    public boolean isJobNeedCheckQueue() {
+        // The queries only using schema meta will never been queued, because a MySQL client will
+        // query schema meta after the connection is established.
+        boolean notNeed =
+                this.scanNodes.isEmpty() || this.scanNodes.stream().allMatch(SchemaScanNode.class::isInstance);
+        return !notNeed;
     }
 
     public static class Builder {
@@ -609,8 +623,8 @@ public class JobSpec {
             return this;
         }
 
-        private Builder warehouseId(long warehouseId) {
-            instance.warehouseId = warehouseId;
+        private Builder computeResource(ComputeResource computeResource) {
+            instance.computeResource = computeResource;
             return this;
         }
 
@@ -644,32 +658,15 @@ public class JobSpec {
         }
 
         private boolean isEnableQueue(ConnectContext connectContext) {
-            if (connectContext != null && connectContext.getSessionVariable() != null &&
-                    !connectContext.getSessionVariable().isEnableQueryQueue()) {
-                return false;
-            }
-            if (instance.isStatisticsJob()) {
-                return GlobalVariable.isEnableQueryQueueStatistic();
-            }
-
-            if (instance.isLoadType()) {
-                return GlobalVariable.isEnableQueryQueueLoad();
-            }
-
-            return GlobalVariable.isEnableQueryQueueSelect();
+            BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+            return slotManager.isEnableQueryQueue(connectContext, instance);
         }
 
         private boolean needCheckQueue() {
             if (!instance.connectContext.isNeedQueued()) {
                 return false;
             }
-
-            // The queries only using schema meta will never been queued, because a MySQL client will
-            // query schema meta after the connection is established.
-            boolean notNeed =
-                    instance.scanNodes.isEmpty() || instance.scanNodes.stream().allMatch(SchemaScanNode.class::isInstance);
-            return !notNeed;
+            return instance.isJobNeedCheckQueue();
         }
     }
-
 }

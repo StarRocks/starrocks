@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Keywords
+# キーワード
 
 このトピックでは、非予約キーワードと予約キーワードについて説明します。StarRocks の予約キーワードのリストを提供します。
 
@@ -97,6 +97,7 @@ SQL ステートメント内のキーワード、例えば `CREATE` や `DROP` �
 
 - ELSE
 - EXCEPT
+- EXCLUDE
 - EXISTS
 - EXPLAIN
 

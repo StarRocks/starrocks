@@ -237,31 +237,15 @@ select  *  from  sales_record  order by  employee_id  nulls first;
 
 ### GROUP BY
 
-GROUP BY 句は、COUNT()、SUM()、AVG()、MIN()、MAX() などの集計関数と一緒に使用されることがよくあります。
-
-GROUP BY で指定された列は集計操作に参加しません。GROUP BY 句には、集計関数によって生成された結果をフィルタリングするために Having 句を追加できます。
-
-例:
-
-```sql
-select tiny_column, sum(short_column)
-from small_table 
-group by tiny_column;
-```
-
-```plain text
-+-------------+---------------------+
-| tiny_column |  sum('short_column')|
-+-------------+---------------------+
-|      1      |        2            |
-|      2      |        1            |
-+-------------+---------------------+
-```
+GROUP BY 句は集計関数と一緒に使用されることがよくあります。GROUP BY で指定された列は集計操作に参加しません。
 
 #### 構文
 
   ```sql
-  SELECT ...
+  SELECT
+  ...
+  aggregate_function() [ FILTER ( where boolean_expression ) ]
+  ...
   FROM ...
   [ ... ]
   GROUP BY [
@@ -275,124 +259,119 @@ group by tiny_column;
 
 #### パラメータ
 
-  `groupSet` は、select リスト内の列、エイリアス、または式で構成されるセットを表します。`groupSet ::= { ( expr  [ , expr [ , ... ] ] )}`
+- `FILTER` は集計関数と一緒に使用することができます。フィルタリングされた行のみが集約関数の計算に参加します。
 
-  `expr` は、select リスト内の列、エイリアス、または式を示します。
+  > **注意**
+  >
+  > FILTER 句は AVG、COUNT、MAX、MIN、SUM、ARRAY_AGG、ARRAY_AGG_DISTINCT 関数でのみサポートされています。
+  > FILTER 句は COUNT DISTINCT ではサポートされていません。
+  > FILTER 句が指定されている場合、ARRAY_AGG 関数と ARRAY_AGG_DISTINCT 関数では ORDER BY 句は使用できません。
 
-#### 注意
+- `GROUPING SETS`、`CUBE`、`ROLLUP` は GROUP BY 句の拡張です。GROUP BY 句では、これらを使用して複数の集合をグループ化した集約を行うことができます。結果は、複数の GROUP BY 句の UNION と同等です。
 
-StarRocks は PostgreSQL のような構文をサポートしています。構文の例は次のとおりです。
-
-  ```sql
-  SELECT a, b, SUM( c ) FROM tab1 GROUP BY GROUPING SETS ( (a, b), (a), (b), ( ) );
-  SELECT a, b,c, SUM( d ) FROM tab1 GROUP BY ROLLUP(a,b,c)
-  SELECT a, b,c, SUM( d ) FROM tab1 GROUP BY CUBE(a,b,c)
-  ```
-
-  `ROLLUP(a,b,c)` は次の `GROUPING SETS` 文と同等です。
-
-  ```sql
-  GROUPING SETS (
-  (a,b,c),
-  ( a, b ),
-  ( a),
-  ( )
-  )
-  ```
-
-  `CUBE ( a, b, c )` は次の `GROUPING SETS` 文と同等です。
-
-  ```sql
-  GROUPING SETS (
-  ( a, b, c ),
-  ( a, b ),
-  ( a,    c ),
-  ( a       ),
-  (    b, c ),
-  (    b    ),
-  (       c ),
-  (         )
-  )
-  ```
 
 #### 例
 
-  以下は実際のデータの例です。
+例 1: `FILTER` の例
 
-  ```plain text
-  SELECT * FROM t;
-  +------+------+------+
-  | k1   | k2   | k3   |
-  +------+------+------+
-  | a    | A    |    1 |
-  | a    | A    |    2 |
-  | a    | B    |    1 |
-  | a    | B    |    3 |
-  | b    | A    |    1 |
-  | b    | A    |    4 |
-  | b    | B    |    1 |
-  | b    | B    |    5 |
-  +------+------+------+
-  8 rows in set (0.01 sec)
-
-  SELECT k1, k2, SUM(k3) FROM t GROUP BY GROUPING SETS ( (k1, k2), (k2), (k1), ( ) );
-  +------+------+-----------+
-  | k1   | k2   | sum(`k3`) |
-  +------+------+-----------+
-  | b    | B    |         6 |
-  | a    | B    |         4 |
-  | a    | A    |         3 |
-  | b    | A    |         5 |
-  | NULL | B    |        10 |
-  | NULL | A    |         8 |
-  | a    | NULL |         7 |
-  | b    | NULL |        11 |
-  | NULL | NULL |        18 |
-  +------+------+-----------+
-  9 rows in set (0.06 sec)
-
-  > SELECT k1, k2, GROUPING_ID(k1,k2), SUM(k3) FROM t GROUP BY GROUPING SETS ((k1, k2), (k1), (k2), ());
-  +------+------+---------------+----------------+
-  | k1   | k2   | grouping_id(k1,k2) | sum(`k3`) |
-  +------+------+---------------+----------------+
-  | a    | A    |             0 |              3 |
-  | a    | B    |             0 |              4 |
-  | a    | NULL |             1 |              7 |
-  | b    | A    |             0 |              5 |
-  | b    | B    |             0 |              6 |
-  | b    | NULL |             1 |             11 |
-  | NULL | A    |             2 |              8 |
-  | NULL | B    |             2 |             10 |
-  | NULL | NULL |             3 |             18 |
-  +------+------+---------------+----------------+
-  9 rows in set (0.02 sec)
-  ```
-
-GROUP BY `GROUPING SETS` ｜ `CUBE` ｜ `ROLLUP` は GROUP BY 句の拡張です。GROUP BY 句内で複数のセットのグループ化を実現できます。結果は、複数の対応する GROUP BY 句の UNION 操作と同等です。
-
-GROUP BY 句は、1 つの要素のみを含む GROUP BY GROUPING SETS の特殊なケースです。たとえば、GROUPING SETS 文:
+  以下の 2 つのクエリは等価である。
 
   ```sql
-  SELECT a, b, SUM( c ) FROM tab1 GROUP BY GROUPING SETS ( (a, b), (a), (b), ( ) );
+  SELECT
+    COUNT(*) AS total_users,
+    SUM(CASE WHEN gender = 'M' THEN 1 ELSE 0 END) AS male_users,
+    SUM(CASE WHEN gender = 'F' THEN 1 ELSE 0 END) AS female_users
+  FROM users;
   ```
-
-  クエリ結果は次のように等価です。
-
-  ```sql
-  SELECT a, b, SUM( c ) FROM tab1 GROUP BY a, b
-  UNION
-  SELECT a, null, SUM( c ) FROM tab1 GROUP BY a
-  UNION
-  SELECT null, b, SUM( c ) FROM tab1 GROUP BY b
-  UNION
-  SELECT null, null, SUM( c ) FROM tab1
-  ```
-
-  `GROUPING(expr)` は、列が集計列であるかどうかを示します。集計列である場合は 0、それ以外の場合は 1 です。
-
-  `GROUPING_ID(expr  [ , expr [ , ... ] ])` は GROUPING に似ています。GROUPING_ ID は、指定された列の順序に従って列リストのビットマップ値を計算し、各ビットは GROUPING の値です。
   
-  GROUPING_ID() 関数はビットベクトルの 10 進値を返します。
+  ```sql
+  SELECT
+    COUNT(*) AS total_users,
+    COUNT(*) FILTER (WHERE gender = 'M') AS male_users,
+    COUNT(*) FILTER (WHERE gender = 'F') AS female_users
+  FROM users;
+  ```
+
+例 2: `GROUPING SETS`、`CUBE`、`ROLLUP` の例
+
+  `ROLLUP(a,b,c)` は以下の `GROUPING SETS` 句と等価である。
+  
+    ```sql
+    GROUPING SETS (
+    (a,b,c),
+    (a,b  ),
+    (a    ),
+    (     )
+    )
+    ```
+  
+  `CUBE (a, b, c)` は以下の `GROUPING SETS` 句と等価である。
+  
+    ```sql
+    GROUPING SETS (
+    ( a, b, c ),
+    ( a, b    ),
+    ( a,    c ),
+    ( a       ),
+    (    b, c ),
+    (    b    ),
+    (       c ),
+    (         )
+    )
+    ```
+  
+  実際のデータセットでテストする。
+  
+    ```sql
+    SELECT * FROM t;
+    +------+------+------+
+    | k1   | k2   | k3   |
+    +------+------+------+
+    | a    | A    |    1 |
+    | a    | A    |    2 |
+    | a    | B    |    1 |
+    | a    | B    |    3 |
+    | b    | A    |    1 |
+    | b    | A    |    4 |
+    | b    | B    |    1 |
+    | b    | B    |    5 |
+    +------+------+------+
+    8 rows in set (0.01 sec)
+  
+    SELECT k1, k2, SUM(k3) FROM t
+    GROUP BY GROUPING SETS ( (k1, k2), (k2), (k1), ( ) );
+    +------+------+-----------+
+    | k1   | k2   | sum(`k3`) |
+    +------+------+-----------+
+    | b    | B    |         6 |
+    | a    | B    |         4 |
+    | a    | A    |         3 |
+    | b    | A    |         5 |
+    | NULL | B    |        10 |
+    | NULL | A    |         8 |
+    | a    | NULL |         7 |
+    | b    | NULL |        11 |
+    | NULL | NULL |        18 |
+    +------+------+-----------+
+    9 rows in set (0.06 sec)
+  
+    SELECT k1, k2, GROUPING_ID(k1,k2), SUM(k3) FROM t
+    GROUP BY GROUPING SETS ((k1, k2), (k1), (k2), ());
+    +------+------+---------------+----------------+
+    | k1   | k2   | grouping_id(k1,k2) | sum(`k3`) |
+    +------+------+---------------+----------------+
+    | a    | A    |             0 |              3 |
+    | a    | B    |             0 |              4 |
+    | a    | NULL |             1 |              7 |
+    | b    | A    |             0 |              5 |
+    | b    | B    |             0 |              6 |
+    | b    | NULL |             1 |             11 |
+    | NULL | A    |             2 |              8 |
+    | NULL | B    |             2 |             10 |
+    | NULL | NULL |             3 |             18 |
+    +------+------+---------------+----------------+
+    9 rows in set (0.02 sec)
+    ```
 
 ### HAVING
 
@@ -669,7 +648,7 @@ limit 3;
 3 rows in set (0.01 sec)
 ```
 
-### **INTERSECT**
+### INTERSECT
 
 複数のクエリの結果の交差を計算します。つまり、すべての結果セットに現れる結果です。この句は、結果セットの中で一意の行のみを返します。ALL キーワードはサポートされていません。
 
@@ -712,7 +691,7 @@ order by id;
 +------+-------+
 ```
 
-### **EXCEPT/MINUS**
+### EXCEPT/MINUS
 
 右側のクエリに存在しない左側のクエリの一意の結果を返します。EXCEPT は MINUS と同等です。
 
@@ -1134,4 +1113,57 @@ SELECT SUM(CASE WHEN c3 = 1 THEN c1 ELSE NULL END) AS sum_c1_1,
        AVG(CASE WHEN c3 = 5 THEN c2 ELSE NULL END) AS avg_c2_5
 FROM t1
 GROUP BY c0;
+```
+
+### EXCLUDE
+
+この機能はバージョン4.0からサポートされています。
+
+この機能は、クエリ結果から指定した列を除外し、特定の列を無視する必要がある場合のクエリ文を簡略化します。多数の列を含むテーブルを扱う際に特に便利で、明示的に保持する列名を全て列挙する手間を省けます。
+
+#### 構文
+
+```sql
+SELECT 
+  * EXCLUDE (<column_name> [, <column_name> ...]) 
+  | <table_alias>.* EXCLUDE (<column_name> [, <column_name> ...])
+FROM ...
+```
+
+#### パラメータ
+
+- **`* EXCLUDE`**  
+  ワイルドカード `*` は全ての列を選択し、`EXCLUDE` の後に除外する列名のリストを指定します。
+- **`<table_alias>.* EXCLUDE`**  
+  テーブルエイリアスが存在する場合、特定のテーブルの列を除外するように指定できます（エイリアスと組み合わせて使用する必要があります）。
+- **`<column_name>`**  
+  除外する列名。複数の列名はカンマで区切ります。列がテーブルに存在しない場合はエラーが発生します。
+
+#### 使用例
+
+##### 基本使用法
+
+```sql
+-- テストテーブルの作成
+CREATE TABLE test_table (
+  id INT,
+  name VARCHAR(50),
+  age INT,
+  email VARCHAR(100)
+) DUPLICATE KEY(id);
+
+-- 単一列を除外 (age)
+SELECT * EXCLUDE (age) FROM test_table;
+-- 以下のクエリと同等：
+SELECT id, name, email FROM test_table;
+
+-- 複数列を除外 (name, email)
+SELECT * EXCLUDE (name, email) FROM test_table;
+-- 以下のクエリと同等：
+SELECT id, age FROM test_table;
+
+-- テーブルエイリアスを使用して列を除外
+SELECT test_table.* EXCLUDE (email) FROM test_table;
+-- 以下のクエリと同等：
+SELECT id, name, age FROM test_table;
 ```

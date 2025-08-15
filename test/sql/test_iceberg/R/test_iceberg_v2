@@ -110,7 +110,7 @@ with cte1 as (
     select l.k1, sum(length(l.k2)) l_k2, sum(length(r.k2)) r_k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table l
         left join iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table r on l.k1 = r.k1 group by 1
     )
-select cte1.k1, cte2.k1, cte1.l_k2, cte2.r_k2 from cte1 left join cte2 on cte1.k1 = cte2.k1;
+select cte1.k1, cte2.k1, cte1.l_k2, cte2.r_k2 from cte1 left join cte2 on cte1.k1 = cte2.k1 order by cte1.k1 desc;
 -- result:
 2	2	9	9
 1	1	8	8
@@ -149,6 +149,18 @@ select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_
 -- !result
 select k1,k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table group by k1,k3 having count(1) > 1;
 -- result:
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table', '[1, INT, true] | [2, VARCHAR(1073741824), true] | [3, VARCHAR(1073741824), true]')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table', '[11: k1, INT, true] | [12: k2, VARCHAR(1073741824), true] | [13: k3, VARCHAR(1073741824), true]')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table', '[4: k1, INT, true] | [5: k2, VARCHAR(1073741824), true] | [6: k3, VARCHAR(1073741824), true]')
+-- result:
+None
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:

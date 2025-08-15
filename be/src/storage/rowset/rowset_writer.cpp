@@ -48,7 +48,7 @@
 #include "fs/fs.h"
 #include "fs/key_cache.h"
 #include "io/io_error.h"
-#include "runtime/exec_env.h"
+#include "runtime/load_fail_point.h"
 #include "segment_options.h"
 #include "serde/column_array_serde.h"
 #include "storage/aggregate_iterator.h"
@@ -124,7 +124,7 @@ Status RowsetWriter::init() {
     _writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
     _writer_options.referenced_column_ids = _context.referenced_column_ids;
     _writer_options.is_compaction = _context.is_compaction;
-
+    _writer_options.flat_json_config = _context.flat_json_config;
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
         (_context.is_partial_update || !_context.merge_condition.empty() || _context.miss_auto_increment_column)) {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
@@ -470,6 +470,7 @@ Status RowsetWriter::_flush_update_file(const SegmentPB& segment_pb, butil::IOBu
 }
 
 Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
+    FAIL_POINT_TRIGGER_EXECUTE(load_segment_flush, SEGMENT_FLUSH_FP_ACTION(_context.txn_id, _context.tablet_id));
     if (data.size() != segment_pb.data_size() + segment_pb.delete_data_size() + segment_pb.update_data_size() +
                                segment_pb.seg_index_data_size()) {
         return Status::InternalError(fmt::format(

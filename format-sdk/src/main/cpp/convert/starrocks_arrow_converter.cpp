@@ -69,7 +69,8 @@ public:
 
         auto chunk = ChunkHelper::new_chunk(*_sr_schema, recordBatch->num_rows());
         for (size_t idx = 0; idx < column_size; ++idx) {
-            ARROW_RETURN_NOT_OK(_converters[idx]->toSrColumn(recordBatch->column(idx), chunk->columns()[idx]));
+            auto mutable_column = chunk->columns()[idx]->as_mutable_ptr();
+            ARROW_RETURN_NOT_OK(_converters[idx]->toSrColumn(recordBatch->column(idx), mutable_column));
         }
 
         return chunk;

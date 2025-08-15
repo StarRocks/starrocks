@@ -19,16 +19,12 @@ import com.google.common.base.CharMatcher;
 import com.google.common.io.BaseEncoding;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.io.Text;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TBinaryLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -165,22 +161,6 @@ public class VarBinaryLiteral extends LiteralExpr {
         return super.uncheckedCastTo(targetType);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeBinary(out, value);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = Text.readBinary(in);
-    }
-
-    public static VarBinaryLiteral read(DataInput in) throws IOException {
-        VarBinaryLiteral literal = new VarBinaryLiteral();
-        literal.readFields(in);
-        return literal;
-    }
     @Override
     public boolean equalsWithoutChild(Object obj) {
         if (!(obj instanceof VarBinaryLiteral)) {

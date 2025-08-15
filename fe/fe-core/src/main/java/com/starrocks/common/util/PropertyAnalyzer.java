@@ -71,6 +71,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
@@ -85,10 +86,12 @@ import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.rewrite.TimeDriftConstraint;
 import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
@@ -108,6 +111,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -139,7 +143,6 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_COLOCATE_WITH = "colocate_with";
 
     public static final String PROPERTIES_TIMEOUT = "timeout";
-
     public static final String PROPERTIES_DISTRIBUTION_TYPE = "distribution_type";
     public static final String PROPERTIES_SEND_CLEAR_ALTER_TASK = "send_clear_alter_tasks";
 
@@ -162,6 +165,13 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_BINLOG_TTL = "binlog_ttl_second";
 
     public static final String PROPERTIES_BINLOG_MAX_SIZE = "binlog_max_size";
+    public static final String PROPERTIES_FLAT_JSON_ENABLE = "flat_json.enable";
+
+    public static final String PROPERTIES_FLAT_JSON_NULL_FACTOR = "flat_json.null.factor";
+
+    public static final String PROPERTIES_FLAT_JSON_SPARSITY_FACTOR = "flat_json.sparsity.factor";
+
+    public static final String PROPERTIES_FLAT_JSON_COLUMN_MAX = "flat_json.column.max";
 
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
@@ -196,8 +206,10 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_TTL = "partition_ttl";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
     public static final String PROPERTIES_PARTITION_RETENTION_CONDITION = "partition_retention_condition";
+    public static final String PROPERTIES_TIME_DRIFT_CONSTRAINT = "time_drift_constraint";
 
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
+    public static final String PROPERTIES_PARTITION_REFRESH_STRATEGY = "partition_refresh_strategy";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_EXCLUDED_REFRESH_TABLES = "excluded_refresh_tables";
@@ -244,6 +256,12 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
+
+    public static final String PROPERTIES_FILE_BUNDLING = "file_bundling";
+
+    public static final String PROPERTIES_COMPACTION_STRATEGY = "compaction_strategy";
+
+    public static final String PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE = "dynamic_tablet_split_size";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
@@ -432,7 +450,10 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION)) {
             partitionRetentionCondition = properties.get(PROPERTIES_PARTITION_RETENTION_CONDITION);
             if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
-                throw new SemanticException("Illegal partition retention condition: " + partitionRetentionCondition);
+                if (removeProperties) {
+                    properties.remove(PROPERTIES_PARTITION_RETENTION_CONDITION);
+                }
+                return partitionRetentionCondition;
             }
             // parse retention condition
             Expr whereExpr = null;
@@ -494,6 +515,65 @@ public class PropertyAnalyzer {
         }
     }
 
+    public static double analyzeFlatJsonNullFactor(Map<String, String> properties) {
+        double flatJsonNullFactor = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_FLAT_JSON_NULL_FACTOR)) {
+            try {
+                flatJsonNullFactor = Double.parseDouble(properties.get(PROPERTIES_FLAT_JSON_NULL_FACTOR));
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Flat json null factor: " + e.getMessage());
+            }
+            if (flatJsonNullFactor < 0 || flatJsonNullFactor > 1) {
+                throw new SemanticException("Illegal flat json null factor: " + flatJsonNullFactor);
+            }
+            return flatJsonNullFactor;
+        } else {
+            throw new SemanticException("Flat json null factor is not set");
+        }
+    }
+
+    public static double analyzeFlatJsonSparsityFactor(Map<String, String> properties) {
+        double flatJsonSparsityFactor = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)) {
+            try {
+                flatJsonSparsityFactor = Double.parseDouble(properties.get(PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Flat json sparsity factor: " + e.getMessage());
+            }
+            if (flatJsonSparsityFactor < 0 || flatJsonSparsityFactor > 1) {
+                throw new SemanticException("Illegal flat json sparsity factor: " + flatJsonSparsityFactor);
+            }
+            return flatJsonSparsityFactor;
+        } else {
+            throw new SemanticException("Flat json sparsity factor is not set");
+        }
+    }
+
+    public static int analyzeFlatJsonColumnMax(Map<String, String> properties) {
+        int columnMax = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+            try {
+                columnMax = Integer.parseInt(properties.get(PROPERTIES_FLAT_JSON_COLUMN_MAX));
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Flat json column max: " + e.getMessage());
+            }
+            if (columnMax < 0) {
+                throw new SemanticException("Illegal flat json column max: " + columnMax);
+            }
+            return columnMax;
+        } else {
+            throw new SemanticException("Flat json column max is not set");
+        }
+    }
+
+    public static boolean analyzeFlatJsonEnabled(Map<String, String> properties) {
+        boolean flatJsonEnabled = false;
+        if (properties != null && properties.containsKey(PROPERTIES_FLAT_JSON_ENABLE)) {
+            flatJsonEnabled = Boolean.parseBoolean(properties.get(PROPERTIES_FLAT_JSON_ENABLE));
+        }
+        return flatJsonEnabled;
+    }
+
     public static boolean analyzeEnableLoadProfile(Map<String, String> properties) {
         boolean enableLoadProfile = false;
         if (properties != null && properties.containsKey(PROPERTIES_ENABLE_LOAD_PROFILE)) {
@@ -508,6 +588,38 @@ public class PropertyAnalyzer {
             return forbiddenTimeRanges;
         }
         return "";
+    }
+
+    public static TimeDriftConstraint analyzeTimeDriftConstraint(String spec, Table table,
+                                                                 Map<String, String> properties) {
+        properties.remove(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+        TimeDriftConstraint constraint = TimeDriftConstraint.parseSpec(spec);
+        if (!table.containColumn(constraint.getTargetColumn())) {
+            throw new SemanticException("Target column '%s' not exists in table '%s'",
+                    constraint.getTargetColumn(), table.getName());
+        }
+        if (!table.containColumn(constraint.getReferenceColumn())) {
+            throw new SemanticException("Reference column '%s' not exists in table '%s'",
+                    constraint.getReferenceColumn(), table.getName());
+        }
+
+        boolean refColumnIsDateTypePartitionColumn = ConnectorPartitionTraits.build(table)
+                .getPartitionColumns().stream()
+                .filter(column -> column.getName().equals(constraint.getReferenceColumn()))
+                .findFirst().map(column -> column.getType().isDateType()).orElse(false);
+        if (!refColumnIsDateTypePartitionColumn) {
+            throw new SemanticException("Reference column '%s' must be a DATE/DATETIME type partition column",
+                    constraint.getReferenceColumn());
+        }
+
+        boolean targetColumnIsDateType = table.getColumns().stream()
+                .filter(column -> column.getName().equals(constraint.getTargetColumn()))
+                .findFirst().map(column -> column.getType().isDateType()).orElse(false);
+        if (!targetColumnIsDateType) {
+            throw new SemanticException("Target column '%s' must be a DATE/DATETIME type partition column",
+                    constraint.getReferenceColumn());
+        }
+        return constraint;
     }
 
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {
@@ -544,6 +656,21 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_PARTITION_REFRESH_NUMBER);
         }
         return partitionRefreshNumber;
+    }
+
+    public static String analyzePartitionRefreshStrategy(Map<String, String> properties) {
+        String partitionRefreshStrategy = null;
+        if (properties != null && properties.containsKey(PROPERTIES_PARTITION_REFRESH_STRATEGY)) {
+            partitionRefreshStrategy = properties.get(PROPERTIES_PARTITION_REFRESH_STRATEGY);
+            try {
+                MaterializedView.PartitionRefreshStrategy.valueOf(partitionRefreshStrategy.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid partition_refresh_strategy: " + partitionRefreshStrategy +
+                        ". Only 'strict' or 'adaptive' are supported.");
+            }
+            properties.remove(PROPERTIES_PARTITION_REFRESH_STRATEGY);
+        }
+        return partitionRefreshStrategy;
     }
 
     public static List<TableName> analyzeExcludedTables(Map<String, String> properties,
@@ -763,6 +890,15 @@ public class PropertyAnalyzer {
         }
         throw new AnalysisException(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION
                 + " must be `true` or `false`");
+    }
+
+    public static Boolean analyzeFileBundling(Map<String, String> properties) throws AnalysisException {
+        boolean fileBundling = Config.enable_file_bundling;
+        if (properties != null && properties.containsKey(PROPERTIES_FILE_BUNDLING)) {
+            fileBundling = Boolean.parseBoolean(properties.get(PROPERTIES_FILE_BUNDLING));
+            properties.remove(PROPERTIES_FILE_BUNDLING);
+        }
+        return fileBundling;
     }
 
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,
@@ -1093,17 +1229,56 @@ public class PropertyAnalyzer {
         return type;
     }
 
+    public static int analyzeIntProp(Map<String, String> properties, String propKey, int defaultVal)
+            throws AnalysisException {
+        int val = defaultVal;
+        if (properties != null && properties.containsKey(propKey)) {
+            String valStr = properties.get(propKey);
+            try {
+                val = Integer.parseInt(valStr);
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Invalid " + propKey + " format: " + valStr);
+            }
+            properties.remove(propKey);
+        }
+        return val;
+    }
+
+    public static Optional<Long> analyzeLongProp(Map<String, String> properties, String propKey)
+            throws AnalysisException {
+        if (properties == null || !properties.containsKey(propKey)) {
+            return Optional.empty();
+        }
+        return Optional.of(analyzeLongProp(properties, propKey, 0L));
+    }
+
     public static long analyzeLongProp(Map<String, String> properties, String propKey, long defaultVal)
             throws AnalysisException {
         long val = defaultVal;
         if (properties != null && properties.containsKey(propKey)) {
             String valStr = properties.get(propKey);
+            properties.remove(propKey);
             try {
                 val = Long.parseLong(valStr);
             } catch (NumberFormatException e) {
                 throw new AnalysisException("Invalid " + propKey + " format: " + valStr);
             }
             properties.remove(propKey);
+        }
+        return val;
+    }
+
+    public static double analyzerDoubleProp(Map<String, String> properties, String propKey, double defaultVal)
+        throws AnalysisException {
+        double val = defaultVal;
+        if (properties != null && properties.containsKey(propKey)) {
+            String valStr = properties.get(propKey);
+            properties.remove(propKey);
+            try {
+                val = Double.parseDouble(valStr);
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Invalid " + propKey + " format: " + valStr);
+            }
         }
         return val;
     }
@@ -1380,6 +1555,21 @@ public class PropertyAnalyzer {
                 : TPersistentIndexType.LOCAL;
     }
 
+    public static TCompactionStrategy analyzecompactionStrategy(Map<String, String> properties) throws AnalysisException {
+        if (properties != null && properties.containsKey(PROPERTIES_COMPACTION_STRATEGY)) {
+            String strategy = properties.get(PROPERTIES_COMPACTION_STRATEGY);
+            properties.remove(PROPERTIES_COMPACTION_STRATEGY);
+            if (strategy.equalsIgnoreCase(TableProperty.DEFAULT_COMPACTION_STRATEGY)) {
+                return TCompactionStrategy.DEFAULT;
+            } else if (strategy.equalsIgnoreCase(TableProperty.REAL_TIME_COMPACTION_STRATEGY)) {
+                return TCompactionStrategy.REAL_TIME;
+            } else {
+                throw new AnalysisException("Invalid compaction strategy: " + strategy);
+            }
+        }
+        return TCompactionStrategy.DEFAULT;
+    }
+
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
                                                            boolean removeProperties) throws AnalysisException {
         String text = properties.get(PROPERTIES_STORAGE_COOLDOWN_TTL);
@@ -1505,6 +1695,13 @@ public class PropertyAnalyzer {
                             + " does not support non-partitioned materialized view.");
                 }
             }
+            // partition refresh strategy
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)) {
+                String strategy = PropertyAnalyzer.analyzePartitionRefreshStrategy(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, strategy);
+                materializedView.getTableProperty().setPartitionRefreshStrategy(strategy);
+            }
             // exclude trigger tables
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
                 List<TableName> tables = PropertyAnalyzer.analyzeExcludedTables(properties,
@@ -1565,6 +1762,15 @@ public class PropertyAnalyzer {
                 List<ForeignKeyConstraint> foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(
                         properties, db, materializedView);
                 materializedView.setForeignKeyConstraints(foreignKeyConstraints);
+            }
+
+            // time drift constraint
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+                String timeDriftConstraintSpec = properties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+                PropertyAnalyzer.analyzeTimeDriftConstraint(timeDriftConstraintSpec, materializedView, properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
+                materializedView.getTableProperty().setTimeDriftConstraintSpec(timeDriftConstraintSpec);
             }
 
             // labels.location

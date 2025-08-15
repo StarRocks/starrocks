@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DROP ANALYZE
 
-## Description
-
-Deletes a custom collection task.
+DROP ANALYZE deletes a custom collection task.
 
 By default, StarRocks automatically collects full statistics of a table. It checks for any data updates every 5 minutes. If data change is detected, data collection will be automatically triggered. If you do not want to use automatic full collection, you can set the FE configuration item `enable_collect_full_statistic` to `false` and customize a collection task.
 

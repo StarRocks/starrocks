@@ -74,14 +74,12 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Status;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -96,6 +94,7 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -106,7 +105,6 @@ import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -467,9 +465,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     // DB lock should be hold already
     public static AlterReplicaTask.RollupJobV2Params analyzeAndCreateRollupJobV2Params(OlapTable tbl,
-                                                                                        List<Column> rollupSchema,
-                                                                                        Expr whereClause,
-                                                                                        String dbFullName)
+                                                                                       List<Column> rollupSchema,
+                                                                                       Expr whereClause,
+                                                                                       String dbFullName)
             throws AlterCancelException {
         DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor();
@@ -570,7 +568,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
         }
         usedColIds.addAll(nonKeyColIds);
-        return new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable, usedColIds);
+        return new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable.toThrift(), usedColIds);
     }
 
     /**
@@ -603,9 +601,13 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
+        Optional<TDescriptorTable> tDescTable = Optional.empty();
         try (AutoCloseableLock ignore =
                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
+            // only needs to analyze once
+            AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
+                    analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
@@ -619,8 +621,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     long baseTabletId = tabletIdMap.get(rollupTabletId);
-                    AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                            analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
 
                     List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
                     TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
@@ -867,7 +867,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             PhysicalPartition physicalPartition = tbl.getPhysicalPartition(partitionId);
             TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
             TabletMeta rollupTabletMeta = new TabletMeta(dbId, tableId, partitionId, rollupIndexId,
-                        rollupSchemaHash, medium);
+                    medium);
 
             for (Tablet rollupTablet : rollupIndex.getTablets()) {
                 invertedIndex.addTablet(rollupTablet.getId(), rollupTabletMeta);
@@ -1017,11 +1017,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this, AlterJobV2.class);
-        Text.writeString(out, json);
-    }
+
+
 
     @Override
     public void gsonPostProcess() throws IOException {

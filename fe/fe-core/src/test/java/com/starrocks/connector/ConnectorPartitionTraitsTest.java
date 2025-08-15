@@ -19,6 +19,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.paimon.Partition;
 import com.starrocks.connector.partitiontraits.DefaultTraits;
@@ -33,8 +37,9 @@ import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import mockit.Mocked;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -59,21 +64,21 @@ public class ConnectorPartitionTraitsTest {
         };
 
         Optional<Long> result = new PaimonPartitionTraits().maxPartitionRefreshTs();
-        Assert.assertTrue(result.isPresent());
-        Assert.assertEquals(200L, result.get().longValue());
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertEquals(200L, result.get().longValue());
     }
 
     @Test
     public void testisSupportPCTRefresh() {
-        Assert.assertTrue(new OlapPartitionTraits().isSupportPCTRefresh());
-        Assert.assertTrue(new HivePartitionTraits().isSupportPCTRefresh());
-        Assert.assertTrue(new IcebergPartitionTraits().isSupportPCTRefresh());
-        Assert.assertTrue(new PaimonPartitionTraits().isSupportPCTRefresh());
-        Assert.assertTrue(new JDBCPartitionTraits().isSupportPCTRefresh());
-        Assert.assertFalse(new HudiPartitionTraits().isSupportPCTRefresh());
-        Assert.assertFalse(new OdpsPartitionTraits().isSupportPCTRefresh());
-        Assert.assertFalse(new KuduPartitionTraits().isSupportPCTRefresh());
-        Assert.assertFalse(new DeltaLakePartitionTraits().isSupportPCTRefresh());
+        Assertions.assertTrue(new OlapPartitionTraits().isSupportPCTRefresh());
+        Assertions.assertTrue(new HivePartitionTraits().isSupportPCTRefresh());
+        Assertions.assertTrue(new IcebergPartitionTraits().isSupportPCTRefresh());
+        Assertions.assertTrue(new PaimonPartitionTraits().isSupportPCTRefresh());
+        Assertions.assertTrue(new JDBCPartitionTraits().isSupportPCTRefresh());
+        Assertions.assertFalse(new HudiPartitionTraits().isSupportPCTRefresh());
+        Assertions.assertFalse(new OdpsPartitionTraits().isSupportPCTRefresh());
+        Assertions.assertFalse(new KuduPartitionTraits().isSupportPCTRefresh());
+        Assertions.assertFalse(new DeltaLakePartitionTraits().isSupportPCTRefresh());
 
         final Set<Table.TableType> supportedTableTypes = ImmutableSet.of(
                 Table.TableType.OLAP,
@@ -86,7 +91,7 @@ public class ConnectorPartitionTraitsTest {
                 Table.TableType.JDBC
         );
         for (Table.TableType tableType : Table.TableType.values()) {
-            Assert.assertEquals(supportedTableTypes.contains(tableType),
+            Assertions.assertEquals(supportedTableTypes.contains(tableType),
                     ConnectorPartitionTraits.isSupportPCTRefresh(tableType));
         }
     }
@@ -98,7 +103,7 @@ public class ConnectorPartitionTraitsTest {
                 Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap(), Maps.newHashMap(), null,
                 HiveTable.HiveTableType.MANAGED_TABLE);
         ConnectorPartitionTraits connectorPartitionTraits = ConnectorPartitionTraits.build(hiveTable);
-        Assert.assertEquals(connectorPartitionTraits.getTableName(), "hiveTable");
+        Assertions.assertEquals(connectorPartitionTraits.getTableName(), "hiveTable");
     }
 
     @Test
@@ -108,6 +113,25 @@ public class ConnectorPartitionTraitsTest {
                 Lists.newArrayList(), Lists.newArrayList(), Lists.newArrayList(), 0,
                 Maps.newHashMap(), HudiTable.HudiTableType.COW);
         ConnectorPartitionTraits connectorPartitionTraits = ConnectorPartitionTraits.build(hudiTable);
-        Assert.assertEquals(connectorPartitionTraits.getTableName(), "hudiTable");
+        Assertions.assertEquals(connectorPartitionTraits.getTableName(), "hudiTable");
     }
+
+    @Test
+    public void testIcebergTable(@Mocked org.apache.iceberg.Table nativeTable) {
+        IcebergTable icebergTable = new IcebergTable(0, "name", "iceberg_catalog", "resource_name", "icebergDb",
+                "icebergTable", "",
+                Lists.newArrayList(), nativeTable,
+                Maps.newHashMap());
+        ConnectorPartitionTraits connectorPartitionTraits = ConnectorPartitionTraits.build(icebergTable);
+        Assertions.assertEquals(connectorPartitionTraits.getTableName(), "icebergTable");
+        try {
+            PartitionKey key = connectorPartitionTraits.createPartitionKeyWithType(Lists.newArrayList("123.3"), 
+                    Lists.newArrayList(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6)));
+            Assertions.assertEquals(key.getKeys().get(0).getType(), 
+                    ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6));
+        } catch (Exception e) {
+            throw new RuntimeException("createPartitionKeyWithType failed", e);
+        }
+    }
+    
 }

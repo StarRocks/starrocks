@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW ALTER MATERIALIZED VIEW
 
-## Description
-
-Shows the building status of synchronous materialized views.
+SHOW ALTER MATERIALIZED VIEW shows the building status of synchronous materialized views.
 
 :::tip
 

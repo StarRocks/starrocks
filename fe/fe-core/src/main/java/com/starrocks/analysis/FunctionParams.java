@@ -35,13 +35,9 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -59,6 +55,7 @@ public class FunctionParams implements Writable {
     private boolean isDistinct;
 
     private List<OrderByElement> orderByElements;
+
     // c'tor for non-star params
     public FunctionParams(boolean isDistinct, List<Expr> exprs) {
         if (exprs != null && exprs.stream().anyMatch(e -> e instanceof NamedArgument)) {
@@ -80,6 +77,17 @@ public class FunctionParams implements Writable {
         this.exprs = exprs;
         this.orderByElements = orderByElements;
     }
+
+    public FunctionParams(boolean isStar, List<Expr> exprs,  List<String> exprsNames, boolean isDistinct, List<OrderByElement> orderByElements) {
+        this.isStar = isStar;
+        this.exprs = exprs;
+        this.exprsNames = exprsNames;
+
+        this.isDistinct = isDistinct;
+        this.orderByElements = orderByElements;
+    }
+
+
 
     // c'tor for non-star, non-distinct params
     public FunctionParams(List<Expr> exprs) {
@@ -196,38 +204,8 @@ public class FunctionParams implements Writable {
         this.exprs = exprs;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeBoolean(isStar);
-        out.writeBoolean(isDistinct);
-        if (exprs != null) {
-            out.writeBoolean(true);
-            out.writeInt(exprs.size());
-            for (Expr expr : exprs) {
-                Expr.writeTo(expr, out);
-            }
-        } else {
-            out.writeBoolean(false);
-        }
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        isStar = in.readBoolean();
-        isDistinct = in.readBoolean();
-        if (in.readBoolean()) {
-            exprs = Lists.newArrayList();
-            int size = in.readInt();
-            for (int i = 0; i < size; ++i) {
-                exprs.add(Expr.readIn(in));
-            }
-        }
-    }
 
-    public static FunctionParams read(DataInput in) throws IOException {
-        FunctionParams params = new FunctionParams();
-        params.readFields(in);
-        return params;
-    }
 
     @Override
     public int hashCode() {

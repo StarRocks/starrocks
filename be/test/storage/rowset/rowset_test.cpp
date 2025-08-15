@@ -110,7 +110,6 @@ protected:
         if (fs::path_exist(config::storage_root_path)) {
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
-        StoragePageCache::instance()->prune();
         config::storage_root_path = _default_storage_root_path;
     }
 

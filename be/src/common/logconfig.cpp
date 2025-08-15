@@ -26,13 +26,14 @@
 #include <iostream>
 #include <mutex>
 
+#include "cache/datacache.h"
+#include "cache/object_cache/page_cache.h"
 #include "common/config.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
 #include "gutil/sysinfo.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "storage/page_cache.h"
 #include "util/logging.h"
 #include "util/stack_util.h"
 
@@ -95,7 +96,7 @@ static void dump_trace_info() {
 
         // write build version
         int res = get_build_version(buffer, sizeof(buffer));
-        [[maybe_unused]] auto wt = write(STDERR_FILENO, buffer, res);
+        std::ignore = write(STDERR_FILENO, buffer, res);
 
         res = sprintf(buffer, "query_id:");
         res = print_unique_id(buffer + res, query_id) + res;
@@ -110,39 +111,50 @@ static void dump_trace_info() {
             res = snprintf(buffer + res, MAX_BUFFER_SIZE - res, "%s\n", custom_coredump_msg.c_str()) + res;
         }
 
-        wt = write(STDERR_FILENO, buffer, res);
-        // dump memory usage
-        // copy trackers
-        auto trackers = GlobalEnv::GetInstance()->mem_trackers();
-        for (const auto& tracker : trackers) {
-            if (tracker) {
-                size_t len = tracker->debug_string(buffer, sizeof(buffer));
-                wt = write(STDERR_FILENO, buffer, len);
-            }
-        }
+        std::ignore = write(STDERR_FILENO, buffer, res);
     }
     start_dump = true;
 }
 
+#define FMT_LOG(msg, ...)                                                                                      \
+    fmt::format_to(std::back_inserter(mbuffer), "[{}.{}][thread: {}] " msg "\n", tv.tv_sec, tv.tv_usec / 1000, \
+                   tid __VA_OPT__(, ) __VA_ARGS__);                                                            \
+    DCHECK(mbuffer.size() < 500);                                                                              \
+    std::ignore = write(STDERR_FILENO, mbuffer.data(), mbuffer.size());                                        \
+    mbuffer.clear();
+
 static void dontdump_unused_pages() {
+    size_t prev_allocate_size = CurrentThread::current().get_consumed_bytes();
     static bool start_dump = false;
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    pthread_t tid = pthread_self();
+    const uint32_t MAX_BUFFER_SIZE = 1024;
+    char buffer[MAX_BUFFER_SIZE] = {};
+    // memory_buffer allocate 500 bytes from stack
+    fmt::memory_buffer mbuffer;
     if (!start_dump) {
-        std::string purge_msg = "arena." + std::to_string(MALLCTL_ARENAS_ALL) + ".purge";
-        int ret = je_mallctl(purge_msg.c_str(), nullptr, nullptr, nullptr, 0);
+        int res = snprintf(buffer, MAX_BUFFER_SIZE, "arena.%d.purge", MALLCTL_ARENAS_ALL);
+        buffer[res] = '\0';
+        int ret = je_mallctl(buffer, nullptr, nullptr, nullptr, 0);
+
         if (ret != 0) {
-            LOG(ERROR) << "je_mallctl execute purge failed: " << strerror(ret);
+            FMT_LOG("je_mallctl execute purge failed, errno:{}", ret);
         } else {
-            LOG(INFO) << "je_mallctl execute purge success";
+            FMT_LOG("je_mallctl execute purge success");
         }
 
-        std::string dontdump_msg = "arena." + std::to_string(MALLCTL_ARENAS_ALL) + ".dontdump";
-        ret = je_mallctl(dontdump_msg.c_str(), nullptr, nullptr, nullptr, 0);
+        res = snprintf(buffer, MAX_BUFFER_SIZE, "arena.%d.dontdump", MALLCTL_ARENAS_ALL);
+        buffer[res] = '\0';
+        ret = je_mallctl(buffer, nullptr, nullptr, nullptr, 0);
+
         if (ret != 0) {
-            LOG(ERROR) << "je_mallctl execute dontdump failed: " << strerror(ret);
+            FMT_LOG("je_mallctl execute dontdump failed, errno:{}", ret);
         } else {
-            LOG(INFO) << "je_mallctl execute dontdump success";
+            FMT_LOG("je_mallctl execute dontdump success");
         }
     }
+    DCHECK_EQ(prev_allocate_size, CurrentThread::current().get_consumed_bytes());
     start_dump = true;
 }
 
@@ -150,7 +162,7 @@ static void failure_handler_after_output_log() {
     static bool start_dump = false;
     if (!start_dump && config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
         ExecEnv::GetInstance()->try_release_resource_before_core_dump();
-        CacheEnv::GetInstance()->try_release_resource_before_core_dump();
+        DataCache::GetInstance()->try_release_resource_before_core_dump();
         dontdump_unused_pages();
     }
     start_dump = true;
@@ -158,7 +170,7 @@ static void failure_handler_after_output_log() {
 
 static void failure_writer(const char* data, size_t size) {
     dump_trace_info();
-    [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
+    std::ignore = write(STDERR_FILENO, data, size);
 }
 
 // MUST not add LOG(XXX) in this function, may cause deadlock.

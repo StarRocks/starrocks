@@ -14,29 +14,24 @@
 
 package com.starrocks.memory;
 
-import com.starrocks.StarRocksFE;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+import one.profiler.AsyncProfiler;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.lang.management.ManagementFactory;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 public class ProcProfileCollector extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(ProcProfileCollector.class);
@@ -47,11 +42,10 @@ public class ProcProfileCollector extends FrontendDaemon {
     private final SimpleDateFormat profileTimeFormat = new SimpleDateFormat("yyyyMMdd-HHmmss");
     private final String profileLogDir;
 
-    private long lastCollectTime = -1;
     private long lastLogTime = -1;
 
     public ProcProfileCollector() {
-        super("ProcProfileCollector");
+        super("ProcProfileCollector", 1000L);
         profileLogDir = Config.sys_log_dir + "/proc_profile";
     }
 
@@ -60,18 +54,12 @@ public class ProcProfileCollector extends FrontendDaemon {
         File file = new File(profileLogDir);
         file.mkdirs();
 
-        if (lastCollectTime == -1L
-                || (System.currentTimeMillis() - lastCollectTime > Config.proc_profile_collect_interval_s * 1000)) {
+        if (Config.proc_profile_cpu_enable) {
+            collectCPUProfile();
+        }
 
-            lastCollectTime = System.currentTimeMillis();
-
-            if (Config.proc_profile_cpu_enable) {
-                collectCPUProfile();
-            }
-
-            if (Config.proc_profile_mem_enable) {
-                collectMemProfile();
-            }
+        if (Config.proc_profile_mem_enable) {
+            collectMemProfile();
         }
 
         deleteExpiredFiles();
@@ -79,80 +67,37 @@ public class ProcProfileCollector extends FrontendDaemon {
 
     private void collectMemProfile() {
         String fileName = MEM_FILE_NAME_PREFIX + currentTimeString() + ".html";
-        collectProfile(StarRocksFE.STARROCKS_HOME_DIR + "/bin/async-profiler/bin/asprof",
-                "-e", "alloc",
-                "--alloc", "2m",
-                "-d", String.valueOf(Config.proc_profile_collect_time_s),
-                "-f", profileLogDir + "/" +  fileName,
-                getPid());
+        AsyncProfiler profiler = AsyncProfiler.getInstance();
+        try {
+            profiler.execute(String.format("start,quiet,event=alloc,alloc=2m,cstack=vm,file=%s", profileLogDir + "/" + fileName));
+            Thread.sleep(Config.proc_profile_collect_time_s * 1000L);
+            profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
+        } catch (Exception e) {
+            checkAndLog(() -> LOG.warn("collect memory profile failed, reason: {}", e.getMessage()));
+        }
 
         try {
             compressFile(fileName);
         } catch (IOException e) {
-            checkAndLog(() -> LOG.warn("compress file {} failed, reason: {}", fileName, e.getMessage()));
+            checkAndLog(() -> LOG.warn("compress memory file {} failed, reason: {}", fileName, e.getMessage()));
         }
     }
 
     private void collectCPUProfile() {
         String fileName = CPU_FILE_NAME_PREFIX + currentTimeString() + ".html";
-        collectProfile(StarRocksFE.STARROCKS_HOME_DIR + "/bin/async-profiler/bin/asprof",
-                "-e", "cpu",
-                "-d", String.valueOf(Config.proc_profile_collect_time_s),
-                "-f", profileLogDir + "/" +  fileName,
-                getPid());
+        AsyncProfiler profiler = AsyncProfiler.getInstance();
+        try {
+            profiler.execute(String.format("start,quiet,event=cpu,cstack=vm,file=%s", profileLogDir + "/" + fileName));
+            Thread.sleep(Config.proc_profile_collect_time_s * 1000L);
+            profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
+        } catch (Exception e) {
+            checkAndLog(() -> LOG.warn("collect cpu profile failed, reason: {}", e.getMessage()));
+        }
 
         try {
             compressFile(fileName);
         } catch (IOException e) {
             checkAndLog(() -> LOG.warn("compress file {} failed, reason: {}", fileName, e.getMessage()));
-        }
-    }
-
-    private void collectProfile(String... command) {
-        try {
-            ProcessBuilder processBuilder = new ProcessBuilder(command);
-            Process process = processBuilder.start();
-            process.waitFor();
-            if (process.exitValue() != 0) {
-                checkAndLog(() -> LOG.warn("collect profile failed, stdout: {}, stderr: {}",
-                        getMsgFromInputStream(process.getInputStream()),
-                        getMsgFromInputStream(process.getErrorStream())));
-                stopProfile();
-            }
-        } catch (IOException | InterruptedException e) {
-            checkAndLog(() -> LOG.warn("collect profile failed, reason: {}", e.getMessage()));
-        }
-    }
-
-    private void stopProfile() {
-        try {
-            ProcessBuilder processBuilder = new ProcessBuilder(StarRocksFE.STARROCKS_HOME_DIR + "/bin/profiler.sh",
-                    "stop",
-                    getPid());
-            Process process = processBuilder.start();
-            boolean terminated = process.waitFor(10, TimeUnit.SECONDS);
-            if (!terminated) {
-                process.destroyForcibly();
-            }
-        } catch (IOException | InterruptedException e) {
-            checkAndLog(() -> LOG.warn("stop profile failed, reason: {}", e.getMessage()));
-        }
-    }
-
-    private String getMsgFromInputStream(InputStream inputStream) {
-        if (inputStream == null) {
-            return "";
-        }
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line).append("\n");
-            }
-            return sb.toString();
-        } catch (IOException e) {
-            checkAndLog(() -> LOG.warn("get message from input stream failed, reason: {}", e.getMessage()));
-            return "";
         }
     }
 
@@ -224,13 +169,6 @@ public class ProcProfileCollector extends FrontendDaemon {
         return fileName.startsWith(CPU_FILE_NAME_PREFIX) ?
                 fileName.substring(CPU_FILE_NAME_PREFIX.length(), fileName.indexOf("."))
                 : fileName.substring(MEM_FILE_NAME_PREFIX.length(), fileName.indexOf("."));
-    }
-
-    private String getPid() {
-        return ManagementFactory
-                .getRuntimeMXBean()
-                .getName()
-                .split("@")[0];
     }
 
     private void checkAndLog(Runnable runnable) {

@@ -18,16 +18,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.parser.NodePosition;
@@ -48,21 +44,9 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         this.orderByElements = orderByElements;
     }
 
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Database", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Table", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Columns", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("UpdateTime", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Healthy", ScalarType.createVarchar(5)))
-                    .addColumn(new Column("ColumnStats", ScalarType.createVarcharType(128)))
-                    .build();
-
     public static List<String> showBasicStatsMeta(ConnectContext context,
                                                   BasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "");
+        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "", "", "");
         long dbId = basicStatsMeta.getDbId();
         long tableId = basicStatsMeta.getTableId();
         List<String> columns = basicStatsMeta.getColumns();
@@ -95,13 +79,16 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         row.set(5, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
         row.set(6, (int) (basicStatsMeta.getHealthy() * 100) + "%");
         row.set(7, basicStatsMeta.getColumnStatsString());
+        row.set(8, basicStatsMeta.getTabletStatsReportTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        row.set(9, basicStatsMeta.getTableHealthyMetrics(table).toString());
+        row.set(10, StatisticUtils.getTableLastUpdateTime(table).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
 
         return row;
     }
 
     public static List<String> showExternalBasicStatsMeta(ConnectContext context,
                                                           ExternalBasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "");
+        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "", "", "", "");
         String catalogName = basicStatsMeta.getCatalogName();
         String dbName = basicStatsMeta.getDbName();
         String tableName = basicStatsMeta.getTableName();
@@ -137,16 +124,6 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         row.set(7, basicStatsMeta.getColumnStatsString());
 
         return row;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

@@ -21,8 +21,8 @@ import com.starrocks.persist.HbPackage;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TStatusCode;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -43,35 +43,35 @@ public class BackendHbResponseTest {
         BackendHbResponse resp =
                 new BackendHbResponse(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores, memLimitBytes);
 
-        Assert.assertEquals(beId, resp.getBeId());
-        Assert.assertEquals(bePort, resp.getBePort());
-        Assert.assertEquals(httpPort, resp.getHttpPort());
-        Assert.assertEquals(brpcPort, resp.getBrpcPort());
-        Assert.assertEquals(starletPort, resp.getStarletPort());
-        Assert.assertEquals(version, resp.getVersion());
-        Assert.assertEquals(cpuCores, resp.getCpuCores());
-        Assert.assertEquals(memLimitBytes, resp.getMemLimitBytes());
-        Assert.assertEquals(TStatusCode.OK, resp.getStatusCode());
+        Assertions.assertEquals(beId, resp.getBeId());
+        Assertions.assertEquals(bePort, resp.getBePort());
+        Assertions.assertEquals(httpPort, resp.getHttpPort());
+        Assertions.assertEquals(brpcPort, resp.getBrpcPort());
+        Assertions.assertEquals(starletPort, resp.getStarletPort());
+        Assertions.assertEquals(version, resp.getVersion());
+        Assertions.assertEquals(cpuCores, resp.getCpuCores());
+        Assertions.assertEquals(memLimitBytes, resp.getMemLimitBytes());
+        Assertions.assertEquals(TStatusCode.OK, resp.getStatusCode());
 
         // json serialize
         String json = GsonUtils.GSON.toJson(resp);
         BackendHbResponse respJson = GsonUtils.GSON.fromJson(json, BackendHbResponse.class);
-        Assert.assertEquals(beId, respJson.getBeId());
-        Assert.assertEquals(bePort, respJson.getBePort());
-        Assert.assertEquals(httpPort, respJson.getHttpPort());
-        Assert.assertEquals(brpcPort, respJson.getBrpcPort());
-        Assert.assertEquals(starletPort, respJson.getStarletPort());
-        Assert.assertEquals(version, respJson.getVersion());
-        Assert.assertEquals(cpuCores, respJson.getCpuCores());
-        Assert.assertEquals(memLimitBytes, respJson.getMemLimitBytes());
-        Assert.assertEquals(TStatusCode.OK, respJson.getStatusCode());
+        Assertions.assertEquals(beId, respJson.getBeId());
+        Assertions.assertEquals(bePort, respJson.getBePort());
+        Assertions.assertEquals(httpPort, respJson.getHttpPort());
+        Assertions.assertEquals(brpcPort, respJson.getBrpcPort());
+        Assertions.assertEquals(starletPort, respJson.getStarletPort());
+        Assertions.assertEquals(version, respJson.getVersion());
+        Assertions.assertEquals(cpuCores, respJson.getCpuCores());
+        Assertions.assertEquals(memLimitBytes, respJson.getMemLimitBytes());
+        Assertions.assertEquals(TStatusCode.OK, respJson.getStatusCode());
     }
 
     @Test
     public void testSerializeHbResponseStatusCode() throws IOException {
         HbPackage hbPackage = new HbPackage();
         BackendHbResponse hbResponse = new BackendHbResponse(1, TStatusCode.SHUTDOWN, "Shutdown");
-        Assert.assertEquals(TStatusCode.SHUTDOWN, hbResponse.getStatusCode());
+        Assertions.assertEquals(TStatusCode.SHUTDOWN, hbResponse.getStatusCode());
         hbPackage.addHbResponse(hbResponse);
 
         DataOutputBuffer buffer = new DataOutputBuffer(1024);
@@ -83,15 +83,15 @@ public class BackendHbResponseTest {
         short opCode = in.readShort();
         JournalEntity replayEntry = new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, in));
 
-        Assert.assertEquals(OperationType.OP_HEARTBEAT_V2, replayEntry.opCode());
+        Assertions.assertEquals(OperationType.OP_HEARTBEAT_V2, replayEntry.opCode());
         HbPackage replayHbPackage = (HbPackage) replayEntry.data();
-        Assert.assertEquals(1, replayHbPackage.getHbResults().size());
+        Assertions.assertEquals(1, replayHbPackage.getHbResults().size());
         HeartbeatResponse replayHbResponse = replayHbPackage.getHbResults().get(0);
-        Assert.assertEquals(HeartbeatResponse.Type.BACKEND, replayHbResponse.getType());
-        Assert.assertTrue(replayHbResponse instanceof BackendHbResponse);
+        Assertions.assertEquals(HeartbeatResponse.Type.BACKEND, replayHbResponse.getType());
+        Assertions.assertTrue(replayHbResponse instanceof BackendHbResponse);
 
         // ensure the status code can be replayed through the edit log, so the follower can be synced with the leader
         BackendHbResponse replayBackendResponse = (BackendHbResponse) replayHbResponse;
-        Assert.assertEquals(TStatusCode.SHUTDOWN, replayBackendResponse.getStatusCode());
+        Assertions.assertEquals(TStatusCode.SHUTDOWN, replayBackendResponse.getStatusCode());
     }
 }

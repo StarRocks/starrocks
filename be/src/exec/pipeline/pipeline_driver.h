@@ -223,13 +223,13 @@ public:
 public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
                    Pipeline* pipeline, int32_t driver_id)
-            : _operators(operators),
+            : _observer(this),
+              _operators(operators),
               _query_ctx(query_ctx),
               _fragment_ctx(fragment_ctx),
               _pipeline(pipeline),
               _source_node_id(operators[0]->get_plan_node_id()),
-              _driver_id(driver_id),
-              _observer(this) {
+              _driver_id(driver_id) {
         _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
         for (auto& op : _operators) {
             _operator_stages[op->get_id()] = OperatorStage::INIT;
@@ -338,10 +338,10 @@ public:
     void cancel_operators(RuntimeState* runtime_state);
 
     Operator* sink_operator() { return _operators.back().get(); }
-    bool is_ready() {
+    bool is_ready() const {
         return _state == DriverState::READY || _state == DriverState::RUNNING || _state == DriverState::LOCAL_WAITING;
     }
-    bool is_finished() {
+    bool is_finished() const {
         return _state == DriverState::FINISH || _state == DriverState::CANCELED ||
                _state == DriverState::INTERNAL_ERROR;
     }
@@ -512,13 +512,13 @@ public:
 
 protected:
     PipelineDriver()
-            : _operators(),
+            : _observer(this),
+              _operators(),
               _query_ctx(nullptr),
               _fragment_ctx(nullptr),
               _pipeline(nullptr),
               _source_node_id(0),
-              _driver_id(0),
-              _observer(this) {}
+              _driver_id(0) {}
 
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT_NS = 100'000'000L;
@@ -549,6 +549,7 @@ protected:
     void _update_global_rf_timer();
 
     RuntimeState* _runtime_state = nullptr;
+    PipelineObserver _observer;
     Operators _operators;
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;
@@ -595,8 +596,6 @@ protected:
     std::atomic<bool> _has_log_cancelled{false};
 
     std::atomic<bool> _is_operator_cancelled{false};
-
-    PipelineObserver _observer;
 
     std::unique_ptr<PipelineTimerTask> _global_rf_timer;
 

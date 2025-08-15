@@ -16,12 +16,13 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,7 +35,7 @@ public class PipelineDriverAllocatorTest {
 
     private final int numCpuCores = 64;
 
-    @Before
+    @BeforeEach
     public void before() {
         prevDriverLowWater = GlobalVariable.getQueryQueueDriverLowWater();
         prevDriverHighWater = GlobalVariable.getQueryQueueDriverHighWater();
@@ -42,7 +43,7 @@ public class PipelineDriverAllocatorTest {
         mockCPUCores(numCpuCores);
     }
 
-    @After
+    @AfterEach
     public void after() {
         GlobalVariable.setQueryQueueDriverLowWater(prevDriverLowWater);
         GlobalVariable.setQueryQueueDriverHighWater(prevDriverHighWater);
@@ -219,6 +220,8 @@ public class PipelineDriverAllocatorTest {
     }
 
     private LogicalSlot genSlot(int numFragments, int dop) {
-        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe-name", 0, 1, 0, 0, 0, numFragments, dop);
+        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe-name", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                0, 1, 0, 0, 0,
+                numFragments, dop);
     }
 }

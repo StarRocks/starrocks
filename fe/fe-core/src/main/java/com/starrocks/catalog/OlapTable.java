@@ -47,12 +47,12 @@ import com.google.gson.annotations.SerializedName;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
-import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.alter.OlapTableRollupJobBuilder;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -78,7 +78,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidOlapTableStateException;
-import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DateUtils;
@@ -123,6 +122,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.DropAutoIncrementMapTask;
 import com.starrocks.task.TabletTaskExecutor;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TPersistentIndexType;
@@ -360,7 +360,7 @@ public class OlapTable extends Table {
 
         for (Index index : indexes) {
             Set<ColumnId> columnIdsSetForIndex = index.getColumns().stream().collect(Collectors.toSet());
-            if (columnIdsSetForSchema.containsAll​(columnIdsSetForIndex)) {
+            if (columnIdsSetForSchema.containsAll(columnIdsSetForIndex)) {
                 hitIndexes.add(index);
             }
         }
@@ -491,10 +491,33 @@ public class OlapTable extends Table {
         tableProperty.setBinlogConfig(curBinlogConfig);
     }
 
+    public void setFlatJsonConfig(FlatJsonConfig flatJsonConfig) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(Maps.newHashMap());
+        }
+        tableProperty.modifyTableProperties(flatJsonConfig.toProperties());
+        tableProperty.setFlatJsonConfig(flatJsonConfig);
+    }
+
+    public FlatJsonConfig getFlatJsonConfig() {
+        if (tableProperty != null) {
+            return tableProperty.getFlatJsonConfig();
+        }
+        return null;
+    }
+
     public boolean containsBinlogConfig() {
         if (tableProperty == null ||
                 tableProperty.getBinlogConfig() == null ||
                 tableProperty.getBinlogConfig().getVersion() == BinlogConfig.INVALID) {
+            return false;
+        }
+        return true;
+    }
+
+    public boolean containsFlatJsonConfig() {
+        if (tableProperty == null ||
+                tableProperty.getFlatJsonConfig() == null) {
             return false;
         }
         return true;
@@ -1280,32 +1303,40 @@ public class OlapTable extends Table {
                 continue;
             }
             // one item
-            List<String> singleValues = listPartitionInfo.getIdToValues().get(partitionId);
-            if (CollectionUtils.isNotEmpty(singleValues)) {
+            List<LiteralExpr> literalValues = listPartitionInfo.getLiteralExprValues().get(partitionId);
+            if (CollectionUtils.isNotEmpty(literalValues)) {
                 List<List<String>> cellValue = Lists.newArrayList();
                 // for one item(single value), treat it as multi values.
-                for (String val : singleValues) {
-                    cellValue.add(Lists.newArrayList(val));
+                for (LiteralExpr val : literalValues) {
+                    cellValue.add(Lists.newArrayList(val.getStringValue()));
                 }
                 partitionItems.put(partitionName, new PListCell(cellValue));
             }
 
             // multi items
-            List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partitionId);
-            if (CollectionUtils.isNotEmpty(multiValues)) {
-                if (CollectionUtils.isEmpty(colIdxes)) {
-                    partitionItems.put(partitionName, new PListCell(multiValues));
-                } else {
-                    List<List<String>> cellValue = Lists.newArrayList();
-                    for (List<String> multiValue : multiValues) {
-                        List<String> selectedValues = Lists.newArrayList();
-                        for (int idx : colIdxes) {
-                            selectedValues.add(multiValue.get(idx));
+            List<List<LiteralExpr>> multiExprValues = listPartitionInfo.getMultiLiteralExprValues().get(partitionId);
+            if (CollectionUtils.isNotEmpty(multiExprValues)) {
+                List<List<String>> multiValues = Lists.newArrayList();
+                for (List<LiteralExpr> exprValues : multiExprValues) {
+                    List<String> values = Lists.newArrayList();
+                    if (CollectionUtils.isEmpty(colIdxes)) {
+                        for (LiteralExpr literalExpr : exprValues) {
+                            values.add(literalExpr.getStringValue());
                         }
-                        cellValue.add(selectedValues);
+                    } else {
+                        for (int idx : colIdxes) {
+                            if (idx >= 0 && idx < exprValues.size()) {
+                                values.add(exprValues.get(idx).getStringValue());
+                            } else {
+                                // print index and exprValues
+                                throw new SemanticException("Invalid column index during partition processing. " +
+                                        "Index: " + idx + ", ExprValues: " + exprValues);
+                            }
+                        }
                     }
-                    partitionItems.put(partitionName, new PListCell(cellValue));
+                    multiValues.add(values);
                 }
+                partitionItems.put(partitionName, new PListCell(multiValues));
             }
         }
         return partitionItems;
@@ -1349,22 +1380,24 @@ public class OlapTable extends Table {
      * Infer the distribution info based on partitions and cluster status
      */
     public void inferDistribution(DistributionInfo info) throws DdlException {
-        if (info.getBucketNum() == 0) {
-            if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
-                // infer bucket num
+        if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
+            // infer bucket num
+            if (info.getBucketNum() == 0) {
                 int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
                         5, Config.enable_auto_tablet_distribution);
                 info.setBucketNum(numBucket);
-            } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
-                // prior to use user set mutable bucket num
-                long numBucket = getMutableBucketNum();
-                if (numBucket <= 0) {
-                    numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
-                }
-                info.setBucketNum((int) numBucket);
-            } else {
-                throw new DdlException("Unknown distribution info type: " + info.getType());
             }
+        } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
+            // prior to use user set mutable bucket num
+            long numBucket = getMutableBucketNum();
+            if (numBucket > 0) {
+                info.setBucketNum((int) numBucket);
+            } else if (info.getBucketNum() == 0) {
+                numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
+                info.setBucketNum((int) numBucket);
+            }
+        } else {
+            throw new DdlException("Unknown distribution info type: " + info.getType());
         }
     }
 
@@ -1476,6 +1509,7 @@ public class OlapTable extends Table {
     }
 
     public void dropPartitionAndReserveTablet(String partitionName) {
+        // reserveTablets is true and partition is not recycled, so dbId -1 is ok.
         dropPartition(-1, partitionName, true, true);
     }
 
@@ -1485,6 +1519,9 @@ public class OlapTable extends Table {
 
     // check input partition has temporary partition
     public boolean inputHasTempPartition(List<Long> partitionIds) {
+        if (partitionIds == null) {
+            return false;
+        }
         for (Long pid : partitionIds) {
             if (tempPartitions.getPartition(pid) != null) {
                 return true;
@@ -2197,14 +2234,14 @@ public class OlapTable extends Table {
      *
      * return the old partition.
      */
-    public Partition replacePartition(Partition newPartition) {
+    public Partition replacePartition(long dbId, Partition newPartition) {
         Partition oldPartition = nameToPartition.remove(newPartition.getName());
 
         // For cloud native table, add partition into recycle Bin after truncate table.
         // It is no necessary for share nothing mode because file will be deleted throught
         // tablet report in this case.
         if (this.isCloudNativeTableOrMaterializedView()) {
-            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(-1, oldPartition);
+            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, oldPartition);
             recyclePartitionInfo.setRecoverable(false);
             GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
         }
@@ -2327,7 +2364,7 @@ public class OlapTable extends Table {
 
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             MaterializedIndex baseIdx = physicalPartition.getBaseIndex();
-            for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
+            for (Long tabletId : baseIdx.getTabletIds()) {
                 LocalTablet tablet = (LocalTablet) baseIdx.getTablet(tabletId);
                 List<Long> replicaBackendIds = tablet.getNormalReplicaBackendIds();
                 if (replicaBackendIds.size() < replicationNum) {
@@ -2461,6 +2498,13 @@ public class OlapTable extends Table {
         tableProperty.buildInMemory();
     }
 
+    public Boolean isFileBundling() {
+        if (tableProperty != null) {
+            return tableProperty.isFileBundling();
+        }
+        return false;
+    }
+
     public Boolean enablePersistentIndex() {
         if (tableProperty != null) {
             return tableProperty.enablePersistentIndex();
@@ -2579,6 +2623,31 @@ public class OlapTable extends Table {
         tableProperty.buildPersistentIndexType();
     }
 
+    public TCompactionStrategy getCompactionStrategy() {
+        if (tableProperty != null) {
+            return tableProperty.getCompactionStrategy();
+        }
+        return TCompactionStrategy.DEFAULT;
+    }
+
+    public void setCompactionStrategy(TCompactionStrategy compactionStrategy) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+
+        // only support DEFAULT and REAL_TIME for now
+        if (compactionStrategy == TCompactionStrategy.DEFAULT || compactionStrategy == TCompactionStrategy.REAL_TIME) {
+            tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
+                    TableProperty.compactionStrategyToString(compactionStrategy));
+        } else {
+            // do nothing
+            LOG.warn("Unknown TCompactionStrategy");
+            return;
+        }
+
+        tableProperty.buildCompactionStrategy();
+    }
+
     public Multimap<String, String> getLocation() {
         if (tableProperty != null) {
             return tableProperty.getLocation();
@@ -2610,6 +2679,10 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
                         Boolean.valueOf(enableReplicatedStorage).toString());
         tableProperty.buildReplicatedStorage();
+    }
+
+    public boolean allowBucketSizeSetting() {
+        return (defaultDistributionInfo instanceof RandomDistributionInfo) && Config.enable_automatic_bucket;
     }
 
     public Long getAutomaticBucketSize() {
@@ -2685,7 +2758,10 @@ public class OlapTable extends Table {
 
     public void updateBaseCompactionForbiddenTimeRanges(boolean isDrop) {
         try {
-            if (isDrop && getBaseCompactionForbiddenTimeRanges().isEmpty()) {
+            if (this.isCloudNativeTableOrMaterializedView()) {
+                return;
+            }
+            if (getBaseCompactionForbiddenTimeRanges().isEmpty()) {
                 return;
             }
             GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
@@ -2746,6 +2822,15 @@ public class OlapTable extends Table {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION,
                 TimeUtils.toHumanReadableString(duration));
         tableProperty.buildDataCachePartitionDuration();
+    }
+
+    public void setFileBundling(boolean fileBundling) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING,
+                        Boolean.valueOf(fileBundling).toString());
+        tableProperty.buildFileBundling();
     }
 
     public void setStorageCoolDownTTL(PeriodDuration duration) {
@@ -2809,7 +2894,7 @@ public class OlapTable extends Table {
         }
     }
 
-    public void replaceMatchPartitions(List<String> tempPartitionNames) {
+    public void replaceMatchPartitions(long dbId, List<String> tempPartitionNames) {
         for (String partitionName : tempPartitionNames) {
             Partition partition = tempPartitions.getPartition(partitionName);
             if (partition != null) {
@@ -2818,7 +2903,7 @@ public class OlapTable extends Table {
                 Partition oldPartition = nameToPartition.get(oldPartitionName);
                 if (oldPartition != null) {
                     // drop old partition
-                    dropPartition(-1, oldPartitionName, true);
+                    dropPartition(dbId, oldPartitionName, true);
                 }
                 // add new partition
                 addPartition(partition);
@@ -2854,7 +2939,7 @@ public class OlapTable extends Table {
      * names are still p1 and p2.
      *
      */
-    public void replaceTempPartitions(List<String> partitionNames, List<String> tempPartitionNames,
+    public void replaceTempPartitions(long dbId, List<String> partitionNames, List<String> tempPartitionNames,
                                       boolean strictRange, boolean useTempPartitionName) throws DdlException {
         if (partitionInfo instanceof RangePartitionInfo) {
             RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
@@ -2917,7 +3002,7 @@ public class OlapTable extends Table {
         // 1. drop old partitions
         for (String partitionName : partitionNames) {
             // This will also drop all tablets of the partition from TabletInvertedIndex
-            dropPartition(-1, partitionName, true);
+            dropPartition(dbId, partitionName, true);
         }
 
         // 2. add temp partitions' range info to rangeInfo, and remove them from
@@ -2946,14 +3031,14 @@ public class OlapTable extends Table {
 
     // used for unpartitioned table in insert overwrite
     // replace partition with temp partition
-    public void replacePartition(String sourcePartitionName, String tempPartitionName) {
+    public void replacePartition(long dbId, String sourcePartitionName, String tempPartitionName) {
         if (partitionInfo.getType() != PartitionType.UNPARTITIONED) {
             return;
         }
         // drop source partition
         Partition srcPartition = nameToPartition.get(sourcePartitionName);
         if (srcPartition != null) {
-            dropPartition(-1, sourcePartitionName, true);
+            dropPartition(dbId, sourcePartitionName, true);
         }
 
         Partition partition = tempPartitions.getPartition(tempPartitionName);
@@ -3294,12 +3379,12 @@ public class OlapTable extends Table {
     // If you are modifying this function, please check if you need to modify LakeTable.onDrop also.
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
+        super.onDrop(db, force, replay);
+
         // drop all temp partitions of this table, so that there is no temp partitions
         // in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
-        AlterMVJobExecutor.inactiveRelatedMaterializedView(this,
-                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()), replay);
         if (!replay && hasAutoIncrementColumn()) {
             sendDropAutoIncrementMapTask();
         }
@@ -3427,6 +3512,15 @@ public class OlapTable extends Table {
             }
         }
 
+        if (isFileBundling() && isCloudNativeTable()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, isFileBundling().toString());
+        }
+
+        if (getCompactionStrategy() != TCompactionStrategy.DEFAULT) {
+            properties.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, 
+                                TableProperty.compactionStrategyToString(getCompactionStrategy()));
+        }
+
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
         // partition live number
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
@@ -3464,6 +3558,16 @@ public class OlapTable extends Table {
         if (!Strings.isNullOrEmpty(foreignKeyConstraint) && hasForeignKeyConstraints()) {
             properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
                     ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()));
+        }
+        String timeDriftConstraintSpec = tableProperties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+        if (!Strings.isNullOrEmpty(timeDriftConstraintSpec)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
+        }
+
+        // partition_retention_condition
+        String partitionRetentionCondition = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION);
+        if (!Strings.isNullOrEmpty(partitionRetentionCondition)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
         }
         return properties;
     }
@@ -3516,6 +3620,34 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, storageType());
         }
 
+        // flat json enable
+        String flatJsonEnable = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE);
+        if (!Strings.isNullOrEmpty(flatJsonEnable)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, flatJsonEnable);
+
+            // Only include other flat JSON properties if flat_json.enable is true
+            if (Boolean.parseBoolean(flatJsonEnable)) {
+                // flat json null factor
+                String flatJsonNullFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR);
+                if (!Strings.isNullOrEmpty(flatJsonNullFactor)) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, flatJsonNullFactor);
+                }
+
+                // flat json sparsity factor
+                String flatJsonSparsityFactor =
+                        tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR);
+                if (!Strings.isNullOrEmpty(flatJsonSparsityFactor)) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, flatJsonSparsityFactor);
+                }
+
+                // flat json column max
+                String flatJsonColumnMax = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
+                if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
+                }
+            }
+        }
+
         return properties;
     }
 
@@ -3541,10 +3673,10 @@ public class OlapTable extends Table {
     }
 
     @Nullable
-    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionId) {
+    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionPathId) {
         FilePathInfo pathInfo = getDefaultFilePathInfo();
         if (pathInfo != null) {
-            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionId);
+            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionPathId);
         }
         return null;
     }
@@ -3729,5 +3861,16 @@ public class OlapTable extends Table {
             return listMap.entrySet().stream().collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
         }
         return null;
+    }
+
+    public boolean allowUpdateFileBundling() {
+        for (Partition partition : getPartitions()) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                if (physicalPartition.getMetadataSwitchVersion() != 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 }

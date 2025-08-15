@@ -269,6 +269,8 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
                 LOG(WARNING) << "Fail to load tablet from dir: " << status << " tablet:" << _clone_req.tablet_id
                              << ". schema_hash_dir='" << schema_hash_dir;
                 _error_msgs->push_back("load tablet from dir failed.");
+                (void)fs::remove_all(tablet_dir);
+                return status;
             }
 
             std::string dcgs_snapshot_file = strings::Substitute("$0/$1.dcgs_snapshot", schema_hash_dir, tablet_id);
@@ -282,6 +284,11 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
                 }
 
                 auto new_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+                if (new_tablet == nullptr) {
+                    std::string error_msg = strings::Substitute("tablet: $0 is not exist", tablet_id);
+                    LOG(WARNING) << error_msg;
+                    return Status::InternalError(error_msg);
+                }
 
                 auto data_dir = new_tablet->data_dir();
                 rocksdb::WriteBatch wb;
@@ -313,7 +320,10 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
 
         } else if (fs::path_exist(clone_meta_file)) {
             DCHECK(!fs::path_exist(clone_header_file));
-            status = tablet_manager->create_tablet_from_meta_snapshot(store, tablet_id, schema_hash, schema_hash_dir);
+            bool need_rebuild_pk_index = _clone_req.__isset.need_rebuild_pk_index && _clone_req.need_rebuild_pk_index;
+            status = tablet_manager->create_tablet_from_meta_snapshot(store, tablet_id, schema_hash, schema_hash_dir,
+                                                                      false, need_rebuild_pk_index,
+                                                                      config::pindex_rebuild_clone_wait_seconds);
             if (!status.ok()) {
                 LOG(WARNING) << "Fail to load tablet from snapshot: " << status << " tablet:" << _clone_req.tablet_id
                              << ". schema_hash_dir=" << schema_hash_dir;
@@ -983,8 +993,10 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
         RETURN_IF_ERROR(fs->link_file(from, to));
     }
     LOG(INFO) << "Linked " << clone_files.size() << " files from " << clone_dir << " to " << tablet_dir;
+    bool need_rebuild_pk_index = _clone_req.__isset.need_rebuild_pk_index && _clone_req.need_rebuild_pk_index;
     // Note that |snapshot_meta| may be modified by `load_snapshot`.
-    Status st = tablet->updates()->load_snapshot(snapshot_meta);
+    Status st = tablet->updates()->load_snapshot(snapshot_meta, false, false, need_rebuild_pk_index,
+                                                 config::pindex_rebuild_clone_wait_seconds);
     if (!st.ok()) {
         Status clear_st;
         for (const std::string& filename : tablet_files) {

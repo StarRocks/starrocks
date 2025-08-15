@@ -3,7 +3,7 @@ description: Kafka ルーチン ロード with 共有データ storage
 displayed_sidebar: docs
 ---
 
-# Kafka routine load StarRocks using shared-data storage
+# ルーチンロードで Kafka から共有データクラスタにデータをロード
 
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'

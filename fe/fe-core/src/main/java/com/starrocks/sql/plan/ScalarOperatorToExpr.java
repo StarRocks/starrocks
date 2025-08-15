@@ -56,11 +56,13 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.MapExpr;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -88,6 +90,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
+import com.starrocks.sql.spm.SPMFunctions;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunctionBinaryType;
 
@@ -384,13 +387,16 @@ public class ScalarOperatorToExpr {
         public Expr visitMatchExprOperator(MatchExprOperator operator, FormatterContext context) {
             Expr child1 = buildExpr.build(operator.getChild(0), context);
             Expr child2 = buildExpr.build(operator.getChild(1), context);
-            return new MatchExpr(child1, child2);
+            return new MatchExpr(operator.getMatchOperator(), child1, child2);
         }
 
         @Override
         public Expr visitCall(CallOperator call, FormatterContext context) {
             String fnName = call.getFnName();
             Expr callExpr;
+            if (!FeConstants.runningUnitTest && SPMFunctions.isSPMFunctions(call)) {
+                throw UnsupportedException.unsupportedException("spm function only used in create baseline stmt");
+            }
             switch (fnName.toLowerCase()) {
                 /*
                  * Arithmetic

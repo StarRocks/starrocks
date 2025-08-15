@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "column/column.h"
 #include "exprs/function_helper.h"
 
 namespace starrocks {
@@ -34,6 +33,13 @@ public:
      * @return TYPE_OBJECT
      */
     DEFINE_VECTORIZED_FN(bitmap_hash);
+
+    /**
+     * @param:
+     * @paramType columns: [TYPE_VARCHAR]
+     * @return TYPE_OBJECT
+     */
+    DEFINE_VECTORIZED_FN(bitmap_hash64);
 
     /**
      * @param: 

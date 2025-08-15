@@ -38,7 +38,6 @@
 
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
-#include "runtime/string_value.h"
 #include "storage/types.h"
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
@@ -61,7 +60,7 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         precision = (scalar_type.__isset.precision) ? scalar_type.precision : -1;
 
         if (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 ||
-            type == TYPE_DECIMAL128) {
+            type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256) {
             DCHECK(scalar_type.__isset.precision);
             DCHECK(scalar_type.__isset.scale);
         }
@@ -242,6 +241,8 @@ std::string TypeDescriptor::debug_string() const {
         return strings::Substitute("DECIMAL64($0, $1)", precision, scale);
     case TYPE_DECIMAL128:
         return strings::Substitute("DECIMAL128($0, $1)", precision, scale);
+    case TYPE_DECIMAL256:
+        return strings::Substitute("DECIMAL256($0, $1)", precision, scale);
     case TYPE_ARRAY:
         return strings::Substitute("ARRAY<$0>", children[0].debug_string());
     case TYPE_MAP:
@@ -274,8 +275,7 @@ bool TypeDescriptor::support_orderby() const {
     if (type == TYPE_ARRAY) {
         return children[0].support_orderby();
     }
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_STRUCT;
+    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL && type != TYPE_MAP;
 }
 
 bool TypeDescriptor::support_groupby() const {
@@ -322,7 +322,7 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_PERCENTILE:
     case TYPE_JSON:
     case TYPE_VARBINARY:
-        return sizeof(StringValue);
+        return sizeof(Slice);
 
     case TYPE_NULL:
     case TYPE_BOOLEAN:
@@ -355,6 +355,9 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_DECIMALV2:
     case TYPE_DECIMAL128:
         return 16;
+    case TYPE_DECIMAL256:
+    case TYPE_INT256:
+        return 32;
     case TYPE_ARRAY:
     case TYPE_MAP:
         return sizeof(void*); // sizeof(Collection*)

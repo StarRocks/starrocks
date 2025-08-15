@@ -13,7 +13,7 @@ displayed_sidebar: docs
 ## 语法
 
 ```Haskell
-PERCENTILE_APPROX(expr, p[, compression])
+DOUBLE PERCENTILE_APPROX(expr, DOUBLE p[, DOUBLE compression])
 ```
 
 ## 参数说明

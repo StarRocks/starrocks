@@ -23,6 +23,8 @@ import com.starrocks.catalog.mv.MVTimelinessListPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessNonPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessRangePartitionArbiter;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.UnsupportedException;
@@ -44,8 +46,9 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public class MvRefreshArbiter {
     private static final Logger LOG = LogManager.getLogger(MvRefreshArbiter.class);
 
-    public static boolean needsToRefreshTable(MaterializedView mv, Table table, boolean isQueryRewrite) {
-        Optional<Boolean> needsToRefresh = needsToRefreshTable(mv, table, true, isQueryRewrite);
+    public static boolean needsToRefreshTable(MaterializedView mv, BaseTableInfo baseTableInfo, Table table,
+                                              boolean isQueryRewrite) {
+        Optional<Boolean> needsToRefresh = needsToRefreshTable(mv, baseTableInfo, table, true, isQueryRewrite);
         if (needsToRefresh.isPresent()) {
             return needsToRefresh.get();
         }
@@ -85,7 +88,7 @@ public class MvRefreshArbiter {
         logMVPrepare(mv, "MV refresh arbiter start to get partition names to refresh, query rewrite mode: {}",
                 mvConsistencyRewriteMode);
         MVTimelinessArbiter timelinessArbiter = buildMVTimelinessArbiter(mv, isQueryRewrite);
-        try {
+        try (Timer ignored = Tracers.watchScope("MVTimelinessUpdateInfo")) {
             return timelinessArbiter.getMVTimelinessUpdateInfo(mvConsistencyRewriteMode);
         } catch (AnalysisException e) {
             logMVPrepare(mv, "Failed to get mv timeliness info: {}", DebugUtil.getStackTrace(e));
@@ -119,6 +122,7 @@ public class MvRefreshArbiter {
      * @return Optional<Boolean> : true if needs to refresh, false if not, empty if there are some unkown results.
      */
     private static Optional<Boolean> needsToRefreshTable(MaterializedView mv,
+                                                         BaseTableInfo baseTableInfo,
                                                          Table baseTable,
                                                          boolean withMv,
                                                          boolean isQueryRewrite) {
@@ -128,7 +132,7 @@ public class MvRefreshArbiter {
         } else if (baseTable.isNativeTableOrMaterializedView()) {
             OlapTable olapBaseTable = (OlapTable) baseTable;
 
-            if (!mv.shouldRefreshTable(baseTable.name)) {
+            if (!mv.shouldRefreshTable(baseTableInfo.getDbName(), baseTable.name)) {
                 return Optional.of(false);
             }
 

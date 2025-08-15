@@ -18,35 +18,33 @@
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaRoutineLoadJobsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
         {"ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"PAUSE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"END_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
-        {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DATA_SOURCE_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DATA_SOURCE_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"CURRENT_TASK_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"JOB_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DATA_SOURCE_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         false},
-        {"CUSTOM_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"STATISTICS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"PROGRESS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"REASONS_OF_STATE_CHANGED", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         true},
-        {"ERROR_LOG_URLS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"OTHER_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"JOB_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DATA_SOURCE_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"CUSTOM_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"STATISTICS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"PROGRESS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"REASONS_OF_STATE_CHANGED", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"ERROR_LOG_URLS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"OTHER_MSG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"LATEST_SOURCE_POSITION", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true},
-        {"OFFSET_LAG", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true}};
+        {"OFFSET_LAG", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true},
+        {"TIMESTAMP_PROGRESS", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true}};
 
 SchemaRoutineLoadJobsScanner::SchemaRoutineLoadJobsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -79,7 +77,7 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < _result.loads.size(); _cur_idx++) {
         auto& info = _result.loads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 21) {
+            if (slot_id < 1 || slot_id > 22) {
                 return Status::InternalError(strings::Substitute("invalid slot id: $0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -255,6 +253,21 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                 Status s = JsonValue::parse(offset_lag, &json_value);
                 if (!s.ok()) {
                     LOG(WARNING) << "parse offset_lag failed. offset_lag:" << offset_lag.to_string() << " error:" << s;
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                } else {
+                    fill_column_with_slot<TYPE_JSON>(column.get(), (void*)&json_value_ptr);
+                }
+                break;
+            }
+            case 22: {
+                // timestamp_progress
+                Slice timestamp_progress = Slice(info.timestamp_progress);
+                JsonValue json_value;
+                JsonValue* json_value_ptr = &json_value;
+                Status s = JsonValue::parse(timestamp_progress, &json_value);
+                if (!s.ok()) {
+                    LOG(WARNING) << "parse timestamp_progress failed. timestamp_progress:"
+                                 << timestamp_progress.to_string() << " error:" << s;
                     down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 } else {
                     fill_column_with_slot<TYPE_JSON>(column.get(), (void*)&json_value_ptr);

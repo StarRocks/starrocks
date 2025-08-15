@@ -18,16 +18,16 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
 
 public class JsonTypeTest extends PlanTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 
@@ -84,19 +84,6 @@ public class JsonTypeTest extends PlanTestBase {
     /**
      * Arrow expression should be rewrite to json_query
      */
-    @Test
-    public void testRewriteArrowExpr() throws Exception {
-        assertPlanContains("select parse_json('1') -> '$.k1' ",
-                "json_query(parse_json('1'), '$.k1')");
-        assertPlanContains("select v_json -> '$.k1' from tjson_test ",
-                "json_query(2: v_json, '$.k1')");
-
-        // arrow and cast
-        assertPlanContains("select cast(parse_json('1') -> '$.k1' as int) ",
-                "json_query(parse_json('1'), '$.k1')");
-        assertPlanContains("select cast(v_json -> '$.k1' as int) from tjson_test",
-                "CAST(get_json_int(2: v_json, '$.k1') AS INT)");
-    }
 
     @Test
     public void testPredicateImplicitCast() throws Exception {
@@ -251,13 +238,13 @@ public class JsonTypeTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "array_join(14: flat_json_meta, ', ')");
 
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(
                 "select flat_json_meta(12) from tjson_test[_META_]"));
 
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(
                 "select flat_json_meta(v_json) from tjson_test[_META_] group by v_INT"));
 
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(
                 "select flat_json_meta(json_query(v_json, '$.v1')) from tjson_test[_META_]"));
     }
 }

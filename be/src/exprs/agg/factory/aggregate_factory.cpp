@@ -21,8 +21,11 @@
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "types/logical_type.h"
 #include "udf/java/java_function_fwd.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
+
+DEFINE_FAIL_POINT(not_exist_agg_function);
 
 AggregateFuncResolver::AggregateFuncResolver() {
     register_avg();
@@ -37,6 +40,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     register_others();
     register_retract_functions();
     register_hypothesis_testing();
+    register_boolean();
 }
 
 AggregateFuncResolver::~AggregateFuncResolver() = default;
@@ -117,7 +121,7 @@ static const AggregateFunction* get_function(const std::string& name, LogicalTyp
     }
 
     auto is_decimal_type = [](LogicalType lt) {
-        return lt == TYPE_DECIMAL32 || lt == TYPE_DECIMAL64 || lt == TYPE_DECIMAL128;
+        return lt == TYPE_DECIMAL32 || lt == TYPE_DECIMAL64 || lt == TYPE_DECIMAL128 || lt == TYPE_DECIMAL256;
     };
     if (func_version > 2 && is_decimal_type(arg_type)) {
         if (name == "sum") {
@@ -156,6 +160,7 @@ static const AggregateFunction* get_function(const std::string& name, LogicalTyp
 
 const AggregateFunction* get_aggregate_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
                                                 bool is_null, TFunctionBinaryType::type binary_type, int func_version) {
+    FAIL_POINT_TRIGGER_RETURN(not_exist_agg_function, nullptr);
     return get_function(name, arg_type, return_type, false, is_null, binary_type, func_version);
 }
 

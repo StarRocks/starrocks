@@ -38,8 +38,11 @@ import com.starrocks.thrift.TColumnStatsUsageRes;
 import com.starrocks.thrift.TSchemaTableType;
 import org.apache.commons.lang3.NotImplementedException;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -70,9 +73,26 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
         return new ColumnStatsUsageSystemTable();
     }
 
+    private static final Set<String> SUPPORTED_EQUAL_COLUMNS =
+            Collections.unmodifiableSet(new TreeSet<>(String.CASE_INSENSITIVE_ORDER) {
+                {
+                    add("TABLE_CATALOG");
+                    add("TABLE_DATABASE");
+                    add("TABLE_NAME");
+                }
+            });
+
     @Override
-    public boolean supportFeEvaluation() {
-        return FeConstants.runningUnitTest;
+    public boolean supportFeEvaluation(ScalarOperator predicate) {
+        // TODO(FIXME): use it in the non unit test environment
+        if (!FeConstants.runningUnitTest) {
+            return false;
+        }
+        final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        if (!isOnlyEqualConstantOps(conjuncts)) {
+            return false;
+        }
+        return isSupportedEqualPredicateColumn(conjuncts, SUPPORTED_EQUAL_COLUMNS);
     }
 
     @Override
@@ -119,9 +139,9 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
         Optional<Pair<TableName, ColumnId>> names = columnFullId.toNames();
         List<ScalarOperator> result = Lists.newArrayList();
         result.add(ConstantOperator.createVarchar(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME));
-        result.add(ConstantOperator.createVarchar(names.map(x -> x.first.getDb()).orElse(null)));
-        result.add(ConstantOperator.createVarchar(names.map(x -> x.first.getTbl()).orElse(null)));
-        result.add(ConstantOperator.createVarchar(names.map(x -> x.second.getId()).orElse(null)));
+        result.add(ConstantOperator.createNullableObject(names.map(x -> x.first.getDb()).orElse(null), Type.VARCHAR));
+        result.add(ConstantOperator.createNullableObject(names.map(x -> x.first.getTbl()).orElse(null), Type.VARCHAR));
+        result.add(ConstantOperator.createNullableObject(names.map(x -> x.second.getId()).orElse(null), Type.VARCHAR));
         result.add(ConstantOperator.createVarchar(columnUsage.getUseCaseString()));
         result.add(ConstantOperator.createDatetime(columnUsage.getLastUsed()));
         result.add(ConstantOperator.createDatetime(columnUsage.getCreated()));

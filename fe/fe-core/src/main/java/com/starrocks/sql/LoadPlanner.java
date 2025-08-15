@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
@@ -56,7 +55,6 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadScanNode;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -70,6 +68,7 @@ import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -121,7 +120,6 @@ public class LoadPlanner {
     private List<BrokerFileGroup> fileGroups;
     private List<List<TBrokerFileStatus>> fileStatusesList;
     private int filesAdded;
-    private Analyzer analyzer;
 
     IdGenerator<PlanNodeId> planNodeGenerator = PlanNodeId.createGenerator();
 
@@ -136,7 +134,7 @@ public class LoadPlanner {
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
 
-    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
@@ -175,10 +173,8 @@ public class LoadPlanner {
         } else {
             this.parallelInstanceNum = Config.load_parallel_instance_num;
         }
-        this.analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), this.context);
-        this.analyzer.setTimezone(timezone);
         this.timezone = timezone;
-        this.descTable = this.analyzer.getDescTbl();
+        this.descTable = new DescriptorTable();
         this.loadMemLimit = loadMemLimit;
         this.execMemLimit = execMemLimit;
         this.sessionVariables = sessionVariables;
@@ -218,11 +214,11 @@ public class LoadPlanner {
         this.parallelInstanceNum = parallelInstanceNum;
         this.columnDescs = columnDescs;
         this.streamLoadInfo = streamLoadInfo;
-        this.analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), this.context);
-        this.descTable = analyzer.getDescTbl();
+        this.descTable = new DescriptorTable();
         this.enableDictOptimize = Config.enable_dict_optimize_stream_load;
         this.startTime = System.currentTimeMillis();
         this.sessionVariables = sessionVariables;
+        this.computeResource = streamLoadInfo.getComputeResource();
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
@@ -237,14 +233,19 @@ public class LoadPlanner {
         this.timeoutS = timeoutS;
         this.etlJobType = EtlJobType.STREAM_LOAD;
         this.context.getSessionVariable().setEnablePipelineEngine(true);
-    }
-
-    public void setWarehouseId(long warehouseId) {
-        this.warehouseId = warehouseId;
+        this.computeResource = streamLoadInfo.getComputeResource();
     }
 
     public long getWarehouseId() {
-        return warehouseId;
+        return computeResource.getWarehouseId();
+    }
+
+    public void setComputeResource(ComputeResource computeResource) {
+        this.computeResource = computeResource;
+    }
+
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     public void setBatchWrite(
@@ -421,24 +422,26 @@ public class LoadPlanner {
         if (this.etlJobType == EtlJobType.BROKER) {
             FileScanNode fileScanNode = new FileScanNode(new PlanNodeId(planNodeGenerator.getNextId().asInt()),
                     tupleDesc,
-                    "FileScanNode", fileStatusesList, filesAdded, warehouseId);
+                    "FileScanNode", fileStatusesList, filesAdded, computeResource);
             fileScanNode.setLoadInfo(loadJobId, txnId, destTable, brokerDesc, fileGroups, strictMode,
                     parallelInstanceNum);
             fileScanNode.setUseVectorizedLoad(true);
             fileScanNode.setJSONOptions(jsonOptions);
-            fileScanNode.init(analyzer);
-            fileScanNode.finalizeStats(analyzer);
+            fileScanNode.init(descTable);
+            fileScanNode.finalizeStats();
+            fileScanNode.setComputeResource(computeResource);
             scanNode = fileScanNode;
         } else if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == EtlJobType.ROUTINE_LOAD) {
             StreamLoadScanNode streamScanNode = new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc,
-                    destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId, warehouseId);
+                    destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId, computeResource);
             streamScanNode.setNeedAssignBE(true);
             if (enableBatchWrite) {
                 streamScanNode.setBatchWrite(batchWriteIntervalMs, batchWriteParameters, batchWriteBackendIds);
             }
             streamScanNode.setUseVectorizedLoad(true);
-            streamScanNode.init(analyzer);
-            streamScanNode.finalizeStats(analyzer);
+            streamScanNode.init(descTable);
+            streamScanNode.finalizeStats();
+            streamScanNode.setComputeResource(computeResource);
             scanNode = streamScanNode;
         }
         scanNodes.add(scanNode);
@@ -482,7 +485,7 @@ public class LoadPlanner {
             Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
             dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds,
                     olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
-                    checkNullExprInAutoIncrement(), enableAutomaticPartition, warehouseId);
+                    checkNullExprInAutoIncrement(), enableAutomaticPartition, computeResource);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
             }

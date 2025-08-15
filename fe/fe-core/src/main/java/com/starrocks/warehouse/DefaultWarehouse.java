@@ -14,11 +14,20 @@
 
 package com.starrocks.warehouse;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
+import com.starrocks.system.ComputeNode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +52,24 @@ public class DefaultWarehouse extends Warehouse {
     @Override
     public Long getAnyWorkerGroupId() {
         return StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+    }
+
+    @Override
+    public void addNodeToCNGroup(ComputeNode node, String cnGroupName) throws DdlException {
+        if (!Strings.isNullOrEmpty(cnGroupName)) {
+            // NOTE: NOT IMPLEMENTED, so the cnGroupName must be empty!
+            ErrorReport.reportDdlException(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED);
+        }
+        node.setWorkerGroupId(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        node.setWarehouseId(getId());
+    }
+
+    @Override
+    public void validateRemoveNodeFromCNGroup(ComputeNode node, String cnGroupName) throws DdlException {
+        if (!Strings.isNullOrEmpty(cnGroupName)) {
+            // NOTE: NOT IMPLEMENTED, so the cnGroupName must be empty!
+            ErrorReport.reportDdlException(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED);
+        }
     }
 
     @Override
@@ -72,6 +99,36 @@ public class DefaultWarehouse extends Warehouse {
     @Override
     public ProcResult fetchResult() {
         return new BaseProcResult();
+    }
+
+    @Override
+    public void createCNGroup(CreateCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    @Override
+    public void dropCNGroup(DropCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    @Override
+    public void enableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    @Override
+    public void disableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    @Override
+    public void alterCNGroup(AlterCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    @Override
+    public void replayInternalOpLog(String payload) {
+
     }
 
     @Override

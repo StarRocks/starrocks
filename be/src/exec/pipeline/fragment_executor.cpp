@@ -51,11 +51,14 @@
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 #include "util/time.h"
 #include "util/uid_util.h"
 
 namespace starrocks::pipeline {
+
+DEFINE_FAIL_POINT(fragment_prepare_sleep);
 
 using WorkGroupManager = workgroup::WorkGroupManager;
 using WorkGroup = workgroup::WorkGroup;
@@ -99,6 +102,7 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     const auto& query_id = params.query_id;
     const auto& fragment_instance_id = request.fragment_instance_id();
     const auto& query_options = request.common().query_options;
+    const auto& t_desc_tbl = request.common().desc_tbl;
 
     auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (existing_query_ctx) {
@@ -108,7 +112,8 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
         }
     }
 
-    ASSIGN_OR_RETURN(_query_ctx, exec_env->query_context_mgr()->get_or_register(query_id));
+    const bool query_ctx_should_exist = t_desc_tbl.__isset.is_cached && t_desc_tbl.is_cached;
+    ASSIGN_OR_RETURN(_query_ctx, exec_env->query_context_mgr()->get_or_register(query_id, query_ctx_should_exist));
     _query_ctx->set_exec_env(exec_env);
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
@@ -671,7 +676,8 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                             delete ctx;
                         }
                     });
-                    RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+                    RETURN_IF_ERROR(
+                            exec_env->stream_context_mgr()->put_channel_context(label, table_name, channel_id, ctx));
                 }
                 stream_load_contexts.push_back(ctx);
             }
@@ -920,6 +926,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
     }
 
+    FAIL_POINT_TRIGGER_EXECUTE(fragment_prepare_sleep, { sleep(2); });
+
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     _query_ctx->mark_prepared();
     prepare_success = true;
@@ -976,9 +984,16 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     const TUniqueId& instance_id = params.fragment_instance_id;
 
     QueryContextPtr query_ctx = exec_env->query_context_mgr()->get(query_id);
-    if (query_ctx == nullptr) return Status::OK();
+    if (query_ctx == nullptr) {
+        // query can be cancelled because of timeout or short-circuited query like `limit`.
+        // return Status::InternalError(fmt::format("QueryContext not found for query_id: {}", print_id(query_id)));
+        return Status::OK();
+    }
     FragmentContextPtr fragment_ctx = query_ctx->fragment_mgr()->get(instance_id);
-    if (fragment_ctx == nullptr) return Status::OK();
+    if (fragment_ctx == nullptr) {
+        return Status::InternalError(fmt::format("FragmentContext not found for query_id: {}, instance_id: {}",
+                                                 print_id(query_id), print_id(instance_id)));
+    }
     RuntimeState* runtime_state = fragment_ctx->runtime_state();
 
     std::unordered_set<int> notify_ids;
@@ -987,11 +1002,15 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         if (scan_ranges.size() == 0) continue;
         auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
         if (iter == fragment_ctx->morsel_queue_factories().end()) {
-            continue;
+            return Status::InternalError(
+                    fmt::format("MorselQueueFactory not found for node_id: {}, query_id: {}, instance_id: {}", node_id,
+                                print_id(query_id), print_id(instance_id)));
         }
         MorselQueueFactory* morsel_queue_factory = iter->second.get();
         if (morsel_queue_factory == nullptr) {
-            continue;
+            return Status::InternalError(
+                    fmt::format("MorselQueueFactory is null for node_id: {}, query_id: {}, instance_id: {}", node_id,
+                                print_id(query_id), print_id(instance_id)));
         }
 
         RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
@@ -1007,11 +1026,15 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         for (const auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
             auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
             if (iter == fragment_ctx->morsel_queue_factories().end()) {
-                continue;
+                return Status::InternalError(
+                        fmt::format("MorselQueueFactory not found for node_id: {}, query_id: {}, instance_id: {}",
+                                    node_id, print_id(query_id), print_id(instance_id)));
             }
             MorselQueueFactory* morsel_queue_factory = iter->second.get();
             if (morsel_queue_factory == nullptr) {
-                continue;
+                return Status::InternalError(
+                        fmt::format("MorselQueueFactory is null for node_id: {}, query_id: {}, instance_id: {}",
+                                    node_id, print_id(query_id), print_id(instance_id)));
             }
 
             bool has_more_morsel = has_more_per_driver_seq_scan_ranges(per_driver_scan_ranges);

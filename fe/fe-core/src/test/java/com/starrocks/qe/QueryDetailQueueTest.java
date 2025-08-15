@@ -39,8 +39,8 @@ import com.starrocks.common.Config;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -59,7 +59,7 @@ public class QueryDetailQueueTest extends PlanTestBase {
         QueryDetailQueue.addQueryDetail(startQueryDetail);
 
         List<QueryDetail> queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime() - 1);
-        Assert.assertEquals(1, queryDetails.size());
+        Assertions.assertEquals(1, queryDetails.size());
 
         Gson gson = new Gson();
         String jsonString = gson.toJson(queryDetails);
@@ -85,11 +85,12 @@ public class QueryDetailQueueTest extends PlanTestBase {
                 "\"memCostBytes\":100003," +
                 "\"spillBytes\":-1," +
                 "\"warehouse\":\"default_warehouse\"," +
-                "\"catalog\":\"default_catalog\"}]";
-        Assert.assertEquals(jsonString, queryDetailString);
+                "\"catalog\":\"default_catalog\"," +
+                "\"queryFeMemory\":0}]";
+        Assertions.assertEquals(jsonString, queryDetailString);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime());
-        Assert.assertEquals(0, queryDetails.size());
+        Assertions.assertEquals(0, queryDetails.size());
 
         QueryDetail endQueryDetail = startQueryDetail.copy();
         endQueryDetail.setLatency(1);
@@ -97,7 +98,7 @@ public class QueryDetailQueueTest extends PlanTestBase {
         QueryDetailQueue.addQueryDetail(endQueryDetail);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime() - 1);
-        Assert.assertEquals(2, queryDetails.size());
+        Assertions.assertEquals(2, queryDetails.size());
     }
 
     @Test
@@ -120,12 +121,13 @@ public class QueryDetailQueueTest extends PlanTestBase {
         List<QueryDetail> queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startTime);
 
         QueryDetail runningDetail = queryDetails.get(0);
-        Assert.assertEquals(QueryDetail.QueryMemState.RUNNING, runningDetail.getState());
-        Assert.assertEquals(sql, runningDetail.getSql());
+        Assertions.assertEquals(QueryDetail.QueryMemState.RUNNING, runningDetail.getState());
+        Assertions.assertEquals(sql, runningDetail.getSql());
 
         QueryDetail finishedDetail = queryDetails.get(1);
-        Assert.assertEquals(QueryDetail.QueryMemState.FINISHED, finishedDetail.getState());
-        Assert.assertEquals(sql, finishedDetail.getSql());
+        Assertions.assertEquals(QueryDetail.QueryMemState.FINISHED, finishedDetail.getState());
+        Assertions.assertEquals(sql, finishedDetail.getSql());
+        Assertions.assertTrue(finishedDetail.getQueryFeMemory() > 0);
 
         Config.enable_collect_query_detail_info = old;
     }

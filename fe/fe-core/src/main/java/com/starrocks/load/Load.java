@@ -38,10 +38,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
@@ -66,6 +66,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
@@ -84,7 +85,8 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.LambdaArgument;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TOpType;
@@ -99,9 +101,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
 import static com.starrocks.common.ErrorCode.ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND;
 import static com.starrocks.common.ErrorCode.ERR_MAPPING_EXPR_INVALID;
+import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class Load {
     private static final Logger LOG = LogManager.getLogger(Load.class);
@@ -120,13 +123,14 @@ public class Load {
      * 2. should not be bitmap/hll/percentile/json/varchar column
      * 3. should not be primary key
      * 4. table should be primary key model
+     *
      * @param mergeCondition
      * @param table
      * @return
      * @throws StarRocksException
      */
     public static void checkMergeCondition(String mergeCondition, OlapTable table, List<Column> columns,
-            boolean missAutoIncrementColumn) throws DdlException {
+                                           boolean missAutoIncrementColumn) throws DdlException {
         if (mergeCondition == null || mergeCondition.isEmpty()) {
             return;
         }
@@ -137,7 +141,7 @@ public class Load {
 
         Optional<Column> conditionCol = columns.stream().filter(c -> c.getName().equalsIgnoreCase(mergeCondition)).findFirst();
         if (!conditionCol.isPresent()) {
-            throw new DdlException("Merge condition column " + mergeCondition + 
+            throw new DdlException("Merge condition column " + mergeCondition +
                     " does not exist. If you are doing partial update with condition update, please check condition column" +
                     " is in the given update columns. Otherwise please check condition column is in table " + table.getName());
         } else {
@@ -245,10 +249,10 @@ public class Load {
             // In case of spark load, we should get the unanalyzed expression
             if (analyze) {
                 ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
-                    new Scope(RelationId.anonymous(), new RelationFields(
-                            tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
-                                    col.getType(), tableName, null))
-                                .collect(Collectors.toList()))), connectContext);
+                        new Scope(RelationId.anonymous(), new RelationFields(
+                                tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                                col.getType(), tableName, null))
+                                        .collect(Collectors.toList()))), connectContext);
             }
 
             ImportColumnDesc importColumnDesc = new ImportColumnDesc(column.getName(), expr);
@@ -290,18 +294,18 @@ public class Load {
      */
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
                                    Map<String, Pair<String, List<String>>> columnToHadoopFunction,
-                                   Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
+                                   Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
                                    List<String> columnsFromPath) throws StarRocksException {
-        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, analyzer,
+        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
                 columnsFromPath, false, false);
     }
 
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
                                    Map<String, Pair<String, List<String>>> columnToHadoopFunction,
-                                   Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
+                                   Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
                                    List<String> columnsFromPath, boolean isStreamLoadJson,
@@ -456,7 +460,7 @@ public class Load {
                 }
             }
         }
-    
+
         copiedColumnExprs.addAll(getMaterializedShadowColumnDesc(tbl, dbName, true));
         // get shadow column desc when table schema change
         copiedColumnExprs.addAll(getSchemaChangeShadowColumnDesc(tbl, columnExprMap));
@@ -526,7 +530,7 @@ public class Load {
                 Expr expr = transformHadoopFunctionExpr(tbl, realColName, importColumnDesc.getExpr());
                 exprsByName.put(realColName, expr);
             } else {
-                SlotDescriptor slotDesc = analyzer.getDescTbl().addSlotDescriptor(srcTupleDesc);
+                SlotDescriptor slotDesc = descriptorTable.addSlotDescriptor(srcTupleDesc);
                 if (useVectorizedLoad) {
                     if (tblColumn != null) {
                         if (pathColumns.contains(columnName) || exprArgsColumns.contains(columnName)) {
@@ -584,7 +588,6 @@ public class Load {
                 mvDefineExpr.put(column.getName(), column.getDefineExpr());
             }
         }
-
 
         if (dbName != null && !dbName.isEmpty()) {
             for (Entry<String, Expr> entry : exprsByName.entrySet()) {
@@ -650,7 +653,7 @@ public class Load {
             // 1. analyze all exprs using varchar type
             Map<String, Expr> copiedExprsByName = Maps.newHashMap(exprsByName);
             Map<String, Expr> copiedMvDefineExpr = Maps.newHashMap(mvDefineExpr);
-            analyzeMappingExprs(tbl, analyzer, copiedExprsByName, copiedMvDefineExpr,
+            analyzeMappingExprs(tbl, descriptorTable, srcTupleDesc, copiedExprsByName, copiedMvDefineExpr,
                     slotDescByName, useVectorizedLoad);
 
             // 2. replace src slot desc with cast return type after expr analyzed
@@ -658,12 +661,12 @@ public class Load {
         }
 
         // 3. reanalyze all exprs using new type in vectorized load or using varchar in old load
-        analyzeMappingExprs(tbl, analyzer, exprsByName, mvDefineExpr, slotDescByName, useVectorizedLoad);
+        analyzeMappingExprs(tbl, descriptorTable, srcTupleDesc, exprsByName, mvDefineExpr, slotDescByName, useVectorizedLoad);
         LOG.debug("after init column, exprMap: {}", exprsByName);
     }
 
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
-             List<Boolean> missAutoIncrementColumn) throws StarRocksException {
+                                                      List<Boolean> missAutoIncrementColumn) throws StarRocksException {
         Set<String> specified = columnExprs.stream()
                 .map(desc -> desc.getColumnName())
                 .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
@@ -694,8 +697,8 @@ public class Load {
 
                             if (!ret.contains(originColumn)) {
                                 throw new DdlException("column " + originColumn.getName() + " needs to be " +
-                                                       "used for expression evaluation for materialized " +
-                                                       "column " + col.getName());
+                                        "used for expression evaluation for materialized " +
+                                        "column " + col.getName());
                             }
                         }
                     }
@@ -764,9 +767,10 @@ public class Load {
         }
     }
 
-    private static void analyzeMappingExprs(Table tbl, Analyzer analyzer, Map<String, Expr> exprsByName,
-                                            Map<String, Expr> mvDefineExpr, Map<String, SlotDescriptor> slotDescByName,
-                                            boolean useVectorizedLoad) throws StarRocksException {
+    private static void analyzeMappingExprs(Table tbl, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
+                                            Map<String, Expr> exprsByName, Map<String, Expr> mvDefineExpr,
+                                            Map<String, SlotDescriptor> slotDescByName, boolean useVectorizedLoad)
+            throws StarRocksException {
         for (Map.Entry<String, Expr> entry : exprsByName.entrySet()) {
             // only for normal column here
             if (tbl.getColumn(entry.getKey()) != null && tbl.getColumn(entry.getKey()).isGeneratedColumn()) {
@@ -776,9 +780,17 @@ public class Load {
             ExprSubstitutionMap smap = new ExprSubstitutionMap();
             List<SlotRef> slots = Lists.newArrayList();
             entry.getValue().collect(SlotRef.class, slots);
+            // SlotRef for the lambda argument will be allocated SlotDescriptor when analyzing,
+            // so skip to check the descriptor for lambda argument
+            List<LambdaArgument> lambdaArguments = Lists.newArrayList();
+            entry.getValue().collect(LambdaArgument.class, lambdaArguments);
+            Set<String> lambdaArgumentNames = lambdaArguments.stream().map(LambdaArgument::getName).collect(Collectors.toSet());
             for (SlotRef slot : slots) {
                 SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
                 if (slotDesc == null) {
+                    if (lambdaArgumentNames.contains(slot.getColumnName())) {
+                        continue;
+                    }
                     ErrorReport.reportAnalysisException(ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND, slot.getColumnName(),
                             AstToSQLBuilder.toSQL(entry.getValue()), entry.getKey());
                 }
@@ -793,7 +805,9 @@ public class Load {
             Expr expr = entry.getValue().clone(smap);
 
             try {
-                expr = Expr.analyzeAndCastFold(expr);
+                java.util.function.Function<SlotRef, ColumnRefOperator> resolveSlotFunc =
+                        (slotRef) -> resolveSlotRef(descriptorTable, srcTupleDesc, slotDescByName, slotRef);
+                expr = Expr.analyzeLoadExpr(expr, resolveSlotFunc);
             } catch (SemanticException e) {
                 ErrorReport.reportAnalysisException(ERR_MAPPING_EXPR_INVALID, AstToSQLBuilder.toSQL(entry.getValue()),
                         e.getDetailMsg(), entry.getKey());
@@ -895,6 +909,41 @@ public class Load {
     }
 
     /**
+     * Resolve {@code SlotRef} to {@code ColumnRefOperator} when analyzing
+     *
+     * @param srcTupleDescriptor The tuple descriptor used to create a slot descriptor for the new SlotRef
+     * @param slotDescriptors    slot descriptors that have been created. mapping from column name to slot descriptor
+     * @param node               the slot ref to resolve
+     * @return The resolved column ref operator
+     */
+    private static ColumnRefOperator resolveSlotRef(DescriptorTable descriptorTable, TupleDescriptor srcTupleDescriptor,
+                                                    Map<String, SlotDescriptor> slotDescriptors, SlotRef node) {
+        if (!node.isFromLambda() && !node.isAnalyzed()) {
+            // The SlotRef for non-lambda argument is analyzed manually before using Analyzer
+            // TODO: delete old analyze in Load
+            String errMsg = String.format("The SlotRef not from lambda is not analyzed, %s", node.toSql());
+            LOG.warn(errMsg);
+            throw unsupportedException(errMsg);
+        }
+        if (node.isFromLambda()) {
+            SlotDescriptor descriptor = slotDescriptors.get(node.getColumnName());
+            if (descriptor == null) {
+                descriptor = descriptorTable.addSlotDescriptor(srcTupleDescriptor);
+                descriptor.setType(node.getType());
+                descriptor.setLabel(node.getColumnName());
+                descriptor.setIsNullable(node.isNullable());
+                slotDescriptors.put(node.getColumnName(), descriptor);
+            }
+            return new ColumnRefOperator(descriptor.getId().asInt(),
+                    node.getType(), node.getColumnName(), node.isNullable());
+        } else {
+            String columnName = node.getColumnName() == null ? node.getLabel() : node.getColumnName();
+            return new ColumnRefOperator(node.getSlotId().asInt(),
+                    node.getType(), columnName, node.isNullable());
+        }
+    }
+
+    /**
      * This method is used to transform hadoop function.
      * The hadoop function includes: replace_value, strftime, time_format, alignment_timestamp, default_value, now.
      * It rewrites those function with real function name and param.
@@ -943,7 +992,7 @@ public class Load {
                         if (defaultValueType == Column.DefaultValueType.CONST) {
                             exprs.add(new StringLiteral(column.calculatedDefaultValue()));
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                            if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
+                            if (isValidDefaultFunction(column.getDefaultExpr().getExpr())) {
                                 exprs.add(column.getDefaultExpr().obtainExpr());
                             } else {
                                 throw new StarRocksException("Column(" + columnName + ") has unsupported default value:"
@@ -970,7 +1019,7 @@ public class Load {
                         if (defaultValueType == Column.DefaultValueType.CONST) {
                             innerIfExprs.add(new StringLiteral(column.calculatedDefaultValue()));
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                            if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
+                            if (isValidDefaultFunction(column.getDefaultExpr().getExpr())) {
                                 innerIfExprs.add(column.getDefaultExpr().obtainExpr());
                             } else {
                                 throw new StarRocksException("Column(" + columnName + ") has unsupported default value:"
@@ -1056,7 +1105,7 @@ public class Load {
                 return funcExpr.getChild(0);
             } else if (funcName.equalsIgnoreCase(FunctionSet.NOW)) {
                 FunctionName nowFunctionName = new FunctionName(FunctionSet.NOW);
-                FunctionCallExpr newFunc = new FunctionCallExpr(nowFunctionName, new FunctionParams(null));
+                FunctionCallExpr newFunc = new FunctionCallExpr(nowFunctionName, funcExpr.getParams());
                 return newFunc;
             } else if (funcName.equalsIgnoreCase(FunctionSet.SUBSTITUTE)) {
                 return funcExpr.getChild(0);
@@ -1103,6 +1152,8 @@ public class Load {
                 return TFileFormatType.FORMAT_ORC;
             } else if (fileFormat.toLowerCase().equals("json")) {
                 return TFileFormatType.FORMAT_JSON;
+            } else if (fileFormat.toLowerCase().equals("avro")) {
+                return TFileFormatType.FORMAT_AVRO;
             }
             // Attention: The compression type of csv format is from the suffix of filename.
         }

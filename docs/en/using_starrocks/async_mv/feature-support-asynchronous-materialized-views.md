@@ -48,7 +48,7 @@ This document outlines the boundaries of competence for asynchronous materialize
 
 | Property                           | Description                                                                                                                              | Supported Version(s) |
 |:-----------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------|:---------------------|
-| `session.<property_name>`          | Prefix of session variables used for materialized view construction, for example, `session.query_timeout` and `session.query_mem_limit`. | v3.0+                |
+| `session.<property_name>`          | Prefix of session variables used for materialized view construction, for example, `session.insert_timeout` and `session.query_mem_limit`. | v3.4+                |
 | auto_refresh_partitions_limit      | Maximum number of materialized view partitions to be refreshed each time an automatic refresh is triggered.                              | v2.5+                |
 | excluded_trigger_tables            | Base tables whose updates will not trigger the materialized view automatic refresh.                                                      | v2.5+                |
 | partition_refresh_number           | Number of partitions to be refreshed in each batch when the refresh task is executed in batches.                                         | v2.5+                |

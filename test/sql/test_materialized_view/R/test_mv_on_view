@@ -89,7 +89,7 @@ None
 -- !result
 [UC] ALTER MATERIALIZED VIEW mv_on_view_1 ACTIVE;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Can not active materialized view [mv_on_view_1] because analyze materialized view define sql: \n\nCREATE MATERIALIZED VIEW `mv_on_view_1` (`event_day`, `sum_pv`)\nDISTRIBUTED BY RANDOM\nREFRESH ASYNC\nPROPERTIES (\n"replicated_storage" = "true",\n"replication_num" = "1",\n"storage_medium" = "HDD"\n)\nAS SELECT `db_mv_on_view`.`view1`.`event_day`, `db_mv_on_view`.`view1`.`sum_pv`\nFROM `db_mv_on_view`.`view1`;\n\nCause an error: View db_mv_on_view.view1 references invalid table(s) or column(s) or function(s) or definer/invoker of view lack rights to use them: Getting analyzing error. Detail message: Column \'`db_mv_on_view`.`jj`.`pv`\' cannot be resolved..')
+[REGEX].*Can not active materialized view [mv_on_view_1] because analyze materialized view define sql.*
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_view_1';
 -- result:

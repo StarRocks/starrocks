@@ -93,10 +93,11 @@ private:
 
 class ResultSinkOperatorFactory final : public OperatorFactory {
 public:
-    ResultSinkOperatorFactory(int32_t id, TResultSinkType::type sink_type, bool is_binary_format,
+    ResultSinkOperatorFactory(int32_t id, size_t dop, TResultSinkType::type sink_type, bool is_binary_format,
                               TResultSinkFormatType::type format_type, std::vector<TExpr> t_output_expr,
                               FragmentContext* const fragment_ctx, const RowDescriptor& row_desc)
             : OperatorFactory(id, "result_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
+              _dop(dop),
               _sink_type(sink_type),
               _is_binary_format(is_binary_format),
               _format_type(format_type),
@@ -125,6 +126,8 @@ public:
 
 private:
     void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
+
+    const size_t _dop;
 
     TResultSinkType::type _sink_type;
     bool _is_binary_format;

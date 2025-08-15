@@ -60,6 +60,38 @@ ColumnPredicate* PredicateParser::create_column_predicate(const TCondition& cond
     return pred;
 }
 
+ColumnPredicate* PredicateParser::create_column_predicate(const GeneralCondition& condition, TypeInfoPtr& type_info,
+                                                          ColumnId index) {
+    ColumnPredicate* pred = nullptr;
+    if ((condition.condition_op == "*=" || condition.condition_op == "=") && condition.condition_values.size() == 1) {
+        pred = new_column_eq_predicate_from_datum(type_info, index, condition.condition_values[0]);
+    } else if ((condition.condition_op == "!*=" || condition.condition_op == "!=") &&
+               condition.condition_values.size() == 1) {
+        pred = new_column_ne_predicate_from_datum(type_info, index, condition.condition_values[0]);
+    } else if (condition.condition_op == "<<") {
+        pred = new_column_lt_predicate_from_datum(type_info, index, condition.condition_values[0]);
+    } else if (condition.condition_op == "<=") {
+        pred = new_column_le_predicate_from_datum(type_info, index, condition.condition_values[0]);
+    } else if (condition.condition_op == ">>") {
+        pred = new_column_gt_predicate_from_datum(type_info, index, condition.condition_values[0]);
+    } else if (condition.condition_op == ">=") {
+        pred = new_column_ge_predicate_from_datum(type_info, index, condition.condition_values[0]);
+    } else if (condition.condition_op == "*=" && condition.condition_values.size() > 1) {
+        pred = new_column_in_predicate_from_datum(type_info, index, condition.condition_values);
+    } else if ((condition.condition_op == "!*=" || condition.condition_op == "!=") &&
+               condition.condition_values.size() > 1) {
+        pred = new_column_not_in_predicate_from_datum(type_info, index, condition.condition_values);
+    } else if ((condition.condition_op.size() == 4 && strcasecmp(condition.condition_op.c_str(), " is ") == 0) ||
+               (condition.condition_op.size() == 2 && strcasecmp(condition.condition_op.c_str(), "is") == 0)) {
+        const bool is_null = condition.is_null();
+        pred = new_column_null_predicate(type_info, index, is_null);
+    } else {
+        LOG(WARNING) << "unknown condition: " << condition.condition_op;
+        return pred;
+    }
+    return pred;
+}
+
 bool OlapPredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
     RETURN_IF(predicate->column_id() >= _schema->num_columns(), false);
     const TabletColumn& column = _schema->column(predicate->column_id());
@@ -91,9 +123,10 @@ bool OlapPredicateParser::can_pushdown(const ConstPredicateNodePtr& pred_tree) c
     return pred_tree.visit(CanPushDownVisitor{this});
 }
 
-ColumnPredicate* OlapPredicateParser::parse_thrift_cond(const TCondition& condition) const {
+template <typename ConditionType>
+StatusOr<ColumnPredicate*> OlapPredicateParser::t_parse_thrift_cond(const ConditionType& condition) const {
     const size_t index = _schema->field_index(condition.column_name);
-    RETURN_IF(index >= _schema->num_columns(), nullptr);
+    RETURN_IF(index >= _schema->num_columns(), Status::Unknown("unknown column " + condition.column_name));
     const TabletColumn& col = _schema->column(index);
     auto precision = col.precision();
     auto scale = col.scale();
@@ -101,12 +134,20 @@ ColumnPredicate* OlapPredicateParser::parse_thrift_cond(const TCondition& condit
     auto&& type_info = get_type_info(type, precision, scale);
 
     ColumnPredicate* pred = create_column_predicate(condition, type_info, index);
-    RETURN_IF(pred == nullptr, nullptr);
+    RETURN_IF(pred == nullptr, Status::Unknown("unknown condition"));
 
     if (type == TYPE_CHAR) {
         pred->padding_zeros(col.length());
     }
     return pred;
+}
+
+StatusOr<ColumnPredicate*> OlapPredicateParser::parse_thrift_cond(const TCondition& condition) const {
+    return t_parse_thrift_cond(condition);
+}
+
+StatusOr<ColumnPredicate*> OlapPredicateParser::parse_thrift_cond(const GeneralCondition& condition) const {
+    return t_parse_thrift_cond(condition);
 }
 
 StatusOr<ColumnPredicate*> OlapPredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState* state,
@@ -137,7 +178,8 @@ bool ConnectorPredicateParser::can_pushdown(const ConstPredicateNodePtr& pred_tr
     return true;
 }
 
-ColumnPredicate* ConnectorPredicateParser::parse_thrift_cond(const TCondition& condition) const {
+template <typename ConditionType>
+ColumnPredicate* ConnectorPredicateParser::t_parse_thrift_cond(const ConditionType& condition) const {
     uint8_t precision = 0;
     uint8_t scale = 0;
     LogicalType type = LogicalType::TYPE_UNKNOWN;
@@ -158,6 +200,14 @@ ColumnPredicate* ConnectorPredicateParser::parse_thrift_cond(const TCondition& c
     auto&& type_info = get_type_info(type, precision, scale);
 
     return create_column_predicate(condition, type_info, index);
+}
+
+StatusOr<ColumnPredicate*> ConnectorPredicateParser::parse_thrift_cond(const TCondition& condition) const {
+    return t_parse_thrift_cond(condition);
+}
+
+StatusOr<ColumnPredicate*> ConnectorPredicateParser::parse_thrift_cond(const GeneralCondition& condition) const {
+    return t_parse_thrift_cond(condition);
 }
 
 StatusOr<ColumnPredicate*> ConnectorPredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc,

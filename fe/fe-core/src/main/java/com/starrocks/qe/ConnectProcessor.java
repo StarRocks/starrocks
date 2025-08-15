@@ -38,9 +38,11 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -50,6 +52,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -73,12 +76,15 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.SqlDigestBuilder;
@@ -93,6 +99,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
+import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.AsynchronousCloseException;
@@ -114,7 +123,6 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     protected StmtExecutor executor = null;
-
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -183,6 +191,24 @@ public class ConnectProcessor {
         ctx.resetSessionVariable();
     }
 
+    public static long getThreadAllocatedBytes(long threadId) {
+        try {
+            ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+            if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
+                com.sun.management.ThreadMXBean casted = (com.sun.management.ThreadMXBean) threadMXBean;
+                if (casted.isThreadAllocatedMemorySupported() && casted.isThreadAllocatedMemoryEnabled()) {
+                    long allocatedBytes = casted.getThreadAllocatedBytes(threadId);
+                    if (allocatedBytes != -1) {
+                        return allocatedBytes;
+                    }
+                }
+            }
+            return 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
         // slow query
         long endTime = System.currentTimeMillis();
@@ -202,7 +228,9 @@ public class ConnectProcessor {
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
                 .setIsForwardToLeader(isForwardToLeader)
-                .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());
+                .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString())
+                .setSessionId(ctx.getSessionId().toString())
+                .setCNGroup(ctx.getCurrentComputeResourceName());
 
         if (ctx.getState().isQuery()) {
             MetricRepo.COUNTER_QUERY_ALL.increase(1L);
@@ -241,11 +269,14 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setIsQuery(false);
         }
 
-        // Build Digest for SELECT/INSERT/UPDATE/DELETE
+        // Build Digest and queryFeMemory for SELECT/INSERT/UPDATE/DELETE
         if (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt) {
             if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
                 ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
             }
+            long threadAllocatedMemory =
+                    getThreadAllocatedBytes(Thread.currentThread().getId()) - ctx.getCurrentThreadAllocatedMemory();
+            ctx.getAuditEventBuilder().setQueryFeMemory(threadAllocatedMemory);
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
@@ -255,7 +286,8 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQLOrDefault(parsedStmt, origStmt));
         } else if (parsedStmt == null) {
             // invalid sql, record the original statement to avoid audit log can't replay
-            ctx.getAuditEventBuilder().setStmt(origStmt);
+            // but redact sensitive credentials first
+            ctx.getAuditEventBuilder().setStmt(SqlCredentialRedactor.redact(origStmt));
         } else {
             ctx.getAuditEventBuilder().setStmt(LogUtil.removeLineSeparator(origStmt));
         }
@@ -283,6 +315,9 @@ public class ConnectProcessor {
     // process COM_QUERY statement,
     protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
+        long beginMemory = getThreadAllocatedBytes(Thread.currentThread().getId());
+        ctx.setCurrentThreadAllocatedMemory(beginMemory);
+
         // convert statement to Java string
         String originStmt = null;
         byte[] bytes = packetBuf.array();
@@ -300,7 +335,9 @@ public class ConnectProcessor {
                         ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog())
-                .setWarehouse(ctx.getCurrentWarehouseName());
+                .setWarehouse(ctx.getCurrentWarehouseName())
+                .setCustomQueryId(ctx.getCustomQueryId())
+                .setCNGroup(ctx.getCurrentComputeResourceName());
         Tracers.register(ctx);
         // set isQuery before `forwardToLeader` to make it right for audit log.
         ctx.getState().setIsQuery(true);
@@ -311,7 +348,7 @@ public class ConnectProcessor {
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
             if (Config.enable_print_sql) {
-                LOG.info("Begin to execute sql, type: query，query id:{}, sql:{}", ctx.getQueryId(), originStmt);
+                LOG.info("Begin to execute sql, type: query, query id:{}, sql:{}", ctx.getQueryId(), originStmt);
             }
             List<StatementBase> stmts;
             try (Timer ignored = Tracers.watchScope(Tracers.Module.PARSER, "Parser")) {
@@ -343,6 +380,30 @@ public class ConnectProcessor {
                 }
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
                 Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
+
+                if (ctx.getTxnId() != 0 &&
+                        !((parsedStmt instanceof InsertStmt && !((InsertStmt) parsedStmt).isOverwrite()) ||
+                                parsedStmt instanceof BeginStmt ||
+                                parsedStmt instanceof CommitStmt ||
+                                parsedStmt instanceof RollbackStmt)) {
+                    ErrorReport.report(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
+                    ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                    return;
+                }
+
+                if (ctx.getOAuth2Context() != null && ctx.getAuthToken() == null) {
+                    OAuth2Context oAuth2Context = ctx.getOAuth2Context();
+                    String authUrl = oAuth2Context.authServerUrl() +
+                            "?response_type=code" +
+                            "&client_id=" + URLEncoder.encode(oAuth2Context.clientId(), StandardCharsets.UTF_8) +
+                            "&redirect_uri=" + URLEncoder.encode(oAuth2Context.redirectUrl(), StandardCharsets.UTF_8) +
+                            "&state=" + ctx.getConnectionId() +
+                            "&scope=openid";
+
+                    ErrorReport.report(ErrorCode.ERR_OAUTH2_NOT_AUTHENTICATED, authUrl);
+                    ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                    return;
+                }
 
                 executor = new StmtExecutor(ctx, parsedStmt);
                 ctx.setExecutor(executor);
@@ -793,6 +854,14 @@ public class ConnectProcessor {
             ctx.setForwardTimes(request.getForward_times());
         }
 
+        if (request.isSetConnectionId()) {
+            ctx.setConnectionId(request.getConnectionId());
+        }
+
+        if (request.isSetTxn_id()) {
+            ctx.setTxnId(request.getTxn_id());
+        }
+
         ctx.setThreadLocalInfo();
 
         if (ctx.getCurrentUserIdentity() == null) {
@@ -815,7 +884,7 @@ public class ConnectProcessor {
 
                 StatementBase statement = SqlParser.parseSingleStatement(request.modified_variables_sql,
                         ctx.getSessionVariable().getSqlMode());
-                executor = new StmtExecutor(ctx, statement);
+                executor = StmtExecutor.newInternalExecutor(ctx, statement);
                 executor.setProxy();
                 executor.execute();
             }
@@ -834,7 +903,11 @@ public class ConnectProcessor {
             }.visit(statement);
             statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
-            executor = new StmtExecutor(ctx, statement);
+            if (request.isIsInternalStmt()) {
+                executor = StmtExecutor.newInternalExecutor(ctx, statement);
+            } else {
+                executor = new StmtExecutor(ctx, statement);
+            }
             ctx.setExecutor(executor);
             executor.setProxy();
             executor.execute();
@@ -869,6 +942,9 @@ public class ConnectProcessor {
         result.setPacket(getResultPacket());
         result.setState(ctx.getState().getStateType().toString());
         result.setErrorMsg(ctx.getState().getErrorMessage());
+        //Put the txnId in connectContext into result and pass it back to the follower node
+        result.setTxn_id(ctx.getTxnId());
+
         if (executor != null) {
             if (executor.getProxyResultSet() != null) {  // show statement
                 result.setResultSet(executor.getProxyResultSet().tothrift());

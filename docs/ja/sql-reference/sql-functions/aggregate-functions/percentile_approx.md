@@ -13,7 +13,7 @@ p 番目のパーセンタイルの近似値を返します。ここで、p の�
 ## 構文
 
 ```Haskell
-PERCENTILE_APPROX(expr, DOUBLE p[, DOUBLE compression])
+DOUBLE PERCENTILE_APPROX(expr, DOUBLE p[, DOUBLE compression])
 ```
 
 ## 例

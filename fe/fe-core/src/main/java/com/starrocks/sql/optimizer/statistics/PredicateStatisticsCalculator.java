@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.statistics.HistogramStatisticsUtils.estimateInPredicateWithHistogram;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateUtils.computeCompoundStatsWithMultiColumnOptimize;
 
 public class PredicateStatisticsCalculator {
@@ -124,22 +125,36 @@ public class PredicateStatisticsCalculator {
             if (!checkNeedEvalEstimate(predicate)) {
                 return statistics;
             }
+            if (SPMFunctions.isSPMFunctions(predicate)) {
+                if (SPMFunctions.canRevert2ScalarOperator(predicate)) {
+                    predicate = (InPredicateOperator) SPMFunctions.revertSPMFunctions(predicate).get(0);
+                } else {
+                    return statistics;
+                }
+            }
             double selectivity;
 
             ScalarOperator firstChild = getChildForCastOperator(predicate.getChild(0));
             // 1. compute the inPredicate children column statistics
             ColumnStatistic inColumnStatistic = getExpressionStatistic(firstChild);
 
-            List<ScalarOperator> children = predicate.getChildren();
             List<ScalarOperator> otherChildrenList = predicate.getChildren().stream().skip(1).toList();
-            if (children.size() == 2 && SPMFunctions.isSPMFunctions(children.get(1))) {
-                otherChildrenList = children.get(1).getChildren().stream().skip(1).collect(Collectors.toList());
-                if (otherChildrenList.isEmpty()) {
-                    return statistics;
-                }
+            otherChildrenList = otherChildrenList.stream().map(this::getChildForCastOperator).distinct().toList();
+            boolean allConstants = otherChildrenList.stream().allMatch(op -> op instanceof ConstantOperator);
+
+            if (!predicate.isSubquery() && firstChild.isColumnRef() && !inColumnStatistic.isUnknown() &&
+                    inColumnStatistic.getHistogram() != null && allConstants) {
+                return estimateInPredicateWithHistogram(
+                        (ColumnRefOperator) firstChild,
+                        inColumnStatistic,
+                        otherChildrenList.stream()
+                                .map(op -> (ConstantOperator) op)
+                                .collect(Collectors.toList()),
+                        predicate.isNotIn(),
+                        statistics
+                );
             }
-            otherChildrenList = otherChildrenList.stream().map(this::getChildForCastOperator).distinct().collect(
-                    Collectors.toList());
+
             List<ColumnStatistic> otherChildrenColumnStatisticList =
                     otherChildrenList.stream().distinct().map(this::getExpressionStatistic).toList();
 
@@ -278,6 +293,18 @@ public class PredicateStatisticsCalculator {
             // For CastOperator, we need use child as column statistics
             leftChild = getChildForCastOperator(leftChild);
             rightChild = getChildForCastOperator(rightChild);
+
+            // For SPM functions, we try to revert to origin scalar operator
+            // in actually, SPMFunction also support the correct statistics, but the implement of binary
+            // predicate depend on ConstantOperator, not ConstantExpression, it's take SPM's plan is
+            // different with origin plan.
+            if (SPMFunctions.isSPMFunctions(leftChild) && SPMFunctions.canRevert2ScalarOperator(leftChild)) {
+                leftChild = SPMFunctions.revertSPMFunctions(leftChild).get(0);
+            }
+            if (SPMFunctions.isSPMFunctions(rightChild) && SPMFunctions.canRevert2ScalarOperator(rightChild)) {
+                rightChild = SPMFunctions.revertSPMFunctions(rightChild).get(0);
+            }
+
             // compute left and right column statistics
             ColumnStatistic leftColumnStatistic = getExpressionStatistic(leftChild);
             ColumnStatistic rightColumnStatistic = getExpressionStatistic(rightChild);
@@ -298,13 +325,8 @@ public class PredicateStatisticsCalculator {
                 // only columnRefOperator could add column statistic to statistics
                 leftChildOpt = leftChild.isColumnRef() ? Optional.of((ColumnRefOperator) leftChild) : Optional.empty();
 
-                if (rightChild.isConstant()) {
-                    Optional<ConstantOperator> constantOperator;
-                    if (rightChild.isConstantRef()) {
-                        constantOperator = Optional.of((ConstantOperator) rightChild);
-                    } else {
-                        constantOperator = Optional.empty();
-                    }
+                if (rightChild.isConstantRef()) {
+                    Optional<ConstantOperator> constantOperator = Optional.of((ConstantOperator) rightChild);
                     Statistics binaryStats =
                             BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(leftChildOpt,
                                     leftColumnStatistic, predicate, constantOperator, statistics);

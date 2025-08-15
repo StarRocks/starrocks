@@ -140,15 +140,19 @@ const std::string TXN_PREPARE = "prepare";
 const std::string TXN_ROLLBACK = "rollback";
 const std::string TXN_LOAD = "load";
 const std::string TXN_LIST = "list";
+const std::string DEFAULT_WAREHOUSE = "default_warehouse";
 
 class StreamLoadContext {
 public:
-    explicit StreamLoadContext(ExecEnv* exec_env) : id(UniqueId::gen_uid()), _exec_env(exec_env), _refs(0) {
-        start_nanos = MonotonicNanos();
-    }
+    explicit StreamLoadContext(ExecEnv* exec_env, IntGauge* running_loads = nullptr)
+            : StreamLoadContext(exec_env, UniqueId::gen_uid(), running_loads) {}
 
-    explicit StreamLoadContext(ExecEnv* exec_env, UniqueId id) : id(id), _exec_env(exec_env), _refs(0) {
+    explicit StreamLoadContext(ExecEnv* exec_env, UniqueId id, IntGauge* running_loads = nullptr)
+            : id(id), _exec_env(exec_env), _refs(0), _running_loads(running_loads) {
         start_nanos = MonotonicNanos();
+        if (_running_loads != nullptr) {
+            _running_loads->increment(1);
+        }
     }
 
     ~StreamLoadContext() noexcept {
@@ -158,6 +162,9 @@ public:
         }
 
         _exec_env->load_stream_mgr()->remove(id);
+        if (_running_loads != nullptr) {
+            _running_loads->increment(-1);
+        }
     }
 
     std::string to_json() const;
@@ -215,6 +222,7 @@ public:
     // the batch_write_label represents the txn
     std::string label;
     // optional
+    std::string warehouse = DEFAULT_WAREHOUSE;
     double max_filter_ratio = 0.0;
     int32_t timeout_second = -1;
     AuthInfo auth;
@@ -253,8 +261,6 @@ public:
     int64_t total_received_data_cost_nanos = 0;
     int64_t received_data_cost_nanos = 0;
     int64_t write_data_cost_nanos = 0;
-    std::atomic<int64_t> begin_txn_ts = 0;
-    std::atomic<int64_t> last_active_ts = 0;
 
     std::string error_url;
     std::string rejected_record_path;
@@ -269,9 +275,6 @@ public:
     std::vector<TTabletFailInfo> fail_infos;
 
     std::mutex lock;
-    // Whether the transaction stream load is detected as timeout. This flag is used to tell
-    // the new request that the transaction is timeout and will be aborted
-    std::atomic<bool> timeout_detected{false};
 
     std::shared_ptr<MessageBodySink> body_sink;
     bool need_rollback = false;
@@ -281,9 +284,6 @@ public:
     std::future<Status> future = promise.get_future();
 
     Status status;
-
-    int32_t idle_timeout_sec = -1;
-    int channel_id = -1;
 
     // buffer for reading data from ev_buffer
     static constexpr size_t kDefaultBufferSize = 64 * 1024;
@@ -295,6 +295,22 @@ public:
 
     int64_t load_deadline_sec = -1;
     std::unique_ptr<ConcurrentLimiterGuard> _http_limiter_guard;
+
+    // =================== transaction stream load ===================
+
+    // Transaction begin timestamp for timeout detection
+    std::atomic<int64_t> begin_txn_ts = 0;
+    // Last active timestamp for idle timeout detection
+    std::atomic<int64_t> last_active_ts = 0;
+    // The timeout in seconds for a prepared transaction timeout
+    int32_t prepared_timeout_second = -1;
+    // Whether the transaction stream load is detected as timeout. This flag is used to tell
+    // the new request that the transaction is timeout and will be aborted
+    std::atomic<bool> timeout_detected{false};
+    // Idle transaction timeout in seconds
+    int32_t idle_timeout_sec = -1;
+    // Channel ID for multi-channel stream load
+    int channel_id = -1;
 
     // =================== merge commit ===================
 
@@ -328,6 +344,7 @@ public:
 private:
     ExecEnv* _exec_env;
     std::atomic<int> _refs;
+    IntGauge* _running_loads;
 };
 
 } // namespace starrocks

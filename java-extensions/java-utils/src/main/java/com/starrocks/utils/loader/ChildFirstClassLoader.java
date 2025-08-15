@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
 
@@ -38,7 +39,7 @@ public class ChildFirstClassLoader extends URLClassLoader {
         super(urls, null);
         this.parentLoader = new ParentClassLoader(parent);
         // load native method class from parent
-        this.parentFirstClass = new ArrayList<>(Collections.singleton("com.starrocks.utils.NativeMethodHelper"));
+        this.parentFirstClass = new ArrayList<>(Arrays.asList("com.starrocks.utils.NativeMethodHelper"));
     }
 
     @Override

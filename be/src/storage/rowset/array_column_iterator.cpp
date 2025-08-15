@@ -349,4 +349,62 @@ Status ArrayColumnIterator::decode_dict_codes(const int32_t* codes, size_t size,
     return _element_iterator->decode_dict_codes(codes, size, words);
 }
 
+StatusOr<std::vector<std::pair<int64_t, int64_t>>> ArrayColumnIterator::get_io_range_vec(const SparseRange<>& range,
+                                                                                         Column* dst) {
+    auto [array_column, null_column] = unpack_array_column(dst);
+    CHECK((_null_iterator == nullptr && null_column == nullptr) ||
+          (_null_iterator != nullptr && null_column != nullptr));
+
+    SparseRange element_range;
+
+    SparseRangeIterator<> iter = range.new_iterator();
+    size_t to_read = range.span_size();
+
+    UInt32Column* offsets = array_column->offsets_column().get();
+    // array column can be nested, range may be empty
+    DCHECK(range.empty() || (range.begin() == _array_size_iterator->get_current_ordinal()));
+    while (iter.has_more()) {
+        Range<> r = iter.next(to_read);
+
+        RETURN_IF_ERROR(_array_size_iterator->seek_to_ordinal_and_calc_element_ordinal(r.begin()));
+        size_t element_ordinal = _array_size_iterator->element_ordinal();
+        // if array column in nullable or element of array is empty, element_range may be empty.
+        // so we should reseek the element_ordinal
+        // if (element_range->span_size() == 0) {
+        //     RETURN_IF_ERROR(_element_iterator->seek_to_ordinal(element_ordinal));
+        // }
+        // 2. Read offset column
+        // [1, 2, 3], [4, 5, 6]
+        // In memory, it will be transformed to actual offset(0, 3, 6)
+        // On disk, offset is stored as length array(3, 3)
+        auto& data = offsets->get_data();
+        size_t end_offset = data.back();
+
+        size_t prev_array_size = offsets->size();
+        SparseRange<> size_read_range(r);
+        RETURN_IF_ERROR(_array_size_iterator->next_batch(size_read_range, offsets));
+        size_t curr_array_size = offsets->size();
+
+        size_t num_to_read = end_offset;
+        for (size_t i = prev_array_size; i < curr_array_size; ++i) {
+            end_offset += data[i];
+            data[i] = end_offset;
+        }
+        num_to_read = end_offset - num_to_read;
+
+        element_range.add(Range<>(element_ordinal, element_ordinal + num_to_read));
+    }
+
+    std::vector<std::pair<int64_t, int64_t>> res;
+    if (_null_iterator != nullptr) {
+        ASSIGN_OR_RETURN(auto vec, _null_iterator->get_io_range_vec(range, dst));
+        res.insert(res.end(), vec.begin(), vec.end());
+    }
+    if (_access_values) {
+        ASSIGN_OR_RETURN(auto vec, _element_iterator->get_io_range_vec(element_range, dst));
+        res.insert(res.end(), vec.begin(), vec.end());
+    }
+    return res;
+}
+
 } // namespace starrocks

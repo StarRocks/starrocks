@@ -17,12 +17,13 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 import java.util.Optional;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 public class CreateFileStmt extends DdlStmt {
     public static final String PROP_CATALOG_DEFAULT = "DEFAULT";
@@ -53,7 +54,7 @@ public class CreateFileStmt extends DdlStmt {
     public CreateFileStmt(String fileName, String dbName, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.fileName = fileName;
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.properties = properties;
     }
 
@@ -66,7 +67,7 @@ public class CreateFileStmt extends DdlStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public String getCatalogName() {
@@ -119,11 +120,6 @@ public class CreateFileStmt extends DdlStmt {
             }
             */
         }
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     @Override

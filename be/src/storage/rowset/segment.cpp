@@ -52,12 +52,16 @@
 #include "storage/rowset/cast_column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
+#include "storage/rowset/json_column_iterator.h"
 #include "storage/rowset/page_io.h"
+#include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
 #include "storage/utils.h"
 #include "util/crc32c.h"
+#include "util/failpoint/fail_point.h"
+#include "util/json_flattener.h"
 #include "util/slice.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
@@ -240,7 +244,7 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
         _encryption_info = std::make_unique<FileEncryptionInfo>(opts.encryption_info);
     }
 
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _segment_file_info));
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
@@ -362,7 +366,7 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
         file_opts.encryption_info = std::move(info);
         _encryption_info = std::make_unique<FileEncryptionInfo>(file_opts.encryption_info);
     }
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _segment_file_info));
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(file_opts, _segment_file_info));
 
     PageReadOptions opts;
     opts.use_page_cache = lake_io_opts.use_page_cache;
@@ -394,16 +398,7 @@ bool Segment::has_loaded_index() const {
 
 Status Segment::_create_column_readers(SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
-    for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
-        const auto& column_pb = footer->columns(ordinal);
-        auto [it, ok] = column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
-        if (UNLIKELY(!ok)) {
-            LOG(ERROR) << "Duplicate column id=" << column_pb.unique_id() << " found between column '"
-                       << footer->columns(it->second).name() << "' and column '" << column_pb.name() << "'";
-            return Status::InternalError("Duplicate column id");
-        }
-    }
-
+    RETURN_IF_ERROR(_check_column_unique_id_uniqueness(footer, column_id_to_footer_ordinal));
     for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
         const auto& column = _tablet_schema->column(ordinal);
         auto iter = column_id_to_footer_ordinal.find(column.unique_id());
@@ -416,6 +411,38 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
             return res.status();
         }
         _column_readers.emplace(column.unique_id(), std::move(res).value());
+    }
+    return Status::OK();
+}
+
+DEFINE_FAIL_POINT(ingest_duplicate_column_unique_id);
+Status Segment::_check_column_unique_id_uniqueness(
+        SegmentFooterPB* footer, std::unordered_map<uint32_t, uint32_t>& column_id_to_footer_ordinal) {
+    // check uniqueness of column ids in footer
+    for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
+        const auto& column_pb = footer->columns(ordinal);
+        auto [it, ok] = column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
+        if (UNLIKELY(!ok)) {
+            LOG(ERROR) << "Duplicate column id=" << column_pb.unique_id() << " found between column '"
+                       << footer->columns(it->second).name() << "' and column '" << column_pb.name() << "'";
+            return Status::InternalError("Duplicate column id");
+        }
+    }
+
+    // check uniqueness of column ids in tablet schema
+    std::unordered_map<uint32_t, uint32_t> column_id_to_tablet_schema_ordinal;
+    FAIL_POINT_TRIGGER_EXECUTE(ingest_duplicate_column_unique_id,
+                               { column_id_to_tablet_schema_ordinal.emplace(1, 2); });
+
+    for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
+        const auto& column = _tablet_schema->column(ordinal);
+        auto [it, ok] = column_id_to_tablet_schema_ordinal.emplace(column.unique_id(), ordinal);
+        if (UNLIKELY(!ok)) {
+            LOG(ERROR) << "Duplicate column id=" << column.unique_id() << " found between column '"
+                       << _tablet_schema->column(it->second).name() << "' and column '" << column.name()
+                       << "' in tablet schema";
+            return Status::InternalError("Duplicate column id found in tablet schema");
+        }
     }
     return Status::OK();
 }
@@ -434,7 +461,12 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
                                                                  column.scale());
             return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
         }
-    } else if (!column.has_default_value() && !column.is_nullable()) {
+    }
+    if (column.is_extended()) {
+        return _new_extended_column_iterator(column, path);
+    }
+
+    if (!column.has_default_value() && !column.is_nullable()) {
         return Status::InternalError(
                 fmt::format("invalid nonexistent column({}) without default value.", column.name()));
     } else {
@@ -448,12 +480,63 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
     }
 }
 
+StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const TabletColumn& column,
+                                                                    ColumnAccessPath* path) {
+    auto extended_info = column.extended_info();
+    RETURN_IF(extended_info == nullptr, Status::InvalidArgument("extended info is null"));
+    auto source_index = extended_info->source_column_index;
+    RETURN_IF(source_index < 0 || static_cast<size_t>(source_index) >= _tablet_schema->num_columns(),
+              Status::InvalidArgument(fmt::format("invalid source column index: {}", source_index)));
+    auto access_path = extended_info->access_path;
+    RETURN_IF(access_path == nullptr, Status::InvalidArgument("access path is null for extended column"));
+
+    auto source_id = _tablet_schema->column(source_index).unique_id();
+    std::string full_path = access_path->linear_path();
+    auto [col_name, field_name] = JsonFlatPath::split_path(full_path);
+    auto& leaf_type = access_path->leaf_value_type();
+    RETURN_IF(!_column_readers.contains(source_id),
+              Status::RuntimeError(fmt::format("unknown root column: {}", source_id)));
+
+    // Check if it's a sub-column of FlatJSON
+    // case 1: it's not a FlatJSON
+    // case 2: it's a FlatJSON, but it's not a flatten column in the FlatJSON
+    auto sub_readers = _column_readers[source_id]->sub_readers();
+    if (sub_readers) {
+        for (auto& sub_reader : *sub_readers) {
+            if (field_name == sub_reader->name()) {
+                auto source_iter = std::make_unique<ScalarColumnIterator>(sub_reader.get());
+                LogicalType reader_type = sub_reader.get()->column_type();
+                VLOG(2) << fmt::format(
+                        "create extended_column_iterator for full_path={} field={} reader_type={}, expected_type={}",
+                        full_path, field_name, reader_type, column.type());
+
+                if (reader_type == column.type()) {
+                    return source_iter;
+                } else {
+                    auto nullable = sub_reader->is_nullable();
+                    auto source_type = TypeDescriptor::from_logical_type(reader_type);
+                    auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(),
+                                                                         column.precision(), column.scale());
+                    return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type,
+                                                                nullable);
+                }
+            }
+        }
+    }
+
+    // Build a regular ColumnIterator to read it
+    auto& source_reader = _column_readers[source_id];
+    ASSIGN_OR_RETURN(auto source_iter, source_reader->new_iterator(path, &column));
+    return create_json_extract_iterator(std::move(source_iter), source_reader->is_nullable(), std::string(field_name),
+                                        leaf_type.type);
+}
+
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const TabletColumn& column,
                                                                        ColumnAccessPath* path) {
     auto id = column.unique_id();
     auto iter = _column_readers.find(id);
     if (iter != _column_readers.end()) {
-        ASSIGN_OR_RETURN(auto source_iter, iter->second->new_iterator(path, nullptr));
+        ASSIGN_OR_RETURN(auto source_iter, iter->second->new_iterator(path, &column));
         if (iter->second->column_type() == column.type()) {
             return source_iter;
         } else {

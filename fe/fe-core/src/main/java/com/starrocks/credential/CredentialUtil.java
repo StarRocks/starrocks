@@ -15,11 +15,13 @@
 package com.starrocks.credential;
 
 import com.starrocks.catalog.JDBCResource;
-import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
+import com.starrocks.connector.iceberg.IcebergCatalogProperties;
+import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.odps.OdpsProperties;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.azure.AzureStoragePath;
+import org.apache.iceberg.aws.AwsProperties;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -54,7 +56,14 @@ public class CredentialUtil {
         doMask(properties, CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY);
 
         // Mask for iceberg rest catalog credential
-        doMask(properties, IcebergRESTCatalog.KEY_CREDENTIAL_WITH_PREFIX);
+        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                OAuth2SecurityConfig.OAUTH2_CREDENTIAL);
+        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                OAuth2SecurityConfig.OAUTH2_TOKEN);
+        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                AwsProperties.REST_ACCESS_KEY_ID);
+        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                AwsProperties.REST_SECRET_ACCESS_KEY);
 
         // Mask for odps catalog credential
         doMask(properties, OdpsProperties.ACCESS_ID);

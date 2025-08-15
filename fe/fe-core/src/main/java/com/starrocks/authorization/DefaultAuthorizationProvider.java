@@ -15,8 +15,8 @@
 package com.starrocks.authorization;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -63,7 +63,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 PrivilegeType.CREATE_RESOURCE_GROUP,
                 PrivilegeType.CREATE_GLOBAL_FUNCTION,
                 PrivilegeType.CREATE_STORAGE_VOLUME,
-                PrivilegeType.CREATE_WAREHOUSE));
+                PrivilegeType.CREATE_WAREHOUSE,
+                PrivilegeType.SECURITY));
 
         typeToActionList.put(ObjectType.USER, Lists.newArrayList(
                 PrivilegeType.IMPERSONATE));

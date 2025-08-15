@@ -39,7 +39,6 @@ set(STORAGE_FILES
     olap_define.cpp
     olap_server.cpp
     options.cpp
-    page_cache.cpp
     persistent_index.cpp
     primary_index.cpp
     primary_key_encoder.cpp
@@ -214,8 +213,10 @@ set(STORAGE_FILES
     lake/cloud_native_index_compaction_task.cpp
     lake/metacache.cpp
     lake/lake_primary_key_recover.cpp
-    lake/load_spill_block_manager.cpp
     lake/spill_mem_table_sink.cpp
+    lake/tablet_retain_info.cpp
+    load_spill_block_manager.cpp
+    load_chunk_spiller.cpp
     sstable/block_builder.cpp
     sstable/block.cpp
     sstable/coding.cpp
@@ -240,6 +241,7 @@ set(STORAGE_FILES
     lake/txn_log_applier.cpp
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
+    persistent_index_load_executor.cpp
     lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
     lake/lake_local_persistent_index_tablet_loader.cpp
@@ -249,6 +251,8 @@ set(STORAGE_FILES
     lake/persistent_index_sstable.cpp
     lake/lake_primary_key_compaction_conflict_resolver.cpp
     lake/column_mode_partial_update_handler.cpp
+    sstable/sstable_predicate.cpp
+    sstable/sstable_predicate_utils.cpp
     primary_key_dump.cpp
     dictionary_cache_manager.cpp
     rows_mapper.cpp
@@ -269,7 +273,9 @@ set(STORAGE_FILES
     index/vector/tenann_index_reader.cpp
     index/vector/tenann/del_id_filter.cpp
     index/vector/tenann/tenann_index_builder.cpp
-    index/vector/tenann/tenann_index_utils.cpp)
+    index/vector/tenann/tenann_index_utils.cpp
+    record_predicate/record_predicate_helper.cpp
+    record_predicate/column_hash_is_congruent.cpp)
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)

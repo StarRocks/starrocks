@@ -39,6 +39,7 @@
 #include "storage/range.h"
 #include "storage/rowset/common.h" // ordinal_t
 #include "storage/rowset/page_decoder.h"
+#include "storage/rowset/page_handle_fwd.h"
 #include "storage/rowset/page_pointer.h"
 
 namespace starrocks {
@@ -47,7 +48,6 @@ class Status;
 class Column;
 class DataPageFooterPB;
 class EncodingInfo;
-class PageHandle;
 class PagePointer;
 
 class ParsedPage {

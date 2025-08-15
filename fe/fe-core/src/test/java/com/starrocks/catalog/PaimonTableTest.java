@@ -25,8 +25,7 @@ import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.RowType;
 import org.assertj.core.api.Assertions;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,10 +61,9 @@ public class PaimonTableTest {
                 result = partitions;
             }
         };
-        PaimonTable paimonTable = new PaimonTable("testCatalog", "testDB", "testTable", fullSchema,
-                paimonNativeTable, 100L);
+        PaimonTable paimonTable = new PaimonTable("testCatalog", "testDB", "testTable", fullSchema, paimonNativeTable);
         Map<String, String> properties = paimonTable.getProperties();
-        Assert.assertEquals(0, properties.size());
+        org.junit.jupiter.api.Assertions.assertEquals(0, properties.size());
         List<Column> partitionColumns = paimonTable.getPartitionColumns();
         Assertions.assertThat(partitionColumns).hasSameElementsAs(partitionSchema);
     }
@@ -88,24 +86,21 @@ public class PaimonTableTest {
         };
         String dbName = "testDB";
         String tableName = "testTable";
-        PaimonTable paimonTable = new PaimonTable("testCatalog", dbName, tableName, fullSchema,
-                paimonNativeTable, 100L);
+        PaimonTable paimonTable = new PaimonTable("testCatalog", dbName, tableName, fullSchema, paimonNativeTable);
 
         TTableDescriptor tTableDescriptor = paimonTable.toThrift(null);
-        Assert.assertEquals(tTableDescriptor.getDbName(), dbName);
-        Assert.assertEquals(tTableDescriptor.getTableName(), tableName);
+        org.junit.jupiter.api.Assertions.assertEquals(tTableDescriptor.getDbName(), dbName);
+        org.junit.jupiter.api.Assertions.assertEquals(tTableDescriptor.getTableName(), tableName);
     }
 
     @Test
     public void testEquals(@Mocked FileStoreTable paimonNativeTable) {
         String dbName = "testDB";
         String tableName = "testTable";
-        PaimonTable table = new PaimonTable("testCatalog", dbName, tableName, null,
-                paimonNativeTable, 100L);
-        PaimonTable table2 = new PaimonTable("testCatalog", dbName, tableName, null,
-                paimonNativeTable, 100L);
-        Assert.assertEquals(table, table2);
-        Assert.assertEquals(table, table);
-        Assert.assertNotEquals(table, null);
+        PaimonTable table = new PaimonTable("testCatalog", dbName, tableName, null, paimonNativeTable);
+        PaimonTable table2 = new PaimonTable("testCatalog", dbName, tableName, null, paimonNativeTable);
+        org.junit.jupiter.api.Assertions.assertEquals(table, table2);
+        org.junit.jupiter.api.Assertions.assertEquals(table, table);
+        org.junit.jupiter.api.Assertions.assertNotEquals(table, null);
     }
 }

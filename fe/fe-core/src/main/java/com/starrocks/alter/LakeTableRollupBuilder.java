@@ -34,10 +34,10 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class LakeTableRollupBuilder extends AlterJobV2Builder {
@@ -65,17 +65,16 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                 baseIndexId, rollupIndexId, baseIndexName, rollupIndexName, mvSchemaVersion,
                 rollupColumns, whereClause, baseSchemaHash, mvSchemaHash,
                 rollupKeysType, rollupShortKeyColumnCount, origStmt, viewDefineSql, isColocateMVIndex);
-        mvJob.setWarehouseId(warehouseId);
+        mvJob.setComputeResource(computeResource);
 
         for (Partition partition : olapTable.getPartitions()) {
             long partitionId = partition.getId();
             TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
-
+            // create shard group
+            long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
+                        createShardGroup(dbId, olapTable.getId(), partitionId, rollupIndexId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long physicalPartitionId = physicalPartition.getId();
-                // create shard group
-                long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                        createShardGroup(dbId, olapTable.getId(), partitionId, rollupIndexId);
                 // index state is SHADOW
                 MaterializedIndex mvIndex = new MaterializedIndex(rollupIndexId,
                         MaterializedIndex.IndexState.SHADOW, shardGroupId);
@@ -87,12 +86,11 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                 shardProperties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
                 shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(rollupIndexId));
 
-                List<Tablet> originTablets = physicalPartition.getIndex(baseIndexId).getTablets();
-                WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                Optional<Long> workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(
-                        ConnectContext.get().getCurrentWarehouseId());
-                if (workerGroupId.isEmpty()) {
-                    Warehouse warehouse = warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                List<Tablet> originTablets = baseIndex.getTablets();
+                final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                if (!warehouseManager.isResourceAvailable(computeResource)) {
+                    final long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+                    Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
                     ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
                 }
                 List<Long> originTableIds = originTablets.stream()
@@ -100,19 +98,25 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                         .collect(Collectors.toList());
                 List<Long> shadowTabletIds = GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
                         originTablets.size(),
-                        olapTable.getPartitionFilePathInfo(partitionId),
-                        olapTable.getPartitionFileCacheInfo(partitionId),
-                        shardGroupId, originTableIds, shardProperties, workerGroupId.get());
+                        olapTable.getPartitionFilePathInfo(physicalPartition.getPathId()),
+                        olapTable.getPartitionFileCacheInfo(physicalPartitionId),
+                        shardGroupId, originTableIds, shardProperties, computeResource);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TabletMeta shadowTabletMeta =
-                        new TabletMeta(dbId, olapTable.getId(), physicalPartitionId, rollupIndexId, 0, medium, true);
+                        new TabletMeta(dbId, olapTable.getId(), physicalPartitionId, rollupIndexId, medium, true);
+                Map<Long, Long> tabletIdMap = new HashMap<>();
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
                     mvIndex.addTablet(shadowTablet, shadowTabletMeta);
                     mvJob.addTabletIdMap(physicalPartitionId, shadowTablet.getId(), originTablet.getId());
+                    tabletIdMap.put(originTablet.getId(), shadowTablet.getId());
                 }
+
+                List<Long> virtualBuckets = new ArrayList<>(baseIndex.getVirtualBuckets());
+                virtualBuckets.replaceAll(tabletId -> tabletIdMap.get(tabletId));
+                mvIndex.setVirtualBuckets(virtualBuckets);
 
                 mvJob.addMVIndex(physicalPartitionId, mvIndex);
                 LOG.debug("create materialized view index {} based on index {} in partition {}:{}",

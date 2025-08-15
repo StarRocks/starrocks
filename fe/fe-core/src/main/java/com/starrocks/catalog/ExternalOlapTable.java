@@ -471,6 +471,7 @@ public class ExternalOlapTable extends OlapTable {
                     partitionMeta.getPartition_name(),
                     partitionMeta.getPartition_id(), // TODO(wulei): fix it
                     null);
+            physicalPartition.setBucketNum(defaultDistributionInfo.getBucketNum());
 
             logicalPartition.addSubPartition(physicalPartition);
 
@@ -499,7 +500,7 @@ public class ExternalOlapTable extends OlapTable {
                     }
                     TabletMeta tabletMeta = new TabletMeta(tTabletMeta.getDb_id(), tTabletMeta.getTable_id(),
                             tTabletMeta.getPartition_id(), tTabletMeta.getIndex_id(),
-                            tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
+                            tTabletMeta.getStorage_medium());
                     index.addTablet(tablet, tabletMeta, false);
                 }
                 if (indexMeta.getPartition_id() == physicalPartition.getId()) {

@@ -42,14 +42,12 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.LockUtils.SlowLockLogStats;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
@@ -59,12 +57,9 @@ import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -454,43 +449,8 @@ public class Database extends MetaObject implements Writable {
         return exist;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
 
-        out.writeLong(id);
-        // compatible with old version
-        if (fullQualifiedName.isEmpty()) {
-            Text.writeString(out, fullQualifiedName);
-        } else {
-            Text.writeString(out, ClusterNamespace.getFullName(fullQualifiedName));
-        }
-        // write tables
-        int numTables = nameToTable.size();
-        out.writeInt(numTables);
-        for (Map.Entry<String, Table> entry : nameToTable.entrySet()) {
-            entry.getValue().write(out);
-        }
 
-        out.writeLong(dataQuotaBytes);
-        Text.writeString(out, SystemInfoService.DEFAULT_CLUSTER);
-        // compatible for dbState
-        Text.writeString(out, "NORMAL");
-        // NOTE: compatible attachDbName
-        Text.writeString(out, "");
-
-        // write functions
-        out.writeInt(name2Function.size());
-        for (Entry<String, List<Function>> entry : name2Function.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            out.writeInt(entry.getValue().size());
-            for (Function function : entry.getValue()) {
-                function.write(out);
-            }
-        }
-
-        out.writeLong(replicaQuotaSize);
-    }
 
     @Override
     public int hashCode() {

@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+keywords:
+  - MySql
+  - mysql
+  - sync
+  - Flink CDC
 ---
 
 # Realtime synchronization from MySQL
@@ -425,7 +430,9 @@ flink.starrocks.password=xxxxxx
 flink.starrocks.sink.properties.format=csv
 flink.starrocks.sink.properties.column_separator=\x01
 flink.starrocks.sink.properties.row_delimiter=\x02
-flink.starrocks.sink.buffer-flush.interval-ms=15000[table-rule.2]
+flink.starrocks.sink.buffer-flush.interval-ms=15000
+
+[table-rule.2]
 # Pattern to match databases for setting properties
 database = ^order2.*$
 # Pattern to match tables for setting properties

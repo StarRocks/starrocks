@@ -287,8 +287,8 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
         if (hdfs_properties->__isset.region) {
             config.region = hdfs_properties->region;
         }
-        if (hdfs_properties->__isset.ssl_enable && hdfs_properties->ssl_enable) {
-            config.scheme = Aws::Http::Scheme::HTTPS;
+        if (hdfs_properties->__isset.ssl_enable) {
+            config.scheme = hdfs_properties->ssl_enable ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
         }
         if (hdfs_properties->__isset.max_connection) {
             config.maxConnections = hdfs_properties->max_connection;

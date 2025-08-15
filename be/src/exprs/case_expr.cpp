@@ -530,7 +530,7 @@ private:
                     while (i < when_num && !(when_viewers[i].value(row))) {
                         ++i;
                     }
-                    if (then_columns[i]->is_null(i)) {
+                    if (then_columns[i]->is_null(row)) {
                         res->append_nulls(1);
                     } else {
                         res->append(*then_columns[i], row, 1);
@@ -542,7 +542,7 @@ private:
                     while ((i < when_num) && (when_viewers[i].is_null(row) || !when_viewers[i].value(row))) {
                         ++i;
                     }
-                    if (then_columns[i]->is_null(i)) {
+                    if (then_columns[i]->is_null(row)) {
                         res->append_nulls(1);
                     } else {
                         res->append(*then_columns[i], row, 1);
@@ -676,6 +676,7 @@ private:
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL32, RESULT_TYPE);                               \
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL64, RESULT_TYPE);                               \
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL128, RESULT_TYPE);                              \
+        CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL256, RESULT_TYPE);                              \
         CASE_WHEN_RESULT_TYPE(TYPE_JSON, RESULT_TYPE);                                    \
         CASE_WHEN_RESULT_TYPE(TYPE_ARRAY, RESULT_TYPE);                                   \
         CASE_WHEN_RESULT_TYPE(TYPE_MAP, RESULT_TYPE);                                     \

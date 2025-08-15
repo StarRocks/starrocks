@@ -341,7 +341,7 @@ bool Bitset<LT>::contains_range(const CppType& min_value, const CppType& max_val
     }
 
     if (min_group + 1 <= max_group - 1) {
-        return SIMD::count_nonzero(_bitset.data() + min_group + 1, max_group - min_group - 1);
+        return SIMD::contains_nonzero_bit(_bitset.data() + min_group + 1, max_group - min_group - 1);
     }
     return false;
 }

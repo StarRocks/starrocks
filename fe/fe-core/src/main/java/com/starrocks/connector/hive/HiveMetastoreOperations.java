@@ -46,7 +46,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
-import static com.starrocks.connector.PartitionUtil.executeInNewThread;
 import static com.starrocks.connector.hive.HiveWriteUtils.checkLocationProperties;
 import static com.starrocks.connector.hive.HiveWriteUtils.createDirectory;
 import static com.starrocks.connector.hive.HiveWriteUtils.isDirectory;
@@ -313,13 +312,6 @@ public class HiveMetastoreOperations {
         Map<String, HivePartitionStats> partitionStats;
         if (enableCatalogLevelCache) {
             partitionStats = metastore.getPresentPartitionsStatistics(hivePartitionNames);
-            if (partitionStats.size() == partitionNames.size()) {
-                return partitionStats;
-            }
-
-            String backgroundThreadName = String.format(BACKGROUND_THREAD_NAME_PREFIX + "%s-%s-%s",
-                    catalogName, dbName, tblName);
-            executeInNewThread(backgroundThreadName, () -> metastore.getPartitionStatistics(table, partitionNames));
         } else {
             partitionStats = metastore.getPartitionStatistics(table, partitionNames);
         }

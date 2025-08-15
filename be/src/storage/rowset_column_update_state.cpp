@@ -52,12 +52,12 @@ Status RowsetColumnUpdateState::load(Tablet* tablet, Rowset* rowset, MemTracker*
     std::call_once(_load_once_flag, [&] {
         _tablet_id = tablet->tablet_id();
         _status = _do_load(tablet, rowset, update_mem_tracker);
-        if (!_status.ok()) {
+        if (!_status.ok() && !_status.is_mem_limit_exceeded() && !_status.is_time_out()) {
             LOG(WARNING) << "load RowsetColumnUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"
                          << get_stack_trace();
-            if (_status.is_mem_limit_exceeded()) {
-                LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
-            }
+        }
+        if (_status.is_mem_limit_exceeded()) {
+            LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
         }
     });
     return _status;
@@ -201,7 +201,8 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
     int64_t t_start = MonotonicMillis();
     if (need_lock) {
         RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk(tablet, *(_upserts[start_idx]->upserts), &read_version,
-                                                                &(_upserts[start_idx]->src_rss_rowids)));
+                                                                &(_upserts[start_idx]->src_rss_rowids),
+                                                                3000 /* timeout_ms */));
     } else {
         RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk_unlock(
                 tablet, *(_upserts[start_idx]->upserts), &read_version, &(_upserts[start_idx]->src_rss_rowids)));
@@ -418,40 +419,29 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
     return Status::OK();
 }
 
-// cut rowid pairs by source rowid's order. E.g.
-// rowid_pairs -> <101, 2>, <202, 3>, <303, 4>, <102, 5>, <203, 6>
-// After cut, it will be:
-//  inorder_source_rowids -> <101, 202, 303>, <102, 203>
-//  inorder_upt_rowids -> <2, 3, 4>, <5, 6>
-static void cut_rowids_in_order(const std::vector<RowidPairs>& rowid_pairs,
-                                std::vector<std::vector<uint32_t>>* inorder_source_rowids,
-                                std::vector<std::vector<uint32_t>>* inorder_upt_rowids,
-                                StreamChunkContainer container) {
-    uint32_t last_source_rowid = 0;
-    std::vector<uint32_t> current_source_rowids;
-    std::vector<uint32_t> current_upt_rowids;
-    auto cut_rowids_fn = [&]() {
-        inorder_source_rowids->push_back({});
-        inorder_upt_rowids->push_back({});
-        inorder_source_rowids->back().swap(current_source_rowids);
-        inorder_upt_rowids->back().swap(current_upt_rowids);
-    };
+// This function will split rowid_pairs into two parts:
+// 1. sorted_source_rowids: sorted source rowids
+// 2. unsorted_upt_rowids: unsorted upt rowids
+// If container is not provided, we will just push back the rowids without alignment.
+void split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<uint32_t>* sorted_source_rowids,
+                       std::vector<uint32_t>* unsorted_upt_rowids, StreamChunkContainer* container) {
+    // rowid_pairs MUST be sorted already
+    DCHECK(std::is_sorted(rowid_pairs.begin(), rowid_pairs.end(), RowidPairsCompFn));
     for (const auto& each : rowid_pairs) {
-        if (!container.contains(each.first)) {
-            // skip in this round
-            continue;
+        if (container == nullptr) {
+            // If container is not provided, we just push back the rowids.
+            sorted_source_rowids->push_back(each.first);
+            unsorted_upt_rowids->push_back(each.second);
+        } else {
+            if (!container->contains(each.first)) {
+                // skip in this round
+                continue;
+            }
+            // append to sorted_source_rowids and unsorted_upt_rowids
+            // Align rowid
+            sorted_source_rowids->push_back(each.first - container->start_rowid);
+            unsorted_upt_rowids->push_back(each.second);
         }
-        if (each.first < last_source_rowid) {
-            // cut
-            cut_rowids_fn();
-        }
-        // Align rowid
-        current_source_rowids.push_back(each.first - container.start_rowid);
-        current_upt_rowids.push_back(each.second);
-        last_source_rowid = each.first;
-    }
-    if (!current_source_rowids.empty()) {
-        cut_rowids_fn();
     }
 }
 
@@ -478,16 +468,17 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
         tracker->consume(upt_chunk_size);
         DeferOp tracker_defer([&]() { tracker->release(upt_chunk_size); });
         // 2. update source chunk
-        std::vector<std::vector<uint32_t>> inorder_source_rowids;
-        std::vector<std::vector<uint32_t>> inorder_upt_rowids;
-        cut_rowids_in_order(each.second, &inorder_source_rowids, &inorder_upt_rowids, container);
-        DCHECK(inorder_source_rowids.size() == inorder_upt_rowids.size());
-        for (int i = 0; i < inorder_source_rowids.size(); i++) {
-            auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, inorder_upt_rowids[i].size());
-            TRY_CATCH_BAD_ALLOC(tmp_chunk->append_selective(*upt_chunk, inorder_upt_rowids[i].data(), 0,
-                                                            inorder_upt_rowids[i].size()));
-            RETURN_IF_EXCEPTION(container.chunk_ptr->update_rows(*tmp_chunk, inorder_source_rowids[i].data()));
-        }
+        std::vector<uint32_t> sorted_source_rowids;
+        std::vector<uint32_t> unsorted_upt_rowids;
+        // split rowid_pairs into sorted_source_rowids and unsorted_upt_rowids
+        split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, &container);
+        DCHECK(sorted_source_rowids.size() == unsorted_upt_rowids.size());
+        // fetch upt rows from upt_chunk
+        auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, unsorted_upt_rowids.size());
+        TRY_CATCH_BAD_ALLOC(
+                tmp_chunk->append_selective(*upt_chunk, unsorted_upt_rowids.data(), 0, unsorted_upt_rowids.size()));
+        // update source chunk use upt rows
+        RETURN_IF_EXCEPTION(container.chunk_ptr->update_rows(*tmp_chunk, sorted_source_rowids.data()));
     }
     return Status::OK();
 }
@@ -697,7 +688,22 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     std::vector<ColumnUID> update_column_uids;
     std::vector<ColumnUID> unique_update_column_ids;
     const auto& tschema = rowset->schema();
+    /* 
+      * skip overwrite the auto increment column using data in .upt files if user partially update it for the existed keys
+
+      * In current implementation, if user partially update the auto increment column, it will also be included in partial schema
+      * in writing phrase. Because we need to allocate the id in this phrase. It means that .upt files will contains auto increment
+      * column data even it is partially updated (does not specfied by user).
+      * 
+      * For the keys which have already existed in the tablet, we will write "0" in .upt file. In the apply phrase, such "0" data is not
+      * used and we need to discard the column for the keys which have already existed in the tablet.
+    */
     for (ColumnId cid : txn_meta.partial_update_column_ids()) {
+        if (txn_meta.has_auto_increment_partial_update_column_id() &&
+            cid == txn_meta.auto_increment_partial_update_column_id()) {
+            // skip auto increment column if it is being used for partial update
+            continue;
+        }
         if (cid >= tschema->num_key_columns()) {
             update_column_ids.push_back(cid);
             update_column_uids.push_back((ColumnUID)cid);
@@ -711,7 +717,12 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             LOG(ERROR) << msg;
             return Status::InternalError(msg);
         }
-        if (!tschema->column(cid).is_key()) {
+        const auto& column = tschema->column(cid);
+        if (txn_meta.has_auto_increment_partial_update_column_id() && column.is_auto_increment()) {
+            // skip auto increment column if it is being used for partial update
+            continue;
+        }
+        if (!column.is_key()) {
             unique_update_column_ids.push_back(uid);
         }
     }
@@ -833,8 +844,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
                   << ", finalize cost:" << cost_str.str();
     } else {
-        LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
-                  << ", cost_time: " << total_do_update_time;
+        VLOG(1) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
+                << ", cost_time: " << total_do_update_time;
     }
     _finalize_finished = true;
     return Status::OK();

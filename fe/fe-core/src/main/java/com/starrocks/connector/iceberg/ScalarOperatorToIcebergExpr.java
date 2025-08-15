@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -42,6 +43,7 @@ import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.math.RoundingMode;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -320,6 +322,9 @@ public class ScalarOperatorToIcebergExpr {
                     return dstTypeID != Type.TypeID.DATE;
                 case DATETIME:
                     return dstTypeID != Type.TypeID.TIMESTAMP;
+                case VARBINARY:
+                case BINARY:
+                    return dstTypeID != Type.TypeID.BINARY;
                 default:
                     return true;
             }
@@ -352,10 +357,11 @@ public class ScalarOperatorToIcebergExpr {
                     break;
                     // num usually don't need cast, and num and string has different comparator
                     // cast is dangerous.
+                case DECIMAL:
+                    res = operator.castTo(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 0));
+                    break;
                 case INTEGER:
                 case LONG:
-                    // usually not used as partition column, don't do much work
-                case DECIMAL:
                 case FLOAT:
                 case DOUBLE:
                 case STRUCT:
@@ -402,7 +408,16 @@ public class ScalarOperatorToIcebergExpr {
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
-                    return operator.getDecimal();
+                    if (context != null) {
+                        //In iceberg transform expr, the decimal's scale will influence the result, like truncate and bucket...
+                        //For column value 123.40 and const value 123.4, column = value should be true
+                        //But in iceberg transform, 123.40 and 123.4 are not the same, and the partition may be pruned incorretly.
+                        return operator.getDecimal().setScale(((Types.DecimalType) context).scale(), 
+                                RoundingMode.HALF_UP);
+                    } else {
+                        return operator.getDecimal().setScale(((ScalarType) operator.getType()).getScalarScale(), 
+                                RoundingMode.HALF_UP);
+                    }
                 case HLL:
                 case VARCHAR:
                 case CHAR:
@@ -420,6 +435,9 @@ public class ScalarOperatorToIcebergExpr {
                     long value = operator.getDatetime().atZone(zoneId).toEpochSecond() * 1000
                             * 1000 * 1000 + operator.getDatetime().getNano();
                     return TimeUnit.MICROSECONDS.convert(value, TimeUnit.NANOSECONDS);
+                case VARBINARY:
+                case BINARY:
+                    return operator.getBinary();
                 default:
                     return null;
             }

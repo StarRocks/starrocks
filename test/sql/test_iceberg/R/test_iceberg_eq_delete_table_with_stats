@@ -1,0 +1,28 @@
+-- name: testIcebergEqDeleteTableWithStats
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","enable_get_stats_from_external_metadata"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+set enable_query_trigger_analyze = false;
+-- result:
+-- !result
+set enable_iceberg_column_statistics = true;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.eq_del_tbl;
+-- result:
+0	0	0
+2	2	2
+3	3	3
+4	4	4
+5	5	5
+6	6	6
+7	7	7
+8	8	8
+-- !result
+select count(distinct name) from iceberg_sql_test_${uuid0}.iceberg_oss_db.eq_del_tbl;
+-- result:
+8
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

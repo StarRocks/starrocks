@@ -23,6 +23,7 @@ import com.starrocks.http.rest.transaction.TransactionOperationParams.Channel;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.Validate;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -61,20 +62,24 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                 String warehouseName = txnOperationParams.getWarehouseName();
                 Warehouse warehouse =
                         GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+                ComputeResource computeResource =
+                        GlobalStateMgr.getCurrentState().getWarehouseMgr().acquireComputeResource(warehouse.getId());
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTaskFromFrontend(
                         dbName, tableName, label, "", "", timeoutMillis, channel.getNum(), channel.getId(), result,
-                        warehouse.getId());
+                        computeResource);
                 return new ResultWrapper(result);
             case TXN_PREPARE:
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().prepareLoadTask(
-                        label, channel.getId(), request.getRequest().headers(), result);
+                        label, tableName, channel.getId(), request.getRequest().headers(), result);
                 if (!result.stateOK() || result.containMsg()) {
                     return new ResultWrapper(result);
                 }
-                GlobalStateMgr.getCurrentState().getStreamLoadMgr().tryPrepareLoadTaskTxn(label, result);
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().tryPrepareLoadTaskTxn(label,
+                        txnOperationParams.getPreparedTimeoutMillis(), result);
                 return new ResultWrapper(result);
             case TXN_COMMIT:
-                GlobalStateMgr.getCurrentState().getStreamLoadMgr().commitLoadTask(label, result);
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().commitLoadTask(
+                        label, request.getRequest().headers(), result);
                 return new ResultWrapper(result);
             case TXN_ROLLBACK:
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().rollbackLoadTask(label, result);

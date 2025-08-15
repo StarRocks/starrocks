@@ -21,14 +21,19 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 
-import static org.junit.Assert.assertTrue;
+import java.util.Arrays;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoadActionTest {
 
@@ -56,8 +61,14 @@ public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoa
             }
         };
 
-        new MockUp<TransactionLoadAction>() {
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                return Arrays.asList(1234L);
+            }
+        };
 
+        new MockUp<TransactionLoadAction>() {
             @Mock
             public void redirectTo(BaseRequest request,
                                    BaseResponse response,
@@ -75,14 +86,14 @@ public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoa
     /**
      * we need close be server after junit test
      */
-    @AfterClass
+    @AfterAll
     public static void close() {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .dropComputeNode(new ComputeNode(1234, "localhost", HTTP_PORT));
         beServer.shutDown();
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void initBeServer() throws Exception {
         TEST_HTTP_PORT = detectUsableSocketPort();
         beServer = new HttpServer(TEST_HTTP_PORT);

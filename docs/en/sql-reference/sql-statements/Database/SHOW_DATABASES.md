@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW DATABASES
 
-## Description
-
-Views databases in your current StarRocks cluster or an external data source. StarRocks supports viewing databases of an external data source from v2.3 onwards.
+SHOW DATABASES lists databases in your current StarRocks cluster or an external data source. StarRocks supports viewing databases of an external data source from v2.3 onwards.
 
 ## Syntax
 

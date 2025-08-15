@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DROP DATABASE
 
-## Description
-
-Drops a database in StarRocks.
+DROP DATABASE is used to delete a database in StarRocks.
 
 > **NOTE**
 >

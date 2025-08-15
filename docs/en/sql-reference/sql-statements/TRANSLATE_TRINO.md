@@ -2,7 +2,11 @@
 displayed_sidebar: docs
 ---
 
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
 # Translate Trino SQL
+
+<Beta />
 
 From v3.3.9, StarRocks supports translating Trino SQL statements into StarRocks SQL statements.
 

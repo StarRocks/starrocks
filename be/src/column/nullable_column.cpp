@@ -15,6 +15,7 @@
 #include "column/nullable_column.h"
 
 #include "column/column_helper.h"
+#include "column/column_view/column_view.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
@@ -88,6 +89,10 @@ void NullableColumn::append(const Column& src, size_t offset, size_t count) {
 }
 
 void NullableColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    if (src.is_view()) {
+        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        return;
+    }
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t orig_size = _null_column->size();
     if (src.only_null()) {
@@ -466,6 +471,26 @@ void NullableColumn::crc32_hash_selective(uint32_t* hash, uint16_t* sel, uint16_
         } else {
             _data_column->crc32_hash(hash, sel[i], sel[i] + 1);
         }
+    }
+}
+
+void NullableColumn::murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const {
+    if (!_has_null) {
+        _data_column->murmur_hash3_x86_32(hash, from, to);
+        return;
+    }
+
+    const auto& null_data = _null_column->get_data();
+    while (from < to) {
+        uint32_t new_from = from + 1;
+        while (new_from < to && null_data[from] == null_data[new_from]) {
+            ++new_from;
+        }
+        // skip null data
+        if (!null_data[from]) {
+            _data_column->murmur_hash3_x86_32(hash, from, new_from);
+        }
+        from = new_from;
     }
 }
 

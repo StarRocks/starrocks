@@ -24,6 +24,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AuditLog;
@@ -322,8 +323,8 @@ public class StatisticExecutor {
         }
 
         OlapTable olapTable = (OlapTable) table;
-        long version = olapTable.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
-                .max(Long::compareTo).orElse(0L);
+        long version = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
+                PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
         String columnName = MetaUtils.getColumnNameByColumnId(dbId, tableId, columnId);
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
@@ -461,7 +462,8 @@ public class StatisticExecutor {
     public AnalyzeStatus collectStatistics(ConnectContext statsConnectCtx,
                                            StatisticsCollectJob statsJob,
                                            AnalyzeStatus analyzeStatus,
-                                           boolean refreshAsync) {
+                                           boolean refreshAsync,
+                                           boolean resetWarehouse) {
         Database db = statsJob.getDb();
         Table table = statsJob.getTable();
 
@@ -479,7 +481,9 @@ public class StatisticExecutor {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
             statsConnectCtx.setStatisticsConnection(true);
-            statsConnectCtx.getSessionVariable().setWarehouseName(Config.statistics_collect_warehouse);
+            if (resetWarehouse) {
+                statsConnectCtx.setCurrentWarehouse(Config.lake_background_warehouse);
+            }
             statsJob.collect(statsConnectCtx, analyzeStatus);
             LOG.info("execute statistics job successfully, duration={}, job={}", watch.toString(), statsJob);
         } catch (Exception e) {
@@ -528,18 +532,16 @@ public class StatisticExecutor {
             AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
             if (table.isNativeTableOrMaterializedView()) {
                 if (statsJob.isMultiColumnStatsJob()) {
-                    List<StatsConstants.StatisticsType> statisticsTypes = statsJob.getStatisticsTypes();
                     // TODO(stephen): support auto collect column groups and multiple statistics type
                     Set<Integer> columnIds = statsJob.columnGroups.get(0).stream()
                             .map(table::getColumn)
                             .map(Column::getUniqueId)
                             .collect(Collectors.toSet());
-                    for (StatsConstants.StatisticsType type : statisticsTypes) {
-                        MultiColumnStatsMeta meta = new MultiColumnStatsMeta(db.getId(), table.getId(), columnIds,
-                                statsJob.getAnalyzeType(), type, analyzeStatus.getEndTime(), statsJob.getProperties());
-                        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addMultiColumnStatsMeta(meta);
-                        GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshMultiColumnStatisticsCache(meta.getTableId());
-                    }
+                    MultiColumnStatsMeta meta = new MultiColumnStatsMeta(db.getId(), table.getId(), columnIds,
+                            statsJob.getAnalyzeType(), statsJob.getStatisticsTypes(),
+                            analyzeStatus.getEndTime(), statsJob.getProperties());
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().addMultiColumnStatsMeta(meta);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshMultiColumnStatisticsCache(meta.getTableId(), true);
                 } else {
                     BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
                     if (basicStatsMeta == null) {
@@ -547,11 +549,13 @@ public class StatisticExecutor {
                         basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
                                 statsJob.getColumnNames(), statsJob.getAnalyzeType(), analyzeStatus.getEndTime(),
                                 statsJob.getProperties(), existUpdateRows);
+                        basicStatsMeta.increaseStatsCollectionCount(analyzeStatus);
                     } else {
                         basicStatsMeta = basicStatsMeta.clone();
                         basicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
                         basicStatsMeta.setProperties(statsJob.getProperties());
                         basicStatsMeta.setAnalyzeType(statsJob.getAnalyzeType());
+                        basicStatsMeta.increaseStatsCollectionCount(analyzeStatus);
                     }
 
                     for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {
@@ -635,9 +639,7 @@ public class StatisticExecutor {
         // copy
         executeDML(context, sqlList.get(0));
 
-        // delete
-        executeDML(context, sqlList.get(1));
-
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(sourcePartition);
         // NOTE: why don't we refresh the statistics cache ?
         // OVERWRITE will create a new partition and delete the existing one, so next time when consulting the stats
         // cache, it would get a cache-miss so reload the cache. and also the cache of deleted partition would be

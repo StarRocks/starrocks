@@ -52,6 +52,10 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
+import com.starrocks.fs.azure.AzBlobURI;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
@@ -63,6 +67,7 @@ import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
 import org.apache.iceberg.hadoop.SerializableConfiguration;
 import org.apache.iceberg.hadoop.Util;
+import org.apache.iceberg.io.ByteBufferInputStream;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
@@ -88,6 +93,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_ENDPOINT;
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_SAS_TOKEN;
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.BLOB_ENDPOINT;
+
 /**
  * Implementation of FileIO that adds metadata content caching features.
  */
@@ -105,16 +114,16 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     public static final long DISK_CACHE_EXPIRATION_SECONDS = Config.iceberg_metadata_disk_cache_expiration_seconds;
 
     private transient ContentCache fileContentCache;
-    private FileIO wrappedIO;
+    private ResolvingFileIO wrappedIO;
+    private Map<String, String> properties;
     private SerializableSupplier<Configuration> conf;
     private static final Pattern HADOOP_CATALOG_METADATA_JSON_PATTERN =
             Pattern.compile("^v\\d+(\\.gz)?\\.metadata\\.json(\\.gz)?$");
 
     @Override
     public void initialize(Map<String, String> properties) {
-        ResolvingFileIO resolvingFileIO = new ResolvingFileIO();
-        resolvingFileIO.setConf(conf.get());
-        wrappedIO = resolvingFileIO;
+        this.properties = properties;
+        wrappedIO = new ResolvingFileIO();
         wrappedIO.initialize(properties);
 
         if (ENABLE_DISK_CACHE) {
@@ -157,12 +166,26 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
     @Override
     public InputFile newInputFile(String path) {
-        return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(path));
+        try {
+            wrappedIO.setConf(buildConfFromProperties(properties, path));
+            return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(path));
+        } catch (StarRocksException e) {
+            String errorMessage = String.format("Failed to new input file for path: %s, properties: %s", path, properties);
+            LOG.error(errorMessage, e);
+            throw new StarRocksConnectorException(errorMessage, e);
+        }
     }
 
     @Override
     public OutputFile newOutputFile(String path) {
-        return wrappedIO.newOutputFile(path);
+        try {
+            wrappedIO.setConf(buildConfFromProperties(properties, path));
+            return wrappedIO.newOutputFile(path);
+        } catch (StarRocksException e) {
+            String errorMessage = String.format("Failed to new output file for path: %s, properties: %s", path, properties);
+            LOG.error(errorMessage, e);
+            throw new StarRocksConnectorException(errorMessage, e);
+        }
     }
 
     @Override
@@ -179,6 +202,38 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public Map<String, String> properties() {
         return wrappedIO.properties();
+    }
+
+    public Configuration buildConfFromProperties(Map<String, String> properties, String path) throws StarRocksException {
+        // build Hadoop configuration from properties for HadoopFileIO
+        Configuration copied = new Configuration(conf.get());
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && entry.getKey().endsWith(ADLS_ENDPOINT)) {
+                // Handle Azure ADLS SAS token
+                String endpoint = entry.getKey().substring(ADLS_SAS_TOKEN.length());
+                copied.set(String.format("fs.azure.account.auth.type.%s", endpoint),
+                        "SAS");
+                copied.set(String.format("fs.azure.sas.fixed.token.%s", endpoint),
+                        entry.getValue());
+                return copied;
+            } else if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && (entry.getKey().endsWith(BLOB_ENDPOINT))) {
+                // Handle Azure Blob SAS token
+                AzBlobURI uri = AzBlobURI.parse(path);
+                String key =
+                        String.format("fs.azure.sas.%s.%s.blob.core.windows.net", uri.getContainer(), uri.getAccount());
+                copied.set(key, entry.getValue());
+                return copied;
+            } else if (entry.getKey().equals(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN)) {
+                // Handle GCS access token
+                copied.set("fs.gs.auth.access.token.provider.impl", GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL);
+                copied.set(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY, entry.getValue());
+                copied.set(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY,
+                        properties.getOrDefault(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT,
+                                String.valueOf(Long.MAX_VALUE)));
+                return copied;
+            }
+        }
+        return conf.get();
     }
 
     private static class CacheEntry {

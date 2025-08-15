@@ -19,6 +19,7 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/column_view/column_view_helper.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -26,13 +27,13 @@
 #include "gutil/casts.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
+#include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "util/date_func.h"
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
-
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
@@ -76,6 +77,24 @@ void ColumnHelper::merge_two_filters(const ColumnPtr& column, Filter* __restrict
         // noted that here we don't need to count zero, but to check is there any non-zero.
         // filter values are 0/1, we can use memchr here.
         *all_zero = (memchr(filter->data(), 0x1, filter->size()) == nullptr);
+    }
+}
+
+void ColumnHelper::merge_two_anti_filters(const ColumnPtr& column, NullData& null_data, Filter* __restrict filter) {
+    size_t num_rows = column->size();
+    auto* data_column = get_data_column(column.get());
+
+    if (column->is_nullable()) {
+        const auto* nullable_column = as_raw_const_column<NullableColumn>(column);
+        const auto nulls = nullable_column->null_column_data().data();
+        for (size_t i = 0; i < num_rows; ++i) {
+            null_data[i] |= nulls[i];
+        }
+    }
+
+    const auto* datas = get_cpp_data<TYPE_BOOLEAN>(data_column);
+    for (size_t j = 0; j < num_rows; ++j) {
+        (*filter)[j] &= datas[j];
     }
 }
 
@@ -197,6 +216,56 @@ MutableColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
     return ConstColumn::create(std::move(nullable_column), chunk_size);
 }
 
+class UpdateColumnNullInfoVisitor : public ColumnVisitorMutableAdapter<UpdateColumnNullInfoVisitor> {
+public:
+    UpdateColumnNullInfoVisitor() : ColumnVisitorMutableAdapter<UpdateColumnNullInfoVisitor>(this) {}
+
+    Status do_visit(ConstColumn* column) {
+        return Status::NotSupported("Unsupported const column in column wise comparator");
+    }
+
+    template <typename T>
+    Status do_visit(ObjectColumn<T>* column) {
+        return Status::NotSupported("Unsupported object column in column wise comparator");
+    }
+
+    Status do_visit(NullableColumn* column) {
+        RETURN_IF_ERROR(column->data_column()->accept_mutable(this));
+        column->update_has_null();
+        return Status::OK();
+    }
+
+    Status do_visit(ArrayColumn* column) {
+        RETURN_IF_ERROR(column->elements_column()->accept_mutable(this));
+        return Status::OK();
+    }
+
+    Status do_visit(MapColumn* column) {
+        RETURN_IF_ERROR(column->keys_column()->accept_mutable(this));
+        RETURN_IF_ERROR(column->values_column()->accept_mutable(this));
+        return Status::OK();
+    }
+
+    Status do_visit(StructColumn* column) {
+        return Status::NotSupported("Unsupported struct column in column wise comparator");
+    }
+
+    template <typename T>
+    Status do_visit(FixedLengthColumnBase<T>* column) {
+        return Status::OK();
+    }
+    template <typename T>
+    Status do_visit(BinaryColumnBase<T>* column) {
+        return Status::OK();
+    }
+};
+
+Status ColumnHelper::update_nested_has_null(Column* column) {
+    UpdateColumnNullInfoVisitor visitor;
+    RETURN_IF_ERROR(column->accept_mutable(&visitor));
+    return Status::OK();
+}
+
 size_t ColumnHelper::find_nonnull(const Column* col, size_t start, size_t end) {
     DCHECK_LE(start, end);
 
@@ -274,6 +343,18 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
     return create_column(type_desc, nullable, false, 0);
 }
 
+MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool use_view_if_needed,
+                                             long column_view_concat_rows_limit, long column_view_concat_bytes_limit) {
+    if (use_view_if_needed) {
+        auto opt_column = ColumnViewHelper::create_column_view(type_desc, nullable, column_view_concat_rows_limit,
+                                                               column_view_concat_bytes_limit);
+        if (opt_column.has_value()) {
+            return std::move(opt_column.value());
+        }
+    }
+    return create_column(type_desc, nullable);
+}
+
 struct ColumnBuilder {
     template <LogicalType ltype>
     MutableColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
@@ -292,6 +373,8 @@ struct ColumnBuilder {
             return Decimal64Column::create(type_desc.precision, type_desc.scale, size);
         case TYPE_DECIMAL128:
             return Decimal128Column::create(type_desc.precision, type_desc.scale, size);
+        case TYPE_DECIMAL256:
+            return Decimal256Column::create(type_desc.precision, type_desc.scale, size);
         default:
             return RunTimeColumnType<ltype>::create(size);
         }
@@ -317,7 +400,7 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
         auto data = create_column(type_desc.children[0], true, is_const, size);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
     } else if (type_desc.type == LogicalType::TYPE_MAP) {
-        MutableColumnPtr offsets = UInt32Column ::create(size);
+        MutableColumnPtr offsets = UInt32Column::create(size);
         MutableColumnPtr keys = nullptr;
         MutableColumnPtr values = nullptr;
         if (type_desc.children[0].is_unknown_type()) {
@@ -524,5 +607,4 @@ ChunkUniquePtr ChunkSliceTemplate<SegmentedChunkPtr>::cutoff(size_t required_row
 template struct ChunkSliceTemplate<ChunkPtr>;
 template struct ChunkSliceTemplate<ChunkUniquePtr>;
 template struct ChunkSliceTemplate<SegmentedChunkPtr>;
-
 } // namespace starrocks

@@ -325,6 +325,25 @@ public:
     DEFINE_VECTORIZED_FN(locate_pos);
 
     /**
+     * Return the position of the first occurrence of substring in string
+     *
+     * @param: [string_value, sub_string_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(strpos);
+
+    /**
+     * Return the position of the N-th occurrence of substring in string
+     * When N is negative, search from the end of string
+     *
+     * @param: [string_value, sub_string_value, instance]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(strpos_instance);
+
+    /**
      * @param: [string_value, ......]
      * @paramType: [BinaryColumn, ......]
      * @return: BinaryColumn
@@ -399,6 +418,7 @@ public:
     // regex method
     static Status regexp_extract_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status regexp_count_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
@@ -432,6 +452,13 @@ public:
      * @return: Array<BinaryColumn>
      */
     DEFINE_VECTORIZED_FN(regexp_split);
+
+    /**
+     * @param: [string_value, pattern_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(regexp_count);
 
     /**
      * @param: [string_value, pattern_value, replace_value]
@@ -593,6 +620,15 @@ public:
     static Status field_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     template <LogicalType Type>
     static Status field_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
+     * Format byte count as human-readable string with appropriate units
+     *
+     * @param: [bytes]
+     * @paramType: [BigIntColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(format_bytes);
 
     static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status ngram_search_case_insensitive_prepare(FunctionContext* context,

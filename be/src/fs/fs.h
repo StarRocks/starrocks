@@ -80,6 +80,8 @@ public:
             : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, fs_options) {}
 
     const THdfsProperties* hdfs_properties() const;
+    const TCloudConfiguration* get_cloud_configuration() const;
+    bool azure_use_native_sdk() const;
 
     const TBrokerScanRangeParams* scan_range_params;
     const TExportSink* export_sink;
@@ -132,6 +134,8 @@ struct FileInfo {
     std::optional<int64_t> size;
     std::string encryption_meta;
     std::shared_ptr<FileSystem> fs;
+    // It is used to store the file offset of the bundle file.
+    std::optional<int64_t> bundle_file_offset;
 };
 
 struct FileWriteStat {
@@ -143,7 +147,7 @@ struct FileWriteStat {
 
 class FileSystem {
 public:
-    enum Type { POSIX, S3, HDFS, BROKER, MEMORY, STARLET };
+    enum Type { POSIX, S3, HDFS, BROKER, MEMORY, STARLET, AZBLOB };
 
     // Governs if/how the file is created.
     //
@@ -207,6 +211,10 @@ public:
                                                                                const FileInfo& file_info) {
         return new_random_access_file(opts, file_info.path);
     }
+
+    // Used for sharing segment files only.
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file_with_bundling(
+            const RandomAccessFileOptions& opts, const FileInfo& file_info);
 
     // Create an object that writes to a new file with the specified
     // name.  Deletes any existing file with the same name and creates a
@@ -443,6 +451,17 @@ public:
 
     // Returns the filename provided when the WritableFile was constructed.
     virtual const std::string& filename() const = 0;
+
+    // The offset is the position of the file in the shared file.
+    // It will return -1 if the file is not a shared file.
+    virtual int64_t bundle_file_offset() const { return -1; }
+
+    virtual void set_encryption_info(const FileEncryptionInfo& info) {}
+
+    // Return statistics about file written, like how many time is spent on IO
+    virtual StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() {
+        return Status::NotSupported("get_numeric_statistics");
+    }
 };
 
 } // namespace starrocks

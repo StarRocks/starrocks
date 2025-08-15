@@ -59,8 +59,8 @@
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/dictionary_cache_manager.h"
-#include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/local_pk_index_manager.h"
+#include "storage/load_spill_block_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/publish_version_manager.h"
 #include "storage/replication_txn_manager.h"
@@ -168,12 +168,7 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     std::vector<std::thread> threads;
     threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
-        threads.emplace_back([data_dir] {
-            auto res = data_dir->load();
-            if (!res.ok()) {
-                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
-            }
-        });
+        threads.emplace_back([data_dir] { (void)data_dir->load(); });
         Thread::set_thread_name(threads.back(), "load_data_dir");
 
         threads.emplace_back([data_dir] {
@@ -229,7 +224,7 @@ Status StorageEngine::_open(const EngineOptions& options) {
     std::unique_ptr<ThreadPool> thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("delta_writer")
                             .set_min_threads(1)
-                            .set_max_threads(std::max<int>(1, config::number_tablet_writer_threads))
+                            .set_max_threads(caculate_delta_writer_thread_num(config::number_tablet_writer_threads))
                             .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
                             .build(&thread_pool));
@@ -240,7 +235,7 @@ Status StorageEngine::_open(const EngineOptions& options) {
             async_delta_writer,
             static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())->get_thread_pool());
 
-    _load_spill_block_merge_executor = std::make_unique<lake::LoadSpillBlockMergeExecutor>();
+    _load_spill_block_merge_executor = std::make_unique<LoadSpillBlockMergeExecutor>();
     RETURN_IF_ERROR(_load_spill_block_merge_executor->init());
     REGISTER_THREAD_POOL_METRICS(load_spill_block_merge, _load_spill_block_merge_executor->get_thread_pool());
 
@@ -656,7 +651,6 @@ void StorageEngine::stop() {
 #endif
 
     JOIN_THREAD(_fd_cache_clean_thread)
-    JOIN_THREAD(_adjust_cache_thread)
 
     if (config::path_gc_check) {
         JOIN_THREADS(_path_scan_threads)
@@ -693,7 +687,7 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
     LOG(INFO) << "Clearing transaction task txn_id: " << transaction_id;
 
     for (const TPartitionId& partition_id : partition_ids) {
-        std::map<TabletInfo, RowsetSharedPtr> tablet_infos;
+        std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_infos;
         StorageEngine::instance()->txn_manager()->get_txn_related_tablets(transaction_id, partition_id, &tablet_infos);
 
         // each tablet

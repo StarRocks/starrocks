@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler;
 
 import com.google.api.client.util.Lists;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
@@ -25,8 +26,8 @@ import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
 import org.assertj.core.util.Sets;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.List;
@@ -66,7 +67,7 @@ public class PhasedScheduleTest extends SchedulerTestBase {
                 noDispatched.add(execution);
             }
         }
-        Assert.assertFalse(noDispatched.isEmpty());
+        Assertions.assertFalse(noDispatched.isEmpty());
         reportScan(noDispatched, executionDAG, coordinator);
 
     }
@@ -84,7 +85,7 @@ public class PhasedScheduleTest extends SchedulerTestBase {
         final DefaultCoordinator coordinator = startScheduling(sql);
         final ExecutionDAG executionDAG = coordinator.getExecutionDAG();
         final int size = executionDAG.getExecutions().size();
-        Assert.assertEquals(size, 11);
+        Assertions.assertEquals(size, 11);
     }
 
     @Test
@@ -121,7 +122,7 @@ public class PhasedScheduleTest extends SchedulerTestBase {
                 noDispatched.add(execution);
             }
         }
-        Assert.assertFalse(noDispatched.isEmpty());
+        Assertions.assertFalse(noDispatched.isEmpty());
 
         parallelReport(noDispatched, executionDAG, coordinator);
 
@@ -159,6 +160,26 @@ public class PhasedScheduleTest extends SchedulerTestBase {
 
         executionDAG.getExecutions();
 
+    }
+
+    @Test
+    public void testScheduleWithSerializeRequestException() throws Exception {
+        connectContext.getSessionVariable().setEnablePhasedScheduler(true);
+        connectContext.getSessionVariable().setPhasedSchedulerMaxConcurrency(1);
+
+        String sql = "select count(1) from lineitem " +
+                "UNION ALL select count(1) from lineitem " +
+                "UNION ALL select count(1) from lineitem";
+
+        // deploy
+        new MockUp<FragmentInstanceExecState>() {
+            @Mock
+            public void serializeRequest() {
+                throw new RuntimeException("test");
+            }
+        };
+
+        Assertions.assertThrows(StarRocksException.class, () -> startScheduling(sql), "test");
     }
 
     private void reportScan(Collection<FragmentInstanceExecState> instances, ExecutionDAG dag, Coordinator coordinator)

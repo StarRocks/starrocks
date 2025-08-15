@@ -19,10 +19,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -158,7 +160,7 @@ public class MultiDistinctByCTERewriter {
             OptExpression join;
             if (!hasGroupBy) {
                 join = OptExpression.create(
-                        new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null, JoinOperator.HINT_UNREORDER),
+                        new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null, HintNode.HINT_JOIN_UNREORDER),
                         left, right);
             } else {
                 // create inner join when aggregate has group by keys
@@ -212,7 +214,7 @@ public class MultiDistinctByCTERewriter {
             onPredicateList.add(onPredicate);
         }
         return OptExpression.create(new LogicalJoinOperator(JoinOperator.INNER_JOIN,
-                Utils.compoundAnd(onPredicateList), JoinOperator.HINT_UNREORDER), left, right);
+                Utils.compoundAnd(onPredicateList), HintNode.HINT_JOIN_UNREORDER), left, right);
     }
 
     private List<ColumnRefOperator> getJoinOnPredicateColumn(Operator operator) {
@@ -278,12 +280,19 @@ public class MultiDistinctByCTERewriter {
 
                 CallOperator distinctAvgCallOperator = new CallOperator(FunctionSet.DIVIDE, avgCallOperator.getType(),
                         Lists.newArrayList(sumColumnRef, countColumnRef));
-                if (avgCallOperator.getType().isDecimalV3()) {
+                Type avgCallOperatorType = avgCallOperator.getType();
+                if (avgCallOperatorType.isDecimalV3()) {
                     // There is not need to apply ImplicitCastRule to divide operator of decimal types.
                     // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
-                    ScalarType decimal128p38s0 = ScalarType.createDecimalV3NarrowestType(38, 0);
+                    // TODO(stephen): support auto scale up decimal precision
+                    ScalarType decimalType;
+                    if (avgCallOperatorType.isDecimal256()) {
+                        decimalType = ScalarType.createDecimalV3NarrowestType(76, 0);
+                    } else {
+                        decimalType = ScalarType.createDecimalV3NarrowestType(38, 0);
+                    }
                     distinctAvgCallOperator.getChildren().set(
-                            1, new CastOperator(decimal128p38s0, distinctAvgCallOperator.getChild(1), true));
+                            1, new CastOperator(decimalType, distinctAvgCallOperator.getChild(1), true));
                 } else {
                     distinctAvgCallOperator = (CallOperator) scalarRewriter.rewrite(distinctAvgCallOperator,
                             Lists.newArrayList(new ImplicitCastRule()));

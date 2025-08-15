@@ -51,7 +51,7 @@ import java.util.stream.Collectors;
  */
 public class TaskRunHistoryTable {
 
-    public static final int INSERT_BATCH_SIZE = 128;
+    public static final int INSERT_BATCH_SIZE = 32;
     private static final int DEFAULT_RETENTION_DAYS = 7;
     public static final String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
     public static final String TABLE_NAME = "task_run_history";
@@ -184,7 +184,7 @@ public class TaskRunHistoryTable {
         }
         Iterator<Map.Entry<String, String>> iterator = properties.entrySet().iterator();
         while (iterator.hasNext()) {
-            if (!TaskRun.TASK_RUN_PROPERTIES.contains(iterator.next().getKey())) {
+            if (!TaskRun.RESERVED_HISTORY_TASK_RUN_PROPERTIES.contains(iterator.next().getKey())) {
                 iterator.remove();
             }
         }
@@ -210,6 +210,12 @@ public class TaskRunHistoryTable {
             predicates.add(" task_state = " + Strings.quote(params.getState()));
         }
         sql += Joiner.on(" AND ").join(predicates);
+        // If user explicitly specify the LIMIT in sql, we don't apply default limit
+        if (params.isSetPagination() && params.getPagination().getLimit() > 0) {
+            sql += " LIMIT " + params.getPagination().getLimit();
+        } else if (Config.task_runs_max_history_number > 0) {
+            sql += " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number;
+        }
 
         List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
         List<TaskRunStatus> result = TaskRunStatus.fromResultBatch(batch);

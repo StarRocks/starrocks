@@ -36,6 +36,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
@@ -47,14 +48,12 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
-import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetApplicableRolesRequest;
@@ -254,13 +253,16 @@ public class InformationSchemaDataSource {
                         tableConfigInfo.setTable_schema(dbName);
                         tableConfigInfo.setTable_name(table.getName());
 
-                        if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
+                        if (table.isNativeTableOrMaterializedView() || table.isOlapExternalTable()) {
                             // OLAP (done)
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
                             // LAKE (done)
                             // LAKE_MATERIALIZED_VIEW (done)
                             genNormalTableConfigInfo(table, tableConfigInfo);
+                        } else if (table.isView()) {
+                            // VIEW (done)
+                            tableConfigInfo.setTable_engine(table.getType().toString());
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         tList.add(tableConfigInfo);
@@ -452,8 +454,10 @@ public class InformationSchemaDataSource {
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));
         // DATA_SIZE
-        ByteSizeValue byteSizeValue = new ByteSizeValue(physicalPartition.storageDataSize());
-        partitionMetaInfo.setData_size(byteSizeValue.toString());
+        // DATA_SIZE in PARTITIONS_META is string before, and bigint is more programmer-friendly and change it to bigint
+        // We do not change the field type in `TPartitionMetaInfo` for compatibility and BE will finished the type 
+        // convertion.
+        partitionMetaInfo.setData_size(String.valueOf(physicalPartition.storageDataSize()));
         DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
         // STORAGE_MEDIUM
         partitionMetaInfo.setStorage_medium(dataProperty.getStorageMedium().name());
@@ -486,12 +490,20 @@ public class InformationSchemaDataSource {
             partitionMetaInfo.setMax_cs(compactionScore != null ? compactionScore.getMax() : 0.0);
             // STORAGE_PATH
             partitionMetaInfo.setStorage_path(
-                    table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
+                    table.getPartitionFilePathInfo(physicalPartition.getPathId()).getFullPath());
+            // METADATA_SWITCH_VERSION
+            partitionMetaInfo.setMetadata_switch_version(physicalPartition.getMetadataSwitchVersion());
+            // PATH_ID
+            partitionMetaInfo.setPath_id(physicalPartition.getPathId());
         }
 
         partitionMetaInfo.setData_version(physicalPartition.getDataVersion());
         partitionMetaInfo.setVersion_epoch(physicalPartition.getVersionEpoch());
         partitionMetaInfo.setVersion_txn_type(physicalPartition.getVersionTxnType().toThrift());
+        // STORAGE_SIZE
+        partitionMetaInfo.setStorage_size(physicalPartition.storageDataSize() + physicalPartition.getExtraFileSize());
+        // TABLET_BALANCED
+        partitionMetaInfo.setTablet_balanced(physicalPartition.isTabletBalanced());
     }
 
     // tables

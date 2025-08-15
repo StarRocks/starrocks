@@ -1,0 +1,81 @@
+-- name: test_schema_change_with_partition_table
+CREATE TABLE t1(
+    id varchar(100),
+    k1 varchar(100),
+    k2 decimal,
+    k3 int
+)
+PARTITION BY RANGE(str2date(id, '%Y-%m-%d'))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+-- result:
+-- !result
+insert into t1 values('2021-01-04','1',1.1,1), ('2021-01-05','1',1.1,1), ('2021-01-06','1',1.1,1);
+-- result:
+-- !result
+alter table t1 modify column k1 varchar(1024) NULL COMMENT 'k1';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t1 order by id;
+-- result:
+2021-01-04	1	1	1
+2021-01-05	1	1	1
+2021-01-06	1	1	1
+-- !result
+alter table t1 drop column id;
+-- result:
+E: (1064, 'No key column left. index[t1]')
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t1 order by id;
+-- result:
+2021-01-04	1	1	1
+2021-01-05	1	1	1
+2021-01-06	1	1	1
+-- !result
+alter table t1 drop column k1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t1 order by id;
+-- result:
+2021-01-04	1	1
+2021-01-05	1	1
+2021-01-06	1	1
+-- !result
+alter table t1 drop column k2;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t1 order by id;
+-- result:
+2021-01-04	1
+2021-01-05	1
+2021-01-06	1
+-- !result
+alter table t1 drop column k3;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t1 order by id;
+-- result:
+2021-01-04
+2021-01-05
+2021-01-06
+-- !result

@@ -17,16 +17,16 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.MaterializedViewTestBase;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 public class TracerMVTest extends MaterializedViewTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
@@ -50,7 +50,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
         starRocksAssert.withMaterializedView(mv);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         starRocksAssert.dropMaterializedView("test_distinct_mv1");
         MaterializedViewTestBase.afterClass();
@@ -182,7 +182,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
         Tracers.toRuntimeProfile(runtimeProfile);
 
         Map<String, String> result = runtimeProfile.getInfoStrings();
-        Assert.assertTrue(result.isEmpty());
+        Assertions.assertTrue(result.isEmpty());
     }
 
     @Test
@@ -193,7 +193,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
         String mv = "select empid, current_date(), current_timestamp() from emps ";
         testRewriteFail(mv, "select empid, current_date(), current_timestamp(), random() from emps");
         String pr = Tracers.printLogs();
-        Assert.assertTrue(pr.contains("MV contains non-deterministic functions(current_date)"));
+        Assertions.assertTrue(pr.contains("MV contains non-deterministic functions(current_date)"));
         Tracers.close();
     }
 }

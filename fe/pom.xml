@@ -41,16 +41,17 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../</starrocks.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <jprotobuf.version>2.4.23</jprotobuf.version>
+        <jprotobuf-starrocks.version>1.0.0</jprotobuf-starrocks.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.5.5</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
-        <parquet.version>1.14.0</parquet.version>
+        <parquet.version>1.15.2</parquet.version>
         <hadoop.version>3.4.1</hadoop.version>
         <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
+        <antlr.version>4.9.3</antlr.version>
         <skip.plugin>false</skip.plugin>
-        <hudi.version>0.15.0</hudi.version>
+        <hudi.version>1.0.2</hudi.version>
         <hive-apache.version>3.1.2-22</hive-apache.version>
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
@@ -64,15 +65,24 @@ under the License.
         <io.netty.version>4.1.118.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
         <aws-v2-sdk.version>2.29.52</aws-v2-sdk.version>
-        <avro.version>1.11.4</avro.version>
+        <avro.version>1.12.0</avro.version>
         <dnsjava.version>3.6.3</dnsjava.version>
         <nimbusds.version>9.37.2</nimbusds.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <paimon.version>1.0.1</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
-        <iceberg.version>1.7.1</iceberg.version>
-        <staros.version>3.4-rc6</staros.version>
-        <jetty.version>10.0.24</jetty.version>
+        <iceberg.version>1.9.0</iceberg.version>
+        <staros.version>3.5-rc3</staros.version>
+        <!-- hadoop-azure requires no more than jetty10+ -->
+        <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
+        <jetty.version>9.4.57.v20241219</jetty.version>
+        <byteman.version>4.0.24</byteman.version>
+        <!-- azure native sdk -->
+        <azure.version>1.2.34</azure.version>
+        <fastutil.version>8.5.15</fastutil.version>
+        <commons-beanutils.version>1.11.0</commons-beanutils.version>
+        <hbase.version>2.6.2</hbase.version>
+        <async-profiler.version>4.0</async-profiler.version>
     </properties>
 
     <profiles>
@@ -254,7 +264,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.httpcomponents.client5</groupId>
                 <artifactId>httpclient5</artifactId>
-                <version>5.4.1</version>
+                <version>5.4.3</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->
@@ -355,11 +365,10 @@ under the License.
                 <scope>test</scope>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
             <dependency>
-                <groupId>com.baidu</groupId>
-                <artifactId>jprotobuf</artifactId>
-                <version>${jprotobuf.version}</version>
+                <groupId>com.starrocks</groupId>
+                <artifactId>jprotobuf-starrocks</artifactId>
+                <version>${jprotobuf-starrocks.version}</version>
                 <exclusions>
                     <exclusion>
                         <groupId>com.google.auto.value</groupId>
@@ -370,11 +379,10 @@ under the License.
 
             <!--Only used to compile protobuf-->
             <!--jar-with-dependencies contains CVE problems, so set scope with provided to download it.-->
-            <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
             <dependency>
-                <groupId>com.baidu</groupId>
-                <artifactId>jprotobuf</artifactId>
-                <version>${jprotobuf.version}</version>
+                <groupId>com.starrocks</groupId>
+                <artifactId>jprotobuf-starrocks</artifactId>
+                <version>${jprotobuf-starrocks.version}</version>
                 <classifier>jar-with-dependencies</classifier>
                 <scope>provided</scope>
             </dependency>
@@ -401,6 +409,10 @@ under the License.
                         <groupId>org.codehaus.plexus</groupId>
                         <artifactId>plexus-utils</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>junit</groupId>
+                        <artifactId>junit</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -420,6 +432,10 @@ under the License.
                         <groupId>com.baidu</groupId>
                         <artifactId>jprotobuf</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>junit</groupId>
+                        <artifactId>junit</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -430,11 +446,11 @@ under the License.
                 <version>20231013</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/junit/junit -->
+            <!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter -->
             <dependency>
-                <groupId>junit</groupId>
-                <artifactId>junit</artifactId>
-                <version>4.13.1</version>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>5.8.2</version>
                 <scope>test</scope>
             </dependency>
 
@@ -506,6 +522,12 @@ under the License.
             <dependency>
                 <groupId>com.google.protobuf</groupId>
                 <artifactId>protobuf-java</artifactId>
+                <version>${protobuf-java.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java-util</artifactId>
                 <version>${protobuf-java.version}</version>
             </dependency>
 
@@ -661,6 +683,30 @@ under the License.
                         <groupId>com.google.protobuf</groupId>
                         <artifactId>protobuf-java</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-server</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-util</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-io</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-servlet</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-client</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-security</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -755,7 +801,17 @@ under the License.
                         <groupId>ch.qos.reload4j</groupId>
                         <artifactId>reload4j</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>javax.ws.rs</groupId>
+                        <artifactId>jsr311-api</artifactId>
+                    </exclusion>
                 </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>commons-beanutils</groupId>
+                <artifactId>commons-beanutils</artifactId>
+                <version>${commons-beanutils.version}</version>
             </dependency>
 
             <dependency>
@@ -905,6 +961,10 @@ under the License.
                         <groupId>org.jdom</groupId>
                         <artifactId>jdom2</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.ini4j</groupId>
+                        <artifactId>ini4j</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -948,7 +1008,7 @@ under the License.
             <dependency>
                 <groupId>com.fasterxml.uuid</groupId>
                 <artifactId>java-uuid-generator</artifactId>
-                <version>4.0</version>
+                <version>5.1.0</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-common -->
@@ -969,9 +1029,37 @@ under the License.
                         <groupId>org.apache.zookeeper</groupId>
                         <artifactId>zookeeper</artifactId>
                     </exclusion>
+                </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hbase</groupId>
+                <artifactId>hbase-client</artifactId>
+                <version>${hbase.version}</version>
+                <exclusions>
                     <exclusion>
-                        <groupId>org.apache.hadoop</groupId>
-                        <artifactId>hadoop-hdfs</artifactId>
+                        <groupId>org.apache.hbase.thirdparty</groupId>
+                        <artifactId>hbase-shaded-jetty</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.hbase.thirdparty</groupId>
+                        <artifactId>hbase-shaded-netty</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hbase</groupId>
+                <artifactId>hbase-server</artifactId>
+                <version>${hbase.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.hbase</groupId>
+                        <artifactId>hbase-http</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.hbase.thirdparty</groupId>
+                        <artifactId>hbase-shaded-netty</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -1047,13 +1135,6 @@ under the License.
                 <version>12.4.2.jre11</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
-            <dependency>
-                <groupId>com.mysql</groupId>
-                <artifactId>mysql-connector-j</artifactId>
-                <version>9.2.0</version>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
             <dependency>
                 <groupId>com.mockrunner</groupId>
@@ -1064,6 +1145,10 @@ under the License.
                     <exclusion>
                         <groupId>xerces</groupId>
                         <artifactId>xercesImpl</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>junit</groupId>
+                        <artifactId>junit</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -1096,6 +1181,12 @@ under the License.
             </dependency>
 
             <dependency>
+                <groupId>io.airlift</groupId>
+                <artifactId>security</artifactId>
+                <version>202</version>
+            </dependency>
+
+            <dependency>
                 <groupId>com.aliyun.odps</groupId>
                 <artifactId>odps-sdk-core</artifactId>
                 <version>${odps.version}</version>
@@ -1103,6 +1194,10 @@ under the License.
                     <exclusion>
                         <groupId>org.codehaus.jackson</groupId>
                         <artifactId>jackson-mapper-asl</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.ini4j</groupId>
+                        <artifactId>ini4j</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -1112,31 +1207,37 @@ under the License.
                 <artifactId>odps-sdk-table-api</artifactId>
                 <version>${odps.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.grpc</groupId>
                 <artifactId>grpc-api</artifactId>
                 <version>${grpc.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.grpc</groupId>
                 <artifactId>grpc-netty-shaded</artifactId>
                 <version>${grpc.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.grpc</groupId>
                 <artifactId>grpc-protobuf</artifactId>
                 <version>${grpc.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.grpc</groupId>
                 <artifactId>grpc-stub</artifactId>
                 <version>${grpc.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.grpc</groupId>
                 <artifactId>grpc-core</artifactId>
                 <version>${grpc.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>org.apache.arrow</groupId>
                 <artifactId>arrow-vector</artifactId>
@@ -1154,17 +1255,20 @@ under the License.
                 <artifactId>flight-sql</artifactId>
                 <version>${arrow.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>org.apache.arrow</groupId>
                 <artifactId>flight-core</artifactId>
                 <version>${arrow.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>org.apache.arrow</groupId>
                 <artifactId>flight-sql-jdbc-driver</artifactId>
                 <version>${arrow.version}</version>
                 <scope>test</scope>
             </dependency>
+
             <dependency>
                 <groupId>org.apache.arrow</groupId>
                 <artifactId>arrow-jdbc</artifactId>
@@ -1201,7 +1305,6 @@ under the License.
                 <artifactId>paimon-oss</artifactId>
                 <version>${paimon.version}</version>
             </dependency>
-
 
             <dependency>
                 <groupId>io.delta</groupId>
@@ -1327,6 +1430,12 @@ under the License.
                 <version>${jetty.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-security</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/org.apache.ranger/ranger-plugins-common -->
             <dependency>
                 <groupId>org.apache.ranger</groupId>
@@ -1345,20 +1454,48 @@ under the License.
                         <groupId>com.nimbusds</groupId>
                         <artifactId>nimbus-jose-jwt</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>com.sun.jersey</groupId>
+                        <artifactId>jersey-bundle</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/org.antlr/antlr4 -->
+            <!-- https://mvnrepository.com/artifact/org.antlr/antlr4-runtime -->
             <dependency>
                 <groupId>org.antlr</groupId>
-                <artifactId>antlr4</artifactId>
-                <version>4.9.2</version>
-                <exclusions>
-                    <exclusion>
-                        <groupId>commons-lang</groupId>
-                        <artifactId>commons-lang</artifactId>
-                    </exclusion>
-                </exclusions>
+                <artifactId>antlr4-runtime</artifactId>
+                <version>${antlr.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.jboss.byteman/byteman -->
+            <dependency>
+                <groupId>org.jboss.byteman</groupId>
+                <artifactId>byteman</artifactId>
+                <version>${byteman.version}</version>
+            </dependency>
+
+            <!-- azure native sdk -->
+            <dependency>
+                <groupId>com.azure</groupId>
+                <artifactId>azure-sdk-bom</artifactId>
+                <version>${azure.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/it.unimi.dsi/fastutil -->
+            <dependency>
+                <groupId>it.unimi.dsi</groupId>
+                <artifactId>fastutil</artifactId>
+                <version>${fastutil.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/tools.profiler/async-profiler -->
+            <dependency>
+                <groupId>tools.profiler</groupId>
+                <artifactId>async-profiler</artifactId>
+                <version>${async-profiler.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

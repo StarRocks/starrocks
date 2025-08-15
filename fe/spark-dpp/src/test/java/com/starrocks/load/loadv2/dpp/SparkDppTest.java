@@ -19,8 +19,8 @@ package com.starrocks.load.loadv2.dpp;
 
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import org.apache.spark.sql.RowFactory;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 
@@ -38,14 +38,14 @@ public class SparkDppTest {
 
         DecimalParser decimalParser = new DecimalParser(etlColumn);
         // test max/min
-        Assert.assertTrue(decimalParser.getMaxValue().toString().equals("9.99"));
-        Assert.assertTrue(decimalParser.getMinValue().toString().equals("-9.99"));
+        Assertions.assertTrue(decimalParser.getMaxValue().toString().equals("9.99"));
+        Assertions.assertTrue(decimalParser.getMinValue().toString().equals("-9.99"));
         // normal
         BigDecimal bigDecimal = new BigDecimal("1.21");
-        Assert.assertTrue(sparkDpp.validateData(bigDecimal, etlColumn, decimalParser, RowFactory.create(bigDecimal)));
+        Assertions.assertTrue(sparkDpp.validateData(bigDecimal, etlColumn, decimalParser, RowFactory.create(bigDecimal)));
         // failed
         BigDecimal bigDecimalFailed = new BigDecimal("10");
-        Assert.assertFalse(
+        Assertions.assertFalse(
                 sparkDpp.validateData(bigDecimalFailed, etlColumn, decimalParser, RowFactory.create(bigDecimalFailed)));
 
         // string
@@ -55,15 +55,15 @@ public class SparkDppTest {
         StringParser stringParser = new StringParser(stringColumn);
         // normal
         String normalString = "a1";
-        Assert.assertTrue(
+        Assertions.assertTrue(
                 sparkDpp.validateData(normalString, stringColumn, stringParser, RowFactory.create(normalString)));
         // cn normal
         String normalStringCN = "中";
-        Assert.assertTrue(
+        Assertions.assertTrue(
                 sparkDpp.validateData(normalStringCN, stringColumn, stringParser, RowFactory.create(normalStringCN)));
         // cn failed
         String failedStringCN = "中a";
-        Assert.assertFalse(
+        Assertions.assertFalse(
                 sparkDpp.validateData(failedStringCN, stringColumn, stringParser, RowFactory.create(failedStringCN)));
     }
 

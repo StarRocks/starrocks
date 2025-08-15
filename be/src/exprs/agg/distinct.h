@@ -16,18 +16,15 @@
 
 #include <algorithm>
 #include <cstring>
-#include <limits>
 #include <string>
-#include <type_traits>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/fixed_length_column.h"
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "exec/aggregator.h"
+#include "exec/aggregator_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/sum.h"
@@ -36,7 +33,6 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "runtime/memory/counting_allocator.h"
 #include "thrift/protocol/TJSONProtocol.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
@@ -72,7 +68,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
 
     void serialize(uint8_t* dst) const {
         phmap::InMemoryOutput output(reinterpret_cast<char*>(dst));
-        set.dump(output);
+        [[maybe_unused]] auto err = set.dump(output);
         DCHECK(output.length() == set.dump_bound());
     }
 
@@ -80,10 +76,10 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
         phmap::InMemoryInput input(reinterpret_cast<const char*>(src));
         auto old_size = set.size();
         if (old_size == 0) {
-            set.load(input);
+            [[maybe_unused]] auto err = set.load(input);
         } else {
             MyHashSet set_src;
-            set_src.load(input);
+            [[maybe_unused]] auto err = set_src.load(input);
             set.merge(set_src);
         }
     }
@@ -110,7 +106,7 @@ struct AdaptiveSliceHashSet {
     AdaptiveSliceHashSet() { set = std::make_shared<SliceHashSetWithAggStateAllocator>(); }
 
     void try_convert_to_two_level(MemPool* mem_pool) {
-        if (distinct_size % 65536 == 0 && mem_pool->total_allocated_bytes() >= Aggregator::two_level_memory_threshold) {
+        if (distinct_size % 65536 == 0 && mem_pool->total_allocated_bytes() >= agg::two_level_memory_threshold) {
             two_level_set = std::make_shared<SliceTwoLevelHashSetWithAggStateAllocator>();
             two_level_set->reserve(set->capacity());
             two_level_set->insert(set->begin(), set->end());
@@ -534,7 +530,8 @@ using DistinctAggregateFunctionV2 =
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
 using DecimalDistinctAggregateFunction =
-        TDistinctAggregateFunction<LT, TYPE_DECIMAL128, DistinctAggregateStateV2, DistinctType, T>;
+        TDistinctAggregateFunction<LT, lt_is_decimal256<LT> ? TYPE_DECIMAL256 : TYPE_DECIMAL128,
+                                   DistinctAggregateStateV2, DistinctType, T>;
 
 // now we only support String
 struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {

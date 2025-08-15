@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TUniqueId;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -24,8 +25,8 @@ import static com.starrocks.qe.scheduler.slot.ShortJobFirstAlgo.AGING_WEIGHT;
 public class ShortJobFirstAlgoTest {
 
     private LogicalSlot createLogicalSlot(int numSlots) {
-        return new LogicalSlot(new TUniqueId(1L, 1L), "fe1", 1, numSlots,
-                1000L, 1, 1, 1, 1);
+        return new LogicalSlot(new TUniqueId(1L, 1L), "fe1", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                1, numSlots, 1000L, 1, 1, 1, 1);
     }
 
     @Test

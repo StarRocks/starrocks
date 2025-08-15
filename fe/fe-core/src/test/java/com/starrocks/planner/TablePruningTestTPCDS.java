@@ -23,9 +23,9 @@ import com.starrocks.sql.plan.TPCDSTestUtil;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
@@ -47,7 +47,7 @@ public class TablePruningTestTPCDS extends TablePruningTestBase {
                             try {
                                 starRocksAssert.alterTableProperties(q);
                             } catch (Exception e) {
-                                Assert.fail();
+                                Assertions.fail();
                             }
                         }
                 ));
@@ -60,13 +60,13 @@ public class TablePruningTestTPCDS extends TablePruningTestBase {
                             try {
                                 starRocksAssert.alterTableProperties(q);
                             } catch (Exception e) {
-                                Assert.fail();
+                                Assertions.fail();
                             }
                         }
                 ));
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
@@ -108,10 +108,10 @@ public class TablePruningTestTPCDS extends TablePruningTestBase {
             Pair<Integer, String> r1 = getHashJoinCount(sql, enablePruning);
             if (result.containsKey(n)) {
                 List<Integer> res = result.get(n);
-                Assert.assertEquals(r0.first, res.get(0));
-                Assert.assertEquals(r1.first, res.get(1));
+                Assertions.assertEquals(r0.first, res.get(0));
+                Assertions.assertEquals(r1.first, res.get(1));
             } else {
-                Assert.assertEquals(r0.first, r1.first);
+                Assertions.assertEquals(r0.first, r1.first);
             }
         }
     }

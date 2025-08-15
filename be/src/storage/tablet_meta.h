@@ -45,6 +45,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/binlog_manager.h"
 #include "storage/delete_handler.h"
+#include "storage/flat_json_config.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset.h"
@@ -218,9 +219,15 @@ public:
 
     std::shared_ptr<BinlogConfig> get_binlog_config() { return _binlog_config; }
 
+    std::shared_ptr<FlatJsonConfig> get_flat_json_config() { return _flat_json_config; }
+
     void set_binlog_config(const BinlogConfig& new_config) {
         _binlog_config = std::make_shared<BinlogConfig>();
         _binlog_config->update(new_config);
+    }
+
+    void set_flat_json_config(const FlatJsonConfig& new_config) {
+        _flat_json_config = std::make_shared<FlatJsonConfig>(new_config);
     }
 
     BinlogLsn get_binlog_min_lsn() { return _binlog_min_lsn; }
@@ -285,6 +292,7 @@ private:
     TabletUpdates* _updates = nullptr;
 
     std::shared_ptr<BinlogConfig> _binlog_config;
+    std::shared_ptr<FlatJsonConfig> _flat_json_config;
 
     // The minimum lsn of binlog that is valid. It will be updated when deleting expired
     // or overcapacity binlog in Tablet#delete_expired_inc_rowsets, and used to skip those

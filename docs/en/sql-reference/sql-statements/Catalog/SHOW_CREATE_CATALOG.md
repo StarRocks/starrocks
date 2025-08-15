@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW CREATE CATALOG
 
-## Description
-
-Queries the creation statement of an [external catalog](../../../data_source/catalog/catalog_overview.md).
+SHOW CREATE CATALOG queries the creation statement of an [external catalog](../../../data_source/catalog/catalog_overview.md).
 
 Note that authentication-related information in the return result will be anonymized.
 

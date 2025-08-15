@@ -17,8 +17,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TableSampleClauseTest extends PlanTestBase {
 
@@ -28,7 +28,7 @@ public class TableSampleClauseTest extends PlanTestBase {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
 
         // to sql
-        Assert.assertEquals("SELECT `test`.`t1`.`v4`, `test`.`t1`.`v5`, `test`.`t1`.`v6`\n" +
+        Assertions.assertEquals("SELECT `test`.`t1`.`v4`, `test`.`t1`.`v5`, `test`.`t1`.`v6`\n" +
                         "FROM `test`.`t1` SAMPLE('method'='BY_BLOCK','seed'='1','percent'='1')",
                 AstToSQLBuilder.toSQL(statementBase));
 

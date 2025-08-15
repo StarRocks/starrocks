@@ -17,8 +17,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Replica;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class AdminShowReplicaStatusStmtTest {
     private ConnectContext ctx = UtFrameUtils.createDefaultCtx();
@@ -27,6 +27,6 @@ public class AdminShowReplicaStatusStmtTest {
     public void testNormal() throws Exception {
         String sql = "ADMIN SHOW REPLICA STATUS FROM db1.tbl1 WHERE STATUS = 'DEAD'";
         AdminShowReplicaStatusStmt stmt = (AdminShowReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals(Replica.ReplicaStatus.DEAD, stmt.getStatusFilter());
+        Assertions.assertEquals(Replica.ReplicaStatus.DEAD, stmt.getStatusFilter());
     }
 }

@@ -34,6 +34,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 // Must come before gtest.h.
@@ -41,6 +42,7 @@
 
 #include <boost/utility/binary.hpp>
 
+#include "util/bit_packing_default.h"
 #include "util/bit_stream_utils.h"
 #include "util/bit_stream_utils.inline.h"
 #include "util/bit_util.h"
@@ -235,6 +237,82 @@ TEST(TestBitStreamUtil, TestUint64) {
     ASSERT_EQ(v4, 126);
 }
 
+TEST(TestBitStreamUtil, TestVLQ) {
+    {
+        std::vector<int32_t> values = {0, std::numeric_limits<int32_t>::max(), std::numeric_limits<int32_t>::min()};
+        for (int i = 0; i < 30; i++) {
+            values.push_back((1 << i) - 1);
+            values.push_back(-((1 << i) - 1));
+            values.push_back(-((1 << i) + 1));
+        }
+        faststring buffer(1);
+        BitWriter writer(&buffer);
+        for (auto v : values) {
+            writer.PutZigZagVlqInt(v);
+        }
+
+        BitReader reader(buffer.data(), buffer.size());
+        for (auto v : values) {
+            int32_t val = 0;
+            bool result = reader.GetZigZagVlqInt(&val);
+            EXPECT_TRUE(result);
+            EXPECT_EQ(val, v);
+        }
+    }
+    {
+        std::vector<int64_t> values = {0, std::numeric_limits<int64_t>::max(), std::numeric_limits<int64_t>::min()};
+        for (int i = 0; i < 62; i++) {
+            values.push_back((1 << i) - 1);
+            values.push_back(-((1 << i) - 1));
+            values.push_back(-((1 << i) + 1));
+        }
+        faststring buffer(1);
+        BitWriter writer(&buffer);
+        for (auto v : values) {
+            writer.PutZigZagVlqInt(v);
+        }
+
+        BitReader reader(buffer.data(), buffer.size());
+        for (auto v : values) {
+            int64_t val = 0;
+            bool result = reader.GetZigZagVlqInt(&val);
+            EXPECT_TRUE(result);
+            EXPECT_EQ(val, v);
+        }
+    }
+}
+
+TEST(TestBitStreamUtil, TestGetBatch) {
+    auto f = [](int BASE, int N, int BW) {
+        faststring buffer(1);
+        BitWriter writer(&buffer);
+        ASSERT_TRUE((1 << BW) >= (BASE + 2 * N)) << "BW: " << BW << " BASE: " << BASE << " N: " << N;
+        for (int i = 0; i < 2 * N; i++) {
+            writer.PutValue(BASE + i, BW);
+        }
+        writer.Flush();
+
+        BitReader reader(buffer.data(), buffer.size());
+        std::vector<int> data(N);
+        EXPECT_TRUE(reader.GetBatch(BW, data.data(), N));
+        for (int i = 0; i < N; i++) {
+            EXPECT_EQ(data[i], i + BASE);
+        }
+        EXPECT_TRUE(reader.GetBatch(BW, data.data(), N));
+        for (int i = 0; i < N; i++) {
+            EXPECT_EQ(data[i], i + BASE + N);
+        }
+    };
+
+    for (int bw = 9; bw < 20; bw++) {
+        for (int bwi = 0; bwi < 10; bwi++) {
+            for (int ni = 0; ni < 10; ni++) {
+                f(1 << (bw - 7), 64 - ni, bw + bwi);
+            }
+        }
+    }
+}
+
 TEST(TestBitStreamUtil, BatchedBitReaderGetBytes) {
     uint8_t data[4] = {0x8, 0x1, 0x0, 0x0};
 
@@ -247,7 +325,7 @@ TEST(TestBitStreamUtil, BatchedBitReaderGetBytes) {
 }
 
 TEST(TestBitStreamUtil, BatchedBitReaderUnpackBatch) {
-    uint8_t data[BitPacking::MAX_BITWIDTH * 48 / 8];
+    uint8_t data[starrocks::util::bitpacking_default::MAX_BITWIDTH * 48 / 8];
     for (unsigned char& i : data) {
         i = 0x8;
     }

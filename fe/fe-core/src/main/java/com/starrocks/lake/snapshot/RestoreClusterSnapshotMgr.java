@@ -55,13 +55,11 @@ public class RestoreClusterSnapshotMgr {
         updateConfig();
     }
 
-    public static void init(String clusterSnapshotYamlFile, String[] args) throws StarRocksException {
-        for (String arg : args) {
-            if (arg.equalsIgnoreCase("-cluster_snapshot")) {
-                LOG.info("FE start to restore from a cluster snapshot (-cluster_snapshot)");
-                instance = new RestoreClusterSnapshotMgr(clusterSnapshotYamlFile);
-                return;
-            }
+    public static void init(String clusterSnapshotYamlFile, boolean startFromSnapshot) throws StarRocksException {
+        if (startFromSnapshot) {
+            LOG.info("FE start to restore from a cluster snapshot (--cluster_snapshot)");
+            instance = new RestoreClusterSnapshotMgr(clusterSnapshotYamlFile);
+            return;
         }
 
         String restoreClusterSnapshotEnv = System.getenv("RESTORE_CLUSTER_SNAPSHOT");
@@ -219,21 +217,21 @@ public class RestoreClusterSnapshotMgr {
         for (Backend be : systemInfoService.getIdToBackend().values()) {
             LOG.info("Drop old backend {}", be);
             systemInfoService.dropBackend(be.getHost(), be.getHeartbeatPort(),
-                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, false);
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, "", false);
         }
 
         // Drop old compute nodes
         for (ComputeNode cn : systemInfoService.getIdComputeNode().values()) {
             LOG.info("Drop old compute node {}", cn);
             systemInfoService.dropComputeNode(cn.getHost(), cn.getHeartbeatPort(),
-                    WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, "");
         }
 
         // Add new compute nodes
         for (ClusterSnapshotConfig.ComputeNode cn : computeNodes) {
             LOG.info("Add new compute node {}", cn);
             systemInfoService.addComputeNode(cn.getHost(), cn.getHeartbeatServicePort(),
-                    WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, "");
         }
     }
 

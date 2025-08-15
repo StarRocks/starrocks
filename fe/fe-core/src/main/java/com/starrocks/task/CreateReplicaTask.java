@@ -36,11 +36,14 @@ package com.starrocks.task;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.thrift.TBinlogConfig;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TCreateTabletReq;
+import com.starrocks.thrift.TFlatJsonConfig;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -66,6 +69,7 @@ public class CreateReplicaTask extends AgentTask {
     private TPersistentIndexType persistentIndexType;
 
     private BinlogConfig binlogConfig;
+    private FlatJsonConfig flatJsonConfig;
 
     private final TTabletType tabletType;
 
@@ -86,6 +90,7 @@ public class CreateReplicaTask extends AgentTask {
     private final TTabletSchema tabletSchema;
     private long gtid = 0;
     private long timeoutMs = -1;
+    private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
     private CreateReplicaTask(Builder builder) {
         super(null, builder.getNodeId(), TTaskType.CREATE, builder.getDbId(), builder.getTableId(),
@@ -101,6 +106,7 @@ public class CreateReplicaTask extends AgentTask {
         this.compressionLevel = builder.getCompressionLevel();
         this.tabletSchema = builder.getTabletSchema();
         this.binlogConfig = builder.getBinlogConfig();
+        this.flatJsonConfig = builder.getFlatJsonConfig();
         this.createSchemaFile = builder.isCreateSchemaFile();
         this.enableTabletCreationOptimization = builder.isEnableTabletCreationOptimization();
         this.baseTabletId = builder.getBaseTabletId();
@@ -108,6 +114,7 @@ public class CreateReplicaTask extends AgentTask {
         this.inRestoreMode = builder.isInRestoreMode();
         this.gtid = builder.getGtid();
         this.timeoutMs = builder.getTimeoutMs();
+        this.compactionStrategy = builder.getCompactionStrategy();
     }
 
     public static Builder newBuilder() {
@@ -171,6 +178,10 @@ public class CreateReplicaTask extends AgentTask {
             TBinlogConfig tBinlogConfig = binlogConfig.toTBinlogConfig();
             createTabletReq.setBinlog_config(tBinlogConfig);
         }
+        if (flatJsonConfig != null) {
+            TFlatJsonConfig tFlatJsonConfig = flatJsonConfig.toTFlatJsonConfig();
+            createTabletReq.setFlat_json_config(tFlatJsonConfig);
+        }
         if (inRestoreMode) {
             createTabletReq.setIn_restore_mode(true);
         }
@@ -187,6 +198,9 @@ public class CreateReplicaTask extends AgentTask {
         createTabletReq.setEnable_tablet_creation_optimization(enableTabletCreationOptimization);
         createTabletReq.setGtid(gtid);
         createTabletReq.setTimeout_ms(timeoutMs);
+        if (compactionStrategy != null) {
+            createTabletReq.setCompaction_strategy(compactionStrategy);
+        }
         return createTabletReq;
     }
 
@@ -206,6 +220,7 @@ public class CreateReplicaTask extends AgentTask {
         private boolean enablePersistentIndex;
         private TPersistentIndexType persistentIndexType;
         private BinlogConfig binlogConfig;
+        private FlatJsonConfig flatJsonConfig;
         private TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         private MarkedCountDownLatch<Long, Long> latch;
         private boolean inRestoreMode = false;
@@ -217,6 +232,7 @@ public class CreateReplicaTask extends AgentTask {
         private TTabletSchema tabletSchema;
         private long gtid = 0;
         private long timeoutMs = -1;
+        private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
         private Builder() {
         }
@@ -329,6 +345,15 @@ public class CreateReplicaTask extends AgentTask {
             return this;
         }
 
+        public FlatJsonConfig getFlatJsonConfig() {
+            return flatJsonConfig;
+        }
+
+        public Builder setFlatJsonConfig(FlatJsonConfig flatJsonConfig) {
+            this.flatJsonConfig = flatJsonConfig;
+            return this;
+        }
+
         public BinlogConfig getBinlogConfig() {
             return binlogConfig;
         }
@@ -434,6 +459,15 @@ public class CreateReplicaTask extends AgentTask {
 
         public Builder setTimeoutMs(long timeoutMs) {
             this.timeoutMs = timeoutMs;
+            return this;
+        }
+
+        public TCompactionStrategy getCompactionStrategy() {
+            return compactionStrategy;
+        }
+
+        public Builder setCompactionStrategy(TCompactionStrategy compactionStrategy) {
+            this.compactionStrategy = compactionStrategy;
             return this;
         }
 

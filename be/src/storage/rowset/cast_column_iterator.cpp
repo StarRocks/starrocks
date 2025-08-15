@@ -77,4 +77,10 @@ Status CastColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t s
     return Status::OK();
 }
 
+StatusOr<std::vector<std::pair<int64_t, int64_t>>> CastColumnIterator::get_io_range_vec(const SparseRange<>& range,
+                                                                                        Column* dst) {
+    auto source_column = _source_chunk.get_column_by_index(0);
+    return _parent->get_io_range_vec(range, source_column.get());
+}
+
 } // namespace starrocks

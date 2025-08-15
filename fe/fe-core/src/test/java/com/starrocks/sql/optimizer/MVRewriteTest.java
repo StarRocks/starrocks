@@ -44,12 +44,12 @@ import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class MVRewriteTest {
     private static final String EMPS_TABLE_NAME = "emps";
@@ -69,7 +69,7 @@ public class MVRewriteTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
@@ -102,7 +102,7 @@ public class MVRewriteTest {
                 "    )");
     }
 
-    @Before
+    @BeforeEach
     public void beforeMethod() throws Exception {
         String createTableSQL =
                 "create table " + HR_DB_NAME + "." + EMPS_TABLE_NAME + " (time date, empid int, name varchar, "
@@ -128,7 +128,7 @@ public class MVRewriteTest {
         starRocksAssert.withTable(createTableSQL);
     }
 
-    @After
+    @AfterEach
     public void afterMethod() throws Exception {
         starRocksAssert.dropTable(EMPS_TABLE_NAME);
         starRocksAssert.dropTable(DEPTS_TABLE_NAME);
@@ -136,7 +136,7 @@ public class MVRewriteTest {
         starRocksAssert.dropTable("all_type_table");
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws Exception {
         starRocksAssert.dropTable("ods_order");
     }
@@ -530,8 +530,8 @@ public class MVRewriteTest {
         String query = "select empid, deptno, salary from " + EMPS_TABLE_NAME + " e1 where empid = (select max(empid)"
                 + " from " + EMPS_TABLE_NAME + " where deptno = e1.deptno);";
         String plan = starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainQuery();
-        Assert.assertTrue(plan.contains(QUERY_USE_EMPS_MV));
-        Assert.assertTrue(plan.contains(QUERY_USE_EMPS));
+        Assertions.assertTrue(plan.contains(QUERY_USE_EMPS_MV));
+        Assertions.assertTrue(plan.contains(QUERY_USE_EMPS));
     }
 
     @Test
@@ -688,6 +688,39 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testBitmapUnionInSubqueryAndUnion() throws Exception {
+        String createUserTagMVSql = "create materialized view " + USER_TAG_MV_NAME + " as select user_id, " +
+                "bitmap_union(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id;";
+        starRocksAssert.withMaterializedView(createUserTagMVSql);
+        {
+            String query = String.format("select count(distinct tag_id) from (select tag_id from %s ) t", USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainContains(USER_TAG_MV_NAME);
+        }
+
+        {
+            String query = String.format("select count(distinct tag_id) from (select tag_id from %s union " +
+                    "select tag_id from %s where user_id is not null) t", USER_TAG_TABLE_NAME, USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+        }
+        {
+            String query = String.format("select count(tag_id) from (select tag_id from %s union " +
+                    "select tag_id from %s where user_id is not null) t", USER_TAG_TABLE_NAME, USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+        }
+
+        {
+            String query = String.format("select count(distinct tag_id) from (select tag_id from %s union all " +
+                    "select tag_id from %s where user_id is not null) t", USER_TAG_TABLE_NAME, USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+        }
+        {
+            String query = String.format("select count(tag_id) from (select tag_id from %s union all " +
+                    "select tag_id from %s where user_id is not null) t", USER_TAG_TABLE_NAME, USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+        }
+    }
+
+    @Test
     public void testIncorrectMVRewriteInQuery() throws Exception {
         String createUserTagMVSql = "create materialized view " + USER_TAG_MV_NAME + " as select user_id, "
                 + "bitmap_union(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id;";
@@ -800,7 +833,7 @@ public class MVRewriteTest {
                 + USER_TAG_TABLE_NAME + ";";
         try {
             starRocksAssert.withMaterializedView(createMVSQL);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
@@ -994,9 +1027,10 @@ public class MVRewriteTest {
                 "select deptno, count(distinct salary % 10) from " + EMPS_TABLE_NAME + " group by deptno";
         try {
             starRocksAssert.withMaterializedView(createMVSQL);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Create materialized view non-slot ref expression should have an alias:"));
+            Assertions.assertTrue(
+                    e.getMessage().contains("Create materialized view non-slot ref expression should have an alias:"));
         }
     }
 
@@ -1040,7 +1074,8 @@ public class MVRewriteTest {
         String union = "select a.empid from (select empid from " + EMPS_TABLE_NAME + " where deptno > 300" +
                 " union all select empid from"
                 + " " + EMPS_TABLE_NAME + " where deptno < 200) a group by a.empid";
-        starRocksAssert.withMaterializedView(createMVSQL).query(union).explainContains(QUERY_USE_EMPS_MV);
+        // NOTE: not support agg push down and union push down at the same time.
+        starRocksAssert.withMaterializedView(createMVSQL).query(union).explainWithout(QUERY_USE_EMPS_MV);
         starRocksAssert.assertMVWithoutComplexExpression(HR_DB_NAME, EMPS_TABLE_NAME);
     }
 
@@ -1089,13 +1124,13 @@ public class MVRewriteTest {
                 + " " + EMPS_TABLE_NAME + " where deptno < 200 group by empid) a group by a.empid";
         String plan = starRocksAssert.withMaterializedView(createMVSQL).query(union).explainQuery();
         // NOTE: Since `deptno` is key column of the new mv, so use `PREAGGREGATION` instead.
-        Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
+        Assertions.assertTrue(plan.contains("1:OlapScanNode\n" +
                 "     TABLE: emps\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 4: deptno > 300\n" +
                 "     partitions=1/1\n" +
                 "     rollup: emps_mv"));
-        Assert.assertTrue(plan.contains("7:OlapScanNode\n" +
+        Assertions.assertTrue(plan.contains("7:OlapScanNode\n" +
                 "     TABLE: emps\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 11: deptno < 200\n" +
@@ -1402,7 +1437,7 @@ public class MVRewriteTest {
                 "SELECT k6, k7 FROM all_type_table GROUP BY k6, k7 ORDER BY k6";
         CreateMaterializedViewStmt createMaterializedViewStmt =
                 (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(createMVSQL, starRocksAssert.getCtx());
-        createMaterializedViewStmt.getMVColumnItemList().forEach(k -> Assert.assertTrue(k.isKey()));
+        createMaterializedViewStmt.getMVColumnItemList().forEach(k -> Assertions.assertTrue(k.isKey()));
 
         starRocksAssert.withMaterializedView(createMVSQL).query(query).explainContains("rollup: partial_order_by_mv");
         starRocksAssert.dropMaterializedView("partial_order_by_mv");

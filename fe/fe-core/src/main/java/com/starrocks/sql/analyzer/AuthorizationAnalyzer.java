@@ -28,6 +28,7 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -43,7 +44,6 @@ import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
 
 import java.util.ArrayList;
@@ -481,7 +481,7 @@ public class AuthorizationAnalyzer {
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to/from user", true));
             } else {
-                validRoleName(stmt.getRole(), "Can not granted/revoke role to/from role", true);
+                validRoleName(stmt.getRoleOrGroup(), "Can not granted/revoke role to/from role", true);
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to/from user", true));
             }
@@ -492,8 +492,8 @@ public class AuthorizationAnalyzer {
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
             if (stmt.getUserIdent() != null) {
                 analyseUser(stmt.getUserIdent(), true);
-            } else if (stmt.getRole() != null) {
-                validRoleName(stmt.getRole(), "There is no such grant defined for role " + stmt.getRole(), true);
+            } else if (stmt.getGroupOrRole() != null) {
+                validRoleName(stmt.getGroupOrRole(), "There is no such grant defined for role " + stmt.getGroupOrRole(), true);
             } else {
                 stmt.setUserIdent(session.getCurrentUserIdentity());
             }

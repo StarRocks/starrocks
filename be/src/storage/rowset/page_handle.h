@@ -34,8 +34,9 @@
 
 #pragma once
 
+#include "cache/object_cache/page_cache.h"
 #include "gutil/macros.h" // for DISALLOW_COPY
-#include "storage/page_cache.h"
+#include "storage/rowset/page_handle_fwd.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -45,58 +46,59 @@ namespace starrocks {
 // class to unify these two cases.
 // If client use this struct to wrap data not in cache, this class
 // will free data's memory when it is destroyed.
-class PageHandle {
+template <class PageType>
+class PageHandleTmpl {
 public:
-    PageHandle() = default;
+    PageHandleTmpl() = default;
 
     // This class will take the ownership of input data's memory. It will
     // free it when deconstructs.
-    explicit PageHandle(const Slice& data) : _is_data_owner(true), _data(data) {}
+    explicit PageHandleTmpl(PageType* data) : _is_data_owner(true), _data(data) {}
 
     // This class will take the content of cache data, and will make input
-    // cache_data to a invalid cache handle.
-    explicit PageHandle(PageCacheHandle&& cache_data)
-            : _data(static_cast<uint8_t*>(nullptr), 0), _cache_data(std::move(cache_data)) {}
+    // cache_data to an invalid cache handle.
+    explicit PageHandleTmpl(PageCacheHandle&& cache_data) : _cache_data(std::move(cache_data)) {}
 
     // Move constructor
-    PageHandle(PageHandle&& other) noexcept : _data(other._data), _cache_data(std::move(other._cache_data)) {
+    PageHandleTmpl(PageHandleTmpl&& other) noexcept : _data(other._data), _cache_data(std::move(other._cache_data)) {
         // we can use std::exchange if we switch c++14 on
         std::swap(_is_data_owner, other._is_data_owner);
     }
 
-    PageHandle& operator=(PageHandle&& other) noexcept {
+    PageHandleTmpl& operator=(PageHandleTmpl&& other) noexcept {
         std::swap(_is_data_owner, other._is_data_owner);
-        _data = other._data;
-        _cache_data = std::move(other._cache_data);
+        std::swap(_data, other._data);
+        std::swap(_cache_data, other._cache_data);
         return *this;
     }
 
-    ~PageHandle() {
+    ~PageHandleTmpl() {
         if (_is_data_owner) {
-            delete[] _data.data;
-            _data.data = nullptr;
+            delete _data;
+            _data = nullptr;
         }
     }
 
     void reset() {
         if (_is_data_owner) {
-            delete[] _data.data;
+            delete _data;
             _is_data_owner = false;
         }
-        _data.clear();
+        _data = nullptr;
     }
 
     // the return slice contains uncompressed page body, page footer, and footer size
-    Slice data() const {
+    const PageType* data() const {
         if (_is_data_owner) {
             return _data;
+        } else {
+            return reinterpret_cast<const PageType*>(_cache_data.data());
         }
-        return _cache_data.data();
     }
 
     int64_t mem_usage() const {
         if (_is_data_owner) {
-            return _data.size;
+            return _data->size();
         } else {
             return 0;
         }
@@ -104,14 +106,14 @@ public:
 
 private:
     // when this is true, it means this struct own data and _data is valid.
-    // otherwise _cache_data is valid, and data is belong to cache.
+    // otherwise _cache_data is valid, and data is belonged to cache.
     bool _is_data_owner = false;
-    Slice _data;
+    PageType* _data = nullptr;
     PageCacheHandle _cache_data;
 
     // Don't allow copy and assign
-    PageHandle(const PageHandle&) = delete;
-    const PageHandle& operator=(const PageHandle&) = delete;
+    PageHandleTmpl(const PageHandleTmpl&) = delete;
+    const PageHandleTmpl& operator=(const PageHandleTmpl&) = delete;
 };
 
 } // namespace starrocks

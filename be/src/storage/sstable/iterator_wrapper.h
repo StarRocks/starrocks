@@ -50,6 +50,10 @@ public:
         assert(iter_);
         return iter_->max_rss_rowid();
     }
+    SstablePredicateSPtr predicate() const {
+        assert(iter_);
+        return iter_->predicate();
+    }
     void Next() {
         assert(iter_);
         iter_->Next();

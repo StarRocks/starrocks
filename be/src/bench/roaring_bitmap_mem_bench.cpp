@@ -17,9 +17,6 @@
 
 #include <memory>
 
-#include "column/datum_tuple.h"
-#include "common/config.h"
-#include "runtime/chunk_cursor.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "types/bitmap_value.h"

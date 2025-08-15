@@ -99,7 +99,7 @@ mysql> explain verbose select col1 from hudi_table;
 
 `dataCacheOptions={populate: false}` は、クエリがすべてのパーティションをスキャンするため、キャッシュがポピュレートされないことを示しています。
 
-Data Cache のポピュレーションの動作をセッション変数 [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode) を使用して微調整することもできます。
+Data Cache のポピュレーションの動作をセッション変数 [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode) を使用して微調整することもできます。
 
 ### ポピュレーションモード
 
@@ -195,6 +195,20 @@ SET GLOBAL enable_file_metacache=true;
 >
 > Footer Cache はデータキャッシュのメモリモジュールを使用してデータをキャッシュします。したがって、BE パラメータ `datacache_enable` が `true` に設定されていることを確認し、`datacache_mem_size` に適切な値を設定する必要があります。
 
+## Page Cache
+
+データレイクに対するクエリ実行時にリモートストレージ内のファイルからデータをキャッシュする機能に加え、StarRocks は圧縮解除済みの Parquet ページデータのキャッシュもサポートしています。Page Cache は、圧縮解除済みの Parquet ページデータをメモリに格納します。以降のクエリで同じページにアクセスする場合、データはキャッシュから直接取得できるため、繰り返し I/O 操作や圧縮解除を回避できます。
+
+Page Cache を有効にするには、次のシステム変数を設定します:
+
+```SQL
+SET GLOBAL enable_file_pagecache=true;
+```
+
+> **注意**
+>
+> Page Cache はデータキャッシュのメモリモジュールを使用してデータキャッシュを行います。したがって、BEパラメーター `datacache_enable` を `true` に設定し、`datacache_mem_size` に適切な値を設定する必要があります。
+
 ## I/O アダプタ
 
 キャッシュディスクの I/O 負荷が高いためにディスクアクセスの待ち時間が大幅に増加し、キャッシュシステムの最適化が逆効果になるのを防ぐために、Data Cache は I/O アダプタ機能を提供します。この機能は、ディスク負荷が高い場合に一部のキャッシュ要求をリモートストレージにルーティングし、ローカルキャッシュとリモートストレージの両方を利用して I/O スループットを向上させます。この機能はデフォルトで有効になっています。
@@ -247,16 +261,40 @@ datacache_auto_adjust_enable=true
 - ディスク使用量が BE パラメータ `datacache_disk_low_level`（デフォルト値は `60`、つまりディスクスペースの 60%）で指定されたしきい値を一貫して下回り、Data Cache によって使用されている現在のディスクスペースがいっぱいの場合、システムは自動的にキャッシュ容量を拡張します。
 - キャッシュ容量を自動的にスケーリングする際、システムは BE パラメータ `datacache_disk_safe_level`（デフォルト値は `70`、つまりディスクスペースの 70%）で指定されたレベルにキャッシュ容量を調整することを目指します。
 
+## キャッシュ共有
+
+Data Cache は BE ノードのローカルディスクに依存するため、クラスタがスケーリングされる際、データルーティングの変更によりキャッシュミスが発生する可能性があり、エラスティックなスケーリング中にパフォーマンスが大幅に低下する可能性があります。
+
+キャッシュ共有は、ネットワークを介したノード間のキャッシュデータへのアクセスをサポートするために使用されます。クラスタスケーリング中、ローカルキャッシュミスが発生すると、システムはまず同じクラスタ内の他のノードからキャッシュデータのフェッチを試みます。すべてのキャッシュがミスした場合にのみ、システムはリモートストレージからデータを再取得します。この機能により、エラスティックなスケーリング中にキャッシュが無効になることによるパフォーマンスのジッタが効果的に低減され、安定したクエリパフォーマンスが保証されます。
+
+![cache sharing workflow](../_assets/cache_sharing_workflow.png)
+
+以下の2つの項目を設定することで、キャッシュ共有機能を有効にすることができます：
+
+- FE 設定項目 `enable_trace_historical_node` を `true` に設定する。
+- システム変数 `enable_datacache_sharing` を `true` に設定する。
+
+さらに、Query Profile で以下のメトリクスをチェックすることで、キャッシュ共有を監視することができる：
+
+- `DataCacheReadPeerCounter`：他のキャッシュノードからの読み取り回数。
+- `DataCacheReadPeerBytes`：他のキャッシュノードからの読み取りバイト数。
+- `DataCacheReadPeerTimer`：他のキャッシュノードからキャッシュデータにアクセスするのに使用される時間。
+
 ## 設定と変数
 
-次のシステム変数と BE パラメータを使用して Data Cache を構成できます。
+次のシステム変数とパラメータを使用して Data Cache を構成できます。
 
 ### システム変数
 
-- [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
+- [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
 - [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
 - [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
 - [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
+- [enable_datacache_sharing](../sql-reference/System_variable.md#enable_datacache_sharing)
+
+### FE パラメータ
+
+- [enable_trace_historical_node](../administration/management/FE_configuration.md#enable_trace_historical_node)
 
 ### BE パラメータ
 

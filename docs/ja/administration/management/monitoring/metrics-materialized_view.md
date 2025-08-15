@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 v3.1以降、StarRocksは非同期マテリアライズドビューのメトリクスをサポートしています。
 
-Prometheusがクラスター内のマテリアライズドビューのメタデータにアクセスできるようにするためには、Prometheusの設定ファイル **prometheus/prometheus.yml** に以下の設定を追加する必要があります。
+Prometheusがクラスター内のマテリアライズドビューのメタデータにアクセスできるようにするには、Prometheusの設定ファイル **prometheus/prometheus.yml** に以下の設定を追加する必要があります。
 
 ```YAML
 global:
@@ -15,7 +15,7 @@ scrape_configs:
 
   - job_name: 'dev' 
     metrics_path: '/metrics'    
-    # 以下の設定を追加してください。
+    # 以下の設定を追加します。
     basic_auth:
       username: 'root'
       password: ''
@@ -24,7 +24,7 @@ scrape_configs:
 ....
 ```
 
-- `username`: StarRocksクラスターにログインするためのユーザー名。このユーザーには`user_admin`ロールが付与されている必要があります。
+- `username`: StarRocksクラスターにログインするためのユーザー名。rootアカウントを使用しない場合、ユーザーには`user_admin`と`db_admin`の両方のロールが付与されている必要があります。
 - `password`: StarRocksクラスターにログインするためのパスワード。
 - `'with_materialized_view_metrics'`: 収集するメトリクスの範囲。有効な値:
   - `'all'`: マテリアライズドビューに関連するすべてのメトリクスが収集されます。
@@ -65,7 +65,7 @@ scrape_configs:
 ### mv_query_total_hit_count
 
 - Type: Counter
-- Description: クエリプランでマテリアライズドビューがクエリを書き換えることができると考えられた回数。この値は、最終的なクエリプランが高コストのため書き換えをスキップする場合があるため、高く見えることがあります。
+- Description: クエリプランでマテリアライズドビューがクエリを書き換え可能と見なされた回数。この値は、最終的なクエリプランが高コストのため書き換えをスキップする場合があるため、より高く表示されることがあります。
 
 ### mv_query_total_considered_count
 
@@ -75,7 +75,7 @@ scrape_configs:
 ### mv_query_total_matched_count
 
 - Type: Counter
-- Description: クエリの最終プランにマテリアライズドビューが関与した回数（マテリアライズドビューに対する直接クエリを含む）。
+- Description: マテリアライズドビューがクエリの最終プランに関与した回数（マテリアライズドビューに対する直接クエリを含む）。
 
 ### mv_refresh_pending_jobs
 
@@ -100,12 +100,12 @@ scrape_configs:
 ### mv_inactive_state
 
 - Type: Gauge
-- Description: マテリアライズドビューのステータス。有効な値: `0`(アクティブ) と `1`(非アクティブ)。
+- Description: マテリアライズドビューのステータス。有効な値: `0`（アクティブ）および`1`（非アクティブ）。
 
 ### mv_partition_count
 
 - Type: Gauge
-- Description: マテリアライズドビューのパーティション数。マテリアライズドビューがパーティション化されていない場合、この値は`0`です。
+- Description: マテリアライズドビューのパーティション数。マテリアライズドビューがパーティション化されていない場合、値は`0`です。
 
 ### mv_refresh_duration
 

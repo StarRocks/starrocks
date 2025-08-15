@@ -46,7 +46,7 @@ import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.UtFrameUtils;
-import junit.framework.Assert;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -68,6 +68,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class PseudoCluster {
     private static final Logger LOG = LogManager.getLogger(PseudoCluster.class);
@@ -210,7 +212,8 @@ public class PseudoCluster {
 
         @Override
         public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
-                                       long groupId, List<Long> matchShardIds, Map<String, String> properties, long workerGroupId)
+                                       long groupId, List<Long> matchShardIds, Map<String, String> properties,
+                                       ComputeResource computeResource)
                 throws DdlException {
             List<Long> shardIds = new ArrayList<>();
             for (int i = 0; i < numShards; i++) {
@@ -378,7 +381,7 @@ public class PseudoCluster {
             try {
                 FileUtils.forceDelete(new File(getRunDir()));
             } catch (IOException e) {
-                Assert.fail("shutdown failed " + e);
+                fail("shutdown failed " + e);
             }
         }
     }

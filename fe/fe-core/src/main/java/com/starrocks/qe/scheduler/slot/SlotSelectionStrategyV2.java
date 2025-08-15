@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.compress.utils.Lists;
@@ -57,6 +58,18 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
 
     private final LinkedHashMap<TUniqueId, SlotContext> requiringSmallSlots = new LinkedHashMap<>();
     private int numAllocatedSmallSlots = 0;
+
+    private final long warehouseId;
+    private final BaseSlotManager slotManager;
+
+    public SlotSelectionStrategyV2(long warehouseId) {
+        this.warehouseId = warehouseId;
+        this.slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+    }
+
+    public QueryQueueOptions getOpts() {
+        return opts;
+    }
 
     @Override
     public void onRequireSlot(LogicalSlot slot) {
@@ -115,15 +128,15 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
     }
 
     @Override
-    public List<LogicalSlot> peakSlotsToAllocate(SlotTracker slotTracker) {
+    public List<LogicalSlot> peakSlotsToAllocate(BaseSlotTracker slotTracker) {
         updateOptionsPeriodically();
 
         List<LogicalSlot> slotsToAllocate = Lists.newArrayList();
-
+        // allocate small slots
         int curNumAllocatedSmallSlots = numAllocatedSmallSlots;
         for (SlotContext slotContext : requiringSmallSlots.values()) {
             LogicalSlot slot = slotContext.getSlot();
-            if (curNumAllocatedSmallSlots + slot.getNumPhysicalSlots() > opts.v2().getTotalSmallSlots()) {
+            if (!isSmallSlotAvailable(slotTracker, slot, curNumAllocatedSmallSlots)) {
                 break;
             }
 
@@ -134,10 +147,11 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
             curNumAllocatedSmallSlots += slot.getNumPhysicalSlots();
         }
 
+        // allocate normal slots
         int numAllocatedSlots = slotTracker.getNumAllocatedSlots() - numAllocatedSmallSlots;
         while (!requiringQueue.isEmpty()) {
             SlotContext slotContext = requiringQueue.peak();
-            if (!isGlobalSlotAvailable(numAllocatedSlots, slotContext.getSlot())) {
+            if (!isGlobalSlotAvailable(slotTracker, numAllocatedSlots, slotContext.getSlot())) {
                 break;
             }
 
@@ -155,14 +169,14 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
         return opts;
     }
 
-    private void updateOptionsPeriodically() {
+    public void updateOptionsPeriodically() {
         long now = System.currentTimeMillis();
         if (now - lastUpdateOptionsTime < UPDATE_OPTIONS_INTERVAL_MS) {
             return;
         }
 
         lastUpdateOptionsTime = now;
-        QueryQueueOptions newOpts = QueryQueueOptions.createFromEnv();
+        QueryQueueOptions newOpts = QueryQueueOptions.createFromEnv(this.warehouseId);
         if (!newOpts.equals(opts)) {
             opts = newOpts;
 
@@ -187,13 +201,43 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
                     .forEach(slotContext -> requiringQueue.add(slotContext));
 
             LOG.info("updated SlotSelectionStrategy to {}", newOpts.toString());
-
         }
     }
 
-    private boolean isGlobalSlotAvailable(int numAllocatedSlots, LogicalSlot slot) {
+    private boolean isSmallSlotAvailable(BaseSlotTracker slotTracker,
+                                         LogicalSlot slot,
+                                         int curNumAllocatedSmallSlots) {
+        // if the small slot limit is reached, return false
+        if (curNumAllocatedSmallSlots + slot.getNumPhysicalSlots() > opts.v2().getTotalSmallSlots()) {
+            return false;
+        }
+        // if the concurrency limit is set and the limit is reached, return false
+        if (!isQueryConcurrencyLimitAvailable(slotTracker)) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean isGlobalSlotAvailable(BaseSlotTracker slotTracker, int numAllocatedSlots, LogicalSlot slot) {
+        // check the total slots limit is reached
         final int numTotalSlots = opts.v2().getTotalSlots();
-        return numAllocatedSlots == 0 || numAllocatedSlots + slot.getNumPhysicalSlots() <= numTotalSlots;
+        if (numAllocatedSlots != 0 && numAllocatedSlots + slot.getNumPhysicalSlots() > numTotalSlots) {
+            return false;
+        }
+        // if the concurrency limit is set and the limit is reached, return false
+        if (!isQueryConcurrencyLimitAvailable(slotTracker)) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean isQueryConcurrencyLimitAvailable(BaseSlotTracker slotTracker) {
+        // if the query queue limit is not set(by default), return true
+        int queryQueueConcurrencyLimit = slotManager.getQueryQueueConcurrencyLimit(warehouseId);
+        if (queryQueueConcurrencyLimit <= 0) {
+            return true;
+        }
+        return slotTracker.getCurrentCurrency() < queryQueueConcurrencyLimit;
     }
 
     private static boolean isSmallSlot(LogicalSlot slot) {

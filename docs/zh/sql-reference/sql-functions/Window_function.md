@@ -4,36 +4,7 @@ keywords: ['analytic']
 sidebar_position: 0.9
 ---
 
-# 使用窗口函数组织过滤数据
-
-- [使用窗口函数组织过滤数据](#使用窗口函数组织过滤数据)
-  - [窗口函数语法及参数](#窗口函数语法及参数)
-    - [语法](#语法)
-    - [参数说明](#参数说明)
-  - [窗口函数建表示例](#窗口函数建表示例)
-  - [使用 AVG() 窗口函数](#使用-avg-窗口函数)
-  - [使用 COUNT() 窗口函数](#使用-count-窗口函数)
-  - [使用 CUME\_DIST() 窗口函数](#使用-cume_dist-窗口函数)
-  - [使用 DENSE\_RANK() 窗口函数](#使用-dense_rank-窗口函数)
-  - [使用 FIRST\_VALUE() 窗口函数](#使用-first_value-窗口函数)
-  - [使用 LAST\_VALUE() 窗口函数](#使用-last_value-窗口函数)
-  - [使用 LAG() 窗口函数](#使用-lag-窗口函数)
-  - [使用 LEAD() 窗口函数](#使用-lead-窗口函数)
-  - [使用 MAX() 窗口函数](#使用-max-窗口函数)
-  - [使用 MIN() 窗口函数](#使用-min-窗口函数)
-  - [使用 NTILE() 窗口函数](#使用-ntile-窗口函数)
-  - [使用 PERCENT\_RANK() 函数](#使用-percent_rank-函数)
-  - [使用 RANK() 窗口函数](#使用-rank-窗口函数)
-  - [使用 ROW\_NUMBER() 窗口函数](#使用-row_number-窗口函数)
-  - [使用 QUALIFY 窗口函数](#使用-qualify-窗口函数)
-  - [使用 SUM() 窗口函数](#使用-sum-窗口函数)
-  - [使用 VARIANCE, VAR\_POP, VARIANCE\_POP 窗口函数](#使用-variance-var_pop-variance_pop-窗口函数)
-  - [使用 VAR\_SAMP, VARIANCE\_SAMP 窗口函数](#使用-var_samp-variance_samp-窗口函数)
-  - [使用 STD, STDDEV, STDDEV\_POP 窗口函数](#使用-std-stddev-stddev_pop-窗口函数)
-  - [使用 STDDEV\_SAMP 窗口函数](#使用-stddev_samp-窗口函数)
-  - [使用 COVAR\_SAMP 窗口函数](#使用-covar_samp-窗口函数)
-  - [使用 COVAR\_POP 窗口函数](#使用-covar_pop-窗口函数)
-  - [使用 CORR 窗口函数](#使用-corr-窗口函数)
+# 窗口函数
 
 本文介绍如何使用 StarRocks 窗口函数。
 
@@ -112,7 +83,7 @@ INSERT INTO `scores` VALUES
   (6, "amber", "physics", 100);
   ```
 
-## 使用 AVG() 窗口函数
+## AVG()
 
 `AVG()` 函数用于计算特定窗口内选中字段的平均值。该函数忽略 NULL 值。
 
@@ -177,7 +148,7 @@ from stock_ticker;
 
 比如，第一行的 `moving_average` 取值 `12.87500000`，是 "2014-10-02" 的值 `12.86`，加前一天 "2014-10-02" 的值 null，再加后一天 "2014-10-03" 的值 `12.89` 之后的平均值。
 
-## 使用 COUNT() 窗口函数
+## COUNT()
 
 `COUNT()` 函数用于返回特定窗口内满足要求的行的数目。
 
@@ -213,7 +184,7 @@ from scores where subject in ('math') and score > 90;
 +------+-------+---------+-------+-------------+
 ```
 
-## 使用 CUME_DIST() 窗口函数
+## CUME_DIST()
 
 计算某个窗口或分区中某个值的累积分布，取值范围 0 到 1。常用于统计一个记录集中最高或者最低值的分布情况，即一个值在该记录集中的相对位置。比如，收入或销量前 10% 的人、考试排名后 5% 的学生等。
 
@@ -278,7 +249,7 @@ FROM scores;
 - 对于第二行数据 `0.2`，分组 `english` 中有 5 行数据，且只有这一行自身满足 ”小于等于当前行“ 的要求，所以累积分布为 0.2。
 - 对于第三行数据 `0.4`，分组 `english` 中有 5 行数据，且有两行（85 和 NULL）满足 ”小于等于当前行“ 的要求，所以累积分布为 0.4。
 
-## 使用 DENSE_RANK() 窗口函数
+## DENSE_RANK()
 
 `DENSE_RANK()` 函数用来为特定窗口中的数据排名。当函数中出现相同排名时，下一行的排名为相同排名数加 1。因此，`DENSE_RANK()` 返回的序号**是连续的数字**。而 `RANK()` 返回的序号**有可能是不连续的数字**。举例：如果前面有两个排名 1，DENSE_RANK() 第三行仍然会返回排名 2，但是 RANK() 第三行会返回 3。
 
@@ -319,7 +290,7 @@ from scores where subject in ('math');
 
 示例中有两个得分 80，排名都为 3，下一行的 70 排名是 4，排名是连续的。
 
-## 使用 FIRST_VALUE() 窗口函数
+## FIRST_VALUE()
 
 `FIRST_VALUE()` 函数返回窗口范围内的**第一个**值。
 
@@ -372,7 +343,7 @@ from scores;
 +------+-------+---------+-------+-------+
 ```
 
-## 使用 LAST_VALUE() 窗口函数
+## LAST_VALUE()
 
 `LAST_VALUE()` 返回窗口范围内的**最后一个**值。与 `FIRST_VALUE()` 相反。
 
@@ -428,7 +399,7 @@ from scores;
 +------+-------+---------+-------+------+
 ```
 
-## 使用 LAG() 窗口函数
+## LAG()
 
 用来计算当前行**之前**若干行的值。该函数可用于直接比较行间差值或进行数据过滤。
 
@@ -530,7 +501,7 @@ FROM test_tbl ORDER BY col_1;
 
 对于第 7 行数据 6，往前遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
 
-## 使用 LEAD() 窗口函数
+## LEAD()
 
 用来计算当前行**之后**若干行的值。该函数可用于直接比较行间差值或进行数据过滤。
 
@@ -627,7 +598,7 @@ FROM test_tbl ORDER BY col_1;
 
 对于第 1 行数据 NULL，往后遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
 
-## 使用 MAX() 窗口函数
+## MAX()
 
 `MAX()` 函数返回当前窗口指定行数内数据的最大值。
 
@@ -691,7 +662,7 @@ from scores
 where subject in ('math');
 ```
 
-## 使用 MIN() 窗口函数
+## MIN()
 
 `MIN()` 函数返回当前窗口指定行数内数据的最小值。
 
@@ -744,7 +715,7 @@ from scores
 where subject in ('math');
 ```
 
-## 使用 NTILE() 窗口函数
+## NTILE()
 
 `NTILE()` 函数将分区中已排序的数据**尽可能均匀**地分配至指定数量（`num_buckets`）的桶中，并返回每一行所在的桶号。桶的编号从 `1` 开始直至 `num_buckets`。`NTILE()` 的返回类型为 BIGINT。
 
@@ -813,7 +784,7 @@ from scores;
 - 第 1 行是一个分区，划分在一个分桶中。
 - 2-7 行是一个分区，其中前 3 行在第一个分桶中、后 3 行在第二个分桶中。
 
-## 使用 PERCENT_RANK() 函数
+## PERCENT_RANK()
 
 计算当前行在所在的分区内的相对排名，百分比。计算公式为 `(Rank - 1)/(Rows in partition - 1)`。`Rank` 表示该行数据在该分区内的排名。
 
@@ -854,7 +825,7 @@ FROM scores where subject in ('math');
 +------+-------+---------+-------+--------------+
 ```
 
-## 使用 RANK() 窗口函数
+## RANK()
 
 `RANK()` 函数用来对当前窗口内的数据进行排名，返回结果集是对分区内每行的排名，行的排名是相关行之前的排名数加一。与 `DENSE_RANK()` 不同的是，`RANK()` 返回的序号**有可能是不连续的数字**，而 `DENSE_RANK()` 返回的序号**是连续的数字**。举例：如果前面有两个排名 1，RANK() 第三行会返回 3，而 DENSE_RANK() 第三行仍然会返回排名 2。
 
@@ -894,7 +865,7 @@ from scores where subject in ('math');
 
 示例中有两个得分 80，排名都为 3，下一行的 70 排名是 5。
 
-## 使用 ROW_NUMBER() 窗口函数
+## ROW_NUMBER()
 
 `ROW_NUMBER()` 函数为每个 Partition 的每一行返回一个从 `1` 开始连续递增的整数。与 `RANK()` 和 `DENSE_RANK()` 不同的是，`ROW_NUMBER()` 返回的值**不会重复也不会出现空缺**，是**连续递增**的。
 
@@ -932,7 +903,7 @@ from scores where subject in ('math');
 +------+-------+---------+-------+------+
 ```
 
-## 使用 QUALIFY 窗口函数
+## QUALIFY
 
 QUALIFY 子句用于过滤窗口函数的结果。在 SELECT 语句中，可以使用 QUALIFY 来设置过滤条件，从多条记录中筛选符合条件的记录。QUALIFY 与聚合函数中的 HAVING 子句功能类似。该函数从 2.5 版本开始支持。
 
@@ -1062,7 +1033,7 @@ ORDER BY city_id;
 8. ORDER BY
 9. LIMIT
 
-## 使用 SUM() 窗口函数
+## SUM()
 
 `SUM()` 函数对特定窗口内指定行求和。
 
@@ -1114,7 +1085,7 @@ from scores;
 +------+-------+---------+-------+------+
 ```
 
-## 使用 VARIANCE, VAR_POP, VARIANCE_POP 窗口函数
+## VARIANCE, VAR_POP, VARIANCE_POP
 
 VARIANCE() 窗口函数用于统计表达式的总体方差。VAR_POP 和 VARIANCE_POP 是 VARIANCE 窗口函数的别名。
 
@@ -1156,7 +1127,7 @@ from scores where subject in ('math');
 +------+-------+---------+-------+--------------------+
 ```
 
-## 使用 VAR_SAMP, VARIANCE_SAMP 窗口函数
+## VAR_SAMP, VARIANCE_SAMP
 
 VAR_SAMP() 窗口函数用于统计表达式的样本方差。
 
@@ -1197,7 +1168,7 @@ from scores where subject in ('math');
 +------+-------+---------+-------+--------------------+
 ```
 
-## 使用 STD, STDDEV, STDDEV_POP 窗口函数
+## STD, STDDEV, STDDEV_POP
 
 STD() 窗口函数用于统计表达式的总体标准差。
 
@@ -1237,7 +1208,7 @@ from scores where subject in ('math');
 +------+-------+---------+-------+-------------------+
 ```
 
-## 使用 STDDEV_SAMP 窗口函数
+## STDDEV_SAMP
 
 STDDEV_SAMP() 窗口函数用于统计表达式的样本标准差。
 
@@ -1295,7 +1266,7 @@ from scores where subject in ('math');
 +------+-------+---------+-------+--------------------+
 ```
 
-## 使用 COVAR_SAMP 窗口函数
+## COVAR_SAMP
 
 COVAR_SAMP() 窗口函数用于统计表达式的样本协方差。
 
@@ -1352,7 +1323,7 @@ from scores where subject in ('math');
 +------+-------+---------+-------+----------------------+
 ```
 
-## 使用 COVAR_POP 窗口函数
+## COVAR_POP
 
 COVAR_POP() 窗口函数用于统计表达式的总体协方差。
 
@@ -1392,7 +1363,7 @@ from scores where subject in ('math');
 +------+-------+---------+-------+----------------------+
 ```
 
-## 使用 CORR 窗口函数
+## CORR
 
 CORR() 窗口函数用于统计表达式的相关系数。
 

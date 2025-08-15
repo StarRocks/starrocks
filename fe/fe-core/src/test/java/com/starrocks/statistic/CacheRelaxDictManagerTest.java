@@ -40,13 +40,14 @@ import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -58,18 +59,18 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 public class CacheRelaxDictManagerTest {
-    @ClassRule
-    public static TemporaryFolder temp = new TemporaryFolder();
+    @TempDir
+    public static File temp;
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
-        ConnectorPlanTestBase.mockAllCatalogs(ctx, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockAllCatalogs(ctx, newFolder(temp, "junit").toURI().toString());
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
     }
 
@@ -119,7 +120,7 @@ public class CacheRelaxDictManagerTest {
         };
         CompletableFuture<Optional<ColumnDict>> future = dictStatistics.get(key);
         Optional<ColumnDict> optionalColumnDict = future.get();
-        Assert.assertTrue(optionalColumnDict.isEmpty());
+        Assertions.assertTrue(optionalColumnDict.isEmpty());
     }
 
     @Test
@@ -139,7 +140,7 @@ public class CacheRelaxDictManagerTest {
         };
         CompletableFuture<Optional<ColumnDict>> future = dictStatistics.get(key);
         Optional<ColumnDict> optionalColumnDict = future.get();
-        Assert.assertTrue(optionalColumnDict.isEmpty());
+        Assertions.assertTrue(optionalColumnDict.isEmpty());
     }
 
     @Test
@@ -162,10 +163,10 @@ public class CacheRelaxDictManagerTest {
         };
         CompletableFuture<Optional<ColumnDict>> future = dictStatistics.get(key);
         Optional<ColumnDict> optionalColumnDict = future.get();
-        Assert.assertFalse(optionalColumnDict.isEmpty());
-        Assert.assertEquals(size, optionalColumnDict.get().getDictSize());
+        Assertions.assertFalse(optionalColumnDict.isEmpty());
+        Assertions.assertEquals(size, optionalColumnDict.get().getDictSize());
         Thread.sleep(2000);
-        Assert.assertTrue(dictStatistics.get(key).get().isPresent());
+        Assertions.assertTrue(dictStatistics.get(key).get().isPresent());
     }
 
     @Test
@@ -187,7 +188,7 @@ public class CacheRelaxDictManagerTest {
         };
         CompletableFuture<Optional<ColumnDict>> future = dictStatistics.get(key);
         Optional<ColumnDict> optionalColumnDict = future.get();
-        Assert.assertTrue(optionalColumnDict.isEmpty());
+        Assertions.assertTrue(optionalColumnDict.isEmpty());
     }
 
     @Test
@@ -197,11 +198,11 @@ public class CacheRelaxDictManagerTest {
         String tableUUID = table.getUUID();
         // clear
         IRelaxDictManager.getInstance().removeGlobalDict(tableUUID, "p_mfgr");
-        Assert.assertTrue(IRelaxDictManager.getInstance().hasGlobalDict(tableUUID, "p_mfgr"));
+        Assertions.assertTrue(IRelaxDictManager.getInstance().hasGlobalDict(tableUUID, "p_mfgr"));
         IRelaxDictManager.getInstance().invalidTemporarily(tableUUID, "p_mfgr");
-        Assert.assertFalse(IRelaxDictManager.getInstance().hasGlobalDict(tableUUID, "p_mfgr"));
+        Assertions.assertFalse(IRelaxDictManager.getInstance().hasGlobalDict(tableUUID, "p_mfgr"));
         IRelaxDictManager.getInstance().removeTemporaryInvalid(tableUUID, "p_mfgr");
-        Assert.assertTrue(IRelaxDictManager.getInstance().hasGlobalDict(tableUUID, "p_mfgr"));
+        Assertions.assertTrue(IRelaxDictManager.getInstance().hasGlobalDict(tableUUID, "p_mfgr"));
     }
 
     @Test
@@ -213,7 +214,7 @@ public class CacheRelaxDictManagerTest {
         String columnName = "p_mfgr";
         IRelaxDictManager manager = IRelaxDictManager.getInstance();
         manager.removeGlobalDict(tableUUID, columnName);
-        Assert.assertTrue(manager.hasGlobalDict(tableUUID, columnName));
+        Assertions.assertTrue(manager.hasGlobalDict(tableUUID, columnName));
         int size = Config.low_cardinality_threshold / 2;
         new MockUp<StmtExecutor>() {
             @Mock
@@ -230,7 +231,7 @@ public class CacheRelaxDictManagerTest {
         }
         if (manager.getGlobalDict(tableUUID, columnName).isPresent()) {
             ColumnDict columnDict = manager.getGlobalDict(tableUUID, columnName).get();
-            Assert.assertEquals(size, columnDict.getDictSize());
+            Assertions.assertEquals(size, columnDict.getDictSize());
             TResultBatch resultBatch = generateDictResult(size + 1);
 
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
@@ -242,19 +243,28 @@ public class CacheRelaxDictManagerTest {
 
             manager.updateGlobalDict(tableUUID, columnName, Optional.of(sd));
             Optional<ColumnDict> optional = manager.getGlobalDict(tableUUID, columnName);
-            Assert.assertTrue(optional.isPresent());
-            Assert.assertEquals(size + 1, optional.get().getDictSize());
+            Assertions.assertTrue(optional.isPresent());
+            Assertions.assertEquals(size + 1, optional.get().getDictSize());
             TStatisticData nullDict = new TStatisticData();
             manager.updateGlobalDict(tableUUID, columnName, Optional.of(nullDict));
             optional = manager.getGlobalDict(tableUUID, columnName);
-            Assert.assertTrue(optional.isPresent());
-            Assert.assertEquals(size + 1, optional.get().getDictSize());
-            Assert.assertEquals(1,
+            Assertions.assertTrue(optional.isPresent());
+            Assertions.assertEquals(size + 1, optional.get().getDictSize());
+            Assertions.assertEquals(1,
                     ((CacheRelaxDictManager) manager).estimateCount().get("ExternalTableColumnDict").intValue());
-            Assert.assertEquals(1, ((CacheRelaxDictManager) manager).getSamples().get(0).first.size());
+            Assertions.assertEquals(1, ((CacheRelaxDictManager) manager).getSamples().get(0).first.size());
 
             manager.removeGlobalDict(tableUUID, columnName);
         }
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
     }
 
 }

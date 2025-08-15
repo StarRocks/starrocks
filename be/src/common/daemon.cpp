@@ -139,15 +139,15 @@ void calculate_metrics(void* arg_this) {
         LOG(INFO) << fmt::format(
                 "Current memory statistics: process({}), query_pool({}), load({}), "
                 "metadata({}), compaction({}), schema_change({}), "
-                "page_cache({}), update({}), chunk_allocator({}), passthrough({}), clone({}), consistency({}), "
+                "page_cache({}), update({}), passthrough({}), clone({}), consistency({}), "
                 "datacache({}), jit({})",
                 mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
                 mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
                 mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
                 mem_metrics->storage_page_cache_mem_bytes.value(), mem_metrics->update_mem_bytes.value(),
-                mem_metrics->chunk_allocator_mem_bytes.value(), mem_metrics->passthrough_mem_bytes.value(),
-                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(),
-                mem_metrics->datacache_mem_bytes.value(), mem_metrics->jit_cache_mem_bytes.value());
+                mem_metrics->passthrough_mem_bytes.value(), mem_metrics->clone_mem_bytes.value(),
+                mem_metrics->consistency_mem_bytes.value(), mem_metrics->datacache_mem_bytes.value(),
+                mem_metrics->jit_cache_mem_bytes.value());
 
         StarRocksMetrics::instance()->table_metrics_mgr()->cleanup();
         nap_sleep(15, [daemon] { return daemon->stopped(); });
@@ -326,12 +326,14 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
 
     init_signals();
     init_minidump();
-
+#if defined(__SANITIZE_ADDRESS__) || defined(ADDRESS_SANITIZER)
+#else
     // Don't bother set the limit if the process is running with very limited memory capacity
     if (MemInfo::physical_mem() > 1024 * 1024 * 1024) {
         // set mem hook to reject the memory allocation if large than available physical memory detected.
         set_large_memory_alloc_failure_threshold(MemInfo::physical_mem());
     }
+#endif
 }
 
 void Daemon::stop() {

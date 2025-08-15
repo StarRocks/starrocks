@@ -105,7 +105,7 @@ download_func() {
             rm -f "$DESC_DIR/$FILENAME"
         else
             echo "Downloading $FILENAME from $DOWNLOAD_URL to $DESC_DIR"
-            wget --no-check-certificate $DOWNLOAD_URL -O $DESC_DIR/$FILENAME
+            wget --progress=dot:mega --tries=3 --no-check-certificate $DOWNLOAD_URL -O $DESC_DIR/$FILENAME
             if [ "$?"x == "0"x ]; then
                 if md5sum_func $FILENAME $DESC_DIR $MD5SUM; then
                     SUCCESS=1
@@ -203,14 +203,14 @@ do
                 exit 1
             fi
         elif [[ "${!NAME}" =~ $SUFFIX_ZIP ]]; then
-            if ! $UNZIP_CMD "$TP_SOURCE_DIR/${!NAME}" -d $TP_SOURCE_DIR/tmp_dir; then
+            if ! $UNZIP_CMD -q "$TP_SOURCE_DIR/${!NAME}" -d $TP_SOURCE_DIR/tmp_dir; then
                 echo "Failed to unzip ${!NAME}"
                 exit 1
             fi
         elif [[ "${!NAME}" =~ $SUFFIX_BZ2 ]]; then
             echo "$TP_SOURCE_DIR/${!NAME}"
             echo "$TP_SOURCE_DIR/${!SOURCE}"
-            if ! $TAR_CMD jxvf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
+            if ! $TAR_CMD xjf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
                 echo "Failed to untar ${!NAME}"
                 exit 1
             fi
@@ -378,7 +378,7 @@ echo "Finished patching $GPERFTOOLS_SOURCE"
 
 # patch librdkafka
 cd $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $LIBRDKAFKA_SOURCE = "librdkafka-2.0.2" ]; then
+if [ ! -f $PATCHED_MARK ] && [ $LIBRDKAFKA_SOURCE = "librdkafka-2.11.0" ]; then
     patch -p0 < $TP_PATCH_DIR/librdkafka.patch
     touch $PATCHED_MARK
 fi
@@ -420,6 +420,8 @@ fi
 cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
 if [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.11.267" ]; then
     if [ ! -f prefetch_crt_dep_ok ]; then
+        # make prefetch_crt_dependency.sh less chatty
+        patch -p1 < $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-quiet-unzip-dependencies.patch || true
         bash ./prefetch_crt_dependency.sh
         touch prefetch_crt_dep_ok
     fi
@@ -469,14 +471,16 @@ fi
 cd -
 echo "Finished patching $VPACK_SOURCE"
 
-# patch avro-c
+# patch avro-c and avro-cpp
 cd $TP_SOURCE_DIR/$AVRO_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.10.2" ]; then
-    cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
-    patch -p0 < $TP_PATCH_DIR/avro-1.10.2.c.patch
+if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.12.0" ]; then
+    # c patches
     cd $TP_SOURCE_DIR/$AVRO_SOURCE
-    cp $TP_PATCH_DIR/avro-1.10.2.c.findjansson.patch $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c/Findjansson.cmake
-    patch -p1 < $TP_PATCH_DIR/avro-1.10.2.c.gcc14.patch
+    patch -p1 < $TP_PATCH_DIR/avro-1.12.0.c.patch
+    cp $TP_PATCH_DIR/avro-1.12.0.c.findjansson.patch ./lang/c/Findjansson.cmake
+
+    # c++ patches
+    patch -p1 < $TP_PATCH_DIR/avro-1.12.0.cpp.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -522,7 +526,7 @@ if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     fi
     if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-16.1.0" ] ; then
         patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-parquet-map-key.patch
-        patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-use-zstd-1.5.0.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-use-zstd-1.5.7.patch
         touch $PATCHED_MARK
     fi
     cd -
@@ -594,6 +598,33 @@ if [[ -d $TP_SOURCE_DIR/$BREAK_PAD_SOURCE ]] ; then
         patch -p1 < "$TP_PATCH_DIR/breakpad-2022.07.12.patch"
         touch "$PATCHED_MARK"
     fi
+    if [ ! -f "$PATCHED_MARK" ] && [[ $BREAK_PAD_SOURCE == "breakpad-2024.02.16" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/breakpad-2024.02.16.patch"
+        touch "$PATCHED_MARK"
+    fi
     cd -
     echo "Finished patching $BREAK_PAD_SOURCE"
+fi
+
+# patch azure
+if [[ -d $TP_SOURCE_DIR/$AZURE_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$AZURE_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $AZURE_SOURCE == "azure-storage-files-shares_12.12.0" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/azure-storage-files-shares_12.12.0.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $AZURE_SOURCE"
+fi
+
+#patch cctz
+if [[ -d $TP_SOURCE_DIR/$CCTZ_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$CCTZ_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $CCTZ_SOURCE == "cctz-2.3" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/cctz_civil_cache.patch"
+        patch -p1 < "$TP_PATCH_DIR/cctz_02_lookup_offset.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $CCTZ_SOURCE"
 fi

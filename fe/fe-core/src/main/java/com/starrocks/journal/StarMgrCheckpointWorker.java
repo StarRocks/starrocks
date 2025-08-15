@@ -15,19 +15,20 @@
 package com.starrocks.journal;
 
 import com.starrocks.leader.CheckpointController;
+import com.starrocks.leader.MetaHelper;
 import com.starrocks.staros.StarMgrServer;
 
 public class StarMgrCheckpointWorker extends CheckpointWorker {
     public StarMgrCheckpointWorker(Journal journal) {
-        super("star_os_checkpoint_worker", journal, StarMgrServer.IMAGE_SUBDIR);
+        super("star_os_checkpoint_worker", journal);
     }
 
     @Override
-    void doCheckpoint(long epoch, long journalId) throws Exception {
+    void doCheckpoint(long epoch, long journalId, boolean needClusterSnapshotInfo) throws Exception {
         LOG.info("begin to generate new image: image.{}", journalId);
         StarMgrServer starMgrServer = StarMgrServer.getCurrentState();
         try {
-            starMgrServer.replayAndGenerateImage(imageDir, journalId);
+            starMgrServer.replayAndGenerateImage(MetaHelper.getImageFileDir(false), journalId);
         } finally {
             // destroy checkpoint, reclaim memory
             StarMgrServer.destroyCheckpoint();

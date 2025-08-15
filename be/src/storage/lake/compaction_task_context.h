@@ -21,10 +21,12 @@
 #include <string>
 
 #include "common/status.h"
+#include "gen_cpp/lake_types.pb.h"
 
 namespace starrocks {
 struct OlapReaderStatistics;
-}
+struct OlapWriterStatistics;
+} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -40,8 +42,8 @@ private:
 };
 
 struct CompactionTaskStats {
-    int64_t io_ns_remote = 0;
-    int64_t io_ns_local_disk = 0;
+    int64_t io_ns_read_remote = 0;
+    int64_t io_ns_read_local_disk = 0;
     int64_t io_bytes_read_remote = 0;
     int64_t io_bytes_read_local_disk = 0;
     int64_t segment_init_ns = 0;
@@ -49,9 +51,15 @@ struct CompactionTaskStats {
     int64_t io_count_local_disk = 0;
     int64_t io_count_remote = 0;
     int64_t in_queue_time_sec = 0;
+    int64_t read_segment_count = 0;
+    int64_t write_segment_count = 0;
+    int64_t write_segment_bytes = 0;
+    int64_t io_ns_write_remote = 0;
     int64_t pk_sst_merge_ns = 0;
+    int64_t input_file_size = 0;
 
     void collect(const OlapReaderStatistics& reader_stats);
+    void collect(const OlapWriterStatistics& writer_stats);
     CompactionTaskStats operator+(const CompactionTaskStats& that) const;
     CompactionTaskStats operator-(const CompactionTaskStats& that) const;
     std::string to_json_stats();
@@ -60,11 +68,12 @@ struct CompactionTaskStats {
 // Context of a single tablet compaction task.
 struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_, bool force_base_compaction_,
-                                   std::shared_ptr<CompactionTaskCallback> cb_)
+                                   bool skip_write_txnlog_, std::shared_ptr<CompactionTaskCallback> cb_)
             : txn_id(txn_id_),
               tablet_id(tablet_id_),
               version(version_),
               force_base_compaction(force_base_compaction_),
+              skip_write_txnlog(skip_write_txnlog_),
               callback(std::move(cb_)) {}
 
 #ifndef NDEBUG
@@ -77,6 +86,7 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     const int64_t tablet_id;
     const int64_t version;
     const bool force_base_compaction;
+    const bool skip_write_txnlog;
     std::atomic<int64_t> start_time{0};
     std::atomic<int64_t> finish_time{0};
     std::atomic<bool> skipped{false};
@@ -86,6 +96,7 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     int64_t enqueue_time_sec; // time point when put into queue
     std::shared_ptr<CompactionTaskCallback> callback;
     std::unique_ptr<CompactionTaskStats> stats = std::make_unique<CompactionTaskStats>();
+    std::shared_ptr<TxnLogPB> txn_log;
 };
 
 } // namespace starrocks::lake

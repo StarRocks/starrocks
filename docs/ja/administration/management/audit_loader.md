@@ -47,20 +47,15 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `digest`            VARCHAR(32)                COMMENT "スロー SQL フィンガープリント",
   `planCpuCosts`      DOUBLE                     COMMENT "プランニングの CPU リソース消費時間 (ナノ秒単位)",
   `planMemCosts`      DOUBLE                     COMMENT "プランニングのメモリコスト (バイト単位)",
-  `warehouse`         VARCHAR(128)               COMMENT "ウェアハウス名"
+  `warehouse`         VARCHAR(128)               COMMENT "ウェアハウス名",
+  `cngroup`           STRING                     COMMENT "コンピュートノードグループ名"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "監査ログテーブル"
-PARTITION BY RANGE (`timestamp`) ()
-DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
+PARTITION BY date_trunc('day', `timestamp`)
 PROPERTIES (
-  "dynamic_partition.time_unit" = "DAY",
-  "dynamic_partition.start" = "-30",       -- 最新の 30 日間の監査ログを保持します。ビジネスの需要に応じてこの値を調整できます。
-  "dynamic_partition.end" = "3",
-  "dynamic_partition.prefix" = "p",
-  "dynamic_partition.buckets" = "3",
-  "dynamic_partition.enable" = "true",
-  "replication_num" = "3"                 -- 監査ログの 3 つのレプリカを保持します。運用環境では 3 つのレプリカを保持することをお勧めします。
+  "replication_num" = "1",
+  "partition_live_number"="30"
 );
 ```
 
@@ -96,7 +91,7 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
     - `user`: クラスターのユーザー名。このユーザーはテーブルにデータをロードする権限 (LOAD_PRIV) を持っている必要があります。
     - `password`: ユーザーパスワード。
     - `secret_key`: パスワードを暗号化するために使用されるキー（文字列、16 バイトを超えてはならない）。このパラメータが設定されていない場合、**plugin.conf** 内のパスワードは暗号化されず、`password` に平文のパスワードを指定するだけで済みます。このパラメータが指定されている場合、パスワードはこのキーで暗号化されていることを示し、`password` に暗号化された文字列を指定する必要があります。暗号化されたパスワードは、StarRocks で `AES_ENCRYPT` 関数を使用して生成できます：`SELECT TO_BASE64(AES_ENCRYPT('password','secret_key'));`。
-    - `enable_compute_all_query_digest`: すべてのクエリに対して Hash SQL フィンガープリントを生成するかどうか（StarRocks はデフォルトでスロークエリに対してのみ SQL フィンガープリントを有効にしています）。プラグインでのフィンガープリント計算は FE のものとは異なり、[SQL ステートメントを正規化](../Query_planning.md#sql-fingerprint) しますが、プラグインはしません。この機能を有効にすると、フィンガープリント計算は追加の計算リソースを消費します。
+    - `enable_compute_all_query_digest`: すべてのクエリに対して Hash SQL フィンガープリントを生成するかどうか（StarRocks はデフォルトでスロークエリに対してのみ SQL フィンガープリントを有効にしています）。プラグインでのフィンガープリント計算は FE のものとは異なり、[SQL ステートメントを正規化](../../best_practices/query_tuning/query_planning.md#sql-fingerprint) しますが、プラグインはしません。この機能を有効にすると、フィンガープリント計算は追加の計算リソースを消費します。
     - `filter`: 監査ログロードのフィルター条件。このパラメータは Stream Load の [WHERE パラメータ](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#opt_properties) に基づいており、`-H “where: <condition>”` として指定され、デフォルトは空の文字列です。例：`filter=isQuery=1 and clientIp like '127.0.0.1%' and user='root'`。
 
 4. ファイルを再度パッケージに圧縮します。
@@ -206,6 +201,7 @@ INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5
     planCpuCosts: 0
     planMemCosts: 0
        warehouse: default_warehouse
+         cngroup: 
     1 row in set (0.01 sec)
     ```
 

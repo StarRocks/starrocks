@@ -44,9 +44,10 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.jetbrains.annotations.TestOnly;
 
 import java.util.ArrayList;
@@ -60,16 +61,19 @@ import java.util.stream.Collectors;
  * Representation of the common elements of all scan nodes.
  */
 public abstract class ScanNode extends PlanNode {
-    protected final TupleDescriptor desc;
+    protected TupleDescriptor desc;
     protected Map<String, PartitionColumnFilter> columnFilters;
     protected String sortColumn = null;
     protected List<ColumnAccessPath> columnAccessPaths;
     protected DataCacheOptions dataCacheOptions = null;
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-    protected ScanOptimzeOption scanOptimzeOption;
+    protected ScanOptimizeOption scanOptimizeOption;
     // The column names applied dict optimization
     // used for explain
     protected final List<String> appliedDictStringColumns = new ArrayList<>();
+    // NOTE: To avoid trigger a new compute resource creation, set the value when the scan node needs to use it.
+    // The compute resource used by this scan node.
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -93,16 +97,16 @@ public abstract class ScanNode extends PlanNode {
         this.dataCacheOptions = dataCacheOptions;
     }
 
-    public void setWarehouseId(long warehouseId) {
-        this.warehouseId = warehouseId;
+    public void setComputeResource(ComputeResource computeResource) {
+        this.computeResource = computeResource;
     }
 
-    public void setScanOptimzeOption(ScanOptimzeOption opt) {
-        this.scanOptimzeOption = opt.copy();
+    public void setScanOptimizeOption(ScanOptimizeOption opt) {
+        this.scanOptimizeOption = opt.copy();
     }
 
-    public ScanOptimzeOption getScanOptimzeOption() {
-        return scanOptimzeOption;
+    public ScanOptimizeOption getScanOptimizeOption() {
+        return scanOptimizeOption;
     }
 
     public void updateAppliedDictStringColumns(Set<Integer> appliedColumnIds) {
@@ -119,6 +123,10 @@ public abstract class ScanNode extends PlanNode {
 
     public String getTableName() {
         return desc.getTable().getName();
+    }
+
+    public int getBucketNums() throws StarRocksException {
+        throw new StarRocksException("Error when using bucket-aware execution");
     }
 
     public boolean isLocalNativeTable() {
@@ -159,9 +167,9 @@ public abstract class ScanNode extends PlanNode {
 
     protected String explainColumnAccessPath(String prefix) {
         String result = "";
-        if (columnAccessPaths.stream().anyMatch(c -> !c.isFromPredicate())) {
+        if (columnAccessPaths.stream().anyMatch(c -> !c.isFromPredicate() && !c.isExtended())) {
             result += prefix + "ColumnAccessPath: [" + columnAccessPaths.stream()
-                    .filter(c -> !c.isFromPredicate())
+                    .filter(c -> !c.isFromPredicate() && !c.isExtended())
                     .map(ColumnAccessPath::explain)
                     .sorted()
                     .collect(Collectors.joining(", ")) + "]\n";
@@ -169,6 +177,14 @@ public abstract class ScanNode extends PlanNode {
         if (columnAccessPaths.stream().anyMatch(ColumnAccessPath::isFromPredicate)) {
             result += prefix + "PredicateAccessPath: [" + columnAccessPaths.stream()
                     .filter(ColumnAccessPath::isFromPredicate)
+                    .map(ColumnAccessPath::explain)
+                    .sorted()
+                    .collect(Collectors.joining(", ")) + "]\n";
+        }
+        // explain the extended column access path if ColumnAccessPath::isExtended
+        if (columnAccessPaths.stream().anyMatch(ColumnAccessPath::isExtended)) {
+            result += prefix + "ExtendedColumnAccessPath: [" + columnAccessPaths.stream()
+                    .filter(ColumnAccessPath::isExtended)
                     .map(ColumnAccessPath::explain)
                     .sorted()
                     .collect(Collectors.joining(", ")) + "]\n";

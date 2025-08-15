@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 40
 ---
 
 # SSL 認証
@@ -15,6 +16,7 @@ StarRocks で SSL 認証を有効にするには、FE 構成ファイル **fe.co
 - `ssl_keystore_location`：SSL 証明書とキーを格納するキーストアファイルへのパスを指定します。
 - `ssl_keystore_password`：キーストアファイルにアクセスするためのパスワード。StarRocks は、キーストアファイルを読み取るためにこのパスワードを要求します。
 - `ssl_key_password`：キーにアクセスするためのパスワード。StarRocks は、キーストアからキーを取得するためにこのパスワードを要求します。
+- `ssl_force_secure_transport`: SSL 認証を強制するかどうか。デフォルト値：`FALSE`。この項目を `TRUE` に設定すると、SSL で暗号化されていない接続はシステムによって拒否されます。
 
 例：
 
@@ -64,7 +66,7 @@ SSL認証を無効にするには、以下の手順に従う：
 
 ## LDAP 認証
 
-LDAP 認証を有効にする方法の詳細については、[認証方法](./Authentication.md)を参照してください。
+LDAP 認証を有効にする方法の詳細については、[認証方法](./authentication/ldap_authentication.md)を参照してください。
 
 JDBC 接続については、 StarRocks は SSL 認証をサポートしているので、`AuthPlugin` をカスタマイズする必要はありません。組み込みの `MysqlClearPasswordPlugin` を使用できます。
 

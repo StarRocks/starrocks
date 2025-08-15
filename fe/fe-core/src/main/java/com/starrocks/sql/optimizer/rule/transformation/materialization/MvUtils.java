@@ -1377,11 +1377,38 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), baseTableInfo);
+        try {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), baseTableInfo);
+        } catch (Exception e) {
+            // For hive catalog, when meets NoSuchObjectException, we should return empty
+            //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
+            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:178)
+            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:163)
+            //        at com.starrocks.connector.hive.HiveMetaClient.getTable(HiveMetaClient.java:272)
+            //        at com.starrocks.connector.hive.HiveMetastore.getTable(HiveMetastore.java:116)
+            if (e.getMessage() != null && e.getMessage().contains("NoSuchObjectException")) {
+                return Optional.empty();
+            }
+            throw e;
+        }
     }
 
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(new ConnectContext(), baseTableInfo);
+        try {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(new ConnectContext(), baseTableInfo);
+        } catch (Exception e) {
+            // For hive catalog, when meets NoSuchObjectException, we should return empty
+            //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
+            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:178)
+            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:163)
+            //        at com.starrocks.connector.hive.HiveMetaClient.getTable(HiveMetaClient.java:272)
+            //        at com.starrocks.connector.hive.HiveMetastore.getTable(HiveMetastore.java:116)
+            LOG.warn("Failed to get table with baseTableInfo: {}, error: {}", baseTableInfo, e.getMessage());
+            if (e.getMessage() != null && e.getMessage().contains("NoSuchObjectException")) {
+                return Optional.empty();
+            }
+            throw e;
+        }
     }
 
     public static Table getTableChecked(BaseTableInfo baseTableInfo) {
@@ -1498,9 +1525,10 @@ public class MvUtils {
         return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
     }
 
-    public static ScalarOperator convertPartitionKeyRangesToListPredicate(List<? extends ScalarOperator> partitionColRefs,
-                                                                          Collection<PRangeCell> pRangeCells,
-                                                                          boolean areAllRangePartitionsSingleton) {
+    public static ScalarOperator convertPartitionKeyRangesToListPredicate(
+            List<? extends ScalarOperator> partitionColRefs,
+            Collection<PRangeCell> pRangeCells,
+            boolean areAllRangePartitionsSingleton) throws AnalysisException {
         final List<Range<PartitionKey>> partitionRanges = pRangeCells
                 .stream()
                 .map(PRangeCell::getRange)
@@ -1509,15 +1537,25 @@ public class MvUtils {
         return convertPartitionKeysToListPredicate(partitionColRefs, partitionRanges, areAllRangePartitionsSingleton);
     }
 
-    public static ScalarOperator convertPartitionKeysToListPredicate(List<? extends ScalarOperator> partitionColRefs,
-                                                                     Collection<PartitionKey> partitionRanges) {
+    private static ConstantOperator convertLiteralToConstantOperator(ScalarOperator partitionColRef,
+                                                                     LiteralExpr literalExpr) throws AnalysisException {
+        if (!partitionColRef.getType().equals(literalExpr.getType())) {
+            literalExpr = LiteralExpr.create(literalExpr.getStringValue(), partitionColRef.getType());
+        }
+        return (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+    }
+
+    public static ScalarOperator convertPartitionKeysToListPredicate(
+            List<? extends ScalarOperator> partitionColRefs,
+            Collection<PartitionKey> partitionRanges) throws AnalysisException {
         final List<ScalarOperator> values = Lists.newArrayList();
         if (partitionColRefs.size() == 1) {
+            ScalarOperator partitionColRef = partitionColRefs.get(0);
             for (PartitionKey key : partitionRanges) {
                 final List<LiteralExpr> literalExprs = key.getKeys();
                 Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
                 final LiteralExpr literalExpr = literalExprs.get(0);
-                final ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                final ConstantOperator upperBound = convertLiteralToConstantOperator(partitionColRef, literalExpr);
                 values.add(upperBound);
             }
             return MvUtils.convertToInPredicate(partitionColRefs.get(0), values);
@@ -1540,9 +1578,10 @@ public class MvUtils {
         }
     }
 
-    private static ScalarOperator convertPartitionKeysToListPredicate(List<? extends ScalarOperator> partitionColRefs,
-                                                                      Collection<Range<PartitionKey>> partitionRanges,
-                                                                      boolean areAllRangePartitionsSingleton) {
+    private static ScalarOperator convertPartitionKeysToListPredicate(
+            List<? extends ScalarOperator> partitionColRefs,
+            Collection<Range<PartitionKey>> partitionRanges,
+            boolean areAllRangePartitionsSingleton) throws AnalysisException {
 
         if (areAllRangePartitionsSingleton) {
             List<PartitionKey> partitionKeys = partitionRanges

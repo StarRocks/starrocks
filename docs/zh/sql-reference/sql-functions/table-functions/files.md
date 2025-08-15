@@ -21,8 +21,9 @@ displayed_sidebar: docs
   - NFS(NAS)
 - **文件格式：**
   - Parquet
-  - ORC
-  - CSV
+  - ORC（自 v3.3 起支持）
+  - CSV（自 v3.3 起支持）
+  - Avro（自 v3.4.4 起支持，仅支持导入）
 
 自 v3.2 版本起，除了基本数据类型，FILES() 还支持复杂数据类型 ARRAY、JSON、MAP 和 STRUCT。
 
@@ -33,7 +34,7 @@ displayed_sidebar: docs
 ### 语法
 
 ```SQL
-FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ])
+FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ] [, list_recursively])
 ```
 
 ### 参数说明
@@ -115,11 +116,49 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
 #### data_format
 
-数据文件的格式。有效值：`parquet`、`orc` 和 `csv`。
+数据文件的格式。有效值：
+- `parquet`
+- `orc`（自 v3.3 起支持）
+- `csv`（自 v3.3 起支持）
+- `avro`（自 v3.4.4 起支持，仅支持导入）。
 
 特定数据文件格式需要额外参数指定细节选项。
 
 `list_files_only` 设置为 `true` 时，无需指定 `data_format`。
+
+##### Parquet
+
+Parquet 格式示例：
+
+```SQL
+"format"="parquet",
+"parquet.use_legacy_encoding" = "true",  -- 仅用于数据导出
+"parquet.version" = "2.6"                -- 仅用于数据导出
+```
+
+###### parquet.use_legacy_encoding
+
+控制 DATETIME 和 DECIMAL 数据类型的编码技术。有效值：`true` 和 `false`（默认）。该属性仅支持数据导出。
+
+如果设置为 `true`：
+
+- 对于 DATETIME 类型，系统使用 `INT96` 编码方式。
+- 对于 DECIMAL 类型，系统使用 `fixed_len_byte_array` 编码方式。
+
+如果设置为 `false`：
+
+- 对于 DATETIME 类型，系统使用 `INT64` 编码方式。
+- 对于 DECIMAL 类型，系统使用 `INT32` 或 `INT64` 编码方式。
+
+:::note
+
+对于 DECIMAL 128 数据类型，仅可使用 `fixed_len_byte_array` 编码。`parquet.use_legacy_encoding` 不生效。
+
+:::
+
+###### parquet.version
+
+控制系统导出数据时使用的 Parquet 版本。自 v3.4.6 版本起支持该功能。有效值：`1.0`、`2.4` 和 `2.6`（默认）。该属性仅支持数据导出。
 
 ##### CSV
 
@@ -177,7 +216,7 @@ CSV 格式示例：
 
 您可以使用以下参数配置采样规则：
 
-- `auto_detect_sample_files`：每个批次中采样的数据文件数量。范围：[0, + ∞]。默认值：`1`。
+- `auto_detect_sample_files`：每个批次中采样的数据文件数量。默认选择第一个和最后一个文件。范围：[0, + ∞]。默认值：`2`。
 - `auto_detect_sample_rows`：每个采样数据文件中的数据扫描行数。范围：[0, + ∞]。默认值：`500`。
 
 采样后，StarRocks 根据以下规则 Union 所有数据文件的列：
@@ -225,7 +264,9 @@ FILES() 的 Schema 检测并不是完全严格的。例如，在读取 CSV 文�
 
 StarRocks 访问存储系统的认证配置。
 
-StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 认证访问 AWS S3 以及 Google Cloud Storage，以及通过 Shared Key 访问 Azure Blob Storage。
+StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 认证访问 AWS S3 以及 Google Cloud Storage，以及通过 Shared Key、SAS Token、Managed Identity 以及 Service Principal 访问 Azure Blob Storage。
+
+##### HDFS
 
 - 如果您使用简单认证接入访问 HDFS 集群：
 
@@ -241,45 +282,309 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
   | username                       | 是       | 用于访问 HDFS 集群中 NameNode 节点的用户名。                 |
   | password                       | 是       | 用于访问 HDFS 集群中 NameNode 节点的密码。                   |
 
-- 如果您使用 IAM User 认证访问 AWS S3：
+- 如果您使用 Kerberos 认证接入访问 HDFS 集群：
 
-  ```SQL
-  "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
-  "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-  "aws.s3.region" = "<s3_region>"
+  目前，FILES() 仅支持通过放置在 **fe/conf**、**be/conf** 以及 **cn/conf** 目录下的配置文件 **hdfs-site.xml** 基于 Kerberos 身份验证访问 HDFS。
+
+  此外，您需要在每个 FE 配置文件 **fe.conf**、BE 配置文件 **be.conf** 和 CN 配置文件 **cn.conf** 的配置项 `JAVA_OPTS` 中追加以下选项：
+
+  ```Plain
+  # 指定存储 Kerberos 配置文件的本地路径。
+  -Djava.security.krb5.conf=<path_to_kerberos_conf_file>
   ```
 
-  | **参数**          | **必填** | **说明**                                                 |
-  | ----------------- | -------- | -------------------------------------------------------- |
-  | aws.s3.access_key | 是       | 用于指定访问 AWS S3 存储空间的 Access Key。              |
-  | aws.s3.secret_key | 是       | 用于指定访问 AWS S3 存储空间的 Secret Key。              |
-  | aws.s3.region     | 是       | 用于指定需访问的 AWS S3 存储空间的地区，如 `us-west-2`。 |
+  示例：
 
-- 如果您使用 IAM User 认证访问 GCS：
-
-  ```SQL
-  "fs.s3a.access.key" = "AAAAAAAAAAAAAAAAAAAA",
-  "fs.s3a.secret.key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-  "fs.s3a.endpoint" = "<gcs_endpoint>"
+  ```Properties
+  JAVA_OPTS="-Xlog:gc*:${LOG_DIR}/be.gc.log.$DATE:time -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log -Djava.security.krb5.conf=/etc/krb5.conf"
   ```
 
-  | **参数**          | **必填** | **说明**                                                 |
-  | ----------------- | -------- | -------------------------------------------------------- |
-  | fs.s3a.access.key | 是       | 用于指定访问 GCS 存储空间的 Access Key。              |
-  | fs.s3a.secret.key | 是       | 用于指定访问 GCS 存储空间的 Secret Key。              |
-  | fs.s3a.endpoint   | 是       | 用于指定需访问的 GCS 存储空间的 Endpoint，如 `storage.googleapis.com`。请勿在 Endpoint 地址中指定 `https`。 |
+  您还需要在每个 FE、BE 和 CN 节点上运行 `kinit` 命令，以从 Key Distribution Center (KDC) 获取 Ticket Granting Ticket (TGT)。
+
+  ```Bash
+  kinit -kt <path_to_keytab_file> <principal>
+  ```
+
+  要运行该命令，所使用的 Principal 必须拥有 HDFS 集群的写入权限。此外，还需要为该命令设置一个 crontab，以便在特定时间间隔内运行任务，从而防止认证过期。
+
+  示例：
+
+  ```Bash
+  # 每 6 小时更新一次 TGT。
+  0 */6 * * * kinit -kt sr.keytab sr/test.starrocks.com@STARROCKS.COM > /tmp/kinit.log
+  ```
+
+- 访问启用 HA 模式的 HDFS：
+
+  目前，FILES() 仅支持通过放置在 **fe/conf**、**be/conf** 以及 **cn/conf** 目录下的配置文件 **hdfs-site.xml** 访问启用了 HA 模式的 HDFS。
+
+##### AWS S3
+
+如果存储系统为 AWS S3，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Instance Profile 进行认证和鉴权
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+- 基于 Assumed Role 进行认证和鉴权
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.iam_role_arn" = "<iam_role_arn>",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+- 基于 IAM User 进行认证和鉴权
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "false",
+  "aws.s3.access_key" = "<iam_user_access_key>",
+  "aws.s3.secret_key" = "<iam_user_secret_key>",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+`StorageCredentialParams` 包含如下参数。
+
+| 参数                        | 是否必须   | 说明                                                         |
+| --------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
+| aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。 |
+| aws.s3.region               | 是       | AWS S3 Bucket 所在的地域。示例：`us-west-1`。                |
+| aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
+| aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
+
+有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
+
+##### Google GCS
+
+如果存储系统为 Google GCS，请按如下配置 `StorageCredentialParams`：
+
+- 基于 VM 进行认证和鉴权
+
+  ```SQL
+  "gcp.gcs.use_compute_engine_service_account" = "true"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                   | **默认值** | **取值样例** | **说明**                                                 |
+  | ------------------------------------------ | ---------- | ------------ | -------------------------------------------------------- |
+  | gcp.gcs.use_compute_engine_service_account | false      | true         | 是否直接使用 Compute Engine 上面绑定的 Service Account。 |
+
+- 基于 Service Account 号进行认证和鉴权
+
+  ```SQL
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                               | **默认值** | **取值样例**                                                 | **说明**                                                     |
+  | -------------------------------------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | gcp.gcs.service_account_email          | ""         | `"user@hello.iam.gserviceaccount.com"` | 创建 Service Account 时生成的 JSON 文件中的 Email。          |
+  | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Service Account 时生成的 JSON 文件中的 Private Key ID。 |
+  | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Service Account 时生成的 JSON 文件中的 Private Key。    |
+
+- 基于 Impersonation 进行认证和鉴权
+
+  - 使用 VM 实例模拟 Service Account
+
+    ```SQL
+    "gcp.gcs.use_compute_engine_service_account" = "true",
+    "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+    ```
+
+    `StorageCredentialParams` 包含如下参数。
+
+    | **参数**                                   | **默认值** | **取值样例** | **说明**                                                     |
+    | ------------------------------------------ | ---------- | ------------ | ------------------------------------------------------------ |
+    | gcp.gcs.use_compute_engine_service_account | false      | true         | 是否直接使用 Compute Engine 上面绑定的 Service Account。     |
+    | gcp.gcs.impersonation_service_account      | ""         | "hello"      | 需要模拟的目标 Service Account。 |
+
+  - 使用一个 Service Account（即“Meta Service Account”）模拟另一个 Service Account（即“Data Service Account”）
+
+    ```SQL
+    "gcp.gcs.service_account_email" = "<google_service_account_email>",
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+    "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
+    ```
+
+    `StorageCredentialParams` 包含如下参数。
+
+    | **参数**                               | **默认值** | **取值样例**                                                 | **说明**                                                     |
+    | -------------------------------------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+    | gcp.gcs.service_account_email          | ""         | `"user@hello.iam.gserviceaccount.com"` | 创建 Meta Service Account 时生成的 JSON 文件中的 Email。     |
+    | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key ID。 |
+    | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key。 |
+    | gcp.gcs.impersonation_service_account  | ""         | "hello"                                                      | 需要模拟的目标 Data Service Account。 |
+
+##### Azure Blob Storage
 
 - 如果您使用 Shared Key 访问 Azure Blob Storage：
 
   ```SQL
-  "azure.blob.storage_account" = "<storage_account>",
   "azure.blob.shared_key" = "<shared_key>"
   ```
 
   | **参数**                   | **必填** | **说明**                                                 |
   | -------------------------- | -------- | ------------------------------------------------------ |
-  | azure.blob.storage_account | 是       | 用于指定 Azure Blob Storage Account 名。                  |
   | azure.blob.shared_key      | 是       | 用于指定访问 Azure Blob Storage 存储空间的 Shared Key。     |
+
+- 如果您使用 SAS token 访问 Azure Blob Storage：
+
+  ```SQL
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
+  ```
+
+  | **参数**                   | **必填** | **说明**                                                 |
+  | -------------------------- | -------- | ------------------------------------------------------ |
+  | azure.blob.sas_token       | 是       | 用于指定访问 Azure Blob Storage 存储空间的 SAS Token。 |
+
+- 如果您使用 Managed Identity 访问 Azure Blob Storage（自 v3.4.4 起支持）：
+
+  :::note
+  - 只支持以 Client ID 为凭证的 User-assigned Managed Identity。
+  - FE 动态配置 `azure_use_native_sdk`（默认值：`true`）控制是否允许系统使用 Managed Identity 和 Service Principal 进行身份验证。
+  :::
+
+  ```SQL
+  "azure.blob.oauth2_use_managed_identity" = "true",
+  "azure.blob.oauth2_client_id" = "<oauth2_client_id>"
+  ```
+
+  | **参数**                                | **必填** | **说明**                                                |
+  | -------------------------------------- | -------- | ------------------------------------------------------ |
+  | azure.blob.oauth2_use_managed_identity | 是       | 是否使用 Managed Identity 访问 Azure Blob Storage 存储空间。将此项设置为 `true`。                 |
+  | azure.blob.oauth2_client_id            | 是       | 用于访问 Azure Blob Storage 存储空间的 Managed Identity 的 Client ID。                |
+
+- 如果您使用 Service Principal 访问 Azure Blob Storage（自 v3.4.4 起支持）：
+
+  :::note
+  - 仅支持 Client Secret 凭证。
+  - FE 动态配置 `azure_use_native_sdk`（默认值：`true`）控制是否允许系统使用 Managed Identity 和 Service Principal 进行身份验证。
+  :::
+
+  ```SQL
+  "azure.blob.oauth2_client_id" = "<oauth2_client_id>",
+  "azure.blob.oauth2_client_secret" = "<oauth2_client_secret>",
+  "azure.blob.oauth2_tenant_id" = "<oauth2_tenant_id>"
+  ```
+
+  | **参数**                                | **必填** | **说明**                                                |
+  | -------------------------------------- | -------- | ------------------------------------------------------ |
+  | azure.blob.oauth2_client_id            | 是       | 用于访问 Azure Blob Storage 存储空间的 Service Principal 的 Client ID。                    |
+  | azure.blob.oauth2_client_secret        | 是       | 用于访问 Azure Blob Storage 存储空间的 Service Principal 的 Client Secret。          |
+  | azure.blob.oauth2_tenant_id            | 是       | 用于访问 Azure Blob Storage 存储空间的 Service Principal 的 Tenant ID。                |
+
+##### Azure Data Lake Storage Gen2
+
+如果存储系统为 Data Lake Storage Gen2，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Managed Identity 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                | **是否必须** | **说明**                                                |
+  | --------------------------------------- | ------------ | ------------------------------------------------------- |
+  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
+  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属的 Tenant 的 ID。                               |
+  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
+
+- 基于 Shared Key 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                    | **是否必须** | **说明**                                   |
+  | --------------------------- | ------------ | ------------------------------------------ |
+  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
+  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
+
+- 基于 Service Principal 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                           | **是否必须** | **说明**                                                     |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
+  | azure.adls2.oauth2_client_secret   | 是           | 新建 Client (Application) Secret。                           |
+  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+
+##### Azure Data Lake Storage Gen1
+
+如果存储系统为 Data Lake Storage Gen1，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Managed Service Identity 进行认证和鉴权
+
+  ```SQL
+  "azure.adls1.use_managed_service_identity" = "true"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                 | **是否必须** | **说明**                                                     |
+  | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.use_managed_service_identity | 是           | 指定是否开启 Managed Service Identity 鉴权方式。设置为 `true`。 |
+
+- 基于 Service Principal 进行认证和鉴权
+
+  ```SQL
+  "azure.adls1.oauth2_client_id" = "<application_client_id>",
+  "azure.adls1.oauth2_credential" = "<application_client_credential>",
+  "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                      | **是否必须** | **说明**                                                     |
+  | ----------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.oauth2_client_id  | 是           | Service Principal 的 Client (Application) ID。               |
+  | azure.adls1.oauth2_credential | 是           | 新建 Client (Application) Secret。                           |
+  | azure.adls1.oauth2_endpoint   | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+
+#### 其他兼容 S3 协议的对象存储
+
+如果存储系统为其他兼容 S3 协议的对象存储（如 MinIO），请按如下配置 `StorageCredentialParams`：
+
+```SQL
+"aws.s3.enable_ssl" = "false",
+"aws.s3.enable_path_style_access" = "true",
+"aws.s3.endpoint" = "<s3_endpoint>",
+"aws.s3.access_key" = "<iam_user_access_key>",
+"aws.s3.secret_key" = "<iam_user_secret_key>"
+```
+
+`StorageCredentialParams` 包含如下参数。
+
+| 参数                            | 是否必须 | 描述                                                         |
+| ------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl               | 是       | 是否开启 SSL 连接。取值范围：`true` 和 `false`。默认值：`true`。对于 MinIO，必须设置为 `true`。 |
+| aws.s3.enable_path_style_access | 是       | 是否开启路径类型 URL 访问 (Path-Style URL Access)。取值范围：`true` 和 `false`。默认值：`false`。 |
+| aws.s3.endpoint                 | 是       | 用于访问兼容 S3 协议的对象存储的 Endpoint。                         |
+| aws.s3.access_key               | 是       | IAM User 的 Access Key。                                     |
+| aws.s3.secret_key               | 是       | IAM User 的 Secret Key。                                     |
 
 #### columns_from_path
 
@@ -908,4 +1213,120 @@ INSERT INTO FILES(
     'format' = 'parquet'
 )
 SELECT * FROM sales_records;
+```
+
+#### 示例八：Avro 文件
+
+导入 Avro 文件数据：
+
+```SQL
+INSERT INTO avro_tbl
+  SELECT * FROM FILES(
+    "path" = "hdfs://xxx.xx.xx.x:yyyy/avro/primitive.avro", 
+    "format" = "avro"
+);
+```
+
+查询 Avro 文件数据：
+
+```SQL
+SELECT * FROM FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/complex.avro", "format" = "avro")\G
+*************************** 1. row ***************************
+record_field: {"id":1,"name":"avro"}
+  enum_field: HEARTS
+ array_field: ["one","two","three"]
+   map_field: {"a":1,"b":2}
+ union_field: 100
+ fixed_field: 0x61626162616261626162616261626162
+1 row in set (0.05 sec)
+```
+
+查看 Avro 文件的 Schema 信息：
+
+```SQL
+DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avro");
++------------------------+------------------+------+
+| Field                  | Type             | Null |
++------------------------+------------------+------+
+| decimal_bytes          | decimal(10,2)    | YES  |
+| decimal_fixed          | decimal(10,2)    | YES  |
+| uuid_string            | varchar(1048576) | YES  |
+| date                   | date             | YES  |
+| time_millis            | int              | YES  |
+| time_micros            | bigint           | YES  |
+| timestamp_millis       | datetime         | YES  |
+| timestamp_micros       | datetime         | YES  |
+| local_timestamp_millis | bigint           | YES  |
+| local_timestamp_micros | bigint           | YES  |
+| duration               | varbinary(12)    | YES  |
++------------------------+------------------+------+
+```
+
+#### 示例九：使用 Managed Identity 和 Service Principal 访问 Azure Blob Storage
+
+```SQL
+-- Managed Identity
+SELECT * FROM FILES(
+    "path" = "wasbs://storage-container@storage-account.blob.core.windows.net/ssb_1g/customer/*",
+    "format" = "parquet",
+    "azure.blob.oauth2_use_managed_identity" = "true",
+    "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-aaaaaaaaaaaa"
+);
+-- Service Principal
+SELECT * FROM FILES(
+    "path" = "wasbs://storage-container@storage-account.blob.core.windows.net/ssb_1g/customer/*",
+    "format" = "parquet",
+    "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-bbbbbbbbbbbb",
+    "azure.blob.oauth2_client_secret" = "C2M8Q~ZXXXXXX_5XsbDCeL2dqP7hIR60xxxxxxxx",
+    "azure.blob.oauth2_tenant_id" = "540e19cc-386b-4a44-a7b8-cccccccccccc"
+);
+```
+
+#### 示例十：CSV 以及 ORC 文件
+
+查询 CSV 文件数据：
+
+```SQL
+SELECT * FROM FILES(                                                                                                                                                     "path" = "s3://test-bucket/file1.csv",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\r\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
++------+---------+--------------+
+| $1   | $2      | $3           |
++------+---------+--------------+
+|    1 | 0.71173 | 2017-11-20   |
+|    2 | 0.16145 | 2017-11-21   |
+|    3 | 0.80524 | 2017-11-22   |
+|    4 | 0.91852 | 2017-11-23   |
+|    5 | 0.37766 | 2017-11-24   |
+|    6 | 0.34413 | 2017-11-25   |
+|    7 | 0.40055 | 2017-11-26   |
+|    8 | 0.42437 | 2017-11-27   |
+|    9 | 0.67935 | 2017-11-27   |
+|   10 | 0.22783 | 2017-11-29   |
++------+---------+--------------+
+10 rows in set (0.33 sec)
+```
+
+导入 CSV 文件数据：
+
+```SQL
+INSERT INTO csv_tbl
+  SELECT * FROM FILES(
+    "path" = "s3://test-bucket/file1.csv",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\r\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
 ```

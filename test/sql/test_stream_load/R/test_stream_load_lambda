@@ -1,0 +1,38 @@
+-- name: test_stream_load_lambda
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `test_lambda` (
+  `id` string,
+  `dt` datetime,
+  `method` string,
+  `ip`  string,
+  `path` string,
+  `vid` string,
+  `cid` string
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -T ${root_path}/sql/test_stream_load/data/test_load_lambda.json -H "Expect:100-continue" -H "format: json" -H "jsonpaths: [\"$.id\",\"$.timestamp\",\"$.http.request.method\",\"$.http.request.headers.ip\",\"$.http.request.path\",\"$.events.context\",\"$.agent.findings\"]" -H "columns: id,dt,method,ip,path,tmp1,tmp2,vid=get_json_string(array_filter(item -> get_json_string(item\, '$.type')='type1'\, CAST(parse_json(tmp1) AS ARRAY<JSON>))[1]\, '$.vid'),cid=get_json_string(map_values((map_filter((k\, v)->get_json_string(v\, '$.type')='type1'\,cast(parse_json(tmp2) AS map<string\,json>))))[1]\,'$.cid')" ${url}/api/db_${uuid0}/test_lambda/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from db_${uuid0}.test_lambda order by id;
+-- result:
+1	2025-04-17 11:00:00	POST	127.0.0.1	/starrocks/test	vid1	cid1
+-- !result

@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Physical Partition implementation
@@ -58,6 +59,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     @SerializedName(value = "shardGroupId")
     private long shardGroupId = INVALID_SHARD_GROUP_ID;
+
+    // Path id is only for shared-data mode, used to construct storage path.
+    // Default value is physical partition id, but in tablet splitting or merging,
+    // a new physical partition will replace the old physical partition,
+    // the new physical partition will share the same path id with the old one,
+    // and the path id is no longer the same as physical partition id.
+    @SerializedName(value = "pathId")
+    private long pathId;
 
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")
@@ -102,17 +111,36 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     private long versionEpoch;
     @SerializedName(value = "versionTxnType")
     private TransactionType versionTxnType;
+
+    /**
+     * metadataSwitchVersion is non-zero: The metadata format differs before and after this version.
+     * Therefore, vacuum operations cannot be executed across `metadataSwitchVersion`
+     * e.g.
+     *  the tablet under this partition has five versions: 1, 2, 3, 4, 5 and the metadataSwitchVersion is 3
+     *  the vacuum is run as the following:
+     *      1. Set minRetainVersion to 3 in the vacuumRequest.
+     *      2. The BE will delete tablet metadata where the version is less than 3.
+     *      3. If all tablets execute successfully and there are no metadata entries in two different formats, 
+     *      set metadataSwitchVersion to 0.
+     */
+    @SerializedName(value = "metadataSwitchVersion")
+    private long metadataSwitchVersion;
     /**
      * ID of the transaction that has committed current visible version.
      * Just for tracing the txn log, no need to persist.
      */
     private long visibleTxnId = -1;
 
-    private volatile long lastVacuumTime = 0;
+    private final AtomicLong lastVacuumTime = new AtomicLong(0);
 
-    private volatile long minRetainVersion = 0;
+    private final AtomicLong minRetainVersion = new AtomicLong(0);
 
-    private volatile long lastSuccVacuumVersion = 0;
+    private final AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
+
+    @SerializedName(value = "bucketNum")
+    private int bucketNum = 0;
+    
+    private final AtomicLong extraFileSize = new AtomicLong(0);
 
     private PhysicalPartition() {
 
@@ -122,6 +150,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.id = id;
         this.name = name;
         this.parentId = parentId;
+        this.pathId = id;
         this.baseIndex = baseIndex;
         this.visibleVersion = PARTITION_INIT_VERSION;
         this.visibleVersionTime = System.currentTimeMillis();
@@ -147,6 +176,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     public void setIdForRestore(long id) {
         this.beforeRestoreId = this.id;
         this.id = id;
+        this.pathId = id;
     }
 
     public long getBeforeRestoreId() {
@@ -163,6 +193,10 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public long getShardGroupId() {
         return this.shardGroupId;
+    }
+
+    public long getPathId() {
+        return this.pathId;
     }
 
     public List<Long> getShardGroupIds() {
@@ -186,27 +220,47 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public long getLastVacuumTime() {
-        return lastVacuumTime;
+        return lastVacuumTime.get();
     }
 
     public void setLastVacuumTime(long lastVacuumTime) {
-        this.lastVacuumTime = lastVacuumTime;
+        this.lastVacuumTime.set(lastVacuumTime);
     }
 
     public long getMinRetainVersion() {
-        return minRetainVersion;
+        long retainVersion = minRetainVersion.get();
+        if (metadataSwitchVersion != 0) {
+            if (retainVersion != 0) {
+                retainVersion = Math.min(retainVersion, metadataSwitchVersion);
+            } else {
+                retainVersion = metadataSwitchVersion;
+            }
+        }
+        return retainVersion;
     }
 
     public void setMinRetainVersion(long minRetainVersion) {
-        this.minRetainVersion = minRetainVersion;
+        this.minRetainVersion.set(minRetainVersion);
     }
 
     public long getLastSuccVacuumVersion() {
-        return lastSuccVacuumVersion;
+        return lastSuccVacuumVersion.get();
     }
 
     public void setLastSuccVacuumVersion(long lastSuccVacuumVersion) {
-        this.lastSuccVacuumVersion = lastSuccVacuumVersion;
+        this.lastSuccVacuumVersion.set(lastSuccVacuumVersion);
+    }
+
+    public long getExtraFileSize() {
+        return extraFileSize.get();
+    }
+
+    public void setExtraFileSize(long extraFileSize) {
+        this.extraFileSize.set(extraFileSize);
+    }
+
+    public void incExtraFileSize(long addFileSize) {
+        this.extraFileSize.addAndGet(addFileSize);
     }
 
     /*
@@ -327,6 +381,23 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.versionTxnType = versionTxnType;
     }
 
+    public long getMetadataSwitchVersion() {
+        return metadataSwitchVersion;
+    }
+
+    public void setMetadataSwitchVersion(long metadataSwitchVersion) {
+        this.metadataSwitchVersion = metadataSwitchVersion;
+    }
+
+    public boolean isTabletBalanced() {
+        for (MaterializedIndex index : getMaterializedIndices(IndexExtState.VISIBLE)) {
+            if (!index.isTabletBalanced()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public MaterializedIndex getIndex(long indexId) {
         if (baseIndex.getId() == indexId) {
             return baseIndex;
@@ -420,6 +491,11 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         Preconditions.checkState(!idToVisibleRollupIndex.containsKey(shadowIndexId), shadowIndexId);
         shadowIdx.setState(IndexState.NORMAL);
         if (isBaseIndex) {
+            // in shared-data cluster, if upgraded from 3.3 or older version, `shardGroupId` will not
+            // be set, so must set it here
+            if (shadowIdx.getShardGroupId() == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                shadowIdx.setShardGroupId(shardGroupId);
+            }
             baseIndex = shadowIdx;
         } else {
             idToVisibleRollupIndex.put(shadowIndexId, shadowIdx);
@@ -430,6 +506,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public int hashCode() {
         return Objects.hashCode(visibleVersion, baseIndex);
+    }
+
+    public int getBucketNum() {
+        return bucketNum;
+    }
+
+    public void setBucketNum(int bucketNum) {
+        this.bucketNum = bucketNum;
     }
 
     public boolean equals(Object obj) {
@@ -492,11 +576,15 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         buffer.append("storageDataSize: ").append(storageDataSize()).append("; ");
         buffer.append("storageRowCount: ").append(storageRowCount()).append("; ");
         buffer.append("storageReplicaCount: ").append(storageReplicaCount()).append("; ");
+        buffer.append("bucketNum: ").append(bucketNum).append("; ");
 
         return buffer.toString();
     }
 
     public void gsonPostProcess() throws IOException {
+        if (pathId == 0) {
+            pathId = id;
+        }
         if (dataVersion == 0) {
             dataVersion = visibleVersion;
         }

@@ -4,9 +4,136 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
-## 3.4.1
+## 3.4.6
+
+Release Date: August 7, 2025
+
+### Improvements
+
+- When exporting data to Parquet files using `INSERT INTO FILES`, you can now specify the Parquet version via the [`parquet.version`](https://docs.starrocks.io/docs/sql-reference/sql-functions/table-functions/files.md#parquetversion) property to improve compatibility with other tools when reading the exported files. [#60843](https://github.com/StarRocks/starrocks/pull/60843)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Loading jobs failed due to overly coarse lock granularity in `TableMetricsManager`. [#58911](https://github.com/StarRocks/starrocks/pull/58911)
+- Case sensitivity issue in column names when loading Parquet data via `FILES()`. [#61059](https://github.com/StarRocks/starrocks/pull/61059)
+- Cache did not take effect after upgrading a shared-data cluster from v3.3 to v3.4 or later. [#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- A division-by-zero error occurred when the partition ID was null, causing a BE crash. [#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- Broker Load jobs failed during BE scaling. [#60224](https://github.com/StarRocks/starrocks/pull/60224)
+
+### Behavior Changes
+
+- The `keyword` column in the `information_schema.keywords` view has been renamed to `word` to align with the MySQL definition. [#60863](https://github.com/StarRocks/starrocks/pull/60863)
+
+## 3.4.5
+
+Release Date: July 10, 2025
+
+### Improvements
+
+- Enhanced observability of loading job execution: Unified the runtime information of loading tasks into the `information_schema.loads` view. Users can view the execution details of all INSERT, Broker Load, Stream Load, and Routine Load subtasks in this view. Additional fields have been added to help users better understand the status of loading tasks and the association with parent jobs (PIPES, Routine Load Jobs).
+- Support modifying `kafka_broker_list` via the `ALTER ROUTINE LOAD` statement.
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Under high-frequency loading scenarios, Compaction could be delayed. [#59998](https://github.com/StarRocks/starrocks/pull/59998)
+- Querying Iceberg external tables via Unified Catalog would throw an error: `not support getting unified metadata table factory`. [#59412](https://github.com/StarRocks/starrocks/pull/59412)
+- When using `DESC FILES()` to view CSV files in remote storage, incorrect results were returned because the system mistakenly inferred `xinf` as the FLOAT type. [#59574](https://github.com/StarRocks/starrocks/pull/59574)
+- `INSERT INTO` could cause BE to crash when encountering empty partitions. [#59553](https://github.com/StarRocks/starrocks/pull/59553)
+- When StarRocks reads Equality Delete files in Iceberg, it could still access deleted data if the data had already been removed from the Iceberg table. [#59709](https://github.com/StarRocks/starrocks/pull/59709)
+- Query failures caused by renaming columns. [#59178](https://github.com/StarRocks/starrocks/pull/59178)
+
+### Behavior Changes
+
+- The default value of the BE configuration item `skip_pk_preload` has been changed from `false` to `true`. As a result, the system will skip preloading Primary Key Indexes for Primary Key tables to reduce the likelihood of `Reached Timeout` errors. This change may increase query latency for operations that require loading Primary Key Indexes.
+
+## 3.4.4
+
+Release Date: June 10, 2025
+
+### Improvements
+
+- Storage Volume now supports ADLS2 using Managed Identity as the credential. [#58454](https://github.com/StarRocks/starrocks/pull/58454)
+- For [partitions based on complex time function expressions](https://docs.starrocks.io/docs/table_design/data_distribution/expression_partitioning/#partitioning-based-on-a-complex-time-function-expression-since-v34), partition pruning works well for partitions based on most DATETIME-related functions
+- Supports loading Avro data files from Azure using the `FILES` function. [#58131](https://github.com/StarRocks/starrocks/pull/58131)
+- When Routine Load encounters invalid JSON data, the consumed partition and offset information is logged in the error log to facilitate troubleshooting. [#55772](https://github.com/StarRocks/starrocks/pull/55772)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Concurrent queries accessing the same partition in a partitioned table caused Hive Metastore to hang. [#58089](https://github.com/StarRocks/starrocks/pull/58089)
+- Abnormal termination of `INSERT` tasks caused the job to remain in the `QUEUEING` state. [#58603](https://github.com/StarRocks/starrocks/pull/58603)
+- After upgrading the cluster from v3.4.0 to v3.4.2, a large number of tablet replicas encounter exceptions. [#58518](https://github.com/StarRocks/starrocks/pull/58518)
+- FE OOM caused by incorrect `UNION` execution plans. [#59040](https://github.com/StarRocks/starrocks/pull/59040)
+- Invalid database IDs during partition recycling could cause FE startup to fail. [#59666](https://github.com/StarRocks/starrocks/pull/59666)
+- After a failed FE CheckPoint operation, the process could not exit properly, resulting in blocking. [#58602](https://github.com/StarRocks/starrocks/pull/58602)
+
+## 3.4.3
+
+Release Date: April 30, 2025
+
+### Improvements
+
+- Routine Load and Stream Load support the use of Lambda expressions in the `columns` parameter for complex column data extraction. `array_filter`/`map_filter` can be used to filter and extract ARRAY/MAP data. Complex filtering and extraction of JSON data can be achieved by combining the `cast` function to convert JSON array/JSON object to ARRAY and MAP types. For example, `COLUMNS (js, col=array_filter(i -> json_query(i, '$.type')=='t1', cast(js as Array<JSON>))[1])` can extract the first JSON object from the JSON array `js` where `type` is `t1`. [#58149](https://github.com/StarRocks/starrocks/pull/58149)
+- Supports converting JSON objects to MAP type using the `cast` function, combined with `map_filter` to extract items from the JSON object that meet specific conditions. For example, `map_filter((k, v) -> json_query(v, '$.type') == 't1', cast(js AS MAP<String, JSON>))` can extract the JSON object from `js` where `type` is `t1`. [#58045](https://github.com/StarRocks/starrocks/pull/58045)
+- LIMIT is now supported when querying the `information_schema.task_runs` view. [#57404](https://github.com/StarRocks/starrocks/pull/57404)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Queries against ORC format Hive tables are returned with an error `OrcChunkReader::lazy_seek_to failed. reason = bad read in RleDecoderV2: :readByte`. [#57454](https://github.com/StarRocks/starrocks/pull/57454)
+- RuntimeFilter from the upper layer could not be pushed down when querying Iceberg tables that contain Equality Delete files. [#57651](https://github.com/StarRocks/starrocks/pull/57651)
+- Enabling the spill-to-disk pre-aggregation strategy causes queries to fail. [#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- Queries are returned with an error `ConstantRef-cmp-ConstantRef not supported here, null != 111 should be eliminated earlier`. [#57735](https://github.com/StarRocks/starrocks/pull/57735)
+- Query timeout with the `query_queue_pending_timeout_second` parameter while the Query Queue feature is not enabled. [#57719](https://github.com/StarRocks/starrocks/pull/57719)
+
+## 3.4.2
+
+Release Date: April 10, 2025
+
+### Improvements
+
+- FE supports graceful shutdown to improve system availability. When exiting FE via `./stop_fe.sh -g`, FE will first return a 500 status code to the front-end Load Balancer via the `/api/health` API to indicate that it is preparing to shut down, allowing the Load Balancer to switch to other available FE nodes. Meanwhile, FE will continue to run ongoing queries until they finish or timeout (default timeout: 60 seconds). [#56823](https://github.com/StarRocks/starrocks/pull/56823)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Partition pruning might not work if the partition column is a generated column. [#54543](https://github.com/StarRocks/starrocks/pull/54543)
+- Incorrect parameter handling in the `concat` function could cause a BE crash during query execution. [#57522](https://github.com/StarRocks/starrocks/pull/57522)
+- The `ssl_enable` property did not take effect when using Broker Load to load data. [#57229](https://github.com/StarRocks/starrocks/pull/57229)
+- When NULL values exist, querying subfields of STRUCT-type columns could cause a BE crash. [#56496](https://github.com/StarRocks/starrocks/pull/56496)
+- When modifying the bucket distribution of a table with the statement `ALTER TABLE {table} PARTITIONS (p1, p1) DISTRIBUTED BY ...`, specifying duplicate partition names could result in failure to delete internally generated temporary partitions. [#57005](https://github.com/StarRocks/starrocks/pull/57005)
+- In a shared-data cluster, running `SHOW PROC '/current_queries'` resulted in the error "Error 1064 (HY000): Sending collect query statistics request fails". [#56597](https://github.com/StarRocks/starrocks/pull/56597)
+- Running `INSERT OVERWRITE` loading tasks in parallel caused the error "ConcurrentModificationException: null", resulting in loading failure. [#56557](https://github.com/StarRocks/starrocks/pull/56557)
+- After upgrading from v2.5.21 to v3.1.17, running multiple Broker Load tasks concurrently could cause exceptions. [#56512](https://github.com/StarRocks/starrocks/pull/56512)
+
+### Behavior Changes
+
+- The default value of the BE configuration item `avro_ignore_union_type_tag` has been changed to `true`, enabling the direct parsing of `["NULL", "STRING"]` as STRING type data, which better aligns with typical user requirements. [#57553](https://github.com/StarRocks/starrocks/pull/57553)
+- The default value of the session variable `big_query_profile_threshold` has been changed from 0 to 30 (seconds). [#57177](https://github.com/StarRocks/starrocks/pull/57177)
+- A new FE configuration item `enable_mv_refresh_collect_profile` has been added to control whether to collect Profile information during materialized view refresh. The default value is `false` (previously, the system collected Profile by default). [#56971](https://github.com/StarRocks/starrocks/pull/56971)
+
+## 3.4.1 (Yanked)
 
 Release Date: March 12, 2025
+
+:::tip
+
+This version has been taken offline due to metadata loss issues in **shared-data clusters**.
+
+- **Problem**: When there are committed compaction transactions that are not yet been published during a shift of Leader FE node in a shared-data cluster, metadata loss may occur after the shift.
+
+- **Impact scope**: This problem only affects shared-data clusters. Shared-nothing clusters are unaffected.
+
+- **Temporary workaround**: When the Publish task is returned with an error, you can execute `SHOW PROC 'compactions'` to check if there are any partitions that have two compaction transactions with empty `FinishTime`. You can execute `ALTER TABLE DROP PARTITION FORCE` to drop the partitions to avoid Publish tasks getting hang.
+
+:::
 
 ### New Features and Enhancements
 
@@ -51,7 +178,6 @@ Release date: January 24, 2025
 
 - [Experimental] Offers a preliminary Query Feedback feature for automatic optimization of slow queries. The system will collect the execution details of slow queries, automatically analyze its query plan for potential opportunities for optimization, and generate a tailored optimization guide for the query. If CBO generates the same bad plan for subsequent identical queries, the system will locally optimize this query plan based on the guide. For more information, see [Query Feedback](https://docs.starrocks.io/docs/using_starrocks/query_feedback/).
 - [Experimental] Supports Python UDFs, offering more convenient function customization compared to Java UDFs. For more information, see [Python UDF](https://docs.starrocks.io/docs/sql-reference/sql-functions/Python_UDF/).
-- [Experimental] Supports Arrow Flight interface for more efficient reading of large data volumes in query results. It also allows BE, instead of FE, to process the returned results, greatly reducing the pressure on FE. It is especially suitable for business scenarios involving big data analysis and processing, and machine learning.
 - Enables the pushdown of multi-column OR predicates, allowing queries with multi-column OR conditions (for example, `a = xxx OR b = yyy`) to utilize certain column indexes, thus reducing data read volume and improving query performance.
 - Optimized TPC-DS query performance by roughly 20% under the TPC-DS 1TB Iceberg dataset. Optimization methods include table pruning and aggregated column pruning using primary and foreign keys, and aggregation pushdown.
 

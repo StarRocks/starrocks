@@ -18,39 +18,25 @@
 
 #include <cstring>
 #include <iterator>
-#include <map>
-#include <sstream>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
-#include "cache/block_cache/kv_cache.h"
-#include "column/column.h"
-#include "column/column_helper.h"
-#include "column/const_column.h"
+#include "cache/datacache.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
-#include "common/global_types.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/hdfs_scanner.h"
-#include "exprs/expr_context.h"
-#include "exprs/runtime_filter.h"
-#include "exprs/runtime_filter_bank.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
-#include "formats/parquet/scalar_column_reader.h"
-#include "formats/parquet/schema.h"
-#include "formats/parquet/statistics_helper.h"
 #include "formats/parquet/utils.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "io/shared_buffered_input_stream.h"
-#include "runtime/descriptors.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::parquet {
 
@@ -68,12 +54,10 @@ FileReader::~FileReader() = default;
 
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
-#ifdef WITH_STARCACHE
-    // Only support file metacache in starcache engine
-    if (ctx->use_file_metacache && config::datacache_enable) {
-        _cache = CacheEnv::GetInstance()->external_table_meta_cache();
+    if (ctx->use_file_metacache) {
+        _cache = DataCache::GetInstance()->page_cache();
     }
-#endif
+
     // parse FileMetadata
     FileMetaDataParser file_metadata_parser{_file, ctx, _cache, &_datacache_options, _file_size};
     ASSIGN_OR_RETURN(_file_metadata, file_metadata_parser.get_file_metadata());
@@ -112,7 +96,7 @@ std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
     }
 }
 
-FileMetaData* FileReader::get_file_metadata() {
+const FileMetaData* FileReader::get_file_metadata() {
     return _file_metadata.get();
 }
 
@@ -126,9 +110,9 @@ Status FileReader::collect_scan_io_ranges(std::vector<io::SharedBufferedInputStr
 }
 
 Status FileReader::_build_split_tasks() {
-    // dont do split in following cases:
+    // don't do split in following cases:
     // 1. this feature is not enabled
-    // 2. we have already do split before (that's why `split_context` is nullptr)
+    // 2. we have already done split before (that's why `split_context` is nullptr)
     if (!_scanner_ctx->enable_split_tasks || _scanner_ctx->split_context != nullptr) {
         return Status::OK();
     }
@@ -226,15 +210,6 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
     return filter;
 }
 
-int32_t FileReader::_get_partition_column_idx(const std::string& col_name) const {
-    for (int32_t i = 0; i < _scanner_ctx->partition_columns.size(); i++) {
-        if (_scanner_ctx->partition_columns[i].name() == col_name) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
     _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols,
                                        existed_column_names);
@@ -282,6 +257,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.file = _file;
     _group_reader_param.file_metadata = _file_metadata.get();
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
+    _group_reader_param.use_file_pagecache = fd_scanner_ctx.use_file_pagecache;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
     _group_reader_param.partition_columns = &fd_scanner_ctx.partition_columns;
     _group_reader_param.partition_values = &fd_scanner_ctx.partition_values;
@@ -290,6 +266,9 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
     _group_reader_param.predicate_tree = &fd_scanner_ctx.predicate_tree;
     _group_reader_param.global_dictmaps = fd_scanner_ctx.global_dictmaps;
+    _group_reader_param.modification_time = _datacache_options.modification_time;
+    _group_reader_param.file_size = _file_size;
+    _group_reader_param.datacache_options = &_datacache_options;
 
     int64_t row_group_first_row = 0;
     // select and create row group readers.
@@ -347,7 +326,13 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 
     if (_cur_row_group_idx < _row_group_size) {
         size_t row_count = _chunk_size;
-        Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
+        Status status;
+        try {
+            status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
+        } catch (std::exception& e) {
+            return Status::InternalError(
+                    strings::Substitute("Encountered Exception while reading. reason = $0", e.what()));
+        }
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
                 RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, row_count));
@@ -401,7 +386,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = 0;
-        if (_scanner_ctx->return_count_column) {
+        if (_scanner_ctx->use_count_opt) {
             read_size = _total_row_count - _scan_row_count;
             _scanner_ctx->append_or_update_count_column_to_chunk(chunk, read_size);
             _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);

@@ -50,10 +50,10 @@ import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Map;
@@ -65,7 +65,7 @@ public class AlterJobV2Test {
 
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.setUpForPersistTest();
@@ -86,10 +86,19 @@ public class AlterJobV2Test {
                     .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
                                 "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
                     .withTable("CREATE TABLE modify_column_test(k1 int, k2 int, k3 int) ENGINE = OLAP " +
-                                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
+                                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');")
+                .withTable("CREATE TABLE partition_str2date(\n" +
+                        "        id varchar(100),\n" +
+                        "        k1 varchar(100),\n" +
+                        "        k2 decimal,\n" +
+                        "        k3 int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(str2date(id, '%Y-%m-%d'))(\n" +
+                        "START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                        ");");
     }
 
-    @AfterClass
+    @AfterAll
     public static void teardown() throws Exception {
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -101,7 +110,7 @@ public class AlterJobV2Test {
             Thread.sleep(5000);
             retryTimes--;
         }
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, tb.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, tb.getState());
     }
 
     @Test
@@ -137,7 +146,7 @@ public class AlterJobV2Test {
                 Thread.sleep(1000);
             }
             System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+            Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         }
         // 3. check show alter table column
         String showAlterStmtStr = "show alter table rollup from test;";
@@ -182,6 +191,20 @@ public class AlterJobV2Test {
     }
 
     @Test
+    public void testModifyRelatedColumnWithStr2DatePartitionTable() {
+        try {
+            // modify column which define in mv
+            String alterStmtStr = "alter table test.partition_str2date modify column k1 varchar(1024)";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+            waitForSchemaChangeAlterJobFinish();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assertions.fail();
+        }
+    }
+
+    @Test
     public void testModifyRelatedColumnWithMv() {
         try {
             String sql = "CREATE MATERIALIZED VIEW test.mv2 DISTRIBUTED BY HASH(k1) " +
@@ -198,10 +221,10 @@ public class AlterJobV2Test {
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv2 =
                         (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("mv2");
-            Assert.assertFalse(mv2.isActive());
+            Assertions.assertFalse(mv2.isActive());
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -225,7 +248,7 @@ public class AlterJobV2Test {
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                         .getDb("test").getTable("mv3");
-            Assert.assertTrue(!mv.isActive());
+            Assertions.assertTrue(!mv.isActive());
         } finally {
             starRocksAssert.dropTable("modify_column_test3");
         }
@@ -251,10 +274,10 @@ public class AlterJobV2Test {
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
                         .getLocalMetastore().getDb("test").getTable("mv6");
-            Assert.assertTrue(mv.isActive());
+            Assertions.assertTrue(mv.isActive());
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         } finally {
             starRocksAssert.dropTable("testModifyWithSelectStarMV2");
         }
@@ -280,9 +303,9 @@ public class AlterJobV2Test {
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
                         .getLocalMetastore().getDb("test").getTable("mv5");
-            Assert.assertTrue(!mv.isActive());
+            Assertions.assertTrue(!mv.isActive());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         } finally {
             starRocksAssert.dropTable("modify_column_test5");
         }
@@ -310,7 +333,7 @@ public class AlterJobV2Test {
                 waitForSchemaChangeAlterJobFinish();
                 MaterializedView mv = (MaterializedView) GlobalStateMgr
                             .getCurrentState().getLocalMetastore().getDb("test").getTable("mv4");
-                Assert.assertTrue(mv.isActive());
+                Assertions.assertTrue(mv.isActive());
             }
 
             {
@@ -323,13 +346,13 @@ public class AlterJobV2Test {
                 waitForSchemaChangeAlterJobFinish();
                 MaterializedView mv = (MaterializedView) GlobalStateMgr
                             .getCurrentState().getLocalMetastore().getDb("test").getTable("mv4");
-                Assert.assertFalse(mv.isActive());
+                Assertions.assertFalse(mv.isActive());
                 System.out.println(mv.getInactiveReason());
-                Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: k2"));
+                Assertions.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: k2"));
             }
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         } finally {
             starRocksAssert.dropTable("modify_column_test4");
         }
@@ -352,10 +375,10 @@ public class AlterJobV2Test {
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv =
                         (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("mv1");
-            Assert.assertTrue(mv.isActive());
+            Assertions.assertTrue(mv.isActive());
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -382,7 +405,7 @@ public class AlterJobV2Test {
         AlterJobV2 alterJobV2New =
                     GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().get(alterJobV2Old.jobId);
 
-        Assert.assertEquals(alterJobV2Old.jobId, alterJobV2New.jobId);
-        Assert.assertTrue(alterJobV2Old.lakePublishVersion());
+        Assertions.assertEquals(alterJobV2Old.jobId, alterJobV2New.jobId);
+        Assertions.assertTrue(alterJobV2Old.lakePublishVersion());
     }
 }

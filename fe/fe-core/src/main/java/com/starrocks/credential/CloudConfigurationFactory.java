@@ -15,28 +15,38 @@
 package com.starrocks.credential;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.aliyun.AliyunCloudConfigurationProvider;
 import com.starrocks.credential.aws.AwsCloudConfigurationProvider;
 import com.starrocks.credential.aws.AwsCloudCredential;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
-import com.starrocks.credential.gcp.GCPCloudConfigurationProvoder;
+import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
 import com.starrocks.credential.hdfs.StrictHDFSCloudConfigurationProvider;
 import com.starrocks.credential.tencent.TencentCloudConfigurationProvider;
+import com.starrocks.fs.azure.AzBlobURI;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.aws.AwsClientProperties;
 import org.apache.iceberg.aws.s3.S3FileIOProperties;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.Map;
 
-public class CloudConfigurationFactory {
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_ENDPOINT;
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_SAS_TOKEN;
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.BLOB_ENDPOINT;
+import static com.starrocks.credential.gcp.GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN;
+import static com.starrocks.credential.gcp.GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT;
 
+public class CloudConfigurationFactory {
+    private static final Logger LOG = LogManager.getLogger(CloudConfigurationFactory.class);
     static ImmutableList<CloudConfigurationProvider> cloudConfigurationFactoryChain = ImmutableList.of(
             new AwsCloudConfigurationProvider(),
             new AzureCloudConfigurationProvider(),
-            new GCPCloudConfigurationProvoder(),
+            new GCPCloudConfigurationProvider(),
             new AliyunCloudConfigurationProvider(),
             new TencentCloudConfigurationProvider(),
             new HDFSCloudConfigurationProvider(),
@@ -45,7 +55,7 @@ public class CloudConfigurationFactory {
     static ImmutableList<CloudConfigurationProvider> strictCloudConfigurationFactoryChain = ImmutableList.of(
             new AwsCloudConfigurationProvider(),
             new AzureCloudConfigurationProvider(),
-            new GCPCloudConfigurationProvoder(),
+            new GCPCloudConfigurationProvider(),
             new AliyunCloudConfigurationProvider(),
             new TencentCloudConfigurationProvider(),
             new HDFSCloudConfigurationProvider(),
@@ -83,14 +93,33 @@ public class CloudConfigurationFactory {
         return null;
     }
 
-    public static CloudConfiguration buildCloudConfigurationForVendedCredentials(Map<String, String> properties) {
+    public static CloudConfiguration buildCloudConfigurationForVendedCredentials(Map<String, String> properties,
+                                                                                 String path) {
+        CloudConfiguration cloudConfiguration = buildCloudConfigurationForAWSVendedCredentials(properties);
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            return cloudConfiguration;
+        }
+
+        cloudConfiguration = buildCloudConfigurationForAzureVendedCredentials(properties, path);
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            return cloudConfiguration;
+        }
+
+        cloudConfiguration = buildCloudConfigurationForGCSVendedCredentials(properties, path);
+        return cloudConfiguration;
+    }
+
+    public static CloudConfiguration buildCloudConfigurationForAWSVendedCredentials(Map<String, String> properties) {
         Map<String, String> copiedProperties = new HashMap<>();
         String sessionAk = properties.getOrDefault(S3FileIOProperties.ACCESS_KEY_ID, null);
         String sessionSk = properties.getOrDefault(S3FileIOProperties.SECRET_ACCESS_KEY, null);
         String sessionToken = properties.getOrDefault(S3FileIOProperties.SESSION_TOKEN, null);
-        String region = properties.getOrDefault(AwsClientProperties.CLIENT_REGION, null);
-        String enablePathStyle = properties.getOrDefault(S3FileIOProperties.PATH_STYLE_ACCESS, null);
-        String endpoint = properties.getOrDefault(S3FileIOProperties.ENDPOINT, null);
+        String region = properties.getOrDefault(AwsClientProperties.CLIENT_REGION,
+                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_REGION, null));
+        String enablePathStyle = properties.getOrDefault(S3FileIOProperties.PATH_STYLE_ACCESS,
+                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS, null));
+        String endpoint = properties.getOrDefault(S3FileIOProperties.ENDPOINT,
+                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ENDPOINT, null));
         if (sessionAk != null && sessionSk != null && sessionToken != null) {
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, sessionAk);
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, sessionSk);
@@ -103,6 +132,46 @@ public class CloudConfigurationFactory {
             }
             if (enablePathStyle != null) {
                 copiedProperties.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS, enablePathStyle);
+            }
+        }
+        return buildCloudConfigurationForStorage(copiedProperties);
+    }
+
+    public static CloudConfiguration buildCloudConfigurationForAzureVendedCredentials(Map<String, String> properties,
+                                                                                      String path) {
+        Map<String, String> copiedProperties = new HashMap<>();
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && entry.getKey().endsWith(ADLS_ENDPOINT)) {
+                String endpoint = entry.getKey().substring(ADLS_SAS_TOKEN.length());
+                copiedProperties.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, endpoint);
+                copiedProperties.put(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, entry.getValue());
+                break;
+            } else if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && entry.getKey().endsWith(BLOB_ENDPOINT)) {
+                try {
+                    AzBlobURI uri = AzBlobURI.parse(path);
+                    copiedProperties.put(CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT, uri.getAccount());
+                    copiedProperties.put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, uri.getContainer());
+                    copiedProperties.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, entry.getValue());
+                    break;
+                } catch (StarRocksException e) {
+                    String errorMessage = String.format("Failed to parse azure blob file for path: %s, properties: %s", path,
+                            properties);
+                    LOG.error(errorMessage, e);
+                }
+            }
+        }
+        return buildCloudConfigurationForStorage(copiedProperties);
+    }
+
+    public static CloudConfiguration buildCloudConfigurationForGCSVendedCredentials(Map<String, String> properties,
+                                                                                    String path) {
+        Map<String, String> copiedProperties = new HashMap<>();
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().equals(GCS_ACCESS_TOKEN)) {
+                copiedProperties.put(GCS_ACCESS_TOKEN, entry.getValue());
+                copiedProperties.put(GCS_ACCESS_TOKEN_EXPIRES_AT, properties.getOrDefault(GCS_ACCESS_TOKEN_EXPIRES_AT,
+                        String.valueOf(Long.MAX_VALUE)));
+                break;
             }
         }
         return buildCloudConfigurationForStorage(copiedProperties);

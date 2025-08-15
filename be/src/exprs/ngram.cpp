@@ -29,9 +29,9 @@ using NgramHash = uint16;
 struct Ngramstate {
     // use std::unique_ptr<std::vector<NgramHash>> instead  of vector as key
     // to prevent vector use after free when hash map resize
-    using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<std::vector<NgramHash>>,
-                                                    phmap::Hash<int32_t>, phmap::EqualTo<int32_t>,
-                                                    phmap::Allocator<int32_t>, NUM_LOCK_SHARD_LOG, std::mutex>;
+    using DriverMap = phmap::parallel_flat_hash_map<std::thread::id, std::unique_ptr<std::vector<NgramHash>>,
+                                                    phmap::Hash<std::thread::id>, phmap::EqualTo<std::thread::id>,
+                                                    phmap::Allocator<std::thread::id>, NUM_LOCK_SHARD_LOG, std::mutex>;
     Ngramstate(size_t hash_map_len) : publicHashMap(hash_map_len, 0){};
     // unmodified map, only used for driver to copy
     std::vector<NgramHash> publicHashMap;
@@ -42,17 +42,17 @@ struct Ngramstate {
     float result = -1;
 
     std::vector<NgramHash>* get_or_create_driver_hashmap() {
-        int32_t driver_id = CurrentThread::current().get_driver_id();
+        std::thread::id current_thread_id = std::this_thread::get_id();
 
         std::vector<NgramHash>* result = nullptr;
-        driver_maps.if_contains(driver_id, [&](const auto& value) { result = value.get(); });
-        // create the dirver map when one driver first call this function
-        if (UNLIKELY(result == nullptr)) {
-            std::unique_ptr<std::vector<NgramHash>> result_ptr =
-                    std::make_unique<std::vector<NgramHash>>(publicHashMap);
-            result = result_ptr.get();
-            driver_maps.lazy_emplace(driver_id, [&](auto build) { build(driver_id, std::move(result_ptr)); });
-        }
+        driver_maps.lazy_emplace_l(
+                current_thread_id, [&](const auto& value) { result = value.get(); },
+                [&](auto build) {
+                    std::unique_ptr<std::vector<NgramHash>> result_ptr =
+                            std::make_unique<std::vector<NgramHash>>(publicHashMap);
+                    result = result_ptr.get();
+                    build(current_thread_id, std::move(result_ptr));
+                });
 
         DCHECK(result != nullptr);
 
@@ -74,7 +74,7 @@ public:
             return Status::NotSupported("ngram search's second parameter must be const");
         }
 
-        const Slice& needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
+        const Slice needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
         if (needle.get_size() > MAX_STRING_SIZE) {
             return Status::NotSupported("ngram function's second parameter is larger than 2^15");
         }
@@ -127,7 +127,7 @@ public:
         }
 
         auto const& needle_column = context->get_constant_column(1);
-        const Slice& needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
+        const Slice needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
 
         auto const& gram_num_column = context->get_constant_column(2);
         size_t gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);
@@ -141,7 +141,7 @@ public:
 
         // all not-null const, so we just calculate the result once
         if (context->is_notnull_constant_column(0)) {
-            const Slice& haystack = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(0));
+            const Slice haystack = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(0));
             state->result = haystack_const_and_needle_const(haystack, state->publicHashMap, context, gram_num);
         }
         return Status::OK();

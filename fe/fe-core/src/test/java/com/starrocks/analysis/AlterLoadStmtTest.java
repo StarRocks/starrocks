@@ -21,19 +21,18 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class AlterLoadStmtTest {
 
-    private Analyzer analyzer;
-
-    @Before
+    @BeforeEach
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer();
     }
 
     @Test
@@ -45,8 +44,8 @@ public class AlterLoadStmtTest {
                     jobProperties);
 
             com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
-            Assert.assertEquals(1, stmt.getAnalyzedJobProperties().size());
-            Assert.assertTrue(
+            Assertions.assertEquals(1, stmt.getAnalyzedJobProperties().size());
+            Assertions.assertTrue(
                     stmt.getAnalyzedJobProperties().containsKey(LoadStmt.PRIORITY));
         }
         {
@@ -56,8 +55,8 @@ public class AlterLoadStmtTest {
                     jobProperties);
             com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
 
-            Assert.assertEquals(1, stmt.getAnalyzedJobProperties().size());
-            Assert.assertTrue(
+            Assertions.assertEquals(1, stmt.getAnalyzedJobProperties().size());
+            Assertions.assertTrue(
                     stmt.getAnalyzedJobProperties().containsKey(LoadStmt.PRIORITY));
         }
         {
@@ -67,8 +66,8 @@ public class AlterLoadStmtTest {
                     jobProperties);
             com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
 
-            Assert.assertEquals(1, stmt.getAnalyzedJobProperties().size());
-            Assert.assertTrue(
+            Assertions.assertEquals(1, stmt.getAnalyzedJobProperties().size());
+            Assertions.assertTrue(
                     stmt.getAnalyzedJobProperties().containsKey(LoadStmt.PRIORITY));
         }
         {
@@ -78,8 +77,8 @@ public class AlterLoadStmtTest {
                     jobProperties);
             com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
 
-            Assert.assertEquals(1, stmt.getAnalyzedJobProperties().size());
-            Assert.assertTrue(
+            Assertions.assertEquals(1, stmt.getAnalyzedJobProperties().size());
+            Assertions.assertTrue(
                     stmt.getAnalyzedJobProperties().containsKey(LoadStmt.PRIORITY));
         }
         {
@@ -89,16 +88,18 @@ public class AlterLoadStmtTest {
                     jobProperties);
             com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
 
-            Assert.assertEquals(1, stmt.getAnalyzedJobProperties().size());
-            Assert.assertTrue(
+            Assertions.assertEquals(1, stmt.getAnalyzedJobProperties().size());
+            Assertions.assertTrue(
                     stmt.getAnalyzedJobProperties().containsKey(LoadStmt.PRIORITY));
         }
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testNoProperties() {
-        AlterLoadStmt stmt = new AlterLoadStmt(new LabelName("db1", "label1"), null);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
+        assertThrows(SemanticException.class, () -> {
+            AlterLoadStmt stmt = new AlterLoadStmt(new LabelName("db1", "label1"), null);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
+        });
     }
 
     @Test
@@ -110,11 +111,11 @@ public class AlterLoadStmtTest {
                     jobProperties);
             try {
                 com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
-                Assert.fail();
+                Assertions.fail();
             } catch (SemanticException e) {
-                Assert.assertTrue(e.getMessage().contains("Unsupported properties 'format'"));
+                Assertions.assertTrue(e.getMessage().contains("Unsupported properties 'format'"));
             } catch (Exception e) {
-                Assert.fail();
+                Assertions.fail();
             }
         }
 
@@ -126,11 +127,11 @@ public class AlterLoadStmtTest {
 
             try {
                 com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
-                Assert.fail();
+                Assertions.fail();
             } catch (SemanticException e) {
-                Assert.assertTrue(e.getMessage().contains("priority"));
+                Assertions.assertTrue(e.getMessage().contains("priority"));
             } catch (Exception e) {
-                Assert.fail();
+                Assertions.fail();
             }
         }
     }

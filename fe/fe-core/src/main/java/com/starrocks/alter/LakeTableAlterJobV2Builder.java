@@ -27,11 +27,11 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,7 +60,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setBloomFilterInfo(bloomFilterColumnsChanged, bloomFilterColumns, bloomFilterFpp);
         schemaChangeJob.setAlterIndexInfo(hasIndexChanged, indexes);
         schemaChangeJob.setStartTime(startTime);
-        schemaChangeJob.setWarehouseId(warehouseId);
+        schemaChangeJob.setComputeResource(computeResource);
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
         schemaChangeJob.setSortKeyUniqueIds(sortKeyUniqueIds);
         for (Map.Entry<Long, List<Column>> entry : newIndexSchema.entrySet()) {
@@ -70,13 +70,14 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             short newShortKeyColumnCount = newIndexShortKeyCount.get(originIndexId);
             long shadowIndexId = globalStateMgr.getNextId();
 
-            // create SHADOW index for each partition
-            for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-                long partitionId = partition.getParentId();
-                long physicalPartitionId = partition.getId();
-                long shardGroupId = partition.getIndex(originIndexId).getShardGroupId();
+            // create SHADOW index for each physicalPartition
+            for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+                long partitionId = physicalPartition.getParentId();
+                long physicalPartitionId = physicalPartition.getId();
+                MaterializedIndex originIndex = physicalPartition.getIndex(originIndexId);
+                long shardGroupId = originIndex.getShardGroupId();
 
-                List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
+                List<Tablet> originTablets = originIndex.getTablets();
                 // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
                 //  revise the code again.
                 List<Long> originTabletIds = originTablets.stream().map(Tablet::getId).collect(Collectors.toList());
@@ -84,26 +85,33 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
                 properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
-                List<Long> shadowTabletIds =
-                        createShards(originTablets.size(), table.getPartitionFilePathInfo(physicalPartitionId),
-                                table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
-                                originTabletIds, properties, warehouseId);
+                List<Long> shadowTabletIds = createShards(originTablets.size(),
+                        table.getPartitionFilePathInfo(physicalPartition.getPathId()),
+                        table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
+                        originTabletIds, properties, computeResource);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
                 TabletMeta shadowTabletMeta =
-                        new TabletMeta(dbId, tableId, physicalPartitionId, shadowIndexId, 0, medium, true);
+                        new TabletMeta(dbId, tableId, physicalPartitionId, shadowIndexId, medium, true);
                 MaterializedIndex shadowIndex =
                         new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW, shardGroupId);
+                Map<Long, Long> tabletIdMap = new HashMap<>();
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
                     shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
                     schemaChangeJob
                             .addTabletIdMap(physicalPartitionId, shadowIndexId, shadowTablet.getId(), originTablet.getId());
+                    tabletIdMap.put(originTablet.getId(), shadowTablet.getId());
                 }
+
+                List<Long> virtualBuckets = new ArrayList<>(originIndex.getVirtualBuckets());
+                virtualBuckets.replaceAll(tabletId -> tabletIdMap.get(tabletId));
+                shadowIndex.setVirtualBuckets(virtualBuckets);
+
                 schemaChangeJob.addPartitionShadowIndex(physicalPartitionId, shadowIndexId, shadowIndex);
-            } // end for partition
+            } // end for physicalPartition
             schemaChangeJob.addIndexSchema(shadowIndexId, originIndexId, newIndexName, newShortKeyColumnCount,
                     entry.getValue());
         } // end for index
@@ -113,12 +121,10 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     @VisibleForTesting
     public static List<Long> createShards(int shardCount, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
                                           long groupId, List<Long> matchShardIds, Map<String, String> properties,
-                                          long warehouseId)
+                                          ComputeResource computeResource)
             throws DdlException {
-        WarehouseManager warehouseManager =  GlobalStateMgr.getCurrentState().getWarehouseMgr();
         return GlobalStateMgr.getCurrentState().getStarOSAgent()
                 .createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds, properties,
-                        warehouseManager.selectWorkerGroupByWarehouseId(warehouseId)
-                                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+                        computeResource);
     }
 }

@@ -6,12 +6,10 @@
 
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "gen_cpp/StatusCode_types.h" // for TStatus
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -132,6 +130,7 @@ public:
         // TODO(mofei) define json format error.
         return Status(TStatusCode::DATA_QUALITY_ERROR, msg);
     }
+    static Status VariantError(std::string_view msg) { return Status(TStatusCode::DATA_QUALITY_ERROR, msg); }
 
     // used for global dict collection
     static Status GlobalDictError(std::string_view msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg); }
@@ -162,8 +161,11 @@ public:
     static Status BigQueryScanRowsLimitExceeded(std::string_view msg) {
         return Status(TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED, msg);
     }
+    static Status NotAuthorized(std::string_view msg) { return Status(TStatusCode::NOT_AUTHORIZED, msg); }
 
     bool ok() const { return _state == nullptr; }
+
+    bool is_unknown() const { return code() == TStatusCode::UNKNOWN; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
 
@@ -218,6 +220,10 @@ public:
     bool is_yield() const { return code() == TStatusCode::YIELD; }
 
     bool is_shutdown() const { return code() == TStatusCode::SHUTDOWN; }
+
+    bool is_not_authorized() const { return code() == TStatusCode::NOT_AUTHORIZED; }
+
+    bool is_global_dict_error() const { return code() == TStatusCode::GLOBAL_DICT_ERROR; }
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
@@ -508,3 +514,28 @@ struct StatusInstance {
             return Status::InternalError(e.what()); \
         }                                           \
     } while (0)
+
+#ifdef NDEBUG
+#define RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, condition)                                    \
+    do {                                                                                                  \
+        if (UNLIKELY(!((val1)condition(val2)))) {                                                         \
+            return Status::InternalError(                                                                 \
+                    fmt::format("assert {}({}) " #condition " {}({}) failed", #val1, val1, #val2, val2)); \
+        }                                                                                                 \
+    } while (0)
+
+#define RETURN_IF_DCHECK_EQ_FAILED(val1, val2) RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, ==)
+#define RETURN_IF_DCHECK_LE_FAILED(val1, val2) RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, <=)
+#define RETURN_IF_DCHECK_LT_FAILED(val1, val2) RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, <)
+#define RETURN_IF_DCHECK_GE_FAILED(val1, val2) RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, >=)
+#define RETURN_IF_DCHECK_GT_FAILED(val1, val2) RETURN_IF_DCHECK_FAILED_BINARY_INTERNAL(val1, val2, >)
+
+#else
+
+#define RETURN_IF_DCHECK_EQ_FAILED(val1, val2) DCHECK_EQ(val1, val2)
+#define RETURN_IF_DCHECK_LE_FAILED(val1, val2) DCHECK_LE(val1, val2)
+#define RETURN_IF_DCHECK_LT_FAILED(val1, val2) DCHECK_LT(val1, val2)
+#define RETURN_IF_DCHECK_GE_FAILED(val1, val2) DCHECK_GE(val1, val2)
+#define RETURN_IF_DCHECK_GT_FAILED(val1, val2) DCHECK_GT(val1, val2)
+
+#endif

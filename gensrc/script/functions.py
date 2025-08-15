@@ -46,6 +46,7 @@ vectorized_functions = [
     [100470, "abs", True, False, "DECIMAL32", ["DECIMAL32"], "MathFunctions::abs_decimal32"],
     [100471, "abs", True, False, "DECIMAL64", ["DECIMAL64"], "MathFunctions::abs_decimal64"],
     [100472, "abs", True, False, "DECIMAL128", ["DECIMAL128"], "MathFunctions::abs_decimal128"],
+    [100473, "abs", True, False, "DECIMAL256", ["DECIMAL256"], "MathFunctions::abs_decimal256"],
 
     [10050, "sin", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::sin"],
     [10060, "asin", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::asin"],
@@ -197,6 +198,26 @@ vectorized_functions = [
 
     [10330, "cbrt", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::cbrt"],
 
+    [10340, '__iceberg_transform_truncate', True, False, 'INT', ['INT', 'INT'], 'MathFunctions::iceberg_truncate_int<TYPE_INT>'],
+    [10341, '__iceberg_transform_truncate', True, False, 'BIGINT', ['BIGINT', 'INT'], 'MathFunctions::iceberg_truncate_int<TYPE_BIGINT>'],
+    [10342, '__iceberg_transform_truncate', True, False, 'DECIMAL32', ['DECIMAL32', 'INT'], 'MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL32>'],
+    [10343, '__iceberg_transform_truncate', True, False, 'DECIMAL64', ['DECIMAL64', 'INT'], 'MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL64>'],
+    [10344, '__iceberg_transform_truncate', True, False, 'DECIMAL128', ['DECIMAL128', 'INT'], 'MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL128>'],
+    [10345, '__iceberg_transform_truncate', True, False, 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::left',
+     'StringFunctions::left_or_right_prepare', 'StringFunctions::left_or_right_close'],
+    [10346, '__iceberg_transform_truncate', True, False, 'VARBINARY', ['VARBINARY', 'INT'], 'BinaryFunctions::iceberg_truncate_binary'],
+     
+    [10350, '__iceberg_transform_bucket', True, False, 'INT', ['INT', 'INT'], 'MathFunctions::iceberg_bucket_int<TYPE_INT>'],
+    [10351, '__iceberg_transform_bucket', True, False, 'INT', ['BIGINT', 'INT'], 'MathFunctions::iceberg_bucket_int<TYPE_BIGINT>'],
+    [10352, '__iceberg_transform_bucket', True, False, 'INT', ['DATE', 'INT'], 'MathFunctions::iceberg_bucket_date'],
+    [10353, '__iceberg_transform_bucket', True, False, 'INT', ['DATETIME', 'INT'], 'MathFunctions::iceberg_bucket_datetime'],
+    [10354, '__iceberg_transform_bucket', True, False, 'INT', ['VARCHAR', 'INT'], 'MathFunctions::iceberg_bucket_string'],
+    [10355, '__iceberg_transform_bucket', True, False, 'INT', ['VARBINARY', 'INT'], 'MathFunctions::iceberg_bucket_string'],
+    [10356, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL32', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL32>'],
+    [10357, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL64', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL64>'],
+    [10358, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL128', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL128>'],
+
+
     # 20xxx: bit functions
     [20010, 'bitand', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],
     [20011, 'bitand', True, False, 'SMALLINT', ['SMALLINT', 'SMALLINT'], "BitFunctions::bitAnd<TYPE_SMALLINT>"],
@@ -319,6 +340,8 @@ vectorized_functions = [
     [30210, 'instr', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
     [30220, 'locate', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::locate'],
     [30221, 'locate', True, False, 'INT', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::locate_pos'],
+    [30225, 'strpos', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strpos'],
+    [30226, 'strpos', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::strpos_instance'],
 
     [30250, 'concat', True, True, 'VARCHAR', ['VARCHAR', '...'], 'StringFunctions::concat',
      'StringFunctions::concat_prepare', 'StringFunctions::concat_close'],
@@ -354,6 +377,8 @@ vectorized_functions = [
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
     [30334, 'regexp_split', True, True, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::regexp_split',
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
+    [30335, 'regexp_count', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_count',
+     'StringFunctions::regexp_count_prepare', 'StringFunctions::regexp_close'],
     [30400, "money_format", True, False, "VARCHAR", ["BIGINT"], "StringFunctions::money_format_bigint"],
     [30401, "money_format", True, False, "VARCHAR", ["LARGEINT"], "StringFunctions::money_format_largeint"],
     [30402, "money_format", True, False, "VARCHAR", ["DECIMALV2"], "StringFunctions::money_format_decimalv2val"],
@@ -409,6 +434,8 @@ vectorized_functions = [
      'StringFunctions::field_prepare<TYPE_DECIMAL64>', 'StringFunctions::field_close<TYPE_DECIMAL64>'],
     [304592, 'field', True, False, 'INT', ['DECIMAL128', '...'], 'StringFunctions::field<TYPE_DECIMAL128>', 
      'StringFunctions::field_prepare<TYPE_DECIMAL128>', 'StringFunctions::field_close<TYPE_DECIMAL128>'],
+
+    [30460, 'format_bytes', True, False, 'VARCHAR', ['BIGINT'], 'StringFunctions::format_bytes'],
 
     # Binary Functions
     # to_binary
@@ -503,6 +530,7 @@ vectorized_functions = [
     [50202, 'localtime', True, False, 'DATETIME', [], 'TimeFunctions::now'],
     [50203, 'localtimestamp', True, False, 'DATETIME', [], 'TimeFunctions::now'],
     [50204, 'now', True, False, 'DATETIME', ['INT'], 'TimeFunctions::now'],
+    [50205, 'current_timestamp', True, False, 'DATETIME', ['INT'], 'TimeFunctions::now'],
     [50210, 'curtime', True, False, 'TIME', [], 'TimeFunctions::curtime'],
     [50211, 'current_time', True, False, 'TIME', [], 'TimeFunctions::curtime'],
     [50220, 'curdate', True, False, 'DATE', [], 'TimeFunctions::curdate'],
@@ -547,7 +575,9 @@ vectorized_functions = [
      'TimeFunctions::from_unix_to_datetime_with_format_64',
      'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
     [50290, 'from_unixtime_ms', True, False, 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_ms_64'],
-
+    [50291, 'from_unixtime', True, False, 'VARCHAR', ['BIGINT', 'VARCHAR', 'VARCHAR'],
+     'TimeFunctions::from_unix_to_datetime_with_format_timezone',
+     'TimeFunctions::from_unix_timezone_prepare', 'TimeFunctions::from_unix_timezone_close'],
     [50300, 'unix_timestamp', True, False, 'INT', [], 'TimeFunctions::to_unix_for_now_32'],
     [50301, 'unix_timestamp', True, False, 'INT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime_32'],
     [50302, 'unix_timestamp', True, False, 'INT', ['DATE'], 'TimeFunctions::to_unix_from_date_32'],
@@ -557,6 +587,27 @@ vectorized_functions = [
     [50305, 'from_unixtime', True, False, 'VARCHAR', ['INT', 'VARCHAR'],
      'TimeFunctions::from_unix_to_datetime_with_format_32',
      'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
+    [50306, 'to_datetime', True, False, 'DATETIME', ['BIGINT'], 
+     'TimeFunctions::unixtime_to_datetime',
+     'TimeFunctions::unixtime_to_datetime_prepare', 'TimeFunctions::unixtime_to_datetime_close'],
+    [50307, 'to_datetime', True, False, 'DATETIME', ['BIGINT', 'INT'], 
+     'TimeFunctions::unixtime_to_datetime',
+     'TimeFunctions::unixtime_to_datetime_prepare', 'TimeFunctions::unixtime_to_datetime_close'],
+    [50308, 'to_datetime_ntz', True, False, 'DATETIME', ['BIGINT'], 
+     'TimeFunctions::unixtime_to_datetime_ntz',
+     'TimeFunctions::unixtime_to_datetime_ntz_prepare', 'TimeFunctions::unixtime_to_datetime_ntz_close'],
+    [50309, 'to_datetime_ntz', True, False, 'DATETIME', ['BIGINT', 'INT'], 
+     'TimeFunctions::unixtime_to_datetime_ntz',
+     'TimeFunctions::unixtime_to_datetime_ntz_prepare', 'TimeFunctions::unixtime_to_datetime_ntz_close'],
+     
+
+    # specialized version of from_unixtime to reduce the cost of datetime conversion
+    # TODO: 50380 year_from_unixtime
+    # TODO: 50381 month_from_unixtime
+    # TODO: 50382 day_from_unixtime
+    [50383, 'hour_from_unixtime', True, False, 'INT', ['BIGINT'], 'TimeFunctions::hour_from_unixtime'],
+    # TODO: 50384 minute_from_unixtime
+    # TODO: 50385 second_from_unixtime
 
     [50310, 'dayname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::day_name'],
     [50311, 'monthname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::month_name'],
@@ -584,8 +635,21 @@ vectorized_functions = [
     [50402, 'last_day', True, False, 'DATE', ['DATETIME'], 'TimeFunctions::last_day'],
     [50403, 'last_day', True, False, 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::last_day_with_format',
      'TimeFunctions::last_day_prepare', 'TimeFunctions::last_day_close'],
+    [50404, 'last_day', True, False, 'DATE', ['DATE'], 'TimeFunctions::last_day_date'],
+    [50405, 'last_day', True, False, 'DATE', ['DATE', 'VARCHAR'], 'TimeFunctions::last_day_date_with_format',
+     'TimeFunctions::last_day_prepare', 'TimeFunctions::last_day_close'],
+
     [50501, 'makedate', True, False, 'DATE', ['INT', 'INT'], 'TimeFunctions::make_date'],
     [50610, 'time_format', True, False, 'VARCHAR', ['TIME', 'VARCHAR'], 'TimeFunctions::time_format'],
+
+
+    [50620, '__iceberg_transform_year', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_years_since_epoch_date'],
+    [50621, '__iceberg_transform_year', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_years_since_epoch_datetime'],
+    [50630, '__iceberg_transform_month', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_months_since_epoch_date'],
+    [50631, '__iceberg_transform_month', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_months_since_epoch_datetime'],
+    [50640, '__iceberg_transform_day', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_days_since_epoch_date'],
+    [50641, '__iceberg_transform_day', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_days_since_epoch_datetime'],
+    [50650, '__iceberg_transform_hour', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_hours_since_epoch_datetime'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
@@ -717,6 +781,7 @@ vectorized_functions = [
     [90015, 'to_bitmap', False, False, 'BITMAP', ['BIGINT'], 'BitmapFunctions::to_bitmap<TYPE_BIGINT>'],
     [90016, 'to_bitmap', False, False, 'BITMAP', ['LARGEINT'], 'BitmapFunctions::to_bitmap<TYPE_LARGEINT>'],
     [90020, 'bitmap_hash', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::bitmap_hash'],
+    [90021, 'bitmap_hash64', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::bitmap_hash64'],
     [90030, 'bitmap_count', True, False, 'BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_count'],
     [90040, 'bitmap_empty', False, False, 'BITMAP', [], 'BitmapFunctions::bitmap_empty'],
     [90050, 'bitmap_or', False, False, 'BITMAP', ['BITMAP', 'BITMAP'], 'BitmapFunctions::bitmap_or'],
@@ -746,6 +811,7 @@ vectorized_functions = [
     [100010, 'murmur_hash3_32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
     [100021, 'xx_hash3_64', True, False, 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_64'],
     [100022, 'xx_hash3_128', True, False, 'LARGEINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_128'],
+    [100023, 'crc32_hash', True, False, 'BIGINT', ['ANY_ARRAY'], 'HashFunctions::crc32_hash'],
 
 
     # Utility functions
@@ -806,8 +872,11 @@ vectorized_functions = [
     [110018, "json_keys", False, False, "JSON", ["JSON"], "JsonFunctions::json_keys"],
     [110019, "json_keys", False, False, "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    [110024, "json_remove", False, False, "JSON", ["JSON", "VARCHAR", "..."], "JsonFunctions::json_remove",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110100, "to_json", False, False, "JSON", ["ANY_MAP"], "JsonFunctions::to_json"],
     [110101, "to_json", False, False, "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json"],
+    [110112, "json_contains", False, False, "BOOLEAN", ["JSON", "JSON"], "JsonFunctions::json_contains"],
 
     # aes and base64 function
     [120100, "aes_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt"],
@@ -1362,4 +1431,7 @@ vectorized_functions = [
     # data synopse functions
     [181000, 'bar', True, False, 'VARCHAR', ['BIGINT', "BIGINT", 'BIGINT', 'BIGINT'], 'UtilityFunctions::bar'],
     [181001, 'equiwidth_bucket', True, False, 'BIGINT', ['BIGINT', 'BIGINT', 'BIGINT', 'BIGINT'], 'UtilityFunctions::equiwidth_bucket'],
+
+    # gin functions
+    [190000, 'tokenize', True, False, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'GinFunctions::tokenize', 'GinFunctions::tokenize_prepare', 'GinFunctions::tokenize_close']
 ]

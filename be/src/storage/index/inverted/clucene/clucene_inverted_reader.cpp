@@ -19,6 +19,7 @@
 #include <boost/locale/encoding_utf.hpp>
 #include <memory>
 
+#include "clucene_inverted_util.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/clucene/match_operator.h"
 #include "types/logical_type.h"
@@ -53,6 +54,8 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     auto act_len = strnlen(search_query->data, search_query->size);
     std::string search_str(search_query->data, act_len);
     std::wstring search_wstr = boost::locale::conv::utf_to_utf<TCHAR>(search_str);
+    std::vector<std::wstring> tokens;
+    RETURN_IF_ERROR(starrocks::tokenize_text(_parser_type, search_str, tokens));
     VLOG(2) << "begin to query the inverted index from clucene"
             << ", column_name: " << column_name << ", search_str: " << search_str;
     std::wstring column_name_ws = std::wstring(column_name.begin(), column_name.end());
@@ -65,8 +68,8 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     std::unique_ptr<MatchOperator> match_operator;
 
     auto* directory = lucene::store::FSDirectory::getDirectory(_index_path.c_str());
-    // defer must define before IndexSearcher. Because the destory order is matter.
-    // Make sure IndexSearcher destory first and decrement __cl_refcount first.
+    // defer must define before IndexSearcher. Because the destroy order is matter.
+    // Make sure IndexSearcher destroy first and decrement __cl_refcount first.
     DeferOp defer([&]() { CLOSE_DIR(directory) });
     lucene::search::IndexSearcher index_searcher(directory);
 
@@ -75,6 +78,9 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     case InvertedIndexQueryType::EQUAL_QUERY:
         match_operator =
                 std::make_unique<MatchTermOperator>(&index_searcher, nullptr, column_name_ws.c_str(), search_wstr);
+        break;
+    case InvertedIndexQueryType::MATCH_ANY_QUERY:
+        match_operator = std::make_unique<MatchAnyOperator>(&index_searcher, nullptr, column_name_ws, tokens);
         break;
     case InvertedIndexQueryType::MATCH_PHRASE_QUERY:
         // in phrase query
@@ -109,8 +115,8 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     try {
         RETURN_IF_ERROR(match_operator->match(&result));
     } catch (CLuceneError& e) {
-        LOG(WARNING) << "CLuceneError occured, error msg: " << e.what();
-        return Status::InternalError(fmt::format("CLuceneError occured, error msg: {}", e.what()));
+        LOG(WARNING) << "CLuceneError occurred, error msg: " << e.what();
+        return Status::InternalError(fmt::format("CLuceneError occurred, error msg: {}", e.what()));
     }
     bit_map->swap(result);
     return Status::OK();
@@ -124,7 +130,7 @@ Status FullTextCLuceneInvertedReader::query_null(OlapReaderStatistics* stats, co
         // try to get query bitmap result from cache and return immediately on cache hit
         dir = lucene::store::FSDirectory::getDirectory(_index_path.c_str());
 
-        // ownership of null_bitmap and its deletion will be transfered to cache
+        // ownership of null_bitmap and its deletion will be transferred to cache
         std::shared_ptr<roaring::Roaring> null_bitmap = std::make_shared<roaring::Roaring>();
         auto null_bitmap_file_name = IndexDescriptor::get_temporary_null_bitmap_file_name();
         if (dir->fileExists(null_bitmap_file_name.c_str())) {

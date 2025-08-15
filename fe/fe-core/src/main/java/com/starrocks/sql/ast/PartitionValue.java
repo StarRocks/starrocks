@@ -70,7 +70,7 @@ public class PartitionValue implements ParseNode {
         if (isMax()) {
             return LiteralExpr.createInfinity(type, true);
         } else {
-            if (type == Type.DATETIME) {
+            if (type.isDatetime()) {
                 try {
                     return LiteralExpr.create(value, type);
                 } catch (AnalysisException ex) {

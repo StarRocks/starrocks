@@ -15,14 +15,12 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KuduTable;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -37,6 +35,8 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -44,10 +44,10 @@ import mockit.Mocked;
 import org.apache.kudu.client.KuduClient;
 import org.apache.kudu.client.KuduScanToken;
 import org.jetbrains.annotations.NotNull;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -67,7 +67,7 @@ public class KuduScanNodeTest {
     public KuduScanNodeTest() throws IOException {
     }
 
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -80,7 +80,7 @@ public class KuduScanNodeTest {
         this.tokens.add(token);
     }
 
-    @After
+    @AfterEach
     public void after() throws Exception {
         starRocksAssert.dropCatalog(KUDU_CATALOG);
         if (client != null) {
@@ -110,15 +110,15 @@ public class KuduScanNodeTest {
 
         kuduScanNode.setupScanRangeLocations(tupleDesc, null);
         List<TScanRangeLocations> result = kuduScanNode.getScanRangeLocations(1);
-        Assert.assertTrue(result.size() > 0);
+        Assertions.assertTrue(result.size() > 0);
         TScanRange scanRange = result.get(0).getScan_range();
-        Assert.assertTrue(scanRange.isSetHdfs_scan_range());
+        Assertions.assertTrue(scanRange.isSetHdfs_scan_range());
         THdfsScanRange hdfsScanRange = scanRange.getHdfs_scan_range();
-        Assert.assertTrue(hdfsScanRange.getFile_length() > 0);
-        Assert.assertTrue(hdfsScanRange.getLength() > 0);
-        Assert.assertTrue(hdfsScanRange.isSetUse_kudu_jni_reader());
-        Assert.assertEquals("AAECAw", hdfsScanRange.getKudu_scan_token());
-        Assert.assertEquals(KUDU_MASTER, hdfsScanRange.getKudu_master());
+        Assertions.assertTrue(hdfsScanRange.getFile_length() > 0);
+        Assertions.assertTrue(hdfsScanRange.getLength() > 0);
+        Assertions.assertTrue(hdfsScanRange.isSetUse_kudu_jni_reader());
+        Assertions.assertEquals("AAECAw", hdfsScanRange.getKudu_scan_token());
+        Assertions.assertEquals(KUDU_MASTER, hdfsScanRange.getKudu_master());
     }
 
 
@@ -131,8 +131,7 @@ public class KuduScanNodeTest {
     }
 
     private TupleDescriptor setupDescriptorTable(KuduTable kuduTable, List<Column> columns) {
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        DescriptorTable descTable = analyzer.getDescTbl();
+        DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         tupleDesc.setTable(kuduTable);
         SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(0), null);
@@ -182,8 +181,8 @@ public class KuduScanNodeTest {
 
         KuduScanNode kuduScanNode = makeKuduScanNode();
         List<Long> allAvailableBackendOrComputeIds = kuduScanNode.getAllAvailableBackendOrComputeIds();
-        Assert.assertNotNull(allAvailableBackendOrComputeIds);
-        Assert.assertEquals(3, allAvailableBackendOrComputeIds.size());
+        Assertions.assertNotNull(allAvailableBackendOrComputeIds);
+        Assertions.assertEquals(3, allAvailableBackendOrComputeIds.size());
     }
 
     @Test
@@ -203,14 +202,21 @@ public class KuduScanNodeTest {
             }
         };
 
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
+
         ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
         ComputeNode c2 = new ComputeNode(10002L, "192.168.0.3", 9050);
         mockedWarehouseManager.setAliveComputeNodes(new ArrayList<>(List.of(c1, c2)));
 
         KuduScanNode kuduScanNode = makeKuduScanNode();
         List<Long> allAvailableBackendOrComputeIds = kuduScanNode.getAllAvailableBackendOrComputeIds();
-        Assert.assertNotNull(allAvailableBackendOrComputeIds);
-        Assert.assertEquals(2, allAvailableBackendOrComputeIds.size());
+        Assertions.assertNotNull(allAvailableBackendOrComputeIds);
+        Assertions.assertEquals(2, allAvailableBackendOrComputeIds.size());
     }
 
     @NotNull

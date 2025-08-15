@@ -35,6 +35,7 @@ public class TransactionOperationParams {
     private final String label;
     private final TransactionOperation txnOperation;
     private final Long timeoutMillis;
+    private final Long preparedTimeoutMillis;
     private final Channel channel;
 
     /* queries */
@@ -51,6 +52,7 @@ public class TransactionOperationParams {
                                       String label,
                                       TransactionOperation txnOperation,
                                       Long timeoutMillis,
+                                      Long preparedTimeoutMillis,
                                       Channel channel,
                                       LoadJobSourceType sourceType,
                                       Body body) {
@@ -60,6 +62,7 @@ public class TransactionOperationParams {
         this.label = label;
         this.txnOperation = txnOperation;
         this.timeoutMillis = timeoutMillis;
+        this.preparedTimeoutMillis = preparedTimeoutMillis;
         this.channel = channel;
         this.sourceType = sourceType;
         this.body = body;
@@ -149,6 +152,10 @@ public class TransactionOperationParams {
 
     public Long getTimeoutMillis() {
         return timeoutMillis;
+    }
+
+    public Long getPreparedTimeoutMillis() {
+        return preparedTimeoutMillis;
     }
 
     public Channel getChannel() {

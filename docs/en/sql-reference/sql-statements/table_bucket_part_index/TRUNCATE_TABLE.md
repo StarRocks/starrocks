@@ -4,14 +4,12 @@ displayed_sidebar: docs
 
 # TRUNCATE TABLE
 
-## Description
-
-This statement is used to truncate the specified table and partition data.
+TRUNCATE TABLE is used to truncate the specified table and partition data.
 
 Syntax:
 
 ```sql
-TRUNCATE TABLE [db.]tbl[ PARTITION(p1, p2, ...)]
+TRUNCATE TABLE [db.]tbl[ PARTITION(PartitionName1, PartitionName2, ...)]
 ```
 
 Note:
@@ -30,8 +28,8 @@ Note:
     TRUNCATE TABLE example_db.tbl;
     ```
 
-2. Truncate partitions `p1` and `p2` in table `tbl`.
+2. Truncate partitions `PartitionName1` and `PartitionName2` in table `tbl`.
 
     ```sql
-    TRUNCATE TABLE tbl PARTITION(p1, p2);
+    TRUNCATE TABLE tbl PARTITION(PartitionName1, PartitionName2);
     ```

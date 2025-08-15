@@ -8,16 +8,36 @@ displayed_sidebar: docs
 
 ## 概述
 
-在 StarRocks 中，Compaction 是指将不同版本的数据文件合并为更大的文件，从而减少小文件的数量并提高查询效率。与存算一体集群相比，存算分离集群引入了一种新的 Compaction 调度机制，其特点是：
+在 StarRocks 中，每次导入都会生成一个新的版本。Compaction 将不同版本的数据文件合并为更大的文件，从而减少小文件的数量并提高查询效率。
 
-- Compaction 由 FE 调度并由 CN 执行。FE 以分区为单位发起 Compaction 任务。
-- 每次 Compaction 都会生成一个新的数据版本，经历完整的数据导入事务流程，即数据写入、Commit 和 Publish。
+## Compaction Score
+
+### 介绍
+
+Compaction Score 反映了分区的数据文件合并状态。分数越高，表示该分区的数据文件合并程度越低，即该分区有更多版本的数据文件需要合并。FE 为每个分区维护 Compaction Score 信息，包括 Max Compaction Score （即这个分区中 Compaction Score 最高的 Tablet 的分数）。当 Partition 的 Max Compaction Score 小于 FE 参数 `lake_compaction_score_selector_min_score`(默认10)，则这个 Partition 的所有 Compaction 已经结束。当 Partition 的 Max Compaction Score 超过 100，就可以认为是不太健康的 Compaction 状态。当这个分区的 Max Compaction Score 超过 FE 参数 `lake_ingest_slowdown_threshold`(默认100)，系统会开始减缓这个分区的数据导入事务的提交速度，当超过 FE 参数 `lake_compaction_score_upper_bound`(默认2000) 时，系统会拒绝这个分区的数据导入事务。
+
+### 计算规则
+
+大多数情况下，一个数据文件对应的 Compaction Score 为 1，也就是说，假设一个分区只有一个 Tablet，如果第一次数据导入这个 Tablet 内产生了 10 个数据文件，那么这个分区的 Max Compaction Score 就是 10，并且一个事务在一个 Tablet 内产生的所有数据文件被称作是一个 Rowset。
+
+除了以上的分数计算规则，实际的 Compaction Score 计算时还会把这个 Tablet 的所有 Rowset 按照大小规则进行分组，然后以 Score 最大的那一组作为其 Compaction Score。
+
+假设一个 Tablet 经历了 7 次导入，生成了 7 个 Rowset，数据大小分别是 100 MB、100 MB、100 MB、10 MB、10 MB、10 MB、10 MB，那么计算时，首先会将其中三个 100 MB 分为一组，四个 10 MB 分为另一组，然后分别统计两个组内的数据文件数量，以数据文件多的那个组的 Compaction Score 作为这个 Tablet 的 Compaction Score。如果 Compaction Score 满足要求，后续进行 Compaction 时，会挑选分数最高的一组 Rowset 进行 Compaction。比如在这个例子里，如果是第二组 Compaction Score 更高，那么经过 Compaction，这个 Tablet 的 Rowset 分布会变成 100 MB、100 MB、100 MB、40 MB。
+
+## 整体流程
+
+与存算一体集群相比，存算分离集群引入了一种新的 FE 统一控制的 Compaction 调度机制，其流程是：
+
+1. FE Leader 根据每个事务的 Publish 结果计算并存储对应 Partition 的 Compaction Score 信息。
+2. FE 会按照 Partition 的 Max Compaction Score 选择分数最高的一批 Partition 作为 Compaction 任务的候选者。
+3. FE 会依次对挑选出来的 Partition 开始 Compaction 事务， 生成对应的 Tablet 子任务并下发到 CN 上，直到子任务的数量到达 FE 参数 `lake_compaction_max_tasks` 的限制。
+4. CN 会在后台以 Tablet 为单位执行 Compaction 子任务，并将结果返回给 FE。单个 CN 同时执行的子任务数量受 CN 参数 `compact_threads` 控制。
+5. FE 收集所有子任务的结果，然后进行 Compaction 事务提交。
+6. FE 将成功提交的 Compaction 事务进行 Publish。
 
 ## 管理 Compaction
 
 ### 查看 Compaction Score
-
-系统为每个分区维护一个 Compaction Score。Compaction Score 反映了对应分区的数据文件合并状态。分数越高，表示该分区的数据文件合并程度越低，即该分区有更多版本的数据文件需要合并。FE 根据 Compaction Score 触发 Compaction 任务，您也可以通过 Compaction Score 判断特定分区的数据版本是否过多。
 
 - 您可以通过 SHOW PROC 语句查看特定表中分区的 Compaction Score。
 
@@ -37,7 +57,7 @@ displayed_sidebar: docs
   1 row in set (0.20 sec)
   ```
 
-- 从 v3.1.9 和 v3.2.4 版本开始，您也可以通过查询系统定义视图 `information_schema.partitions_meta` 查看分区的 Compaction Score。
+- 您也可以通过查询系统定义视图 `information_schema.partitions_meta` 查看分区的 Compaction Score。
 
   示例：
 
@@ -255,7 +275,9 @@ CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
 
 由于 Compaction 对查询性能的影响非常重要，建议用户持续关注表和分区的后台数据合并情况。以下是一些最佳实践建议：
 
+- 尽量调高导入的时间间隔（避免间隔 10 秒以内导入的场景），并且增加单次导入的批大小（避免 100 行数据以内的批大小）。
+- 调整计算节点上的 Compaction 工作线程数，以加快任务执行速度。在生产环境中，建议将 `compact_threads` 的值设置为 BE/CN CPU 核心数量的 25%。在集群较空闲时，例如只需执行 Compaction 而无需处理查询时，可以暂时调整为 CPU 数量的 50%，在任务完成后再调回至 25%。
+- 运用主要的两个命令 `show proc '/compactions'` 以及 `select * from information_schema.be_cloud_native_compactions;` 查看 Compaction 执行情况。
 - 关注 Compaction Score，建议根据该指标配置告警。StarRocks 提供的 Grafana 监控模板已包含该指标。
 - 监控 Compaction 的资源消耗情况，尤其是内存使用情况。Grafana 监控模板中也包含该项指标。
-- 调整计算节点上的 Compaction 并行工作线程数，以加快任务执行速度。建议将 `compact_threads` 的值设置为 BE/CN CPU 核心数量的 25%。在集群较空闲时，例如只需执行 Compaction 而无需处理查询时，可以暂时调整为 CPU 数量的 50%，在任务完成后再调回至 25%。
 

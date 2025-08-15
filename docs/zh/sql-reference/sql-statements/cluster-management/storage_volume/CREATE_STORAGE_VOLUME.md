@@ -19,7 +19,7 @@ displayed_sidebar: docs
 
 ```SQL
 CREATE STORAGE VOLUME [IF NOT EXISTS] <storage_volume_name>
-TYPE = { S3 | HDFS | AZBLOB }
+TYPE = { S3 | HDFS | AZBLOB | ADLS2 | GS }
 LOCATIONS = ('<remote_storage_path>')
 [ COMMENT '<comment_string>' ]
 PROPERTIES
@@ -31,8 +31,8 @@ PROPERTIES
 | **参数**            | **说明**                                                     |
 | ------------------- | ------------------------------------------------------------ |
 | storage_volume_name | 存储卷的名称。请注意，您无法创建名为 `builtin_storage_volume` 的存储卷，因为该名称被用于创建内置存储卷。有关 storage volume 的命名要求，参见[系统限制](../../../System_limit.md)。 |
-| TYPE                | 远程存储系统的类型。有效值：`S3` 、`AZBLOB` 、 `ADLS2` 和 `HDFS`。`S3` 代表 AWS S3 或与 S3 协议兼容的存储系统。`AZBLOB` 代表 Azure Blob Storage（自 v3.1.1 起支持）。`ADLS2` 代表 Azure Data Lake Storage Gen2（自 v3.4.1 起支持）。`HDFS` 代表 HDFS 集群。 |
-| LOCATIONS           | 远程存储系统的位置。格式如下：<ul><li>AWS S3 或与 S3 协议兼容的存储系统：`s3://<s3_path>`。`<s3_path>` 必须为绝对路径，如 `s3://testbucket/subpath`。请注意，如果要为存储卷启用 [分区前缀](#分区前缀) 功能，您只能指定存储桶名称，不允许指定子路径。</li><li>Azure Blob Storage: `azblob://<azblob_path>`。`<azblob_path>` 必须为绝对路径，如 `azblob://testcontainer/subpath`。</li><li>Azure Data Lake Storage Gen2: `adls2://<file_system_name>/<dir_name>`。示例：`adls2://testfilesystem/starrocks`。</li><li>HDFS：`hdfs://<host>:<port>/<hdfs_path>`。`<hdfs_path>` 必须为绝对路径，如 `hdfs://127.0.0.1:9000/user/xxx/starrocks`。</li><li>WebHDFS：`webhdfs://<host>:<http_port>/<hdfs_path>`，其中 `<http_port>` 为 NameNode 的 HTTP 端口。`<hdfs_path>` 必须为绝对路径，如 `webhdfs://127.0.0.1:50070/user/xxx/starrocks`。</li><li>ViewFS：`viewfs://<ViewFS_cluster>/<viewfs_path>`，其中 `<ViewFS_cluster>` 为 ViewFS 集群名。`<viewfs_path>` 必须为绝对路径，如 `viewfs://myviewfscluster/user/xxx/starrocks`。</li></ul> |
+| TYPE                | 远程存储系统的类型。有效值：`S3` 、`AZBLOB` 、 `ADLS2` 、`GS` 和 `HDFS`。`S3` 代表 AWS S3 或与 S3 协议兼容的存储系统。`AZBLOB` 代表 Azure Blob Storage（自 v3.1.1 起支持）。`ADLS2` 代表 Azure Data Lake Storage Gen2（自 v3.4.1 起支持）。`GS` 代表 Google Storage（Native SDK 自 v3.5.1 起支持）。`HDFS` 代表 HDFS 集群。 |
+| LOCATIONS           | 远程存储系统的位置。格式如下：<ul><li>AWS S3 或与 S3 协议兼容的存储系统：`s3://<s3_path>`。`<s3_path>` 必须为绝对路径，如 `s3://testbucket/subpath`。请注意，如果要为存储卷启用 [分区前缀](#分区前缀) 功能，您只能指定存储桶名称，不允许指定子路径。</li><li>Azure Blob Storage: `azblob://<azblob_path>`。`<azblob_path>` 必须为绝对路径，如 `azblob://testcontainer/subpath`。</li><li>Azure Data Lake Storage Gen2: `adls2://<file_system_name>/<dir_name>`。示例：`adls2://testfilesystem/starrocks`。</li><li>使用 Native SDK 的 Google Storage：`gs://<gs_path>`。`<gs_path>`  必须为绝对路径，如 `gs://testcbucket/subpath`。</li><li>HDFS：`hdfs://<host>:<port>/<hdfs_path>`。`<hdfs_path>` 必须为绝对路径，如 `hdfs://127.0.0.1:9000/user/xxx/starrocks`。</li><li>WebHDFS：`webhdfs://<host>:<http_port>/<hdfs_path>`，其中 `<http_port>` 为 NameNode 的 HTTP 端口。`<hdfs_path>` 必须为绝对路径，如 `webhdfs://127.0.0.1:50070/user/xxx/starrocks`。</li><li>ViewFS：`viewfs://<ViewFS_cluster>/<viewfs_path>`，其中 `<ViewFS_cluster>` 为 ViewFS 集群名。`<viewfs_path>` 必须为绝对路径，如 `viewfs://myviewfscluster/user/xxx/starrocks`。</li></ul> |
 | COMMENT             | 存储卷的注释。                                               |
 | PROPERTIES          | `"key" = "value"` 形式的参数对，用以指定访问远程存储系统的属性和认证信息。有关详细信息，请参阅 [PROPERTIES](#properties)。 |
 
@@ -40,11 +40,13 @@ PROPERTIES
 
 下表列出了存储卷所有可用的属性。这些属性的使用说明在列表后提供，从 [认证信息](#认证信息) 和 [特性](#特性) 两个方面，基于不同场景进行分类。
 
+import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
+
 | **属性**                            | **描述**                                                     |
 | ----------------------------------- | ------------------------------------------------------------ |
 | enabled                             | 是否启用当前存储卷。默认值：`false`。已禁用的存储卷无法被引用。 |
 | aws.s3.region                       | 需访问的 S3 存储空间的地区，如 `us-west-2`。                 |
-| aws.s3.endpoint                     | 访问 S3 存储空间的连接地址，如 `https://s3.us-west-2.amazonaws.com`。[Preview] 自 v3.3.0 起，支持 Amazon S3 Express One Zone Storage，如 `https://s3express.us-west-2.amazonaws.com`。 |
+| aws.s3.endpoint                     | 访问 S3 存储空间的连接地址，如 `https://s3.us-west-2.amazonaws.com`。[Preview] 自 v3.3.0 起，支持 Amazon S3 Express One Zone Storage，如 `https://s3express.us-west-2.amazonaws.com`。<Beta /> |
 | aws.s3.use_aws_sdk_default_behavior | 是否使用 AWS SDK 默认的认证凭证。有效值：`true` 和 `false` (默认)。 |
 | aws.s3.use_instance_profile         | 是否使用 Instance Profile 或 Assumed Role 作为安全凭证访问 S3。有效值：`true` 和 `false` (默认)。<ul><li>如果您使用 IAM 用户凭证（Access Key 和 Secret Key）访问 S3，则需要将此项设为 `false`，并指定 `aws.s3.access_key` 和 `aws.s3.secret_key`。</li><li>如果您使用 Instance Profile 访问 S3，则需要将此项设为 `true`。</li><li>如果您使用 Assumed Role 访问 S3，则需要将此项设为 `true`，并指定 `aws.s3.iam_role_arn`。</li><li>如果您使用外部 AWS 账户通过 Assumed Role 认证访问 S3，则需要将此项设为 `true`，并额外指定 `aws.s3.iam_role_arn` 和 `aws.s3.external_id`。</li></ul> |
 | aws.s3.access_key                   | 访问 S3 存储空间的 Access Key。                              |
@@ -57,6 +59,14 @@ PROPERTIES
 | azure.adls2.endpoint   | Azure Data Lake Storage Gen2 的链接地址，如 `https://test.dfs.core.windows.net`。 |
 | azure.adls2.shared_key | 访问 Azure Data Lake Storage Gen2 的共享密钥（Shared Key）。           |
 | azure.adls2.sas_token  | 访问 Azure Data Lake Storage Gen2 的共享访问签名（SAS）。              |
+| azure.adls2.oauth2_use_managed_identity | 是否使用 Managed Identity 用于授权 Azure Data Lake Storage Gen2 请求。默认值：`false`。 |
+| azure.adls2.oauth2_tenant_id        | 用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Tenant ID。 |
+| azure.adls2.oauth2_client_id        | 用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Client ID。 |
+| gcp.gcs.service_account_email	      | 创建 Service Account 时生成的 JSON 文件中的 Email。示例：`user@hello.iam.gserviceaccount.com`。 |
+| gcp.gcs.service_account_private_key_id | 创建 Service Account 时生成的 JSON 文件中的 Private Key ID。 |
+| gcp.gcs.service_account_private_key | 创建 Service Account 时生成的 JSON 文件中的 Private Key。示例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。 |
+| gcp.gcs.impersonation_service_account | 如果使用基于模拟身份的身份验证，需要要模拟的 Service Account。          |
+| gcp.gcs.use_compute_engine_service_account | 是否使用 Compute Engine 上面绑定的 Service Account。 |
 | hadoop.security.authentication                        | 指定认证方式。有效值：`simple`（默认） 和 `kerberos`。`simple` 表示简单认证，即 Username。`kerberos` 表示 Kerberos 认证。 |
 | username                                              | 用于访问 HDFS 集群中 NameNode 节点的用户名。                      |
 | hadoop.security.kerberos.ticket.cache.path            | 用于指定 kinit 生成的 Ticket Cache 文件的路径。                   |
@@ -125,23 +135,6 @@ PROPERTIES
   "aws.s3.iam_role_arn" = "<role_arn>",
   "aws.s3.external_id" = "<external_id>"
   ```
-
-##### GCS
-
-如果您使用 GCP Cloud Storage，请设置以下属性：
-
-```SQL
-"enabled" = "{ true | false }",
-
--- 例如：us-east-1
-"aws.s3.region" = "<region>",
-
--- 例如：https://storage.googleapis.com
-"aws.s3.endpoint" = "<endpoint_url>",
-
-"aws.s3.access_key" = "<access_key>",
-"aws.s3.secret_key" = "<secrete_key>"
-```
 
 ##### 阿里云 OSS
 
@@ -304,9 +297,68 @@ StarRocks 自 v3.4.1 起支持基于 Azure Data Lake Storage Gen2 创建存储�
   "azure.adls2.sas_token" = "<sas_token>"
   ```
 
+- 如果您使用 Managed Identity 认证，请设置以下 PROPERTIES：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<client_id>" 
+  ```
+
 :::note
 不支持 Azure Data Lake Storage Gen1。
 :::
+
+##### Google Storage
+
+- 如果使用 Compute Engine 上面绑定的 Service Account 访问 Google Storage（从 v3.5.1 版开始支持），请设置以下 PROPERTIES：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "gcp.gcs.use_compute_engine_service_account" = "true"
+  ```
+
+- 如果使用基于 Service Account 的身份验证方法访问 Google Storage（从 v3.5.1 版开始支持），请设置以下 PROPERTIES：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "gcp.gcs.use_compute_engine_service_account" = "false",
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
+  ```
+
+- 如果使用模拟身份的身份验证方法访问 Google Storage（从 v3.5.1 版开始支持），请设置以下 PROPERTIES：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "gcp.gcs.use_compute_engine_service_account" = "false",
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>",
+  "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+  ```
+
+- 如果使用基于 S3 协议以及 IAM User 的身份验证方法访问 Google Storage，请设置以下 PROPERTIES：
+
+  :::tip 
+  Google Storage 支持使用 [XML API](https://cloud.google.com/storage/docs/interoperability)，设置使用 AWS S3 语法。在这种情况下，必须将 `TYPE` 设置为 `S3`，并将 `LOCATIONS` 设置为与 S3 协议兼容的存储位置。
+  :::
+
+  ```SQL
+  "enabled" = "{ true | false }",
+
+  -- For example: us-east1
+  "aws.s3.region" = "<region>",
+
+  -- For example: https://storage.googleapis.com
+  "aws.s3.endpoint" = "<endpoint_url>",
+
+  "aws.s3.access_key" = "<access_key>",
+  "aws.s3.secret_key" = "<secrete_key>"
+  ```
 
 ##### HDFS
 
@@ -487,12 +539,27 @@ PROPERTIES(
 
 ```SQL
 CREATE STORAGE VOLUME adls2
-    TYPE = ADLS2
-    LOCATIONS = ("adls2://testfilesystem/starrocks")
-    PROPERTIES (
-        "azure.adls2.endpoint" = "https://test.dfs.core.windows.net",
-        "azure.adls2.sas_token" = "xxx"
-    );
+TYPE = ADLS2
+LOCATIONS = ("adls2://testfilesystem/starrocks")
+PROPERTIES (
+    "azure.adls2.endpoint" = "https://test.dfs.core.windows.net",
+    "azure.adls2.sas_token" = "xxx"
+);
+```
+
+示例九：使用模拟身份 Service Account 基于 Google Storage 创建存储卷 `gs`。
+
+```SQL
+CREATE STORAGE VOLUME gs
+TYPE = GS
+LOCATIONS = ("gs://testbucket/starrocks")
+PROPERTIES (
+    "gcp.gcs.use_compute_engine_service_account" = "false",
+    "gcp.gcs.service_account_email" = "user@hello.iam.gserviceaccount.com",
+    "gcp.gcs.service_account_private_key_id" = "61d257bd847xxxxxxxxxxxxxxx4f0b9b6b9ca07af3b7ea",
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n",
+    "gcp.gcs.impersonation_service_account" = "admin@hello.iam.gserviceaccount.com"
+);
 ```
 
 ## 相关 SQL

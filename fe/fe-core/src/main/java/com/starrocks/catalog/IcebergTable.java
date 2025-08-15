@@ -22,18 +22,29 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TCompressedPartitionMap;
 import com.starrocks.thrift.THdfsPartition;
+import com.starrocks.thrift.TIcebergPartitionInfo;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TPartitionMap;
 import com.starrocks.thrift.TTableDescriptor;
@@ -41,6 +52,7 @@ import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.types.Types;
@@ -54,9 +66,11 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.iceberg.IcebergApiConverter.getBucketSourceIdWithBucketNum;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
@@ -82,7 +96,7 @@ public class IcebergTable extends Table {
 
     private org.apache.iceberg.Table nativeTable; // actual iceberg table
     private List<Column> partitionColumns;
-
+    private Optional<Boolean> hasBucketProperties = Optional.empty();
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     public IcebergTable() {
@@ -267,7 +281,7 @@ public class IcebergTable extends Table {
 
     public List<String> getPartitionColumnNamesWithTransform() {
         PartitionSpec partitionSpec = getNativeTable().spec();
-        return IcebergApiConverter.toPartitionFields(partitionSpec);
+        return IcebergApiConverter.toPartitionFields(partitionSpec, false);
     }
 
     @Override
@@ -295,6 +309,44 @@ public class IcebergTable extends Table {
                 .filter(field -> nativeTable.schema().findColumnName(field.sourceId()).equalsIgnoreCase(colName))
                 .findFirst()
                 .orElse(null);
+    }
+
+    public boolean hasBucketProperties() {
+        if (hasBucketProperties.isEmpty()) {
+            if (getNativeTable().specs().size() != 1) {
+                hasBucketProperties = Optional.of(false);
+            } else {
+                PartitionSpec spec = getNativeTable().spec();
+                hasBucketProperties = Optional.of(spec.isPartitioned() && Partitioning.hasBucketField(spec));
+            }
+        }
+
+        return hasBucketProperties.get();
+    }
+
+    public List<BucketProperty> getBucketProperties() {
+        if (!hasBucketProperties()) {
+            return Lists.newArrayList();
+        }
+
+        List<BucketProperty> bucketProperties = new ArrayList<>();
+        List<Pair<Integer, Integer>> bucketSourceIdWithBucketNums = getBucketSourceIdWithBucketNum(getNativeTable().spec());
+
+        for (Pair<Integer, Integer> bucket : bucketSourceIdWithBucketNums) {
+            Column column = getColumn(nativeTable.schema().findColumnName(bucket.first));
+            if (!bucketPropertySupported(column.getType())) {
+                continue;
+            }
+            bucketProperties.add(new BucketProperty(TBucketFunction.MURMUR3_X86_32, bucket.second, column));
+        }
+
+        return bucketProperties;
+    }
+
+    private boolean bucketPropertySupported(Type columnType) {
+        //other type such as decimal/date/timestamp are merely used as bucket partition column,
+        // and the storage is very different from StarRocks, it's cumbersome to calc hash value
+        return columnType.isInt() || columnType.isBigint() || columnType.isBinaryType() || columnType.isVarchar();
     }
 
     public org.apache.iceberg.Table getNativeTable() {
@@ -326,6 +378,71 @@ public class IcebergTable extends Table {
 
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
+        if (comment == null || !comment.equals(EQUALITY_DELETE_TABLE_COMMENT)) {
+            List<String> exprStr = IcebergApiConverter.toPartitionFields(nativeTable.spec(), true);
+            List<Expr> partitionExprs = exprStr.stream()
+                    .map(expr -> {
+                        if (expr.startsWith(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "void")) {
+                            return (Expr) new NullLiteral();
+                        } else {
+                            return ColumnIdExpr.fromSql(expr).getExpr();
+                        }
+                    }).collect(Collectors.toList());
+            for (Expr expr : partitionExprs) {
+                List<SlotRef> slotRefs = Lists.newArrayList();
+                expr.collect(SlotRef.class, slotRefs);
+                for (SlotRef slotRef : slotRefs) {
+                    Boolean found = false;
+                    for (int i = 0; !found && i < fullSchema.size(); i++) {
+                        Column column = fullSchema.get(i);
+                        if (column.getName().equalsIgnoreCase(slotRef.getColumnName())) {
+                            found = true;
+                            if (expr instanceof FunctionCallExpr) {
+                                Type[] args;
+                                if (((FunctionCallExpr) expr).getParams().exprs().size() == 2) {
+                                    args = new Type[] {column.getType(), Type.INT};
+                                    if (expr.getChild(1) instanceof IntLiteral) {
+                                        expr.getChild(1).setType(Type.INT);
+                                    } else {
+                                        throw new SemanticException("Unsupported function call %s", expr.toString());
+                                    }
+                                } else if (((FunctionCallExpr) expr).getParams().exprs().size() == 1) {
+                                    args = new Type[] {column.getType()};
+                                } else {
+                                    throw new SemanticException("Unsupported function call %s", expr.toString());
+                                }
+                                Function builtinFunction = Expr.getBuiltinFunction(
+                                        ((FunctionCallExpr) expr).getFnName().getFunction(), 
+                                                args, Function.CompareMode.IS_IDENTICAL);
+                                ((FunctionCallExpr) expr).setFn(builtinFunction);
+                                
+                                if (((FunctionCallExpr) expr).getFnName().getFunction().equals(
+                                        FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "truncate")) {
+                                    ((FunctionCallExpr) expr).setType(column.getType());
+                                } else {
+                                    ((FunctionCallExpr) expr).setType(builtinFunction.getReturnType());
+                                }
+                            }
+                        }
+                    }
+                    if (!found) {
+                        throw new StarRocksConnectorException("Cannot find column %s in table %s",
+                                slotRef.getColumnName(), getTableIdentifier());
+                    }
+                }
+            }
+            List<TIcebergPartitionInfo> partitionInfos = Lists.newArrayList();
+            for (int i = 0; i < partitionExprs.size(); i++) {
+                TIcebergPartitionInfo partInfo = new TIcebergPartitionInfo();
+                partInfo.setSource_column_name(nativeTable.schema()
+                        .findColumnName(nativeTable.spec().fields().get(i).sourceId()));
+                partInfo.setPartition_column_name(nativeTable.spec().fields().get(i).name());
+                partInfo.setTransform_expr(nativeTable.spec().fields().get(i).transform().toString());
+                partInfo.setPartition_expr(partitionExprs.get(i).treeToThrift());
+                partitionInfos.add(partInfo);
+            }
+            tIcebergTable.setPartition_info(partitionInfos);
+        }
 
         if (!partitions.isEmpty()) {
             TPartitionMap tPartitionMap = new TPartitionMap();

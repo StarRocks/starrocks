@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 50
-sidebar_label: Feature Support
+sidebar_label: 機能サポート
 ---
 
 # 機能サポート: 非同期マテリアライズドビュー
@@ -48,7 +48,7 @@ sidebar_label: Feature Support
 
 | プロパティ                           | 説明                                                                                                                              | サポートバージョン |
 |:-----------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------|:---------------------|
-| `session.<property_name>`          | マテリアライズドビュー構築に使用されるセッション変数のプレフィックス。例: `session.query_timeout` や `session.query_mem_limit`。 | v3.0+                |
+| `session.<property_name>`          | マテリアライズドビュー構築に使用されるセッション変数のプレフィックス。例: `session.insert_timeout` や `session.query_mem_limit`。 | v3.4+                |
 | auto_refresh_partitions_limit      | 自動リフレッシュがトリガーされるたびにリフレッシュされるマテリアライズドビューパーティションの最大数。                              | v2.5+                |
 | excluded_trigger_tables            | マテリアライズドビューの自動リフレッシュをトリガーしないベーステーブル。                                                      | v2.5+                |
 | partition_refresh_number           | リフレッシュタスクがバッチで実行されるときに、各バッチでリフレッシュされるパーティションの数。                                         | v2.5+                |

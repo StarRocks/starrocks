@@ -48,7 +48,7 @@ import java.lang.reflect.Type;
  *
  */
 public class SRMetaBlockReaderV2 implements SRMetaBlockReader {
-    private static final Logger LOG = LogManager.getLogger(SRMetaBlockReaderV1.class);
+    private static final Logger LOG = LogManager.getLogger(SRMetaBlockReaderV2.class);
 
     private final JsonReader jsonReader;
     private int numJsonRead;

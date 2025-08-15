@@ -34,7 +34,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
@@ -78,10 +77,6 @@ public class InformationFunction extends Expr {
     @Override
     public Expr clone() {
         return new InformationFunction(this);
-    }
-
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
     public String getFuncType() {

@@ -1,0 +1,58 @@
+-- name: test_mv_with_schema_change_column_rename
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `duplicate_table_with_null_partition` (
+  `k1` date,
+  `k2` datetime,
+  `k3` char(20),
+  `k4` varchar(20),
+  `k5` boolean,
+  `k6` tinyint
+)
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+PARTITION BY RANGE(`k1`)
+(
+  PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+  PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+  PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3;
+
+INSERT INTO duplicate_table_with_null_partition VALUES
+  ("2020-06-23","2020-06-23 00:00:00","beijing","haidian",-1,-128),
+  ("2020-07-23","2020-07-23 00:00:00","shanghai","pudong",0,0),
+  ("2020-07-23","2020-07-24 00:00:00","shanghai1","pudong1",1,1),
+  ("2020-08-23","2020-08-23 00:00:00","xian","zhonglou",1,127),
+  (NULL,NULL,NULL,NULL,NULL,NULL);
+
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY k1 
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH ASYNC 
+AS SELECT k1, count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition GROUP BY k1;
+
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition GROUP BY k1;", "test_mv1")
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'test_mv1' and TABLE_SCHEMA='db_${uuid0}';
+SELECT k1, count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition GROUP BY k1 ORDER BY k1;
+
+alter table duplicate_table_with_null_partition rename column k1 to k11;
+[UC]REFRESH MATERIALIZED VIEW test_mv1 with sync mode;
+function: print_hit_materialized_view("SELECT count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition", "test_mv1")
+SELECT count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition ORDER BY count_datetime, min_char, max_varchar, sum_boolean, avg_tinyint;
+
+INSERT INTO duplicate_table_with_null_partition VALUES ("2020-06-24","2020-06-23 00:00:00","beijing","haidian",-1,-128);
+[UC]REFRESH MATERIALIZED VIEW test_mv1 with sync mode;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'test_mv1' and TABLE_SCHEMA='db_${uuid0}';
+
+alter table duplicate_table_with_null_partition rename column k11 to k1;
+
+INSERT INTO duplicate_table_with_null_partition VALUES ("2020-06-24","2020-06-23 00:00:00","beijing","haidian",-1,-128);
+[UC]REFRESH MATERIALIZED VIEW test_mv1 with sync mode;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'test_mv1' and TABLE_SCHEMA='db_${uuid0}';
+
+function: print_hit_materialized_view("SELECT k1, count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition GROUP BY k1;", "test_mv1")
+SELECT k1, count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition GROUP BY k1 ORDER BY k1;
+
+drop database db_${uuid0} force;

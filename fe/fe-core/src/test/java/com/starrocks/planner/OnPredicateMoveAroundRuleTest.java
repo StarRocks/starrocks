@@ -17,7 +17,7 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -49,7 +49,7 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         int numOfPredicate = (int) Arrays.stream(plan.split("\n"))
                 .filter(ln -> Pattern.compile("PREDICATES").matcher(ln).find()).count();
-        Assert.assertEquals(plan, expect, numOfPredicate);
+        Assertions.assertEquals(expect, numOfPredicate, plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")

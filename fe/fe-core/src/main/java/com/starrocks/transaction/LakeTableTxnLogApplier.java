@@ -14,15 +14,18 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -79,12 +82,11 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
 
-            // lake rollup will lead to version not continuously,
-            // just ingore check for now
-            // or we can persist a mocked transactionState.
             // The version of a replication transaction may not continuously
-            //Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
-            //        || version == partition.getVisibleVersion() + 1);
+            Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                    || txnState.isVersionOverwrite()
+                    || partitionCommitInfo.isDoubleWrite()
+                    || version == partition.getVisibleVersion() + 1);
 
             partition.updateVisibleVersion(version, versionTime);
             if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
@@ -98,8 +100,12 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             PartitionIdentifier partitionIdentifier =
                     new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                boolean isPartialSuccess = false;
+                if (txnState.getTxnCommitAttachment() != null) {
+                    isPartialSuccess = ((CompactionTxnCommitAttachment) txnState.getTxnCommitAttachment()).getForceCommit();
+                }
                 compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime, compactionScore,
-                        txnState.getTransactionId());
+                        txnState.getTransactionId(), isPartialSuccess);
             } else {
                 compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
             }
@@ -115,6 +121,11 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
             }
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
+        }
+
+        if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            warehouseManager.recordWarehouseInfoForTable(tableId, txnState.getComputeResource());
         }
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {

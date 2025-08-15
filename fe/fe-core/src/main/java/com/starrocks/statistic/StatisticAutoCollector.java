@@ -16,7 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
@@ -35,6 +35,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -42,6 +43,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticAutoCollector.class);
 
     private static final StatisticExecutor STATISTIC_EXECUTOR = new StatisticExecutor();
+    public static final String DEFAULT_JOB_FLAG = "default_job_flag";
 
     public StatisticAutoCollector() {
         super("AutoStatistic", Config.statistic_collect_interval_sec * 1000);
@@ -64,6 +66,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
 
         // check statistic table state
         if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            LOG.warn("Statistic table state check failed, skip auto collection");
             return;
         }
 
@@ -85,6 +88,9 @@ public class StatisticAutoCollector extends FrontendDaemon {
 
         LOG.info("auto collect statistic on analyze job[{}] start", analyzeJobIds);
         for (NativeAnalyzeJob nativeAnalyzeJob : allNativeAnalyzeJobs) {
+            if (nativeAnalyzeJob.isDefaultJob() && !Config.enable_auto_collect_statistics) {
+                continue;
+            }
             List<StatisticsCollectJob> jobs = nativeAnalyzeJob.instantiateJobs();
             result.addAll(jobs);
             ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
@@ -110,7 +116,6 @@ public class StatisticAutoCollector extends FrontendDaemon {
             }
             LOG.info("auto collect external statistic on analyze job[{}] end", jobIds);
         }
-
         return result;
     }
 
@@ -131,7 +136,11 @@ public class StatisticAutoCollector extends FrontendDaemon {
         }
 
         NativeAnalyzeJob job = createDefaultJobAnalyzeAll();
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeJob(job);
+        try {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeJob(job);
+        } catch (AlreadyExistsException e) {
+            LOG.info("analyze job already exists");
+        }
     }
 
     /**
@@ -141,7 +150,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
         AnalyzeType analyzeType = Config.enable_collect_full_statistic ? AnalyzeType.FULL : AnalyzeType.SAMPLE;
         return new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID,
                 Collections.emptyList(), Collections.emptyList(), analyzeType, ScheduleType.SCHEDULE,
-                Maps.newHashMap(), ScheduleStatus.PENDING, LocalDateTime.MIN);
+                Map.of(DEFAULT_JOB_FLAG, "true"), ScheduleStatus.PENDING, LocalDateTime.MIN);
     }
 
     /**

@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "agent/master_info.h"
+#include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
@@ -29,6 +30,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
+#include "util/defer_op.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 
@@ -83,7 +85,7 @@ QueryContext::~QueryContext() noexcept {
     }
 }
 
-void QueryContext::count_down_fragments() {
+void QueryContext::count_down_fragments(QueryContextManager* query_context_mgr) {
     size_t old = _num_active_fragments.fetch_sub(1);
     DCHECK_GE(old, 1);
     bool all_fragments_finished = old == 1;
@@ -93,13 +95,17 @@ void QueryContext::count_down_fragments() {
 
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = shared_query_trace();
-    ExecEnv::GetInstance()->query_context_mgr()->remove(_query_id);
+    query_context_mgr->remove(_query_id);
     // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
     // considering that this feature is generally used for debugging,
     // I think it should not have a big impact now
     if (query_trace != nullptr) {
         (void)query_trace->dump();
     }
+}
+
+void QueryContext::count_down_fragments() {
+    return this->count_down_fragments(ExecEnv::GetInstance()->query_context_mgr());
 }
 
 FragmentContextManager* QueryContext::fragment_mgr() {
@@ -110,7 +116,7 @@ void QueryContext::cancel(const Status& status, bool cancelled_by_fe) {
     _is_cancelled = true;
     if (cancelled_by_fe) {
         // only update when confirm cancelled from fe
-        _cancelled_by_fe = true;
+        set_cancelled_by_fe();
     }
     if (_cancelled_status.load() != nullptr) {
         return;
@@ -227,7 +233,7 @@ std::shared_ptr<QueryStatisticsRecvr> QueryContext::maintained_query_recv() {
     return _sub_plan_query_statistics_recvr;
 }
 
-std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
+std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic(int64_t delta_transmitted_bytes) {
     auto query_statistic = std::make_shared<QueryStatistics>();
     // Not transmit delta if it's the final sink
     if (_is_final_sink) {
@@ -236,6 +242,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
 
     query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
     query_statistic->add_mem_costs(mem_cost_bytes());
+    query_statistic->add_transmitted_bytes(delta_transmitted_bytes);
     {
         std::lock_guard l(_scan_stats_lock);
         for (const auto& [table_id, scan_stats] : _scan_stats) {
@@ -262,6 +269,7 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
     res->add_spill_bytes(get_spill_bytes());
+    res->add_transmitted_bytes(get_transmitted_bytes());
 
     {
         std::lock_guard l(_scan_stats_lock);
@@ -387,7 +395,8 @@ QueryContextManager::~QueryContextManager() {
         return query_ctx->get_cancelled_status();           \
     }
 
-StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& query_id) {
+StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& query_id,
+                                                             bool return_error_if_not_exist) {
     size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
@@ -414,12 +423,26 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
             // lookup query context for the second chance in sc_map
             if (sc_it != sc_map.end()) {
                 auto ctx = std::move(sc_it->second);
-                sc_map.erase(sc_it);
-                RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(ctx);
                 auto* raw_ctx_ptr = ctx.get();
-                context_map.emplace(query_id, std::move(ctx));
+                sc_map.erase(sc_it);
+                auto cancel_status = [ctx]() -> Status {
+                    RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(ctx);
+                    return Status::OK();
+                }();
+                // If there are still active fragments, we cannot directly remove the query context
+                // because the operator is still executing.
+                // We need to wait until the fragment execution is complete,
+                // then call QueryContextManager::remove to safely remove this query context.
+                if (cancel_status.ok() || !ctx->has_no_active_instances()) {
+                    context_map.emplace(query_id, std::move(ctx));
+                }
+                RETURN_IF_ERROR(cancel_status);
                 return raw_ctx_ptr;
             }
+        }
+
+        if (return_error_if_not_exist) {
+            return Status::Cancelled("Query terminates prematurely");
         }
 
         // finally, find no query contexts, so create a new one

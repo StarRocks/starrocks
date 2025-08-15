@@ -17,6 +17,7 @@ package com.starrocks.qe.scheduler.dag;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.JoinNode;
@@ -27,6 +28,7 @@ import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SetOperationNode;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.FragmentScanRangeAssignment;
@@ -84,6 +86,8 @@ public class ExecutionFragment {
     private Boolean cachedIsColocated = null;
     private Boolean cachedIsReplicated = null;
     private Boolean cachedIsLocalBucketShuffleJoin = null;
+
+    private Boolean cachedIsColocateSet = null;
 
     private boolean isRightOrFullBucketShuffle = false;
     // used for phased schedule
@@ -164,10 +168,19 @@ public class ExecutionFragment {
         return colocatedAssignment;
     }
 
-    public ColocatedBackendSelector.Assignment getOrCreateColocatedAssignment(OlapScanNode scanNode) {
+    public ColocatedBackendSelector.Assignment getOrCreateColocatedAssignment(ScanNode scanNode)
+            throws StarRocksException {
         if (colocatedAssignment == null) {
-            final int numOlapScanNodes = scanNodes.values().stream().mapToInt(node -> node instanceof OlapScanNode ? 1 : 0).sum();
-            colocatedAssignment = new ColocatedBackendSelector.Assignment(scanNode, numOlapScanNodes);
+            final int numScanNodes = scanNodes.size();
+            ColocatedBackendSelector.Assignment.ScanRangeType type;
+            if (scanNode instanceof OlapScanNode olapScanNode) {
+                type = ColocatedBackendSelector.Assignment.ScanRangeType.NATIVE;
+            } else {
+                type = ColocatedBackendSelector.Assignment.ScanRangeType.NONNATIVE;
+            }
+
+            int bucketNum = scanNode.getBucketNums();
+            colocatedAssignment = new ColocatedBackendSelector.Assignment(bucketNum, numScanNodes, type);
         }
         return colocatedAssignment;
     }
@@ -307,6 +320,23 @@ public class ExecutionFragment {
 
         cachedIsLocalBucketShuffleJoin = isLocalBucketShuffleJoin(planFragment.getPlanRoot());
         return cachedIsLocalBucketShuffleJoin;
+    }
+
+    private boolean isColocateSet(PlanNode root) {
+        if (root instanceof ExchangeNode) {
+            return false;
+        }
+        if (root instanceof SetOperationNode) {
+            return root.isColocate();
+        }
+        return root.getChildren().stream().anyMatch(this::isColocateSet);
+    }
+
+    public boolean isColocateSet() {
+        if (cachedIsColocateSet == null) {
+            cachedIsColocateSet = isColocateSet(planFragment.getPlanRoot());
+        }
+        return cachedIsColocateSet;
     }
 
     public boolean isRightOrFullBucketShuffle() {

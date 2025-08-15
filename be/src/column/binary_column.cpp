@@ -14,6 +14,8 @@
 
 #include "column/binary_column.h"
 
+#include "column/column_view/column_view.h"
+
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
@@ -30,7 +32,6 @@
 #include "util/raw_container.h"
 
 namespace starrocks {
-
 template <typename T>
 void BinaryColumnBase<T>::check_or_die() const {
     CHECK_EQ(_bytes.size(), _offsets.back());
@@ -83,6 +84,10 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
 
 template <typename T>
 void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    if (src.is_binary_view()) {
+        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        return;
+    }
     const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     const auto& src_offsets = src_column.get_offset();
     const auto& src_bytes = src_column.get_bytes();
@@ -313,6 +318,54 @@ bool BinaryColumnBase<T>::append_continuous_fixed_length_strings(const char* dat
         *(off_data++) = static_cast<T>(bytes_size);
     }
     return true;
+}
+
+template <typename T>
+void BinaryColumnBase<T>::append_bytes(char* const* data, uint32_t* length, size_t size) {
+    for (size_t i = 0; i < size; i++) {
+        _bytes.insert(_bytes.end(), data[i], data[i] + length[i]);
+    }
+    _slices_cache = false;
+}
+
+template <typename T, size_t copy_length>
+void append_bytes_fixed_length(char* const* data, const uint32_t* lengths, size_t data_size, Bytes* bytes,
+                               const typename BinaryColumnBase<T>::Offsets& offsets) __attribute__((noinline));
+
+template <typename T, size_t copy_length>
+__attribute__((noinline)) void append_bytes_fixed_length(char* const* data, const uint32_t* lengths, size_t data_size,
+                                                         Bytes* bytes,
+                                                         const typename BinaryColumnBase<T>::Offsets& offsets) {
+    size_t length = offsets.size();
+    size_t byte_sizes = offsets[length - 1];
+
+    size_t offset = bytes->size();
+    bytes->resize(byte_sizes + copy_length);
+
+    for (size_t i = 0; i < data_size; ++i) {
+        memcpy(&(*bytes)[offset], data[i], copy_length);
+        offset += lengths[i];
+    }
+
+    bytes->resize(offset);
+}
+
+template <typename T>
+void BinaryColumnBase<T>::append_bytes_overflow(char* const* data, uint32_t* lengths, size_t size, size_t max_length) {
+    if (max_length <= 8) {
+        append_bytes_fixed_length<T, 8>(data, lengths, size, &_bytes, _offsets);
+    } else if (max_length <= 16) {
+        append_bytes_fixed_length<T, 16>(data, lengths, size, &_bytes, _offsets);
+    } else if (max_length <= 32) {
+        append_bytes_fixed_length<T, 32>(data, lengths, size, &_bytes, _offsets);
+    } else if (max_length <= 64) {
+        append_bytes_fixed_length<T, 64>(data, lengths, size, &_bytes, _offsets);
+    } else if (max_length <= 128) {
+        append_bytes_fixed_length<T, 128>(data, lengths, size, &_bytes, _offsets);
+    } else {
+        append_bytes(data, lengths, size);
+    }
+    _slices_cache = false;
 }
 
 template <typename T>
@@ -629,8 +682,8 @@ void BinaryColumnBase<T>::deserialize_and_append_batch_nullable(Buffer<Slice>& s
                                          ? 4
                                          : *((uint32_t*)(srcs[0].data + sizeof(bool))); // first string size
     _bytes.reserve(chunk_size * string_size * 2);
-    ColumnFactory<Column, BinaryColumnBase<T>>::deserialize_and_append_batch_nullable(srcs, chunk_size, is_nulls,
-                                                                                      has_null);
+    ColumnFactory<Column, BinaryColumnBase<T> >::deserialize_and_append_batch_nullable(srcs, chunk_size, is_nulls,
+                                                                                       has_null);
 }
 
 template <typename T>
@@ -688,6 +741,14 @@ void BinaryColumnBase<T>::crc32_hash_selective(uint32_t* hashes, uint16_t* sel, 
         uint16_t idx = sel[i];
         hashes[idx] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[idx],
                                               static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]), hashes[idx]);
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::murmur_hash3_x86_32(uint32_t* hashes, uint32_t from, uint32_t to) const {
+    for (uint32_t i = from; i < to; ++i) {
+        hashes[i] = HashUtil::murmur_hash3_32(_bytes.data() + _offsets[i],
+                                              static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), 0);
     }
 }
 
@@ -882,5 +943,4 @@ Status BinaryColumnBase<T>::capacity_limit_reached() const {
 
 template class BinaryColumnBase<uint32_t>;
 template class BinaryColumnBase<uint64_t>;
-
 } // namespace starrocks

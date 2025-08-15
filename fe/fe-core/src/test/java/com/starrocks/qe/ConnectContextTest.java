@@ -41,6 +41,7 @@ import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -49,11 +50,15 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.xnio.StreamConnection;
 
 import java.util.List;
@@ -70,7 +75,7 @@ public class ConnectContextTest {
 
     private VariableMgr variableMgr = new VariableMgr();
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         new Expectations() {
             {
@@ -97,77 +102,72 @@ public class ConnectContextTest {
         ConnectContext ctx = new ConnectContext(connection);
 
         // State
-        Assert.assertNotNull(ctx.getState());
+        Assertions.assertNotNull(ctx.getState());
 
         // Capability
-        Assert.assertEquals(MysqlCapability.DEFAULT_CAPABILITY, ctx.getServerCapability());
+        Assertions.assertEquals(MysqlCapability.DEFAULT_CAPABILITY, ctx.getServerCapability());
         ctx.setCapability(new MysqlCapability(10));
-        Assert.assertEquals(new MysqlCapability(10), ctx.getCapability());
+        Assertions.assertEquals(new MysqlCapability(10), ctx.getCapability());
 
         // Kill flag
-        Assert.assertFalse(ctx.isKilled());
+        Assertions.assertFalse(ctx.isKilled());
         ctx.setKilled();
-        Assert.assertTrue(ctx.isKilled());
+        Assertions.assertTrue(ctx.isKilled());
 
         // Current db
-        Assert.assertEquals("", ctx.getDatabase());
+        Assertions.assertEquals("", ctx.getDatabase());
         ctx.setDatabase("testCluster:testDb");
-        Assert.assertEquals("testCluster:testDb", ctx.getDatabase());
+        Assertions.assertEquals("testCluster:testDb", ctx.getDatabase());
 
         // User
         ctx.setQualifiedUser("testCluster:testUser");
-        Assert.assertEquals("testCluster:testUser", ctx.getQualifiedUser());
+        Assertions.assertEquals("testCluster:testUser", ctx.getQualifiedUser());
 
         // Serializer
-        Assert.assertNotNull(ctx.getSerializer());
+        Assertions.assertNotNull(ctx.getSerializer());
 
         // Session variable
-        Assert.assertNotNull(ctx.getSessionVariable());
-
-        // connect scheduler
-        Assert.assertNull(ctx.getConnectScheduler());
-        ctx.setConnectScheduler(connectScheduler);
-        Assert.assertNotNull(ctx.getConnectScheduler());
+        Assertions.assertNotNull(ctx.getSessionVariable());
 
         // connection id
         ctx.setConnectionId(101);
-        Assert.assertEquals(101, ctx.getConnectionId());
+        Assertions.assertEquals(101, ctx.getConnectionId());
 
         // set connect start time to now
         ctx.resetConnectionStartTime();
 
         // command
         ctx.setCommand(MysqlCommand.COM_PING);
-        Assert.assertEquals(MysqlCommand.COM_PING, ctx.getCommand());
+        Assertions.assertEquals(MysqlCommand.COM_PING, ctx.getCommand());
 
         // Thread info
-        Assert.assertNotNull(ctx.toThreadInfo());
+        Assertions.assertNotNull(ctx.toThreadInfo());
         long currentTimeMillis = System.currentTimeMillis();
         List<String> row = ctx.toThreadInfo().toRow(currentTimeMillis, false);
-        Assert.assertEquals(10, row.size());
-        Assert.assertEquals("101", row.get(0));
-        Assert.assertEquals("testUser", row.get(1));
-        Assert.assertEquals("127.0.0.1:12345", row.get(2));
-        Assert.assertEquals("testDb", row.get(3));
-        Assert.assertEquals("Ping", row.get(4));
-        Assert.assertEquals(TimeUtils.longToTimeString(ctx.getConnectionStartTime()), row.get(5));
-        Assert.assertEquals(Long.toString((currentTimeMillis - ctx.getConnectionStartTime()) / 1000), row.get(6));
-        Assert.assertEquals("OK", row.get(7));
-        Assert.assertEquals("", row.get(8));
-        Assert.assertEquals("false", row.get(9));
+        Assertions.assertEquals(12, row.size());
+        Assertions.assertEquals("101", row.get(0));
+        Assertions.assertEquals("testUser", row.get(1));
+        Assertions.assertEquals("127.0.0.1:12345", row.get(2));
+        Assertions.assertEquals("testDb", row.get(3));
+        Assertions.assertEquals("Ping", row.get(4));
+        Assertions.assertEquals(TimeUtils.longToTimeString(ctx.getConnectionStartTime()), row.get(5));
+        Assertions.assertEquals(Long.toString((currentTimeMillis - ctx.getConnectionStartTime()) / 1000), row.get(6));
+        Assertions.assertEquals("OK", row.get(7));
+        Assertions.assertEquals("", row.get(8));
+        Assertions.assertEquals("false", row.get(9));
+        Assertions.assertEquals("default_warehouse", row.get(10));
+        Assertions.assertEquals("", row.get(11));
 
         // Start time
         ctx.setStartTime();
-        Assert.assertNotSame(0, ctx.getStartTime());
+        Assertions.assertNotSame(0, ctx.getStartTime());
 
         // query id
         ctx.setExecutionId(new TUniqueId(100, 200));
-        Assert.assertEquals(new TUniqueId(100, 200), ctx.getExecutionId());
+        Assertions.assertEquals(new TUniqueId(100, 200), ctx.getExecutionId());
 
         // GlobalStateMgr
-        Assert.assertNull(ctx.getGlobalStateMgr());
-        ctx.setGlobalStateMgr(globalStateMgr);
-        Assert.assertNotNull(ctx.getGlobalStateMgr());
+        Assertions.assertNotNull(ctx.getGlobalStateMgr());
 
         // clean up
         ctx.cleanup();
@@ -180,22 +180,22 @@ public class ConnectContextTest {
 
         // sleep no time out
         ctx.setStartTime();
-        Assert.assertFalse(ctx.isKilled());
+        Assertions.assertFalse(ctx.isKilled());
         long now = ctx.getStartTime() + ctx.getSessionVariable().getWaitTimeoutS() * 1000 - 1;
         ctx.checkTimeout(now);
-        Assert.assertFalse(ctx.isKilled());
+        Assertions.assertFalse(ctx.isKilled());
 
         // Timeout
         ctx.setStartTime();
         now = ctx.getStartTime() + ctx.getSessionVariable().getWaitTimeoutS() * 1000 + 1;
         ctx.checkTimeout(now);
-        Assert.assertTrue(ctx.isKilled());
+        Assertions.assertTrue(ctx.isKilled());
 
         // Kill
         ctx.kill(true, "sleep time out");
-        Assert.assertTrue(ctx.isKilled());
+        Assertions.assertTrue(ctx.isKilled());
         ctx.kill(false, "sleep time out");
-        Assert.assertTrue(ctx.isKilled());
+        Assertions.assertTrue(ctx.isKilled());
 
         // clean up
         ctx.cleanup();
@@ -211,19 +211,19 @@ public class ConnectContextTest {
         ctx.setExecutor(executor);
 
         // query no time out
-        Assert.assertFalse(ctx.isKilled());
+        Assertions.assertFalse(ctx.isKilled());
         long now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 - 1;
         ctx.checkTimeout(now);
-        Assert.assertFalse(ctx.isKilled());
+        Assertions.assertFalse(ctx.isKilled());
 
         // Timeout
         now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 + 1;
         ctx.checkTimeout(now);
-        Assert.assertFalse(ctx.isKilled());
+        Assertions.assertFalse(ctx.isKilled());
 
         // Kill
         ctx.kill(true, "query timeout");
-        Assert.assertTrue(ctx.isKilled());
+        Assertions.assertTrue(ctx.isKilled());
 
         // clean up
         ctx.cleanup();
@@ -240,19 +240,19 @@ public class ConnectContextTest {
         ctx.setExecutor(executor);
 
         // insert no time out
-        Assert.assertFalse(ctx.isKilled());
+        Assertions.assertFalse(ctx.isKilled());
         long now = ctx.getStartTime() + ctx.getSessionVariable().getInsertTimeoutS() * 1000 - 1;
         ctx.checkTimeout(now);
-        Assert.assertFalse(ctx.isKilled());
+        Assertions.assertFalse(ctx.isKilled());
 
         // Timeout
         now = ctx.getStartTime() + ctx.getSessionVariable().getInsertTimeoutS() * 1000 + 1;
         ctx.checkTimeout(now);
-        Assert.assertFalse(ctx.isKilled());
+        Assertions.assertFalse(ctx.isKilled());
 
         // Kill
         ctx.kill(true, "insert timeout");
-        Assert.assertTrue(ctx.isKilled());
+        Assertions.assertTrue(ctx.isKilled());
 
         // clean up
         ctx.cleanup();
@@ -261,10 +261,10 @@ public class ConnectContextTest {
     @Test
     public void testThreadLocal() {
         ConnectContext ctx = new ConnectContext(connection);
-        Assert.assertNull(ConnectContext.get());
+        Assertions.assertNull(ConnectContext.get());
         ctx.setThreadLocalInfo();
-        Assert.assertNotNull(ConnectContext.get());
-        Assert.assertEquals(ctx, ConnectContext.get());
+        Assertions.assertNotNull(ConnectContext.get());
+        Assertions.assertEquals(ctx, ConnectContext.get());
     }
 
     @Test
@@ -285,10 +285,10 @@ public class ConnectContextTest {
         ConnectContext ctx = new ConnectContext(connection);
         ctx.setGlobalStateMgr(globalStateMgr);
         ctx.setCurrentWarehouse("wh1");
-        Assert.assertEquals("wh1", ctx.getCurrentWarehouseName());
+        Assertions.assertEquals("wh1", ctx.getCurrentWarehouseName());
 
         ctx.setCurrentWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, ctx.getCurrentWarehouseId());
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, ctx.getCurrentWarehouseId());
     }
 
     @Test
@@ -300,12 +300,12 @@ public class ConnectContextTest {
         {
             ctx.setErrorCodeOnce(status.getErrorCodeString());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-            Assert.assertEquals("MEM_LIMIT_EXCEEDED", ctx.getNormalizedErrorCode());
+            Assertions.assertEquals("MEM_LIMIT_EXCEEDED", ctx.getNormalizedErrorCode());
         }
 
         {
             ctx.resetErrorCode();
-            Assert.assertEquals("ANALYSIS_ERR", ctx.getNormalizedErrorCode());
+            Assertions.assertEquals("ANALYSIS_ERR", ctx.getNormalizedErrorCode());
         }
     }
 
@@ -317,10 +317,157 @@ public class ConnectContextTest {
 
         Thread.sleep(100);
 
-        Assert.assertTrue(context.isIdleLastFor(99));
+        Assertions.assertTrue(context.isIdleLastFor(99));
 
         context.setCommand(MysqlCommand.COM_QUERY);
         context.setStartTime();
-        Assert.assertFalse(context.isIdleLastFor(99));
+        Assertions.assertFalse(context.isIdleLastFor(99));
+    }
+
+    @Test
+    public void testQueryTimeoutWithPendingTime() {
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setCommand(MysqlCommand.COM_QUERY);
+        ctx.setThreadLocalInfo();
+
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        ctx.setExecutor(executor);
+
+        // query no time out
+        Assertions.assertFalse(ctx.isKilled());
+
+        long now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 - 1;
+        Assertions.assertFalse(ctx.checkTimeout(now));
+        Assertions.assertFalse(ctx.isKilled());
+
+        // Timeout without pending time
+        now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 + 1;
+        Assertions.assertTrue(ctx.checkTimeout(now));
+        Assertions.assertFalse(ctx.isKilled());
+
+        // Timeout with pending time
+        int pendingTimeS = 300;
+        ctx.setPendingTimeSecond(pendingTimeS);
+        Assertions.assertTrue(ctx.getExecTimeout() == ctx.getSessionVariable().getQueryTimeoutS() + pendingTimeS);
+
+        now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 + 1;
+        Assertions.assertFalse(ctx.checkTimeout(now));
+        now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 + pendingTimeS * 1000 + 1;
+        Assertions.assertTrue(ctx.checkTimeout(now));
+
+        // Kill
+        ctx.kill(true, "query timeout");
+        Assertions.assertTrue(ctx.isKilled());
+
+        // clean up
+        ctx.cleanup();
+    }
+
+    @Test
+    public void getCurrentComputeResourceName_returnsEmptyStringWhenNotSharedDataMode() {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return false;
+            }
+        };
+        ConnectContext ctx = new ConnectContext();
+        Assertions.assertEquals("", ctx.getCurrentComputeResourceName());
+    }
+
+    @Test
+    public void getCurrentComputeResourceName_returnsEmptyStringWhenComputeResourceIsNull() {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        ConnectContext ctx = new ConnectContext();
+        ctx.setCurrentComputeResource(null);
+        Assertions.assertEquals("", ctx.getCurrentComputeResourceName());
+    }
+
+    @Test
+    public void getCurrentComputeResourceName_returnsResourceNameWhenComputeResourceIsSet(
+            @Mocked WarehouseManager warehouseManager) {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        new Expectations() {
+            {
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getComputeResourceName((ComputeResource) any);
+                minTimes = 0;
+                result = "testResource";
+            }
+        };
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setCurrentComputeResource(WarehouseComputeResource.of(0L));
+        Assertions.assertEquals("testResource", ctx.getCurrentComputeResourceName());
+    }
+
+    @Test
+    public void getCurrentComputeResourceNoAcquire_returnsDefaultResourceWhenNotSharedDataMode() {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return false;
+            }
+        };
+        ConnectContext ctx = new ConnectContext();
+        Assertions.assertEquals(WarehouseManager.DEFAULT_RESOURCE, ctx.getCurrentComputeResourceNoAcquire());
+    }
+
+    @Test
+    public void getCurrentComputeResourceNoAcquire_returnsNullWhenComputeResourceIsNotSet() {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        ConnectContext ctx = new ConnectContext();
+        ctx.setCurrentComputeResource(null);
+        Assertions.assertNull(ctx.getCurrentComputeResourceNoAcquire());
+    }
+
+    @Test
+    public void getCurrentComputeResourceNoAcquire_returnsComputeResourceWhenSet() {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        ConnectContext ctx = new ConnectContext();
+        ComputeResource resource = WarehouseComputeResource.of(1L);
+        ctx.setCurrentComputeResource(resource);
+        Assertions.assertEquals(resource, ctx.getCurrentComputeResourceNoAcquire());
+    }
+
+    @Test
+    public void testConnectContextNoGlobalStateMgrNPE() {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            connectContext = new ConnectContext();
+            // not set globalStateMgr
+            connectContext.setThreadLocalInfo();
+        }
+        // ConnectContext.get() should have non-nullable globalStateMgr even if forget to manually create the context
+        // without setting globalStateMgr explicitly
+        Assertions.assertNotNull(ConnectContext.get().getGlobalStateMgr());
+
+        connectContext = ConnectContext.get();
+        // set globalStateMgr explicitly
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        Assertions.assertNotNull(ConnectContext.get().getGlobalStateMgr());
     }
 }

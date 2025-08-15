@@ -34,16 +34,16 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
 public class MaterializedViewRuleTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lo_count_mv as " +
@@ -57,18 +57,18 @@ public class MaterializedViewRuleTest extends PlanTestBase {
     public void testMaterializedViewWithCountSelection() throws Exception {
         String sql = "select LO_ORDERDATE,count(LO_LINENUMBER) from lineorder_flat_for_mv group by LO_ORDERDATE;";
         ExecPlan plan = getExecPlan(sql);
-        Assert.assertTrue(plan != null);
-        Assert.assertEquals(1, plan.getScanNodes().size());
-        Assert.assertTrue(plan.getScanNodes().get(0) instanceof OlapScanNode);
+        Assertions.assertTrue(plan != null);
+        Assertions.assertEquals(1, plan.getScanNodes().size());
+        Assertions.assertTrue(plan.getScanNodes().get(0) instanceof OlapScanNode);
         OlapScanNode olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
         Long selectedIndexid = olapScanNode.getSelectedIndexId();
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         Database database = globalStateMgr.getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(database.getFullName(), "lineorder_flat_for_mv");
-        Assert.assertTrue(table instanceof OlapTable);
+        Assertions.assertTrue(table instanceof OlapTable);
         OlapTable baseTable = (OlapTable) table;
-        Assert.assertEquals(baseTable.getIndexIdByName("lo_count_mv"), selectedIndexid);
+        Assertions.assertEquals(baseTable.getIndexIdByName("lo_count_mv"), selectedIndexid);
     }
 
     @Test
@@ -85,7 +85,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         ExecPlan plan = getExecPlan(sql);
         OlapScanNode olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
         Long selectedIndexid = olapScanNode.getSelectedIndexId();
-        Assert.assertNotEquals(baseTable.getIndexIdByName("lo_count_key_mv"), selectedIndexid);
+        Assertions.assertNotEquals(baseTable.getIndexIdByName("lo_count_key_mv"), selectedIndexid);
     }
 
     @Test
@@ -116,7 +116,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         try {
             rewriter.rewrite(aggExpr, rewriteContext);
         } catch (NoSuchElementException e) {
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         }
 
         CallOperator countStar = new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList());
@@ -129,7 +129,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         try {
             rewriter2.rewrite(aggExpr2, rewriteContext);
         } catch (NoSuchElementException e) {
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         }
 
         CallOperator sumDs = new CallOperator(FunctionSet.SUM, Type.BIGINT, arguments);
@@ -142,7 +142,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         try {
             rewriter3.rewrite(aggExpr3, rewriteContext);
         } catch (NoSuchElementException e) {
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         }
     }
 }

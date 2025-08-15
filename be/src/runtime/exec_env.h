@@ -48,8 +48,8 @@
 #include "storage/options.h"
 #include "util/threadpool.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
-// Unnecssary includes will cause compilatio very slow.
-// So please consider use forward declaraion as much as possible.
+// Unnecessary includes will cause compilation very slow.
+// So please consider use forward declaration as much as possible.
 
 namespace starrocks {
 class AgentServer;
@@ -80,9 +80,6 @@ class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
 class QuerySpillManager;
-class BlockCache;
-class ObjectCache;
-class StoragePageCache;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -154,7 +151,6 @@ public:
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
     MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
-    MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker.get(); }
     MemTracker* passthrough_mem_tracker() { return _passthrough_mem_tracker.get(); }
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
@@ -165,9 +161,9 @@ public:
     std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
     std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
-    int64_t get_storage_page_cache_size();
-    int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
     static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
+
+    int64_t process_mem_limit() const { return _process_mem_tracker->limit(); }
 
 private:
     static bool _is_init;
@@ -223,7 +219,6 @@ private:
     // The memory tracker for update manager
     std::shared_ptr<MemTracker> _update_mem_tracker;
 
-    std::shared_ptr<MemTracker> _chunk_allocator_mem_tracker;
     // record mem usage in passthrough
     std::shared_ptr<MemTracker> _passthrough_mem_tracker;
 
@@ -240,34 +235,6 @@ private:
     std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
 
     std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
-};
-
-class CacheEnv {
-public:
-    static CacheEnv* GetInstance();
-
-    Status init(const std::vector<StorePath>& store_paths);
-    void destroy();
-
-    void try_release_resource_before_core_dump();
-
-    BlockCache* block_cache() const { return _block_cache.get(); }
-    ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
-    StoragePageCache* page_cache() const { return _page_cache.get(); }
-
-private:
-    Status _init_datacache();
-    Status _init_starcache_based_object_cache();
-    Status _init_lru_base_object_cache();
-    Status _init_page_cache();
-
-    GlobalEnv* _global_env;
-    std::vector<StorePath> _store_paths;
-
-    std::shared_ptr<BlockCache> _block_cache;
-    std::shared_ptr<ObjectCache> _starcache_based_object_cache;
-    std::shared_ptr<ObjectCache> _lru_based_object_cache;
-    std::shared_ptr<StoragePageCache> _page_cache;
 };
 
 // Execution environment for queries/plan fragments.
@@ -323,6 +290,7 @@ public:
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
     PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
     PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
+    PriorityThreadPool* datacache_rpc_pool() { return _datacache_rpc_pool; }
     ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
     ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
@@ -380,6 +348,8 @@ public:
 
     ThreadPool* delete_file_thread_pool();
 
+    ThreadPool* put_aggregate_metadata_thread_pool() { return _put_aggregate_metadata_thread_pool.get(); }
+
     void try_release_resource_before_core_dump();
 
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
@@ -410,6 +380,7 @@ private:
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
     PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
     PriorityThreadPool* _query_rpc_pool = nullptr;
+    PriorityThreadPool* _datacache_rpc_pool = nullptr;
     std::unique_ptr<ThreadPool> _load_rpc_pool;
     std::unique_ptr<ThreadPool> _dictionary_cache_pool;
     FragmentMgr* _fragment_mgr = nullptr;
@@ -448,6 +419,7 @@ private:
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
+    std::unique_ptr<ThreadPool> _put_aggregate_metadata_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;

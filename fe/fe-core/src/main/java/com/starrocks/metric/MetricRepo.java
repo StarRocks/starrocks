@@ -57,6 +57,7 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.load.batchwrite.MergeCommitMetricRegistry;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.routineload.KafkaProgress;
@@ -71,12 +72,16 @@ import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -163,6 +168,7 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("failed_stats_collect_job", MetricUnit.REQUESTS,
                             "the number of failed statistics collect jobs"));
 
+    public static LongCounterMetric COUNTER_SQL_BLOCK_HIT_COUNT;
 
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
     public static LongCounterMetric COUNTER_UNFINISHED_RESTORE_JOB;
@@ -188,6 +194,10 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_LAKE_SERVICE_RPC;
     public static LongCounterMetric COUNTER_BRPC_EXEC_PLAN_FRAGMENT;
     public static LongCounterMetric COUNTER_BRPC_EXEC_PLAN_FRAGMENT_ERROR;
+
+    // count file number and total size vacuumed for cloud native
+    public static LongCounterMetric COUNTER_VACUUM_FILES_NUMBER;
+    public static LongCounterMetric COUNTER_VACUUM_FILES_BYTES;
 
     public static Histogram HISTO_QUERY_LATENCY;
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
@@ -250,13 +260,10 @@ public final class MetricRepo {
             }
 
             for (JobState state : JobState.values()) {
-                GaugeMetric<Long> gauge = new GaugeMetric<Long>("job",
+                Metric<Long> gauge = new LeaderAwareGaugeMetricLong("job",
                         MetricUnit.NOUNIT, "job statistics") {
                     @Override
-                    public Long getValue() {
-                        if (!GlobalStateMgr.getCurrentState().isLeader()) {
-                            return 0L;
-                        }
+                    public Long getValueLeader() {
                         return loadManger.getLoadJobNum(state, jobType);
                     }
                 };
@@ -274,13 +281,10 @@ public final class MetricRepo {
                 continue;
             }
 
-            GaugeMetric<Long> gauge = new GaugeMetric<Long>("job",
+            Metric<Long> gauge = new LeaderAwareGaugeMetricLong("job",
                     MetricUnit.NOUNIT, "job statistics") {
                 @Override
-                public Long getValue() {
-                    if (!GlobalStateMgr.getCurrentState().isLeader()) {
-                        return 0L;
-                    }
+                public Long getValueLeader() {
                     if (jobType == AlterJobV2.JobType.SCHEMA_CHANGE) {
                         return alter.getSchemaChangeHandler()
                                 .getAlterJobV2Num(AlterJobV2.JobState.RUNNING);
@@ -321,39 +325,38 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
 
         // scheduled tablet num
-        GaugeMetric<Long> scheduledTabletNum = (GaugeMetric<Long>) new GaugeMetric<Long>(
+        Metric<Long> scheduledTabletNum = new LeaderAwareGaugeMetricLong(
                 "scheduled_tablet_num", MetricUnit.NOUNIT, "number of tablets being scheduled") {
             @Override
-            public Long getValue() {
-                if (!GlobalStateMgr.getCurrentState().isLeader()) {
-                    return 0L;
-                }
+            public Long getValueLeader() {
                 return (long) GlobalStateMgr.getCurrentState().getTabletScheduler().getTotalNum();
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(scheduledTabletNum);
 
         // routine load jobs
-        RoutineLoadMgr routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
-            GaugeMetric<Long> gauge = new GaugeMetric<Long>("routine_load_jobs",
+            Metric<Long> gauge = new LeaderAwareGaugeMetricLong("routine_load_jobs",
                     MetricUnit.NOUNIT, "routine load jobs") {
                 @Override
-                public Long getValue() {
+                public Long getValueLeader() {
+                    RoutineLoadMgr routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
                     if (null == routineLoadManger) {
                         return 0L;
+                    } else {
+                        return (long) routineLoadManger.getRoutineLoadJobByState(Sets.newHashSet(state)).size();
                     }
-                    return (long) routineLoadManger.getRoutineLoadJobByState(Sets.newHashSet(state)).size();
                 }
             };
             gauge.addLabel(new MetricLabel("state", state.name()));
             STARROCKS_METRIC_REGISTER.addMetric(gauge);
         }
 
-        GaugeMetric<Long> routineLoadUnstableJobsGauge = new GaugeMetric<Long>("routine_load_jobs",
+        Metric<Long> routineLoadUnstableJobsGauge = new LeaderAwareGaugeMetricLong("routine_load_jobs",
                 MetricUnit.NOUNIT, "routine load jobs") {
             @Override
-            public Long getValue() {
+            public Long getValueLeader() {
+                RoutineLoadMgr routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
                 if (null == routineLoadManger) {
                     return 0L;
                 }
@@ -462,6 +465,15 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(gaugeReportQueueSize);
+
+        GaugeMetric<Long> totalTabletCount = new GaugeMetric<Long>(
+                "tablet_count", MetricUnit.NOUNIT, "total tablet count") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(totalTabletCount);
 
         // 2. counter
         COUNTER_REQUEST_ALL = new LongCounterMetric("request_total", MetricUnit.REQUESTS, "total request");
@@ -573,6 +585,11 @@ public final class MetricRepo {
         COUNTER_UNFINISHED_RESTORE_JOB = new LongCounterMetric("unfinished_restore_job", MetricUnit.REQUESTS,
                 "current unfinished restore job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);
+
+        COUNTER_SQL_BLOCK_HIT_COUNT = new LongCounterMetric("sql_block_hit_count", MetricUnit.REQUESTS,
+                                                           "total sql block hit count");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SQL_BLOCK_HIT_COUNT);
+
         List<Database> dbs = Lists.newArrayList();
         if (GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb() != null) {
             for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().entrySet()) {
@@ -589,6 +606,13 @@ public final class MetricRepo {
 
             }
         }
+
+        COUNTER_VACUUM_FILES_NUMBER = new LongCounterMetric("vacuum_files_count", MetricUnit.REQUESTS,
+                "total files have been vacuumed");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_VACUUM_FILES_NUMBER);
+        COUNTER_VACUUM_FILES_BYTES = new LongCounterMetric("vacuum_files_bytes", MetricUnit.BYTES,
+                "total file bytes have been vacuumed");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_VACUUM_FILES_BYTES);
 
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));
@@ -679,13 +703,10 @@ public final class MetricRepo {
             }
 
             // tablet number of each backend
-            GaugeMetric<Long> tabletNum = (GaugeMetric<Long>) new GaugeMetric<Long>(TABLET_NUM,
+            Metric<Long> tabletNum = new LeaderAwareGaugeMetricLong(TABLET_NUM,
                     MetricUnit.NOUNIT, "tablet number") {
                 @Override
-                public Long getValue() {
-                    if (!GlobalStateMgr.getCurrentState().isLeader()) {
-                        return 0L;
-                    }
+                public Long getValueLeader() {
                     return invertedIndex.getTabletNumByBackendId(beId);
                 }
             };
@@ -694,14 +715,10 @@ public final class MetricRepo {
             STARROCKS_METRIC_REGISTER.addMetric(tabletNum);
 
             // max compaction score of tablets on each backend
-            GaugeMetric<Long> tabletMaxCompactionScore = (GaugeMetric<Long>) new GaugeMetric<Long>(
-                    TABLET_MAX_COMPACTION_SCORE, MetricUnit.NOUNIT,
-                    "tablet max compaction score") {
+            Metric<Long> tabletMaxCompactionScore = new LeaderAwareGaugeMetricLong(
+                    TABLET_MAX_COMPACTION_SCORE, MetricUnit.NOUNIT, "tablet max compaction score") {
                 @Override
-                public Long getValue() {
-                    if (!GlobalStateMgr.getCurrentState().isLeader()) {
-                        return 0L;
-                    }
+                public Long getValueLeader() {
                     return be.getTabletMaxCompactionScore();
                 }
             };
@@ -770,12 +787,24 @@ public final class MetricRepo {
                 Collectors.groupingBy(RoutineLoadJob::getWarehouseId)
         );
 
+        List<GaugeMetricImpl<Long>> routineLoadLags = new ArrayList<>();
+
         // get all partitions offset in a batch api
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         for (Map.Entry<Long, List<RoutineLoadJob>> entry : kafkaJobsMp.entrySet()) {
             long warehouseId = entry.getKey();
             List<RoutineLoadJob> kafkaJobs = entry.getValue();
 
             List<PKafkaOffsetProxyRequest> requests = new ArrayList<>();
+
+            final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
+            ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+            try {
+                computeResource = warehouseManager.acquireComputeResource(acquireContext);
+            } catch (Exception e) {
+                LOG.warn("acquire compute resource failed for warehouse: {}, error: {}", warehouseId, e.getMessage());
+                return;
+            }
 
             for (RoutineLoadJob job : kafkaJobs) {
                 KafkaRoutineLoadJob kJob = (KafkaRoutineLoadJob) job;
@@ -787,7 +816,7 @@ public final class MetricRepo {
                 }
                 PKafkaOffsetProxyRequest offsetProxyRequest = new PKafkaOffsetProxyRequest();
                 offsetProxyRequest.kafkaInfo = KafkaUtil.genPKafkaLoadInfo(kJob.getBrokerList(), kJob.getTopic(),
-                        ImmutableMap.copyOf(kJob.getConvertedCustomProperties()), warehouseId);
+                        ImmutableMap.copyOf(kJob.getConvertedCustomProperties()), computeResource);
                 offsetProxyRequest.partitionIds = new ArrayList<>(
                         ((KafkaProgress) kJob.getProgress()).getPartitionIdToOffset().keySet());
                 requests.add(offsetProxyRequest);
@@ -800,8 +829,6 @@ public final class MetricRepo {
                 LOG.warn("get batch offsets failed", e);
                 return;
             }
-
-            List<GaugeMetricImpl<Long>> routineLoadLags = new ArrayList<>();
 
             for (int i = 0; i < kafkaJobs.size(); i++) {
                 KafkaRoutineLoadJob kJob = (KafkaRoutineLoadJob) kafkaJobs.get(i);
@@ -835,9 +862,9 @@ public final class MetricRepo {
                     routineLoadLags.add(metric);
                 }
             }
-
-            GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
         }
+
+        GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
     }
 
     public static synchronized String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {
@@ -887,6 +914,12 @@ public final class MetricRepo {
             collectMemoryUsageMetrics(visitor);
         }
 
+        // collect warehouse metrics
+        if (Config.enable_collect_warehouse_metrics) {
+            BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+            slotManager.collectWarehouseMetrics(visitor);
+        }
+
         // collect http metrics
         HttpMetricRegistry.getInstance().visit(visitor);
 
@@ -902,6 +935,9 @@ public final class MetricRepo {
 
         // collect brpc pool metrics
         collectBrpcMetrics(visitor);
+
+        // collect merge commit metrics
+        MergeCommitMetricRegistry.getInstance().visit(visitor);
 
         // node info
         visitor.getNodeInfo();

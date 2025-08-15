@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 #include <fslib/configuration.h>
 #include <fslib/fslib_all_initializer.h>
+#include <fslib/star_cache_configuration.h>
 #include <gtest/gtest.h>
 
 #include <fstream>
@@ -80,9 +81,16 @@ public:
             std::string tmpl("/tmp/sr_starlet_ut_XXXXXX");
             EXPECT_TRUE(::mkdtemp(tmpl.data()) != nullptr);
             config::starlet_cache_dir = tmpl;
+            staros::starlet::fslib::FLAGS_star_cache_async_init = false;
+            setenv(staros::starlet::fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(),
+                   1 /* overwrite */);
         }
 
+        staros::starlet::StarletConfig starlet_config;
+        starlet_config.rpc_port = config::starlet_port;
         g_worker = std::make_shared<starrocks::StarOSWorker>();
+        g_starlet = std::make_unique<staros::starlet::Starlet>(g_worker);
+        g_starlet->init(starlet_config);
         (void)g_worker->add_shard(shard_info);
 
         // Expect a clean root directory before testing
@@ -94,7 +102,7 @@ public:
             return;
         }
         (void)g_worker->remove_shard(10086);
-        g_worker.reset();
+        shutdown_staros_worker();
         std::string test_type = GetParam();
         if (test_type == "cachefs" && config::starlet_cache_dir.compare(0, 5, std::string("/tmp/")) == 0) {
             // Clean cache directory
@@ -153,12 +161,17 @@ TEST_P(StarletFileSystemTest, test_write_and_read) {
     EXPECT_OK(wf->append("hello"));
     EXPECT_OK(wf->append(" world!"));
     EXPECT_OK(wf->sync());
+    ASSIGN_OR_ABORT(auto stats, wf->get_numeric_statistics());
+    EXPECT_EQ((*stats).size(), 2);
+    EXPECT_EQ((*stats).value(1), 12); // write bytes
     EXPECT_OK(wf->close());
     EXPECT_EQ(sizeof("hello world!"), wf->size() + 1);
 
     char buf[1024];
     ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(uri));
     ASSIGN_OR_ABORT(auto nr, rf->read_at(0, buf, sizeof(buf)));
+    ASSIGN_OR_ABORT(auto stats2, rf->get_numeric_statistics());
+    EXPECT_EQ((*stats2).size(), 11);
     EXPECT_EQ("hello world!", std::string_view(buf, nr));
 
     ASSIGN_OR_ABORT(nr, rf->read_at(3, buf, sizeof(buf)));
@@ -397,6 +410,24 @@ TEST_P(StarletFileSystemTest, test_delete_files) {
     paths.emplace_back(uri3);
     EXPECT_OK(fs->delete_files(paths));
     (void)g_worker->remove_shard(shard_info.id);
+}
+
+TEST_P(StarletFileSystemTest, test_tag) {
+    bool old = config::starlet_write_file_with_tag;
+    config::starlet_write_file_with_tag = true;
+    auto uri1 = StarletPath("tag.dat");
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri1));
+    ASSIGN_OR_ABORT(auto wf1, fs->new_writable_file(uri1));
+
+    auto uri2 = StarletPath("tag.meta");
+    ASSIGN_OR_ABORT(auto wf2, fs->new_writable_file(uri2));
+
+    auto uri3 = StarletPath("tag.log");
+    ASSIGN_OR_ABORT(auto wf3, fs->new_writable_file(uri3));
+
+    auto uri4 = StarletPath("tag.logs");
+    ASSIGN_OR_ABORT(auto wf4, fs->new_writable_file(uri4));
+    config::starlet_write_file_with_tag = old;
 }
 
 INSTANTIATE_TEST_CASE_P(StarletFileSystem, StarletFileSystemTest,

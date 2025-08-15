@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 40
 ---
 
 # SSL 认证
@@ -15,6 +16,7 @@ displayed_sidebar: docs
 - `ssl_keystore_location`：指定存储 SSL 证书和密钥的 keystore 文件路径。
 - `ssl_keystore_password`：keystore 文件的访问密码，StarRocks 读取 keystore 文件时需要提供该密码。
 - `ssl_key_password`：密钥的访问密码，StarRocks 读取 keystore 文件中的密钥时需要提供该密码。
+- `ssl_force_secure_transport`: 是否强制启用 SSL 认证，默认为 `FALSE`。如设置为 `TRUE`，则系统会拒绝未通过 SSL 加密的连接。
 
 示例：
 
@@ -64,7 +66,7 @@ verifyServerCertificate=false
 
 ## LDAP 认证
 
-LDAP 认证的配置方法已在官方文档 [设置用户认证](./Authentication.md) 中介绍。
+LDAP 认证的配置方法已在官方文档 [设置用户认证](./authentication/ldap_authentication.md) 中介绍。
 
 对于 JDBC 连接，由于 StarRocks 已支持 SSL 认证，无需自定义 `AuthPlugin`，可直接使用 JDBC 提供的 `MysqlClearPasswordPlugin`。
 

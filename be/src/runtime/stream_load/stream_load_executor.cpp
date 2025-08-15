@@ -39,6 +39,7 @@
 #include <string_view>
 
 #include "agent/master_info.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "common/utils.h"
@@ -69,6 +70,10 @@ static bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, st
                                    int64_t deadline);
 
 Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
+    if (process_exit_in_progress()) {
+        return Status::ServiceUnavailable("Service is shutting down, please retry later!");
+    }
+
     StarRocksMetrics::instance()->txn_exec_plan_total.increment(1);
 // submit this params
 #ifndef BE_TEST
@@ -76,6 +81,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
     ctx->start_write_data_nanos = MonotonicNanos();
     LOG(INFO) << "begin to execute job. label=" << ctx->label << ", txn_id: " << ctx->txn_id
               << ", query_id=" << print_id(ctx->put_result.params.params.query_id);
+    // Once this is added into FragmentMgr, the fragment will be counted during graceful exit.
     auto st = _exec_env->fragment_mgr()->exec_plan_fragment(
             ctx->put_result.params,
             [ctx](PlanFragmentExecutor* executor) {
@@ -339,6 +345,9 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
         rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
     }
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
+    if (ctx->prepared_timeout_second != -1) {
+        request.__set_prepared_timeout_second(ctx->prepared_timeout_second);
+    }
 
     // set attachment if has
     TTxnCommitAttachment attachment;
@@ -355,6 +364,8 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnPrepare(result, request); },
             rpc_timeout_ms));
 #else
+    // Add sync point for testing prepared_timeout_second setting
+    TEST_SYNC_POINT_CALLBACK("StreamLoadExecutor::prepare_txn::rpc", &request);
     result = k_stream_load_commit_result;
 #endif
     // Return if this transaction is prepare successful; otherwise, we need try

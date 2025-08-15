@@ -15,11 +15,11 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 import java.util.Map;
 import java.util.Optional;
@@ -56,7 +56,7 @@ public class MVTestUtils {
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
             }
             System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+            Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         }
     }
 
@@ -78,7 +78,7 @@ public class MVTestUtils {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
         }
         System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         return true;
     }
 }

@@ -22,11 +22,13 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -65,10 +67,22 @@ public class RewriteMultiDistinctRule extends TransformationRule {
             return true;
         }
 
+        // if have multiple distinct functions and their distinct input cols are not exactly same
         Optional<List<ColumnRefOperator>> distinctCols = Utils.extractCommonDistinctCols(agg.getAggregations().values());
+        if (distinctCols.isEmpty()) {
+            return true;
+        }
 
-        // all distinct function use the same distinct columns, we use the split rule to rewrite
-        return distinctCols.isEmpty();
+        // If have multiple distinct functions and their distinct input cols are exactly same, but split Agg rule can't handle it
+        // such as table has one tablet property
+        if (Utils.hasMultipleDistinctFuncShareSameDistinctColumns(agg.getAggregations().values()) &&
+                !Utils.couldGenerateMultiStageAggregate(input.getLogicalProperty(), input.getOp(),
+                        input.inputAt(0).getOp())) {
+            return true;
+        }
+
+        // all distinct function use the same distinct columns and split rule can handle it, we use the split rule to rewrite
+        return false;
     }
 
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
@@ -141,6 +155,12 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         // respect skew int
         if (context.getSessionVariable().isCboCteReuse() && agg.hasSkew() && !agg.getGroupingKeys().isEmpty()) {
             return true;
+        }
+
+        // if one tablet, prefer to use MultiFun, which only has one global agg without exchange
+        LogicalProperty inputLogicalProperty = input.getLogicalProperty();
+        if (inputLogicalProperty.oneTabletProperty().supportOneTabletOpt && (!FeConstants.runningUnitTest)) {
+            return false;
         }
 
         if (context.getSessionVariable().isCboCteReuse() &&

@@ -5,9 +5,7 @@ keywords: ['CTAS']
 
 # CREATE TABLE AS SELECT
 
-## Description
-
-You can use the CREATE TABLE AS SELECT (CTAS) statement to synchronously or asynchronously query a table and create a new table based on the query result, and then insert the query result into the new table.
+Use the CREATE TABLE AS SELECT (CTAS) statement to synchronously or asynchronously query a table and create a new table based on the query result, and then insert the query result into the new table.
 
 You can submit an asynchronous CTAS task using [SUBMIT TASK](../loading_unloading/ETL/SUBMIT_TASK.md).
 
@@ -68,8 +66,6 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../loading_unloadin
   - The table is a Duplicate Key table by default. You can also specify it as a Primary Key table in `key_desc`.
 
   - The sort keys are the first three columns, and the storage space of the data types of these three columns does not exceed 36 bytes.
-
-- The CTAS statement does not support setting indexes for a newly created table.
 
 - If the CTAS statement fails to execute due to reasons, such as an FE restart, one of the following issues may occur:
   - A new table is created successfully but does not contain data.

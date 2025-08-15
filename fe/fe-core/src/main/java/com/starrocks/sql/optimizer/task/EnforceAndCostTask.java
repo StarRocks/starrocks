@@ -16,7 +16,7 @@ package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
@@ -113,6 +113,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     // 4. Add enforcer for node if it can not satisfy the requirements.
     @Override
     public void execute() {
+
         if (groupExpression.isUnused()) {
             return;
         }
@@ -287,7 +288,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         PhysicalJoinOperator node = (PhysicalJoinOperator) groupExpression.getOp();
         // If broadcast child has hint, need to change the cost to zero
         double childCost = childBestExpr.getCost(inputProperty);
-        if (JoinOperator.HINT_BROADCAST.equals(node.getJoinHint()) && childCost == Double.POSITIVE_INFINITY) {
+        if (HintNode.HINT_JOIN_BROADCAST.equals(node.getJoinHint()) && childCost == Double.POSITIVE_INFINITY) {
             List<PhysicalPropertySet> childInputProperties =
                     childBestExpr.getInputProperties(inputProperty);
             childBestExpr.updatePropertyWithCost(inputProperty, childInputProperties, 0);
@@ -306,6 +307,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         // shuffling large left-hand table data
         ConnectContext ctx = ConnectContext.get();
         SessionVariable sv = ConnectContext.get().getSessionVariable();
+        // If the broadcast join is not enabled, return false directly
+        if (sv.getBroadcastRowCountLimit() <= 0) {
+            return false;
+        }
         int beNum = Math.max(1, ctx.getAliveBackendNumber());
         Statistics leftChildStats = groupExpression.getInputs().get(curChildIndex - 1).getStatistics();
         Statistics rightChildStats = groupExpression.getInputs().get(curChildIndex).getStatistics();

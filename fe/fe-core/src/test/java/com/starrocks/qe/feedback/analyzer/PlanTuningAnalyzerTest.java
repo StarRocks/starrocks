@@ -30,7 +30,6 @@ import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.plan.DistributedEnvPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
-import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -55,7 +54,7 @@ class PlanTuningAnalyzerTest extends DistributedEnvPlanTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         OptExpression root = execPlan.getPhysicalPlan();
 
-        NodeExecStats localAgg = new NodeExecStats(1, 3000000000L, 2000000L, 0, 0, 0);
+        NodeExecStats localAgg = new NodeExecStats(1, 3000000000L, 2000000000L, 0, 0, 0);
         NodeExecStats globalAgg = new NodeExecStats(3, 500000, 7, 0, 0, 0);
         Map<Integer, NodeExecStats> map = Maps.newHashMap();
         map.put(1, localAgg);
@@ -64,7 +63,7 @@ class PlanTuningAnalyzerTest extends DistributedEnvPlanTestBase {
         Pair<SkeletonNode, Map<Integer, SkeletonNode>> pair = skeletonBuilder.buildSkeleton(root);
         OperatorTuningGuides tuningGuides = new OperatorTuningGuides(UUID.randomUUID(), 50);
         PlanTuningAnalyzer.getInstance().analyzePlan(execPlan.getPhysicalPlan(), pair.second, tuningGuides);
-        Assert.assertTrue(tuningGuides.getTuningGuides(1).get(0) instanceof StreamingAggTuningGuide);
+        Assertions.assertTrue(tuningGuides.getTuningGuides(2).get(0) instanceof StreamingAggTuningGuide);
     }
 
     @Test
@@ -83,7 +82,7 @@ class PlanTuningAnalyzerTest extends DistributedEnvPlanTestBase {
             Pair<SkeletonNode, Map<Integer, SkeletonNode>> pair = skeletonBuilder.buildSkeleton(root);
             OperatorTuningGuides tuningGuides = new OperatorTuningGuides(UUID.randomUUID(), 50);
             PlanTuningAnalyzer.getInstance().analyzePlan(execPlan.getPhysicalPlan(), pair.second, tuningGuides);
-            Assert.assertTrue(tuningGuides.getTuningGuides(5).get(0) instanceof RightChildEstimationErrorTuningGuide);
+            Assertions.assertTrue(tuningGuides.getTuningGuides(0).get(0) instanceof RightChildEstimationErrorTuningGuide);
         }
 
         {
@@ -100,7 +99,7 @@ class PlanTuningAnalyzerTest extends DistributedEnvPlanTestBase {
             Pair<SkeletonNode, Map<Integer, SkeletonNode>> pair = skeletonBuilder.buildSkeleton(root);
             OperatorTuningGuides tuningGuides = new OperatorTuningGuides(UUID.randomUUID(), 50);
             PlanTuningAnalyzer.getInstance().analyzePlan(execPlan.getPhysicalPlan(), pair.second, tuningGuides);
-            Assert.assertTrue(tuningGuides.getTuningGuides(5).get(0) instanceof RightChildEstimationErrorTuningGuide);
+            Assertions.assertTrue(tuningGuides.getTuningGuides(0).get(0) instanceof RightChildEstimationErrorTuningGuide);
         }
 
         {
@@ -117,10 +116,10 @@ class PlanTuningAnalyzerTest extends DistributedEnvPlanTestBase {
             Pair<SkeletonNode, Map<Integer, SkeletonNode>> pair = skeletonBuilder.buildSkeleton(root);
             OperatorTuningGuides tuningGuides = new OperatorTuningGuides(UUID.randomUUID(), 50);
             PlanTuningAnalyzer.getInstance().analyzePlan(execPlan.getPhysicalPlan(), pair.second, tuningGuides);
-            Assert.assertTrue(tuningGuides.getTuningGuides(5).get(0) instanceof LeftChildEstimationErrorTuningGuide);
+            Assertions.assertTrue(tuningGuides.getTuningGuides(0).get(0) instanceof LeftChildEstimationErrorTuningGuide);
             PlanTuningAdvisor.getInstance().putTuningGuides(sql, pair.first, tuningGuides);
             List<List<String>> showResult = PlanTuningAdvisor.getInstance().getShowResult();
-            Assert.assertEquals(8, showResult.get(0).size());
+            Assertions.assertEquals(8, showResult.get(0).size());
         }
     }
 

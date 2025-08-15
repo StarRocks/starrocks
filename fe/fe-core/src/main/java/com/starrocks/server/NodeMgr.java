@@ -42,7 +42,6 @@ import com.google.gson.annotations.SerializedName;
 import com.google.gson.stream.JsonReader;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.common.Config;
-import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
@@ -52,8 +51,6 @@ import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.http.meta.MetaBaseAction;
 import com.starrocks.leader.MetaHelper;
-import com.starrocks.persist.ImageFormatVersion;
-import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.Storage;
@@ -146,7 +143,6 @@ public class NodeMgr {
     private int clusterId;
     private String token;
     private String runMode;
-    private String imageDir;
 
     private final List<Pair<String, Integer>> helperNodes = Lists.newArrayList();
     private Pair<String, Integer> selfNode = null;
@@ -171,9 +167,9 @@ public class NodeMgr {
         this.selfNode = selfNode;
     }
 
-    public void initialize(String[] args) throws Exception {
+    public void initialize(String helpers) throws Exception {
         getCheckedSelfHostPort();
-        getHelperNodes(args);
+        getHelperNodes(helpers);
     }
 
     private boolean tryLock(boolean mustLock) {
@@ -218,6 +214,10 @@ public class NodeMgr {
         return result;
     }
 
+    public long getAliveFrontendsCnt() {
+        return frontends.values().stream().filter(Frontend::isAlive).count();
+    }
+
     public Frontend getFrontend(Integer frontendId) {
         if (frontendId == 0) {
             return getMySelf();
@@ -238,14 +238,14 @@ public class NodeMgr {
     }
 
     public boolean isVersionAndRoleFilesNotExist() {
-        File roleFile = new File(this.imageDir, Storage.ROLE_FILE);
-        File versionFile = new File(this.imageDir, Storage.VERSION_FILE);
+        File roleFile = new File(GlobalStateMgr.getImageDirPath(), Storage.ROLE_FILE);
+        File versionFile = new File(GlobalStateMgr.getImageDirPath(), Storage.VERSION_FILE);
         return !roleFile.exists() && !versionFile.exists();
     }
 
     private void removeMetaFileIfExist(String fileName) {
         try {
-            File file = new File(this.imageDir, fileName);
+            File file = new File(GlobalStateMgr.getImageDirPath(), fileName);
             if (file.exists()) {
                 if (file.delete()) {
                     LOG.warn("Deleted file {}, maybe because the firstly startup failed.", file.getAbsolutePath());
@@ -264,16 +264,17 @@ public class NodeMgr {
     }
 
     public void getClusterIdAndRoleOnStartup() throws IOException {
-        File roleFile = new File(this.imageDir, Storage.ROLE_FILE);
-        File versionFile = new File(this.imageDir, Storage.VERSION_FILE);
+        String imageDir = GlobalStateMgr.getImageDirPath();
+        File roleFile = new File(imageDir, Storage.ROLE_FILE);
+        File versionFile = new File(imageDir, Storage.VERSION_FILE);
 
         boolean isVersionFileChanged = false;
 
-        Storage storage = new Storage(this.imageDir);
+        Storage storage = new Storage(imageDir);
 
         // prepare starmgr dir
         if (RunMode.isSharedDataMode()) {
-            String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
+            String subDir = imageDir + StarMgrServer.IMAGE_SUBDIR;
             File dir = new File(subDir);
             if (!dir.exists()) { // subDir might not exist
                 LOG.info("create image dir for star mgr, {}.", dir.getAbsolutePath());
@@ -347,7 +348,7 @@ public class NodeMgr {
                 clusterId = Storage.newClusterID();
                 token = Strings.isNullOrEmpty(Config.auth_token) ?
                         Storage.newToken() : Config.auth_token;
-                storage = new Storage(clusterId, token, this.imageDir);
+                storage = new Storage(clusterId, token, imageDir);
                 isVersionFileChanged = true;
 
                 isFirstTimeStartUp = true;
@@ -397,7 +398,7 @@ public class NodeMgr {
 
             Pair<String, Integer> rightHelperNode = helperNodes.get(0);
 
-            storage = new Storage(this.imageDir);
+            storage = new Storage(imageDir);
             if (roleFile.exists() && (role != storage.getRole() || !nodeName.equals(storage.getNodeName()))
                     || !roleFile.exists()) {
                 storage.writeFrontendRoleAndNodeName(role, nodeName);
@@ -410,7 +411,7 @@ public class NodeMgr {
 
                 // NOTE: cluster_id will be init when Storage object is constructed,
                 //       so we new one.
-                storage = new Storage(this.imageDir);
+                storage = new Storage(imageDir);
                 clusterId = storage.getClusterID();
                 token = storage.getToken();
                 runMode = storage.getRunMode();
@@ -609,25 +610,8 @@ public class NodeMgr {
         }
     }
 
-    private void getHelperNodes(String[] args) {
-        String helpers = null;
-        for (int i = 0; i < args.length; i++) {
-            if (args[i].equalsIgnoreCase("-helper")) {
-                if (i + 1 >= args.length) {
-                    System.out.println("-helper need parameter host:port,host:port");
-                    System.exit(-1);
-                }
-                helpers = args[i + 1];
-                if (!helpers.contains(":")) {
-                    System.out.print("helper's format seems was wrong [" + helpers + "]");
-                    System.out.println(", eg. host:port,host:port");
-                    System.exit(-1);
-                }
-                break;
-            }
-        }
-
-        if (helpers != null) {
+    private void getHelperNodes(String helpers) {
+        if (!Strings.isNullOrEmpty(helpers)) {
             String[] splittedHelpers = helpers.split(",");
             for (String helper : splittedHelpers) {
                 Pair<String, Integer> helperHostPort = SystemInfoService.validateHostAndPort(helper, false);
@@ -708,7 +692,7 @@ public class NodeMgr {
                 helperNode.first, Config.http_port) + "/version";
         LOG.info("Downloading version file from {}", url);
         try {
-            File dir = new File(this.imageDir);
+            File dir = new File(GlobalStateMgr.getImageDirPath());
             MetaHelper.getRemoteFile(url, HTTP_TIMEOUT_SECOND * 1000,
                     MetaHelper.getOutputStream(Storage.VERSION_FILE, dir));
             MetaHelper.complete(Storage.VERSION_FILE, dir);
@@ -725,31 +709,26 @@ public class NodeMgr {
      * Exception are free to raise on initialized phase
      */
     private void getNewImageOnStartup(Pair<String, Integer> helperNode, String subDir) throws IOException {
-        String dirStr = this.imageDir + subDir;
-        ImageLoader imageLoader = new ImageLoader(dirStr);
-        long localImageVersion = imageLoader.getImageJournalId();
+        String imageFileDir = MetaHelper.getImageFileDir(Strings.isNullOrEmpty(subDir));
+        Storage storage = new Storage(imageFileDir);
+        long localImageJournalId = storage.getImageJournalId();
 
         String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
         URL infoUrl = new URL("http://" + accessibleHostPort + "/info?subdir=" + subDir);
         StorageInfo remoteStorageInfo = getStorageInfo(infoUrl);
-        long remoteImageVersion = remoteStorageInfo.getImageJournalId();
-        if (remoteImageVersion > localImageVersion) {
+        long remoteImageJournalId = remoteStorageInfo.getImageJournalId();
+        if (remoteImageJournalId > localImageJournalId) {
             String url = "http://" + accessibleHostPort + "/image?"
-                    + "version=" + remoteImageVersion
+                    + "version=" + remoteImageJournalId
                     + "&subdir=" + subDir
                     + "&image_format_version=" + remoteStorageInfo.getImageFormatVersion();
-            LOG.info("start to download image.{} version:{}, from {}", remoteImageVersion,
+            LOG.info("start to download image.{} version:{}, from {}", remoteImageJournalId,
                     remoteStorageInfo.getImageFormatVersion(), url);
-            File dir;
-            if (remoteStorageInfo.getImageFormatVersion() == ImageFormatVersion.v1) {
-                dir = new File(dirStr);
-            } else {
-                dir = new File(dirStr, remoteStorageInfo.getImageFormatVersion().toString());
-            }
-            MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000, Long.toString(remoteImageVersion), dir);
+            MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000,
+                    Long.toString(remoteImageJournalId), new File(imageFileDir));
         } else {
             LOG.info("skip download image for {}, current version {} >= version {} from {}",
-                    dirStr, localImageVersion, remoteImageVersion, helperNode);
+                    imageFileDir, localImageJournalId, remoteImageJournalId, helperNode);
         }
     }
 
@@ -1190,12 +1169,6 @@ public class NodeMgr {
         return statisticsItems;
     }
 
-    public void setFrontendConfig(Map<String, String> configs, boolean isPersisted, String userIdentity) throws DdlException {
-        for (Map.Entry<String, String> entry : configs.entrySet()) {
-            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue(), isPersisted, userIdentity);
-        }
-    }
-
     public Frontend getMySelf() {
         return frontends.get(nodeName);
     }
@@ -1203,6 +1176,8 @@ public class NodeMgr {
     @VisibleForTesting
     public void setMySelf(Frontend frontend) {
         selfNode = Pair.create(frontend.getHost(), frontend.getRpcPort());
+        nodeName = frontend.getNodeName();
+        role = frontend.getRole();
     }
 
     public ConcurrentHashMap<String, Frontend> getFrontends() {
@@ -1211,8 +1186,11 @@ public class NodeMgr {
 
     public void resetFrontends() {
         frontends.clear();
+        frontendIds.clear();
+
         int fid = allocateNextFrontendId();
         Frontend self = new Frontend(fid, role, nodeName, selfNode.first, selfNode.second);
+        self.setAlive(true);
         frontends.put(self.getNodeName(), self);
         frontendIds.put(fid, self);
         // reset helper nodes
@@ -1224,6 +1202,8 @@ public class NodeMgr {
 
     public void replayResetFrontends(Frontend frontend) {
         frontends.clear();
+        frontendIds.clear();
+
         frontends.put(frontend.getNodeName(), frontend);
         frontendIds.put(frontend.getFid(), frontend);
         // reset helper nodes
@@ -1287,10 +1267,6 @@ public class NodeMgr {
         return isElectable;
     }
 
-    public void setImageDir(String imageDir) {
-        this.imageDir = imageDir;
-    }
-
     public static String genFeNodeName(String host, int port, boolean isOldStyle) {
         String name = host + "_" + port;
         if (isOldStyle) {
@@ -1302,5 +1278,12 @@ public class NodeMgr {
 
     public static boolean isFeNodeNameValid(String nodeName, String host, int port) {
         return nodeName.startsWith(host + "_" + port);
+    }
+
+    public long getTotalCpuCores() {
+        return frontends.values()
+                .stream()
+                .mapToLong(Frontend::getCpuCores)
+                .sum() + systemInfo.getTotalCpuCores();
     }
 }

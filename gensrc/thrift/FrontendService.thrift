@@ -407,6 +407,8 @@ struct TMaterializedViewStatus {
     27: optional string query_rewrite_status
 
     28: optional string creator
+    29: optional string last_refresh_process_time
+    30: optional string last_refresh_job_id
 }
 
 struct TListPipesParams {
@@ -477,6 +479,12 @@ struct TListMaterializedViewStatusResult {
     1: optional list<TMaterializedViewStatus> materialized_views
 }
 
+// Pagination cursor for request segmentation
+struct TRequestPagination {
+    1: optional i64 offset
+    2: optional i64 limit
+}
+
 // Arguments to showTasks/ShowTaskRuns
 struct TGetTasksParams {
     1: optional string db
@@ -487,6 +495,8 @@ struct TGetTasksParams {
     4: optional string query_id
     // task's state
     5: optional string state
+
+    6: optional TRequestPagination pagination
 }
 
 struct TTaskInfo {
@@ -522,6 +532,8 @@ struct TTaskRunInfo {
     13: optional string properties
 
     14: optional string catalog
+    15: optional string job_id
+    16: optional i64 process_time
 }
 
 struct TGetTaskRunInfoResult {
@@ -610,6 +622,7 @@ struct TRoutineLoadJobInfo {
     19: optional string other_msg
     20: optional string latest_source_position
     21: optional string offset_lag
+    22: optional string timestamp_progress
 }
 
 struct TGetRoutineLoadJobsResult {
@@ -772,6 +785,7 @@ struct TAuditStatistics {
     6: optional i64 cpu_cost_ns
     7: optional i64 mem_cost_bytes
     8: optional i64 spill_bytes
+    10: optional i64 transmitted_bytes
     9: optional list<TAuditStatisticsItem> stats_items
 }
 
@@ -821,6 +835,8 @@ struct TMasterOpRequest {
     34: optional i32 forward_times
     35: optional string session_id
     36: optional i32 connectionId
+    37: optional i64 txn_id;
+    38: optional bool isInternalStmt;
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
@@ -853,6 +869,7 @@ struct TMasterOpResult {
     6: optional string resource_group_name;
     7: optional TAuditStatistics audit_statistics;
     8: optional string errorMsg;
+    9: optional i64 txn_id;
 }
 
 struct TIsMethodSupportedRequest {
@@ -1045,6 +1062,8 @@ struct TLoadTxnCommitRequest {
     11: optional TTxnCommitAttachment txnCommitAttachment
     12: optional i64 thrift_rpc_timeout_ms
     13: optional list<Types.TTabletFailInfo> failInfos
+    // The timeout for prepared transaction. Only valid if this requerst is sent by rpc loadTxnPrepare
+    14: optional i32 prepared_timeout_second
 }
 
 struct TLoadTxnCommitResult {
@@ -1500,6 +1519,10 @@ struct TPartitionMetaInfo {
     26: optional i64 data_version
     27: optional i64 version_epoch
     28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
+    29: optional i64 storage_size
+    30: optional bool tablet_balanced
+    31: optional i64 metadata_switch_version
+    32: optional i64 path_id
 }
 
 struct TGetPartitionsMetaResponse {
@@ -1613,6 +1636,7 @@ struct TQueryStatisticsInfo {
     13: optional string wareHouseName
     14: optional string customQueryId
     15: optional string resourceGroupName
+    16: optional string execProgress
 }
 
 struct TGetQueryStatisticsResponse {
@@ -1628,6 +1652,7 @@ struct TResourceLogicalSlot {
     5: optional i64 expired_pending_time_ms
     6: optional i64 expired_allocated_time_ms
     7: optional i64 fe_start_time_ms
+    8: optional i64 warehouse_id
 
     100: optional i32 num_fragments
     101: optional i32 pipeline_dop
@@ -1654,6 +1679,7 @@ struct TFinishSlotRequirementResponse {
 
 struct TReleaseSlotRequest {
     1: optional Types.TUniqueId slot_id
+    2: optional i64 warehouse_id
 }
 
 struct TReleaseSlotResponse {
@@ -1932,11 +1958,79 @@ struct TListSessionsResponse {
     2: optional list<TSessionInfo> sessions;
 }
 
+struct TListConnectionRequest {
+    1: optional TAuthInfo auth_info;
+    2: optional string for_user;
+    3: optional bool show_full;
+}
+
+struct TConnectionInfo {
+    1: optional string connection_id;
+    2: optional string user;
+    3: optional string host;
+    4: optional string db;
+    5: optional string command;
+    6: optional string connection_start_time;
+    7: optional string time;
+    8: optional string state;
+    9: optional string info;
+    10: optional string isPending;
+    11: optional string warehouse;
+	12: optional string cngroup;
+}
+
+struct TListConnectionResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TConnectionInfo> connections;
+}
+
 struct TGetKeysRequest {
 }
 
 struct TGetKeysResponse {
     1: optional list<binary> key_metas;
+}
+
+struct TGetWarehouseMetricsRequest {
+    1: optional TAuthInfo auth_info
+}
+struct TGetWarehouseMetricsResponeItem {
+    1: optional string warehouse_id;
+    2: optional string warehouse_name;
+    3: optional string queue_pending_length;
+    4: optional string queue_running_length;
+    5: optional string max_pending_length;
+    6: optional string max_pending_time_second;
+    7: optional string earliest_query_wait_time;
+    8: optional string max_required_slots;
+    9: optional string sum_required_slots;
+    10: optional string remain_slots;
+    11: optional string max_slots;
+    12: optional string extra_message;
+}
+struct TGetWarehouseMetricsRespone {
+    1:optional list<TGetWarehouseMetricsResponeItem> metrics;
+}
+
+struct TGetWarehouseQueriesRequest {
+    1: optional TAuthInfo auth_info
+}
+struct TGetWarehouseQueriesResponseItem {
+    1: optional string warehouse_id;
+    2: optional string warehouse_name;
+    3: optional string query_id;
+    4: optional string state;
+    5: optional string est_costs_slots;
+    6: optional string allocate_slots;
+    7: optional string queued_wait_seconds;
+    8: optional string query;
+    9: optional string query_start_time;
+    10: optional string query_end_time;
+    11: optional string query_duration;
+    12: optional string extra_message;
+}
+struct TGetWarehouseQueriesResponse {
+    1: optional list<TGetWarehouseQueriesResponseItem> queries;
 }
 
 struct TStartCheckpointRequest {
@@ -2048,6 +2142,41 @@ struct TGetApplicableRolesRequest {
 struct TGetApplicableRolesResponse {
     1: optional list<TApplicableRolesInfo> roles;
     2: optional i64 next_table_id_offset;
+}
+
+struct TUpdateFailPointRequest {
+    1: optional string name;
+    2: optional bool is_enable;
+    3: optional i32 times;
+    4: optional double probability;
+}
+
+struct TUpdateFailPointResponse {
+    1: optional Status.TStatus status;
+}
+
+struct TDynamicTabletJobsItem {
+    1: optional i64 job_id;
+    2: optional string db_name;
+    3: optional string table_name;
+    4: optional i64 db_id;
+    5: optional i64 table_id;
+    6: optional string job_type;
+    7: optional string job_state;
+    8: optional i64 transaction_id;
+    9: optional i64 parallel_partitions;
+    10: optional i64 parallel_tablets;
+    11: optional i64 created_time;
+    12: optional i64 finished_time;
+    13: optional string error_message;
+}
+
+struct TDynamicTabletJobsRequest {
+}
+
+struct TDynamicTabletJobsResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TDynamicTabletJobsItem> items;
 }
 
 service FrontendService {
@@ -2169,6 +2298,8 @@ service FrontendService {
     TListSessionsResponse listSessions(1: TListSessionsRequest request)
     TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
 
+    TListConnectionResponse listConnections(1: TListConnectionRequest request)
+
     TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
 
     TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
@@ -2184,5 +2315,13 @@ service FrontendService {
     TGetApplicableRolesResponse getApplicableRoles(1: TGetApplicableRolesRequest request)
 
     TGetKeywordsResponse getKeywords(1: TGetKeywordsRequest request)
+
+    TGetWarehouseMetricsRespone getWarehouseMetrics(1: TGetWarehouseMetricsRequest request)
+
+    TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
+
+    TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
+
+    TDynamicTabletJobsResponse getDynamicTabletJobsInfo(1: TDynamicTabletJobsRequest request)
 }
 

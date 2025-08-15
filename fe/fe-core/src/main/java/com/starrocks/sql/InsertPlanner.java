@@ -110,6 +110,7 @@ import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.iceberg.NullOrder;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
@@ -127,7 +128,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
 import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME_PREFIX;
 
 public class InsertPlanner {
@@ -381,9 +382,12 @@ public class InsertPlanner {
                 dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
                         olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
-                        nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentWarehouseId());
+                        nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentComputeResource());
                 if (insertStmt.usePartialUpdate()) {
                     ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.AUTO_MODE);
+                    if (insertStmt.autoIncrementPartialUpdate()) {
+                        ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
+                    }
                 }
                 if (olapTable.getAutomaticBucketSize() > 0) {
                     ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
@@ -624,7 +628,7 @@ public class InsertPlanner {
                     } else if (defaultValueType == Column.DefaultValueType.CONST) {
                         scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        if (SUPPORTED_DEFAULT_FNS.contains(targetColumn.getDefaultExpr().getExpr())) {
+                        if (isValidDefaultFunction(targetColumn.getDefaultExpr().getExpr())) {
                             scalarOperator = SqlToScalarOperatorTranslator.
                                     translate(targetColumn.getDefaultExpr().obtainExpr());
                         } else {
@@ -913,7 +917,7 @@ public class InsertPlanner {
             return new PhysicalPropertySet();
         }
 
-        List<Column> columns = table.getFullSchema();
+        List<Column> columns = outputFullSchema;
         Preconditions.checkState(columns.size() == outputColumns.size(),
                 "outputColumn's size must equal with table's column size");
 
@@ -981,12 +985,25 @@ public class InsertPlanner {
         return skip;
     }
 
-    private boolean isKeyPartitionStaticInsert(InsertStmt insertStmt, QueryRelation queryRelation) {
-        if (!(queryRelation instanceof SelectRelation)) {
-            return false;
+    private boolean checkPartitionInsertValid(Table targetTable) {
+        if (targetTable instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) targetTable;
+            if (icebergTable.isPartitioned()) {
+                PartitionSpec partitionSpec = icebergTable.getNativeTable().spec();
+                boolean isInvalid = partitionSpec.fields().stream().anyMatch(field -> !field.transform().isIdentity());
+                if (isInvalid) {
+                    throw new SemanticException("Staitc insert into Iceberg table %s is not supported" + 
+                            " for not partitioned by identity transform", icebergTable.getName());
+                }
+            }
         }
 
+        return true;
+    }
+
+    private boolean isKeyPartitionStaticInsert(InsertStmt insertStmt, QueryRelation queryRelation) {
         Table targetTable = insertStmt.getTargetTable();
+
         if (!(targetTable.isHiveTable() || targetTable.isIcebergTable())) {
             return false;
         }
@@ -996,7 +1013,12 @@ public class InsertPlanner {
         }
 
         if (insertStmt.isSpecifyKeyPartition()) {
+            checkPartitionInsertValid(targetTable);
             return true;
+        }
+
+        if (!(queryRelation instanceof SelectRelation)) {
+            return false;
         }
 
         SelectRelation selectRelation = (SelectRelation) queryRelation;
@@ -1025,6 +1047,7 @@ public class InsertPlanner {
                 }
             }
         }
+        checkPartitionInsertValid(targetTable);
         return true;
     }
 }

@@ -42,17 +42,16 @@
 #include <cstdio>
 #include <memory>
 
-#include "cache/block_cache/block_cache.h"
+#include "cache/datacache.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include "cache/object_cache/page_cache.h"
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
 #include "io/io_profiler.h"
 #include "jemalloc/jemalloc.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_worker.h"
-#include "storage/page_cache.h"
 #include "util/metrics.h"
 
 namespace starrocks {
@@ -273,6 +272,7 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
 
     registry->register_metric("process_mem_bytes", &_memory_metrics->process_mem_bytes);
     registry->register_metric("query_mem_bytes", &_memory_metrics->query_mem_bytes);
+    registry->register_metric("connector_scan_pool_mem_bytes", &_memory_metrics->connector_scan_pool_mem_bytes);
     registry->register_metric("load_mem_bytes", &_memory_metrics->load_mem_bytes);
     registry->register_metric("metadata_mem_bytes", &_memory_metrics->metadata_mem_bytes);
     registry->register_metric("tablet_metadata_mem_bytes", &_memory_metrics->tablet_metadata_mem_bytes);
@@ -291,7 +291,6 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("storage_page_cache_mem_bytes", &_memory_metrics->storage_page_cache_mem_bytes);
     registry->register_metric("jit_cache_mem_bytes", &_memory_metrics->jit_cache_mem_bytes);
     registry->register_metric("update_mem_bytes", &_memory_metrics->update_mem_bytes);
-    registry->register_metric("chunk_allocator_mem_bytes", &_memory_metrics->chunk_allocator_mem_bytes);
     registry->register_metric("clone_mem_bytes", &_memory_metrics->clone_mem_bytes);
     registry->register_metric("consistency_mem_bytes", &_memory_metrics->consistency_mem_bytes);
     registry->register_metric("datacache_mem_bytes", &_memory_metrics->datacache_mem_bytes);
@@ -302,9 +301,9 @@ void SystemMetrics::_update_datacache_mem_tracker() {
     int64_t datacache_mem_bytes = 0;
     auto* datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
     if (datacache_mem_tracker) {
-        BlockCache* block_cache = BlockCache::instance();
-        if (block_cache != nullptr && block_cache->is_initialized()) {
-            auto datacache_metrics = block_cache->cache_metrics();
+        LocalCacheEngine* local_cache = DataCache::GetInstance()->local_cache();
+        if (local_cache != nullptr && local_cache->is_initialized()) {
+            auto datacache_metrics = local_cache->cache_metrics();
             datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
         }
 #ifdef USE_STAROS
@@ -319,7 +318,7 @@ void SystemMetrics::_update_datacache_mem_tracker() {
 void SystemMetrics::_update_pagecache_mem_tracker() {
     auto* pagecache_mem_tracker = GlobalEnv::GetInstance()->page_cache_mem_tracker();
     auto* page_cache = StoragePageCache::instance();
-    if (pagecache_mem_tracker && page_cache) {
+    if (pagecache_mem_tracker && page_cache != nullptr && page_cache->is_initialized()) {
         pagecache_mem_tracker->set(page_cache->memory_usage());
     }
 }
@@ -367,6 +366,7 @@ void SystemMetrics::_update_memory_metrics() {
 
     SET_MEM_METRIC_VALUE(process_mem_tracker, process_mem_bytes)
     SET_MEM_METRIC_VALUE(query_pool_mem_tracker, query_mem_bytes)
+    SET_MEM_METRIC_VALUE(connector_scan_pool_mem_tracker, connector_scan_pool_mem_bytes)
     SET_MEM_METRIC_VALUE(load_mem_tracker, load_mem_bytes)
     SET_MEM_METRIC_VALUE(metadata_mem_tracker, metadata_mem_bytes)
     SET_MEM_METRIC_VALUE(tablet_metadata_mem_tracker, tablet_metadata_mem_bytes)
@@ -385,7 +385,6 @@ void SystemMetrics::_update_memory_metrics() {
     SET_MEM_METRIC_VALUE(page_cache_mem_tracker, storage_page_cache_mem_bytes)
     SET_MEM_METRIC_VALUE(jit_cache_mem_tracker, jit_cache_mem_bytes)
     SET_MEM_METRIC_VALUE(update_mem_tracker, update_mem_bytes)
-    SET_MEM_METRIC_VALUE(chunk_allocator_mem_tracker, chunk_allocator_mem_bytes)
     SET_MEM_METRIC_VALUE(passthrough_mem_tracker, passthrough_mem_bytes)
     SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
     SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
@@ -696,7 +695,6 @@ void SystemMetrics::_install_vector_index_cache_metrics(MetricRegistry* registry
 }
 
 void SystemMetrics::_update_vector_index_cache_metrics() {
-    auto hit_count = 0;
 #ifdef WITH_TENANN
     auto* index_cache = tenann::IndexCache::GetGlobalInstance();
     if (UNLIKELY(index_cache == nullptr)) {
@@ -705,17 +703,19 @@ void SystemMetrics::_update_vector_index_cache_metrics() {
     auto capacity = index_cache->capacity();
     auto usage = index_cache->memory_usage();
     auto lookup_count = index_cache->lookup_count();
+    auto hit_count = index_cache->hit_count();
 #else
     auto capacity = 0;
     auto usage = 0;
     auto lookup_count = 0;
+    auto hit_count = 0;
 #endif
     auto usage_ratio = (capacity == 0L) ? 0.0 : double(usage) / double(capacity);
     auto hit_ratio = (lookup_count == 0L) ? 0.0 : double(hit_count) / double(lookup_count);
     auto dynamic_lookup_count = lookup_count - _vector_index_cache_metrics->_previous_lookup_count;
     auto dynamic_hit_count = hit_count - _vector_index_cache_metrics->_previous_hit_count;
     auto dynamic_hit_ratio =
-            (dynamic_lookup_count == 0) ? 0.0 : double(dynamic_lookup_count) / double(dynamic_hit_count);
+            (dynamic_lookup_count == 0) ? 0.0 : double(dynamic_hit_count) / double(dynamic_lookup_count);
     _vector_index_cache_metrics->vector_index_cache_capacity.set_value(capacity);
     _vector_index_cache_metrics->vector_index_cache_usage.set_value(usage);
     _vector_index_cache_metrics->vector_index_cache_usage_ratio.set_value(usage_ratio);

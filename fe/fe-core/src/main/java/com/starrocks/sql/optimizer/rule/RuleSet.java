@@ -61,6 +61,7 @@ import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.CombinationRule;
+import com.starrocks.sql.optimizer.rule.transformation.DeferProjectAfterTopNRule;
 import com.starrocks.sql.optimizer.rule.transformation.DistributionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateGroupByConstantRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateJoinWithConstantRule;
@@ -83,10 +84,10 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
-import com.starrocks.sql.optimizer.rule.transformation.MinMaxCountOptOnScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.MinMaxOptOnScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.OuterJoinEliminationRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEConsumeColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyDirectRule;
@@ -115,6 +116,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneUKFKJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneWindowColumnsRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownAggFunPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggProjectFilterRule;
@@ -273,6 +275,7 @@ public class RuleSet {
                     new PushDownPredicateIntersectRule(),
                     new PushDownPredicateTableFunctionRule(),
                     new PushDownPredicateRepeatRule(),
+                    new PushDownAggFunPredicateRule(),
 
                     new PushDownPredicateToExternalTableScanRule(),
                     new MergeTwoFiltersRule(),
@@ -286,8 +289,8 @@ public class RuleSet {
                     new PushDownApplyLeftRule()
             ));
 
-    public static final Rule SUBQUERY_REWRITE_COMMON_RULES =
-            new CombinationRule(RuleType.GP_SUBQUERY_REWRITE_COMMON, ImmutableList.of(
+    public static final Rule SUBQUERY_EXTRACT_CORRELATION_PREDICATE_RULES =
+            new CombinationRule(RuleType.GP_SUBQUERY_EXTRACT_CORRELATION_PREDICATE, ImmutableList.of(
                     new PushDownApplyProjectRule(),
                     new PushDownApplyFilterRule(),
                     new PushDownApplyAggFilterRule(),
@@ -308,11 +311,6 @@ public class RuleSet {
                     new QuantifiedApply2OuterJoinRule()
             ));
 
-    public static final Rule PRUNE_ASSERT_ROW_RULES =
-            new CombinationRule(RuleType.GP_PRUNE_ASSERT_ROW, ImmutableList.of(
-                    new PruneAssertOneRowRule()
-            ));
-
     public static final Rule PRUNE_UKFK_JOIN_RULES = new CombinationRule(RuleType.GP_PRUNE_UKFK_JOIN, ImmutableList.of(
             new PruneUKFKJoinRule()
     ));
@@ -331,7 +329,8 @@ public class RuleSet {
             new PruneProjectRule(),
             new PruneProjectEmptyRule(),
             new MergeTwoProjectRule(),
-            new PushDownProjectToCTEAnchorRule()
+            new PushDownProjectToCTEAnchorRule(),
+            new DeferProjectAfterTopNRule()
     ));
 
     public static final Rule COLLECT_CTE_RULES = new CombinationRule(RuleType.GP_COLLECT_CTE, ImmutableList.of(
@@ -416,8 +415,8 @@ public class RuleSet {
                     new PushDownAggToMetaScanRule(),
                     new PushDownFlatJsonMetaToMetaScanRule(),
                     new RewriteSimpleAggToMetaScanRule(),
-                    new RewriteSimpleAggToHDFSScanRule(),
-                    new MinMaxCountOptOnScanRule()
+                    RewriteSimpleAggToHDFSScanRule.SCAN_AND_PROJECT,
+                    new MinMaxOptOnScanRule()
             ));
 
     public RuleSet() {
@@ -436,6 +435,7 @@ public class RuleSet {
     public void addOuterJoinTransformationRules() {
         transformRules.add(JoinAssociativityRule.OUTER_JOIN_ASSOCIATIVITY_RULE);
         transformRules.add(JoinLeftAsscomRule.OUTER_JOIN_LEFT_ASSCOM_RULE);
+        transformRules.add(OuterJoinEliminationRule.getInstance());
     }
 
     public void addJoinCommutativityWithoutInnerRule() {

@@ -228,7 +228,9 @@ struct OlapReaderStatistics {
     int64_t block_seek_ns = 0;
 
     int64_t decode_dict_ns = 0;
+    int64_t decode_dict_count = 0; // rows * columns
     int64_t late_materialize_ns = 0;
+    int64_t late_materialize_rows = 0; // number of rows that are late materialized after the filter
 
     int64_t raw_rows_read = 0;
 
@@ -241,6 +243,8 @@ struct OlapReaderStatistics {
     int64_t vec_cond_chunk_copy_ns = 0;
     int64_t branchless_cond_evaluate_ns = 0;
     int64_t expr_cond_evaluate_ns = 0;
+    int64_t record_predicate_evaluate_ns = 0;
+    int64_t rows_record_predicate_filtered = 0;
 
     int64_t get_rowsets_ns = 0;
     int64_t get_delvec_ns = 0;
@@ -316,6 +320,7 @@ struct OlapReaderStatistics {
     std::unordered_map<std::string, int64_t> flat_json_hits;
     std::unordered_map<std::string, int64_t> merge_json_hits;
     std::unordered_map<std::string, int64_t> dynamic_json_hits;
+    std::unordered_map<std::string, int64_t> extract_json_hits;
 
     // Counters for data sampling
     int64_t sample_time_ns = 0;               // Records the time to prepare sample, actual IO time is not included
@@ -327,17 +332,21 @@ struct OlapReaderStatistics {
 
 // OlapWriterStatistics used to collect statistics when write data to storage
 struct OlapWriterStatistics {
-    int64_t segment_write_ns = 0;
+    int64_t write_remote_ns = 0;    // how much time is spent on write
+    int64_t bytes_write_remote = 0; // how many bytes are written
+    int64_t segment_count = 0;      // how many files are written
 };
 
 const char* const kBytesReadLocalDisk = "bytes_read_local_disk";
 const char* const kBytesWriteLocalDisk = "bytes_write_local_disk";
 const char* const kBytesReadRemote = "bytes_read_remote";
+const char* const kBytesWriteRemote = "bytes_write_remote";
 const char* const kIOCountLocalDisk = "io_count_local_disk";
 const char* const kIOCountRemote = "io_count_remote";
 const char* const kIONsReadLocalDisk = "io_ns_read_local_disk";
 const char* const kIONsWriteLocalDisk = "io_ns_write_local_disk";
-const char* const kIONsRemote = "io_ns_remote";
+const char* const kIONsReadRemote = "io_ns_read_remote";
+const char* const kIONsWriteRemote = "io_ns_write_remote";
 const char* const kPrefetchHitCount = "prefetch_hit_count";
 const char* const kPrefetchWaitFinishNs = "prefetch_wait_finish_ns";
 const char* const kPrefetchPendingNs = "prefetch_pending_ns";

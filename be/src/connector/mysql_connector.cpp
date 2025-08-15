@@ -176,6 +176,8 @@ Status MySQLDataSource::open(RuntimeState* state) {
             case TYPE_PERCENTILE:
             case TYPE_LARGEINT:
             case TYPE_DECIMAL128:
+            case TYPE_DECIMAL256:
+            case TYPE_INT256:
             case TYPE_DECIMALV2:
             case TYPE_DECIMAL32:
             case TYPE_DECIMAL64:
@@ -458,6 +460,20 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
             append_value_to_column<TYPE_DECIMAL128>(data_column, value);
         else
             parse_success = false;
+        break;
+    }
+    case TYPE_DECIMAL256: {
+        int256_t value;
+        if (!DecimalV3Cast::from_string<int256_t>(&value, slot_desc->type().precision, slot_desc->type().scale, data,
+                                                  len))
+            append_value_to_column<TYPE_DECIMAL256>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_INT256: {
+        // INT256 won't be exposed to users
+        parse_success = false;
         break;
     }
     default:

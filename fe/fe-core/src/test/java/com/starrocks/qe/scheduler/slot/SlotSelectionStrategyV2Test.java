@@ -14,16 +14,21 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.qe.GlobalVariable;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -35,12 +40,12 @@ public class SlotSelectionStrategyV2Test {
 
     private boolean prevEnableQueryQueueV2 = false;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() {
         MetricRepo.init();
     }
 
-    @Before
+    @BeforeEach
     public void before() {
         prevEnableQueryQueueV2 = Config.enable_query_queue_v2;
         Config.enable_query_queue_v2 = true;
@@ -48,17 +53,21 @@ public class SlotSelectionStrategyV2Test {
         BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, NUM_CORES);
     }
 
-    @After
+    @AfterEach
     public void after() {
         Config.enable_query_queue_v2 = prevEnableQueryQueueV2;
 
         BackendResourceStat.getInstance().reset();
     }
 
+    private SlotSelectionStrategyV2 createSlotSelectionStrategy() {
+        return new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+    }
+
     @Test
     public void testSmallSlot() {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
 
         LogicalSlot largeSlot = generateSlot(opts.v2().getTotalSlots() - 1);
@@ -120,8 +129,8 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testHeadLineBlocking1() {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
@@ -167,8 +176,8 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testHeadLineBlocking2() {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
@@ -204,6 +213,7 @@ public class SlotSelectionStrategyV2Test {
         // 4. slot3 cannot be peaked because it is blocked by slot2.
         for (int i = 0; i < 10; i++) {
             slotTracker.requireSlot(slot3);
+            // if current concurrency is zero, always peak one
             assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
             assertThat(slotTracker.releaseSlot(slot3.getSlotId())).isSameAs(slot3);
         }
@@ -217,8 +227,8 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testUpdateOptionsPeriodicallyAtAllocating() throws InterruptedException {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
@@ -253,8 +263,8 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testUpdateOptionsPeriodicallyAtReleasing() throws InterruptedException {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
@@ -290,8 +300,8 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testUpdateOptionsChangeQueueStrategyOnline() throws InterruptedException {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
@@ -327,6 +337,197 @@ public class SlotSelectionStrategyV2Test {
     }
 
     private static LogicalSlot generateSlot(int numSlots) {
-        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", LogicalSlot.ABSENT_GROUP_ID, numSlots, 0, 0, 0, 0, 0);
+        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                LogicalSlot.ABSENT_GROUP_ID, numSlots, 0, 0, 0, 0, 0);
+    }
+
+    @Test
+    public void testHistorySlotsQueue() {
+        Config.max_query_queue_history_slots_number = 10;
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+
+        LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
+        LogicalSlot slot2 = generateSlot(opts.v2().getTotalSlots() / 2);
+        LogicalSlot slot3 = generateSlot(2);
+
+        assertThat(slotTracker.getSlots().isEmpty());
+        assertThat(slotTracker.getHistorySlots().isEmpty());
+
+        // 1. Require and allocate slot1.
+        slotTracker.requireSlot(slot1);
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(slot1);
+        slotTracker.allocateSlot(slot1);
+
+        // 2. Require slot2.
+        slotTracker.requireSlot(slot2);
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+
+        // 3. Require enough small slots to make its priority lower.
+        {
+            List<LogicalSlot> smallSlots = IntStream.range(0, 10)
+                    .mapToObj(i -> generateSlot(2))
+                    .collect(Collectors.toList());
+            smallSlots.forEach(slotTracker::requireSlot);
+            for (int numPeakedSmallSlots = 0; numPeakedSmallSlots < 10; ) {
+                List<LogicalSlot> peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+                numPeakedSmallSlots += peakSlots.size();
+                peakSlots.forEach(slotTracker::allocateSlot);
+                peakSlots.forEach(slot -> assertThat(slotTracker.releaseSlot(slot.getSlotId())).isSameAs(slot));
+            }
+        }
+        assertThat(!slotTracker.getHistorySlots().isEmpty());
+        List<LogicalSlot> historySlots = Lists.newArrayList(slotTracker.getHistorySlots());
+        assertThat(historySlots.size() == 10);
+        assertThat(historySlots.stream().allMatch(slot -> slot.getExtraMessage().isEmpty()));
+
+        Collection<LogicalSlot> slots = slotTracker.getSlots();
+        assertThat(slots.size() == historySlots.size() + slotTracker.getSlots().size());
+
+        // Try peak the only rest slot2, but it is blocked by slot1.
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+
+        // 4. slot3 cannot be peaked because it is blocked by slot2.
+        slotTracker.requireSlot(slot3);
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+
+        // 5. slot3 can be peaked after releasing the pending slot2.
+        assertThat(slotTracker.releaseSlot(slot2.getSlotId())).isSameAs(slot2);
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(slot3);
+        slotTracker.allocateSlot(slot3);
+        assertThat(slotTracker.releaseSlot(slot3.getSlotId())).isSameAs(slot3);
+
+        historySlots = Lists.newArrayList(slotTracker.getHistorySlots());
+        assertThat(historySlots.size() == 10);
+        slots = slotTracker.getSlots();
+        assertThat(slots.size() == historySlots.size() + slotTracker.getSlots().size());
+
+        Config.max_query_queue_history_slots_number = 0;
+    }
+
+    @Test
+    public void testConcurrencyLimit1() {
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+
+        int oldVal = GlobalVariable.getQueryQueueConcurrencyLimit();
+        GlobalVariable.setQueryQueueConcurrencyLimit(10);
+
+        LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
+        LogicalSlot slot2 = generateSlot(opts.v2().getTotalSlots() / 2);
+        LogicalSlot slot3 = generateSlot(2);
+
+        // 1. Require and allocate slot1.
+        slotTracker.requireSlot(slot1);
+        Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(slot1);
+        slotTracker.allocateSlot(slot1);
+
+        // 2. Require slot2.
+        slotTracker.requireSlot(slot2);
+        Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+
+        // 3. Require enough small slots to make its priority lower.
+        Assertions.assertThat(slotTracker.getCurrentCurrency()).isEqualTo(1);
+        {
+            List<LogicalSlot> smallSlots = IntStream.range(0, 10)
+                    .mapToObj(i -> generateSlot(2))
+                    .collect(Collectors.toList());
+            smallSlots.forEach(slotTracker::requireSlot);
+
+            int concurrency = slotTracker.getCurrentCurrency();
+            int numPeakedSmallSlots = 0;
+            List<LogicalSlot> runningSmallSlots = com.google.common.collect.Lists.newArrayList();
+            while (concurrency < 9) {
+                List<LogicalSlot> peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+                Assertions.assertThat(peakSlots.isEmpty()).isFalse();
+                numPeakedSmallSlots += peakSlots.size();
+                peakSlots.forEach(slotTracker::allocateSlot);
+                concurrency = slotTracker.getCurrentCurrency();
+                runningSmallSlots.addAll(peakSlots);
+            }
+            Assertions.assertThat(numPeakedSmallSlots == 10);
+            // since concurrency is 10, all small slots are blocked.
+            Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+            // release all running slots
+            runningSmallSlots.forEach(slot -> Assertions.assertThat(slotTracker.releaseSlot(slot.getSlotId())).isSameAs(slot));
+        }
+        Assertions.assertThat(slotTracker.getCurrentCurrency()).isEqualTo(1);
+
+        // Try peak the only rest slot2, but it is blocked by slot1.
+        Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+
+        // 4. slot3 cannot be peaked because it is blocked by slot2.
+        for (int i = 0; i < 10; i++) {
+            slotTracker.requireSlot(slot3);
+            // if current concurrency is zero, always peak one
+            Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+            Assertions.assertThat(slotTracker.releaseSlot(slot3.getSlotId())).isSameAs(slot3);
+        }
+        slotTracker.requireSlot(slot3);
+        Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+
+        // 5. slot2 and slot3 can be peaked after releasing slot1.
+        slotTracker.releaseSlot(slot1.getSlotId());
+        Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(slot2, slot3);
+
+        // reset concurrency limit
+        GlobalVariable.setQueryQueueConcurrencyLimit(oldVal);
+    }
+
+    @Test
+    public void testConcurrencyLimitWithLargeSlots() {
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+
+        GlobalVariable.setQueryQueueConcurrencyLimit(1);
+        LogicalSlot largeSlot1 = generateSlot(opts.v2().getTotalSlots() - 1);
+        LogicalSlot largeSlot2 = generateSlot(opts.v2().getTotalSlots() - 1);
+
+        slotTracker.requireSlot(largeSlot1);
+        List<LogicalSlot> peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).containsExactly(largeSlot1);
+        slotTracker.allocateSlot(largeSlot1);
+
+        slotTracker.requireSlot(largeSlot2);
+        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).isEmpty();
+
+        slotTracker.releaseSlot(largeSlot1.getSlotId());
+
+        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).hasSize(1);
+        assertThat(peakSlots).containsExactly(largeSlot2);
+        slotTracker.releaseSlot(largeSlot2.getSlotId());
+        GlobalVariable.setQueryQueueConcurrencyLimit(-1);
+    }
+
+    @Test
+    public void testConcurrencyLimitWithSmallSlots() {
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+
+        GlobalVariable.setQueryQueueConcurrencyLimit(1);
+        LogicalSlot smallSlot1 = generateSlot(1);
+        LogicalSlot smallSlot2 = generateSlot(1);
+
+        slotTracker.requireSlot(smallSlot1);
+        List<LogicalSlot> peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).containsExactly(smallSlot1);
+        slotTracker.allocateSlot(smallSlot1);
+
+        slotTracker.requireSlot(smallSlot2);
+        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).isEmpty();
+
+        slotTracker.releaseSlot(smallSlot1.getSlotId());
+
+        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).hasSize(1);
+        assertThat(peakSlots).containsExactly(smallSlot2);
+        slotTracker.releaseSlot(smallSlot2.getSlotId());
+        GlobalVariable.setQueryQueueConcurrencyLimit(-1);
     }
 }

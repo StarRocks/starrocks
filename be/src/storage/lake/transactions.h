@@ -21,7 +21,8 @@
 
 namespace starrocks {
 class TxnInfoPB;
-}
+class TxnLogPB;
+} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -35,7 +36,10 @@ class TabletManager;
 // 2. Read the transaction logs for all 'txns' sequentially and apply them to the base metadata.
 // 3. Save the result as a new tablet metadata with version 'new_version'.
 // 4. Update the metadata's commit timestamp to 'commit_time'.
-// 5. Persist the new metadata to the object storage.
+// 5. Persist the new metadata to the object storage or cache the new metadata
+//     a. if skip_write_tablet_metadata is true, we will combined all tablets metadata and only write
+//        one metadata file
+//     b. if skip_write_tablet_metadata is false, each tablet will write its own metadata file
 //
 // Parameters:
 // - tablet_mgr A pointer to the TabletManager object managing the tablet, cannot be nullptr
@@ -48,7 +52,8 @@ class TabletManager;
 // Return:
 // - StatusOr containing the new published TabletMetadataPtr on success.
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
-                                            int64_t new_version, std::span<const TxnInfoPB> txns);
+                                            int64_t new_version, std::span<const TxnInfoPB> txns,
+                                            bool skip_write_tablet_metadata);
 
 // Publish a batch new versions of transaction logs.
 //
@@ -81,5 +86,9 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
 // - txns A `std::span` of `TxnInfoPB` containing information of the transactions to be aborted.
 //
 void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txns);
+
+// Collect files to delete for `abort_txn` in transaction log
+void collect_files_in_log(TabletManager* tablet_mgr, const TxnLogPB& txn_log,
+                          std::vector<std::string>* files_to_delete);
 
 } // namespace starrocks::lake

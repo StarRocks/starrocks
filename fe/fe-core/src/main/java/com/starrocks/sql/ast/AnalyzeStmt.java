@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.parser.NodePosition;
@@ -127,11 +126,6 @@ public class AnalyzeStmt extends StatementBase {
 
     public List<Long> getPartitionIds() {
         return partitionIds;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     @Override

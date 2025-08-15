@@ -11,40 +11,40 @@ create view v2 security invoker as select * from t1;
 create view v3 security invoker as select * from v2;
 -- result:
 -- !result
-create user if not exists u1;
+create user if not exists u1_${uuid};
 -- result:
 -- !result
-grant impersonate on user root to u1;
+grant impersonate on user root to u1_${uuid};
 -- result:
 -- !result
-grant select on view v1 to user u1;
+grant select on view v1 to user u1_${uuid};
 -- result:
 -- !result
-grant select on view v2 to user u1;
+grant select on view v2 to user u1_${uuid};
 -- result:
 -- !result
-grant select on view v3 to user u1;
+grant select on view v3 to user u1_${uuid};
 -- result:
 -- !result
-create user if not exists u2;
+create user if not exists u2_${uuid};
 -- result:
 -- !result
-grant impersonate on user root to u2;
+grant impersonate on user root to u2_${uuid};
 -- result:
 -- !result
-grant select on table t1 to user u2;
+grant select on table t1 to user u2_${uuid};
 -- result:
 -- !result
-grant select on view v1 to user u2;
+grant select on view v1 to user u2_${uuid};
 -- result:
 -- !result
-grant select on view v2 to user u2;
+grant select on view v2 to user u2_${uuid};
 -- result:
 -- !result
-grant select on view v3 to user u1;
+grant select on view v3 to user u1_${uuid};
 -- result:
 -- !result
-execute as u1 with no revert;
+execute as u1_${uuid} with no revert;
 -- result:
 -- !result
 select * from v1;
@@ -61,7 +61,7 @@ E: (5203, 'Access denied; you need (at least one of) the SELECT privilege(s) on 
 execute as root with no revert;
 -- result:
 -- !result
-execute as u2 with no revert;
+execute as u2_${uuid} with no revert;
 -- result:
 -- !result
 select * from v1;
@@ -79,7 +79,7 @@ alter view v1 set security invoker;
 alter view v2 set security none;
 -- result:
 -- !result
-execute as u1 with no revert;
+execute as u1_${uuid} with no revert;
 -- result:
 -- !result
 select * from v1;
@@ -92,7 +92,7 @@ select * from v2;
 execute as root with no revert;
 -- result:
 -- !result
-execute as u2 with no revert;
+execute as u2_${uuid} with no revert;
 -- result:
 -- !result
 select * from v1;
@@ -104,9 +104,9 @@ select * from v2;
 execute as root with no revert;
 -- result:
 -- !result
-drop user u1;
+drop user u1_${uuid};
 -- result:
 -- !result
-drop user u2;
+drop user u2_${uuid};
 -- result:
 -- !result

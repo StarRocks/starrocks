@@ -35,7 +35,6 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.View;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -89,6 +88,7 @@ import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
+import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SwapTableClause;
 import com.starrocks.sql.ast.TableRenameClause;
@@ -216,7 +216,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         this.table = table;
 
         if (statement.getAlterClause() == null) {
-            ((View) table).setSecurity(statement.isSecurity());
+            AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), table.getId(), statement.isSecurity());
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().setViewSecurity(alterViewInfo, false);
             return null;
         }
 
@@ -434,7 +435,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
-                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)) {
                 if (table.isCloudNativeTable()) {
                     Locker locker = new Locker();
                     locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
@@ -482,6 +485,16 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         properties, TTabletMetaType.BINLOG_CONFIG);
                 if (!isSuccess) {
                     throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
+                }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+                boolean isSuccess = schemaChangeHandler.updateFlatJsonConfigMeta(db, table.getId(),
+                        properties, TTabletMetaType.FLAT_JSON_CONFIG);
+                if (!isSuccess) {
+                    throw new DdlException("modify flat json config of FEMeta failed");
+
                 }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
@@ -532,6 +545,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
@@ -597,6 +612,10 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             ErrorReport.wrapWithRuntimeException(() ->
                     schemaChangeHandler.checkModifiedColumWithMaterializedViews((OlapTable) table, modifiedColumns));
             GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, clause);
+
+            // If modified columns are already done, inactive related mv
+            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, (OlapTable) table, modifiedColumns);
+
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
@@ -648,6 +667,13 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitDropFieldClause(DropFieldClause clause, ConnectContext context) {
         unsupportedException("Not support");
+        return null;
+    }
+
+    @Override
+    public Void visitSplitTabletClause(SplitTabletClause clause, ConnectContext context) {
+        ErrorReport.wrapWithRuntimeException(() -> GlobalStateMgr.getCurrentState().getDynamicTabletJobMgr()
+                .createDynamicTabletJob(db, (OlapTable) table, clause));
         return null;
     }
 

@@ -16,48 +16,34 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.common.Config;
 
 import java.nio.ByteBuffer;
 
-public final class ColumnDict {
+public final class ColumnDict extends StatsVersion {
     private final ImmutableMap<ByteBuffer, Integer> dict;
     // olap table use time info as version info.
     // table on lake use num as version, collectedVersion means historical version num,
     // while version means version in current period.
-    private final long collectedVersion;
-    private long version;
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long version) {
-        Preconditions.checkState(dict.size() > 0 && dict.size() <= 256,
+        super(version, version);
+        // TODO: The default value of low_cardinality_threshold is 255. Should we set the check size to 255 or 256?
+        Preconditions.checkState(!dict.isEmpty() && dict.size() <= Config.low_cardinality_threshold + 1,
                 "dict size %s is illegal", dict.size());
         this.dict = dict;
-        this.collectedVersion = version;
-        this.version = version;
     }
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long collectedVersion, long version) {
+        super(collectedVersion, version);
         this.dict = dict;
-        this.collectedVersion = collectedVersion;
-        this.version = version;
     }
 
     public ImmutableMap<ByteBuffer, Integer> getDict() {
         return dict;
     }
 
-    public long getVersion() {
-        return version;
-    }
-
-    public long getCollectedVersion() {
-        return collectedVersion;
-    }
-
     public int getDictSize() {
         return dict.size();
-    }
-
-    void updateVersion(long version) {
-        this.version = version;
     }
 }

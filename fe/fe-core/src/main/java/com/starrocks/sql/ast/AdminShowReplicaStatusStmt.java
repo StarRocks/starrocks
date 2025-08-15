@@ -19,13 +19,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Replica.ReplicaStatus;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -97,24 +92,6 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
 
     public Expr getWhere() {
         return where;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
-            return RedirectStatus.FORWARD_NO_SYNC;
-        } else {
-            return RedirectStatus.NO_FORWARD;
-        }
     }
 
     @Override

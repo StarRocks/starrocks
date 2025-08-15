@@ -244,9 +244,12 @@ void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadConte
 }
 
 // Note: this function should be thread safe
-void FragmentContext::cancel(const Status& status) {
+void FragmentContext::cancel(const Status& status, bool cancelled_by_fe) {
     if (!status.ok() && _runtime_state != nullptr && _runtime_state->query_ctx() != nullptr) {
         _runtime_state->query_ctx()->release_workgroup_token_once();
+        if (cancelled_by_fe) {
+            _runtime_state->query_ctx()->set_cancelled_by_fe();
+        }
     }
 
     _runtime_state->set_is_cancelled(true);

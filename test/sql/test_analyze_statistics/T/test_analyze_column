@@ -1,6 +1,8 @@
--- name: test_analyze_columnn @sequential
-create database analyze_test_${uuid0};
-use analyze_test_${uuid0};
+-- name: test_analyze_column @sequential
+
+DROP DATABASE IF EXISTS test_analyze_column;
+CREATE DATABASE test_analyze_column;
+USE test_analyze_column;
 
  CREATE TABLE `t1` (
     `k1`  date,
@@ -29,28 +31,30 @@ INSERT INTO t1 VALUES
     (null,'2020-10-26 12:12:12',null,null,null,null,null,null,null,null,1,1.12,2.889),
     (null,'2020-10-27 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
 
-[UC] analyze sample table t1;
-show stats meta where `database` = 'analyze_test_${uuid0}';
+analyze sample table t1;
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
-[UC] analyze full table t1(k1,k2);
-show stats meta where `database` = 'analyze_test_${uuid0}';
+analyze full table t1(k1,k2);
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
-[UC] analyze full table t1(k3,k4);
-show stats meta where `database` = 'analyze_test_${uuid0}';
+analyze full table t1(k3,k4);
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
-[UC] analyze sample table t1(k3,k4);
-show stats meta where `database` = 'analyze_test_${uuid0}';
+analyze sample table t1(k3,k4);
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
-[UC] analyze sample table t1;
-show stats meta where `database` = 'analyze_test_${uuid0}';
+analyze sample table t1;
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
-[UC] analyze full table t1;
-show stats meta where `database` = 'analyze_test_${uuid0}';
+analyze full table t1;
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
-[UC] drop stats t1;
-show stats meta where `database` = 'analyze_test_${uuid0}';
+drop stats t1;
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
-[UC] analyze sample table t1;
-show stats meta where `database` = 'analyze_test_${uuid0}';
+analyze sample table t1;
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+
+drop stats t1;
 
 admin set frontend config('enable_statistic_collect_on_first_load'='true');

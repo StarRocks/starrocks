@@ -10,9 +10,251 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
+## 3.3.17
+
+Release Date: July 30, 2025
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Upgraded HttpClient5 to 5.4.3. [#61298](https://github.com/StarRocks/starrocks/pull/61298)
+- Incorrect `cpu_core_used_permille` limit in resource groups. [#61177](https://github.com/StarRocks/starrocks/pull/61177)
+- Conflict between ALTER jobs and partition creation tasks. [#61167](https://github.com/StarRocks/starrocks/pull/61167)
+- NPE caused by missing `globalStateMgr` in `ConnectContext`. [#60880](https://github.com/StarRocks/starrocks/pull/60880)
+- Partition creation failed when partition names matched case-insensitively but had different values. [#60909](https://github.com/StarRocks/starrocks/pull/60909)
+- Lock competition caused by synchronous access to partition statistics. [#61041](https://github.com/StarRocks/starrocks/pull/61041)
+- ANALYZE tasks stuck in `pending` state after FE restart. [#61113](https://github.com/StarRocks/starrocks/pull/61113)
+- Issue with JIT (Just-In-Time) compilation in BE. [#61060](https://github.com/StarRocks/starrocks/pull/61060)
+- Leader address issue in Starmgr. [#61016](https://github.com/StarRocks/starrocks/pull/61016)
+- CVE vulnerabilities in Broker. [#60908](https://github.com/StarRocks/starrocks/pull/60908)
+- Actual number of JDBC connections exceeded `jdbc_connection_pool_size` limit. [#61004](https://github.com/StarRocks/starrocks/pull/61004)
+- CVE-2022-41404 vulnerability. [#59689](https://github.com/StarRocks/starrocks/pull/59689)
+- CVEs related to Parquet and HttpClient5. [#58750](https://github.com/StarRocks/starrocks/pull/58750)
+- Partition not removed from `_partition_map` when physical partition ID was empty. [#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- Missing version check in shared-data clusters. [#59422](https://github.com/StarRocks/starrocks/pull/59422)
+- Transaction log missing when publishing logs in batches in shared-data clusters. [#60949](https://github.com/StarRocks/starrocks/pull/60949)
+- Concurrent publishing of the same transaction when Batch Publish is enabled in shared-data clusters. [#57574](https://github.com/StarRocks/starrocks/pull/57574)
+- Statistics overwrite issue caused by lack of semi-synchronous mode. [#60897](https://github.com/StarRocks/starrocks/pull/60897)
+- Inaccurate `maxInstantTime` used for filtering Hudi files when retrieving latest merged file slices. [#60927](https://github.com/StarRocks/starrocks/pull/60927)
+- TaskRun state incompatible with earlier versions. [#60438](https://github.com/StarRocks/starrocks/pull/60438)
+- CVE-2025-52999 vulnerability. [#60795](https://github.com/StarRocks/starrocks/pull/60795)
+- Vulnerability caused by `log4j-1.2.17-cloudera6` in Broker. [#59579](https://github.com/StarRocks/starrocks/pull/59579)
+- BE crash when loading OOM partitions. [#60778](https://github.com/StarRocks/starrocks/pull/60778)
+- Base Compaction tasks blocking other compaction tasks. [#60711](https://github.com/StarRocks/starrocks/pull/60711)
+- Inefficient handling of error string truncation. [#60878](https://github.com/StarRocks/starrocks/pull/60878)
+- Materialized view rewrite failed in multi-FE environments. [#60841](https://github.com/StarRocks/starrocks/pull/60841)
+- INSERT OVERWRITE failed on manually created partitions. [#60750](https://github.com/StarRocks/starrocks/pull/60750)
+- Issue caused by using random distribution in aggregate keys. [#60702](https://github.com/StarRocks/starrocks/pull/60702)
+- Crash caused by low cardinality rewrite in `multi_distinct_count`. [#60664](https://github.com/StarRocks/starrocks/pull/60664)
+- Issue with Pivot resolving fields. [#60748](https://github.com/StarRocks/starrocks/pull/60748)
+- Upgraded `hudi-common` to 1.0.2. [#59501](https://github.com/StarRocks/starrocks/pull/59501)
+- BE crash when CLONE and DROP TABLE run concurrently. [#61359](https://github.com/StarRocks/starrocks/pull/61359)
+
+## 3.3.16
+
+Release Date: July 4, 2025
+
+### Improvements
+
+- Optimized error logs when creating Hive tables with duplicate names. [#60076](https://github.com/StarRocks/starrocks/pull/60076)
+- Added the FE parameter `slow_lock_print_stack` to prevent process stalls in large clusters when printing thread stacks. [#59967](https://github.com/StarRocks/starrocks/pull/59967)
+- Reduced unnecessary locks during tablet scheduling. [#59744](https://github.com/StarRocks/starrocks/pull/59744)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- SplitOR fails to prune scan columns. [#60223](https://github.com/StarRocks/starrocks/pull/60223)
+- Incorrect query plan for null-aware left anti joins. [#60119](https://github.com/StarRocks/starrocks/pull/60119)
+- Incorrect query results when rewriting queries with materialized views due to missing NULL partitions. [#60087](https://github.com/StarRocks/starrocks/pull/60087)
+- Partition pruning errors when tables contain empty partitions. [#60162](https://github.com/StarRocks/starrocks/pull/60162)
+- Refresh errors on Iceberg external tables when using partition expressions based on `str2date`. [#60089](https://github.com/StarRocks/starrocks/pull/60089)
+- Unexpected behavior caused by materialized view schema changes. [#60079](https://github.com/StarRocks/starrocks/pull/60079)
+- Issues related to low-cardinality global dictionaries in UNION operators. [#60075](https://github.com/StarRocks/starrocks/pull/60075)
+- Incorrect partition ranges for temporary partitions created using the START END syntax. [#60014](https://github.com/StarRocks/starrocks/pull/60014)
+- Lock issues with SUBMIT TASK. [#60026](https://github.com/StarRocks/starrocks/pull/60026)
+- Partial updates fail on Primary Key tables under certain conditions. [#60052](https://github.com/StarRocks/starrocks/pull/60052)
+- Crashes caused by BE failing to create directories due to a lack of permissions to access storage paths. [#60028](https://github.com/StarRocks/starrocks/pull/60028)
+- Cache failures due to cache key duplication in concurrent scenarios. [#60053](https://github.com/StarRocks/starrocks/pull/60053)
+- Hive table metadata background refresh failure in Unified Catalog. [#55215](https://github.com/StarRocks/starrocks/pull/55215)
+- Query failures caused by incorrect return types of CASE WHEN. [#59972](https://github.com/StarRocks/starrocks/pull/59972)
+- Query failures when Delta Lake tables UNION themselves. [#60030](https://github.com/StarRocks/starrocks/pull/60030)
+- Partition creation failure when writing to multiple tables within the same transaction. [#59954](https://github.com/StarRocks/starrocks/pull/59954)
+- Queries could return empty results instead of errors when tablet versions were updated during execution. [#53060](https://github.com/StarRocks/starrocks/pull/53060)
+- Queries against modified columns in a table return null after upgrading to v3.4. [#59941](https://github.com/StarRocks/starrocks/pull/59941)
+- Authentication information is printed in logs. [#59907](https://github.com/StarRocks/starrocks/pull/59907)
+- Metadata refresh failures for external tables in Hive Catalog. [#54596](https://github.com/StarRocks/starrocks/pull/54596)
+- CACHE SELECT failures for tables after schema changes. [#59812](https://github.com/StarRocks/starrocks/pull/59812)
+- Broker Load could not recover after FE Leader shifts. [#59732](https://github.com/StarRocks/starrocks/pull/59732)
+- Stream Load failures when the target table name contains Chinese characters. [#59722](https://github.com/StarRocks/starrocks/pull/59722)
+- Incorrect query results in external tables due to search key hash collisions (affecting Iceberg/Delta/Paimon). [#59781](https://github.com/StarRocks/starrocks/pull/59781)
+
+## 3.3.15
+
+Release Date: Jun 20, 2025
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Missing double quotes for string parameters in statistics INSERT statements. [#59713](https://github.com/StarRocks/starrocks/pull/59713)
+- Downgrade failure caused by Rollup tasks. [#59735](https://github.com/StarRocks/starrocks/pull/59735)
+- Incorrect function parameters in the result of `SHOW CREATE VIEW`. [#59714](https://github.com/StarRocks/starrocks/pull/59714)
+- A security issue where SQL statements with syntax errors exposed sensitive information in the Audit Log. [#59442](https://github.com/StarRocks/starrocks/pull/59442)
+- Error "Query version not found". [#59194](https://github.com/StarRocks/starrocks/pull/59194)
+- Failure to change data distribution using the `ALTER TABLE` statement. [#59360](https://github.com/StarRocks/starrocks/pull/59360)
+- An issue where root user processes were still visible when admin protection was enabled. [#59435](https://github.com/StarRocks/starrocks/pull/59435)
+- Failure of `INSERT OVERWRITE` into Hive. [#59469](https://github.com/StarRocks/starrocks/pull/59469)
+- Missing Tablet ID in the `max_tablet_rowset_num` log item. [#59467](https://github.com/StarRocks/starrocks/pull/59467)
+- An error caused by misconfigured Persistent Index parameters on a Duplicate table. [#56040](https://github.com/StarRocks/starrocks/pull/56040)
+- TaskRun history being archived on FE Follower nodes. [#59393](https://github.com/StarRocks/starrocks/pull/59393)
+- External catalog-based materialized view refresh errors. [#59369](https://github.com/StarRocks/starrocks/pull/59369)
+- Missing minimum version in Tablet information on shared-data clusters. [#59373](https://github.com/StarRocks/starrocks/pull/59373)
+- Abnormal maximum column unique ID in native tables of shared-data clusters due to version compatibility logic errors. [#59190](https://github.com/StarRocks/starrocks/pull/59190)
+- Materialized view refresh failure on Iceberg catalogs when the source Iceberg table is dropped and recreated, and manual refresh also fails after the materialized view is set to active. [#59287](https://github.com/StarRocks/starrocks/pull/59287)
+- Contamination of parameters in materialized view refresh tasks. [#59052](https://github.com/StarRocks/starrocks/pull/59052)
+- Data loss caused by Persistent Index when loading snapshot fails. [#59247](https://github.com/StarRocks/starrocks/pull/59247)
+- Issues caused when subcolumns of STRUCT appear in multiple predicates. [#59216](https://github.com/StarRocks/starrocks/pull/59216)
+- Query failure after renaming columns. [#59178](https://github.com/StarRocks/starrocks/pull/59178)
+- Loading failure due to multiple Stream Load requests. [#59181](https://github.com/StarRocks/starrocks/pull/59181)
+- Inability to refresh Hive table-based materialized views at the partition level in Unified Catalog. [#59139](https://github.com/StarRocks/starrocks/pull/59139)
+- Incorrect UNION plan causing FE out-of-memory (OOM). [#59030](https://github.com/StarRocks/starrocks/pull/59030)
+- Version loss during data loading. [#59006](https://github.com/StarRocks/starrocks/pull/59006)
+- Predicate loss when queries are rewritten to synchronous materialized views. [#58831](https://github.com/StarRocks/starrocks/pull/58831)
+- Issues with BITMAP/HLL/PERCENTILE data types in window functions. [#58776](https://github.com/StarRocks/starrocks/pull/58776)
+- Metadata changes to the external tables in Hive Catalog cannot be refreshed. [#54596](https://github.com/StarRocks/starrocks/pull/54596)
+
+### Behavior Changes
+
+- Introduced FE configuration parameter `task_runs_max_history_number` to control the number of historical TaskRuns retained in the `information_schema.task_runs` view, reducing memory usage. [#59161](https://github.com/StarRocks/starrocks/pull/59161)
+
+## 3.3.14
+
+Release Date: May 14, 2025
+
+### Improvements
+
+- Optimized error messages for regex parsing failures. [#57904](https://github.com/StarRocks/starrocks/pull/57904)
+- Fixed security vulnerabilities [SNYK-JAVA-ORGJSON-5488379](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) and [SNYK-JAVA-ORGJSON-5962464](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464). [#58425](https://github.com/StarRocks/starrocks/pull/58425)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Issues with the JSON data type in `first_value`/`last_value`/`lead`/`lag` window functions. [#58697](https://github.com/StarRocks/starrocks/pull/58697)
+- Deadlock caused by table-level locks from base tables during materialized view writes (after the bug fix, DB-level locks are used). [#58615](https://github.com/StarRocks/starrocks/pull/58615)
+- INSERT tasks hang when the target table is deleted. [#58603](https://github.com/StarRocks/starrocks/pull/58603)
+- Failure to change active/inactive state of materialized views with List partitions. [#58575](https://github.com/StarRocks/starrocks/pull/58575)
+- Incorrect `streaming_load_current_processing` metric. [#58565](https://github.com/StarRocks/starrocks/pull/58565)
+- Data version update errors caused by continuous loading and replica clone tasks. [#58513](https://github.com/StarRocks/starrocks/pull/58513)
+- Failed to refresh materialized views on external tables. [#58506](https://github.com/StarRocks/starrocks/pull/58506)
+- Incorrect `if()` results on ARM architecture. [#58455](https://github.com/StarRocks/starrocks/pull/58455)
+- Materialized view rewriting generated incorrect query plans. [#58487](https://github.com/StarRocks/starrocks/pull/58487)
+- Iceberg table metadata did not refresh automatically. [#58490](https://github.com/StarRocks/starrocks/pull/58490)
+- Incorrect query plan generated by `group_concat`. [#57908](https://github.com/StarRocks/starrocks/pull/57908)
+- Mass Tablet load failures caused by unhandled exceptions during loading. [#58393](https://github.com/StarRocks/starrocks/pull/58393)
+- Constant folding failed due to type mismatches while pruning List partitions with generated columns (after the bug fix, an implicit cast rule was added). [#54543](https://github.com/StarRocks/starrocks/pull/54543)
+- Mismatch between aggregate function return type and original column type (after the bug fix, the column type is `cast` to the function output type). [#58407](https://github.com/StarRocks/starrocks/pull/58407)
+- `broadcast_row_limit` set to 0 or below failed to prevent BROADCAST JOIN generation. [#58307](https://github.com/StarRocks/starrocks/pull/58307)
+- Broker Load used BE nodes that had already been blacklisted. [#58350](https://github.com/StarRocks/starrocks/pull/58350)
+- Asynchronous tasks persist in the background and cannot be dropped after manually cancelling materialized view refresh tasks. [#58310](https://github.com/StarRocks/starrocks/pull/58310)
+- Failed to create expression partitions with month or year granularity. [#58182](https://github.com/StarRocks/starrocks/pull/58182)
+- `ngram_search` generated invalid query plans. [#58190](https://github.com/StarRocks/starrocks/pull/58190)
+
+## 3.3.13
+
+Release Date: April 22, 2025
+
+### Improvements
+
+- Added memory consumption metrics for queries in FE in audit logs and the QueryDetail interface. [#57731](https://github.com/StarRocks/starrocks/pull/57731)
+- Optimized the strategy for concurrent creation of expression partitions. [#57899](https://github.com/StarRocks/starrocks/pull/57899)
+- Added monitoring metrics for the number of active FE nodes. [#57857](https://github.com/StarRocks/starrocks/pull/57857)
+- The `information_schema.task_runs` view supports pushdown of the LIMIT clause. [#57404](https://github.com/StarRocks/starrocks/pull/57404)
+- Fixed several CVE issues. [#57705](https://github.com/StarRocks/starrocks/pull/57705) [#57620](https://github.com/StarRocks/starrocks/pull/57620)
+- Primary Key tables support retry during the PUBLISH stage, enhancing system disaster recovery capabilities. [#57354](https://github.com/StarRocks/starrocks/pull/57354)
+- Reduced memory consumption of Flat JSON. [#57357](https://github.com/StarRocks/starrocks/pull/57357)
+- The `information_schema.routine_load_jobs` view adds the `timestamp_progress` column, consistent with the SHOW ROUTINE LOAD statement return. [#57123](https://github.com/StarRocks/starrocks/pull/57123)
+- Disallowed unauthorized behaviors from StarRocks to LDAP. [#57131](https://github.com/StarRocks/starrocks/pull/57131)
+- Supports returning an error when the schema of an AVRO file does not match the schema of the Hive table. [#57296](https://github.com/StarRocks/starrocks/pull/57296)
+- Materialized views support the `excluded_refresh_tables` property. [#56428](https://github.com/StarRocks/starrocks/pull/56428)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Flat JSON does not support the `get_json_bool` function. [#58077](https://github.com/StarRocks/starrocks/pull/58077)
+- SHOW AUTHENTICATION statement returns the password. [#58072](https://github.com/StarRocks/starrocks/pull/58072)
+- The `percentile_count` function returns incorrect values. [#58038](https://github.com/StarRocks/starrocks/pull/58038)
+- Issues caused by spilling strategies. [#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- After a BE is blacklisted, Stream Load still dispatches tasks to the BE, causing task failures. [#57919](https://github.com/StarRocks/starrocks/pull/57919)
+- Issues when using the `cast` function with semi-structured data types. [#57804](https://github.com/StarRocks/starrocks/pull/57804)
+- The `array_map` function returns incorrect values. [#57756](https://github.com/StarRocks/starrocks/pull/57756)
+- In the scenario of a single tablet, using multiple `distinct` functions on the same column with a single-column GROUP BY clause leads to incorrect query results. [#57690](https://github.com/StarRocks/starrocks/pull/57690)
+- MIN/MAX values in the profiles of big queries are inaccurate. [#57655](https://github.com/StarRocks/starrocks/pull/57655)
+- Non-partitioned materialized views based on Delta Lake data cannot rewrite queries. [#57686](https://github.com/StarRocks/starrocks/pull/57686)
+- A Routine Load deadlock issue. [#57430](https://github.com/StarRocks/starrocks/pull/57430)
+- Predicate pushdown issues with DATE/DATETIME columns. [#57576](https://github.com/StarRocks/starrocks/pull/57576)
+- An issue when the `percentile_disc` function has an empty input. [#57572](https://github.com/StarRocks/starrocks/pull/57572)
+- When modifying the bucket distribution of a table with the statement `ALTER TABLE {table} PARTITIONS (p1, p1) DISTRIBUTED BY ...`, specifying duplicate partition names could result in failure to delete internally generated temporary partitions. [#57005](https://github.com/StarRocks/starrocks/pull/57005)
+- ALTER TABLE MODIFY COLUMN fails with expression partitioned tables based on `str2date` function. [#57487](https://github.com/StarRocks/starrocks/pull/57487)
+- CACHE SELECT issue with semi-structured columns. [#57448](https://github.com/StarRocks/starrocks/pull/57448)
+- Upgrade compatibility issue caused by `hadoop-lib`. [#57436](https://github.com/StarRocks/starrocks/pull/57436)
+- Case sensitivity error issues when creating partitions. [#54867](https://github.com/StarRocks/starrocks/pull/54867)
+- Some columns generate incorrect sort keys during updates. [#57375](https://github.com/StarRocks/starrocks/pull/57375)
+- Unknown issues caused by nested window functions . [#57216](https://github.com/StarRocks/starrocks/pull/57216)
+
+## 3.3.12
+
+Release date: April 3, 2025
+
+### New Features
+
+- Supports the `percentile_approx_weighted` function. [#56654](https://github.com/StarRocks/starrocks/pull/56654)
+- Supports modifying properties of Hive Catalog and Hudi Catalog. [#56212](https://github.com/StarRocks/starrocks/pull/56212)
+- Paimon Catalog supports manifest cache. [#55788](https://github.com/StarRocks/starrocks/pull/55788)
+- Supports `SHOW PARTITIONS` for tables in Paimon Catalog. [#55785](https://github.com/StarRocks/starrocks/pull/55785)
+- Supports statistics collection for Paimon Catalog. [#55757](https://github.com/StarRocks/starrocks/pull/55757)
+
+### Improvements
+
+- Various improvements and bug fixes related to statistics. [#57147](https://github.com/StarRocks/starrocks/pull/57147) [#57238](https://github.com/StarRocks/starrocks/pull/57238) [#57170](https://github.com/StarRocks/starrocks/pull/57170) [#57154](https://github.com/StarRocks/starrocks/pull/57154) [#57124](https://github.com/StarRocks/starrocks/pull/57124) [#57047](https://github.com/StarRocks/starrocks/pull/57047) [#56956](https://github.com/StarRocks/starrocks/pull/56956) [#57031](https://github.com/StarRocks/starrocks/pull/57031) [#56904](https://github.com/StarRocks/starrocks/pull/56904) [#56950](https://github.com/StarRocks/starrocks/pull/56950) [#56671](https://github.com/StarRocks/starrocks/pull/56671) [#55922](https://github.com/StarRocks/starrocks/pull/55922)
+- Optimized error messages when table creation fails. [#57055](https://github.com/StarRocks/starrocks/pull/57055)
+- Enhanced retry mechanism for Broker Load. [#56987](https://github.com/StarRocks/starrocks/pull/56987)
+- Improved performance of `array_generate`. [#57252](https://github.com/StarRocks/starrocks/pull/57252)
+- Aborted ongoing Compaction tasks for deleted partitions. [#56943](https://github.com/StarRocks/starrocks/pull/56943)
+- Optimized error messages when `ALTER TABLE` fails. [#57054](https://github.com/StarRocks/starrocks/pull/57054)
+- Removed unnecessary reverse step from `array_agg()` to improve performance. [#56958](https://github.com/StarRocks/starrocks/pull/56958)
+- Added checksum verification for replicas in Primary Key tables. [#56519](https://github.com/StarRocks/starrocks/pull/56519)
+- Masked sensitive information in the `FILES` function output. [#56684](https://github.com/StarRocks/starrocks/pull/56684)
+- Reduced noisy logs related to materialized views. [#56672](https://github.com/StarRocks/starrocks/pull/56672)
+- Upgraded Iceberg version to 1.7.1. [#55271](https://github.com/StarRocks/starrocks/pull/55271)
+
+### Bug Fixes
+
+- `INSERT INTO FILES` did not support CSV delimiter conversion. [#57126](https://github.com/StarRocks/starrocks/pull/57126)
+- Issues with Iceberg REST Catalog. [#55416](https://github.com/StarRocks/starrocks/pull/55416)
+- Predicate was lost during rewrite for view-based materialized views. [#57153](https://github.com/StarRocks/starrocks/pull/57153)
+- Paimon Catalog failed to read tables with schema changes. [#56796](https://github.com/StarRocks/starrocks/pull/56796)
+- Timezone conversion issue in Paimon Catalog. [#56879](https://github.com/StarRocks/starrocks/pull/56879)
+- `SHOW MATERIALIZED VIEWS` did not display `default_catalog` information. [#56362](https://github.com/StarRocks/starrocks/pull/56362)
+- In Trino dialect mode, time strings containing 'T' were not accepted. (Solution: replaced `parse_datetime` with `str_to_jodatime`.) [#56565](https://github.com/StarRocks/starrocks/pull/56565)
+- Incorrect result of `first_value` function. [#56467](https://github.com/StarRocks/starrocks/pull/56467)
+- Incorrect result of `concat_ws` function. [#56384](https://github.com/StarRocks/starrocks/pull/56384)
+
+### Behavior Changes
+
+- Added authentication to the FE Profile interface. [#56914](https://github.com/StarRocks/starrocks/pull/56914)
+- Changed default value of session variable `big_query_profile_threshold` from `0` to `30`. [#56520](https://github.com/StarRocks/starrocks/pull/56520)
+
 ## 3.3.11
 
 Release date: March 7, 2025
+
+### New Features
+
+- Window functions support `max_by` and `min_by`. [#54961](https://github.com/StarRocks/starrocks/pull/54961)
 
 ### Improvements
 
@@ -24,47 +266,6 @@ Release date: March 7, 2025
 - Supports configuring the maximum number of returned rows for `SHOW PROC '/transaction'`. [#55933](https://github.com/StarRocks/starrocks/pull/55933)
 - Supports creating asynchronous materialized views on Oracle-type JDBC Catalog tables. [#55372](https://github.com/StarRocks/starrocks/pull/55372)
 - MemTracker on BE WebUI supports pagination with 25 rows per page. [#56206](https://github.com/StarRocks/starrocks/pull/56206)
-
-### Bug Fixes
-
-Fixed the following issues:
-
-- FE does not support casting constant TIME data types into DATETIME. [#55804](https://github.com/StarRocks/starrocks/pull/55804)
-- Stream Load transaction interface does not support the `starrocks_fe_table_load_rows` and `starrocks_fe_table_load_bytes` metrics. [#44991](https://github.com/StarRocks/starrocks/pull/44991)
-- Changes to automatic statistics collection do not take effect. [#56173](https://github.com/StarRocks/starrocks/pull/56173)
-- Materialized views in abnormal states caused issues with `SHOW MATERIALIZED VIEWS`. [#55995](https://github.com/StarRocks/starrocks/pull/55995)
-- Text-based materialized view rewrite does not work across different databases. [#56001](https://github.com/StarRocks/starrocks/pull/56001)
-- Metadata compatibility issues in JDBC Catalogs. [#55993](https://github.com/StarRocks/starrocks/pull/55993)
-- Issues of handling the JSON data type in JDBC Catalogs. [#56008](https://github.com/StarRocks/starrocks/pull/56008)
-- Incorrect Sort Key settings during Schema Change. [#55902](https://github.com/StarRocks/starrocks/pull/55902)
-- Credential information leak issue in Broker Load. [#55358](https://github.com/StarRocks/starrocks/pull/55358)
-
-### Behavior Changes
-
-- Added authentication to the `query_detail` interface in FE. [#55919](https://github.com/StarRocks/starrocks/pull/55919)
-
-## 3.3.10 (Yanked)
-
-Release date: February 21, 2025
-
-:::tip
-
-This version has been taken offline due to metadata loss issues in **shared-data clusters**.
-
-- **Problem**: When there are committed compaction transactions that are not yet been published during a shift of Leader FE node in a shared-data cluster, metadata loss may occur after the shift.
-
-- **Impact scope**: This problem only affects shared-data clusters. Shared-nothing clusters are unaffected.
-
-- **Temporary workaround**: When the Publish task is returned with an error, you can execute `SHOW PROC 'compactions'` to check if there are any partitions that have two compaction transactions with empty `FinishTime`. You can execute `ALTER TABLE DROP PARTITION FORCE` to drop the partitions to avoid Publish tasks getting hang.
-
-:::
-
-### New Features
-
-- Window functions support `max_by` and `min_by`. [#54961](https://github.com/StarRocks/starrocks/pull/54961)
-
-### Improvements
-
 - Supports pushdown for subfields of complex types in table functions. [#55425](https://github.com/StarRocks/starrocks/pull/55425)
 - Supports LDAP login for MariaDB clients. [#55720](https://github.com/StarRocks/starrocks/pull/55720)
 - Upgraded Paimon version to 1.0.1. [#54796](https://github.com/StarRocks/starrocks/pull/54796) [#55760](https://github.com/StarRocks/starrocks/pull/55760)
@@ -85,6 +286,15 @@ This version has been taken offline due to metadata loss issues in **shared-data
 
 Fixed the following issues:
 
+- FE does not support casting constant TIME data types into DATETIME. [#55804](https://github.com/StarRocks/starrocks/pull/55804)
+- Stream Load transaction interface does not support the `starrocks_fe_table_load_rows` and `starrocks_fe_table_load_bytes` metrics. [#44991](https://github.com/StarRocks/starrocks/pull/44991)
+- Changes to automatic statistics collection do not take effect. [#56173](https://github.com/StarRocks/starrocks/pull/56173)
+- Materialized views in abnormal states caused issues with `SHOW MATERIALIZED VIEWS`. [#55995](https://github.com/StarRocks/starrocks/pull/55995)
+- Text-based materialized view rewrite does not work across different databases. [#56001](https://github.com/StarRocks/starrocks/pull/56001)
+- Metadata compatibility issues in JDBC Catalogs. [#55993](https://github.com/StarRocks/starrocks/pull/55993)
+- Issues of handling the JSON data type in JDBC Catalogs. [#56008](https://github.com/StarRocks/starrocks/pull/56008)
+- Incorrect Sort Key settings during Schema Change. [#55902](https://github.com/StarRocks/starrocks/pull/55902)
+- Credential information leak issue in Broker Load. [#55358](https://github.com/StarRocks/starrocks/pull/55358)
 - An error caused by pushing down LIMIT before predicates in CTE. [#55768](https://github.com/StarRocks/starrocks/pull/55768)
 - An error caused by table schema changes in Stream Load. [#55773](https://github.com/StarRocks/starrocks/pull/55773)
 - A privilege issue due to the execution plan of DELETE statements containing SELECT. [#55695](https://github.com/StarRocks/starrocks/pull/55695)
@@ -110,8 +320,25 @@ Fixed the following issues:
 
 ### Behavior Changes
 
+- Added authentication to the `query_detail` interface in FE. [#55919](https://github.com/StarRocks/starrocks/pull/55919)
 - The UUID type in Iceberg now maps to BINARY. [#54978](https://github.com/StarRocks/starrocks/pull/54978)
 - Uses changed row count instead of the visible time of partitions to determine if statistics need to be recollected. [#55373](https://github.com/StarRocks/starrocks/pull/55373)
+
+## 3.3.10 (Yanked)
+
+Release date: February 21, 2025
+
+:::tip
+
+This version has been taken offline due to metadata loss issues in **shared-data clusters**.
+
+- **Problem**: When there are committed compaction transactions that are not yet been published during a shift of Leader FE node in a shared-data cluster, metadata loss may occur after the shift.
+
+- **Impact scope**: This problem only affects shared-data clusters. Shared-nothing clusters are unaffected.
+
+- **Temporary workaround**: When the Publish task is returned with an error, you can execute `SHOW PROC 'compactions'` to check if there are any partitions that have two compaction transactions with empty `FinishTime`. You can execute `ALTER TABLE DROP PARTITION FORCE` to drop the partitions to avoid Publish tasks getting hang.
+
+:::
 
 ## 3.3.9
 
@@ -658,6 +885,7 @@ Release date: June 21, 2024
 
 #### Others
 
+- JDK 11 or later is required from StarRocks v3.3.0 onwards.
 - The default value of the materialized view property `partition_refresh_num` has been changed from `-1` to `1`. When a partitioned materialized view needs to be refreshed, instead of refreshing all partitions in a single task, the new behavior will incrementally refresh one partition at a time. This change is intended to prevent excessive resource consumption caused by the original behavior. The default behavior can be adjusted using the FE configuration `default_mv_partition_refresh_number`.
 - Originally, the database consistency checker was scheduled based on GMT+8 time zone. Database consistency checker is scheduled based on the local time zone now. [#45748](https://github.com/StarRocks/starrocks/issues/45748)
 - By default, Data Cache is enabled to accelerate data lake queries. Users can manually disable it by executing `SET enable_scan_datacache = false`. 

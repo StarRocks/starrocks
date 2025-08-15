@@ -44,7 +44,7 @@ public class LakeTableTestHelper {
         MaterializedIndex index = new MaterializedIndex(indexId);
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (long id : tabletId) {
-            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, 0, 0, TStorageMedium.HDD, true);
+            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, 0, TStorageMedium.HDD, true);
             invertedIndex.addTablet(id, tabletMeta);
             index.addTablet(new LakeTablet(id), tabletMeta);
         }
@@ -86,6 +86,17 @@ public class LakeTableTestHelper {
         TransactionState transactionState =
                 new TransactionState(dbId, Lists.newArrayList(tableId), txnId, "label", null,
                         TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, null, 0, 60_000);
+        transactionState.setPrepareTime(currentTimeMs - 10_000);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        return transactionState;
+    }
+
+    TransactionState newCompactionTransactionState() {
+        long txnId = nextTxnId++;
+        long currentTimeMs = System.currentTimeMillis();
+        TransactionState transactionState =
+                new TransactionState(dbId, Lists.newArrayList(tableId), txnId, "label", null,
+                        TransactionState.LoadJobSourceType.LAKE_COMPACTION, null, 0, 60_000);
         transactionState.setPrepareTime(currentTimeMs - 10_000);
         transactionState.setWriteEndTimeMs(currentTimeMs);
         return transactionState;

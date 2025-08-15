@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Deploy StarRocks with Helm
+# Helm を使用して StarRocks をデプロイする
 
 [Helm](https://helm.sh/) は Kubernetes のパッケージマネージャーです。[Helm Chart](https://helm.sh/docs/topics/charts/) は Helm パッケージであり、Kubernetes クラスタ上でアプリケーションを実行するために必要なすべてのリソース定義を含んでいます。このトピックでは、Helm を使用して Kubernetes クラスタ上に StarRocks クラスタを自動的にデプロイする方法について説明します。
 

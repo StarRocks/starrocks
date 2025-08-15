@@ -97,6 +97,7 @@ displayed_sidebar: docs
 
 - ELSE
 - EXCEPT
+- EXCLUDE
 - EXISTS
 - EXPLAIN
 

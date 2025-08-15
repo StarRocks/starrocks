@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 public class KillAnalyzeStmt extends StatementBase {
@@ -30,13 +29,12 @@ public class KillAnalyzeStmt extends StatementBase {
         this.analyzeId = analyzeId;
     }
 
-    public long getAnalyzeId() {
-        return analyzeId;
+    public boolean isKillAllPendingTasks() {
+        return analyzeId == -1;
     }
 
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
+    public long getAnalyzeId() {
+        return analyzeId;
     }
 
     @Override

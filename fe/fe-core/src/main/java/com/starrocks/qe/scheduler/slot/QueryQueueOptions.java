@@ -15,18 +15,24 @@
 package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class QueryQueueOptions {
-
     private static final Logger LOG = LogManager.getLogger(QueryQueueOptions.class);
 
     private final boolean enableQueryQueueV2;
@@ -37,27 +43,51 @@ public class QueryQueueOptions {
         if (!coord.getJobSpec().isEnableQueue() || !coord.getJobSpec().isNeedQueued()) {
             return new QueryQueueOptions(false, V2.DEFAULT);
         }
-
-        return createFromEnv();
+        return createFromEnv(coord.getCurrentWarehouseId());
     }
 
-    public static QueryQueueOptions createFromEnv() {
-        if (!Config.enable_query_queue_v2) {
+    public static QueryQueueOptions createFromEnv(long warehouseId) {
+        // if coord's warehouse is not set, use default
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        if (!slotManager.isEnableQueryQueueV2(warehouseId)) {
             return new QueryQueueOptions(false, V2.DEFAULT);
         }
-
-        V2 v2 = new V2(Config.query_queue_v2_concurrency_level,
-                BackendResourceStat.getInstance().getNumBes(),
-                BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe(),
-                BackendResourceStat.getInstance().getAvgMemLimitBytes(),
-                Config.query_queue_v2_num_rows_per_slot,
-                Config.query_queue_v2_cpu_costs_per_slot);
         SchedulePolicy policy = SchedulePolicy.create(Config.query_queue_v2_schedule_strategy);
         if (policy == null) {
             LOG.error("unknown query_queue_v2_schedule_policy: {}", Config.query_queue_v2_schedule_strategy);
             policy = SchedulePolicy.createDefault();
         }
-        return new QueryQueueOptions(true, v2, policy);
+        if (RunMode.isSharedNothingMode()) {
+            final V2 v2 = new V2(Config.query_queue_v2_concurrency_level,
+                    BackendResourceStat.getInstance().getNumBes(),
+                    BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe(),
+                    BackendResourceStat.getInstance().getAvgMemLimitBytes(),
+                    Config.query_queue_v2_num_rows_per_slot,
+                    Config.query_queue_v2_cpu_costs_per_slot);
+            return new QueryQueueOptions(true, v2, policy);
+        } else {
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final Set<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(warehouseId)
+                    .stream()
+                    .collect(Collectors.toSet());
+            final int computeNodeNum = computeNodeIds.size();
+            final Map<Long, Integer> warehouseNumHardwareCoresOfBe = BackendResourceStat.getInstance()
+                    .getHardwareCoresPerBe(beId -> computeNodeIds.contains(beId));
+            final int avgNumHardwareCoresOfBe = BackendResourceStat.getAvgNumHardwareCoresOfBe(warehouseNumHardwareCoresOfBe);
+            final Map<Long, Long> warehouseMemLimitBytesPerBe = BackendResourceStat.getInstance()
+                    .getMemLimitBytesPerBeWithPred(beId -> computeNodeIds.contains(beId));
+            final long avgMemLimitBytes = BackendResourceStat.getAvgMemLimitBytes(warehouseMemLimitBytesPerBe);
+            // To avoid warehouse's cpu/mem usage too low, we can use concurrency level to scale up
+            // the total slots, the behavior is not changed by default.
+            final int concurrencyLevel = Math.max(1, Config.query_queue_v2_concurrency_level / 4);
+            final V2 v2 = new V2(concurrencyLevel,
+                    computeNodeNum,
+                    avgNumHardwareCoresOfBe,
+                    avgMemLimitBytes,
+                    Config.query_queue_v2_num_rows_per_slot,
+                    Config.query_queue_v2_cpu_costs_per_slot);
+            return new QueryQueueOptions(true, v2, policy);
+        }
     }
 
     @VisibleForTesting
@@ -115,14 +145,20 @@ public class QueryQueueOptions {
     }
 
     public static class V2 {
-        private static final V2 DEFAULT = new V2();
+        public static final V2 DEFAULT = new V2();
 
+        @SerializedName("NumWorkers")
         private final int numWorkers;
+        @SerializedName("NumRowsPerSlot")
         private final int numRowsPerSlot;
 
+        @SerializedName("TotalSlots")
         private final int totalSlots;
+        @SerializedName("MemBytesPerSlot")
         private final long memBytesPerSlot;
+        @SerializedName("CpuCostsPerSlot")
         private final long cpuCostsPerSlot;
+        @SerializedName("TotalSmallSlots")
         private final int totalSmallSlots;
 
         @VisibleForTesting
@@ -221,7 +257,12 @@ public class QueryQueueOptions {
             return EnumUtils.getEnumIgnoreCase(SchedulePolicy.class, value);
         }
     }
+
     private static boolean isAnyZero(long... values) {
         return Arrays.stream(values).anyMatch(val -> val == 0);
+    }
+
+    public static int correctSlotNum(int slotNum) {
+        return slotNum < 0 ? 0 : slotNum;
     }
 }

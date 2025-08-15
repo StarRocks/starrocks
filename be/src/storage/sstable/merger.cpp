@@ -128,6 +128,11 @@ public:
         return current_->max_rss_rowid();
     }
 
+    SstablePredicateSPtr predicate() const override {
+        assert(Valid());
+        return current_->predicate();
+    }
+
 private:
     // Which direction is the iterator moving?
     enum Direction { kForward, kReverse };

@@ -51,6 +51,9 @@ private:
 
 class ConfigTest : public testing::Test {
     void SetUp() override { config::TEST_clear_configs(); }
+
+protected:
+    void find_conf_and_check_value(const std::string& name, int64_t count, const std::string& value);
 };
 
 TEST_F(ConfigTest, test_init) {
@@ -495,6 +498,22 @@ TEST_F(ConfigTest, test_alias03) {
 
     EXPECT_TRUE(config::init(ss));
     EXPECT_EQ(8090, cfg_int32);
+
+    find_conf_and_check_value("cfg_int32", 1, "8090");
+    find_conf_and_check_value("cfg_int32_alias1", 1, "8090");
+    find_conf_and_check_value("cfg_int32_alias2", 1, "8090");
+}
+
+void ConfigTest::find_conf_and_check_value(const std::string& name, int64_t count, const std::string& value) {
+    auto configs = config::list_configs();
+    int64_t find_count = 0;
+    for (const auto& config : configs) {
+        if (config.name == name) {
+            ASSERT_EQ(config.value, value);
+            find_count++;
+        }
+    }
+    ASSERT_EQ(count, find_count);
 }
 
 TEST_F(ConfigTest, test_alias04) {

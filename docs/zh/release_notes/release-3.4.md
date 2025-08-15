@@ -4,9 +4,136 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
-## 3.4.1
+## 3.4.6
+
+发布日期：2025 年 8 月 7 日
+
+### 功能优化
+
+- INSERT INTO FILES 导出数据到 Parquet 文件时，可以使用 [`parquet.version`](https://docs.starrocks.io/docs/zh/sql-reference/sql-functions/table-functions/files.md#parquetversion) 来指定导出 Parquet 文件的版本，以能让其他工具读取导出的 Parquet 文件更好地兼容。[#60843](https://github.com/StarRocks/starrocks/pull/60843)
+
+### 问题修复
+
+修复了如下问题：
+
+- TableMetricsManager 中使用的锁粒度过大导致导入作业失败。[#58911](https://github.com/StarRocks/starrocks/pull/58911)
+- 通过 `FILES()` 导入 Parquet 数据时列名大小写敏感的问题。[#61059](https://github.com/StarRocks/starrocks/pull/61059)
+- 存算分离集群从 v3.3 升级至 v3.4 或更新版本后缓存不生效。[#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- 分区 ID 为空时，业务触发除零错误导致 BE Crash。[#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- BE 扩容过程中 Broker Load 作业报错。[#60224](https://github.com/StarRocks/starrocks/pull/60224)
+
+### 行为变更
+
+- `information_schema.keywords` 视图中的 `keyword` 列改名为 `word` ，以兼容 MySQL 中的定义。[#60863](https://github.com/StarRocks/starrocks/pull/60863)
+
+## 3.4.5
+
+发布日期：2025 年 7 月 10 日
+
+### 功能优化
+
+- 优化导入作业运行情况的可观测性信息：将导入任务的运行信息统一至 `information_schema.loads` 视图中。用户可以在此视图中查看所有 INSERT、Broker Load、Stream Load 以及 Routine Load 的子任务的运行信息。同时为视图增加了更多字段，让用户能更清晰地查看导入任务的运行情况，以及父作业（PIPES、Routint Load Job）的关联信息。
+- 支持通过 ALTER ROUTINE LOAD 语句修改 `kafka_broker_list`。
+
+### 问题修复
+
+修复了如下问题：
+
+- 高频导入下 Compaction 可能延迟。[#59998](https://github.com/StarRocks/starrocks/pull/59998)
+- 通过 Unified Catalog 查询 Iceberg 外表报错: `not support getting unified metadata table factory`。[#59412](https://github.com/StarRocks/starrocks/pull/59412)
+- 通过 DESC FILES() 查看远端存储中的 CSV 文件，返回结果错误（原因为系统错误将 `xinf` 推断为 FLOAT 类型）。[#59574](https://github.com/StarRocks/starrocks/pull/59574)
+- INSERT INTO 遇到空分区导致 BE Crash。[#59553](https://github.com/StarRocks/starrocks/pull/59553)
+- StarRocks 读取 Iceberg 中 Equality Delete 文件时，如果 Iceberg 表中数据已经删除，StarRocks 中依然可以读取到已删除数据。[#59709](https://github.com/StarRocks/starrocks/pull/59709)
+- 给列重命名后导致的查询失败。[#59178](https://github.com/StarRocks/starrocks/pull/59178)
+
+### 行为变更
+
+- BE 配置项 `skip_pk_preload` 的默认值由 `false` 改为 `true`，导致系统会跳过主键表的 Primary Key Index 预读，以减少报错 `Reached Timeout` 的可能性。该变更可能会导致部分需要加载 Primary Key Index 的查询耗时增加。
+
+## 3.4.4
+
+发布日期：2025 年 6 月 10 日
+
+### 功能优化
+
+- Storage Volume 支持基于 Managed Identity 方式认证的 ADLS2 存储。[#58454](https://github.com/StarRocks/starrocks/pull/58454)
+- 在[混合表达式分区](https://docs.starrocks.io/zh/docs/table_design/data_distribution/expression_partitioning/#混合表达式分区-自-v34)中，大多数基于日期时间相关的函数都能有效支持分区裁剪。
+- 支持使用 `FILES` 函数从 Azure 导入 Avro 数据文件。[#58131](https://github.com/StarRocks/starrocks/pull/58131)
+- Routine Load 导入非法 JSON 格式的数据时，增加打印当前消费的 Partition 和 Offset 信息到 Error Log 中，方便定位问题。[#55772](https://github.com/StarRocks/starrocks/pull/55772)
+
+### 问题修复
+
+修复了如下问题：
+
+- 并发查询分区表的相同分区导致 Hive Metastore 卡住。[#58089](https://github.com/StarRocks/starrocks/pull/58089)
+- `INSERT` 任务异常退出，导致对应作业一直处于 `QUEUEING` 状态。[#58603](https://github.com/StarRocks/starrocks/pull/58603)
+- 自 v3.4.0 升级至 v3.4.2 之后，大量 Tablet 的副本数据出现异常。[#58518](https://github.com/StarRocks/starrocks/pull/58518)
+- 错误的 UNION 执行计划造成 FE OOM。[#59040](https://github.com/StarRocks/starrocks/pull/59040)
+- 回收分区时无效的数据库 ID 会导致 FE 启动失败。[#59666](https://github.com/StarRocks/starrocks/pull/59666)
+- FE CheckPoint 操作失败后无法正常结束导致阻塞。[#58602](https://github.com/StarRocks/starrocks/pull/58602)
+
+## 3.4.3
+
+发布日期：2025 年 4 月 30 日
+
+### 功能优化
+
+- Routine Load 以及 Stream Load 支持在 `columns` 参数中使用 Lambda 表达式以实现复杂的列数据提取。用户可以使用 `array_filter`/`map_filter` 过滤提取 ARRAY / MAP 数据。通过结合 `cast` 函数将 JSON Array / JSON Object 转为 ARRAY 和 MAP 类型，可以实现对 JSON 数据的复杂过滤提取。例如通过 `COLUMNS (js, col=array_filter(i -> json_query(i, '$.type')=='t1' , cast(js as Array<JSON>))[1] )` 可以提取 `js` 这个 JSON Array 中 `type` 为 `t1` 的第一个 JSON Object。[#58149](https://github.com/StarRocks/starrocks/pull/58149)
+- 支持将 JSON Object 通过 `cast` 函数转为 MAP 类型的数据，并结合 `map_filter` 提取 JSON Object 中满足条件子项。例如通过 `map_filter((k, v) -> json_query(v, '$.type') == 't1', cast(js AS MAP<String, JSON>))` 可以提取 `js` 这个 JSON Object 中 `type` 为 `t1` 的 JSON Object。[#58045](https://github.com/StarRocks/starrocks/pull/58045)
+- 查询 `information_schema.task_runs` 视图时支持 LIMIT。[#57404](https://github.com/StarRocks/starrocks/pull/57404)
+
+### 问题修复
+
+修复了如下问题：
+
+- 查询 ORC 格式的 Hive 表时报错 `OrcChunkReader::lazy_seek_to failed. reason = bad read in RleDecoderV2: :readByte`。[#57454](https://github.com/StarRocks/starrocks/pull/57454)
+- 查询包含 Equality Delete 文件的 Iceberg 表时，上层的 RuntimeFilter 无法下推。[#57651](https://github.com/StarRocks/starrocks/pull/57651)
+- 启用大算子落盘预聚合策略导致查询 Crash。[#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- 查询报错 `ConstantRef-cmp-ConstantRef not supported here, null != 111 should be eliminated earlier`。[#57735](https://github.com/StarRocks/starrocks/pull/57735)
+- 在查询队列功能未启用状态下，查询触发 `query_queue_pending_timeout_second` 超时。[#57719](https://github.com/StarRocks/starrocks/pull/57719)
+
+## 3.4.2
+
+发布日期：2025 年 4 月 10 日
+
+### 功能优化
+
+- FE 支持优雅退出，从而提升系统的可用性。通过 `./stop_fe.sh -g` 退出结束 FE 时，FE 会先通过 `/api/health` API 向前端的 Load Balancer 返回 500 状态码以告知准备退出中，以便 Load Balancer 可以切换其他可用 FE 节点；同时，继续运行正在执行的查询直到结束或超时（默认 60 秒）。[#56823](https://github.com/StarRocks/starrocks/pull/56823)
+
+### 问题修复
+
+修复了如下问题：
+
+- 分区列如果是生成列的话，分区裁剪可能失效。[#54543](https://github.com/StarRocks/starrocks/pull/54543)
+- `concat` 函数的参数处理逻辑问题导致查询时 BE Crash。[#57522](https://github.com/StarRocks/starrocks/pull/57522)
+- 使用 Broker Load 导入数据时，`ssl_enable` 属性不生效。[#57229](https://github.com/StarRocks/starrocks/pull/57229)
+- 当存在 NULL 数据时，查询 STRUCT 类型列的子字段会导致 BE Crash。[#56496](https://github.com/StarRocks/starrocks/pull/56496)
+- 通过 `ALTER TABLE {table} PARTITIONS (p1, p1) DISTRIBUTED BY ...` 语句修改表的分桶方式时，如果重复指定分区名，内部生成的临时分区无法删除。[#57005](https://github.com/StarRocks/starrocks/pull/57005)
+- 在存算分离集群执行 `SHOW PROC '/current_queries'` 时报错 "Error 1064 (HY000): Sending collect query statistics request fails"。[#56597](https://github.com/StarRocks/starrocks/pull/56597)
+- 并行执行 INSERT OVERWRITE 导入任务时报错 "ConcurrentModificationException: null"，导致导入任务失败。[#56557](https://github.com/StarRocks/starrocks/pull/56557)
+- 自 v2.5.21 升级到 v3.1.17 后，多个 Broker Load 任务并行运行时可能会导致异常。[#56512](https://github.com/StarRocks/starrocks/pull/56512)
+
+### 行为变更
+
+- BE 配置项 `avro_ignore_union_type_tag` 默认值修改为 `true`，使得 `["NULL", "STRING"]` 可以直接作为 STRING 类型数据解析，更符合一般用户的使用需求。[#57553](https://github.com/StarRocks/starrocks/pull/57553)
+- Session 变量 `big_query_profile_threshold` 默认值从 0 修改为 30（秒）。[#57177](https://github.com/StarRocks/starrocks/pull/57177)
+- 增加 FE 配置项 `enable_mv_refresh_collect_profile`，用以控制物化视图刷新中是否收集 Profile 信息，默认值为 `false`（先前系统默认收集 Profile）。[#56971](https://github.com/StarRocks/starrocks/pull/56971)
+
+## 3.4.1（已下线）
 
 发布日期：2025 年 3 月 12 日
+
+:::tip
+
+此版本由于**存算分离集群**存在元数据丢失问题已经下线。
+
+- **问题**：当存算分离集群中的 Leader FE 节点切换期间有已 Commit 但尚未 Publish 的 Compaction 事务时，节点切换后可能会发生元数据丢失。
+
+- **影响范围**：此问题仅影响存算分离群集。存算一体集群不受影响。
+
+- **临时解决方法**：当 Publish 任务返回错误时，可以执行 `SHOW PROC ‘compactions’` 检查是否有分区同时有两个 `FinishTime` 为空的 Compaction 事务。您可以执行 `ALTER TABLE DROP PARTITION FORCE` 来删除该分区，以避免 Publish 任务卡住。
+
+:::
 
 ### 功能优化
 
@@ -51,7 +178,6 @@ displayed_sidebar: docs
 
 - [Experimental] 初步支持 Query Feedback 功能，用于慢查询的自动优化。系统将收集慢查询的执行详情，自动分析查询计划中是否存在需要调优的地方，并生成专属的 Tuning Guide。当后续相同查询生成相同的 Bad Plan 时，系统会基于先前生成的 Tuning Guide 局部调优该 Query Plan。更多内容，参考 [Query Feedback](https://docs.starrocks.io/zh/docs/using_starrocks/query_feedback/)。
 - [Experimental] 支持 Python UDF，相较于 Java UDF 提供了更便捷的函数自定义能力。更多内容，参考 [Python UDF](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/Python_UDF/)。
-- [Experimental] 支持 Arrow Flight 接口，可更高效读取大数据量的查询结果，并使 BE 替代 FE 直接处理返回结果，显著降低 FE 压力，特别适用于大数据分析、处理和机器学习等场景。
 - 支持多列 OR 谓词的下推，允许带有多列 OR 条件（如 `a = xxx OR b = yyy`）的查询利用对应列索引，从而减少数据读取量并提升查询性能。
 - 优化了 TPC-DS 查询性能。在 TPC-DS 1TB Iceberg 数据集下，查询性能提升20%。优化手段包括利用主外键做表裁剪和聚合列裁剪，以及聚合下推位置改进等。
 

@@ -40,6 +40,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -60,16 +61,16 @@ public class MetaScanNode extends ScanNode {
     private final List<TScanRangeLocations> result = Lists.newArrayList();
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
-                        Map<Integer, String> columnIdToNames, List<String> selectPartitionNames, long warehouseId) {
+                        Map<Integer, String> columnIdToNames, List<String> selectPartitionNames, ComputeResource computeResource) {
         super(id, desc, "MetaScan");
         this.olapTable = olapTable;
         this.tableSchema = olapTable.getBaseSchema();
         this.columnIdToNames = columnIdToNames;
         this.selectPartitionNames = selectPartitionNames;
-        this.warehouseId = warehouseId;
+        this.computeResource = computeResource;
     }
 
-    public void computeRangeLocations() {
+    public void computeRangeLocations(ComputeResource computeResource) {
         Collection<PhysicalPartition> partitions;
         if (selectPartitionNames.isEmpty()) {
             partitions = olapTable.getPhysicalPartitions();
@@ -77,7 +78,6 @@ public class MetaScanNode extends ScanNode {
             partitions = selectPartitionNames.stream().map(olapTable::getPartition)
                     .map(Partition::getDefaultPhysicalPartition).collect(Collectors.toList());
         }
-
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
             int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
@@ -101,7 +101,7 @@ public class MetaScanNode extends ScanNode {
                 List<Replica> allQueryableReplicas = Lists.newArrayList();
                 if (RunMode.isSharedDataMode()) {
                     tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
-                            visibleVersion, -1, schemaHash, warehouseId);
+                            visibleVersion, -1, schemaHash, computeResource);
                 } else {
                     tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
                             visibleVersion, -1, schemaHash);

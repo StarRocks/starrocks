@@ -42,6 +42,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -86,7 +87,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
 
     public KafkaTaskInfo(long timeToExecuteMs, KafkaTaskInfo kafkaTaskInfo, Map<Integer, Long> partitionIdToOffset,
                          long tastTimeoutMs) {
-        super(UUID.randomUUID(), kafkaTaskInfo.getJob(), kafkaTaskInfo.getTaskScheduleIntervalMs(), timeToExecuteMs,
+        super(UUIDUtil.genUUID(), kafkaTaskInfo.getJob(), kafkaTaskInfo.getTaskScheduleIntervalMs(), timeToExecuteMs,
                 kafkaTaskInfo.getBeId(), tastTimeoutMs);
         this.partitionIdToOffset = partitionIdToOffset;
     }
@@ -120,7 +121,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         Map<Integer, Long> latestOffsets = KafkaUtil.getLatestOffsets(kafkaRoutineLoadJob.getBrokerList(),
                 kafkaRoutineLoadJob.getTopic(),
                 ImmutableMap.copyOf(kafkaRoutineLoadJob.getConvertedCustomProperties()),
-                new ArrayList<>(partitionIdToOffset.keySet()), warehouseId);
+                new ArrayList<>(partitionIdToOffset.keySet()), getComputeResource());
         for (Map.Entry<Integer, Long> entry : latestOffsets.entrySet()) {
             kafkaRoutineLoadJob.setPartitionOffset(entry.getKey(), entry.getValue());
         }
@@ -241,7 +242,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         // plan for each task, in case table has change(rollup or schema change)
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
         if (tExecPlanFragmentParams.query_options.enable_profile) {
-            StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().
+            StreamLoadTask streamLoadTask = (StreamLoadTask) GlobalStateMgr.getCurrentState().
                     getStreamLoadMgr().getTaskByLabel(label);
             setStreamLoadTask(streamLoadTask);
         }

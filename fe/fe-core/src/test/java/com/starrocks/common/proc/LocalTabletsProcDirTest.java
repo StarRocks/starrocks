@@ -45,8 +45,8 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -131,7 +131,7 @@ public class LocalTabletsProcDirTest {
 
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, TStorageMedium.SSD);
         index.addTablet(tablet1, tabletMeta);
         index.addTablet(tablet2, tabletMeta);
 
@@ -152,20 +152,20 @@ public class LocalTabletsProcDirTest {
         LocalTabletsProcDir tabletsProcDir = new LocalTabletsProcDir(db, table, index);
         List<List<Comparable>> result = tabletsProcDir.fetchComparableResult(-1, -1, null, null, false);
         System.out.println(result);
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals((long) result.get(0).get(0), tablet1Id);
-        Assert.assertEquals(result.get(0).get(21), "/home/disk1");
-        Assert.assertEquals(result.get(0).get(22), true);
-        Assert.assertEquals((long) result.get(0).get(23), -1);
-        Assert.assertEquals((long) result.get(1).get(0), tablet1Id);
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals((long) result.get(0).get(0), tablet1Id);
+        Assertions.assertEquals(result.get(0).get(21), "/home/disk1");
+        Assertions.assertEquals(result.get(0).get(22), true);
+        Assertions.assertEquals((long) result.get(0).get(23), -1);
+        Assertions.assertEquals((long) result.get(1).get(0), tablet1Id);
         if ((long) result.get(0).get(1) == replicaId) {
-            Assert.assertEquals((long) result.get(0).get(2), backendId);
+            Assertions.assertEquals((long) result.get(0).get(2), backendId);
         } else if ((long) result.get(0).get(1) == replicaId + 1) {
-            Assert.assertEquals((long) result.get(0).get(2), backendId + 1);
+            Assertions.assertEquals((long) result.get(0).get(2), backendId + 1);
         }
-        Assert.assertEquals(result.get(1).get(21), "/home/disk2");
-        Assert.assertEquals((long) result.get(2).get(0), tablet2Id);
-        Assert.assertEquals(result.get(2).get(1), -1);
-        Assert.assertEquals(result.get(2).get(2), -1);
+        Assertions.assertEquals(result.get(1).get(21), "/home/disk2");
+        Assertions.assertEquals((long) result.get(2).get(0), tablet2Id);
+        Assertions.assertEquals(result.get(2).get(1), -1);
+        Assertions.assertEquals(result.get(2).get(2), -1);
     }
 }

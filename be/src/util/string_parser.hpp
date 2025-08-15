@@ -490,6 +490,8 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
                 *result = PARSE_FAILURE;
                 return 0;
             }
+        } else {
+            break;
         }
     }
 
@@ -604,6 +606,11 @@ inline int StringParser::StringParseTraits<int64_t>::max_ascii_len() {
 template <>
 inline int StringParser::StringParseTraits<__int128>::max_ascii_len() {
     return 39;
+}
+
+template <>
+inline int StringParser::StringParseTraits<int256_t>::max_ascii_len() {
+    return 77;
 }
 
 template <typename T>

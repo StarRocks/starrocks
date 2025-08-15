@@ -49,7 +49,7 @@ public:
                     const arrow::MemoryPool* pool)
             : ColumnConverter(arrow_type, sr_field, pool){};
 
-    arrow::Status toSrColumn(const std::shared_ptr<arrow::Array> array, ColumnPtr& column) override {
+    arrow::Status toSrColumn(const std::shared_ptr<arrow::Array> array, MutableColumnPtr& column) override {
         if (!column->is_nullable() && array->null_count() > 0) {
             return arrow::Status::Invalid("Column ", column->get_name(),
                                           " is non-nullable, but there are some null data in array.");
@@ -101,7 +101,7 @@ public:
         return arrow::Status::OK();
     }
 
-    arrow::Result<std::shared_ptr<arrow::Array>> toArrowArray(const std::shared_ptr<Column>& column) override {
+    arrow::Result<std::shared_ptr<arrow::Array>> toArrowArray(const ColumnPtr& column) override {
         using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
 
         std::unique_ptr<ArrowBuilderType> builder =

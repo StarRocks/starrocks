@@ -53,18 +53,22 @@ import io.netty.util.ReferenceCountUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.concurrent.Executor;
+
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
     // keep connectContext when channel is open
-    private static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
+    public static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
             AttributeKey.valueOf("httpContextKey");
     protected HttpRequest request = null;
     private final ActionController controller;
+    private final Executor executor;
     private BaseAction action = null;
 
-    public HttpServerHandler(ActionController controller) {
+    public HttpServerHandler(ActionController controller, Executor executor) {
         super();
         this.controller = controller;
+        this.executor = executor;
     }
 
     @Override
@@ -99,26 +103,55 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("action: {} ", action.getClass().getName());
                 }
-
-                HttpServerHandlerMetrics metrics = HttpServerHandlerMetrics.getInstance();
-                long startTime = System.currentTimeMillis();
-                try {
-                    metrics.handlingRequestsNum.increase(1L);
-                    action.handleRequest(req);
-                } finally {
-                    long latency = System.currentTimeMillis() - startTime;
-                    metrics.handlingRequestsNum.increase(-1L);
-                    metrics.requestHandleLatencyMs.update(latency);
-                    if (latency >= Config.http_slow_request_threshold_ms) {
-                        LOG.warn("receive slow http request. uri: {}, thread id: {}, startTime: {}, latency: {} ms",
-                                WebUtils.sanitizeHttpReqUri(req.getRequest().uri()), Thread.currentThread().getId(),
-                                startTime, latency);
-                    }
+                if (action.supportAsyncHandler()) {
+                    handleActionAsync(req);
+                } else {
+                    handleActionSync(req);
                 }
             }
         } finally {
             ReferenceCountUtil.release(msg);
         }
+    }
+
+    private void handleActionSync(BaseRequest request) {
+        RequestHandlingWatch watch = new RequestHandlingWatch(request, false);
+        try {
+            action.handleRequest(request);
+        } catch (Exception e) {
+            handleException(request, e);
+        } finally {
+            watch.finish();
+        }
+    }
+
+    private void handleActionAsync(BaseRequest request) {
+        RequestHandlingWatch watch = new RequestHandlingWatch(request, true);
+        try {
+            executor.execute(() -> {
+                try {
+                    action.handleRequest(request);
+                } catch (Exception e) {
+                    handleException(request, e);
+                } finally {
+                    // HttpServerHandler will flush automatically in channelReadComplete. For synchronous handling,
+                    // the response is written in channelRead which is before channelReadComplete, so no need to
+                    // trigger flush manually. But for asynchronous handling, the response can be written after
+                    // channelReadComplete, so we need to trigger the flush manually.
+                    request.getContext().flush();
+                    watch.finish();
+                }
+            });
+        } catch (Exception exception) {
+            handleException(request, exception);
+            watch.finish();
+        }
+    }
+
+    private void handleException(BaseRequest request, Exception exception) {
+        writeResponse(request.getContext(), HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                String.format("failed to handle request, error: %s:%s ", exception.getClass(), exception.getMessage()));
+        LOG.debug("Failed to handle request: {}", request.getRequest().uri(), exception);
     }
 
     @Override
@@ -178,5 +211,43 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         }
 
         return action;
+    }
+
+    private static class RequestHandlingWatch {
+        private final BaseRequest request;
+        private final boolean asyncHandling;
+        private final long startTime;
+
+        public RequestHandlingWatch(BaseRequest request, boolean asyncHandling) {
+            this.request = request;
+            this.asyncHandling = asyncHandling;
+            this.startTime = System.currentTimeMillis();
+            HttpServerHandlerMetrics.getInstance().handlingRequestsNum.increase(1L);
+            if (asyncHandling) {
+                // HttpServerHandler will release the request object after channelRead finishes. To ensure
+                // the request object can be accessed in the async executor safely, retain the request.
+                ReferenceCountUtil.retain(request.getRequest());
+            }
+        }
+
+        public void finish() {
+            long latency = System.currentTimeMillis() - startTime;
+            HttpServerHandlerMetrics.getInstance().handlingRequestsNum.increase(-1L);
+            HttpServerHandlerMetrics.getInstance().requestHandleLatencyMs.update(latency);
+            if (latency >= Config.http_slow_request_threshold_ms) {
+                String uri;
+                try {
+                    uri = WebUtils.sanitizeHttpReqUri(request.getRequest().uri());
+                } catch (Exception e) {
+                    uri = "failed to sanitize uri, error=" + e.getMessage();
+                }
+                LOG.warn("receive slow http request. uri: {}, startTime: {}, latency: {} ms",
+                        uri, startTime, latency);
+            }
+            if (asyncHandling) {
+                ReferenceCountUtil.release(request.getRequest());
+            }
+        }
+
     }
 }

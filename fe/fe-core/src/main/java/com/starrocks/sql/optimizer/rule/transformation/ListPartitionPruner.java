@@ -324,8 +324,7 @@ public class ListPartitionPruner implements PartitionPruner {
                 ScalarOperator call =
                         SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
 
-                if (call instanceof CallOperator &&
-                        OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) call).first) {
+                if (call instanceof CallOperator) {
                     List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
 
                     for (ColumnRefOperator ref : columnRefOperatorList) {
@@ -343,7 +342,7 @@ public class ListPartitionPruner implements PartitionPruner {
         List<ScalarOperator> extraConjuncts = Lists.newArrayList();
         for (ScalarOperator conjunct : partitionConjuncts) {
             List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(conjunct);
-            if (!checkDeduceConjunct(conjunct, columnRefOperatorList)) {
+            if (!checkDeduceConjunct(partitionColumnRefs, conjunct, columnRefOperatorList)) {
                 continue;
             }
 
@@ -355,6 +354,21 @@ public class ListPartitionPruner implements PartitionPruner {
             }
             ColumnRefOperator generatedColumn = pair.first;
             ScalarOperator generatedExpr = pair.second;
+
+            if (conjunct instanceof BinaryPredicateOperator) {
+                BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) conjunct;
+                // Only support fe constant function
+                if (!OperatorFunctionChecker.onlyContainFEConstantFunctions((CallOperator) generatedExpr).first) {
+                    continue;
+                }
+                if (!binaryPredicate.getBinaryType().isEqual()) {
+                    if (!OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) generatedExpr).first) {
+                        // skip non-monotonic function for not equal predicate
+                        continue;
+                    }
+                }
+            }
+
             ScalarOperator result = buildDeducedConjunct(conjunct, generatedExpr, generatedColumn);
             if (result != null) {
                 extraConjuncts.add(result);
@@ -364,7 +378,8 @@ public class ListPartitionPruner implements PartitionPruner {
         partitionConjuncts.addAll(extraConjuncts);
     }
 
-    private boolean checkDeduceConjunct(ScalarOperator conjunct, List<ColumnRefOperator> columnRefs) {
+    public static boolean checkDeduceConjunct(List<ColumnRefOperator> partitionColumnRefs,
+                                              ScalarOperator conjunct, List<ColumnRefOperator> columnRefs) {
         // The conjunct should not contain partition-column
         if (partitionColumnRefs.containsAll(columnRefs)) {
             return false;
@@ -393,9 +408,9 @@ public class ListPartitionPruner implements PartitionPruner {
      * <p>
      * Deducted result: c3 >= date_trunc('MONTH', '2024-01-02')
      */
-    private ScalarOperator buildDeducedConjunct(ScalarOperator conjunct,
-                                                ScalarOperator monoExpr,
-                                                ColumnRefOperator generatedColumn) {
+    public static ScalarOperator buildDeducedConjunct(ScalarOperator conjunct,
+                                                      ScalarOperator monoExpr,
+                                                      ColumnRefOperator generatedColumn) {
         ScalarOperatorVisitor<ScalarOperator, Void> visitor = new ScalarOperatorVisitor<>() {
 
             private ScalarOperator replaceExpr(int index) {
@@ -485,7 +500,7 @@ public class ListPartitionPruner implements PartitionPruner {
     private static LiteralExpr castLiteralExpr(LiteralExpr literalExpr, Type type) {
         LiteralExpr result = null;
         String value = literalExpr.getStringValue();
-        if (literalExpr.getType() == Type.DATE && type.isNumericType()) {
+        if (literalExpr.getType().isDate() && type.isNumericType()) {
             value = String.valueOf(literalExpr.getLongValue() / 1000000);
         }
         try {

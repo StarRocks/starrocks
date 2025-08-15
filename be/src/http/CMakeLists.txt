@@ -17,7 +17,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/http")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/http")
 
-add_library(Webserver STATIC
+set(WEB_SERVER_FILES
   download_action.cpp
   http_headers.cpp
   http_method.cpp
@@ -53,6 +53,12 @@ add_library(Webserver STATIC
   action/pipeline_blocking_drivers_action.cpp
   action/lake/dump_tablet_metadata_action.cpp
   action/stop_be_action.cpp)
+
+if(STARROCKS_JIT_ENABLE)
+    set(WEB_SERVER_FILES ${WEB_SERVER_FILES} action/jit_cache_action.cpp)
+endif()
+
+add_library(Webserver STATIC ${WEB_SERVER_FILES})
 
 # target_link_libraries(Webserver pthread dl Util)
 #ADD_BE_TEST(integer-array-test)

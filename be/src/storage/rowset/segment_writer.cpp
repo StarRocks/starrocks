@@ -48,6 +48,7 @@
 #include "storage/index/index_descriptor.h"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
+#include "storage/rowset/json_column_writer.h"
 #include "storage/rowset/page_io.h"
 #include "storage/seek_tuple.h"
 #include "storage/short_key_index.h"
@@ -94,8 +95,8 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     if (column.type() == TYPE_JSON) {
         JsonMetaPB* json_meta = meta->mutable_json_meta();
         json_meta->set_format_version(kJsonMetaDefaultFormatVersion);
-        json_meta->set_is_flat(false);
         json_meta->set_has_remain(false);
+        json_meta->set_is_flat(false);
     }
 
     for (uint32_t i = 0; i < column.subcolumn_count(); ++i) {
@@ -206,9 +207,29 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
                 _global_dict_columns_valid_info[iter->first] = true;
             }
         }
+        if (column.type() == LogicalType::TYPE_JSON && _opts.global_dicts != nullptr) {
+            opts.field_name = column.name();
+            std::string_view col_name = column.name();
+            for (auto& [k, dict_v] : *_opts.global_dicts) {
+                // k can be a.b.c, we must check the first token matches column.name()
+                size_t dot_pos = k.find('.');
+                std::string first_token = (dot_pos == std::string::npos) ? k : k.substr(0, dot_pos);
+                if (first_token == col_name) {
+                    opts.flat_json_dicts.emplace(k, dict_v.dict);
+                    _global_dict_columns_valid_info[k] = true;
+                    VLOG(2) << "set global dict for json column: " << k;
+                }
+            }
+        }
 
         opts.need_flat = config::enable_json_flat;
         opts.is_compaction = _opts.is_compaction;
+
+        if (column.type() == LogicalType::TYPE_JSON && _opts.flat_json_config != nullptr) {
+            opts.need_flat = _opts.flat_json_config->is_flat_json_enabled();
+            opts.flat_json_config = _opts.flat_json_config.get();
+        }
+
         ASSIGN_OR_RETURN(auto writer, ColumnWriter::create(opts, &column, _wfile.get()));
         RETURN_IF_ERROR(writer->init());
         _column_writers.push_back(std::move(writer));
@@ -311,11 +332,7 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         *index_size += _wfile->size() - index_offset + standalone_index_size;
 
         // check global dict valid
-        const auto& column = _tablet_schema->column(column_index);
-        if (!column_writer->is_global_dict_valid() && is_string_type(column.type())) {
-            std::string col_name(column.name());
-            _global_dict_columns_valid_info[col_name] = false;
-        }
+        _check_column_global_dict_valid(column_writer.get(), column_index);
 
         // reset to release memory
         column_writer.reset();
@@ -433,6 +450,36 @@ void SegmentWriter::_verify_footer() {
         CHECK(ok) << "Segment footer contains duplicate column id=" << col.unique_id() << ": " << _footer.DebugString();
     }
 #endif
+}
+
+int64_t SegmentWriter::bundle_file_offset() const {
+    return _wfile->bundle_file_offset();
+}
+
+StatusOr<std::unique_ptr<io::NumericStatistics>> SegmentWriter::get_numeric_statistics() {
+    return _wfile->get_numeric_statistics();
+}
+
+void SegmentWriter::_check_column_global_dict_valid(ColumnWriter* column_writer, uint32_t column_index) {
+    const auto& column = _tablet_schema->column(column_index);
+
+    // Check global dict valid for string types
+    if (!column_writer->is_global_dict_valid() && is_string_type(column.type())) {
+        std::string col_name(column.name());
+        _global_dict_columns_valid_info[col_name] = false;
+    }
+
+    // Check global dict valid for JSON type and collect sub-column dict info
+    if (column.type() == LogicalType::TYPE_JSON) {
+        auto* flat_json_writer = dynamic_cast<FlatJsonColumnWriter*>(column_writer);
+        if (flat_json_writer != nullptr) {
+            // Collect dict validity for each sub-column
+            const auto& subcolumn_dict_valid = flat_json_writer->get_subcolumn_dict_valid();
+            for (const auto& kv : subcolumn_dict_valid) {
+                _global_dict_columns_valid_info[kv.first] = kv.second;
+            }
+        }
+    }
 }
 
 } // namespace starrocks

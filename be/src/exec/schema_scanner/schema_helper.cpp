@@ -258,6 +258,26 @@ Status SchemaHelper::get_keywords(const SchemaScannerState& state, const TGetKey
     });
 }
 
+Status SchemaHelper::get_warehouse_metrics(const SchemaScannerState& state, const TGetWarehouseMetricsRequest& request,
+                                           TGetWarehouseMetricsRespone* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getWarehouseMetrics(*response, request);
+    });
+}
+
+Status SchemaHelper::get_warehouse_queries(const SchemaScannerState& state, const TGetWarehouseQueriesRequest& request,
+                                           TGetWarehouseQueriesResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getWarehouseQueries(*response, request);
+    });
+}
+
+Status SchemaHelper::get_dynamic_tablet_jobs_info(const SchemaScannerState& state, const TDynamicTabletJobsRequest& req,
+                                                  TDynamicTabletJobsResponse* res) {
+    return _call_rpc(state,
+                     [&req, &res](FrontendServiceConnection& client) { client->getDynamicTabletJobsInfo(*res, req); });
+}
+
 void fill_data_column_with_null(Column* data_column) {
     auto* nullable_column = down_cast<NullableColumn*>(data_column);
     nullable_column->append_nulls(1);

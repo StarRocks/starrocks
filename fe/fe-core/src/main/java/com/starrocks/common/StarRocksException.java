@@ -15,8 +15,6 @@
 package com.starrocks.common;
 
 import com.google.common.base.Strings;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryState;
 
 /**
  * StarRocksException is the base class of internal exceptions.
@@ -33,49 +31,39 @@ import com.starrocks.qe.QueryState;
  * based on the first two digits of SQLSTATE. For example, Internal Error, Syntax Error
  */
 public class StarRocksException extends Exception {
-    private InternalErrorCode errorCode;
+    private InternalErrorCode internalErrorCode;
+    private ErrorCode errorCode;
 
     public StarRocksException(ErrorCode errorCode, Object... objs) {
         super(errorCode.formatErrorMsg(objs));
-
-        String errMsg = errorCode.formatErrorMsg(objs);
-        ConnectContext ctx = ConnectContext.get();
-        if (ctx != null) {
-            ctx.getState().setError(errMsg);
-            ctx.getState().setErrorCode(errorCode);
-
-            if (errorCode.getSqlState()[0] == 'X' && errorCode.getSqlState()[1] == 'X') {
-                ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
-            }
-
-            if (errorCode.getSqlState()[0] == '5' && errorCode.getSqlState()[1] == '3' &&
-                    errorCode.getSqlState()[2] == '4') {
-                ctx.getState().setErrType(QueryState.ErrType.EXEC_TIME_OUT);
-            }
-        }
+        this.errorCode = errorCode;
     }
 
     public StarRocksException(String msg, Throwable cause) {
         super(Strings.nullToEmpty(msg), cause);
-        errorCode = InternalErrorCode.INTERNAL_ERR;
+        internalErrorCode = InternalErrorCode.INTERNAL_ERR;
     }
 
     public StarRocksException(Throwable cause) {
         super(cause);
-        errorCode = InternalErrorCode.INTERNAL_ERR;
+        internalErrorCode = InternalErrorCode.INTERNAL_ERR;
     }
 
     public StarRocksException(String msg) {
         super(Strings.nullToEmpty(msg));
-        errorCode = InternalErrorCode.INTERNAL_ERR;
+        internalErrorCode = InternalErrorCode.INTERNAL_ERR;
     }
 
     public StarRocksException(InternalErrorCode errCode, String msg) {
         super(Strings.nullToEmpty(msg));
-        this.errorCode = errCode;
+        this.internalErrorCode = errCode;
     }
 
-    public InternalErrorCode getErrorCode() {
+    public ErrorCode getErrorCode() {
         return errorCode;
+    }
+
+    public InternalErrorCode getInternalErrorCode() {
+        return internalErrorCode;
     }
 }

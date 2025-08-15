@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # INSTALL PLUGIN
 
-## Description
-
-This statement is used to install a plugin.
+INSTALL PLUGIN is used to install a plugin.
 
 :::tip
 

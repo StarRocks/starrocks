@@ -28,9 +28,9 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
-#include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
+#include "storage/load_spill_block_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
@@ -78,6 +78,8 @@ protected:
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
         return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
+
+    void do_block_merger(bool use_profile);
 
     constexpr static const char* const kTestDirectory = "test_lake_async_delta_writer";
 
@@ -559,7 +561,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_flush) {
     delta_writer->close();
 }
 
-TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
+void LakeAsyncDeltaWriterTest::do_block_merger(bool use_profile) {
     // Prepare data for writing
     static const int kChunkSize = 128;
     auto chunk0 = generate_data(kChunkSize);
@@ -582,7 +584,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
-                                               .set_profile(&_dummy_runtime_profile)
+                                               .set_profile(use_profile ? &_dummy_runtime_profile : nullptr)
                                                .set_immutable_tablet_size(10000000)
                                                .build());
     ASSERT_OK(delta_writer->open());
@@ -659,6 +661,14 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger_running_while_close) {
     latch2.wait();
     // close
     delta_writer->close();
+}
+
+TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
+    do_block_merger(true);
+}
+
+TEST_F(LakeAsyncDeltaWriterTest, test_block_merger_without_input_profile) {
+    do_block_merger(false);
 }
 
 } // namespace starrocks::lake

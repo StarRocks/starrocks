@@ -21,6 +21,8 @@ import com.staros.proto.AzBlobCredentialInfo;
 import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
+import com.starrocks.common.Config;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.adl.AdlConfKeys;
@@ -71,18 +73,30 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
     private final String sharedKey;
     private final String container;
     private final String sasToken;
+    private final boolean useManagedIdentity;
+    private final String clientId;
+    private final String clientSecret;
+    private final String tenantId;
 
-    AzureBlobCloudCredential(String endpoint, String storageAccount, String sharedKey, String container, String sasToken) {
+    AzureBlobCloudCredential(String endpoint, String storageAccount, String sharedKey, String container, String sasToken,
+                             boolean useManagedIdentity, String clientId, String clientSecret, String tenantId) {
         Preconditions.checkNotNull(endpoint);
         Preconditions.checkNotNull(storageAccount);
         Preconditions.checkNotNull(sharedKey);
         Preconditions.checkNotNull(container);
         Preconditions.checkNotNull(sasToken);
+        Preconditions.checkNotNull(clientId);
+        Preconditions.checkNotNull(clientSecret);
+        Preconditions.checkNotNull(tenantId);
         this.endpoint = endpoint;
         this.storageAccount = storageAccount;
         this.sharedKey = sharedKey;
         this.container = container;
         this.sasToken = sasToken;
+        this.useManagedIdentity = useManagedIdentity;
+        this.clientId = clientId;
+        this.clientSecret = clientSecret;
+        this.tenantId = tenantId;
         tryGenerateConfigurationMap();
     }
 
@@ -108,6 +122,25 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
                 generatedConfigurationMap.put(key, sasToken);
             }
         }
+
+        // For azure native sdk
+        if (Config.azure_use_native_sdk) {
+            if (!sharedKey.isEmpty()) {
+                // shared key
+                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, sharedKey);
+            } else if (!sasToken.isEmpty()) {
+                // sas token
+                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, sasToken);
+            } else if (useManagedIdentity && !clientId.isEmpty()) {
+                // user assigned managed identity
+                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, clientId);
+            } else if (!clientId.isEmpty() && !clientSecret.isEmpty() && !tenantId.isEmpty()) {
+                // client secret service principal
+                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, clientId);
+                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET, clientSecret);
+                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID, tenantId);
+            }
+        }
     }
 
     @Override
@@ -118,6 +151,10 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
                 ", sharedKey='" + sharedKey + '\'' +
                 ", container='" + container + '\'' +
                 ", sasToken='" + sasToken + '\'' +
+                ", useManagedIdentity='" + useManagedIdentity + '\'' +
+                ", clientId='" + clientId + '\'' +
+                ", clientSecret='" + clientSecret + '\'' +
+                ", tenantId='" + tenantId + '\'' +
                 '}';
     }
 
@@ -222,27 +259,6 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
 
     @Override
     void tryGenerateConfigurationMap() {
-        if (!endpoint.isEmpty()) {
-            // If user specific endpoint, they don't need to specific storage account anymore
-            // Like if user is using Azurite, they need to specific endpoint
-            if (!sharedKey.isEmpty()) {
-                generatedConfigurationMap.put(
-                        String.format("fs.azure.account.auth.type.%s", endpoint),
-                        "SharedKey");
-                generatedConfigurationMap.put(
-                        String.format("fs.azure.account.key.%s", endpoint),
-                        sharedKey);
-            } else if (!sasToken.isEmpty()) {
-                generatedConfigurationMap.put(
-                        String.format("fs.azure.account.auth.type.%s", endpoint),
-                        "SAS");
-                generatedConfigurationMap.put(
-                        String.format("fs.azure.sas.fixed.token.%s", endpoint),
-                        sasToken);
-            }
-            return;
-        }
-
         if (oauth2ManagedIdentity && !oauth2TenantId.isEmpty() && !oauth2ClientId.isEmpty()) {
             generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_AUTH_TYPE_PROPERTY_NAME),
                     "OAuth");
@@ -253,21 +269,39 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
                     oauth2TenantId);
             generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_OAUTH_CLIENT_ID),
                     oauth2ClientId);
-        } else if (!storageAccount.isEmpty() && !sharedKey.isEmpty()) {
+        } else if (!sharedKey.isEmpty()) {
             // Shared Key is always used by specific storage account, so we don't need to invoke createConfigKey()
-            generatedConfigurationMap.put(
-                    String.format("fs.azure.account.auth.type.%s.dfs.core.windows.net", storageAccount),
-                    "SharedKey");
-            generatedConfigurationMap.put(
-                    String.format("fs.azure.account.key.%s.dfs.core.windows.net", storageAccount),
-                    sharedKey);
-        } else if (!storageAccount.isEmpty() && !sasToken.isEmpty()) {
-            generatedConfigurationMap.put(
-                    String.format("fs.azure.account.auth.type.%s.dfs.core.windows.net", storageAccount),
-                    "SAS");
-            generatedConfigurationMap.put(
-                    String.format("fs.azure.sas.fixed.token.%s.dfs.core.windows.net", storageAccount),
-                    sasToken);
+            if (!storageAccount.isEmpty()) {
+                generatedConfigurationMap.put(
+                        String.format("fs.azure.account.auth.type.%s.dfs.core.windows.net", storageAccount),
+                        "SharedKey");
+                generatedConfigurationMap.put(
+                        String.format("fs.azure.account.key.%s.dfs.core.windows.net", storageAccount),
+                        sharedKey);
+            } else if (!endpoint.isEmpty()) {
+                generatedConfigurationMap.put(
+                        String.format("fs.azure.account.auth.type.%s", endpoint),
+                        "SharedKey");
+                generatedConfigurationMap.put(
+                        String.format("fs.azure.account.key.%s", endpoint),
+                        sharedKey);
+            }
+        } else if (!sasToken.isEmpty()) {
+            if (!storageAccount.isEmpty()) {
+                generatedConfigurationMap.put(
+                        String.format("fs.azure.account.auth.type.%s.dfs.core.windows.net", storageAccount),
+                        "SAS");
+                generatedConfigurationMap.put(
+                        String.format("fs.azure.sas.fixed.token.%s.dfs.core.windows.net", storageAccount),
+                        sasToken);
+            } else if (!endpoint.isEmpty()) {
+                generatedConfigurationMap.put(
+                        String.format("fs.azure.account.auth.type.%s", endpoint),
+                        "SAS");
+                generatedConfigurationMap.put(
+                        String.format("fs.azure.sas.fixed.token.%s", endpoint),
+                        sasToken);
+            }
         } else if (!oauth2ClientId.isEmpty() && !oauth2ClientSecret.isEmpty() &&
                 !oauth2ClientEndpoint.isEmpty()) {
             generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_AUTH_TYPE_PROPERTY_NAME),
@@ -290,8 +324,10 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
                 "oauth2ManagedIdentity=" + oauth2ManagedIdentity +
                 ", oauth2TenantId='" + oauth2TenantId + '\'' +
                 ", oauth2ClientId='" + oauth2ClientId + '\'' +
+                ", endpoint='" + endpoint + '\'' +
                 ", storageAccount='" + storageAccount + '\'' +
                 ", sharedKey='" + sharedKey + '\'' +
+                ", sasToken='" + sasToken + '\'' +
                 ", oauth2ClientSecret='" + oauth2ClientSecret + '\'' +
                 ", oauth2ClientEndpoint='" + oauth2ClientEndpoint + '\'' +
                 '}';
@@ -306,6 +342,10 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
         ADLS2CredentialInfo.Builder adls2CredentialInfo = ADLS2CredentialInfo.newBuilder();
         adls2CredentialInfo.setSharedKey(sharedKey);
         adls2CredentialInfo.setSasToken(sasToken);
+        adls2CredentialInfo.setTenantId(oauth2TenantId);
+        adls2CredentialInfo.setClientId(oauth2ClientId);
+        adls2CredentialInfo.setClientSecret(oauth2ClientSecret);
+        adls2CredentialInfo.setAuthorityHost(oauth2ClientEndpoint);
         adls2FileStoreInfo.setCredential(adls2CredentialInfo.build());
         fileStore.setAdls2FsInfo(adls2FileStoreInfo.build());
         return fileStore.build();

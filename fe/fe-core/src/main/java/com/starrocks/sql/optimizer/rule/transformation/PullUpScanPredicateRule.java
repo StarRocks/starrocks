@@ -54,7 +54,8 @@ public class PullUpScanPredicateRule extends TransformationRule {
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         ScalarOperator predicates = input.getOp().getPredicate();
-        if (!context.getSessionVariable().isEnableScanPredicateExprReuse() || predicates == null) {
+        if (!context.getSessionVariable().isEnablePredicateExprReuse() ||
+                !context.getSessionVariable().isEnableScanPredicateExprReuse() || predicates == null) {
             return false;
         }
         return true;

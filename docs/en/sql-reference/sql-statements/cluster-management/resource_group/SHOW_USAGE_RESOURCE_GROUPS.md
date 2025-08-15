@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW USAGE RESOURCE GROUPS
 
-## Description
-
-Shows the usage information of resource groups. This feature is supported from v3.1.4 onwards.
+SHOW USAGE RESOURCE GROUPS shows the usage information of resource groups. This feature is supported from v3.1.4 onwards.
 
 :::tip
 

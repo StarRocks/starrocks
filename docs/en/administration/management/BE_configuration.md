@@ -189,27 +189,32 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The timeout for a thrift RPC.
 - Introduced in: -
 
-<!--
 ##### thrift_rpc_strict_mode
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: Whether thrift's strict execution mode is enabled. For more information on thrift strict mode, see [Thrift Binary protocol encoding](https://github.com/apache/thrift/blob/master/doc/specs/thrift-binary-protocol.md).
 - Introduced in: -
--->
 
-<!--
 ##### thrift_rpc_max_body_size
 
 - Default: 0
 - Type: Int
 - Unit:
 - Is mutable: No
-- Description:
+- Description: The maximum string body size of RPC. `0` indicates the size is unlimited.
 - Introduced in: -
--->
+
+##### thrift_rpc_connection_max_valid_time_ms
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Maximum valid time for a thrift RPC connection. A connection will be closed if it has existed in the connection pool for longer than this value. It must be set consistent with FE configuration `thrift_client_timeout_ms`.
+- Introduced in: -
 
 #### bRPC
 
@@ -530,6 +535,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Is mutable: Yes
 - Description: The number of threads used for Schema Change.
 - Introduced in: -
+
+##### avro_ignore_union_type_tag
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to strip the type tag from the JSON string serialized from the Avro Union data type.
+- Introduced in: v3.3.7, v3.4
 
 <!--
 ##### delete_worker_count_normal_priority
@@ -1261,7 +1275,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: The maximum memory size of the row source mask buffer. When the buffer is larger than this value, data will be persisted to a temporary file on the disk. This value should be set lower than the value of `compaction_mem_limit`.
+- Description: The maximum memory size of the row source mask buffer. When the buffer is larger than this value, data will be persisted to a temporary file on the disk. This value should be set lower than the value of `compaction_memory_limit_per_worker`.
 - Introduced in: -
 
 ##### memory_maintenance_sleep_time_s
@@ -1625,6 +1639,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.
 - Introduced in: -
 
+##### transaction_publish_version_thread_pool_idle_time_ms
+
+- Default: 60000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: The idle time before a thread is reclaimed by the Publish Version thread pool.
+- Introduced in: -
+
 <!--
 ##### transaction_apply_worker_count
 
@@ -1676,11 +1699,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### number_tablet_writer_threads
 
-- Default: 16
+- Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The number of threads used for Stream Load. This configuration is changed to dynamic from v3.1.7 onwards.
+- Description: The number of tablet writer threads used in ingestion, such as Stream Load, Broker Load and Insert. When the parameter is set to less than or equal to 0, the system uses half of the number of CPU cores, with a minimum of 16. When the parameter is set to greater than 0, the system uses that value. This configuration is changed to dynamic from v3.1.7 onwards.
 - Introduced in: -
 
 <!--
@@ -2078,15 +2101,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The minimum number of file descriptors in the BE process.
 - Introduced in: -
 
-##### index_stream_cache_capacity
-
-- Default: 10737418240
-- Type: Int
-- Unit: Bytes
-- Is mutable: No
-- Description: The cache capacity for the statistical information of BloomFilter, Min, and Max.
-- Introduced in: -
-
 ##### storage_page_cache_limit
 
 - Default: 20%
@@ -2109,49 +2123,32 @@ When this value is set to less than `0`, the system uses the product of its abso
   - The default value of this item has been changed from `true` to `false` since StarRocks v2.4.
 - Introduced in: -
 
-<!--
 ##### enable_bitmap_index_memory_page_cache
 
-- Default: false
+- Default: true 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable memory cache for Bitmap index. Memory cache is recommended if you want to use Bitmap indexes to accelerate point queries.
 - Introduced in: v3.1
--->
 
-<!--
 ##### enable_zonemap_index_memory_page_cache
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_ordinal_index_memory_page_cache
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### disable_column_pool
 
 - Default: true
 - Type: Boolean
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: Whether to enable memory cache for zonemap index. Memory cache is recommended if you want to use zonemap indexes to accelerate scan.
 - Introduced in: -
--->
+
+##### enable_ordinal_index_memory_page_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable memory cache for ordinal index. Ordinal index is a mapping from row IDs to data page positions, and it can be used to accelerate scans.
+- Introduced in: -
 
 ##### fragment_pool_thread_num_min
 
@@ -2349,16 +2346,14 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
 - Introduced in: -
 
-<!--
 ##### pipeline_scan_thread_pool_queue_size
 
 - Default: 102400
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: The maximum task queue length of SCAN thread pool for Pipeline execution engine.
 - Introduced in: -
--->
 
 <!--
 ##### pipeline_exec_thread_pool_thread_num
@@ -2371,27 +2366,41 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
-<!--
 ##### pipeline_prepare_thread_pool_thread_num
 
 - Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: Number of threads in the pipeline execution engine PREPARE fragment thread pool. `0` indicates the value is equal to the number of system VCPU core number.
 - Introduced in: -
--->
 
-<!--
 ##### pipeline_prepare_thread_pool_queue_size
 
 - Default: 102400
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: The maximum queue lenggth of PREPARE fragment thread pool for Pipeline execution engine.
 - Introduced in: -
--->
+
+##### pipeline_poller_timeout_guard_ms
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: When this item is set to greater than `0`, if a driver takes longer than `pipeline_poller_timeout_guard_ms` for a single dispatch in the poller, then the information of the driver and operator is printed.
+- Introduced in: -
+
+##### pipeline_prepare_timeout_guard_ms
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: When this item is set to greater than `0`, if a plan fragment exceeds `pipeline_prepare_timeout_guard_ms` during the PREPARE process, a stack trace of the plan fragment is printed.
+- Introduced in: -
 
 <!--
 ##### pipeline_sink_io_thread_pool_thread_num
@@ -2854,6 +2863,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: A boolean value to control whether to enable the pageindex of Parquet file to improve performance. `true` indicates enabling pageindex, and `false` indicates disabling it.
 - Introduced in: v3.3
 
+##### parquet_reader_bloom_filter_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: A boolean value to control whether to enable the bloom filter of Parquet file to improve performance. `true` indicates enabling the bloom filter, and `false` indicates disabling it. You can also control this behavior on session level using the system variable `enable_parquet_reader_bloom_filter`. Bloom filters in Parquet are maintained **at the column level within each row group**. If a Parquet file contains bloom filters for certain columns, queries can use predicates on those columns to efficiently skip row groups.
+- Introduced in: v3.5
+
 <!--
 ##### io_coalesce_read_max_buffer_size
 
@@ -3287,7 +3305,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 - Default: 0
 - Type: Int
-- Unit: GB
+- Unit: Bytes
 - Is mutable: Yes
 - Description: The LRU cache size for JIT compilation. It represents the actual size of the cache if it is set to greater than 0. If it is set to less than or equal to 0, the system will adaptively set the cache using the formula `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` (while `mem_limit` of the node must be greater or equal to 16 GB).
 - Introduced in: -
@@ -3583,6 +3601,33 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: An alias of `object_storage_request_timeout_ms`. Refer to [object_storage_request_timeout_ms](#object_storage_request_timeout_ms) for details.
 - Introduced in: v3.3.9
 
+##### starlet_filesystem_instance_cache_capacity
+
+- Default: 10000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The cache capacity of starlet filesystem instances.
+- Introduced in: v3.2.16, v3.3.11, v3.4.1
+
+##### starlet_filesystem_instance_cache_ttl_sec
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The cache expiration time of starlet filesystem instances.
+- Introduced in: v3.3.15, 3.4.5
+
+##### starlet_write_file_with_tag
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: In a shared-data cluster, whether to tag files written to object storage with object storage tags for convenient custom file management.
+- Introduced in: v3.5.3
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -3786,6 +3831,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The number of loops to be waited when the BE/CN process exits. Each loop is a fixed interval of 10 seconds. You can set it to `0` to disable the loop wait. From v3.4 onwards, this item is changed to mutable and its default value is changed from `0` to `2`.
 - Introduced in: v2.5
 
+##### graceful_exit_wait_for_frontend_heartbeat
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Determines whether to await at least one frontend heartbeat response indicating SHUTDOWN status before completing graceful exit. When enabled, the graceful shutdown process remains active until a SHUTDOWN confirmation is responded via heartbeat RPC, ensuring the frontend has sufficient time to detect the termination state between two regular heartbeat intervals.
+- Introduced in: v3.4.5
+
 ### Data Lake
 
 ##### jdbc_connection_pool_size
@@ -3936,11 +3990,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_mem_size
 
-- Default: 10%
+- Default: 0
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`). It is recommended to set the value of this parameter to at least 10 GB.
+- Description: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`).
 - Introduced in: -
 
 ##### datacache_disk_size
@@ -4070,6 +4124,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: The maximum memory that the Query Pool can use. It is expressed as a percentage of the Process memory limit.
 - Introduced in: v3.1.0
+
+##### rocksdb_write_buffer_memory_percent
+
+- Default: 5
+- Type: Int64
+- Unit: -
+- Is mutable: No
+- Description: It is the memory percent of write buffer for meta in rocksdb. default is 5% of system memory. However, aside from this, the final calculated size of the write buffer memory will not be less than 64MB nor exceed 1G (rocksdb_max_write_buffer_memory_bytes)
+- Introduced in: v3.5.0
+
+##### rocksdb_max_write_buffer_memory_bytes
+
+- Default: 1073741824
+- Type: Int64
+- Unit: -
+- Is mutable: No
+- Description: It is the max size of the write buffer for meta in rocksdb. Default is 1GB.
+- Introduced in: v3.5.0
 
 <!--
 ##### datacache_block_size
@@ -4610,11 +4682,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### lake_enable_vertical_compaction_fill_data_cache
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
+- Description: Whether to allow vertical compaction tasks to cache data on local disks in a shared-data cluster.
 - Introduced in: v3.1.7, v3.2.3
 
 <!--
@@ -5249,3 +5321,30 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: The maximum length of input values for bitmap functions.
 - Introduced in: -
+
+##### report_exec_rpc_request_retry_num
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The retry times of rpc request to report exec rpc request to FE. The default value is 10, which means that the rpc request will be retried 10 times if it fails only if it's fragment instatnce finish rpc. Report exec rpc request is important for load job, if one fragment instance finish report failed, the load job will be hang until timeout.
+- Introduced in: -
+
+##### load_replica_status_check_interval_ms_on_success
+
+- Default: 15000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval that the secondary replica checks it's status on the primary replica if the last check rpc successes.
+- Introduced in: 3.5.1
+
+##### load_replica_status_check_interval_ms_on_failure
+
+- Default: 2000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval that the secondary replica checks it's status on the primary replica if the last check rpc fails.
+- Introduced in: 3.5.1

@@ -62,12 +62,12 @@ import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.opentelemetry.api.trace.Span;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -79,8 +79,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -108,7 +108,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
         FRONTEND_STREAMING(8),          // FE streaming load use this type
         MV_REFRESH(9),                  // Refresh MV
         REPLICATION(10),                // Replication
-        BYPASS_WRITE(11);               // Bypass BE, and write data file directly
+        BYPASS_WRITE(11),               // Bypass BE, and write data file directly
+        MULTI_STATEMENT_STREAMING(12);  // multi statement streaming load
 
         private final int flag;
 
@@ -163,6 +164,15 @@ public class TransactionState implements Writable, GsonPreProcessable {
         public TxnSourceType sourceType;
         @SerializedName("ip")
         public String ip;
+        // The id of the coordinator backend. Only valid if sourceType is BE.
+        // Currently, it's only used to record which backend to redirect for
+        // transaction stream load when the transaction is still in PREPARE.
+        // Do not persist it as the PREPARE transaction also does not persist,
+        // and it will not be used after the transaction is prepared, committed
+        // or aborted. We can not do redirection based on 'ip' because there may
+        // be multiple backends on the same physical node, so the ip is not unique
+        // among backends, but backend id is unique.
+        private long backendId = -1;
 
         public TxnCoordinator() {
         }
@@ -175,6 +185,16 @@ public class TransactionState implements Writable, GsonPreProcessable {
         public static TxnCoordinator fromThisFE() {
             return new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                     FrontendOptions.getLocalHostAddress());
+        }
+
+        public static TxnCoordinator fromBackend(String ip, long backendId) {
+            TxnCoordinator coordinator = new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, ip);
+            coordinator.backendId = backendId;
+            return coordinator;
+        }
+
+        public long getBackendId() {
+            return backendId;
         }
 
         @Override
@@ -228,6 +248,17 @@ public class TransactionState implements Writable, GsonPreProcessable {
     @SerializedName("er")
     private Set<Long> errorReplicas;
 
+    private Set<TabletCommitInfo> tabletCommitInfos = null;
+
+    // tabletCommitInfos is not persistent because it is very large, and it is null in follower FE.
+    // 'OlapTableTxnLogApplier.applyVisibleLog' uses tabletCommitInfos to check whether replica need update version.
+    // null tabletCommitInfos will cause follower wrong version update, and query failed from follower
+    // with version not found error.
+    // so add persistent unknownReplicas to fix this issue, unknownReplicas is much less than tabletCommitInfos.
+    // unknownReplicas = total replicas - tabletCommitInfos - errorReplicas
+    @SerializedName("ur")
+    private Set<Long> unknownReplicas;
+
     @SerializedName("ctl")
     private boolean useCombinedTxnLog;
 
@@ -280,12 +311,27 @@ public class TransactionState implements Writable, GsonPreProcessable {
     @SerializedName("to")
     private long timeoutMs = Config.stream_load_default_timeout_second * 1000L;
 
+    // The default timeout value (in milliseconds) for a transaction in the PREPARED state.
+    // A value of -1 indicates that the actual timeout will be determined dynamically at
+    // runtime by Config.prepared_transaction_default_timeout_second.
+    public static final long DEFAULT_PREPARED_TIMEOUT_MS = -1;
+
+    // The timeout (in milliseconds) that a transaction can remain in the PREPARED state
+    // before it must be either COMMITTED or ABORTED. This value is lazily set when the
+    // transaction transitions to the PREPARED state.
+    @SerializedName("pto")
+    private long preparedTimeoutMs = DEFAULT_PREPARED_TIMEOUT_MS;
+
     // optional
     @SerializedName("ta")
     private TxnCommitAttachment txnCommitAttachment;
 
     @SerializedName("wid")
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+    // persistent
+    @SerializedName("wcr")
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     // this map should be set when load execution begin, so that when the txn commit, it will know
     // which tables and rollups it loaded.
@@ -306,15 +352,14 @@ public class TransactionState implements Writable, GsonPreProcessable {
     private Span txnSpan = null;
     private String traceParent = null;
 
-    private Set<TabletCommitInfo> tabletCommitInfos = null;
-
     // For a transaction, we need to ensure that different clients obtain consistent partition information,
     // to avoid inconsistencies caused by replica migration and other operations during the transaction process.
     // Therefore, a snapshot of this information is maintained here.
-    private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
+    private Map<Long, ConcurrentMap<String, TOlapTablePartition>> tableToPartitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
-    private List<String> createdPartitionNames = Lists.newArrayList();
+    private Map<Long, List<String>> tableToCreatedPartitionNames = Maps.newHashMap();
+    private AtomicBoolean isCreatePartitionFailed = new AtomicBoolean(false);
 
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
@@ -340,6 +385,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.finishTime = -1;
         this.reason = "";
         this.errorReplicas = Sets.newHashSet();
+        this.unknownReplicas = Sets.newHashSet();
         this.publishVersionTasks = Maps.newHashMap();
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
@@ -366,6 +412,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.finishTime = -1;
         this.reason = "";
         this.errorReplicas = Sets.newHashSet();
+        this.unknownReplicas = Sets.newHashSet();
         this.publishVersionTasks = Maps.newHashMap();
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
@@ -397,6 +444,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.finishTime = -1;
         this.reason = "";
         this.errorReplicas = Sets.newHashSet();
+        this.unknownReplicas = Sets.newHashSet();
         this.publishVersionTasks = Maps.newHashMap();
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
@@ -417,6 +465,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.errorReplicas = newErrorReplicas;
     }
 
+    public void addUnknownReplica(long replicaId) {
+        unknownReplicas.add(replicaId);
+    }
+
     public boolean isRunning() {
         return transactionStatus == TransactionStatus.PREPARE || transactionStatus == TransactionStatus.PREPARED ||
                 transactionStatus == TransactionStatus.COMMITTED;
@@ -434,15 +486,33 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.tabletCommitInfos.addAll(infos);
     }
 
+    // Not skip check replica version
+    // 1. replica state is not normal and clone
+    // 2. replica is in tabletCommitInfos in leader (or not in errorReplicas and unknownReplicas in follower)
+    // 3. replica current version >= commit version
     public boolean checkReplicaNeedSkip(Tablet tablet, Replica replica, PartitionCommitInfo partitionCommitInfo) {
-        boolean isContain = tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(), replica.getState());
+        ReplicaState state = replica.getState();
+        if (state != ReplicaState.NORMAL && state != ReplicaState.CLONE) {
+            // Not skip check when replica is ALTER or SCHEMA CHANGE.
+            // Should not return false if the state is CLONE, because lastSuccessVersion will be updated incorrectly
+            // in 'OlapTableTxnLogApplier.applyVisibleLog'.
+            if (LOG.isDebugEnabled()) {
+                Backend backend =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(replica.getBackendId());
+                LOG.debug("skip replica version check because tablet {} backend {} is in state {}",
+                        tablet.getId(), backend != null ? backend.toString() : "", state);
+            }
+            return false;
+        }
+
+        boolean isContain = tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(), replica.getId());
         if (isContain) {
             return false;
         }
 
         // In order for the transaction to complete in time for this scenario: the server machine is not recovered.
         // 1. Transaction TA writes to a two-replicas tablet and enters the committed state.
-        //    The tablet's repliace are replicaA, replicaB.
+        //    The tablet's replicas are replicaA, replicaB.
         // 2. replicaA, replicaB generate tasks: PublishVersionTaskA, PublishVersionTaskB.
         //    PublishVersionTaskA/PublishVersionTaskB successfully submitted to the beA/beB via RPC.
         // 3. The machine where beB is located hangs and is not recoverable.
@@ -462,28 +532,13 @@ public class TransactionState implements Writable, GsonPreProcessable {
         tabletCommitInfos = null;
     }
 
-    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
-        TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
-        if (this.tabletCommitInfos == null) {
-            if (LOG.isDebugEnabled()) {
-                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
-                // if tabletCommitInfos is null, skip this check and return true
-                LOG.debug("tabletCommitInfos is null in TransactionState, tablet {} backend {} txn {}",
-                        tabletId, backend != null ? backend.toString() : "", transactionId);
-            }
-            return true;
+    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, long replicaId) {
+        if (tabletCommitInfos != null) {
+            return tabletCommitInfos.contains(new TabletCommitInfo(tabletId, backendId));
+        } else {
+            // tabletCommitInfos is not persistent and is null in follower fe
+            return !errorReplicas.contains(replicaId) && !unknownReplicas.contains(replicaId);
         }
-        if (state != ReplicaState.NORMAL) {
-            // Skip check when replica is CLONE, ALTER or SCHEMA CHANGE
-            // We handle version missing in finishTask when change state to NORMAL
-            if (LOG.isDebugEnabled()) {
-                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
-                LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
-                        tabletId, backend != null ? backend.toString() : "", state);
-            }
-            return true;
-        }
-        return this.tabletCommitInfos.contains(info);
     }
 
     // Only for OlapTable
@@ -557,10 +612,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
     }
 
     public List<Long> getCallbackId() {
-        if (callbackId != -1) {
+        if (this.callbackIdList == null || this.callbackIdList.isEmpty()) {
             return Lists.newArrayList(callbackId);
         } else {
-            return new ArrayList<>(callbackIdList);
+            return Lists.newArrayList(this.callbackIdList);
         }
     }
 
@@ -572,8 +627,13 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return warehouseId;
     }
 
-    public void setWarehouseId(long warehouseId) {
-        this.warehouseId = warehouseId;
+    public void setComputeResource(ComputeResource computeResource) {
+        this.warehouseId = computeResource.getWarehouseId();
+        this.computeResource = computeResource;
+    }
+
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     public void setTransactionStatus(TransactionStatus transactionStatus) {
@@ -632,7 +692,9 @@ public class TransactionState implements Writable, GsonPreProcessable {
                         break;
                 }
             } else if (callbackId > 0) {
-                if (Objects.requireNonNull(transactionStatus) == TransactionStatus.COMMITTED) {
+                if (Objects.requireNonNull(transactionStatus) == TransactionStatus.COMMITTED
+                        && this.sourceType != LoadJobSourceType.BACKEND_STREAMING) {
+                    // BACKEND_STREAMING allows callback to be null
                     // Maybe listener has been deleted. The txn need to be aborted later.
                     throw new TransactionException(
                             "Failed to commit txn when callback " + callbackId + "could not be found");
@@ -705,8 +767,18 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.prepareTime = prepareTime;
     }
 
-    public void setPreparedTime(long preparedTime) {
+    public void setPreparedTimeAndTimeout(long preparedTime, long preparedTimeoutMs) {
         this.preparedTime = preparedTime;
+        this.preparedTimeoutMs = preparedTimeoutMs;
+    }
+
+    public long getPreparedTime() {
+        return preparedTime;
+    }
+
+    public long getPreparedTimeoutMs() {
+        return preparedTimeoutMs == DEFAULT_PREPARED_TIMEOUT_MS ?
+            Config.prepared_transaction_default_timeout_second * 1000L : preparedTimeoutMs;
     }
 
     public void setCommitTime(long commitTime) {
@@ -774,9 +846,15 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     // return true if txn is running but timeout
     public boolean isTimeout(long currentMillis) {
-        return (transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs)
-                || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - preparedTime)
-                / 1000 > Config.prepared_transaction_default_timeout_second);
+        if (transactionStatus == TransactionStatus.PREPARE) {
+            return currentMillis - prepareTime > timeoutMs;
+        }
+        if (transactionStatus == TransactionStatus.PREPARED) {
+            long timeout = preparedTimeoutMs > 0 ?
+                    preparedTimeoutMs : Config.prepared_transaction_default_timeout_second * 1000L;
+            return (currentMillis - preparedTime) > timeout;
+        }
+        return false;
     }
 
     /*
@@ -818,7 +896,13 @@ public class TransactionState implements Writable, GsonPreProcessable {
         sb.append(", coordinator: ").append(txnCoordinator.toString());
         sb.append(", transaction status: ").append(transactionStatus);
         sb.append(", error replicas num: ").append(errorReplicas.size());
-        sb.append(", replica ids: ").append(Joiner.on(",").join(errorReplicas.stream().limit(5).toArray()));
+        if (!errorReplicas.isEmpty()) {
+            sb.append(", error replica ids: ").append(Joiner.on(",").join(errorReplicas.stream().limit(5).toArray()));
+        }
+        sb.append(", unknown replicas num: ").append(unknownReplicas.size());
+        if (!unknownReplicas.isEmpty()) {
+            sb.append(", unknown replica ids: ").append(Joiner.on(",").join(unknownReplicas.stream().limit(5).toArray()));
+        }
         sb.append(", prepare time: ").append(prepareTime);
         sb.append(", write end time: ").append(writeEndTimeMs);
         sb.append(", allow commit time: ").append(allowCommitTimeMs);
@@ -865,6 +949,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
             }
             sb.append("]");
         }
+        sb.append(", warehouse: ").append(computeResource.getWarehouseId());
         return sb.toString();
     }
 
@@ -874,7 +959,13 @@ public class TransactionState implements Writable, GsonPreProcessable {
         sb.append(", db id: ").append(dbId);
         sb.append(", table id list: ").append(StringUtils.join(tableIdList, ","));
         sb.append(", error replicas num: ").append(errorReplicas.size());
-        sb.append(", replica ids: ").append(Joiner.on(",").join(errorReplicas.stream().limit(5).toArray()));
+        if (!errorReplicas.isEmpty()) {
+            sb.append(", error replica ids: ").append(Joiner.on(",").join(errorReplicas.stream().limit(5).toArray()));
+        }
+        sb.append(", unknown replicas num: ").append(unknownReplicas.size());
+        if (!unknownReplicas.isEmpty()) {
+            sb.append(", unknown replica ids: ").append(Joiner.on(",").join(unknownReplicas.stream().limit(5).toArray()));
+        }
         if (commitTime > prepareTime) {
             sb.append(", write cost: ").append(commitTime - prepareTime).append("ms");
         }
@@ -1087,18 +1178,23 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return useCombinedTxnLog;
     }
 
-    public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition() {
-        return partitionNameToTPartition;
+    public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition(long tableId) {
+        writeLock();
+        try {
+            return tableToPartitionNameToTPartition.computeIfAbsent(tableId, k -> Maps.newConcurrentMap());
+        } finally {
+            writeUnlock();
+        }
     }
 
     public ConcurrentMap<Long, TTabletLocation> getTabletIdToTTabletLocation() {
         return tabletIdToTTabletLocation;
     }
 
-    public List<String> getCreatedPartitionNames() {
+    public List<String> getCreatedPartitionNames(long tableId) {
         writeLock();
         try {
-            return createdPartitionNames;
+            return tableToCreatedPartitionNames.computeIfAbsent(tableId, k -> new ArrayList<>());
         } finally {
             writeUnlock();
         }
@@ -1107,18 +1203,28 @@ public class TransactionState implements Writable, GsonPreProcessable {
     public void clearAutomaticPartitionSnapshot() {
         writeLock();
         try {
-            createdPartitionNames = partitionNameToTPartition.keySet().stream().collect(Collectors.toList());
+            tableToPartitionNameToTPartition.forEach((tableId, partitionNameToTPartition) -> {
+                List<String> createdPartitionNames = tableToCreatedPartitionNames.computeIfAbsent(
+                        tableId, k -> new ArrayList<>());
+                createdPartitionNames.addAll(partitionNameToTPartition.keySet());
+            });
+            tabletIdToTTabletLocation.clear();
+            tableToPartitionNameToTPartition.clear();
         } finally {
             writeUnlock();
         }
-        partitionNameToTPartition.clear();
-        tabletIdToTTabletLocation.clear();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-
+    public void setIsCreatePartitionFailed(boolean v) {
+        this.isCreatePartitionFailed.set(v);
     }
+
+    public boolean getIsCreatePartitionFailed() {
+        return this.isCreatePartitionFailed.get();
+    }
+
+
+
 
     @Override
     public void gsonPreProcess() throws IOException {

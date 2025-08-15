@@ -204,7 +204,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
 
 Status AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
     if (!_aggregator->it_hash().has_value()) {
-        _aggregator->it_hash() = _aggregator->_state_allocator.begin();
+        _aggregator->it_hash() = _aggregator->state_allocator().begin();
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     }
 
@@ -232,8 +232,8 @@ pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::Pi
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
         auto aggr_mode = should_cache ? (post_cache ? AM_STREAMING_POST_CACHE : AM_STREAMING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
-        auto sink_operator = std::make_shared<AggregateStreamingSinkOperatorFactory>(context->next_operator_id(), id(),
-                                                                                     aggregator_factory);
+        auto sink_operator = std::make_shared<AggregateStreamingSinkOperatorFactory>(
+                context->next_operator_id(), id(), aggregator_factory, _build_runtime_filters);
         auto source_operator = std::make_shared<AggregateStreamingSourceOperatorFactory>(context->next_operator_id(),
                                                                                          id(), aggregator_factory);
         context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);

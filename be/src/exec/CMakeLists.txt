@@ -47,9 +47,11 @@ set(EXEC_FILES
     es/es_scroll_parser.cpp
     local_file_writer.cpp
     plain_text_builder.cpp
+    agg_runtime_filter_builder.cpp
     aggregator.cpp
     sorted_streaming_aggregator.cpp
     aggregate/agg_hash_variant.cpp
+    aggregate/compress_serializer.cpp
     aggregate/aggregate_base_node.cpp
     aggregate/aggregate_blocking_node.cpp
     aggregate/distinct_blocking_node.cpp
@@ -71,7 +73,9 @@ set(EXEC_FILES
     hash_joiner.cpp
     hash_join_node.cpp
     hash_join_components.cpp
-    join_hash_map.cpp
+    join/join_hash_table_descriptor.cpp
+    join/join_key_constructor.cpp
+    join/join_hash_map.cpp
     topn_node.cpp
     chunks_sorter.cpp
     chunks_sorter_heap_sort.cpp
@@ -105,6 +109,7 @@ set(EXEC_FILES
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
+    avro_cpp_scanner.cpp
     project_node.cpp
     dict_decode_node.cpp
     repeat_node.cpp
@@ -163,10 +168,13 @@ set(EXEC_FILES
     schema_scanner/sys_fe_locks.cpp
     schema_scanner/sys_fe_memory_usage.cpp
     schema_scanner/schema_temp_tables_scanner.cpp
+    schema_scanner/schema_warehouse_metrics.cpp
+    schema_scanner/schema_warehouse_queries.cpp
     schema_scanner/schema_cluster_snapshots_scanner.cpp
     schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
     schema_scanner/schema_applicable_roles_scanner.cpp
     schema_scanner/schema_keywords_scanner.cpp
+    schema_scanner/schema_dynamic_tablet_jobs_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge.cpp

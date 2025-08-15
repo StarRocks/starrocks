@@ -14,7 +14,6 @@
 
 package com.starrocks.lake.snapshot;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
@@ -30,53 +29,56 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
     public static final Logger LOG = LogManager.getLogger(ClusterSnapshotCheckpointScheduler.class);
     private static int CAPTURE_ID_RETRY_TIME = 10;
 
-    private final CheckpointController feController;
-    private final CheckpointController starMgrController;
+    protected final CheckpointController feController;
+    protected final CheckpointController starMgrController;
     // cluster snapshot information used for start
-    private final RestoredSnapshotInfo restoredSnapshotInfo;
+    protected final RestoredSnapshotInfo restoredSnapshotInfo;
 
-    private boolean firstRun;
+    protected long lastAutomatedJobStartTimeMs;
+    protected volatile ClusterSnapshotJob runningJob;
 
     public ClusterSnapshotCheckpointScheduler(CheckpointController feController,
             CheckpointController starMgrController) {
-        super("cluster_snapshot_checkpoint_scheduler", Config.automated_cluster_snapshot_interval_seconds * 1000L);
+        super("cluster_snapshot_checkpoint_scheduler", 10L);
         this.feController = feController;
         this.starMgrController = starMgrController;
-        this.firstRun = true;
         this.restoredSnapshotInfo = RestoreClusterSnapshotMgr.getRestoredSnapshotInfo();
-    }
-
-    @Override
-    public long getInterval() {
-        return Config.automated_cluster_snapshot_interval_seconds * 1000L;
+        this.lastAutomatedJobStartTimeMs = 0;
     }
 
     @Override
     protected void runAfterCatalogReady() {
-        if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn()) {
+        // skip first run when the scheduler start
+        if (lastAutomatedJobStartTimeMs == 0) {
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                                            .resetSnapshotJobsStateAfterRestarted(restoredSnapshotInfo);
+            lastAutomatedJobStartTimeMs = System.currentTimeMillis(); // init last start time
             return;
         }
 
-        // skip first run when the scheduler start
-        if (firstRun) {
-            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
-                                            .resetSnapshotJobsStateAfterRestarted(restoredSnapshotInfo);
-            firstRun = false;
+        /*
+         * Control the interval of automated cluster snapshot manually instead of by Daemon framework
+         * for the future purpose.
+         */
+        if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().canScheduleNextJob(lastAutomatedJobStartTimeMs)) {
             return;
         }
 
         CheckpointController.exclusiveLock();
         try {
-            runCheckpointScheduler();
+            runningJob = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getNextCluterSnapshotJob();
+
+            // set last start time when job has been created and begin to submit
+            lastAutomatedJobStartTimeMs = runningJob.getCreatedTimeMs();
+            runCheckpointScheduler(runningJob);
         } finally {
+            runningJob = null;
             CheckpointController.exclusiveUnlock();
         }
     }
 
-    protected void runCheckpointScheduler() {
+    protected void runCheckpointScheduler(ClusterSnapshotJob job) {
         String errMsg = "";
-        ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
-                .createAutomatedSnapshotJob(); /* INITIALIZING state */
 
         do {
             // step 1: capture consistent journal id for checkpoint
@@ -98,7 +100,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
             long feCheckpointJournalId = consistentIds.first;
             if (feImageJournalId < feCheckpointJournalId) {
                 Pair<Boolean, String> createFEImageRet = feController.runCheckpointControllerWithIds(feImageJournalId,
-                        feCheckpointJournalId);
+                        feCheckpointJournalId, job.needClusterSnapshotInfo());
                 if (!createFEImageRet.first) {
                     errMsg = "checkpoint failed for FE image: " + createFEImageRet.second;
                     break;
@@ -113,7 +115,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
             long starMgrCheckpointJournalId = consistentIds.second;
             if (starMgrImageJournalId < starMgrCheckpointJournalId) {
                 Pair<Boolean, String> createStarMgrImageRet = starMgrController
-                        .runCheckpointControllerWithIds(starMgrImageJournalId, starMgrCheckpointJournalId);
+                        .runCheckpointControllerWithIds(starMgrImageJournalId, starMgrCheckpointJournalId, false);
                 if (!createStarMgrImageRet.first) {
                     errMsg = "checkpoint failed for starMgr image: " + createStarMgrImageRet.second;
                     break;
@@ -122,13 +124,14 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
                 errMsg = "checkpoint journal id for starMgr is smaller than image version";
                 break;
             }
+            job.setClusterSnapshotInfo(feController.getClusterSnapshotInfo());
             LOG.info("Finished create image for starMgr image, version: {}", consistentIds.second);
 
             // step 3: upload all finished image file
             job.setState(ClusterSnapshotJobState.UPLOADING);
             job.logJob();
             try {
-                ClusterSnapshotUtils.uploadAutomatedSnapshotToRemote(job.getSnapshotName());
+                ClusterSnapshotUtils.uploadClusterSnapshotToRemote(job);
             } catch (StarRocksException e) {
                 errMsg = "upload image failed, err msg: " + e.getMessage();
                 break;
@@ -137,11 +140,6 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
                     "Finish upload image for Cluster Snapshot, FE checkpoint journal Id: {}, StarMgr checkpoint journal Id: {}",
                     job.getFeJournalId(), job.getStarMgrJournalId());
         } while (false);
-
-        if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn()) {
-            errMsg = "Job: " + job.getSnapshotName()
-                    + " has been cancelled because automated cluster snapshot has been turn off";
-        }
 
         if (!errMsg.isEmpty()) {
             job.setErrMsg(errMsg);

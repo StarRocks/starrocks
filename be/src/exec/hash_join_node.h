@@ -18,7 +18,7 @@
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
-#include "exec/join_hash_map.h"
+#include "exec/join/join_hash_map.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -58,7 +58,7 @@ private:
 
     static bool _has_null(const ColumnPtr& column);
 
-    void _init_hash_table_param(HashTableParam* param);
+    void _init_hash_table_param(HashTableParam* param, RuntimeState* runtime_state);
     // local join includes: broadcast join and colocate join.
     Status _create_implicit_local_join_runtime_filters(RuntimeState* state);
     void _final_update_profile() {

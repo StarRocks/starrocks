@@ -18,6 +18,8 @@
 
 #include <filesystem>
 
+#include "testutil/parallel_test.h"
+
 namespace starrocks::parquet {
 class ParquetCLIReaderTest : public testing::Test {
 public:
@@ -60,16 +62,14 @@ private:
     }
 };
 
-TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
-    GTEST_SKIP();
+GROUP_SLOW_TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
     std::vector<std::string> paths;
     // We don't support below files in init phase, but we need to make sure that will not make BE crashed.
     std::set<std::string> unsupported_paths_init;
     {
+        // Invalid argument: MAP-annotated group must have a single child.
         // error format built by hudi
         unsupported_paths_init.emplace("./be/test/exec/test_data/parquet_scanner/hudi_array_map.parquet");
-        // error format built by hudi
-        unsupported_paths_init.emplace("./be/test/exec/test_data/parquet_data/hudi_mor_two_level_nested_array.parquet");
         // empty parquet file
         unsupported_paths_init.emplace("./be/test/formats/parquet/test_data/empty.parquet");
         // parquet column reader: not supported convert from parquet `INT64` to `TIME`
@@ -81,6 +81,13 @@ TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
                 "./be/test/formats/parquet/test_data/column_converter/fixed_len_byte_array.parquet");
         // parquet column reader: not supported convert from parquet `BYTE_ARRAY` to `DECIMAL128`
         unsupported_paths_init.emplace("./be/test/formats/parquet/test_data/column_converter/byte_array.parquet");
+        // Invalid argument: Duplicate field name: col1
+        unsupported_paths_init.emplace("./be/test/exec/test_data/parquet_data/schema4.parquet");
+        //  Invalid argument: Map keys must be primitive type.
+        unsupported_paths_init.emplace("./be/test/formats/parquet/test_data/map_key_is_struct.parquet");
+        // Not supported: parquet column reader: not supported convert from parquet `BYTE_ARRAY` to `DECIMAL128`
+        unsupported_paths_init.emplace(
+                "./be/test/formats/parquet/test_data/data_with_page_index_and_bloom_filter.parquet");
     }
     // We don't support below files in get_next phase, it's illegal parquet files
     std::set<std::string> unsupported_paths_get_next;
@@ -93,26 +100,46 @@ TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
     traverse_directory_add_parquet(paths, "./be/test/exec/test_data/parquet_data", ".parquet");
     traverse_directory_add_parquet(paths, "./be/test/exec/test_data/parquet_scanner", ".parquet");
     traverse_directory_add_parquet(paths, "./be/test/formats/parquet/test_data", ".parquet");
+
+    std::vector<std::pair<int, Status>> results;
     for (const std::string& path : paths) {
+        LOG(INFO) << "Testing file: " << path;
         ParquetCLIReader reader{path};
+        int stage = 0;
         auto st = reader.init();
-        if (unsupported_paths_init.find(path) != unsupported_paths_init.end()) {
-            ASSERT_FALSE(st.ok());
-        } else {
-            ASSERT_TRUE(st.ok());
-            auto res = reader.debug(1);
-            if (unsupported_paths_get_next.find(path) != unsupported_paths_get_next.end()) {
-                ASSERT_FALSE(res.ok());
-            } else {
-                ASSERT_TRUE(res.ok()) << res.status().message();
-            }
-            st = res.status();
+        if (!st.ok()) {
+            results.emplace_back(stage, st);
+            continue;
         }
-        // print_res(path, st);
+        stage++;
+        auto res = reader.debug(1);
+        st = res.status();
+        if (!st.ok()) {
+            results.emplace_back(stage, st);
+            continue;
+        }
+        stage++;
+        results.emplace_back(stage, st);
+    }
+
+    ASSERT_EQ(results.size(), paths.size());
+    for (int i = 0; i < results.size(); i++) {
+        const auto& [stage, status] = results[i];
+        const auto& path = paths[i];
+        if (stage == 0) {
+            EXPECT_TRUE(!status.ok() && unsupported_paths_init.contains(path))
+                    << "File path: " << path << ", stage: " << stage << ", status: " << status.to_string();
+        } else if (stage == 1) {
+            EXPECT_TRUE(!status.ok() && unsupported_paths_get_next.contains(path))
+                    << "File path: " << path << ", stage: " << stage << ", status: " << status.to_string();
+        } else {
+            EXPECT_TRUE(status.ok()) << "File path: " << path << ", stage: " << stage
+                                     << ", status: " << status.to_string();
+        }
     }
 }
 
-TEST_F(ParquetCLIReaderTest, ReadArrowFuzzingParquetFiles) {
+GROUP_SLOW_TEST_F(ParquetCLIReaderTest, ReadArrowFuzzingParquetFiles) {
     std::vector<std::string> read_paths;
     {
         traverse_directory_add_parquet(read_paths, "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/");
@@ -120,30 +147,35 @@ TEST_F(ParquetCLIReaderTest, ReadArrowFuzzingParquetFiles) {
                                        "./be/test/formats/parquet/arrow_fuzzing_data/generated_simple_numerics/");
         read_paths.emplace_back("./be/test/formats/parquet/arrow_fuzzing_data/ARROW-17100.parquet");
     }
-    std::set<std::string> ignore_dcheck_paths;
-#ifndef NDEBUG
-    {
-        // ignore below files in DEBUG mode, because below code will consume lots of memory and face failed with DCHECK,
-        // so we only run below two files in Release mode(It will not occur be crashed).
-        ignore_dcheck_paths.emplace(
-                "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/"
-                "clusterfuzz-testcase-minimized-parquet-arrow-fuzz-4819270771146752");
-        ignore_dcheck_paths.emplace(
-                "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/"
-                "clusterfuzz-testcase-minimized-parquet-arrow-fuzz-5667493425446912");
-    }
-#endif
+
     for (const std::string& path : read_paths) {
-        if (ignore_dcheck_paths.find(path) != ignore_dcheck_paths.end()) {
-            continue;
-        }
+        LOG(INFO) << "Testing file: " << path;
         ParquetCLIReader reader{path};
         auto st = reader.init();
         if (st.ok()) {
             auto res = reader.debug(1);
             st = res.status();
         }
-        // print_res(path, st);
     }
 }
+
+TEST_F(ParquetCLIReaderTest, ReadDataPageV2ParquetFiles) {
+    std::vector<std::string> files = {
+            // generated by duckdb: https://duckdb.org/2025/01/22/parquet-encodings.html
+            "data_page_v2_float10k.parquet", "data_page_v2_int1m.parquet", "data_page_v2_string4k.parquet",
+            // other sources.
+            "data_page_v2_test.parquet", "data_page_v2_test2.parquet"};
+    for (const auto& file : files) {
+        std::string path = "./be/test/formats/parquet/test_data/" + file;
+        LOG(INFO) << "Testing file: " << path;
+        ParquetCLIReader reader{path};
+        auto st = reader.init();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        auto res = reader.debug(10);
+        st = res.status();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        LOG(INFO) << "data rows = " << res.value();
+    }
+}
+
 } // namespace starrocks::parquet

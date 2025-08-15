@@ -22,10 +22,11 @@
 
 #include "common/compiler_util.h"
 #include "storage/lake/delta_writer.h"
-#include "storage/lake/load_spill_block_manager.h"
+#include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
 #include "testutil/sync_point.h"
 #include "util/stack_trace_mutex.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
 
@@ -173,6 +174,8 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     int num_tasks = 0;
     auto st = Status{};
     int64_t pending_time_ns = 0;
+    MonotonicStopWatch watch;
+    watch.start();
     for (; iter; ++iter) {
         // It's safe to run without checking `closed()` but doing so can make the task quit earlier on cancel/error.
         if (async_writer->closed()) {
@@ -225,6 +228,12 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         }
     }
     async_writer->_writer->update_task_stat(num_tasks, pending_time_ns);
+    StarRocksMetrics::instance()->async_delta_writer_execute_total.increment(1);
+    StarRocksMetrics::instance()->async_delta_writer_task_total.increment(num_tasks);
+    StarRocksMetrics::instance()->async_delta_writer_task_execute_duration_us.increment(watch.elapsed_time() /
+                                                                                        NANOSECS_PER_USEC);
+    StarRocksMetrics::instance()->async_delta_writer_task_pending_duration_us.increment(pending_time_ns /
+                                                                                        NANOSECS_PER_USEC);
     return 0;
 }
 
@@ -391,6 +400,10 @@ DeltaWriter* AsyncDeltaWriter::delta_writer() {
     return _impl->delta_writer();
 }
 
+const DictColumnsValidMap* AsyncDeltaWriter::global_dict_columns_valid_info() const {
+    return _impl->delta_writer()->global_dict_columns_valid_info();
+}
+
 StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::build() {
     ASSIGN_OR_RETURN(auto writer, DeltaWriterBuilder()
                                           .set_tablet_manager(_tablet_mgr)
@@ -408,6 +421,8 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_column_to_expr_value(_column_to_expr_value)
                                           .set_load_id(_load_id)
                                           .set_profile(_profile)
+                                          .set_bundle_writable_file_context(_bundle_writable_file_context)
+                                          .set_global_dicts(_global_dicts)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);

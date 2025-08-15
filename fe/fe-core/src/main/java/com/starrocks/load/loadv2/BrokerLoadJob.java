@@ -40,6 +40,7 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
@@ -53,6 +54,8 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ThreadUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.BrokerFileGroup;
@@ -70,7 +73,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.task.PriorityLeaderTask;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -83,13 +85,11 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.warehouse.WarehouseIdleChecker;
-import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * There are 3 steps in BrokerLoadJob: BrokerPendingTask, LoadLoadingTask, CommitAndPublishTxn.
@@ -137,7 +137,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
-                        timeoutSecond, warehouseId);
+                        timeoutSecond, computeResource);
     }
 
     @Override
@@ -283,8 +283,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 } else if (partialUpdateMode.equals("row")) {
                     mode = TPartialUpdateMode.ROW_MODE;
                 }
-                UUID uuid = UUID.randomUUID();
-                TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+                TUniqueId loadId = UUIDUtil.genTUniqueId();
 
                 LoadLoadingTask task = new LoadLoadingTask.Builder()
                         .setDb(db)
@@ -311,7 +310,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setFileNum(attachment.getFileNumByTable(aggKey))
                         .setLoadId(loadId)
                         .setJSONOptions(jsonOptions)
-                        .setWarehouseId(warehouseId)
+                        .setComputeResource(computeResource)
                         .build();
 
                 task.prepare();
@@ -371,7 +370,8 @@ public class BrokerLoadJob extends BulkLoadJob {
             }
 
             failMsg.setMsg(txnStatusChangeReason + ". Retry again");
-            LOG.warn("Retry load job. job: {}, remaining retryTime: {}", id, retryTime);
+            LOG.warn("broker load job {} with txn id {} failed. start retry, remaining retry time: {}",
+                    id, txnState.getTransactionId(), retryTime);
             retryTime--;
             unprotectedClearTasksBeforeRetry(failMsg);
             try {
@@ -404,7 +404,7 @@ public class BrokerLoadJob extends BulkLoadJob {
             failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnState.getReason());
             finishTimestamp = txnState.getFinishTime();
             state = JobState.CANCELLED;
-            if (retryTime <= 0 || !failMsg.getMsg().contains("timeout") || !isTimeout()) {
+            if (!isRetryable(failMsg)) {
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
                 return;
             }
@@ -434,8 +434,8 @@ public class BrokerLoadJob extends BulkLoadJob {
         newLoadingTasks.clear();
         reset();
 
-        // set failMsg
-        this.failMsg = failMsg;
+        this.failMsg = null; // when retry, user should not see previous fail msg
+        this.progress = 0; // reset progress
         // cancel all running coordinators, so that the scheduler's worker thread will be released
         for (TUniqueId loadId : loadIds) {
             Coordinator coordinator = QeProcessorImpl.INSTANCE.getCoordinator(loadId);
@@ -632,5 +632,12 @@ public class BrokerLoadJob extends BulkLoadJob {
             value += Long.valueOf(deltaValue);
         }
         return String.valueOf(value);
+    }
+
+    @Override
+    protected void updateTabletFailInfos(TaskAttachment attachment) {
+        if (attachment instanceof BrokerLoadingTaskAttachment) {
+            failInfos.addAll(((BrokerLoadingTaskAttachment) attachment).getFailInfoList());
+        }
     }
 }

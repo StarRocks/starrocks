@@ -267,7 +267,7 @@ std::vector<ConfigInfo> list_configs() {
     std::vector<ConfigInfo> infos;
     for (const auto& [name, field] : Field::fields()) {
         auto& info = infos.emplace_back();
-        info.name = field->name();
+        info.name = name;
         info.value = field->value();
         info.type = field->type();
         info.defval = field->defval();

@@ -48,6 +48,9 @@ public:
     virtual Status encode_dict(Encoder* dict_encoder, size_t* num_dicts) {
         return Status::NotSupported("encode_dict is not supported");
     }
+
+    // used to set fixed length for FLBA
+    virtual void set_type_length(int32_t type_length) {}
 };
 
 class Decoder {
@@ -76,6 +79,8 @@ public:
     // It will return ERROR if caller wants to read out-of-bound data.
     virtual Status next_batch(size_t count, ColumnContentType content_type, Column* dst,
                               const FilterData* filter = nullptr) = 0;
+    virtual Status next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
+                                         Column* dst, const FilterData* filter);
 
     virtual Status skip(size_t values_to_skip) = 0;
 
@@ -83,6 +88,9 @@ public:
     virtual Status next_batch(size_t count, uint8_t* dst) {
         return Status::NotSupported("next_batch is not supported");
     }
+
+protected:
+    void _next_null_column(size_t count, const NullInfos& null_infos, NullableColumn* dst);
 };
 
 class EncodingInfo {

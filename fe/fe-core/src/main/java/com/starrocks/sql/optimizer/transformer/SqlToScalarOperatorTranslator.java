@@ -46,6 +46,7 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
@@ -204,8 +205,14 @@ public final class SqlToScalarOperatorTranslator {
     }
 
     public static ScalarOperator translateWithSlotRef(Expr expr,
-                                                      java.util.function.Function<SlotRef, ColumnRefOperator> resolver) {
+                                                      java.util.function.Function<SlotRef, ? extends ScalarOperator> resolver) {
         ResolveSlotVisitor visitor = new ResolveSlotVisitor(resolver);
+        return visitor.visit(expr, new Context());
+    }
+
+    public static ScalarOperator translateLoadExpr(Expr expr,
+                                                   java.util.function.Function<SlotRef, ColumnRefOperator> slotResolver) {
+        LoadExprVisitor visitor = new LoadExprVisitor(slotResolver);
         return visitor.visit(expr, new Context());
     }
 
@@ -683,8 +690,8 @@ public final class SqlToScalarOperatorTranslator {
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .toArray(ScalarOperator[]::new);
-
-            return new MatchExprOperator(children);
+            MatchExpr.MatchOperator matchOperator = node.getMatchOperator();
+            return new MatchExprOperator(matchOperator, children);
         }
 
         @Override
@@ -819,23 +826,6 @@ public final class SqlToScalarOperatorTranslator {
 
             ScalarOperator subqueryOutput = subqueryPlan.getOutputColumn().get(0);
 
-            /*
-             * The scalar aggregation in the subquery will be converted into a vector aggregation in scalar sub-query
-             * but the scalar aggregation will return at least one row.
-             * So we need to do special processing on count,
-             * other aggregate functions do not need special processing because they return NULL
-             */
-            if (!subqueryPlan.getCorrelation().isEmpty() && queryRelation instanceof SelectRelation &&
-                    ((SelectRelation) queryRelation).hasAggregation() &&
-                    ((SelectRelation) queryRelation).getAggregate().get(0).getFnName().getFunction()
-                            .equalsIgnoreCase(FunctionSet.COUNT)) {
-
-                subqueryOutput = new CallOperator(FunctionSet.IFNULL, Type.BIGINT,
-                        Lists.newArrayList(subqueryOutput, ConstantOperator.createBigint(0)),
-                        Expr.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {Type.BIGINT, Type.BIGINT},
-                                Function.CompareMode.IS_IDENTICAL));
-            }
-
             // un-correlation scalar query, set outer columns
             ColumnRefSet outerUsedColumns = new ColumnRefSet();
             if (subqueryPlan.getCorrelation().isEmpty()) {
@@ -897,9 +887,9 @@ public final class SqlToScalarOperatorTranslator {
      */
     static class ResolveSlotVisitor extends Visitor {
 
-        private final java.util.function.Function<SlotRef, ColumnRefOperator> resolver;
+        private final java.util.function.Function<SlotRef, ? extends ScalarOperator> resolver;
 
-        public ResolveSlotVisitor(java.util.function.Function<SlotRef, ColumnRefOperator> resolver) {
+        public ResolveSlotVisitor(java.util.function.Function<SlotRef, ? extends ScalarOperator> resolver) {
             super(new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
                     new ColumnRefFactory(), Collections.emptyList(),
                     null, null, null, null);
@@ -909,7 +899,7 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitSlot(SlotRef node, Context context) {
             if (!node.isAnalyzed()) {
-                ColumnRefOperator ref = resolver.apply(node);
+                ScalarOperator ref = resolver.apply(node);
                 if (ref != null) {
                     return ref;
                 }
@@ -938,6 +928,36 @@ public final class SqlToScalarOperatorTranslator {
             String columnName = node.getColumnName() == null ? node.getLabel() : node.getColumnName();
             return new ColumnRefOperator(node.getSlotId().asInt(),
                     node.getType(), columnName, node.isNullable());
+        }
+    }
+
+    static class LoadExprVisitor extends Visitor {
+
+        private final java.util.function.Function<SlotRef, ColumnRefOperator> slotResolver;
+
+        public LoadExprVisitor(java.util.function.Function<SlotRef, ColumnRefOperator> slotResolver) {
+            super(new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                    new ColumnRefFactory(), Collections.emptyList(),
+                    null, null, null, null);
+            this.slotResolver = slotResolver;
+        }
+
+        @Override
+        public ScalarOperator visitSlot(SlotRef node, Context context) {
+            return slotResolver.apply(node);
+        }
+
+        @Override
+        public ScalarOperator visitLambdaArguments(LambdaArgument node, Context context) {
+            // To avoid the ids of lambda arguments are different after each visit()
+            if (node.getTransformed() == null) {
+                SlotRef slotRef = new SlotRef(
+                        new TableName(TableName.LAMBDA_FUNC_TABLE, TableName.LAMBDA_FUNC_TABLE), node.getName());
+                slotRef.setType(node.getType());
+                slotRef.setNullable(node.isNullable());
+                node.setTransformed(slotResolver.apply(slotRef));
+            }
+            return node.getTransformed();
         }
     }
 }

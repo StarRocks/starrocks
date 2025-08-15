@@ -35,6 +35,10 @@
 package com.starrocks.common.util;
 
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,6 +47,8 @@ import org.apache.logging.log4j.Logger;
  */
 public class FrontendDaemon extends Daemon {
     private static final Logger LOG = LogManager.getLogger(FrontendDaemon.class);
+
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     public FrontendDaemon() {
     }
@@ -75,5 +81,13 @@ public class FrontendDaemon extends Daemon {
     // override by derived classes
     protected void runAfterCatalogReady() {
 
+    }
+
+    protected void acquireBackgroundComputeResource() {
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouse.getId(), computeResource);
+        // check resource before each run
+        this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
     }
 }

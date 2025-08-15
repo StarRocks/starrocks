@@ -1,0 +1,34 @@
+-- name: test_mv_with_multi_partition_columns_swap 
+
+CREATE TABLE t1 (
+    k1 int,
+    k2 date,
+    k3 string
+)
+DUPLICATE KEY(k1)
+PARTITION BY date_trunc("day", k2), k3;
+INSERT INTO t1 VALUES (1,'2020-06-02','BJ'),(3,'2020-06-02','SZ'),(2,'2020-07-02','SH');
+CREATE MATERIALIZED VIEW mv1
+                partition by (date_trunc("day", k2), k3)
+                REFRESH MANUAL
+                AS select sum(k1), k2, k3 from t1 group by k2, k3;
+REFRESH MATERIALIZED VIEW mv1 with sync mode;
+
+function: print_hit_materialized_view("select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;", "mv1")
+select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;
+
+CREATE MATERIALIZED VIEW mv2
+                partition by (date_trunc("day", k2), k3)
+                REFRESH MANUAL
+                AS select avg(k1), k2, k3 from t1 group by k2, k3;
+REFRESH MATERIALIZED VIEW mv2 with sync mode;
+function: print_hit_materialized_view("select k2, k3, avg(k1) from t1 group by k2, k3 order by 1,2;", "mv2")
+select k2, k3, avg(k1) from t1 group by k2, k3 order by 1,2;
+
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
+
+function: print_hit_materialized_view("select k2, k3, avg(k1) from t1 group by k2, k3 order by 1,2;", "mv1")
+select k2, k3, avg(k1) from t1 group by k2, k3 order by 1,2;
+
+function: print_hit_materialized_view("select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;", "mv2")
+select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;

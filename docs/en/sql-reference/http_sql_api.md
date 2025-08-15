@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # HTTP SQL API
 
-## Description
-
 StarRocks v3.2.0 introduces the HTTP SQL API for users to perform various types of queries using HTTP. Currently, this API supports SELECT, SHOW, EXPLAIN, and KILL statements.
 
 Syntax using the curl command:

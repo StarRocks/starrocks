@@ -100,7 +100,9 @@ enum TPrimitiveType {
   DECIMAL128,
   JSON,
   FUNCTION,
-  VARBINARY
+  VARBINARY,
+  DECIMAL256,
+  INT256
 }
 
 enum TTypeNodeType {
@@ -581,6 +583,7 @@ struct TIcebergDataFile {
     5: optional string partition_path;
     6: optional list<i64> split_offsets;
     7: optional TIcebergColumnStats column_stats;
+    8: optional string partition_null_fingerprint;
 }
 
 struct THiveFileInfo {
@@ -597,6 +600,7 @@ struct TSinkCommitInfo {
 
     100: optional bool is_overwrite;
     101: optional string staging_dir
+    102: optional bool is_rewrite;
 }
 
 struct TSnapshotInfo {
@@ -613,4 +617,13 @@ enum TTxnType {
 enum TNodeType {
     Backend = 0,
     Compute = 1
+}
+
+struct TParquetOptions {
+    // parquet row group max size in bytes
+    1: optional i64 parquet_max_group_bytes
+    2: optional TCompressionType compression_type
+    3: optional bool use_dict
+    // for files table function
+    4: optional string version
 }

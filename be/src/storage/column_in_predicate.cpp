@@ -23,6 +23,7 @@
 #include "roaring/roaring.hh"
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
+#include "storage/olap_type_infra.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
@@ -644,6 +645,11 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL128>(scale, strs);
         return new ColumnInPredicate<TYPE_DECIMAL128, SetType>(type_info, id, std::move(values));
     }
+    case TYPE_DECIMAL256: {
+        using SetType = Set<CppTypeTraits<TYPE_DECIMAL256>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL256>(scale, strs);
+        return new ColumnInPredicate<TYPE_DECIMAL256, SetType>(type_info, id, std::move(values));
+    }
     case TYPE_CHAR:
         return new BinaryColumnInPredicate<TYPE_CHAR>(type_info, id, strs);
     case TYPE_VARCHAR:
@@ -698,6 +704,7 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
     case TYPE_BINARY:
     case TYPE_VARBINARY:
     case TYPE_MAX_VALUE:
+    case TYPE_INT256:
         return nullptr;
         // No default to ensure newly added enumerator will be handled.
     }
@@ -722,6 +729,49 @@ ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type_info, ColumnId 
         return new_column_in_predicate_generic<ItemHashSet>(type_info, id, strs);
     } else {
         return new_column_in_predicate_small(type_info, id, strs);
+    }
+}
+
+template <template <typename, size_t...> typename Set, size_t... Args>
+ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, ColumnId id,
+                                                 const std::vector<Datum>& operands) {
+    const auto type = type_info->type();
+    return field_type_dispatch_column_predicate(
+            type, static_cast<ColumnPredicate*>(nullptr), [&]<LogicalType LT>() -> ColumnPredicate* {
+                if constexpr (lt_is_string<LT>) {
+                    std::vector<std::string> strings;
+                    strings.reserve(operands.size());
+                    for (const auto& v : operands) {
+                        strings.emplace_back(v.get_slice().to_string());
+                    }
+                    return new BinaryColumnInPredicate<LT>(type_info, id, std::move(strings));
+                } else {
+                    using SetType = Set<typename CppTypeTraits<LT>::CppType, (Args)...>;
+                    SetType value_set = predicate_internal::datums_to_set<LT>(operands);
+                    return new ColumnInPredicate<LT, SetType>(type_info, id, std::move(value_set));
+                }
+            });
+}
+
+ColumnPredicate* new_column_in_predicate_small(const TypeInfoPtr& type_info, ColumnId id,
+                                               const std::vector<Datum>& operands) {
+    if (operands.size() == 3) {
+        return new_column_in_predicate_generic<ArraySet, 3>(type_info, id, operands);
+    } else if (operands.size() == 2) {
+        return new_column_in_predicate_generic<ArraySet, 2>(type_info, id, operands);
+    } else if (operands.size() == 1) {
+        return new_column_in_predicate_generic<ArraySet, 1>(type_info, id, operands);
+    }
+    CHECK(false) << "unreachable path";
+    return nullptr;
+}
+
+ColumnPredicate* new_column_in_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id,
+                                                    const std::vector<Datum>& operands) {
+    if (operands.size() > 3) {
+        return new_column_in_predicate_generic<ItemHashSet>(type_info, id, operands);
+    } else {
+        return new_column_in_predicate_small(type_info, id, operands);
     }
 }
 

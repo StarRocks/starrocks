@@ -155,7 +155,9 @@ public:
                                 const std::string& schema_hash_path, bool force = false, bool restore = false);
 
     Status create_tablet_from_meta_snapshot(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
-                                            const std::string& schema_hash_path, bool restore = false);
+                                            const std::string& schema_hash_path, bool restore = false,
+                                            bool need_rebuild_pk_index = false,
+                                            int32_t rebuild_pk_index_wait_seconds = 0);
 
     void release_schema_change_lock(TTabletId tablet_id);
 
@@ -168,8 +170,8 @@ public:
     // Prevent schema change executed concurrently.
     bool try_schema_change_lock(TTabletId tablet_id);
 
-    void try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
-                                       const string& tablet_id_path);
+    Status try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
+                                         const string& tablet_id_path);
 
     void update_root_path_info(std::map<std::string, DataDirInfo>* path_map, size_t* tablet_counter);
 

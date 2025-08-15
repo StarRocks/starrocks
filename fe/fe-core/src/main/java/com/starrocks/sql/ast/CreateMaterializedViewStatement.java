@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -62,7 +63,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private DistributionDesc distributionDesc;
     private final int queryStartIndex;
     private final int queryStopIndex;
-    private final List<String> sortKeys;
+    // It saves the original sort order elements parsing from the order by clause.
+    // Because other sort properties, such as sort-direction and null-orders, are not supported in materialized view now.
+    // We extract its sort columns to `sortKeys` in analyze phase and use the `sortKeys` instead of it in most places.
+    private final List<OrderByElement> orderByElements;
+    // It will be set based on `orderByElements` in analyze
+    private List<String> sortKeys;
     private KeysType keysType = KeysType.DUP_KEYS;
     // view definition of the mv which has been rewritten by AstToSQLBuilder#toSQL
     protected String inlineViewDef;
@@ -97,13 +103,18 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private Map<Integer, Column> generatedPartitionCols = Maps.newHashMap();
     private Map<Expr, Expr> partitionByExprToAdjustExprMap = Maps.newHashMap();
 
+    // Whether the mv is created on a partitioned table with transform function. Use list partition mv if ref base table's
+    // partition contains transform function.
+    private boolean isRefBaseTablePartitionWithTransform = false;
+
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
                                            List<IndexDef> indexDefs,
                                            String comment,
                                            RefreshSchemeClause refreshSchemeDesc,
                                            List<Expr> partitionByExprs,
-                                           DistributionDesc distributionDesc, List<String> sortKeys,
+                                           DistributionDesc distributionDesc,
+                                           List<OrderByElement> orderByElements,
                                            Map<String, String> properties,
                                            QueryStatement queryStatement,
                                            int queryStartIndex,
@@ -119,7 +130,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.refreshSchemeDesc = refreshSchemeDesc;
         this.partitionByExprs = partitionByExprs;
         this.distributionDesc = distributionDesc;
-        this.sortKeys = sortKeys;
+        this.orderByElements = orderByElements;
         this.properties = properties;
         this.queryStartIndex = queryStartIndex;
         this.queryStopIndex = queryStopIndex;
@@ -200,6 +211,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public DistributionDesc getDistributionDesc() {
         return distributionDesc;
+    }
+
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
+    public void setSortKeys(List<String> sortKeys) {
+        this.sortKeys = sortKeys;
     }
 
     public List<String> getSortKeys() {
@@ -328,6 +347,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     }
     public String getOriginalDBName() {
         return originalDBName;
+    }
+
+    public boolean isRefBaseTablePartitionWithTransform() {
+        return isRefBaseTablePartitionWithTransform;
+    }
+
+    public void setRefBaseTablePartitionWithTransform(boolean refBaseTablePartitionWithTransform) {
+        isRefBaseTablePartitionWithTransform = refBaseTablePartitionWithTransform;
     }
 
     @Override

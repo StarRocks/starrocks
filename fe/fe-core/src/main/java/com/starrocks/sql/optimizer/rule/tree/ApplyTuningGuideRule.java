@@ -68,7 +68,9 @@ public class ApplyTuningGuideRule implements TreeRewriteRule {
 
         // delete the useless tuning guides
         if (!tuningGuides.isUseful()) {
-            PlanTuningAdvisor.getInstance().deleteTuningGuides(tuningGuides.getOriginalQueryId());
+            boolean enablePlanAdvisorBlacklist = taskContext.getOptimizerContext().getSessionVariable()
+                    .isEnablePlanAdvisorBlacklist();
+            PlanTuningAdvisor.getInstance().deleteTuningGuides(tuningGuides.getOriginalQueryId(), enablePlanAdvisorBlacklist);
             return root;
         }
 
@@ -117,7 +119,7 @@ public class ApplyTuningGuideRule implements TreeRewriteRule {
                 OptExpression newChild = child.getOp().accept(this, child, context.getChild(i));
                 opt.setChild(i, newChild);
             }
-            List<TuningGuide> guideList = tuningGuides.getTuningGuides(context.getNodeId());
+            List<TuningGuide> guideList = tuningGuides.getTuningGuides(context.getOperatorId());
             OptExpression res = opt;
             if (guideList != null) {
                 for (TuningGuide guide : guideList) {

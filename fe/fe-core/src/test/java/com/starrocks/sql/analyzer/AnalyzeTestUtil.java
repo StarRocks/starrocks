@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -25,12 +26,25 @@ import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 public class AnalyzeTestUtil {
     protected static ConnectContext connectContext;
     protected static StarRocksAssert starRocksAssert;
     protected static String DB_NAME = "test";
+
+    public static void initWithoutTableAndDb(RunMode runMode) throws Exception {
+        Config.enable_experimental_rowstore = true;
+        // create connect context
+        if (runMode == RunMode.SHARED_DATA) {
+            UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        } else {
+            UtFrameUtils.createMinStarRocksCluster();
+        }
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+    }
 
     public static void init() throws Exception {
         Config.enable_experimental_rowstore = true;
@@ -326,6 +340,14 @@ public class AnalyzeTestUtil {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE test.test_exclude ( \n" + 
+                " id INT, \n" +
+                " name VARCHAR(50), \n" +
+                " age INT, \n" +
+                " email VARCHAR(100)) \n" +
+                " DUPLICATE KEY(id) PROPERTIES ( \n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
     }
 
     public static String getDbName() {
@@ -363,7 +385,7 @@ public class AnalyzeTestUtil {
             return statementBase;
         } catch (Exception ex) {
             ex.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
             throw ex;
         }
     }
@@ -376,7 +398,7 @@ public class AnalyzeTestUtil {
             return statementBase;
         } catch (Exception ex) {
             ex.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
             return null;
         }
     }
@@ -390,10 +412,10 @@ public class AnalyzeTestUtil {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
                     connectContext.getSessionVariable().getSqlMode()).get(0);
             Analyzer.analyze(statementBase, connectContext);
-            Assert.fail("Miss semantic error exception");
+            Assertions.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException | ErrorReportException e) {
             if (!exceptMessage.equals("")) {
-                Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
+                Assertions.assertTrue(e.getMessage().contains(exceptMessage), e.getMessage());
             }
         }
     }
@@ -405,13 +427,13 @@ public class AnalyzeTestUtil {
             Analyzer.analyze(statementBase, connectContext);
             SetStmt setStmt = (SetStmt) statementBase;
             SetStmtAnalyzer.calcuteUserVariable((UserVariable) setStmt.getSetListItems().get(0));
-            Assert.fail("Miss semantic error exception");
+            Assertions.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException e) {
             if (!exceptMessage.equals("")) {
-                Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
+                Assertions.assertTrue(e.getMessage().contains(exceptMessage), e.getMessage());
             }
         } catch (Exception e) {
-            Assert.fail("analyze exception: " + e);
+            Assertions.fail("analyze exception: " + e);
         }
     }
 }

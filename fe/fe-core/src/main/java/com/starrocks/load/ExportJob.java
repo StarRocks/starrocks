@@ -40,7 +40,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BaseTableRef;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
@@ -67,18 +66,17 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.MysqlScanNode;
@@ -111,13 +109,13 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Iterator;
@@ -142,7 +140,6 @@ public class ExportJob implements Writable, GsonPostProcessable {
     private final DescriptorTable desc;
     private final Set<String> exportedTempFiles = Sets.newConcurrentHashSet();
     private Set<String> exportedFiles = Sets.newConcurrentHashSet();
-    private final Analyzer analyzer;
     private final List<Coordinator> coordList = Lists.newArrayList();
     private final AtomicInteger nextId = new AtomicInteger(0);
     // backedn_address => snapshot path
@@ -193,6 +190,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
     private ExportFailMsg failMsg;
     @SerializedName("warehouseId")
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    // the resource used by this export job, it will be acquired from warehouse manager
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     private TupleDescriptor exportTupleDesc;
     private Table exportTable;
@@ -212,8 +211,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.startTimeMs = -1;
         this.finishTimeMs = -1;
         this.failMsg = new ExportFailMsg(ExportFailMsg.CancelType.UNKNOWN, "");
-        this.analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), null);
-        this.desc = analyzer.getDescTbl();
+        this.desc = new DescriptorTable();
         this.exportPath = "";
         this.exportTempPath = "";
         this.fileNamePrefix = "";
@@ -239,6 +237,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
     }
 
     public void setJob(ExportStmt stmt) throws StarRocksException {
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        // try to acquire resource from warehouse
+        CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
+        this.computeResource =  warehouseManager.acquireComputeResource(acquireContext);
+
         String dbName = stmt.getTblName().getDb();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
@@ -400,11 +403,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
         switch (exportTable.getType()) {
             case OLAP:
             case CLOUD_NATIVE:
-                scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport", warehouseId);
+                scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport", computeResource);
                 scanNode.setColumnFilters(Maps.newHashMap());
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
                 ((OlapScanNode) scanNode).setCanTurnOnPreAggr(false);
-                scanNode.init(analyzer);
+                ((OlapScanNode) scanNode).computePartitionInfo();
                 ((OlapScanNode) scanNode).selectBestRollupByRollupSelector();
                 break;
             case MYSQL:
@@ -414,7 +417,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 throw new StarRocksException("Unsupported table type: " + exportTable.getType());
         }
 
-        scanNode.finalizeStats(analyzer);
+        scanNode.finalizeStats();
+        scanNode.setComputeResource(computeResource);
         return scanNode;
     }
 
@@ -424,7 +428,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                     exportTupleDesc,
                     "OlapScanNodeForExport",
                     locations,
-                    warehouseId);
+                computeResource);
     }
 
     private PlanFragment genPlanFragment(Table.TableType type, ScanNode scanNode, int taskIdx) throws
@@ -484,14 +488,15 @@ public class ExportJob implements Writable, GsonPostProcessable {
     }
 
     private void genCoordinators(ExportStmt stmt, List<PlanFragment> fragments, List<ScanNode> nodes) {
-        UUID uuid = UUID.randomUUID();
+        UUID uuid = UUIDUtil.genUUID();
         for (int i = 0; i < fragments.size(); ++i) {
             PlanFragment fragment = fragments.get(i);
             ScanNode scanNode = nodes.get(i);
             TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits() + i, uuid.getLeastSignificantBits());
             Coordinator coord = getCoordinatorFactory().createBrokerExportScheduler(
                         id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
-                        TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap(), getMemLimit(), warehouseId);
+                        TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(),
+                    Maps.newHashMap(), getMemLimit(), computeResource);
             this.coordList.add(coord);
             LOG.info("split export job to tasks. job id: {}, job query id: {}, task idx: {}, task query id: {}",
                         id, DebugUtil.printId(this.queryId), i, DebugUtil.printId(queryId));
@@ -515,13 +520,12 @@ public class ExportJob implements Writable, GsonPostProcessable {
         }
 
         OlapScanNode newOlapScanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
-        Analyzer tmpAnalyzer = new Analyzer(GlobalStateMgr.getCurrentState(), null);
         newOlapScanNode.setColumnFilters(Maps.newHashMap());
         newOlapScanNode.setIsPreAggregation(false, "This an export operation");
         newOlapScanNode.setCanTurnOnPreAggr(false);
-        newOlapScanNode.init(tmpAnalyzer);
+        newOlapScanNode.computePartitionInfo();
         newOlapScanNode.selectBestRollupByRollupSelector();
-        List<TScanRangeLocations> newLocations = newOlapScanNode.updateScanRangeLocations(locations);
+        List<TScanRangeLocations> newLocations = newOlapScanNode.updateScanRangeLocations(locations, computeResource);
 
         // random select a new location for each TScanRangeLocations
         for (TScanRangeLocations tablet : newLocations) {
@@ -535,7 +539,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         Coordinator newCoord = getCoordinatorFactory().createBrokerExportScheduler(
                     id, newQueryId, desc, Lists.newArrayList(newFragment), Lists.newArrayList(newTaskScanNode),
-                    TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit(), warehouseId);
+                    TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit(), computeResource);
         this.coordList.set(taskIndex, newCoord);
         LOG.info("reset coordinator for export job: {}, taskIdx: {}", id, taskIndex);
         return newCoord;
@@ -719,6 +723,10 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
     public synchronized boolean updateState(JobState newState) {
         return this.updateState(newState, false, System.currentTimeMillis());
+    }
+
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     public synchronized boolean updateState(JobState newState, boolean isReplay, long stateChangeTime) {
@@ -1024,11 +1032,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
             return state;
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            out.writeLong(jobId);
-            Text.writeString(out, state.name());
-        }
+
+
     }
 
     public static class ExportUpdateInfo implements Writable {
@@ -1068,35 +1073,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
             this.failMsg = failMsg;
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            String json = GsonUtils.GSON.toJson(this, ExportUpdateInfo.class);
-            Text.writeString(out, json);
 
-            // Due to TNetworkAddress unsupport to_json, snapshotPaths can not be seralized to GSON automatically,
-            // here we manually seralize it
-            out.writeInt(snapshotPaths.size());
-            for (Pair<NetworkAddress, String> entry : snapshotPaths) {
-                Text.writeString(out, entry.first.hostname);
-                out.writeInt(entry.first.port);
-                Text.writeString(out, entry.second);
-            }
-        }
 
-        public static ExportUpdateInfo read(DataInput input) throws IOException {
-            ExportUpdateInfo info = GsonUtils.GSON.fromJson(Text.readString(input), ExportUpdateInfo.class);
-
-            int snapshotPathsLen = input.readInt();
-            for (int i = 0; i < snapshotPathsLen; i++) {
-                String hostName = Text.readString(input);
-                int port = input.readInt();
-                String path = Text.readString(input);
-                Pair<NetworkAddress, String> entry = Pair.create(new NetworkAddress(hostName, port), path);
-                info.snapshotPaths.set(i, entry);
-            }
-
-            return info;
-        }
 
         public List<Pair<NetworkAddress, String>> serialize(List<Pair<TNetworkAddress, String>> snapshotPaths) {
             return snapshotPaths

@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include <map>
+
 #include "column/chunk.h"
 #include "common/status.h"
 #include "connector/utils.h"
@@ -31,6 +33,7 @@ class SinkOperatorMemoryManager;
 using Writer = formats::FileWriter;
 using Stream = io::AsyncFlushOutputStream;
 using WriterStreamPair = std::pair<std::unique_ptr<Writer>, Stream*>;
+using PartitionKey = std::pair<std::string, std::vector<int8_t>>;
 using CommitResult = formats::FileWriter::CommitResult;
 using CommitFunc = std::function<void(const CommitResult& result)>;
 
@@ -50,13 +53,16 @@ public:
 
     Status init();
 
-    Status add(Chunk* chunk);
+    virtual Status add(Chunk* chunk);
 
     Status finish();
 
     void rollback();
 
     virtual void callback_on_commit(const CommitResult& result) = 0;
+
+    Status write_partition_chunk(const std::string& partition, const vector<int8_t>& partition_field_null_list,
+                                 Chunk* chunk);
 
 protected:
     AsyncFlushStreamPoller* _io_poller = nullptr;
@@ -71,7 +77,7 @@ protected:
     bool _support_null_partition{false};
     std::vector<std::function<void()>> _rollback_actions;
 
-    std::unordered_map<std::string, WriterStreamPair> _writer_stream_pairs;
+    std::map<PartitionKey, WriterStreamPair> _writer_stream_pairs;
     inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
 };
 

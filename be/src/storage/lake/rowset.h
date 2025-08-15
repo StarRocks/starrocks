@@ -62,6 +62,8 @@ public:
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
+    // this function does not expect segment schema will be changed, so return error if record predicate exists
+    // but does not match its chunk schema
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema, bool file_data_cache,
                                                                       OlapReaderStatistics* stats);
 
@@ -72,6 +74,8 @@ public:
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
+    // this function does not expect segment schema will be changed, so return error if record predicate exists
+    // but does not match its chunk schema
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(const Schema& schema, int64_t version,
                                                                                   const MetaFileBuilder* builder,
                                                                                   OlapReaderStatistics* stats);

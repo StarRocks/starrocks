@@ -65,6 +65,10 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
+    // Currently, there is no need to set predicate for MultiGet of persistent index sstable. Because predicate
+    // only used for sstable compaction to filter out some keys for tablet split purpose and such keys can not
+    // be read by the persistent index by designed. So even we provide a predicate, all keys read by multi_get
+    // will always meet the condition.
     auto start_ts = butil::gettimeofday_us();
     RETURN_IF_ERROR(_sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers));
     auto end_ts = butil::gettimeofday_us();

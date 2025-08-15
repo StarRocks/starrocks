@@ -14,10 +14,12 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.thrift.TResultBatch;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 
@@ -123,34 +125,17 @@ public class SelectConstTest extends PlanTestBase {
         assertPlanContains("select * from t0 where not exists (select 9)", ":UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
-        assertPlanContains("select * from t0 where v3 = (select 6)", "  5:Project\n" +
-                "  |  <slot 7> : CAST(5: expr AS BIGINT)", "equal join conjunct: 3: v3 = 7: cast");
-        assertPlanContains("select case when (select max(v4) from t1) > 1 then 2 else 3 end", "  7:Project\n" +
-                "  |  <slot 7> : if(5: max > 1, 2, 3)\n" +
-                "  |  \n" +
-                "  6:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----5:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL");
-        assertPlanContains("select 1, 2, case when (select max(v4) from t1) > 1 then 4 else 5 end", "  7:Project\n" +
-                "  |  <slot 2> : 1\n" +
-                "  |  <slot 3> : 2\n" +
-                "  |  <slot 9> : if(7: max > 1, 4, 5)\n" +
-                "  |  \n" +
-                "  6:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----5:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL");
+        assertPlanContains("select * from t0 where v3 = (select 6)", "PREDICATES: 3: v3 = 6, 3: v3 IS NOT NULL");
+        assertPlanContains("select case when (select max(v4) from t1) > 1 then 2 else 3 end", "2:Project\n"
+                + "  |  <slot 7> : if(5: max > 1, 2, 3)\n"
+                + "  |  \n"
+                + "  1:AGGREGATE (update finalize)");
+        assertPlanContains("select 1, 2, case when (select max(v4) from t1) > 1 then 4 else 5 end", "2:Project\n"
+                + "  |  <slot 2> : 1\n"
+                + "  |  <slot 3> : 2\n"
+                + "  |  <slot 9> : if(7: max > 1, 4, 5)\n"
+                + "  |  \n"
+                + "  1:AGGREGATE (update finalize)");
     }
 
     @Test
@@ -216,19 +201,44 @@ public class SelectConstTest extends PlanTestBase {
                 "-78883632:00:01");
     }
 
+    @Test
+    public void testExecuteInFEWithComplexQuery() throws Exception {
+        String sql = "select 1, -1, 1.23456, cast(1.123 as float), cast(1.123 as double), " +
+                "cast(10 as bigint), cast(100 as largeint),\n" +
+                "1000000000000, 1+1, 100 * 100, 'abc', \"中文\", '\"abc\"', " +
+                "\"'abc'\", '\\'abc\\\\', \"\\\"abc\\\\\", cast(1.123000000 as decimalv2),\n" +
+                "cast(1.123 as decimal(10, 7)), date '2021-01-01', " +
+                "datetime '2021-01-01 00:00:00', datetime '2021-01-01 00:00:00.123456',\n" +
+                "timediff('2028-01-01 11:25:36', '2000-11-21 12:12:12'), " +
+                "timediff('2000-11-21 12:12:12', '2028-01-01 11:25:36'), x'123456', x'AABBCC11';";
+        ExecPlan execPlan = getExecPlan(sql);
+        FeExecuteCoordinator coordinator = new FeExecuteCoordinator(connectContext, execPlan);
+        try {
+            RowBatch rowBatch = coordinator.getNext();
+        } catch (Exception e) {
+            Assertions.fail(e.getMessage());
+        }
+    }
+
     private void assertFeExecuteResult(String sql, String expected) throws Exception {
         ExecPlan execPlan = getExecPlan(sql);
         FeExecuteCoordinator coordinator = new FeExecuteCoordinator(connectContext, execPlan);
         RowBatch rowBatch = coordinator.getNext();
-        byte[] bytes = rowBatch.getBatch().getRows().get(0).array();
-        int lengthOffset = getOffset(bytes);
-        String value;
-        if (lengthOffset == -1) {
-            value = "NULL";
+        TResultBatch tResultBatch = rowBatch.getBatch();
+        if (tResultBatch.rows.isEmpty()) {
+            Assertions.assertNull(expected);
         } else {
-            value = new String(bytes, lengthOffset, bytes.length - lengthOffset, StandardCharsets.UTF_8);
+            byte[] bytes = tResultBatch.getRows().get(0).array();
+            int lengthOffset = getOffset(bytes);
+            String value;
+            if (lengthOffset == -1) {
+                value = "NULL";
+            } else {
+                value = new String(bytes, lengthOffset, bytes.length - lengthOffset, StandardCharsets.UTF_8);
+            }
+            System.out.println(value);
+            Assertions.assertEquals(expected, value);
         }
-        Assert.assertEquals(expected, value);
     }
 
     private static int getOffset(byte[] bytes) {
@@ -245,5 +255,57 @@ public class SelectConstTest extends PlanTestBase {
             default:
                 return 1;
         }
+    }
+
+    @Test
+    public void testEmptyScan() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tbl0 (\n" +
+                "  c1 int,\n" +
+                "  c2 date,\n" +
+                "  c3 varchar(10),\n" +
+                "  c4 bigint,\n" +
+                "  c5 varchar(3),\n" +
+                "  c6 datetime,\n" +
+                "  c7 string,\n" +
+                "  c8 decimal(10,5),\n" +
+                "  c9 boolean,\n" +
+                "  c10 largeint,\n" +
+                "  c11 date,\n" +
+                "  c12 float,\n" +
+                "  c13 double)\n" +
+                "  PRIMARY KEY(c1,c2)\n" +
+                "  DISTRIBUTED BY HASH(c1) BUCKETS 3\n" +
+                "PROPERTIES ('replication_num' = '1');");
+        String sql = "select c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13," +
+                "c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13 " +
+                "from tbl0;";
+        FeConstants.enablePruneEmptyOutputScan = true;
+        assertFeExecuteResult(sql, null);
+        FeConstants.enablePruneEmptyOutputScan = false;
+    }
+
+    @Test
+    public void testUnionWithUnAlignedValues() throws Exception {
+        String sql = "WITH temp AS (\n" +
+                "  SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3\n" +
+                "  UNION ALL\n" +
+                "  SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3\n" +
+                " )\n" +
+                "SELECT c1, c2, c3\n" +
+                "FROM (\n" +
+                " SELECT c1, c2, c3\n" +
+                " FROM temp\n" +
+                " UNION ALL\n" +
+                " SELECT 'test1' AS c1, 'test1' AS c2, 'test1' AS c3\n" +
+                " UNION ALL\n" +
+                " SELECT 'test1' AS c1, 'test2' AS c2, 'test3' AS c3\n" +
+                ") t;";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "     constant exprs: \n" +
+                        "         'test1' | 'test1' | 'test1'\n" +
+                        "         'test1' | 'test2' | 'test3'",
+                "     constant exprs: \n" +
+                        "         'test' | 'test' | 'test'\n" +
+                        "         'test' | 'test' | 'test'");
     }
 }

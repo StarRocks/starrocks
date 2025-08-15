@@ -19,6 +19,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.UserPrivilegeCollectionV2;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
@@ -38,7 +39,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import org.apache.logging.log4j.LogManager;
@@ -642,14 +642,16 @@ public class AuthenticationMgr {
     }
 
     public void dropGroupProviderStatement(DropGroupProviderStmt stmt, ConnectContext context) {
-        this.nameToGroupProviderMap.remove(stmt.getName());
+        GroupProvider groupProvider = this.nameToGroupProviderMap.remove(stmt.getName());
+        groupProvider.destory();
 
         GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_DROP_GROUP_PROVIDER,
                 new GroupProviderLog(stmt.getName(), null));
     }
 
     public void replayDropGroupProvider(String name) {
-        this.nameToGroupProviderMap.remove(name);
+        GroupProvider groupProvider = this.nameToGroupProviderMap.remove(name);
+        groupProvider.destory();
     }
 
     public List<GroupProvider> getAllGroupProviders() {

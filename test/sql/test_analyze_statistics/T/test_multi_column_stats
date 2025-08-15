@@ -15,12 +15,12 @@ insert into t1 select generate_series, generate_series, generate_series, generat
 insert into t1 select generate_series, generate_series, generate_series, generate_series from table(generate_series(1,1000));
 insert into t1 select generate_series, generate_series, generate_series, generate_series from table(generate_series(1,1000));
 
-[UC]analyze full table t1 multi_columns (c1, c2);
+[UC]analyze full table t1 multiple columns (c1, c2);
 select count(1) from _statistics_.multi_column_statistics where table_name like "%t1%" and column_names = "c1,c2";
-drop multi_columns stats t1;
+drop multiple columns stats t1;
 
 select count(1) from _statistics_.multi_column_statistics where table_name like "%t1%" and column_names = "c1,c2";
-[UC]analyze sample table t1 multi_columns (c1, c2);
+[UC]analyze sample table t1 multiple columns (c1, c2);
 select count(1) from _statistics_.multi_column_statistics where table_name like "%t1%" and column_names = "c1,c2";
 drop stats t1;
 select count(1) from _statistics_.multi_column_statistics where table_name like "%t1%" and column_names = "c1,c2";

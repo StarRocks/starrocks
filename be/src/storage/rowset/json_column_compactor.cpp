@@ -48,6 +48,8 @@ Status FlatJsonColumnCompactor::_compact_columns(Columns& json_datas) {
         vc.emplace_back(js.get());
     }
     deriver.set_generate_filter(true);
+    deriver.init_flat_json_config(_flat_json_config);
+
     deriver.derived(vc);
 
     _flat_paths = deriver.flat_paths();
@@ -184,10 +186,22 @@ Status FlatJsonColumnCompactor::_flatten_columns(Columns& json_datas) {
 Status FlatJsonColumnCompactor::finish() {
     RETURN_IF_ERROR(_compact_columns(_json_datas));
     _json_datas.clear(); // release after write
-    for (auto& iter : _flat_writers) {
-        RETURN_IF_ERROR(iter->finish());
+
+    RETURN_IF_ERROR(_json_writer->finish());
+
+    // Check global dict validity for flat writers
+    _subcolumn_dict_valid.clear();
+
+    for (size_t i = 0; i < _flat_writers.size(); i++) {
+        RETURN_IF_ERROR(_flat_writers[i]->finish());
+
+        // Record dict validity for each sub-column
+        bool sub_dict_valid = _flat_writers[i]->is_global_dict_valid();
+        std::string sub_column_key = _column_name + "." + _flat_paths[i];
+        _subcolumn_dict_valid[sub_column_key] = sub_dict_valid;
     }
-    return _json_writer->finish();
+
+    return Status::OK();
 }
 
 Status JsonColumnCompactor::append(const Column& column) {
@@ -220,7 +234,12 @@ Status JsonColumnCompactor::finish() {
     _json_meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
     _json_meta->mutable_json_meta()->set_has_remain(false);
     _json_meta->mutable_json_meta()->set_is_flat(false);
-    return _json_writer->finish();
+
+    // Check global dict validity
+    RETURN_IF_ERROR(_json_writer->finish());
+    _is_global_dict_valid = _json_writer->is_global_dict_valid();
+
+    return Status::OK();
 }
 
 } // namespace starrocks

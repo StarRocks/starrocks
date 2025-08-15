@@ -91,8 +91,10 @@ OPTS=$(getopt \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'without-starcache' \
+  -l 'without-java-ext' \
   -l 'with-brpc-keepalive' \
   -l 'without-debug-symbol-split' \
+  -l 'without-java-ext' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -140,6 +142,11 @@ while true; do
         *) echo "Internal error" ; exit 1 ;;
     esac
 done
+
+if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
+    echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
+    exit 1
+fi
 
 if [ ${HELP} -eq 1 ]; then
     usage
@@ -246,6 +253,8 @@ mkdir -p $LOG_DIR
 mkdir -p ${UDF_RUNTIME_DIR}
 rm -f ${UDF_RUNTIME_DIR}/*
 
+export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/:$LD_LIBRARY_PATH
+
 # ====================== configure JAVA/JVM ====================
 # NOTE: JAVA_HOME must be configed if using hdfs scan, like hive external table
 # this is only for starting be
@@ -317,6 +326,7 @@ cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util
 test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
     | grep -v starrocks_test \
     | grep -v bench_test \
+    | grep -v builtin_functions_fuzzy_test \
     | grep -e "$TEST_MODULE" `
 
 echo "[INFO] gtest_filter: $TEST_NAME"
@@ -345,4 +355,3 @@ do
         fi
     fi
 done
-

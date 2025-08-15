@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "common/config.h"
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "fs/fs_util.h"
@@ -148,6 +149,7 @@ public:
         ASSERT_EQ(res, 0) << res;
 
         res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/download/");
+
         ASSERT_EQ(res, 0) << res;
     }
     void SetUp() override { k_is_downloaded = false; }
@@ -161,7 +163,7 @@ TEST_F(UserFunctionCacheTest, test_function_type) {
 
     {
         std::string URL = fmt::format("http://127.0.0.1:{}/test.jar", real_port);
-        int tp = cache.get_function_type(URL);
+        int tp = cache._get_function_type(URL);
         ASSERT_EQ(tp, UserFunctionCache::UDF_TYPE_JAVA);
     }
 }
@@ -177,8 +179,19 @@ TEST_F(UserFunctionCacheTest, download_normal) {
         std::string libpath;
         int fid = 0;
         std::string URL = fmt::format("http://127.0.0.1:{}/test.jar", real_port);
-        (void)cache.get_libpath(fid, URL, jar_md5sum, &libpath);
+        (void)cache.get_libpath(fid, URL, jar_md5sum, TFunctionBinaryType::SRJAR, &libpath);
     }
+}
+
+TEST_F(UserFunctionCacheTest, clear_all_lib_file_before_start) {
+    UserFunctionCache cache;
+    std::string lib_dir = "./be/test/runtime/test_data/user_function_cache/clear";
+    fs::remove_all(lib_dir);
+    config::clear_udf_cache_when_start = true;
+    auto st = cache.init(lib_dir);
+    config::clear_udf_cache_when_start = false;
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_FALSE(fs::path_exist(lib_dir + "/1/1.1.jar"));
 }
 
 TEST_F(UserFunctionCacheTest, download_wasm) {
@@ -192,7 +205,7 @@ TEST_F(UserFunctionCacheTest, download_wasm) {
         std::string libpath;
         int fid = 0;
         std::string URL = fmt::format("http://127.0.0.1:{}/test.wasm", real_port);
-        (void)cache.get_libpath(fid, URL, wasm_md5sum, &libpath);
+        (void)cache.get_libpath(fid, URL, wasm_md5sum, TFunctionBinaryType::SRJAR, &libpath);
     }
 }
 

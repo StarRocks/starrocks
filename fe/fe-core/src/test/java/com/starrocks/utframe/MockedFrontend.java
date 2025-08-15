@@ -56,7 +56,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 import java.io.File;
 import java.io.IOException;
@@ -241,7 +241,7 @@ public class MockedFrontend {
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
-                FrontendOptions.init(new String[0]);
+                FrontendOptions.init(null);
                 ExecuteEnv.setup();
 
                 if (!startBDB) {
@@ -263,7 +263,7 @@ public class MockedFrontend {
                     }
                 };
 
-                GlobalStateMgr.getCurrentState().initialize(args);
+                GlobalStateMgr.getCurrentState().initialize(null);
 
                 if (RunMode.isSharedDataMode()) {
                     // setup and start StarManager service
@@ -271,8 +271,7 @@ public class MockedFrontend {
                     // TODO: support MockJournal in StarMgrServer
                     Preconditions.checkState(journal instanceof BDBJEJournal);
                     BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
-                    StarMgrServer.getCurrentState()
-                            .initialize(bdbEnvironment, GlobalStateMgr.getCurrentState().getImageDir());
+                    StarMgrServer.getCurrentState().initialize(bdbEnvironment, GlobalStateMgr.getImageDirPath());
                     StateChangeExecutor.getInstance().registerStateChangeExecution(
                             StarMgrServer.getCurrentState().getStateChangeExecution());
                 }
@@ -306,17 +305,19 @@ public class MockedFrontend {
         Thread feThread = new Thread(fe, FE_PROCESS);
         feThread.start();
         waitForCatalogReady(fe);
-        Assert.assertEquals(runMode, RunMode.getCurrentRunMode());
+        Assertions.assertEquals(runMode, RunMode.getCurrentRunMode());
         System.out.println("Fe process is started with runMode:" + runMode);
     }
 
     private void waitForCatalogReady(FERunnable fe) throws FeStartException {
         int tryCount = 0;
-        while (!fe.isReady() && tryCount < 600) {
+        while (!fe.isReady() && tryCount < 6000) {
             try {
                 tryCount++;
-                Thread.sleep(1000);
-                System.out.println("globalStateMgr is not ready, wait for 1 second");
+                Thread.sleep(100);
+                if (tryCount % 10 == 0) {
+                    System.out.println("globalStateMgr is not ready, wait for 1 second");
+                }
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }

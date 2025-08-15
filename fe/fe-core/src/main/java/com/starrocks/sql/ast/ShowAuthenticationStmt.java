@@ -15,23 +15,10 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowAuthenticationStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA;
-
-    static {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("UserIdentity", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Password", ScalarType.createVarchar(20)));
-        builder.addColumn(new Column("AuthPlugin", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("UserForAuthPlugin", ScalarType.createVarchar(100)));
-        META_DATA = builder.build();
-    }
-
     private final boolean isAll;
     private UserIdentity userIdent;
 
@@ -46,11 +33,6 @@ public class ShowAuthenticationStmt extends ShowStmt {
         super(pos);
         this.userIdent = userIdent;
         this.isAll = isAll;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
     }
 
     public UserIdentity getUserIdent() {

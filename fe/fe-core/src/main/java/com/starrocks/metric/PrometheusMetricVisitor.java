@@ -257,6 +257,8 @@ public class PrometheusMetricVisitor extends MetricVisitor {
         sb.append(Joiner.on(" ").join(TYPE, NODE_INFO, "gauge\n"));
         sb.append(NODE_INFO).append("{type=\"fe_node_num\", state=\"total\"} ")
                 .append(nodeMgr.getFrontends(null).size()).append("\n");
+        sb.append(NODE_INFO).append("{type=\"fe_node_num\", state=\"alive\"} ")
+                .append(nodeMgr.getAliveFrontendsCnt()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"total\"} ")
                 .append(systemInfoService.getTotalBackendNumber()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"alive\"} ")
@@ -274,7 +276,7 @@ public class PrometheusMetricVisitor extends MetricVisitor {
         sb.append(NODE_INFO).append("{type=\"cn_node_num\", state=\"alive\"} ")
             .append(systemInfoService.getAliveComputeNodeNumber()).append("\n");
 
-        // only master FE has this metrics, to help the Grafana knows who is the leader
+        // only the leader FE has this metric, to help the Grafana knows who is the leader
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             sb.append(NODE_INFO).append("{type=\"is_master\"} ").append(1).append("\n");
         }

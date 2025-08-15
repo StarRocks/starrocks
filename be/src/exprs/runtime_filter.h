@@ -43,7 +43,14 @@ inline const constexpr uint8_t RF_VERSION = 0x2; // deprecated
 inline const constexpr uint8_t RF_VERSION_V2 = 0x3;
 // Serialize format: RF_VERSION (1B) | RuntimeFilterType (1B) | RuntimeFilter(LogicalType | other content)
 inline const constexpr uint8_t RF_VERSION_V3 = 0x4;
-enum class RuntimeFilterSerializeType : uint8_t { NONE = 0, EMPTY_FILTER = 1, BLOOM_FILTER = 2, BITSET_FILTER = 3 };
+enum class RuntimeFilterSerializeType : uint8_t {
+    NONE = 0,
+    EMPTY_FILTER = 1,
+    BLOOM_FILTER = 2,
+    BITSET_FILTER = 3,
+    IN_FILTER = 4,
+    UNKNOWN_FILTER,
+};
 static_assert(sizeof(RF_VERSION_V3) == sizeof(RF_VERSION));
 static_assert(sizeof(RF_VERSION_V3) == sizeof(RF_VERSION_V2));
 inline const constexpr int32_t RF_VERSION_SZ = sizeof(RF_VERSION_V3);
@@ -59,6 +66,8 @@ inline std::string to_string(RuntimeFilterSerializeType type) {
         return "BloomFilter";
     case RuntimeFilterSerializeType::BITSET_FILTER:
         return "BitsetFilter";
+    case RuntimeFilterSerializeType::IN_FILTER:
+        return "InFilter";
     case RuntimeFilterSerializeType::NONE:
     default:
         return "None";
@@ -313,6 +322,7 @@ public:
     std::vector<RuntimeFilter*>& group_colocate_filter() { return _group_colocate_filters; }
     const std::vector<RuntimeFilter*>& group_colocate_filter() const { return _group_colocate_filters; }
 
+    virtual const RuntimeFilter* get_in_filter() const { return nullptr; }
     virtual const RuntimeFilter* get_min_max_filter() const {
         DCHECK(false) << "unreachable path";
         return nullptr;
@@ -343,23 +353,22 @@ protected:
     std::vector<RuntimeFilter*> _group_colocate_filters;
 };
 
-struct HashValueIterator {
-    HashValueIterator(std::vector<uint32_t>& hash_values) : hash_values(hash_values) {}
-    virtual ~HashValueIterator() = default;
-    virtual void for_each(const std::function<void(size_t, uint32_t&)>& func) = 0;
-
-    std::vector<uint32_t>& hash_values;
+template <typename F>
+concept HashValueForEachFunc = requires(F f, size_t index, uint32_t& hash_value) {
+    { f(index, hash_value) }
+    ->std::same_as<void>;
 };
 
-struct FullScanIterator final : HashValueIterator {
+struct FullScanIterator {
     typedef void (Column::*HashFuncType)(uint32_t*, uint32_t, uint32_t) const;
     static constexpr HashFuncType FNV_HASH = &Column::fnv_hash;
     static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash;
 
     FullScanIterator(std::vector<uint32_t>& hash_values, size_t num_rows)
-            : HashValueIterator(hash_values), num_rows(num_rows) {}
+            : hash_values(hash_values), num_rows(num_rows) {}
 
-    void for_each(const std::function<void(size_t, uint32_t&)>& func) override {
+    template <HashValueForEachFunc ForEachFuncType>
+    void for_each(ForEachFuncType func) {
         for (size_t i = 0; i < num_rows; i++) {
             func(i, hash_values[i]);
         }
@@ -371,18 +380,20 @@ struct FullScanIterator final : HashValueIterator {
         }
     }
 
+    std::vector<uint32_t>& hash_values;
     size_t num_rows;
 };
 
-struct SelectionIterator final : HashValueIterator {
+struct SelectionIterator {
     typedef void (Column::*HashFuncType)(uint32_t*, uint8_t*, uint16_t, uint16_t) const;
     static constexpr HashFuncType FNV_HASH = &Column::fnv_hash_with_selection;
     static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash_with_selection;
 
     SelectionIterator(std::vector<uint32_t>& hash_values, uint8_t* selection, uint16_t from, uint16_t to)
-            : HashValueIterator(hash_values), selection(selection), from(from), to(to) {}
+            : hash_values(hash_values), selection(selection), from(from), to(to) {}
 
-    void for_each(const std::function<void(size_t, uint32_t&)>& func) override {
+    template <HashValueForEachFunc ForEachFuncType>
+    void for_each(ForEachFuncType func) {
         for (size_t i = from; i < to; i++) {
             if (selection[i]) {
                 func(i, hash_values[i]);
@@ -396,20 +407,22 @@ struct SelectionIterator final : HashValueIterator {
         }
     }
 
+    std::vector<uint32_t>& hash_values;
     uint8_t* selection;
     uint16_t from;
     uint16_t to;
 };
 
-struct SelectedIndexIterator final : HashValueIterator {
+struct SelectedIndexIterator {
     typedef void (Column::*HashFuncType)(uint32_t*, uint16_t*, uint16_t) const;
     static constexpr HashFuncType FNV_HASH = &Column::fnv_hash_selective;
     static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash_selective;
 
     SelectedIndexIterator(std::vector<uint32_t>& hash_values, uint16_t* sel, uint16_t sel_size)
-            : HashValueIterator(hash_values), sel(sel), sel_size(sel_size) {}
+            : hash_values(hash_values), sel(sel), sel_size(sel_size) {}
 
-    void for_each(const std::function<void(size_t, uint32_t&)>& func) override {
+    template <HashValueForEachFunc ForEachFuncType>
+    void for_each(ForEachFuncType func) {
         for (uint16_t i = 0; i < sel_size; i++) {
             func(sel[i], hash_values[sel[i]]);
         }
@@ -420,6 +433,8 @@ struct SelectedIndexIterator final : HashValueIterator {
             (input_column->*hash_func)(hash_values.data(), sel, sel_size);
         }
     }
+
+    std::vector<uint32_t>& hash_values;
     uint16_t* sel;
     uint16_t sel_size;
 };
@@ -532,6 +547,14 @@ public:
     static MinMaxRuntimeFilter* create_with_full_range_without_null(ObjectPool* pool) {
         auto* rf = pool->add(new MinMaxRuntimeFilter());
         rf->_init_full_range();
+        rf->_always_true = true;
+        return rf;
+    }
+
+    static MinMaxRuntimeFilter* create_full_range_with_null(ObjectPool* pool) {
+        auto* rf = pool->add(new MinMaxRuntimeFilter());
+        rf->_init_full_range();
+        rf->insert_null();
         rf->_always_true = true;
         return rf;
     }

@@ -42,11 +42,11 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
@@ -319,7 +319,7 @@ public abstract class BaseAction implements IAction {
     public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo) throws AccessDeniedException {
         try {
             return AuthenticationHandler.authenticate(new ConnectContext(), authInfo.fullUserName,
-                    authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8), null);
+                    authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8));
         } catch (AuthenticationException e) {
             throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
         }
@@ -330,8 +330,7 @@ public abstract class BaseAction implements IAction {
         ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
         try {
             if (!parseAuthInfo(request, authInfo)) {
-                LOG.info("parse auth info failed, Authorization header {}, url {}",
-                        request.getAuthorizationHeader(), request.getRequest().uri());
+                LOG.info("parse auth info failed, url {}", request.getRequest().uri());
                 throw new AccessDeniedException("Need auth information.");
             }
             LOG.debug("get auth info: {}", authInfo);

@@ -19,10 +19,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.thrift.TExprNode;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
 public final class MaxLiteral extends LiteralExpr {
 
     public static final MaxLiteral MAX_VALUE = new MaxLiteral();
@@ -60,16 +56,5 @@ public final class MaxLiteral extends LiteralExpr {
     @Override
     public String toString() {
         return toSql();
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-    }
-
-    public void readFields(DataInput in) throws IOException {
-    }
-
-    public static MaxLiteral read(DataInput in) throws IOException {
-        return MAX_VALUE;
     }
 }

@@ -39,10 +39,8 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
@@ -52,11 +50,11 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 public class TableName implements Writable, GsonPreProcessable, GsonPostProcessable {
     public static final String LAMBDA_FUNC_TABLE = "__LAMBDA_TABLE";
@@ -84,9 +82,9 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     public TableName(String catalog, String db, String tbl, NodePosition pos) {
         this.pos = pos;
-        this.catalog = catalog;
-        this.db = db;
-        this.tbl = tbl;
+        this.catalog = normalizeName(catalog);
+        this.db = normalizeName(db);
+        this.tbl = normalizeName(tbl);
     }
 
     public static TableName fromString(String name) {
@@ -110,33 +108,16 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
         }
     }
 
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(catalog)) {
-            catalog = analyzer.getDefaultCatalog();
-        }
-
-        if (Strings.isNullOrEmpty(db)) {
-            db = analyzer.getDefaultDb();
-            if (Strings.isNullOrEmpty(db)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        }
-
-        if (Strings.isNullOrEmpty(tbl)) {
-            throw new AnalysisException("Table name is null");
-        }
-    }
-
     public void normalization(ConnectContext connectContext) {
         if (Strings.isNullOrEmpty(catalog)) {
             if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalog);
             }
-            catalog = connectContext.getCurrentCatalog();
+            catalog = normalizeName(connectContext.getCurrentCatalog());
         }
 
         if (Strings.isNullOrEmpty(db)) {
-            db = connectContext.getDatabase();
+            db = normalizeName(connectContext.getDatabase());
             if (Strings.isNullOrEmpty(db)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
@@ -152,7 +133,7 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     }
 
     public void setDb(String db) {
-        this.db = db;
+        this.db = normalizeName(db);
     }
 
     public String getTbl() {
@@ -164,12 +145,12 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     }
 
     public void setCatalog(String catalog) {
-        this.catalog = catalog;
+        this.catalog = normalizeName(catalog);
     }
 
     // for rename table
     public void setTbl(String tbl) {
-        this.tbl = tbl;
+        this.tbl = normalizeName(tbl);
     }
 
     public boolean isEmpty() {
@@ -225,17 +206,8 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
         return stringBuilder.toString();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // compatible with old version
-        Text.writeString(out, ClusterNamespace.getFullName(db));
-        Text.writeString(out, tbl);
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        db = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        tbl = Text.readString(in);
-    }
+
 
     @Override
     public void gsonPostProcess() throws IOException {

@@ -38,11 +38,13 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
         auto lambda_function = static_cast<LambdaFunction*>(expr);
         RETURN_IF_ERROR(lambda_function->collect_lambda_argument_ids());
         for (auto argument_id : lambda_function->get_lambda_arguments_ids()) {
-            ctx->lambda_arguments.insert(argument_id);
+            ctx->current_lambda_arguments.insert(argument_id);
+            ctx->all_lambda_arguments.insert(argument_id);
         }
         RETURN_IF_ERROR(lambda_function->collect_common_sub_exprs());
         for (auto slot_id : lambda_function->get_common_sub_expr_ids()) {
-            ctx->common_sub_expr_ids.insert(slot_id);
+            ctx->current_common_sub_expr_ids.insert(slot_id);
+            ctx->all_common_sub_expr_ids.insert(slot_id);
         }
     }
 
@@ -50,10 +52,10 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
         if (expr->is_lambda_function()) {
             auto lambda_function = static_cast<LambdaFunction*>(expr);
             for (auto argument_id : lambda_function->get_lambda_arguments_ids()) {
-                ctx->lambda_arguments.erase(argument_id);
+                ctx->current_lambda_arguments.erase(argument_id);
             }
             for (auto slot_id : lambda_function->get_common_sub_expr_ids()) {
-                ctx->common_sub_expr_ids.erase(slot_id);
+                ctx->current_common_sub_expr_ids.erase(slot_id);
             }
         }
     });
@@ -79,8 +81,8 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
         slot_ids.clear();
         child->get_slot_ids(&slot_ids);
         bool is_independent = std::all_of(slot_ids.begin(), slot_ids.end(), [ctx](const SlotId& id) {
-            return ctx->lambda_arguments.find(id) == ctx->lambda_arguments.end() &&
-                   ctx->common_sub_expr_ids.find(id) == ctx->common_sub_expr_ids.end();
+            return ctx->current_lambda_arguments.find(id) == ctx->current_lambda_arguments.end() &&
+                   ctx->current_common_sub_expr_ids.find(id) == ctx->current_common_sub_expr_ids.end();
         });
 
         if (is_independent) {

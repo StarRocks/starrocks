@@ -4,61 +4,68 @@ displayed_sidebar: docs
 
 # cast
 
+在 JSON 类型和 SQL 类型之间转换值。
 
+:::tip
+所有的 JSON 函数和运算符都列在导航栏和[概览页面](../overview-of-json-functions-and-operators.md)
 
-使用 CAST 函数，实现 JSON 类型数据与 SQL 类型间的相互转换。
+使用[生成列](../../../sql-statements/generated_columns.md)加速查询
+:::
 
 ## 语法
 
-- 将 JSON 类型的数据转为 SQL 类型。
+- 从 JSON 转换为 SQL
 
-```sql
-CAST(json_expr AS sql_data_type)
+```Haskell
+cast(json_expr AS sql_data_type)
 ```
 
-- 将 SQL 类型的数据转为 JSON 类型。
+- 从 SQL 转换为 JSON
 
-```sql
-CAST(sql_expr AS JSON)
+```Haskell
+cast(sql_expr AS JSON)
 ```
 
-## 参数说明
+## 参数
 
-- `json_expr`：待转换为 SQL 类型的 JSON 表达式。
-- `sql_data_type`：转换后的 SQL 类型，可以是字符串类型（包括 STRING、VARCHAR、CHAR）、BOOLEAN、数值类型（包括 TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DOUBLE、FLOAT）。
-- `sql_expr`：待转换为 JSON 类型的 SQL 表达式。支持的数据类型同 `sql_data_type`。
+- `json_expr`：表示要转换为 SQL 值的 JSON 值的表达式。
 
-## 返回值说明
+- `sql_data_type`：要将 JSON 值转换为的 SQL 数据类型。仅支持 STRING、VARCHAR、CHAR、BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DOUBLE 和 FLOAT 数据类型。
 
-- 使用 `CAST(json_expr AS sql_data_type)`，返回 `sql_data_type` 指定类型的值。
-- 使用 `CAST(sql_expr AS JSON)`，返回 JSON 类型的值。
+- `sql_expr`：表示要转换为 JSON 值的 SQL 值的表达式。此参数支持 `sql_data_type` 参数支持的所有 SQL 数据类型。
 
-## 注意事项
+## 返回值
 
-将 SQL 类型的数据转为 JSON 类型时:
+- 如果使用 `cast(json_expr AS sql_data_type)` 语法，cast 函数返回由 `sql_data_type` 参数指定的 SQL 数据类型的值。
 
-- 如果数值类型的值超出 JSON 支持的精度，为避免数值溢出，会返回 SQL 类型的 NULL。
+- 如果使用 `cast(sql_expr AS JSON)` 语法，cast 函数返回一个 JSON 值。
 
-- 对于 SQL 类型的 NULL ，不会转为 JSON 类型的 NULL，仍为 SQL 类型的 NULL。
+## 使用说明
 
-将 JSON 类型的数据转为 SQL 类型时:
+- 从 SQL 转换为 JSON
 
-- 支持兼容类型的转换，例如 JSON 字符串转为 SQL 字符串。
+  - 如果 SQL 值超过 JSON 支持的精度，cast 函数返回 `NULL` 以防止算术溢出。
 
-- 如果类型转换不兼容，例如将 JSON 类型的数字转成 SQL 字符串，则返回 NULL。
+  - 如果 SQL 值为 `NULL`，cast 函数不会将 SQL 值 `NULL` 转换为 JSON 值 `NULL`。返回值仍然是 SQL 值 `NULL`。
 
-- 如果数值类型转型溢出，则返回 SQL 类型的 NULL。
+- 从 JSON 转换为 SQL
 
-- JSON 类型的 NULL 转为 SQL 类型时，会返回 SQL NULL。
+  - cast 函数仅支持兼容的 JSON 和 SQL 数据类型之间的转换。例如，可以将 JSON 字符串转换为 SQL 字符串。
 
-- 将 JSON 类型的数据转为 VARCHAR 类型时，如果转换前为 JSON string 类型，则返回结果为不带引号的 VARCHAR 类型的数据。
+  - cast 函数不支持不兼容的 JSON 和 SQL 数据类型之间的转换。例如，如果将 JSON 数字转换为 SQL 字符串，函数返回 `NULL`。
+
+  - 如果发生算术溢出，cast 函数返回 SQL 值 `NULL`。
+
+  - 如果将 JSON 值 `NULL` 转换为 SQL 值，函数返回 SQL 值 `NULL`。
+
+  - 如果将 JSON 字符串转换为 VARCHAR 值，函数返回的 VARCHAR 值不包含双引号（"）。
 
 ## 示例
 
-示例一：将 JSON 类型的数据转为 SQL 类型。
+示例 1：将 JSON 值转换为 SQL 值。
 
-```Plain Text
--- 将 JSON 转为 INT。
+```plaintext
+-- 将 JSON 值转换为 INT 值。
 mysql> select cast(parse_json('{"a": 1}') -> 'a' as int);
 +--------------------------------------------+
 | CAST((parse_json('{"a": 1}')->'a') AS INT) |
@@ -66,54 +73,55 @@ mysql> select cast(parse_json('{"a": 1}') -> 'a' as int);
 |                                          1 |
 +--------------------------------------------+
 
--- 将 JSON 字符串转为 VARCHAR。
+-- 将 JSON 字符串转换为 VARCHAR 值。
 mysql> select cast(parse_json('"star"') as varchar);
 +---------------------------------------+
-| CAST(parse_json('"star"') AS VARCHAR) |
+| cast(parse_json('"star"') AS VARCHAR) |
 +---------------------------------------+
 | star                                  |
 +---------------------------------------+
 
--- 将 JSON 对象转为 VARCHAR。
+-- 将 JSON 对象转换为 VARCHAR 值。
 mysql> select cast(parse_json('{"star": 1}') as varchar);
 +--------------------------------------------+
-| CAST(parse_json('{"star": 1}') AS VARCHAR) |
+| cast(parse_json('{"star": 1}') AS VARCHAR) |
 +--------------------------------------------+
 | {"star": 1}                                |
 +--------------------------------------------+
 
--- 将 JSON 数组转为 VARCHAR。
+-- 将 JSON 数组转换为 VARCHAR 值。
+
 mysql> select cast(parse_json('[1,2,3]') as varchar);
 +----------------------------------------+
-| CAST(parse_json('[1,2,3]') AS VARCHAR) |
+| cast(parse_json('[1,2,3]') AS VARCHAR) |
 +----------------------------------------+
 | [1, 2, 3]                              |
 +----------------------------------------+
 ```
 
-示例二：将 SQL 类型的数据转为 JSON 类型。
+示例 2：将 SQL 值转换为 JSON 值。
 
-```Plain Text
--- 将INT转成JSON。
+```plaintext
+-- 将 INT 值转换为 JSON 值。
 mysql> select cast(1 as json);
 +-----------------+
-| CAST(1 AS JSON) |
+| cast(1 AS JSON) |
 +-----------------+
 | 1               |
 +-----------------+
 
--- 将 VARCHAR 转为 JSON。
+-- 将 VARCHAR 值转换为 JSON 值。
 mysql> select cast("star" as json);
 +----------------------+
-| CAST('star' AS JSON) |
+| cast('star' AS JSON) |
 +----------------------+
 | "star"               |
 +----------------------+
 
--- 将 BOOLEAN 转为 JSON。
+-- 将 BOOLEAN 值转换为 JSON 值。
 mysql> select cast(true as json);
 +--------------------+
-| CAST(TRUE AS JSON) |
+| cast(TRUE AS JSON) |
 +--------------------+
 | true               |
 +--------------------+

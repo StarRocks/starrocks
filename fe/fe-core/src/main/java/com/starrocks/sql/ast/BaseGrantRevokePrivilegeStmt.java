@@ -19,10 +19,13 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+
+import static com.starrocks.common.util.Util.normalizeNames;
 
 public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected GrantRevokeClause clause;
@@ -55,7 +58,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         this.privilegeTypeUnResolved = privilegeTypeUnResolved;
         this.objectTypeUnResolved = objectTypeUnResolved;
         this.clause = clause;
-        this.objectsUnResolved = objectsUnResolved;
+        this.objectsUnResolved = normalizeNames(objectTypeUnResolved, objectsUnResolved);
         this.role = clause.getRoleName();
     }
 

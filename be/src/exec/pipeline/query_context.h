@@ -71,6 +71,7 @@ public:
     }
 
     void count_down_fragments();
+    void count_down_fragments(QueryContextManager* query_context_mgr);
     int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
@@ -154,6 +155,7 @@ public:
     FragmentContextManager* fragment_mgr();
 
     void cancel(const Status& status, bool cancelled_by_fe);
+    void set_cancelled_by_fe() { _cancelled_by_fe = true; }
 
     void set_is_runtime_filter_coordinator(bool flag) { _is_runtime_filter_coordinator = flag; }
 
@@ -197,6 +199,8 @@ public:
         _total_scan_bytes += scan_bytes;
         _delta_scan_bytes += scan_bytes;
     }
+
+    void incr_transmitted_bytes(int64_t transmitted_bytes) { _total_transmitted_bytes += transmitted_bytes; }
 
     void init_node_exec_stats(const std::vector<int32_t>& exec_stats_node_ids);
     bool need_record_exec_stats(int32_t plan_node_id) {
@@ -252,6 +256,7 @@ public:
     int64_t get_scan_bytes() const { return _total_scan_bytes; }
     std::atomic_int64_t* mutable_total_spill_bytes() { return &_total_spill_bytes; }
     int64_t get_spill_bytes() { return _total_spill_bytes; }
+    int64_t get_transmitted_bytes() { return _total_transmitted_bytes; }
 
     // Query start time, used to check how long the query has been running
     // To ensure that the minimum run time of the query will not be killed by the big query checking mechanism
@@ -267,7 +272,7 @@ public:
     std::shared_ptr<starrocks::debug::QueryTrace> shared_query_trace() { return _query_trace; }
 
     // Delta statistic since last retrieve
-    std::shared_ptr<QueryStatistics> intermediate_query_statistic();
+    std::shared_ptr<QueryStatistics> intermediate_query_statistic(int64_t delta_transmitted_bytes);
     // Merged statistic from all executor nodes
     std::shared_ptr<QueryStatistics> final_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
@@ -329,6 +334,7 @@ private:
     std::atomic<int64_t> _total_scan_rows_num = 0;
     std::atomic<int64_t> _total_scan_bytes = 0;
     std::atomic<int64_t> _total_spill_bytes = 0;
+    std::atomic<int64_t> _total_transmitted_bytes = 0;
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;
@@ -386,7 +392,7 @@ public:
     QueryContextManager(size_t log2_num_slots);
     ~QueryContextManager();
     Status init();
-    StatusOr<QueryContext*> get_or_register(const TUniqueId& query_id);
+    StatusOr<QueryContext*> get_or_register(const TUniqueId& query_id, bool return_error_if_not_exist = false);
     QueryContextPtr get(const TUniqueId& query_id, bool need_prepared = false);
     size_t size();
     bool remove(const TUniqueId& query_id);

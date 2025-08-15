@@ -47,14 +47,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 
-// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.5.0/core/src/main/java/org/apache/iceberg/ManifestGroup.java
+// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.9.0/core/src/main/java/org/apache/iceberg/ManifestGroup.java
 class ManifestGroup {
     private static final Types.StructType EMPTY_STRUCT = Types.StructType.of();
 
     private final FileIO io;
     private final Set<ManifestFile> dataManifests;
     private final DeleteFileIndex.Builder deleteIndexBuilder;
-    private Predicate<ManifestFile> manifestPredicate;
     private Predicate<ManifestEntry<DataFile>> manifestEntryPredicate;
     private Map<Integer, PartitionSpec> specsById;
     private Expression dataFilter;
@@ -93,7 +92,6 @@ class ManifestGroup {
         this.ignoreResiduals = false;
         this.columns = ManifestReader.ALL_COLUMNS;
         this.caseSensitive = true;
-        this.manifestPredicate = m -> true;
         this.manifestEntryPredicate = e -> true;
         this.scanMetrics = ScanMetrics.noop();
     }
@@ -121,11 +119,6 @@ class ManifestGroup {
         return this;
     }
 
-    ManifestGroup filterManifests(Predicate<ManifestFile> newManifestPredicate) {
-        this.manifestPredicate = manifestPredicate.and(newManifestPredicate);
-        return this;
-    }
-
     ManifestGroup filterManifestEntries(
             Predicate<ManifestEntry<DataFile>> newManifestEntryPredicate) {
         this.manifestEntryPredicate = manifestEntryPredicate.and(newManifestEntryPredicate);
@@ -149,6 +142,7 @@ class ManifestGroup {
 
     ManifestGroup ignoreResiduals() {
         this.ignoreResiduals = true;
+        deleteIndexBuilder.ignoreResiduals();
         return this;
     }
 
@@ -220,7 +214,7 @@ class ManifestGroup {
                 deleteIndexBuilder.scanMetrics(scanMetrics).build();
 
         boolean dropStats = ManifestReader.dropStats(columns);
-        if (!deleteFiles.isEmpty()) {
+        if (deleteFiles.hasEqualityDeletes()) {
             select(ManifestReader.withStatsColumns(columns));
         }
 
@@ -331,9 +325,6 @@ class ManifestGroup {
                             manifest -> manifest.hasAddedFiles() || manifest.hasDeletedFiles());
         }
 
-        matchingManifests =
-                CloseableIterable.filter(
-                        scanMetrics.skippedDataManifests(), matchingManifests, manifestPredicate);
         matchingManifests =
                 CloseableIterable.count(scanMetrics.scannedDataManifests(), matchingManifests);
 

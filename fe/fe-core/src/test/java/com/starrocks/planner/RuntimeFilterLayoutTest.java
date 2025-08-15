@@ -17,8 +17,8 @@ package com.starrocks.planner;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TRuntimeFilterLayout;
 import com.starrocks.thrift.TRuntimeFilterLayoutMode;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -37,13 +37,13 @@ public class RuntimeFilterLayoutTest {
             desc.setJoinMode(mode);
             sv.setEnablePipelineLevelMultiPartitionedRf(false);
             TRuntimeFilterLayout layout = desc.toLayout();
-            Assert.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.SINGLETON);
-            Assert.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.SINGLETON);
+            Assertions.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.SINGLETON);
+            Assertions.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.SINGLETON);
 
             sv.setEnablePipelineLevelMultiPartitionedRf(true);
             layout = desc.toLayout();
-            Assert.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.SINGLETON);
-            Assert.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.SINGLETON);
+            Assertions.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.SINGLETON);
+            Assertions.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.SINGLETON);
         }
 
         // SHUFFLE JOIN
@@ -54,13 +54,13 @@ public class RuntimeFilterLayoutTest {
             desc.setJoinMode(mode);
             sv.setEnablePipelineLevelMultiPartitionedRf(true);
             TRuntimeFilterLayout layout = desc.toLayout();
-            Assert.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.GLOBAL_SHUFFLE_2L);
-            Assert.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.PIPELINE_SHUFFLE);
+            Assertions.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.GLOBAL_SHUFFLE_2L);
+            Assertions.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.PIPELINE_SHUFFLE);
 
             sv.setEnablePipelineLevelMultiPartitionedRf(false);
             layout = desc.toLayout();
-            Assert.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.GLOBAL_SHUFFLE_1L);
-            Assert.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.SINGLETON);
+            Assertions.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.GLOBAL_SHUFFLE_1L);
+            Assertions.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.SINGLETON);
         }
 
         // BUCKET JOIN, assign bucket sequences among drivers
@@ -76,13 +76,13 @@ public class RuntimeFilterLayoutTest {
             desc.setBucketSeqToPartition(Arrays.asList(0, 1, 2, 3, 4, 5, 6, 7, 8));
 
             TRuntimeFilterLayout layout = desc.toLayout();
-            Assert.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.GLOBAL_BUCKET_2L);
-            Assert.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.PIPELINE_BUCKET);
+            Assertions.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.GLOBAL_BUCKET_2L);
+            Assertions.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.PIPELINE_BUCKET);
 
             sv.setEnablePipelineLevelMultiPartitionedRf(false);
             layout = desc.toLayout();
-            Assert.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.GLOBAL_BUCKET_1L);
-            Assert.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.SINGLETON);
+            Assertions.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.GLOBAL_BUCKET_1L);
+            Assertions.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.SINGLETON);
         }
 
         // BUCKET JOIN, NOT assign bucket sequences among drivers, with local exchange interpolated
@@ -98,13 +98,13 @@ public class RuntimeFilterLayoutTest {
             desc.setBucketSeqToPartition(Collections.emptyList());
 
             TRuntimeFilterLayout layout = desc.toLayout();
-            Assert.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.GLOBAL_BUCKET_2L_LX);
-            Assert.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.PIPELINE_BUCKET_LX);
+            Assertions.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.GLOBAL_BUCKET_2L_LX);
+            Assertions.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.PIPELINE_BUCKET_LX);
 
             sv.setEnablePipelineLevelMultiPartitionedRf(false);
             layout = desc.toLayout();
-            Assert.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.GLOBAL_BUCKET_1L);
-            Assert.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.SINGLETON);
+            Assertions.assertEquals(layout.global_layout, TRuntimeFilterLayoutMode.GLOBAL_BUCKET_1L);
+            Assertions.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.SINGLETON);
         }
     }
 }

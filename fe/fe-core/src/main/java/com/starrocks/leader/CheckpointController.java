@@ -35,6 +35,7 @@
 package com.starrocks.leader;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -44,6 +45,7 @@ import com.starrocks.http.meta.MetaService;
 import com.starrocks.journal.CheckpointException;
 import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.journal.Journal;
+import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.MetaCleaner;
@@ -63,16 +65,14 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -89,18 +89,21 @@ public class CheckpointController extends FrontendDaemon {
     private static final int READ_TIMEOUT_SECOND = 1;
     private static final ReentrantReadWriteLock RW_LOCK = new ReentrantReadWriteLock();
 
-    private String imageDir;
     private final Journal journal;
     // subDir comes after base imageDir, to distinguish different module's image dir
     private final String subDir;
     private final boolean belongToGlobalStateMgr;
 
     private final Set<String> nodesToPushImage;
+    private final Map<String, Long> lastFailedTime = new HashMap<>();
 
     private volatile String workerNodeName;
     private volatile long workerSelectedTime;
     private volatile long journalId;
-    private volatile BlockingQueue<Pair<Boolean, String>> result;
+    private volatile BlockingQueue<CheckpointCompletionStatus> result;
+
+    // save the cluster snapshot info getted from the checkpoint worker.
+    private volatile ClusterSnapshotInfo clusterSnapshotInfo;
 
     public CheckpointController(String name, Journal journal, String subDir) {
         super(name, FeConstants.checkpoint_interval_second * 1000L);
@@ -108,6 +111,7 @@ public class CheckpointController extends FrontendDaemon {
         this.subDir = subDir;
         this.belongToGlobalStateMgr = Strings.isNullOrEmpty(subDir);
         nodesToPushImage = new HashSet<>();
+        this.clusterSnapshotInfo = null;
     }
 
     public static void exclusiveLock() {
@@ -129,10 +133,8 @@ public class CheckpointController extends FrontendDaemon {
     }
 
     protected void runCheckpointController() {
-        init();
-
         // ignore return value in normal checkpoint controller
-        runCheckpointControllerWithIds(getImageJournalId(), getCheckpointJournalId());
+        runCheckpointControllerWithIds(getImageJournalId(), getCheckpointJournalId(), false);
     }
 
     public long getCheckpointJournalId() {
@@ -142,7 +144,7 @@ public class CheckpointController extends FrontendDaemon {
     public long getImageJournalId() {
         long imageJournalId = 0;
         try {
-            Storage storage = new Storage(imageDir);
+            Storage storage = new Storage(MetaHelper.getImageFileDir(belongToGlobalStateMgr));
             // get max image version
             imageJournalId = storage.getImageJournalId();
         } catch (IOException e) {
@@ -151,14 +153,15 @@ public class CheckpointController extends FrontendDaemon {
         return imageJournalId;
     }
 
-    public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId) {
+    public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                                                                boolean needClusterSnapshotInfo) {
         LOG.info("checkpoint imageJournalId {}, logJournalId {}", imageJournalId, maxJournalId);
 
         // Step 1: create image
         Pair<Boolean, String> createImageRet = Pair.create(false, "");
         if (imageJournalId < maxJournalId) {
             this.journalId = maxJournalId;
-            createImageRet = createImage();
+            createImageRet = createImage(needClusterSnapshotInfo);
         }
         if (createImageRet.first) {
             // Push the image file to all other nodes
@@ -169,6 +172,9 @@ public class CheckpointController extends FrontendDaemon {
                     nodesToPushImage.add(frontend.getNodeName());
                 }
             }
+            lastFailedTime.clear();
+        } else if (!Strings.isNullOrEmpty(createImageRet.second)) {
+            lastFailedTime.put(createImageRet.second, System.currentTimeMillis());
         }
 
         // Step2: push image
@@ -191,13 +197,12 @@ public class CheckpointController extends FrontendDaemon {
         return createImageRet;
     }
 
-    private void init() {
-        this.imageDir = GlobalStateMgr.getServingState().getImageDir() + subDir;
-    }
+    private Pair<Boolean, String> createImage(boolean needClusterSnapshotInfo) {
+        // reset the cluster snapshot info before sending the checkpoint request
+        this.clusterSnapshotInfo = null;
 
-    private Pair<Boolean, String> createImage() {
         result = new ArrayBlockingQueue<>(1);
-        workerNodeName = selectWorker();
+        workerNodeName = selectWorker(needClusterSnapshotInfo);
         if (workerNodeName == null) {
             LOG.warn("Failed to select worker to do checkpoint, journalId: {}", journalId);
             return Pair.create(false, workerNodeName);
@@ -212,14 +217,24 @@ public class CheckpointController extends FrontendDaemon {
         }
 
         try {
-            Pair<Boolean, String> ret = result.poll(Config.checkpoint_timeout_seconds, TimeUnit.SECONDS);
+            long startNs = System.nanoTime();
+            CheckpointCompletionStatus ret = null;
+            while (ret == null
+                    && System.nanoTime() - startNs < TimeUnit.SECONDS.toNanos(Config.checkpoint_timeout_seconds)) {
+                ret = result.poll(1, TimeUnit.SECONDS);
+            }
             if (ret == null) {
                 LOG.warn("do checkpoint timeout on node: {}", workerNodeName);
                 return Pair.create(false, workerNodeName);
             }
-            if (!ret.first) {
-                LOG.warn("do checkpoint failed on node: {}, reason: {}", workerNodeName, ret.second);
+            if (!ret.success) {
+                LOG.warn("do checkpoint failed on node: {}, reason: {}", workerNodeName, ret.reason);
                 return Pair.create(false, workerNodeName);
+            }
+
+            if (needClusterSnapshotInfo) {
+                // set cluter snapshot versions info
+                this.clusterSnapshotInfo = ret.clusterSnapshotInfo;
             }
 
             // download Image
@@ -239,19 +254,11 @@ public class CheckpointController extends FrontendDaemon {
             return;
         }
 
-        try {
-            downloadImage(ImageFormatVersion.v1, imageDir);
-        } catch (IOException e) {
-            if (belongToGlobalStateMgr && e instanceof FileNotFoundException) {
-                LOG.warn("download image of v1 version failed, ignore", e);
-            } else {
-                throw e;
-            }
-        }
-
         if (belongToGlobalStateMgr) {
-            downloadImage(ImageFormatVersion.v2, imageDir + "/v2");
+            downloadImage(ImageFormatVersion.v2, MetaHelper.getImageFileDir(true));
             GlobalStateMgr.getCurrentState().setImageJournalId(journalId);
+        } else {
+            downloadImage(ImageFormatVersion.v1, MetaHelper.getImageFileDir(false));
         }
     }
 
@@ -274,33 +281,9 @@ public class CheckpointController extends FrontendDaemon {
         cleaner.clean();
     }
 
-    private String selectWorker() {
-        List<Frontend> workers;
-        if (Config.checkpoint_only_on_leader) {
-            workers = new ArrayList<>();
-        } else {
-            workers = GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends();
-            // sort workers by heap used percent asc
-            workers.sort((fe1, fe2) -> {
-                if (Math.abs(fe1.getHeapUsedPercent() - fe2.getHeapUsedPercent()) < 1e-6) {
-                    return 0;
-                } else if (fe1.getHeapUsedPercent() > fe2.getHeapUsedPercent()) {
-                    return 1;
-                } else {
-                    return -1;
-                }
-            });
-        }
-
-        // put the leader node to the end
-        workers.add(GlobalStateMgr.getServingState().getNodeMgr().getMySelf());
-
-        for (Frontend frontend : workers) {
-            LOG.info("frontend: {} heap used percent: {}", frontend.getNodeName(), frontend.getHeapUsedPercent());
-        }
-
-        for (Frontend frontend : workers) {
-            if (frontend.isAlive() && doCheckpoint(frontend)) {
+    private String selectWorker(boolean needClusterSnapshotInfo) {
+        for (Frontend frontend : getWorkers(needClusterSnapshotInfo)) {
+            if (frontend.isAlive() && doCheckpoint(frontend, needClusterSnapshotInfo)) {
                 LOG.info("select worker: {} to do checkpoint", frontend.getNodeName());
                 return frontend.getNodeName();
             }
@@ -309,13 +292,51 @@ public class CheckpointController extends FrontendDaemon {
         return null;
     }
 
-    private boolean doCheckpoint(Frontend frontend) {
+    protected List<Frontend> getWorkers(boolean needClusterSnapshotInfo) {
+        List<Frontend> workers;
+        if (Config.checkpoint_only_on_leader || needClusterSnapshotInfo /* get snapshot info by leader worker to avoid RPC*/) {
+            workers = Lists.newArrayList(GlobalStateMgr.getServingState().getNodeMgr().getMySelf());
+        } else {
+            workers = GlobalStateMgr.getServingState().getNodeMgr().getAllFrontends();
+            String leaderNode = GlobalStateMgr.getServingState().getNodeMgr().getMySelf().getNodeName();
+            // sort workers by
+            // 1. lastFailedTime: The closer the time of failure, the lower the probability of being selected as a worker.
+            // 2. heapUsedPercent: The higher the heap usage, the lower the probability of being selected as a worker node.
+            //    To conserve the leader node's memory, the leader node's memory usage is considered infinite.
+            workers.sort((fe1, fe2) -> {
+                long failedTime1 = lastFailedTime.getOrDefault(fe1.getNodeName(), -1L);
+                long failedTime2 = lastFailedTime.getOrDefault(fe2.getNodeName(), -1L);
+                if (failedTime1 != failedTime2) {
+                    return Long.compare(failedTime1, failedTime2);
+                } else {
+                    float usedPercent1 = fe1.getNodeName().equals(leaderNode)
+                            ? Float.MAX_VALUE : fe1.getHeapUsedPercent();
+                    float usedPercent2 = fe2.getNodeName().equals(leaderNode)
+                            ? Float.MAX_VALUE : fe2.getHeapUsedPercent();
+                    return Float.compare(usedPercent1, usedPercent2);
+                }
+            });
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("workers: ");
+        for (Frontend fe : workers) {
+            sb.append("nodeName=").append(fe.getNodeName())
+                    .append(", heapUsedPercent=").append(fe.getHeapUsedPercent())
+                    .append(", lastFailedTime=").append(lastFailedTime.getOrDefault(fe.getNodeName(), -1L))
+                    .append(" ");
+        }
+        LOG.info(sb.toString());
+        return workers;
+    }
+
+    private boolean doCheckpoint(Frontend frontend, boolean needClusterSnapshotInfo) {
         String selfName = GlobalStateMgr.getServingState().getNodeMgr().getNodeName();
         long epoch = GlobalStateMgr.getCurrentState().getEpoch();
         if (selfName.equals(frontend.getNodeName())) {
             CheckpointWorker worker = getCheckpointWorker();
             try {
-                worker.setNextCheckpoint(epoch, journalId);
+                worker.setNextCheckpoint(epoch, journalId, needClusterSnapshotInfo);
                 return true;
             } catch (CheckpointException e) {
                 LOG.warn("set next checkpoint failed", e);
@@ -384,27 +405,26 @@ public class CheckpointController extends FrontendDaemon {
                 continue;
             }
 
-            boolean allFormatSuccess = true;
-            for (ImageFormatVersion formatVersion : getImageFormatVersionToPush(imageVersion)) {
-                String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
-                        + "/put?version=" + imageVersion
-                        + "&port=" + Config.http_port
-                        + "&subdir=" + subDir
-                        + "&for_global_state=" + belongToGlobalStateMgr
-                        + "&image_format_version=" + formatVersion.toString();
-                try {
-                    MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000);
+            boolean pushSuccess = true;
+            ImageFormatVersion formatVersion = belongToGlobalStateMgr ? ImageFormatVersion.v2 : ImageFormatVersion.v1;
+            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
+                    + "/put?version=" + imageVersion
+                    + "&port=" + Config.http_port
+                    + "&subdir=" + subDir
+                    + "&for_global_state=" + belongToGlobalStateMgr
+                    + "&image_format_version=" + formatVersion.toString();
+            try {
+                MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000);
 
-                    LOG.info("push image successfully, url = {}", url);
-                    if (MetricRepo.hasInit) {
-                        MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
-                    }
-                } catch (IOException e) {
-                    allFormatSuccess = false;
-                    LOG.error("Exception when pushing image file. url = {}", url, e);
+                LOG.info("push image successfully, url = {}", url);
+                if (MetricRepo.hasInit) {
+                    MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
                 }
+            } catch (IOException e) {
+                pushSuccess = false;
+                LOG.error("Exception when pushing image file. url = {}", url, e);
             }
-            if (allFormatSuccess) {
+            if (pushSuccess) {
                 iterator.remove();
                 successPushedCnt++;
             }
@@ -412,21 +432,6 @@ public class CheckpointController extends FrontendDaemon {
 
         LOG.info("push image.{} from subdir [{}] to other nodes. totally {} nodes, push succeeded {} nodes",
                 imageVersion, subDir, needToPushCnt, successPushedCnt);
-    }
-
-    private List<ImageFormatVersion> getImageFormatVersionToPush(long imageVersion) {
-        List<ImageFormatVersion> result = new ArrayList<>();
-        if (belongToGlobalStateMgr) {
-            // for global state mgr, the creation of v1 format image may fail, so check the existence of image file
-            if (Files.exists(Path.of(imageDir + "/image." + imageVersion))) {
-                result.add(ImageFormatVersion.v1);
-            }
-            result.add(ImageFormatVersion.v2);
-        } else {
-            // for staros mgr, there is only v1 format image.
-            result.add(ImageFormatVersion.v1);
-        }
-        return result;
     }
 
     private long getMinReplayedJournalId() {
@@ -467,7 +472,8 @@ public class CheckpointController extends FrontendDaemon {
         return minReplayedJournalId;
     }
 
-    public void finishCheckpoint(long journalId, String nodeName) throws CheckpointException {
+    public void finishCheckpoint(long journalId, String nodeName,
+                                 ClusterSnapshotInfo clusterSnapshotInfo) throws CheckpointException {
         if (!nodeName.equals(workerNodeName)) {
             throw new CheckpointException(String.format("worker node name node match, current worker is: %s, param worker is: %s",
                     workerNodeName, nodeName));
@@ -477,7 +483,7 @@ public class CheckpointController extends FrontendDaemon {
                     this.journalId, journalId));
         }
 
-        if (result.offer(Pair.create(true, ""))) {
+        if (result.offer(new CheckpointCompletionStatus(true, "", clusterSnapshotInfo))) {
             LOG.info("finish checkpoint successfully, journalId: {}, nodeName: {}", journalId, nodeName);
         } else {
             LOG.warn("There are already other values in the result queue");
@@ -486,7 +492,7 @@ public class CheckpointController extends FrontendDaemon {
 
     public void cancelCheckpoint(String nodeName, String reason) {
         if (nodeName.equals(workerNodeName)) {
-            result.offer(Pair.create(false, reason));
+            result.offer(new CheckpointCompletionStatus(false, reason, null));
             LOG.warn("cancel checkpoint on node: {}, because: {}", nodeName, reason);
         }
     }
@@ -499,5 +505,26 @@ public class CheckpointController extends FrontendDaemon {
 
     public Journal getJournal() {
         return journal;
+    }
+
+    public ClusterSnapshotInfo getClusterSnapshotInfo() {
+        return this.clusterSnapshotInfo;
+    }
+
+    static class CheckpointCompletionStatus {
+        private final boolean success;
+        private final String reason;
+        private final ClusterSnapshotInfo clusterSnapshotInfo;
+
+        public CheckpointCompletionStatus(boolean success, String reason, ClusterSnapshotInfo clusterSnapshotInfo) {
+            this.success = success;
+            this.reason = reason;
+            this.clusterSnapshotInfo = clusterSnapshotInfo;
+        }
+    }
+
+    // Only for test
+    protected void setLastFailedTime(String workerNodeName, long ts) {
+        lastFailedTime.put(workerNodeName, ts);
     }
 }

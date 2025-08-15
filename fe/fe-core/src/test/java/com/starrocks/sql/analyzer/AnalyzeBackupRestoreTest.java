@@ -24,8 +24,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -35,7 +35,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeBackupRestoreTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AlterTest.beforeClass();
         AnalyzeTestUtil.init();

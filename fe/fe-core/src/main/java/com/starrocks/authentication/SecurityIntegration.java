@@ -64,7 +64,11 @@ public abstract class SecurityIntegration {
         return propertyMap;
     }
 
-    public abstract void checkProperty() throws SemanticException;
+    public void checkProperty() throws SemanticException {
+        if (!propertyMap.containsKey(SECURITY_INTEGRATION_PROPERTY_TYPE_KEY)) {
+            throw new SemanticException("missing required property: " + SECURITY_INTEGRATION_PROPERTY_TYPE_KEY);
+        }
+    }
 
     public List<String> getGroupProviderName() {
         String property = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER);

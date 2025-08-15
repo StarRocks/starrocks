@@ -22,6 +22,7 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
@@ -31,11 +32,11 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -45,7 +46,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class PCTRefreshListPartitionOlapTest extends MVTestBase {
     private static String T1;
     private static String T2;
@@ -57,7 +58,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
     private static String TT1;
     private static String TT2;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         // table whose partitions have multiple values
@@ -172,24 +173,24 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
     private ExecPlan getExecPlan(TaskRun taskRun) {
         try {
-            PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
+            MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             return execPlan;
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
             return null;
         }
     }
 
-    private PartitionBasedMvRefreshProcessor getProcessor(TaskRun taskRun) {
+    private MVPCTBasedRefreshProcessor getProcessor(TaskRun taskRun) {
         try {
             initAndExecuteTaskRun(taskRun);
-            return (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+            return getPartitionBasedRefreshProcessor(taskRun);
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
             return null;
         }
     }
@@ -198,11 +199,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         try {
             executeInsertSql(connectContext, insertSql);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
             return null;
         }
         ExecPlan execPlan = getExecPlan(taskRun);
-        Assert.assertTrue(execPlan != null);
+        Assertions.assertTrue(execPlan != null);
         return execPlan;
     }
 
@@ -225,7 +226,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                             {
                                 // no partition has changed, no need to refresh
                                 ExecPlan execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -237,10 +238,10 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     partitions=2/2");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(1, partitions.size());
+                                Assertions.assertEquals(1, partitions.size());
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -254,7 +255,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     PREAGGREGATION: ON\n" +
                                             "     partitions=3/3");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(1, partitions.size());
+                                Assertions.assertEquals(1, partitions.size());
                             }
                         });
         });
@@ -281,7 +282,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                             {
                                 // no partition has changed, no need to refresh
                                 ExecPlan execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -293,10 +294,10 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     partitions=1/2");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(2, partitions.size());
+                                Assertions.assertEquals(2, partitions.size());
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -310,7 +311,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     PREAGGREGATION: ON\n" +
                                             "     partitions=1/3");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(3, partitions.size());
+                                Assertions.assertEquals(3, partitions.size());
                             }
                         });
         });
@@ -337,7 +338,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                             {
                                 // no partition has changed, no need to refresh
                                 ExecPlan execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -349,10 +350,10 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     partitions=1/2");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(2, partitions.size());
+                                Assertions.assertEquals(2, partitions.size());
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -366,7 +367,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     PREAGGREGATION: ON\n" +
                                             "     partitions=1/3");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(3, partitions.size());
+                                Assertions.assertEquals(3, partitions.size());
                             }
                         });
         });
@@ -393,7 +394,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                             {
                                 // no partition has changed, no need to refresh
                                 ExecPlan execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -407,10 +408,10 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     partitions=2/4");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(2, partitions.size());
+                                Assertions.assertEquals(2, partitions.size());
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -426,10 +427,10 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     partitions=2/4");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(2, partitions.size());
+                                Assertions.assertEquals(2, partitions.size());
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -442,7 +443,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     PREAGGREGATION: ON\n" +
                                             "     partitions=1/5");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(3, partitions.size());
+                                Assertions.assertEquals(3, partitions.size());
                             }
                         });
         });
@@ -469,7 +470,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                             {
                                 // no partition has changed, no need to refresh
                                 ExecPlan execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -483,10 +484,10 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     partitions=4/4");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(2, partitions.size());
+                                Assertions.assertEquals(2, partitions.size());
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -502,10 +503,10 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     partitions=4/4");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(2, partitions.size());
+                                Assertions.assertEquals(2, partitions.size());
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -518,7 +519,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     PREAGGREGATION: ON\n" +
                                             "     partitions=3/5");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(2, partitions.size());
+                                Assertions.assertEquals(2, partitions.size());
                             }
                         });
         });
@@ -545,7 +546,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                             {
                                 // no partition has changed, no need to refresh
                                 ExecPlan execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -558,10 +559,10 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     partitions=1/1");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(1, partitions.size());
+                                Assertions.assertEquals(1, partitions.size());
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -575,7 +576,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     PREAGGREGATION: ON\n" +
                                             "     partitions=1/2");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(2, partitions.size());
+                                Assertions.assertEquals(2, partitions.size());
                             }
                         });
         });
@@ -602,7 +603,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                             {
                                 // no partition has changed, no need to refresh
                                 ExecPlan execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -617,11 +618,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     partitions=1/1");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(1, partitions.size());
-                                Assert.assertTrue(partitions.iterator().next().getName().equals("p1"));
+                                Assertions.assertEquals(1, partitions.size());
+                                Assertions.assertTrue(partitions.iterator().next().getName().equals("p1"));
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -638,11 +639,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     partitions=2/2");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(1, partitions.size());
-                                Assert.assertTrue(partitions.iterator().next().getName().equals("p1"));
+                                Assertions.assertEquals(1, partitions.size());
+                                Assertions.assertTrue(partitions.iterator().next().getName().equals("p1"));
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -655,7 +656,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     PREAGGREGATION: ON\n" +
                                             "     partitions=1/3");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(2, partitions.size());
+                                Assertions.assertEquals(2, partitions.size());
                             }
                         });
         });
@@ -685,7 +686,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                             {
                                 // no partition has changed, no need to refresh
                                 ExecPlan execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -693,21 +694,20 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                 String insertSql = "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
                                 ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-                                PlanTestBase.assertContains(plan, "  1:OlapScanNode\n" +
-                                            "     TABLE: t2\n" +
-                                            "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/2\n" +
-                                            "     rollup: t2");
+                                PlanTestBase.assertContains(plan, "     TABLE: t2\n" +
+                                        "     PREAGGREGATION: ON\n" +
+                                        "     PREDICATES: 4: province = 'beijing'\n" +
+                                        "     partitions=1/2");
                                 PlanTestBase.assertContains(plan, "     TABLE: t4\n" +
-                                            "     PREAGGREGATION: ON\n" +
-                                            "     partitions=0/0\n" +
-                                            "     rollup: t4");
+                                        "     PREAGGREGATION: ON\n" +
+                                        "     PREDICATES: 9: province = 'beijing'\n" +
+                                        "     partitions=0/0");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(2, partitions.size());
+                                Assertions.assertEquals(2, partitions.size());
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -730,7 +730,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     PREAGGREGATION: ON\n" +
                                             "     partitions=1/1");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(3, partitions.size());
+                                Assertions.assertEquals(3, partitions.size());
                             }
                         });
         });
@@ -759,7 +759,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                             {
                                 // no partition has changed, no need to refresh
                                 ExecPlan execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -767,16 +767,16 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                 String insertSql = "insert into t1 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
                                 ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-                                PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
-                                            "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/2\n" +
-                                            "     rollup: t1");
+                                PlanTestBase.assertContains(plan, "    TABLE: t1\n" +
+                                        "     PREAGGREGATION: ON\n" +
+                                        "     PREDICATES: 4: province IN ('chongqing', 'beijing')\n" +
+                                        "     partitions=1/2");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(2, partitions.size());
+                                Assertions.assertEquals(2, partitions.size());
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -787,14 +787,15 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                 ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                                 PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
-                                            "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/3");
+                                        "     PREAGGREGATION: ON\n" +
+                                        "     PREDICATES: 4: province = 'hangzhou'\n" +
+                                        "     partitions=1/3");
                                 PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
-                                            "     PREAGGREGATION: ON\n" +
-                                            "     partitions=0/0\n" +
-                                            "     rollup: t5");
+                                        "     PREAGGREGATION: ON\n" +
+                                        "     PREDICATES: 9: province = 'hangzhou'\n" +
+                                        "     partitions=0/0");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(3, partitions.size());
+                                Assertions.assertEquals(3, partitions.size());
                             }
 
                             {
@@ -816,7 +817,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     PREAGGREGATION: ON\n" +
                                             "     partitions=1/1");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(3, partitions.size());
+                                Assertions.assertEquals(3, partitions.size());
                             }
                         });
         });
@@ -844,7 +845,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                             {
                                 // no partition has changed, no need to refresh
                                 ExecPlan execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -853,15 +854,15 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                 ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                                 PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
-                                            "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/2\n" +
-                                            "     rollup: t1");
+                                        "     PREAGGREGATION: ON\n" +
+                                        "     PREDICATES: 4: province IN ('chongqing', 'beijing')\n" +
+                                        "     partitions=1/2");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(2, partitions.size());
+                                Assertions.assertEquals(2, partitions.size());
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -872,14 +873,16 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                 ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                                 PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
-                                            "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/3");
+                                        "     PREAGGREGATION: ON\n" +
+                                        "     PREDICATES: 4: province = 'hangzhou'\n" +
+                                        "     partitions=1/3");
                                 PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
-                                            "     PREAGGREGATION: ON\n" +
-                                            "     partitions=0/0\n" +
-                                            "     rollup: t5");
+                                        "     PREAGGREGATION: ON\n" +
+                                        "     PREDICATES: 8: province = 'hangzhou'\n" +
+                                        "     partitions=0/0\n" +
+                                        "     rollup: t5");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(3, partitions.size());
+                                Assertions.assertEquals(3, partitions.size());
                             }
 
                             {
@@ -900,7 +903,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     PREAGGREGATION: ON\n" +
                                             "     partitions=1/1");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(3, partitions.size());
+                                Assertions.assertEquals(3, partitions.size());
                             }
                         });
         });
@@ -927,7 +930,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                             {
                                 // no partition has changed, no need to refresh
                                 ExecPlan execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -942,11 +945,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     partitions=1/1");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(1, partitions.size());
-                                Assert.assertTrue(partitions.iterator().next().getName().equals("p1"));
+                                Assertions.assertEquals(1, partitions.size());
+                                Assertions.assertTrue(partitions.iterator().next().getName().equals("p1"));
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -963,11 +966,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     partitions=2/2");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(1, partitions.size());
-                                Assert.assertTrue(partitions.iterator().next().getName().equals("p1"));
+                                Assertions.assertEquals(1, partitions.size());
+                                Assertions.assertTrue(partitions.iterator().next().getName().equals("p1"));
                                 // refresh again, refreshed partitions should not be refreshed again.
                                 execPlan = getExecPlan(taskRun);
-                                Assert.assertTrue(execPlan == null);
+                                Assertions.assertTrue(execPlan == null);
                             }
 
                             {
@@ -980,7 +983,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     PREAGGREGATION: ON\n" +
                                             "     partitions=1/3");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(2, partitions.size());
+                                Assertions.assertEquals(2, partitions.size());
                             }
 
                             {
@@ -993,7 +996,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                             "     PREAGGREGATION: ON\n" +
                                             "     partitions=1/4");
                                 Collection<Partition> partitions = materializedView.getPartitions();
-                                Assert.assertEquals(3, partitions.size());
+                                Assertions.assertEquals(3, partitions.size());
                             }
                         });
         });
@@ -1016,11 +1019,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                         ExecPlan execPlan = getExecPlan(taskRun);
-                        Assert.assertEquals(null, execPlan);
+                        Assertions.assertEquals(null, execPlan);
                         List<String> partitions =
                                 materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                         .collect(Collectors.toList());
-                        Assert.assertEquals("[p1, p2, p3]", partitions.toString());
+                        Assertions.assertEquals("[p1, p2, p3]", partitions.toString());
                     });
         });
     }
@@ -1038,9 +1041,9 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         "   'partition_ttl_number' = '1'" +
                         ")" +
                         "as select dt, province, sum(age) from s2 group by dt, province;");
-                Assert.fail();
+                Assertions.fail();
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("Invalid parameter partition_ttl_number does not support " +
+                Assertions.assertTrue(e.getMessage().contains("Invalid parameter partition_ttl_number does not support " +
                         "non-range-partitioned materialized view"));
             }
         });
@@ -1076,14 +1079,13 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
-                        PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
+                        MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
-                        Assert.assertNull(mvTaskRunContext.getNextPartitionValues());
+                        Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
-                        Assert.assertEquals("p2", message.getMvPartitionsToRefreshString());
-                        Assert.assertEquals("{s2=[p2]}", message.getBasePartitionsToRefreshMapString());
+                        Assertions.assertEquals("p2", message.getMvPartitionsToRefreshString());
                         ExecPlan execPlan = mvTaskRunContext.getExecPlan();
-                        Assert.assertNotEquals(null, execPlan);
+                        Assertions.assertNotEquals(null, execPlan);
                         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                         PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
                                 "     TABLE: s2\n" +
@@ -1123,14 +1125,13 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
-                        PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
+                        MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
-                        Assert.assertNull(mvTaskRunContext.getNextPartitionValues());
+                        Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
-                        Assert.assertEquals("p1", message.getMvPartitionsToRefreshString());
-                        Assert.assertEquals("{t1=[p1]}", message.getBasePartitionsToRefreshMapString());
+                        Assertions.assertEquals("p1", message.getMvPartitionsToRefreshString());
                         ExecPlan execPlan = mvTaskRunContext.getExecPlan();
-                        Assert.assertNotEquals(null, execPlan);
+                        Assertions.assertNotEquals(null, execPlan);
                         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                         PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
                                 "     TABLE: t1\n" +
@@ -1169,14 +1170,13 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
-                        PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
+                        MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
-                        Assert.assertNull(mvTaskRunContext.getNextPartitionValues());
+                        Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
-                        Assert.assertEquals("p1", message.getMvPartitionsToRefreshString());
-                        Assert.assertEquals("{t3=[p1, p3]}", message.getBasePartitionsToRefreshMapString());
+                        Assertions.assertEquals("p1", message.getMvPartitionsToRefreshString());
                         ExecPlan execPlan = mvTaskRunContext.getExecPlan();
-                        Assert.assertNotEquals(null, execPlan);
+                        Assertions.assertNotEquals(null, execPlan);
                         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                         PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
                                 "     TABLE: t3\n" +
@@ -1219,38 +1219,37 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             MaterializedView mv =
                     ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable("test", "mv1"));
-            Assert.assertEquals(3, mv.getPartitions().size());
+            Assertions.assertEquals(3, mv.getPartitions().size());
             PartitionInfo partitionInfo = mv.getPartitionInfo();
-            Assert.assertTrue(partitionInfo instanceof ListPartitionInfo);
+            Assertions.assertTrue(partitionInfo instanceof ListPartitionInfo);
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
             Map<Long, List<List<String>>> idToMultiValues = listPartitionInfo.getIdToMultiValues();
-            Assert.assertEquals(3, idToMultiValues.size());
+            Assertions.assertEquals(3, idToMultiValues.size());
             Partition p1 = mv.getPartition("p1");
             Partition p2 = mv.getPartition("p2");
             Partition p3 = mv.getPartition("p3");
             List<List<String>> p1Values = ImmutableList.of(ImmutableList.of("2020-07-01"), ImmutableList.of("2020-07-02"));
             List<List<String>> p2Values = ImmutableList.of(ImmutableList.of("2020-07-03"));
             List<List<String>> p3Values = ImmutableList.of(ImmutableList.of("2020-07-04"));
-            Assert.assertEquals(p1Values, idToMultiValues.get(p1.getId()));
-            Assert.assertEquals(p2Values, idToMultiValues.get(p2.getId()));
-            Assert.assertEquals(p3Values, idToMultiValues.get(p3.getId()));
+            Assertions.assertEquals(p1Values, idToMultiValues.get(p1.getId()));
+            Assertions.assertEquals(p2Values, idToMultiValues.get(p2.getId()));
+            Assertions.assertEquals(p3Values, idToMultiValues.get(p3.getId()));
 
             // should not have any partitions to refresh after complete refresh
             Task task = TaskBuilder.buildMvTask(mv, "test");
             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
             ExecPlan execPlan = getExecPlan(taskRun);
-            Assert.assertEquals(null, execPlan);
+            Assertions.assertEquals(null, execPlan);
 
             // update old partitions of base table
             executeInsertSql("INSERT INTO t1 VALUES \n" +
                     "    (\"2020-07-01\", \"beijing\",  1), (\"2020-07-01\", \"chengdu\",  2),\n" +
                     "    (\"2020-07-02\", \"beijing\",  3), (\"2020-07-02\", \"hangzhou\", 4);\n");
-            PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
+            MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
             MvTaskRunContext mvTaskRunContext = processor.getMvContext();
-            Assert.assertNull(mvTaskRunContext.getNextPartitionValues());
+            Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
             MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
-            Assert.assertEquals("p1,p2,p3", message.getMvPartitionsToRefreshString());
-            Assert.assertEquals("{t1=[p1, p2, p3]}", message.getBasePartitionsToRefreshMapString());
+            Assertions.assertEquals("p1,p2,p3", message.getMvPartitionsToRefreshString());
 
             // update new partitions of base table
             addListPartition("t1", "p4", "2020-07-02", "shenzhen");
@@ -1259,14 +1258,13 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             executeInsertSql("INSERT INTO t1 partition(p5) VALUES  (\"2020-07-05\", \"shenzhen\", 4);");
             processor = getProcessor(taskRun);
             mvTaskRunContext = processor.getMvContext();
-            Assert.assertNull(mvTaskRunContext.getNextPartitionValues());
+            Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
             message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
-            Assert.assertEquals("p1,p2,p3,p5", message.getMvPartitionsToRefreshString());
-            Assert.assertEquals("{t1=[p1, p2, p3, p4, p5]}", message.getBasePartitionsToRefreshMapString());
+            Assertions.assertEquals("p1,p2,p3,p5", message.getMvPartitionsToRefreshString());
             starRocksAssert.dropTable("t1");
             starRocksAssert.dropMaterializedView("mv1");
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1299,13 +1297,13 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                     "'nanjing')) FORCE;";
                             RefreshMaterializedViewStatement statement =
                                     (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-                            Assert.assertTrue(statement.isForceRefresh());
-                            Assert.assertNull(statement.getPartitionRangeDesc());
+                            Assertions.assertTrue(statement.isForceRefresh());
+                            Assertions.assertNull(statement.getPartitionRangeDesc());
                             Set<PListCell> expect = ImmutableSet.of(
                                     new PListCell(ImmutableList.of(ImmutableList.of("20240101", "beijing"))),
                                     new PListCell(ImmutableList.of(ImmutableList.of("20240101", "nanjing")))
                             );
-                            Assert.assertEquals(expect, statement.getPartitionListDesc());
+                            Assertions.assertEquals(expect, statement.getPartitionListDesc());
                         }
                     });
         });
@@ -1339,11 +1337,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     String query = String.format("select * from %s ", tableName);
                     {
                         // all partitions are expired, no need to create partitions for mv
-                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
-                        Assert.assertEquals(0, mv.getVisiblePartitions().size());
-                        Assert.assertTrue(processor.getNextTaskRun() == null);
+                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
+                        Assertions.assertEquals(0, mv.getVisiblePartitions().size());
+                        Assertions.assertTrue(processor.getNextTaskRun() == null);
                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
-                        Assert.assertTrue(execPlan == null);
+                        Assertions.assertTrue(execPlan == null);
                         String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -1441,9 +1439,9 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     String query = String.format("select * from %s ", tableName);
                     {
                         // all partitions are expired, no need to create partitions for mv
-                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
-                        Assert.assertEquals(2, mv.getVisiblePartitions().size());
-                        Assert.assertTrue(processor.getNextTaskRun() == null);
+                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
+                        Assertions.assertEquals(2, mv.getVisiblePartitions().size());
+                        Assertions.assertTrue(processor.getNextTaskRun() == null);
                         String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, "TABLE: test_mv1\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -1500,5 +1498,53 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     String tableName = (String) obj;
                     testMVRefreshWithLooseMode(tableName);
                 });
+    }
+
+    @Test
+    public void testMVRefreshWithOnePartitionAndOneUnPartitionTable1() throws Exception {
+        String partitionTable = "CREATE TABLE partition_table (dt1 date, int1 int)\n" +
+                "PARTITION BY list(dt1) (\n" +
+                "     PARTITION p1 VALUES IN (\"2025-05-16\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"2025-05-17\") \n" +
+                ")\n";
+        String partitionTableValue = "insert into partition_table partition(p1) values('2025-05-16', 1);";
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
+                "PARTITION BY (dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from partition_table group by dt1 union all\n" +
+                "SELECT dt2,sum(int2) from non_partition_table group by dt2;";
+        testMVRefreshWithOnePartitionAndOneUnPartitionTable(partitionTable, partitionTableValue, mvQuery,
+                "     TABLE: partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 1: dt1 = '2025-05-17'\n" +
+                        "     partitions=1/2",
+                "     TABLE: non_partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 4: dt2 = '2025-05-17'\n" +
+                        "     partitions=1/1");
+    }
+
+    @Test
+    public void testMVRefreshWithOnePartitionAndOneUnPartitionTable2() throws Exception {
+        String partitionTable = "CREATE TABLE partition_table (dt1 date, int1 int, str1 string)\n" +
+                "PARTITION BY list(dt1, str1) (\n" +
+                "     PARTITION p1 VALUES IN ((\"2025-05-16\", \"hangzhou\")),\n" +
+                "     PARTITION p2 VALUES IN ((\"2025-05-17\", \"guangzhou\")) \n" +
+                ")\n";
+        String partitionTableValue = "insert into partition_table partition(p1) values('2025-05-16', 1, 'hangzhou');";
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
+                "PARTITION BY (dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from partition_table group by dt1 union all\n" +
+                "SELECT dt2,sum(int2) from non_partition_table group by dt2;";
+        testMVRefreshWithOnePartitionAndOneUnPartitionTable(partitionTable, partitionTableValue, mvQuery,
+                "     TABLE: partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 1: dt1 = '2025-05-17'\n" +
+                        "     partitions=1/2",
+                "     TABLE: non_partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 5: dt2 = '2025-05-17'\n" +
+                        "     partitions=1/1");
     }
 }

@@ -59,16 +59,16 @@ private:
     Status get_tablet(const TInternalScanRange& scan_range);
     Status init_global_dicts(TabletReaderParams* params);
     Status init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
-    Status init_scanner_columns(std::vector<uint32_t>& scanner_columns);
+    Status init_scanner_columns(std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     void decide_chunk_size(bool has_predicate);
-    Status init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
-                              const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
+    Status init_reader_params(const std::vector<OlapScanRange*>& key_ranges);
     Status init_tablet_reader(RuntimeState* state);
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
     void update_realtime_counter(Chunk* chunk);
     void update_counter();
 
+    Status _extend_schema_by_access_paths();
     Status init_column_access_paths(Schema* schema);
     Status prune_schema_by_access_paths(Schema* schema);
 
@@ -117,6 +117,7 @@ private:
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
+    RuntimeProfile::Counter* _expr_filter_counter = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
@@ -181,8 +182,9 @@ private:
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
-    RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
-    RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
+
+    RuntimeProfile::Counter* _record_predicate_filter_timer = nullptr;
+    RuntimeProfile::Counter* _record_predicate_filter_counter = nullptr;
 };
 
 // ================================

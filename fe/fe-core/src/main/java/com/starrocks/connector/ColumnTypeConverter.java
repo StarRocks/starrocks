@@ -52,6 +52,7 @@ import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
+import org.apache.paimon.types.TimeType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarBinaryType;
@@ -547,6 +548,10 @@ public class ColumnTypeConverter {
             return ScalarType.createType(PrimitiveType.DATE);
         }
 
+        public Type visit(TimeType timeType) {
+            return ScalarType.createType(PrimitiveType.TIME);
+        }
+
         public Type visit(TimestampType timestampType) {
             return ScalarType.createType(PrimitiveType.DATETIME);
         }
@@ -667,7 +672,13 @@ public class ColumnTypeConverter {
             case DECIMAL:
                 int precision = ((Types.DecimalType) icebergType).precision();
                 int scale = ((Types.DecimalType) icebergType).scale();
-                return ScalarType.createUnifiedDecimalType(precision, scale);
+                if (precision <= 9) {
+                    return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, precision, scale);
+                } else if (precision <= 18) {
+                    return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, precision, scale);
+                } else {
+                    return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+                }
             case LIST:
                 Type type = convertToArrayTypeForIceberg(icebergType);
                 if (type.isArrayType()) {

@@ -26,11 +26,13 @@ displayed_sidebar: docs
 
 **Version requirements:**
 
-| Connector | Flink                    | StarRocks     | Java | Scala     |
-| --------- | ------------------------ | ------------- | ---- | --------- |
-| 1.2.9 | 1.15,1.16,1.17,1.18 | 2.1 and later| 8 | 2.11,2.12 |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
+| Connector | Flink                         | StarRocks     | Java | Scala     |
+|-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.9     | 1.15,1.16,1.17,1.18           | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15      | 2.1 and later | 8    | 2.11,2.12 |
 
 > **NOTICE**
 >
@@ -39,6 +41,25 @@ displayed_sidebar: docs
 ## Release notes
 
 ### 1.2
+
+## Release 1.2.11
+
+Release data: June 3, 2025
+
+**Features**
+
+- Supports LZ4 compression for the CSV format. [#408](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/408)
+- Adds support for Flink 1.20. [#409](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/409)
+
+**Improvements**
+
+- Adds an option to disable wrapping JSON into JSON arrays. [#344](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/344)
+- Updated FastJSON to resolve CVE-2022-25845. [#394](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/394)
+- Removed data row metrics from warn logs to avoid exposing payload in logs. [#420](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/420)
+
+**Bug Fixes**
+
+- Wrong pushdown results caused by the shadow clone of StarRocksDynamicTableSource (After the fix, a deep copy of StarRocksDynamicTableSource will be used). [#421](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/421)
 
 #### 1.2.10
 

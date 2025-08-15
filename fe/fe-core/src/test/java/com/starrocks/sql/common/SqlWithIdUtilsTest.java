@@ -24,15 +24,15 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class SqlWithIdUtilsTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
 
         FeConstants.runningUnitTest = true;
@@ -83,7 +83,7 @@ public class SqlWithIdUtilsTest {
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             String encode = SqlWithIdUtils.encode(statementBase, connectContext);
-            Assert.assertEquals(encode,
+            Assertions.assertEquals(encode,
                     String.format("SELECT <db %d>.<table %d>.`k1` AS `k1`, <db %d>.<table %d>.`k2` AS `k2` " +
                             "FROM <db %d>.<table %d> INNER JOIN <db %d>.<table %d> " +
                             "ON <db %d>.<table %d>.`k1` = <db %d>.<table %d>.`k1`",
@@ -92,7 +92,7 @@ public class SqlWithIdUtilsTest {
                             test.getId(), tbl1.getId(), test.getId(), tbl2.getId()));
             SqlWithIdUtils.decode(encode, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -102,12 +102,12 @@ public class SqlWithIdUtilsTest {
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             String encode = SqlWithIdUtils.encode(statementBase, connectContext);
-            Assert.assertEquals(encode, "SELECT <db 10002>.`t1`.`k1` AS `k1`, <db 10002>.`t2`.`k2` AS `k2` " +
+            Assertions.assertEquals(encode, "SELECT <db 10002>.`t1`.`k1` AS `k1`, <db 10002>.`t2`.`k2` AS `k2` " +
                     "FROM <db 10002>.<table 10005> AS `t1` " +
                     "INNER JOIN <db 10002>.<table 10021> AS `t2` ON <db 10002>.`t1`.`k1` = <db 10002>.`t2`.`k1`");
             SqlWithIdUtils.decode(encode, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -117,11 +117,11 @@ public class SqlWithIdUtilsTest {
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             String encode = SqlWithIdUtils.encode(statementBase, connectContext);
-            Assert.assertEquals("SELECT <db 10002>.`t1`.`k1` AS `k1`, <db 10002>.`t1`.`k2` AS `k2` " +
+            Assertions.assertEquals("SELECT <db 10002>.`t1`.`k1` AS `k1`, <db 10002>.`t1`.`k2` AS `k2` " +
                     "FROM <db 10002>.<table 10005> AS `t1`", encode);
             SqlWithIdUtils.decode(encode, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -135,7 +135,7 @@ public class SqlWithIdUtilsTest {
             starRocksAssert.dropDatabase("test");
             SqlWithIdUtils.decode(encode, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(), "Getting analyzing error. Detail message: Can not find db id: "
+            Assertions.assertEquals(e.getMessage(), "Getting analyzing error. Detail message: Can not find db id: "
                     + test.getId() + ".");
         } finally {
             starRocksAssert.withDatabase("test").useDatabase("test")
@@ -180,7 +180,7 @@ public class SqlWithIdUtilsTest {
             starRocksAssert.dropTable("tbl1");
             SqlWithIdUtils.decode(encode, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(), "Getting analyzing error. Detail message: Can not find table id: "
+            Assertions.assertEquals(e.getMessage(), "Getting analyzing error. Detail message: Can not find table id: "
                     + tbl1.getId() + " in db: test.");
         } finally {
             starRocksAssert.useDatabase("test")

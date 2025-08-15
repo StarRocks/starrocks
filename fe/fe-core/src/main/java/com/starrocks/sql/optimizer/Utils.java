@@ -179,6 +179,14 @@ public class Utils {
         return count;
     }
 
+    public static int countOptExpressionNodes(OptExpression node) {
+        int count = 1;
+        for (OptExpression child : node.getInputs()) {
+            count += countOptExpressionNodes(child);
+        }
+        return count;
+    }
+
     public static void extractOlapScanOperator(GroupExpression groupExpression, List<LogicalOlapScanOperator> list) {
         extractOperator(groupExpression, list, p -> OperatorType.LOGICAL_OLAP_SCAN.equals(p.getOpType()));
     }
@@ -303,6 +311,15 @@ public class Utils {
             return null;
         }
 
+        // for and predicate, filter redundant true
+        if (type == CompoundPredicateOperator.CompoundType.AND) {
+            link = link.stream()
+                    .filter(so -> !ConstantOperator.TRUE.equals(so))
+                    .collect(Collectors.toCollection(Lists::newLinkedList));
+            if (link.isEmpty()) {
+                return ConstantOperator.TRUE;
+            }
+        }
         if (link.size() == 1) {
             return link.get(0);
         }
@@ -773,8 +790,11 @@ public class Utils {
         return false;
     }
 
-    // without distinct function, the common distinctCols is an empty list.
-    public static Optional<List<ColumnRefOperator>> extractCommonDistinctCols(Collection<CallOperator> aggCallOperators) {
+    // 1. without distinct function, the common distinctCols is an empty list.
+    // 2. If has some distinct function, but distinct columns are not exactly same, ruturn Optional.empty
+    // 3. If has some distinct function and distinct columns are exactly same or only one distinct function, return Optional.of(distinctCols)
+    public static Optional<List<ColumnRefOperator>> extractCommonDistinctCols(
+            Collection<CallOperator> aggCallOperators) {
         Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
         for (CallOperator callOperator : aggCallOperators) {
             if (callOperator.isDistinct()) {
@@ -789,6 +809,28 @@ public class Utils {
             }
         }
         return Optional.of(Lists.newArrayList(distinctChildren));
+    }
+
+    // like select array_agg(distinct LO_REVENUE), count(distinct LO_REVENUE) will return true
+    public static Boolean hasMultipleDistinctFuncShareSameDistinctColumns(Collection<CallOperator> aggCallOperators) {
+        List<CallOperator> distinctFuncs =
+                aggCallOperators.stream().filter(CallOperator::isDistinct).collect(Collectors.toList());
+        if (distinctFuncs.size() <= 1) {
+            return false;
+        }
+        Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
+        for (CallOperator callOperator : aggCallOperators) {
+            if (distinctChildren.isEmpty()) {
+                distinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+            } else {
+                Set<ColumnRefOperator> nextDistinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+                if (!SetUtils.isEqualSet(distinctChildren, nextDistinctChildren)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     public static boolean hasNonDeterministicFunc(ScalarOperator operator) {
