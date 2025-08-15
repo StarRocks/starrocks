@@ -59,6 +59,13 @@ CONF_String(ssl_private_key_path, "");
 // These connections are created during the first few access and will be used thereafter
 CONF_Int32(brpc_max_connections_per_server, "1");
 
+// BRPC stub cache cleanup configurations
+// Interval in seconds to run cleanup for expired BRPC stubs
+CONF_mInt32(brpc_stub_cleanup_interval_s, "600"); // 10 minutes
+// BRPC stub cache expire configurations
+// The expire time of BRPC stub cache, default 60 minutes.
+CONF_mInt32(brpc_stub_expire_ms, "3600000"); // 60 minutes
+
 // Declare a selection strategy for those servers have many ips.
 // Note that there should at most one ip match this list.
 // this is a list in semicolon-delimited format, in CIDR notation, e.g. 10.10.10.0/24

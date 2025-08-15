@@ -56,6 +56,7 @@ class AgentServer;
 class BfdParser;
 class BrokerMgr;
 class BrpcStubCache;
+class BrpcStubManager;
 class DataStreamMgr;
 class EvHttpServer;
 class ExternalScanContextMgr;
@@ -298,6 +299,7 @@ public:
     BfdParser* bfd_parser() const { return _bfd_parser; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
     BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache; }
+    BrpcStubManager* brpc_stub_manager() const { return _brpc_stub_manager; }
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
     LoadStreamMgr* load_stream_mgr() { return _load_stream_mgr; }
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
@@ -397,6 +399,7 @@ private:
     LoadChannelMgr* _load_channel_mgr = nullptr;
     LoadStreamMgr* _load_stream_mgr = nullptr;
     BrpcStubCache* _brpc_stub_cache = nullptr;
+    BrpcStubManager* _brpc_stub_manager = nullptr;
     StreamContextMgr* _stream_context_mgr = nullptr;
     TransactionMgr* _transaction_mgr = nullptr;
     BatchWriteMgr* _batch_write_mgr = nullptr;

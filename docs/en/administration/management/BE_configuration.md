@@ -256,6 +256,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The maximum body size of a bRPC.
 - Introduced in: -
 
+##### brpc_stub_cleanup_interval_s
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Interval in seconds to run cleanup for expired BRPC stubs.
+- Introduced in: -
+
+##### brpc_stub_expire_ms
+
+- Default: 3600000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The expire time of BRPC stub cache, default 60 minutes.
+- Introduced in: -
+
 <!--
 ##### brpc_socket_max_unwritten_bytes
 
