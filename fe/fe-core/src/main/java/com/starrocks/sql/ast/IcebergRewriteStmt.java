@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.InsertStmt;
-
 public class IcebergRewriteStmt extends InsertStmt {
 
     private final boolean rewriteAll;

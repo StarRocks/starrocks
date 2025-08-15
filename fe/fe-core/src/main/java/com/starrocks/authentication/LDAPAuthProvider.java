@@ -15,9 +15,9 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

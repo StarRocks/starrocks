@@ -16,8 +16,8 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.io.Writable;
-import com.starrocks.sql.ast.UserIdentity;
 
 public class ImpersonatePrivInfo implements Writable {
     @SerializedName(value = "authorizedUser")

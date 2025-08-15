@@ -17,7 +17,7 @@
 
 package com.starrocks.service.arrow.flight.sql.session;
 
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.catalog.UserIdentity;
 
 /**
  * Represents a token and its associated user identity for an Arrow Flight SQL session.

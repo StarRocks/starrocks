@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -32,7 +33,6 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.TaskAnalyzer;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.UtFrameUtils;

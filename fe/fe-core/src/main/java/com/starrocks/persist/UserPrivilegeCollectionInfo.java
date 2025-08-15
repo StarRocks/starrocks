@@ -17,8 +17,8 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authorization.UserPrivilegeCollectionV2;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.io.Writable;
-import com.starrocks.sql.ast.UserIdentity;
 
 public class UserPrivilegeCollectionInfo implements Writable {
 

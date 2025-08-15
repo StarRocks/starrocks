@@ -15,10 +15,10 @@
 package com.starrocks.authentication;
 
 import com.nimbusds.jose.jwk.JWKSet;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.nio.ByteBuffer;
 

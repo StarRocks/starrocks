@@ -17,11 +17,11 @@ package com.starrocks.qe;
 
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.HashSet;
 import java.util.Set;

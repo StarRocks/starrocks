@@ -17,9 +17,9 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
-import com.starrocks.sql.ast.UserIdentity;
 import mockit.Expectations;
 
 public class MockedAuth {
