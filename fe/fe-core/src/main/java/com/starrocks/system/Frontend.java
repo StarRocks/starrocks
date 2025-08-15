@@ -40,6 +40,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.io.JsonWriter;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.staros.StarMgrServer;
@@ -72,6 +73,7 @@ public class Frontend extends JsonWriter {
     private String heartbeatErrMsg = "";
     private String feVersion;
 
+    @SerializedName("alive")
     private boolean isAlive = false;
 
     private int heartbeatRetryTimes = 0;
@@ -149,9 +151,8 @@ public class Frontend extends JsonWriter {
         return heapUsedPercent;
     }
 
-    public void updateHostAndEditLogPort(String host, int editLogPort) {
+    public void updateHost(String host) {
         this.host = host;
-        this.editLogPort = editLogPort;
     }
 
     @VisibleForTesting
@@ -290,5 +291,9 @@ public class Frontend extends JsonWriter {
         sb.append("name: ").append(nodeName).append(", role: ").append(role.name());
         sb.append(", ").append(host).append(":").append(editLogPort);
         return sb.toString();
+    }
+
+    public Frontend clonePersistentProperties() {
+        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(this), Frontend.class);
     }
 }

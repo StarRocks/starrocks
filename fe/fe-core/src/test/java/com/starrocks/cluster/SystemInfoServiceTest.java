@@ -42,6 +42,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -99,13 +100,13 @@ public class SystemInfoServiceTest {
 
         new Expectations() {
             {
-                editLog.logAddBackend((Backend) any);
+                editLog.logAddBackend((Backend) any, (WALApplier) any);
                 minTimes = 0;
 
-                editLog.logDropBackend((Backend) any);
+                editLog.logDropBackend((Backend) any, (WALApplier) any);
                 minTimes = 0;
 
-                editLog.logBackendStateChange((Backend) any);
+                editLog.logBackendStateChange((Backend) any, (WALApplier) any);
                 minTimes = 0;
 
                 globalStateMgr.getNextId();
