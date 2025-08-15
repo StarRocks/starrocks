@@ -1949,6 +1949,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：低基数字典阈值。
 - 引入版本：v3.5.0
 
+##### enable_manual_collect_array_ndv
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许手动采集 ARRAY 类型列的 NDV 信息。
+- 引入版本：v4.0
+
+##### enable_auto_collect_array_ndv
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许自动采集 ARRAY 类型列的 NDV 信息。
+- 引入版本：v4.0
+
 ### 导入导出
 
 ##### load_straggler_wait_second

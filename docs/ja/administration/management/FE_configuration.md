@@ -1356,6 +1356,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 低基数辞書のしきい値。
 - 導入バージョン: v3.5.0
 
+##### enable_manual_collect_array_ndv
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ARRAY タイプの NDV 情報の手動収集を有効にするかどうか。
+- 導入バージョン: v4.0
+
+##### enable_auto_collect_array_ndv
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ARRAY タイプの NDV 情報の自動収集を有効にするかどうか。
+- 導入バージョン: v4.0
+
 ### ロードとアンロード
 
 ##### load_straggler_wait_second
