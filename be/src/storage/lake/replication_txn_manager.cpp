@@ -25,6 +25,7 @@
 #include "agent/task_signatures_manager.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
+#include "fs/fs_starlet.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_constants.h"
@@ -37,6 +38,8 @@
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
 #include "storage/delete_handler.h"
+#include "storage/lake/filenames.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
@@ -181,33 +184,381 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
 
     ASSIGN_OR_RETURN(auto tablet_metadata, tablet.get_metadata(request.visible_version));
 
-    Status status;
-    for (const auto& src_snapshot_info : request.src_snapshot_infos) {
-        status = replicate_remote_snapshot(request, src_snapshot_info, tablet_metadata);
+    if (request.src_tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+        auto status = replicate_lake_remote_storage(request);
         if (!status.ok()) {
-            LOG(WARNING) << "Failed to download snapshot from " << src_snapshot_info.backend.host << ":"
-                         << src_snapshot_info.backend.http_port << ":" << src_snapshot_info.snapshot_path << ", "
-                         << status << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-                         << ", src_tablet_id: " << request.src_tablet_id
-                         << ", visible_version: " << request.visible_version
-                         << ", data_version: " << request.data_version
-                         << ", snapshot_version: " << request.src_visible_version;
-            continue;
+            LOG(WARNING) << "Failed to replicate lake remote file, tablet_id: " << request.tablet_id
+                         << ", txn_id: " << request.transaction_id << ", src_tablet_id: " << request.src_tablet_id
+                         << ", error: " << status.to_string();
         }
+        return status;
+    } else {
+        Status status;
+        for (const auto& src_snapshot_info : request.src_snapshot_infos) {
+            status = replicate_remote_snapshot(request, src_snapshot_info, tablet_metadata);
+            if (!status.ok()) {
+                LOG(WARNING) << "Failed to download snapshot from " << src_snapshot_info.backend.host << ":"
+                             << src_snapshot_info.backend.http_port << ":" << src_snapshot_info.snapshot_path << ", "
+                             << status << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                             << ", src_tablet_id: " << request.src_tablet_id
+                             << ", visible_version: " << request.visible_version
+                             << ", data_version: " << request.data_version
+                             << ", snapshot_version: " << request.src_visible_version;
+                continue;
+            }
 
-        LOG(INFO) << "Replicated remote snapshot from " << src_snapshot_info.backend.host << ":"
-                  << src_snapshot_info.backend.http_port << ":" << src_snapshot_info.snapshot_path << " to "
-                  << _tablet_manager->location_provider()->segment_root_location(request.tablet_id)
-                  << ", keys_type: " << KeysType_Name(tablet_metadata->schema().keys_type())
-                  << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-                  << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
-                  << ", data_version: " << request.data_version
-                  << ", snapshot_version: " << request.src_visible_version;
+            LOG(INFO) << "Replicated remote snapshot from " << src_snapshot_info.backend.host << ":"
+                      << src_snapshot_info.backend.http_port << ":" << src_snapshot_info.snapshot_path << " to "
+                      << _tablet_manager->location_provider()->segment_root_location(request.tablet_id)
+                      << ", keys_type: " << KeysType_Name(tablet_metadata->schema().keys_type())
+                      << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                      << ", src_tablet_id: " << request.src_tablet_id
+                      << ", visible_version: " << request.visible_version << ", data_version: " << request.data_version
+                      << ", snapshot_version: " << request.src_visible_version;
+
+            return status;
+        }
 
         return status;
     }
+}
 
-    return status;
+Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnapshotRequest& request) {
+    auto src_tablet_id = request.src_tablet_id;
+    auto src_visible_version = request.src_visible_version;
+    auto src_db_id = request.src_db_id;
+    auto src_table_id = request.src_table_id;
+    auto src_partition_id = request.src_partition_id;
+
+    auto data_version = request.data_version;
+    auto target_visible_version = request.visible_version;
+    auto target_tablet_id = request.tablet_id;
+
+    auto txn_id = request.transaction_id;
+    auto virtual_tablet_id = request.virtual_tablet_id;
+
+    LOG(INFO) << "Start to replicate lake remote storage, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
+              << ", src_tablet_id: " << src_tablet_id << ", src_db_id: " << src_db_id
+              << ", src_table_id: " << src_table_id << ", src_partition_id: " << src_partition_id
+              << ", visible_version: " << target_visible_version << ", data_version: " << data_version
+              << ", virtual_tablet_id: " << virtual_tablet_id << ", src_visible_version: " << src_visible_version;
+
+    std::vector<Version> missed_versions;
+    for (auto v = data_version + 1; v <= src_visible_version; ++v) {
+        missed_versions.emplace_back(v, v);
+    }
+    if (UNLIKELY(missed_versions.empty())) {
+        LOG(WARNING) << "Replicate lake remote storage skipped, no missing version"
+                     << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
+                     << ", src_tablet_id: " << src_tablet_id << ", visible_version: " << target_visible_version
+                     << ", data_version: " << data_version << ", src_visible_version: " << src_visible_version;
+        return Status::Corruption("No missing version");
+    }
+
+    auto src_meta_dir =
+            _remote_location_provider->metadata_root_location(src_tablet_id, src_db_id, src_table_id, src_partition_id);
+    auto src_data_dir =
+            _remote_location_provider->segment_root_location(src_tablet_id, src_db_id, src_table_id, src_partition_id);
+
+    // `shared_src_fs` is used to access storage of src cluster
+    auto shared_src_fs = new_fs_starlet(virtual_tablet_id);
+
+    VLOG(3) << "Lake replicate storage task, built source meta and data dir, meta dir: " << src_meta_dir
+            << ", data dir: " << src_data_dir << ", txn_id: " << txn_id << ", src_tablet_id: " << src_tablet_id
+            << ", tablet_id: " << target_tablet_id;
+
+    // mak incremental replication first, if `data_version` is lt 1 or source tablet meta lost, turn to full replication
+    // `status_or_last_src_tablet_meta` indicates the tablet meta corresponding to `data_version + 1` on source cluster
+    bool incremental = true;
+    if (data_version <= 1) {
+        incremental = false;
+    } else {
+        auto status_or_last_src_tablet_meta =
+                build_source_tablet_meta(src_tablet_id, data_version + 1, src_meta_dir, shared_src_fs);
+        if (!status_or_last_src_tablet_meta.ok()) {
+            LOG(INFO) << "Failed to get last src tablet meta, txn_id: " << txn_id
+                      << ", src_tablet_id: " << src_tablet_id << ", tablet_id: " << target_tablet_id
+                      << ", data_version: " << data_version << ", src_visible_version: " << src_visible_version
+                      << ", make full replication";
+            incremental = false; // if failed to get last src tablet meta, we should do full snapshot
+        }
+    }
+
+    // `new_rowsets` indicates all rowsets that will be covered to replicate files to target storage
+    std::set<RowsetMetadataPB, RowsetMetaComparator> new_rowsets;
+    RETURN_IF_ERROR(collect_all_rowsets_for_replication(incremental, data_version, src_visible_version, src_tablet_id,
+                                                        target_tablet_id, src_meta_dir, shared_src_fs, &new_rowsets));
+
+    VLOG(3) << "Start to convert rowset metas for tablet_id: " << target_tablet_id
+            << ", src_tablet_id: " << src_tablet_id << ", rowsets size: " << new_rowsets.size();
+
+    // build file_locations mappings between source and target file locations,
+    // it contains all files that need to replicate from source to target storage
+    std::map<std::string, std::string> file_locations;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>> filename_map;
+    // build the mapping between segment file name to its file size
+    // we use the `segment_size` field in rowset metadata to get the file size.
+    // for history reasons, the `segment_size` field is not always present, so the resulting map is not guaranteed to
+    // have all segment file sizes.
+    std::unordered_map<std::string, size_t> segment_name_to_size_map;
+
+    // build txn log and rowsets
+    auto txn_log = std::make_shared<TxnLog>();
+    for (const auto& src_rowset_meta : new_rowsets) {
+        auto* op_write = txn_log->mutable_op_replication()->add_op_writes();
+        LOG(INFO) << "Converting rowset meta for tablet: " << target_tablet_id << ", src_tablet_id: " << src_tablet_id
+                  << ", src_rowset_meta_id: " << src_rowset_meta.id()
+                  << ", segments size: " << src_rowset_meta.segments_size();
+        auto st = convert_lake_replicate_rowset_meta(src_rowset_meta, op_write);
+        if (!st.ok()) {
+            LOG(WARNING) << "Failed to convert rowset meta, src_tablet_id: " << src_tablet_id
+                         << ", version: " << src_visible_version << ", error: " << st;
+            return st;
+        }
+
+        // check if segment size is valid
+        auto segment_size_size = src_rowset_meta.segment_size_size();
+        if (segment_size_size > 0) {
+            auto segment_file_size = src_rowset_meta.segments_size();
+            // `segment_size_size` and `segment_file_size` should always be equal
+            if (UNLIKELY(segment_size_size > 0 && segment_size_size != segment_file_size)) {
+                return Status::Corruption(
+                        fmt::format("found invalidate segment_size, src_tablet_id: {}, "
+                                    "rowse_id: {}, segment_size_size: {}, segment_file_size: {}",
+                                    src_tablet_id, src_rowset_meta.id(), segment_size_size, segment_file_size));
+            }
+        }
+
+        for (int i = 0; i < src_rowset_meta.segments_size(); ++i) {
+            auto src_segment_filename = src_rowset_meta.segments(i);
+            // user src segment filename as target segment filename
+            auto target_segment_path = _tablet_manager->segment_location(target_tablet_id, src_segment_filename);
+            file_locations.emplace(join_path(src_data_dir, src_segment_filename), target_segment_path);
+
+            FileEncryptionInfo encryption_info;
+            if (config::enable_transparent_data_encryption) {
+                ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+                op_write->mutable_rowset()->add_segment_encryption_metas(pair.encryption_meta);
+                encryption_info = std::move(pair.info);
+            }
+            op_write->mutable_rowset()->add_segments(src_segment_filename);
+
+            if (segment_size_size > 0) {
+                auto segment_size = src_rowset_meta.segment_size(i);
+                op_write->mutable_rowset()->add_segment_size(segment_size);
+                segment_name_to_size_map.emplace(src_segment_filename, segment_size);
+            }
+
+            // reuse filename map structure
+            auto pair = filename_map.emplace(src_segment_filename,
+                                             std::pair(src_segment_filename, std::move(encryption_info)));
+            if (!pair.second) {
+                return Status::Corruption("Duplicated segment file: " + pair.first->first);
+            }
+        }
+    }
+
+    VLOG(3) << "Lake replicate storage task, found new added segments files between versions " << data_version
+            << " and " << src_visible_version << ", added segment size: " << file_locations.size()
+            << ", txn_id: " << txn_id << ", src_tablet_id: " << src_tablet_id
+            << ", target_tablet_id: " << target_tablet_id << ", filename_map size: " << filename_map.size();
+
+    // copy source schema
+    ASSIGN_OR_RETURN(auto src_visible_version_tablet_meta,
+                     build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
+    txn_log->mutable_op_replication()->mutable_source_schema()->CopyFrom(src_visible_version_tablet_meta->schema());
+    const TabletSchemaPB* source_schema_pb = &txn_log->op_replication().source_schema();
+    if (source_schema_pb == nullptr) {
+        LOG(WARNING) << "Failed to get source schema, tablet source tablet: " << src_tablet_id
+                     << ", target tablet: " << target_tablet_id;
+        return Status::Corruption("Failed to get source schema");
+    }
+
+    // calc column unique id to adapt for fast schema change
+    std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
+    ASSIGN_OR_RETURN(auto target_tablet, _tablet_manager->get_tablet(target_tablet_id));
+    ASSIGN_OR_RETURN(auto target_tablet_metadata, target_tablet.get_metadata(target_visible_version));
+    ReplicationUtils::calc_column_unique_id_map(source_schema_pb->column(), target_tablet_metadata->schema().column(),
+                                                &column_unique_id_map);
+
+    std::vector<std::string> files_to_delete;
+    CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
+    auto file_converters = build_file_converters(request, filename_map, column_unique_id_map, files_to_delete);
+    for (const auto& pair : filename_map) {
+        const auto& src_file_name = pair.first;
+        auto src_file_location = join_path(src_data_dir, src_file_name);
+        auto it = file_locations.find(src_file_location);
+        if (it == file_locations.end()) {
+            LOG(WARNING) << "Found invalid file location, src file location: " << src_file_location;
+            continue;
+        }
+        const auto& target_file_location = it->second;
+        // check if need to convert segment file while downloading
+        // debug if (is_segment(src_file_name)) {
+        if (is_segment(src_file_name) && !column_unique_id_map.empty()) {
+            // file_size might be empty, in that case we'll get it while downloading the file
+            auto file_size = segment_name_to_size_map[src_file_name];
+            RETURN_IF_ERROR(ReplicationUtils::download_lake_segment_file(src_file_location, src_file_name, file_size,
+                                                                         shared_src_fs, file_converters));
+        } else {
+            // since we can't easily get the file size for non-segment files, here we just use fs::copy operation
+            RETURN_IF_ERROR(
+                    fs::copy_file(src_file_location, shared_src_fs, target_file_location, nullptr, 1024 * 1024));
+        }
+        LOG(INFO) << "Finished to replicate lake remote file, src file: " << src_file_location
+                  << ", target: " << target_file_location;
+    }
+
+    for (auto& op_write : *txn_log->mutable_op_replication()->mutable_op_writes()) {
+        if (op_write.has_txn_meta()) {
+            RETURN_IF_ERROR(
+                    ReplicationUtils::convert_rowset_txn_meta(op_write.mutable_txn_meta(), column_unique_id_map));
+        }
+    }
+
+    // write txn log
+    txn_log->set_tablet_id(target_tablet_id);
+    txn_log->set_txn_id(txn_id);
+
+    auto* txn_meta = txn_log->mutable_op_replication()->mutable_txn_meta();
+    txn_meta->set_tablet_id(target_tablet_id);
+    txn_meta->set_txn_id(txn_id);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_visible_version(target_visible_version);
+    txn_meta->set_data_version(data_version);
+    txn_meta->set_snapshot_version(src_visible_version);
+    txn_meta->set_incremental_snapshot(incremental);
+
+    RETURN_IF_ERROR(_tablet_manager->put_txn_log(txn_log));
+
+    LOG(INFO) << "Replicated lake remote files, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
+              << ", src_tablet_id: " << src_tablet_id << ", src_db_id: " << src_db_id
+              << ", src_table_id: " << src_table_id << ", src_partition_id: " << src_partition_id
+              << ", visible_version: " << target_visible_version << ", data_version: " << data_version
+              << ", virtual_tablet_id: " << virtual_tablet_id << ", src_visible_version: " << src_visible_version;
+
+    clean_files.cancel();
+    return Status::OK();
+}
+
+StatusOr<TabletMetadataPtr> ReplicationTxnManager::build_source_tablet_meta(
+        int64_t src_tablet_id, int64_t version, const std::string& meta_dir,
+        const std::shared_ptr<FileSystem>& shared_src_fs) {
+    LOG(INFO) << "Lake replicate storage task, building source tablet meta for tablet: " << src_tablet_id
+              << ", version: " << version;
+    auto src_metadata_file_name = tablet_metadata_filename(src_tablet_id, version);
+    auto src_tablet_meta_path = join_path(meta_dir, src_metadata_file_name);
+    auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, false, 0, shared_src_fs);
+    if (!src_tablet_meta_or.ok()) {
+        LOG(WARNING) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
+                     << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta_or;
+        return src_tablet_meta_or;
+    }
+    return src_tablet_meta_or.value();
+}
+
+Status ReplicationTxnManager::collect_all_rowsets_for_replication(
+        bool incremental, int64_t data_version, int64_t src_visible_version, int64_t src_tablet_id,
+        int64_t target_tablet_id, const std::string& src_meta_dir, const std::shared_ptr<FileSystem>& shared_src_fs,
+        std::set<RowsetMetadataPB, RowsetMetaComparator>* new_rowsets) {
+    if (incremental) {
+        // find all rowsets
+        for (auto v = data_version + 1; v <= src_visible_version; ++v) {
+            ASSIGN_OR_RETURN(auto tablet_meta, build_source_tablet_meta(src_tablet_id, v, src_meta_dir, shared_src_fs));
+            new_rowsets->insert(tablet_meta->rowsets().begin(), tablet_meta->rowsets().end());
+        }
+        // starting at `src_visible_version`, read the tablet metadata forward along
+        // the `prev_garbage_version` pointer until the version reached `data_version`.
+        // then excluded those rowsets who comes from compaction (by checking compaction_inputs of tablet meta).
+        auto version = src_visible_version;
+        auto min_version = data_version + 1;
+        while (version >= min_version) {
+            ASSIGN_OR_RETURN(auto tablet_meta,
+                             build_source_tablet_meta(src_tablet_id, version, src_meta_dir, shared_src_fs));
+            if (tablet_meta->compaction_inputs_size() > 0) {
+                for (auto& rowset : tablet_meta->rowsets()) {
+                    new_rowsets->erase(rowset);
+                }
+            }
+            CHECK_LT(tablet_meta->prev_garbage_version(), version);
+            version = tablet_meta->prev_garbage_version();
+        }
+    } else {
+        ASSIGN_OR_RETURN(auto src_visible_version_tablet_meta,
+                         build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
+        for (auto& rowset : src_visible_version_tablet_meta->rowsets()) {
+            new_rowsets->insert(rowset);
+        }
+    }
+
+    ASSIGN_OR_RETURN(auto target_data_version_tablet_meta,
+                     _tablet_manager->get_tablet_metadata(target_tablet_id, data_version, false, 0, nullptr));
+    // remove rowsets that are already existed in `target_data_version_tablet_meta` from `new_rowsets`
+    for (const auto& rowset : target_data_version_tablet_meta->rowsets()) {
+        auto it = new_rowsets->find(rowset);
+        if (it != new_rowsets->end()) {
+            new_rowsets->erase(it);
+        }
+    }
+
+    return Status::OK();
+}
+
+Status ReplicationTxnManager::convert_lake_replicate_rowset_meta(const RowsetMetadataPB& src_rowset_meta,
+                                                                 TxnLogPB::OpWrite* op_write) {
+    // Convert rowset metadata
+    auto* rowset_metadata = op_write->mutable_rowset();
+    rowset_metadata->set_id(src_rowset_meta.id());
+    rowset_metadata->set_overlapped(src_rowset_meta.overlapped());
+    rowset_metadata->set_num_rows(src_rowset_meta.num_rows());
+    rowset_metadata->set_data_size(src_rowset_meta.data_size());
+    rowset_metadata->set_num_dels(src_rowset_meta.num_dels());
+
+    // optional DeletePredicatePB delete_predicate
+    if (src_rowset_meta.has_delete_predicate()) {
+        auto* delete_predicate_pb = rowset_metadata->mutable_delete_predicate();
+        delete_predicate_pb->CopyFrom(src_rowset_meta.delete_predicate());
+        RETURN_IF_ERROR(convert_delete_predicate_pb(delete_predicate_pb));
+    }
+
+    return Status::OK();
+}
+
+FileConverterCreatorFunc ReplicationTxnManager::build_file_converters(
+        const TReplicateSnapshotRequest& request,
+        const std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>& filename_map,
+        std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete) const {
+    auto file_converters = [&](const std::string& file_name,
+                               uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+        if (request.transaction_id < get_master_info().min_active_txn_id) {
+            LOG(WARNING) << "Transaction is aborted, txn_id: " << request.transaction_id
+                         << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
+                         << ", visible_version: " << request.visible_version
+                         << ", data_version: " << request.data_version
+                         << ", snapshot_version: " << request.src_visible_version;
+            return Status::InternalError("Transaction is aborted");
+        }
+
+        auto iter = filename_map.find(file_name);
+        if (iter == filename_map.end()) {
+            return nullptr;
+        }
+
+        auto segment_location = _tablet_manager->segment_location(request.tablet_id, iter->second.first);
+        WritableFileOptions opts{.sync_on_close = true,
+                                 .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                 .encryption_info = iter->second.second};
+        ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, segment_location));
+
+        files_to_delete.push_back(std::move(segment_location));
+
+        if (is_segment(file_name) && !column_unique_id_map.empty()) {
+            return std::make_unique<SegmentStreamConverter>(file_name, file_size, std::move(output_file),
+                                                            &column_unique_id_map);
+        }
+        return std::make_unique<FileStreamConverter>(file_name, file_size, std::move(output_file));
+    };
+    return file_converters;
 }
 
 Status ReplicationTxnManager::clear_snapshots(const TxnLogPtr& txn_slog) {
@@ -342,37 +693,7 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
     std::vector<std::string> files_to_delete;
     CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
 
-    auto file_converters = [&](const std::string& file_name,
-                               uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
-        if (request.transaction_id < get_master_info().min_active_txn_id) {
-            LOG(WARNING) << "Transaction is aborted, txn_id: " << request.transaction_id
-                         << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
-                         << ", visible_version: " << request.visible_version
-                         << ", data_version: " << request.data_version
-                         << ", snapshot_version: " << request.src_visible_version;
-            return Status::InternalError("Transaction is aborted");
-        }
-
-        auto iter = filename_map.find(file_name);
-        if (iter == filename_map.end()) {
-            return nullptr;
-        }
-
-        auto segment_location = _tablet_manager->segment_location(request.tablet_id, iter->second.first);
-        WritableFileOptions opts{.sync_on_close = true,
-                                 .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
-                                 .encryption_info = iter->second.second};
-        ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, segment_location));
-
-        files_to_delete.push_back(std::move(segment_location));
-
-        if (is_segment(file_name) && !column_unique_id_map.empty()) {
-            return std::make_unique<SegmentStreamConverter>(file_name, file_size, std::move(output_file),
-                                                            &column_unique_id_map);
-        }
-        return std::make_unique<FileStreamConverter>(file_name, file_size, std::move(output_file));
-    };
-
+    auto file_converters = build_file_converters(request, filename_map, column_unique_id_map, files_to_delete);
     RETURN_IF_ERROR(ReplicationUtils::download_remote_snapshot(
             src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
             src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash, file_converters));
@@ -505,5 +826,4 @@ Status ReplicationTxnManager::convert_delete_predicate_pb(DeletePredicatePB* del
     }
     return Status::OK();
 }
-
 } // namespace starrocks::lake
