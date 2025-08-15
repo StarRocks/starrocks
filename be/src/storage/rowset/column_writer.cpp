@@ -36,6 +36,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <algorithm>
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
@@ -397,6 +398,8 @@ Status ScalarColumnWriter::init() {
         if (_opts.zone_map_truncate_string) {
             _zone_map_index_builder->enable_truncate_string();
         }
+        // Enable per-page string zonemap sampling for CHAR/VARCHAR
+        _string_zm_tracking_enabled = is_string_type(_type_info->type());
     }
     if (_opts.need_bitmap_index) {
         _has_index_builder = true;
@@ -599,7 +602,17 @@ Status ScalarColumnWriter::_write_data_page(Page* page) {
 
 Status ScalarColumnWriter::finish_current_page() {
     if (_zone_map_index_builder != nullptr) {
-        RETURN_IF_ERROR(_zone_map_index_builder->flush());
+        // For strings, finalize per-page sampling before flushing zonemap page
+        if (_string_zm_tracking_enabled) {
+            _finalize_string_page_and_maybe_disable();
+        }
+        if (_string_zm_disabled) {
+            // Stop building further zonemap pages for this column
+            _zone_map_index_builder.reset();
+        }
+        if (_zone_map_index_builder != nullptr) {
+            RETURN_IF_ERROR(_zone_map_index_builder->flush());
+        }
     }
 
     if (_bloom_filter_index_builder != nullptr) {
@@ -796,6 +809,10 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
                     INDEX_ADD_VALUES(_bitmap_index_builder, pdata, run);
                     INDEX_ADD_VALUES(_bloom_filter_index_builder, pdata, run);
                     INDEX_ADD_VALUES(_inverted_index_builder, pdata, run);
+                    // track string page min/max incrementally when writing values
+                    if (_string_zm_tracking_enabled && !_string_zm_disabled) {
+                        _update_string_page_minmax(pdata, run);
+                    }
                 }
                 pdata += type_info()->size() * run;
             }
@@ -804,6 +821,9 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
             INDEX_ADD_VALUES(_bitmap_index_builder, data, num_written);
             INDEX_ADD_VALUES(_bloom_filter_index_builder, data, num_written);
             INDEX_ADD_VALUES(_inverted_index_builder, data, num_written);
+            if (_string_zm_tracking_enabled && !_string_zm_disabled) {
+                _update_string_page_minmax(data, num_written);
+            }
         }
 
         _next_rowid += num_written;
@@ -815,6 +835,57 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
         remaining -= num_written;
     }
     return Status::OK();
+}
+
+void ScalarColumnWriter::_update_string_page_minmax(const void* values, size_t count) {
+    if (!_string_zm_tracking_enabled || _string_zm_disabled) return;
+    if (!is_string_type(_type_info->type())) return;
+    const auto* slices = reinterpret_cast<const Slice*>(values);
+    for (size_t i = 0; i < count; ++i) {
+        const Slice& s = slices[i];
+        // skip empty-sized entries as they may be placeholders for nulls in some contexts
+        if (s.size == 0) continue;
+        std::string_view v(s.data, s.size);
+        if (!_string_curr_has_data) {
+            _string_curr_min.assign(v);
+            _string_curr_max.assign(v);
+            _string_curr_has_data = true;
+        } else {
+            if (v < _string_curr_min) _string_curr_min.assign(v);
+            if (v > _string_curr_max) _string_curr_max.assign(v);
+        }
+    }
+}
+
+void ScalarColumnWriter::_finalize_string_page_and_maybe_disable() {
+    if (!_string_zm_tracking_enabled || _string_zm_disabled) return;
+    if (!is_string_type(_type_info->type())) return;
+    // If current page has non-null data, update stats
+    if (_string_curr_has_data) {
+        _string_pages_seen++;
+        if (_string_has_prev_page) {
+            // Overlap if ranges intersect
+            bool intersects = !(_string_curr_min > _string_prev_max || _string_prev_min > _string_curr_max);
+            if (intersects) {
+                _string_overlapping_adjacent_pairs++;
+            }
+        }
+        // move curr to prev
+        _string_prev_min.swap(_string_curr_min);
+        _string_prev_max.swap(_string_curr_max);
+        _string_has_prev_page = true;
+        _string_curr_has_data = false;
+        _string_curr_min.clear();
+        _string_curr_max.clear();
+    }
+    // Check adaptive disable condition
+    if (_string_pages_seen >= config::string_zonemap_min_pages_for_adaptive_check) {
+        double denom = std::max(1, _string_pages_seen - 1);
+        double overlap_ratio = static_cast<double>(_string_overlapping_adjacent_pairs) / denom;
+        if (overlap_ratio > config::string_zonemap_overlap_threshold) {
+            _string_zm_disabled = true;
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
