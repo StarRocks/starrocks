@@ -336,7 +336,7 @@ public class TaskRun implements Comparable<TaskRun> {
             return Constants.TaskRunState.FAILED;
         }
 
-        // post prosess task run
+        // post process task run
         try (Timer ignored = Tracers.watchScope("TaskRunPostProcess")) {
             processor.postTaskRun(taskRunContext);
         } catch (Exception e) {

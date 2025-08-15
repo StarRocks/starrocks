@@ -1323,6 +1323,7 @@ public class UtFrameUtils {
 
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;
+        Config.mv_refresh_default_planner_optimize_timeout = 300 * 1000; // 5min
 
         if (connectContext != null) {
             // 300s: 5min

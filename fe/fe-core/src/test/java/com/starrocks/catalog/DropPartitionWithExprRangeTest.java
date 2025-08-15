@@ -16,7 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
+import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -258,7 +258,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                                     MaterializedView mv = starRocksAssert.getMv("test", mvName);
                                     {
                                         // all partitions are expired, no need to create partitions for mv
-                                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertEquals(0, mv.getVisiblePartitions().size());
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -276,7 +276,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                                                 now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
                                                 now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
                                                 true);
-                                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertTrue(processor != null);
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         Assertions.assertEquals(2, mv.getVisiblePartitions().size());
@@ -309,7 +309,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                                     MaterializedView mv = starRocksAssert.getMv("test", mvName);
                                     {
                                         // all partitions are expired, no need to create partitions for mv
-                                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertEquals(4, mv.getVisiblePartitions().size());
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -324,7 +324,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
 
                                     {
                                         // all partitions are expired, no need to create partitions for mv
-                                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertEquals(4, mv.getVisiblePartitions().size());
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -342,7 +342,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                                                 now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
                                                 now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
                                                 true);
-                                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertTrue(processor != null);
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         Assertions.assertEquals(6, mv.getVisiblePartitions().size());
