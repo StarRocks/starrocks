@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "exec/sorting/sort_permute.h"
 #include "runtime/chunk_cursor.h"
+#include "sort_permute.h"
 
 namespace starrocks {
 
@@ -34,10 +35,16 @@ struct SortDescs;
 // @param permutation input and output permutation
 // @param tie input and output tie
 // @param range sort range, {0, 0} means not build tie but sort data
+template<SingleContainerPermutation P>
 Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
+                           P& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
+template<SingleContainerPermutation P>
 Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
+                           P& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
+
+template <SingleContainerPermutation P>
+Status sort_and_tie_columns2(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
+                             P& permutation);
 
 // Sort multiple columns using column-wise algorithm, output the order in permutation array
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,

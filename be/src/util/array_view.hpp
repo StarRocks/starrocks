@@ -22,6 +22,8 @@ namespace starrocks {
 template <typename T>
 class array_view {
 public:
+    using value_type = T;
+
     array_view(T* ptr, size_t len) noexcept : _ptr(ptr), _len(len) {}
     template <class Container>
     array_view(const Container& container) noexcept : _ptr(container.data()), _len(container.size()) {}
