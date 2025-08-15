@@ -98,7 +98,8 @@ public class AuthenticationHandler {
                 provider.authenticate(context, matchedUserIdentity.getKey(), authResponse);
             }
 
-            return new AuthenticationResult(matchedUserIdentity.getKey(), List.of(Config.group_provider), null);
+            return new AuthenticationResult(matchedUserIdentity.getKey(), List.of(Config.group_provider), null,
+                    SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE);
         }
     }
 
@@ -138,7 +139,8 @@ public class AuthenticationHandler {
                     UserIdentity.createEphemeralUserIdent(user, remoteHost),
                     securityIntegration.getGroupProviderName() == null ?
                             List.of(Config.group_provider) : securityIntegration.getGroupProviderName(),
-                    securityIntegration.getGroupAllowedLoginList());
+                    securityIntegration.getGroupAllowedLoginList(),
+                    authMechanism);
         }
 
         if (authenticationResult == null && !exceptions.isEmpty()) {
@@ -166,6 +168,7 @@ public class AuthenticationHandler {
 
         Set<String> groups = getGroups(authenticationResult.authenticatedUser, authenticationResult.groupProviderName);
         context.setGroups(groups);
+        context.setSecurityIntegration(authenticationResult.securityIntegration);
 
         if (authenticationResult.authenticatedGroupList != null && !authenticationResult.authenticatedGroupList.isEmpty()) {
             Set<String> intersection = new HashSet<>(groups);
@@ -176,18 +179,10 @@ public class AuthenticationHandler {
         }
     }
 
-    private static class AuthenticationResult {
-        private UserIdentity authenticatedUser = null;
-        private List<String> groupProviderName = null;
-        private List<String> authenticatedGroupList = null;
-
-        public AuthenticationResult(UserIdentity authenticatedUser,
-                                    List<String> groupProviderName,
-                                    List<String> authenticatedGroupList) {
-            this.authenticatedUser = authenticatedUser;
-            this.groupProviderName = groupProviderName;
-            this.authenticatedGroupList = authenticatedGroupList;
-        }
+    private record AuthenticationResult(UserIdentity authenticatedUser,
+                                        List<String> groupProviderName,
+                                        List<String> authenticatedGroupList,
+                                        String securityIntegration) {
     }
 
     public static Set<String> getGroups(UserIdentity userIdentity, List<String> groupProviderList) {
