@@ -138,6 +138,7 @@ class OrdinalIndexWriter;
 class PageBuilder;
 class BloomFilterIndexWriter;
 class ZoneMapIndexWriter;
+class ZoneMapIndexQualityJudger;
 
 class ColumnWriter {
 public:
@@ -274,12 +275,6 @@ private:
 
     Status _write_data_page(Page* page);
 
-    // ---------------- String zonemap adaptive sampling ----------------
-    // Update current page min/max for string values
-    void _update_string_page_minmax(const void* values, size_t count);
-    // Finalize current page sampling, update overlap stats, and maybe disable zonemap
-    void _finalize_string_page_and_maybe_disable();
-
     ColumnWriterOptions _opts;
     WritableFile* _wfile;
     uint32_t _curr_page_format;
@@ -305,6 +300,7 @@ private:
 
     std::unique_ptr<OrdinalIndexWriter> _ordinal_index_builder;
     std::unique_ptr<ZoneMapIndexWriter> _zone_map_index_builder;
+    std::unique_ptr<ZoneMapIndexQualityJudger> _zone_map_index_quality_judger;
     std::unique_ptr<BitmapIndexWriter> _bitmap_index_builder;
     std::unique_ptr<BloomFilterIndexWriter> _bloom_filter_index_builder;
     std::unique_ptr<InvertedWriter> _inverted_index_builder;
@@ -318,18 +314,6 @@ private:
     bool _is_global_dict_valid = true;
 
     uint64_t _total_mem_footprint = 0;
-
-    // String zonemap adaptive sampling state (only used for CHAR/VARCHAR)
-    bool _string_zm_tracking_enabled = false;
-    bool _string_curr_has_data = false;
-    std::string _string_curr_min;
-    std::string _string_curr_max;
-    bool _string_has_prev_page = false;
-    std::string _string_prev_min;
-    std::string _string_prev_max;
-    int32_t _string_pages_seen = 0;              // number of pages with non-null data
-    int32_t _string_overlapping_adjacent_pairs = 0; // count of adjacent page pairs intersecting
-    bool _string_zm_disabled = false;
 };
 
 } // namespace starrocks
