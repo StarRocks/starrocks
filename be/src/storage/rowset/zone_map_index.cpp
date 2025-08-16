@@ -486,6 +486,13 @@ struct ZoneMapWrapper {
     ZoneMapWrapper(const ZoneMap<type>& zone_map) : zone_map(zone_map) {}
 
     bool is_overlap_with(const ZoneMapWrapper& other) const {
+        // If either zone map has null values, they can potentially overlap
+        // since null values can exist alongside any non-null values
+        if (zone_map.has_null || other.zone_map.has_null) {
+            return true;
+        }
+
+        // For non-null zones, check value range overlap
         return (other.zone_map.min_value.value >= zone_map.min_value.value &&
                 other.zone_map.min_value.value <= zone_map.max_value.value) ||
                (other.zone_map.max_value.value >= zone_map.min_value.value &&
@@ -518,14 +525,13 @@ CreateIndexDecision ZoneMapIndexQualityJudgerImpl<type>::make_decision() const {
     // step: check overlap
     double total_overlap = 0.0;
     for (size_t i = 0; i < parsed_zonemap.size(); ++i) {
-        for (size_t j = 0; j < parsed_zonemap.size(); ++j) {
-            if (i == j) continue; // Skip self to self compare
+        for (size_t j = i + 1; j < parsed_zonemap.size(); ++j) {
             if (parsed_zonemap[i].is_overlap_with(parsed_zonemap[j])) {
                 total_overlap += 1.0;
             }
         }
     }
-    double overlap_ratio = total_overlap / (parsed_zonemap.size() * parsed_zonemap.size());
+    double overlap_ratio = total_overlap / (parsed_zonemap.size() * (parsed_zonemap.size() - 1) / 2.0);
     // If overlap ratio is less than or equal to threshold, it's a good index
     if (overlap_ratio <= _overlap_threshold) {
         return CreateIndexDecision::Good;

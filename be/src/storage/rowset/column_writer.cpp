@@ -34,15 +34,10 @@
 
 #include "storage/rowset/column_writer.h"
 
-#include <algorithm>
 #include <cstddef>
 #include <memory>
 
-#include "column/array_column.h"
-#include "column/column_helper.h"
-#include "column/hash_set.h"
 #include "column/nullable_column.h"
-#include "common/logging.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
@@ -398,8 +393,6 @@ Status ScalarColumnWriter::init() {
         if (_opts.zone_map_truncate_string) {
             _zone_map_index_builder->enable_truncate_string();
         }
-        // Enable per-page string zonemap sampling for CHAR/VARCHAR
-        _string_zm_tracking_enabled = is_string_type(_type_info->type());
         if (is_string_type(_type_info->type())) {
             _zone_map_index_quality_judger =
                     ZoneMapIndexQualityJudger::create(_type_info.get(), config::string_zonemap_overlap_threshold,
