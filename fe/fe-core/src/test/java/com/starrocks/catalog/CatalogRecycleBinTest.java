@@ -27,6 +27,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -36,6 +37,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -93,6 +95,7 @@ public class CatalogRecycleBinTest {
     private VariableMgr variableMgr = new VariableMgr();
     private SessionVariable defSessionVariable = new SessionVariable();
 
+    @BeforeAll
     public static void beforeClass() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -727,17 +730,19 @@ public class CatalogRecycleBinTest {
         Assertions.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assertions.assertEquals(0, recycleBin.enableEraseLater.size());
     }
+
     @Test
-    public void testShowCatalogRecycleBinDatabase(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
-        Database db1 = new Database(111, "uno");
-        Database db2SameName = new Database(22, "dos"); // samename
-        Database db2 = new Database(222, "dos");
+    public void testShowCatalogRecycleBinDatabase(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog,
+            @Mocked LocalMetastore localMetaStore, @Mocked ClusterSnapshotMgr clusterSnapshotMgr) {
+        Database db1 = new Database(211, "uno");
+        Database db2SameName = new Database(32, "dos"); // samename
+        Database db2 = new Database(422, "dos");
 
         // 1. recycle 2 dbs
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        recycleBin.recycleDatabase(db1, new HashSet<>(), false);
-        recycleBin.recycleDatabase(db2SameName, new HashSet<>(), false);  // will remove same name
-        recycleBin.recycleDatabase(db2, new HashSet<>(), false);
+        recycleBin.recycleDatabase(db1, new HashSet<>(), true);
+        recycleBin.recycleDatabase(db2SameName, new HashSet<>(), true);  // will remove same name
+        recycleBin.recycleDatabase(db2, new HashSet<>(), true);
 
         Assertions.assertEquals(recycleBin.getDatabase(db1.getId()), db1);
         Assertions.assertEquals(recycleBin.getDatabase(db2.getId()), db2);
@@ -751,13 +756,39 @@ public class CatalogRecycleBinTest {
         long expireFromNow = now - 3600 * 1000L;
         recycleBin.idToRecycleTime.put(db1.getId(), expireFromNow - 1000);
 
-        new Expectations() {
+        new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getLocalMetastore().onEraseDatabase(anyLong);
+                globalStateMgr.getClusterSnapshotMgr();
                 minTimes = 0;
+                result = clusterSnapshotMgr;
+            }
+        };
+        new Expectations(clusterSnapshotMgr) {
+            {
+                clusterSnapshotMgr.isDeletionSafeToExecute(anyLong);
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetaStore;
+            }
+        };
+        new Expectations(globalStateMgr) {
+            {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+            }
+        };
+        new Expectations() {
+            {
+                localMetaStore.onEraseDatabase(anyLong);
+                minTimes = 0;
             }
         };
         new Expectations() {
@@ -791,7 +822,7 @@ public class CatalogRecycleBinTest {
         };
         new Expectations() {
             {
-                ConnectContext.get().getSessionVariable().getTimeZone();
+                connectContext.getSessionVariable().getTimeZone();
                 minTimes = 0;
                 result = tz;
             }
@@ -807,15 +838,39 @@ public class CatalogRecycleBinTest {
         List<List<String>> recyclebininfo = recycleBin.getCatalogRecycleBinInfo();
         Assertions.assertEquals(recyclebininfo.size(), 1);
         String actual = rowsToString(recyclebininfo);
-        Assertions.assertTrue(actual.contains("222"));
+        Assertions.assertTrue(actual.contains("422"));
     }
 
     @Test
     public void testShowCatalogRecycleBinTable(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog,
-            @Mocked VariableMgr variableMgr) {
+            @Mocked VariableMgr variableMgr, @Mocked LocalMetastore localMetaStore, 
+            @Mocked ClusterSnapshotMgr clusterSnapshotMgr) {
         Table table1 = new Table(111, "uno", Table.TableType.VIEW, null);
         Table table2SameName = new Table(22, "dos", Table.TableType.VIEW, null);
         Table table2 = new Table(222, "dos", Table.TableType.VIEW, null);
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getClusterSnapshotMgr();
+                minTimes = 0;
+                result = clusterSnapshotMgr;
+            }
+        };
+        new Expectations(clusterSnapshotMgr) {
+            {
+                clusterSnapshotMgr.isDeletionSafeToExecute(anyLong);
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetaStore;
+            }
+        };
 
         new Expectations() {
             {
@@ -856,7 +911,7 @@ public class CatalogRecycleBinTest {
         };
         new Expectations() {
             {
-                ConnectContext.get().getSessionVariable().getTimeZone();
+                connectContext.getSessionVariable().getTimeZone();
                 minTimes = 0;
                 result = tz;
             }
@@ -893,19 +948,45 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testShowCatalogRecycleBinPartition(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+    public void testShowCatalogRecycleBinPartition(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog,
+            @Mocked LocalMetastore localMetaStore, @Mocked ClusterSnapshotMgr clusterSnapshotMgr) {
         Partition p1 = new Partition(111, 112, "uno", null, null);
         Partition p2SameName = new Partition(22, 23, "dos", null, null);
         Partition p2 = new Partition(222, 223, "dos", null, null);
 
-        new Expectations() {
+        new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getLocalMetastore().onErasePartition((Partition) any);
+                globalStateMgr.getClusterSnapshotMgr();
                 minTimes = 0;
+                result = clusterSnapshotMgr;
+            }
+        };
+        new Expectations(clusterSnapshotMgr) {
+            {
+                clusterSnapshotMgr.isDeletionSafeToExecute(anyLong);
+                minTimes = 0;
+                result = true;
+            }
+        };
 
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetaStore;
+            }
+        };
+        new Expectations(globalStateMgr) {
+            {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+            }
+        };
+        new Expectations() {
+            {
+                localMetaStore.onEraseDatabase(anyLong);
+                minTimes = 0;
             }
         };
         new Expectations() {
@@ -940,7 +1021,7 @@ public class CatalogRecycleBinTest {
 
         new Expectations() {
             {
-                ConnectContext.get().getSessionVariable().getTimeZone();
+                connectContext.getSessionVariable().getTimeZone();
                 minTimes = 0;
                 result = tz;
             }
