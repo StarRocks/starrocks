@@ -52,29 +52,6 @@
 
 namespace starrocks {
 
-// Truncate string min/max values at write time to reduce comparison/metadata overhead.
-// For max values that are truncated, append 0xFF to preserve an upper bound.
-template <LogicalType LT>
-static inline void _truncate_string_minmax_if_needed(ZoneMap<LT>* zm) {
-    if (!config::enable_string_prefix_zonemap) return;
-    const size_t kPrefixLen = std::max<int32_t>(0, config::string_prefix_zonemap_prefix_len);
-    if constexpr (LT == TYPE_CHAR || LT == TYPE_VARCHAR) {
-        auto& min_slice = zm->min_value.value;
-        auto& max_slice = zm->max_value.value;
-        if (min_slice.size > kPrefixLen) {
-            min_slice.size = kPrefixLen;
-        }
-        if (max_slice.size > kPrefixLen) {
-            // Safe, original buffer has length > kPrefixLen
-            // Ensure buffer has room for 0xFF; if exactly kPrefixLen length, keep as is.
-            if (max_slice.size > kPrefixLen) {
-                max_slice.data[kPrefixLen] = static_cast<char>(0xFF);
-                max_slice.size = kPrefixLen + 1;
-            }
-        }
-    }
-}
-
 template <LogicalType type>
 struct ZoneMapDatumBase {
     using CppType = typename TypeTraits<type>::CppType;
@@ -227,6 +204,25 @@ template <LogicalType type>
 ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(TypeInfo* type_info) : _type_info(type_info) {
     _reset_zone_map(&_page_zone_map);
     _reset_zone_map(&_segment_zone_map);
+}
+
+// Truncate string min/max values at write time to reduce comparison/metadata overhead.
+// For max values that are truncated, append 0xFF to preserve an upper bound.
+template <LogicalType LT>
+static inline void _truncate_string_minmax_if_needed(ZoneMap<LT>* zm) {
+    const size_t kPrefixLen = std::max<int32_t>(8, config::string_prefix_zonemap_prefix_len);
+    if constexpr (LT == TYPE_CHAR || LT == TYPE_VARCHAR) {
+        auto& min_slice = zm->min_value.value;
+        auto& max_slice = zm->max_value.value;
+        if (min_slice.size > kPrefixLen) {
+            min_slice.size = kPrefixLen;
+        }
+        if (max_slice.size > kPrefixLen) {
+            // Safe, original buffer has length > kPrefixLen, ensure buffer has room for 0xFF
+            max_slice.data[kPrefixLen] = static_cast<char>(0xFF);
+            max_slice.size = kPrefixLen + 1;
+        }
+    }
 }
 
 template <LogicalType type>
