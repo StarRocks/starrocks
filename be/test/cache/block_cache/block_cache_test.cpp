@@ -25,7 +25,6 @@
 #include "common/statusor.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
-#include "util/await.h"
 
 namespace starrocks {
 
