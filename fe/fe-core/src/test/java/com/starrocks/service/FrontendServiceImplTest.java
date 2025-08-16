@@ -1467,7 +1467,7 @@ public class FrontendServiceImplTest {
 
         TListRecycleBinCatalogsParams request = new TListRecycleBinCatalogsParams();
         TUserIdentity userIdentity = new TUserIdentity();
-        userIdentity.setUsername("test4");
+        userIdentity.setUsername("root");
         userIdentity.setHost("%");
         userIdentity.setIs_domain(false);
         request.setUser_ident(userIdentity);
