@@ -25,6 +25,7 @@
 #include "common/statusor.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
+#include "util/await.h"
 
 namespace starrocks {
 
@@ -305,5 +306,34 @@ TEST_F(BlockCacheTest, read_peer_cache) {
     ASSERT_FALSE(st.ok());
 
     ASSERT_OK(cache->shutdown());
+}
+
+TEST_F(BlockCacheTest, cache_ttl) {
+    const std::string cache_dir = "./block_disk_cache7";
+    ASSERT_TRUE(fs::create_directories(cache_dir).ok());
+
+    const size_t block_size = 256 * 1024;
+    CacheOptions options = TestCacheUtils::create_simple_options(block_size, 20 * MB);
+    options.ttl_check_interval_ms = 1;
+    auto cache = TestCacheUtils::create_cache(options);
+
+    const size_t batch_size = block_size;
+    const std::string cache_key = "test_file";
+
+    WriteCacheOptions write_options;
+    write_options.ttl_seconds = 1;
+
+    std::string value(batch_size, 'a');
+    ASSERT_OK(cache->write(cache_key, 0, batch_size, value.c_str(), &write_options));
+
+    char rvalue[batch_size] = {0};
+    auto res = cache->read(cache_key, 0, batch_size, rvalue);
+    ASSERT_TRUE(res.status().ok());
+    std::string expect_value(batch_size, 'a');
+    ASSERT_EQ(memcmp(rvalue, expect_value.c_str(), batch_size), 0);
+
+    // It is necessary to wait enough time for StarCache remove the cache
+    sleep(10);
+    ASSERT_FALSE(cache->exist(cache_key, 0, batch_size));
 }
 } // namespace starrocks
