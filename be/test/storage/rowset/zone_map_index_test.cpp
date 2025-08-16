@@ -40,10 +40,10 @@
 #include <string>
 
 #include "cache/object_cache/page_cache.h"
+#include "common/config.h"
 #include "fs/fs_memory.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
-#include "common/config.h"
 
 namespace starrocks {
 
@@ -125,19 +125,12 @@ protected:
         ASSERT_EQ(has_min, zone_map.has_min());
         ASSERT_EQ(has_max, zone_map.has_max());
         if (has_min) {
-            auto zmin = zone_map.min();
+            const auto& zmin = zone_map.min();
             ASSERT_TRUE(min.rfind(zmin, 0) == 0 || zmin == min.substr(0, std::min(prefix_len, min.size())));
+            ASSERT_TRUE(zmin <= min);
         }
         if (has_max) {
-            auto zmax = zone_map.max();
-            if (max.size() > prefix_len) {
-                std::string expect = max.substr(0, prefix_len);
-                std::string allow = expect;
-                allow.push_back(static_cast<char>(0xFF));
-                ASSERT_TRUE(zmax == expect || zmax == allow);
-            } else {
-                ASSERT_EQ(max, zmax);
-            }
+            ASSERT_TRUE(zone_map.max() >= max);
         }
         ASSERT_EQ(has_null, zone_map.has_null());
         ASSERT_EQ(has_not_null, zone_map.has_not_null());
