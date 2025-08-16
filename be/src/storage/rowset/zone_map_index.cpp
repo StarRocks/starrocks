@@ -38,6 +38,7 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "common/config.h"
 #include "storage/chunk_helper.h"
 #include "storage/decimal_type_info.h"
 #include "storage/olap_define.h"
@@ -48,7 +49,6 @@
 #include "storage/type_traits.h"
 #include "storage/types.h"
 #include "util/unaligned_access.h"
-#include "common/config.h"
 
 namespace starrocks {
 
