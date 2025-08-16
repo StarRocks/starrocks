@@ -335,5 +335,8 @@ TEST_F(BlockCacheTest, cache_ttl) {
     // It is necessary to wait enough time for StarCache remove the cache
     sleep(10);
     ASSERT_FALSE(cache->exist(cache_key, 0, batch_size));
+
+    ASSERT_OK(cache->shutdown());
+    ASSERT_OK(fs::remove_all(cache_dir));
 }
 } // namespace starrocks
