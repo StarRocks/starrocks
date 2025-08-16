@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.plugin.DynamicPluginLoader;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -46,11 +45,6 @@ public class InstallPluginStmt extends DdlStmt {
 
     public String getMd5sum() {
         return properties == null ? null : properties.get(DynamicPluginLoader.MD5SUM_KEY);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     @Override

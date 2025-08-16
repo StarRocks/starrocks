@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.parser.NodePosition;
@@ -32,11 +31,6 @@ public abstract class DmlStmt extends StatementBase {
     protected DmlStmt(NodePosition pos) {
         super(pos);
         this.properties = Maps.newHashMap();
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     public abstract TableName getTableName();

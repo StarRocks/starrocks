@@ -8,7 +8,7 @@ This topic describes the rules and limits that apply when you use StarRocks.
 
 - StarRocks uses the MySQL protocol for communication. You can connect to the StarRocks cluster via a MySQL client or JDBC. We recommend that you use a MySQL client whose version is 5.1 or later. Versions earlier than 5.1 do not support usernames that are longer than 16 characters.
 
-- Naming conventions for objects such as catalogs, databases, tables, views, partitions, columns, indexes, usernames, roles, repositories, resources, storage volumes, and pipes:
+- Naming conventions for objects such as catalogs, databases, tables, views, asynchronous materialized views, partitions, columns, indexes, usernames, roles, repositories, resources, storage volumes, and pipes:
 
   - The name can only consist of digits (0-9), letters (a-z or A-Z), and underscores (\_). **Usernames can be all digits.**
   - The name can start with a letter or an underscore (\_).
@@ -17,6 +17,11 @@ This topic describes the rules and limits that apply when you use StarRocks.
     - Table name and column name cannot exceed 1024 characters.
     - Username cannot exceed 128 characters.
   - Column name (column alias), partition name, and index name are **not** case-sensitive. Other names are **case-sensitive**.
+
+- The FE configuration item `enable_table_name_case_insensitive` (supported from v4.0 onwards) allows you to control whether data directory names, database names, table names, view names, and asynchronous materialized view names are case-insensitive. Currently, table names are case-sensitive by default.
+  - After enabling this feature, all related names will be stored in lowercase, and all SQL commands containing these names will automatically convert them to lowercase.
+  - You can enable this feature only when creating a cluster. **After the cluster is started, the value of this configuration cannot be modified by any means**. Any attempt to modify it will result in an error. FE will fail to start when it detects that the value of this configuration item is inconsistent with that when the cluster was first started.
+  - Currently, this feature does not support JDBC catalog and table names. Do not enable this feature if you want to perform case-insensitive processing on JDBC or ODBC data sources.
 
 - Naming conventions for labels:
   You can specify the label of a job when you load data. The label name can consist of digits (0-9), letters (a-z or A-Z), and underscores (\_), and cannot exceed 128 characters in length. Label names can start with a letter or an underscore (\_).

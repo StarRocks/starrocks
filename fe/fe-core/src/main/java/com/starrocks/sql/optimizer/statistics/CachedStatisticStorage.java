@@ -419,13 +419,11 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
             if (resultFuture.isDone()) {
                 Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = resultFuture.get();
-                return columns.stream()
-                        .collect(Collectors.toMap(
-                                column -> column,
-                                column -> result.getOrDefault(new ColumnStatsCacheKey(table.getId(), column),
-                                                Optional.empty())
-                                        .orElse(null)
-                        ));
+
+                Map<String, PartitionStats> columnStatistics = Maps.newHashMap();
+                result.forEach((k, v) ->
+                        v.ifPresent(partitionStats -> columnStatistics.put(k.column, partitionStats)));
+                return columnStatistics;
             }
             return Collections.emptyMap();
         } catch (InterruptedException e) {

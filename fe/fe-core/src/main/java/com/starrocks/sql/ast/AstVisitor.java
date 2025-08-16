@@ -196,7 +196,7 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitCreateTemporaryTableAsSelectStatement(CreateTemporaryTableAsSelectStmt statement, C context) {
-        return visitStatement(statement, context);
+        return visitCreateTableAsSelectStatement(statement, context);
     }
 
     default R visitCreateTemporaryTableLikeStatement(CreateTemporaryTableLikeStmt statement, C context) {
@@ -208,7 +208,7 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitDropTemporaryTableStatement(DropTemporaryTableStmt statement, C context) {
-        return visitStatement(statement, context);
+        return visitDropTableStatement(statement, context);
     }
 
     default R visitCleanTemporaryTableStatement(CleanTemporaryTableStmt statement, C context) {
@@ -937,7 +937,7 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitDataCacheSelectStatement(DataCacheSelectStatement statement, C context) {
-        return visitStatement(statement, context);
+        return visitDDLStatement(statement, context);
     }
 
     // --------------------------------------- Export Statement --------------------------------------------------------

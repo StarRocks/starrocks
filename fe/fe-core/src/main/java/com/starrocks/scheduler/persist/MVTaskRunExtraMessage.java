@@ -24,6 +24,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Map;
@@ -99,7 +100,7 @@ public class MVTaskRunExtraMessage implements Writable {
     }
 
     public void setMvPartitionsToRefresh(Set<String> mvPartitionsToRefresh) {
-        if (mvPartitionsToRefresh == null) {
+        if (CollectionUtils.isEmpty(mvPartitionsToRefresh)) {
             return;
         }
         this.mvPartitionsToRefresh = Sets.newHashSet(MvUtils.shrinkToSize(mvPartitionsToRefresh,
@@ -123,15 +124,6 @@ public class MVTaskRunExtraMessage implements Writable {
         if (mvPartitionsToRefresh != null)  {
             String mvPartitionToRefresh = Joiner.on(",").join(mvPartitionsToRefresh);
             return StringUtils.substring(mvPartitionToRefresh, 0, 1024);
-        } else {
-            return "";
-        }
-    }
-
-    public String getBasePartitionsToRefreshMapString() {
-        if (basePartitionsToRefreshMap != null) {
-            String basePartitionToRefresh = basePartitionsToRefreshMap.toString();
-            return StringUtils.substring(basePartitionToRefresh, 0, 1024);
         } else {
             return "";
         }

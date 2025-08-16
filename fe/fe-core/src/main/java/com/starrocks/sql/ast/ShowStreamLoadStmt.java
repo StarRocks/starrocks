@@ -20,7 +20,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.parser.NodePosition;
@@ -137,11 +136,6 @@ public class ShowStreamLoadStmt extends ShowStmt {
 
     public static List<String> getTitleNames() {
         return TITLE_NAMES;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     public void setDb(String db) {

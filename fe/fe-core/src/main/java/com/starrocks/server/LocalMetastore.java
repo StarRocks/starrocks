@@ -1385,7 +1385,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             DropPartitionsInfo info =
                     new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(), null, true);
             editLog.logDropPartitions(info);
-            LOG.info("succeed in dropping all partitions, is temp : {}, is force : {}", isTempPartition,
+            LOG.info("succeed in dropping all partitions, db: {}, table: {}, is temp: {}, is force: {}",
+                    db.getFullName(), olapTable.getName(),
+                    isTempPartition,
                     clause.isForceDrop());
             return;
         }
@@ -1466,13 +1468,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             String partitionName = clause.getPartitionName();
             DropPartitionInfo info = new DropPartitionInfo(dbId, tableId, partitionName, isTempPartition, clause.isForceDrop());
             editLog.logDropPartition(info);
-            LOG.info("succeed in dropping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
+            LOG.info("succeed in dropping partition[{}], db: {}, table: {}, is temp : {}, is force : {}", partitionName,
+                    db.getFullName(), olapTable.getName(),
+                    isTempPartition,
                     clause.isForceDrop());
         } else {
             DropPartitionsInfo info =
                     new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(), existPartitions);
             editLog.logDropPartitions(info);
-            LOG.info("succeed in dropping partitions[{}], is temp : {}, is force : {}", existPartitions, isTempPartition,
+            LOG.info("succeed in dropping partitions[{}], db: {}, table: {}, is temp : {}, is force : {}", existPartitions,
+                    db.getFullName(), olapTable.getName(),
+                    isTempPartition,
                     clause.isForceDrop());
         }
 

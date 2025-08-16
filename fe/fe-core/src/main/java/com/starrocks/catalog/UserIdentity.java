@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.sql.ast;
+package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;

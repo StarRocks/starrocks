@@ -37,7 +37,6 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
@@ -133,8 +132,6 @@ public abstract class StatementBase implements ParseNode {
             return explainLevel;
         }
     }
-
-    public abstract RedirectStatus getRedirectStatus();
 
     public void setOrigStmt(OriginStatement origStmt) {
         Preconditions.checkState(origStmt != null);
