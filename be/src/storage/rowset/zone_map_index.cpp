@@ -38,6 +38,7 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "common/config.h"
 #include "storage/chunk_helper.h"
 #include "storage/decimal_type_info.h"
 #include "storage/olap_define.h"
@@ -205,6 +206,25 @@ ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(TypeInfo* type_info) : _typ
     _reset_zone_map(&_segment_zone_map);
 }
 
+// Truncate string min/max values at write time to reduce comparison/metadata overhead.
+// For max values that are truncated, append 0xFF to preserve an upper bound.
+template <LogicalType LT>
+static inline void _truncate_string_minmax_if_needed(ZoneMap<LT>* zm) {
+    const size_t kPrefixLen = std::max<int32_t>(8, config::string_prefix_zonemap_prefix_len);
+    if constexpr (LT == TYPE_CHAR || LT == TYPE_VARCHAR) {
+        auto& min_slice = zm->min_value.value;
+        auto& max_slice = zm->max_value.value;
+        if (min_slice.size > kPrefixLen) {
+            min_slice.size = kPrefixLen;
+        }
+        if (max_slice.size > kPrefixLen) {
+            // Safe, original buffer has length > kPrefixLen, ensure buffer has room for 0xFF
+            max_slice.data[kPrefixLen] = static_cast<char>(0xFF);
+            max_slice.size = kPrefixLen + 1;
+        }
+    }
+}
+
 template <LogicalType type>
 void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) {
     if (count > 0) {
@@ -215,10 +235,12 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
             if (unaligned_load<CppType>(pmin) < _page_zone_map.min_value.value) {
                 _page_zone_map.min_value.resize_container_for_fit(_type_info, pmin);
                 _type_info->direct_copy(&_page_zone_map.min_value.value, pmin);
+                _truncate_string_minmax_if_needed<type>(&_page_zone_map);
             }
             if (unaligned_load<CppType>(pmax) > _page_zone_map.max_value.value) {
                 _page_zone_map.max_value.resize_container_for_fit(_type_info, pmax);
                 _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
+                _truncate_string_minmax_if_needed<type>(&_page_zone_map);
             }
         } else {
             _page_zone_map.min_value.resize_container_for_fit(_type_info, pmin);
@@ -226,6 +248,7 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
 
             _page_zone_map.max_value.resize_container_for_fit(_type_info, pmax);
             _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
+            _truncate_string_minmax_if_needed<type>(&_page_zone_map);
         }
         _page_zone_map.has_not_null = true;
     }
@@ -239,10 +262,12 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
             if (_page_zone_map.min_value.value < _segment_zone_map.min_value.value) {
                 _segment_zone_map.min_value.resize_container_for_fit(_type_info, &_page_zone_map.min_value.value);
                 _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value);
+                _truncate_string_minmax_if_needed<type>(&_segment_zone_map);
             }
             if (_page_zone_map.max_value.value > _segment_zone_map.max_value.value) {
                 _segment_zone_map.max_value.resize_container_for_fit(_type_info, &_page_zone_map.max_value.value);
                 _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value);
+                _truncate_string_minmax_if_needed<type>(&_segment_zone_map);
             }
         } else {
             _segment_zone_map.min_value.resize_container_for_fit(_type_info, &_page_zone_map.min_value.value);
@@ -250,6 +275,7 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
 
             _segment_zone_map.max_value.resize_container_for_fit(_type_info, &_page_zone_map.max_value.value);
             _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value);
+            _truncate_string_minmax_if_needed<type>(&_segment_zone_map);
         }
         _segment_zone_map.has_not_null = true;
     }
