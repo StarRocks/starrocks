@@ -194,6 +194,7 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
         opts.meta->set_name(_flat_paths[i]);
         opts.need_flat = false;
         opts.need_zone_map = config::json_flat_create_zonemap && is_zone_map_key_type(_flat_types[i]);
+        opts.need_zone_map |= config::enable_string_prefix_zonemap && is_string_type(_flat_types[i]);
 
         // Set global dict for sub-columns that support it
         if (is_string_type(_flat_types[i])) {
