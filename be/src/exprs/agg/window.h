@@ -558,25 +558,20 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         }
 
         // get default value (3rd argument)
-        // If the 3rd arg is absent, treat default as a constant NULL so later code won't touch columns[2].
-        const bool has_default_arg = args.size() >= 3 && args[2] != nullptr;
-        if (!has_default_arg) {
+        DCHECK(args.size() >= 3);
+        DCHECK(args[2] != nullptr);
+        const Column* arg2 = args[2].get();
+        if (arg2->is_constant()) {
             this->data(state).default_value_is_constant = true;
-            this->data(state).default_is_null = true;
-        } else {
-            const Column* arg2 = args[2].get();
-            if (arg2->is_constant()) {
-                this->data(state).default_value_is_constant = true;
-                const auto* default_column = down_cast<const ConstColumn*>(arg2);
-                if (default_column->is_nullable()) {
-                    this->data(state).default_is_null = true;
-                } else {
-                    auto value = ColumnHelper::get_const_value<LT>(arg2);
-                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
-                }
+            const auto* default_column = down_cast<const ConstColumn*>(arg2);
+            if (default_column->is_nullable()) {
+                this->data(state).default_is_null = true;
             } else {
-                this->data(state).default_value_is_constant = false;
+                auto value = ColumnHelper::get_const_value<LT>(arg2);
+                AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
             }
+        } else {
+            this->data(state).default_value_is_constant = false;
         }
 
         if constexpr (ignoreNulls) {
