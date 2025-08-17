@@ -211,7 +211,7 @@ ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(TypeInfo* type_info) : _typ
 template <LogicalType LT>
 static inline void _truncate_string_minmax_if_needed(ZoneMap<LT>* zm) {
     const size_t kPrefixLen = std::max<int32_t>(8, config::string_prefix_zonemap_prefix_len);
-    if constexpr (LT == TYPE_CHAR || LT == TYPE_VARCHAR) {
+    if constexpr (is_string_type(LT) || is_binary_type(LT)) {
         auto& min_slice = zm->min_value.value;
         auto& max_slice = zm->max_value.value;
         if (min_slice.size > kPrefixLen) {
