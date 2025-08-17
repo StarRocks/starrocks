@@ -524,7 +524,21 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         }
     }
 
-    // Build a regular ColumnIterator to read it
+    // case 3: check if this segment contains the specific field
+    auto& column_reader = _column_readers[source_id];
+    if (!column_reader->has_remain_json() ||
+        (column_reader->get_remain_filter() != nullptr &&
+         !column_reader->get_remain_filter()->may_contains_bytes(field_name.data(), field_name.size()))) {
+        // create an iterator always return NULL for fields that don't exist in this segment
+        auto default_null_iter = std::make_unique<DefaultValueColumnIterator>(false, "", true, get_type_info(column),
+                                                                              column.length(), num_rows());
+        ColumnIteratorOptions iter_opts;
+        RETURN_IF_ERROR(default_null_iter->init(iter_opts));
+        VLOG(2) << "json field " << full_path << " not found in segment, return NULL directly";
+        return default_null_iter;
+    }
+
+    // Build a regular JsonExtractIterator to read it
     auto& source_reader = _column_readers[source_id];
     ASSIGN_OR_RETURN(auto source_iter, source_reader->new_iterator(path, &column));
     return create_json_extract_iterator(std::move(source_iter), source_reader->is_nullable(), std::string(field_name),
