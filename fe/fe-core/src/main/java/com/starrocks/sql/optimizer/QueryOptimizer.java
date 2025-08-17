@@ -99,7 +99,6 @@ import com.starrocks.sql.optimizer.rule.tree.ApplyMinMaxStatisticRule;
 import com.starrocks.sql.optimizer.rule.tree.ApplyTuningGuideRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.DataCachePopulateRewriteRule;
-import com.starrocks.sql.optimizer.rule.tree.EliminateOveruseColumnAccessPathRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
 import com.starrocks.sql.optimizer.rule.tree.InlineCteProjectPruneRule;
@@ -684,7 +683,7 @@ public class QueryOptimizer extends Optimizer {
         }
 
         // Rewrite the jsonpath in META-SCAN
-        tree = new JsonPathRewriteRule().rewrite(tree, rootTaskContext);
+        scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForMetaScan());
 
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.META_SCAN_REWRITE_RULES);
@@ -695,6 +694,9 @@ public class QueryOptimizer extends Optimizer {
 
         // After this rule, we shouldn't generate logical project operator
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+
+        scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForOlapScan());
+        scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
 
         scheduler.rewriteOnce(tree, rootTaskContext, new EliminateSortColumnWithEqualityPredicateRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
@@ -967,7 +969,7 @@ public class QueryOptimizer extends Optimizer {
 
         int planCount = result.getPlanCount();
 
-        result = new JsonPathRewriteRule().rewrite(result, rootTaskContext);
+        //        result = new JsonPathRewriteRule().rewrite(result, rootTaskContext);
 
         // Since there may be many different plans in the logic phase, it's possible
         // that this switch can't turned on after logical optimization, so we only determine
@@ -1004,7 +1006,7 @@ public class QueryOptimizer extends Optimizer {
 
         result = new AddIndexOnlyPredicateRule().rewrite(result, rootTaskContext);
         result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
-        result = new EliminateOveruseColumnAccessPathRule().rewrite(result, rootTaskContext);
+        //        result = new EliminateOveruseColumnAccessPathRule().rewrite(result, rootTaskContext);
         result = new RemoveUselessScanOutputPropertyRule().rewrite(result, rootTaskContext);
         result.setPlanCount(planCount);
         return result;
