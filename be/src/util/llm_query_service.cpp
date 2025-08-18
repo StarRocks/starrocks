@@ -66,13 +66,11 @@ std::shared_future<StatusOr<std::string>> LLMQueryService::async_query(const std
     std::string cache_key = generate_cache_key(prompt, config);
 
     // First check cache
-    auto* cache = LLMCacheManager::instance()->get_cache();
-    auto* handle = cache->lookup(CacheKey(cache_key));
-    if (handle) {
-        LLMCacheValue* cache_value = static_cast<LLMCacheValue*>(cache->value(handle));
+    auto* cache = LLMCacheManager::instance();
+    auto* cache_value = cache->lookup(CacheKey(cache_key));
+    if (cache_value) {
         std::promise<StatusOr<std::string>> promise;
         promise.set_value(cache_value->response);
-        cache->release(handle);
         return promise.get_future();
     }
 
@@ -91,19 +89,8 @@ std::shared_future<StatusOr<std::string>> LLMQueryService::async_query(const std
 
         // Cache the result if successful
         if (result.ok()) {
-            auto* cache = LLMCacheManager::instance()->get_cache();
-            auto cache_value = std::make_unique<LLMCacheValue>();
-            cache_value->response = result.value();
-            cache_value->cache_key_str = cache_key;
-
-            size_t charge = sizeof(LLMCacheValue) + cache_value->response.size() + cache_value->cache_key_str.size();
-            auto* new_handle = cache->insert(CacheKey(cache_key), cache_value.get(), charge, &llm_cache_value_deleter);
-
-            if (new_handle) {
-                cache->release(new_handle);
-                // Transfer ownership to cache
-                cache_value.release();
-            }
+            auto* cache = LLMCacheManager::instance();
+            cache->insert(cache_key, result.value());
         }
 
         // Clean up pending query
