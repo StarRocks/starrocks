@@ -210,6 +210,7 @@ void jemalloc_tracker_daemon(void* arg_this) {
 
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     bool init_system_metrics = config::enable_system_metrics;
+    bool init_jvm_metrics = config::enable_jvm_metrics;
     std::set<std::string> disk_devices;
     std::vector<std::string> network_interfaces;
     std::vector<std::string> paths;
@@ -229,7 +230,7 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
             return;
         }
     }
-    StarRocksMetrics::instance()->initialize(paths, init_system_metrics, disk_devices, network_interfaces);
+    StarRocksMetrics::instance()->initialize(paths, init_system_metrics, init_jvm_metrics, disk_devices, network_interfaces);
 }
 
 void sigterm_handler(int signo, siginfo_t* info, void* context) {
