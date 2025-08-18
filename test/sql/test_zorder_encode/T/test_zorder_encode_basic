@@ -1,0 +1,67 @@
+-- name: test_zorder_encode_basic
+CREATE DATABASE test_zorder_encode_basic;
+USE test_zorder_encode_basic;
+
+-- Create a table with a generated Z-order key over two dimensions
+CREATE TABLE points2d (
+  id INT NOT NULL,
+  x  INT,
+  y  INT,
+  zkey VARBINARY(1024) AS (zorder_encode(x, y)) COMMENT "Z-order key for (x,y)"
+) ENGINE=OLAP
+DISTRIBUTED BY HASH(id) BUCKETS 2
+ORDER BY (zkey)
+PROPERTIES ("replication_num" = "1");
+
+-- Insert a small grid that demonstrates different orderings between lexicographic (x,y) and Z-order
+INSERT INTO points2d VALUES
+  (1, 0, 0),
+  (2, 0, 1),
+  (3, 1, 0),
+  (4, 1, 1),
+  (5, 2, 0),
+  (6, 0, 2),
+  (7, 2, 2),
+  (8, NULL, 1),
+  (9, 1, NULL);
+
+-- Compare lexicographic ordering and Z-order ordering
+SELECT id, x, y FROM points2d ORDER BY x, y, id;
+SELECT id, x, y FROM points2d ORDER BY zkey, id;
+
+-- Show the key length and a sample of the encoded key bytes for reference
+SELECT id, x, y, length(zkey) AS key_len FROM points2d ORDER BY id;
+
+-- Demonstrate range-style filtering using the generated Z-order key
+-- (In practice you'd compute a set of Z-order ranges for a multidimensional window.)
+SELECT id, x, y FROM points2d
+WHERE zkey > (SELECT zkey FROM points2d WHERE id = 1)
+ORDER BY zkey, id;
+
+-- Also demo with three dimensions
+CREATE TABLE points3d (
+  id INT NOT NULL,
+  x  INT,
+  y  INT,
+  t  BIGINT,
+  zkey VARBINARY(1024) AS (zorder_encode(x, y, t)) COMMENT "Z-order key for (x,y,t)"
+) ENGINE=OLAP
+DISTRIBUTED BY HASH(id) BUCKETS 2
+ORDER BY (zkey)
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO points3d VALUES
+  (1, 0, 0,  0),
+  (2, 0, 1,  1),
+  (3, 1, 0,  1),
+  (4, 1, 1,  2),
+  (5, 2, 2, 10),
+  (6, NULL, 1, 5),
+  (7, 1, NULL, 5),
+  (8, 1, 1,  NULL);
+
+SELECT id, x, y, t FROM points3d ORDER BY zkey, id;
+
+-- Clean up
+DROP DATABASE test_zorder_encode_basic;
+
