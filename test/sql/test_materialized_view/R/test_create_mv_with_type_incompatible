@@ -1,0 +1,37 @@
+-- name: test_create_mv_with_type_incompatible
+CREATE TABLE t1 (dt date, val int, col1 char(8), col2 varchar(8)) PARTITION BY date_trunc('day', dt);
+-- result:
+-- !result
+insert into t1 values 
+  ('2023-12-01', 100, 'a', 'b'),
+  ('2023-12-01', 200, 'c', 'd'),
+  ('2023-12-02', 300, 'e', 'f'),
+  ('2023-12-02', 400, 'g', 'h'),
+  ('2023-12-03', 500, 'i', 'j');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL 
+AS SELECT   CASE WHEN (`col1` = 'a') THEN '床前明月光'
+   WHEN (`col1` = 'b') THEN '疑是地上霜' 
+   WHEN (`col1` = 'c') THEN '举头望明月' 
+   WHEN (`col1` = 'd') THEN '低头思故乡' 
+   WHEN (`col1` = 'e') THEN '一二三四五六七八九十' 
+   WHEN (`col1` = 'f') THEN '百千万亿ABCDEFG'
+   ELSE col1 END AS new_col1, 
+   col1, col2, dt from t1;
+-- result:
+-- !result
+refresh materialized view test_mv1 with sync mode;
+select count(*) from test_mv1;
+-- result:
+5
+-- !result
+select * from test_mv1 order by dt, new_col1;
+-- result:
+举头望明月	c	d	2023-12-01
+床前明月光	a	b	2023-12-01
+g	g	h	2023-12-02
+一二三四五六七八九十	e	f	2023-12-02
+i	i	j	2023-12-03
+-- !result
