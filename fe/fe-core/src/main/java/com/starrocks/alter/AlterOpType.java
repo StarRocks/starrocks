@@ -61,15 +61,17 @@ public enum AlterOpType {
     // Optimize table
     OPTIMIZE,
     // ALTER_OTHER must be the last one
-    ALTER_OTHER;
+    ALTER_OTHER,
+    // INVALID_OP must be the last one
+    INVALID_OP;
 
     // true means 2 operations have no conflict.
     public static final Boolean[][] COMPATIBILITY_MATRIX;
 
     static {
-        COMPATIBILITY_MATRIX = new Boolean[ALTER_OTHER.ordinal() + 1][ALTER_OTHER.ordinal() + 1];
-        for (int i = 0; i < ALTER_OTHER.ordinal(); i++) {
-            for (int j = 0; j < ALTER_OTHER.ordinal(); j++) {
+        COMPATIBILITY_MATRIX = new Boolean[INVALID_OP.ordinal() + 1][INVALID_OP.ordinal() + 1];
+        for (int i = 0; i < INVALID_OP.ordinal(); i++) {
+            for (int j = 0; j < INVALID_OP.ordinal(); j++) {
                 COMPATIBILITY_MATRIX[i][j] = false;
             }
         }
@@ -82,7 +84,10 @@ public enum AlterOpType {
     }
 
     public static boolean needCheckCapacity(AlterOpType alterOpType) {
-        return alterOpType == ADD_ROLLUP || alterOpType == SCHEMA_CHANGE || alterOpType == ADD_PARTITION || alterOpType == OPTIMIZE;
+        return alterOpType == ADD_ROLLUP
+                || alterOpType == SCHEMA_CHANGE
+                || alterOpType == ADD_PARTITION
+                || alterOpType == OPTIMIZE;
     }
 
     public static AlterOpType getOpType(AlterClause alterClause) {
