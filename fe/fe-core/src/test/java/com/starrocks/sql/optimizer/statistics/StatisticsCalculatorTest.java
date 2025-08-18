@@ -25,7 +25,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
-import com.starrocks.connector.TableVersionRange;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -309,7 +309,7 @@ public class StatisticsCalculatorTest {
         BinaryPredicateOperator predicateOperator = new BinaryPredicateOperator(BinaryType.LT,
                     partitionColumn, ConstantOperator.createInt(50));
         LogicalIcebergScanOperator icebergScanOperator = new LogicalIcebergScanOperator(icebergTable, refToColumn,
-                    columnToRef, -1, predicateOperator, TableVersionRange.empty());
+                    columnToRef, -1, predicateOperator, TvrTableSnapshot.empty());
 
         GroupExpression groupExpression = new GroupExpression(icebergScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));

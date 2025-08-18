@@ -31,6 +31,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
@@ -45,7 +46,6 @@ import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.RemotePathKey;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -278,7 +278,7 @@ public class HiveMetadataTest {
         columns.put(partColumnRefOperator, null);
         columns.put(dataColumnRefOperator, null);
         Statistics statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TableVersionRange.empty());
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TvrTableSnapshot.empty());
         Assertions.assertEquals(Config.default_statistics_output_row_count, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
         Assertions.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
@@ -315,13 +315,13 @@ public class HiveMetadataTest {
 
         Statistics statistics = hiveMetadata.getTableStatistics(
                 optimizerContext, hiveTable, columns, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2),
-                null, -1, TableVersionRange.empty());
+                null, -1, TvrTableSnapshot.empty());
         Assertions.assertEquals(1, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
         statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TableVersionRange.empty());
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TvrTableSnapshot.empty());
 
         Assertions.assertEquals(100, statistics.getOutputRowCount(), 0.001);
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();

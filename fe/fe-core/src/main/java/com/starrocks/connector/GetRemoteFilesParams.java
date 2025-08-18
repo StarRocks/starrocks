@@ -15,6 +15,7 @@
 package com.starrocks.connector;
 
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
@@ -24,7 +25,7 @@ public class GetRemoteFilesParams {
     private List<PartitionKey> partitionKeys;
     private List<String> partitionNames;
     private List<Object> partitionAttachments;
-    private TableVersionRange tableVersionRange;
+    private TvrVersionRange tableVersionRange;
     private ScalarOperator predicate;
     private List<String> fieldNames;
     private long limit = -1;
@@ -102,7 +103,7 @@ public class GetRemoteFilesParams {
         return partitionAttachments;
     }
 
-    public TableVersionRange getTableVersionRange() {
+    public TvrVersionRange getTableVersionRange() {
         return tableVersionRange;
     }
 
@@ -138,7 +139,7 @@ public class GetRemoteFilesParams {
         private List<PartitionKey> partitionKeys;
         private List<String> partitionNames;
         private List<Object> partitionAttachments;
-        private TableVersionRange tableVersionRange;
+        private TvrVersionRange tableVersionRange;
         private ScalarOperator predicate;
         private List<String> fieldNames;
         private long limit = -1;
@@ -161,7 +162,7 @@ public class GetRemoteFilesParams {
             return this;
         }
 
-        public Builder setTableVersionRange(TableVersionRange tableVersionRange) {
+        public Builder setTableVersionRange(TvrVersionRange tableVersionRange) {
             this.tableVersionRange = tableVersionRange;
             return this;
         }

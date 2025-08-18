@@ -16,9 +16,10 @@ package com.starrocks.connector.metadata;
 
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.qe.ConnectContext;
 
 import java.util.Optional;
@@ -49,15 +50,14 @@ public class TableMetaMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public TableVersionRange getTableVersionRange(String dbName, Table table,
-                                                  Optional<ConnectorTableVersion> startVersion,
-                                                  Optional<ConnectorTableVersion> endVersion) {
+    public TvrVersionRange getTableVersionRange(String dbName, Table table,
+                                                Optional<ConnectorTableVersion> startVersion,
+                                                Optional<ConnectorTableVersion> endVersion) {
         if (endVersion.isPresent()) {
             Long snapshotId = endVersion.get().getConstantOperator().castTo(Type.BIGINT).get().getBigint();
-            return TableVersionRange.withEnd(Optional.of(snapshotId));
+            return TvrTableSnapshot.of(Optional.of(snapshotId));
         } else {
-            return TableVersionRange.empty();
+            return TvrTableSnapshot.empty();
         }
     }
-
 }

@@ -18,8 +18,8 @@ import com.google.common.collect.AbstractSequentialIterator;
 import com.google.common.collect.HashMultimap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PredicateSearchKey;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -100,7 +100,7 @@ public class IcebergStatisticProvider {
                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                          OptimizerContext session,
                                          ScalarOperator predicate,
-                                         TableVersionRange version) {
+                                         TvrVersionRange version) {
         Table nativeTable = icebergTable.getNativeTable();
         Statistics.Builder statisticsBuilder = Statistics.builder();
         String uuid = icebergTable.getUUID();
@@ -375,7 +375,7 @@ public class IcebergStatisticProvider {
     }
 
     public static Map<Integer, Long> readNumDistinctValues(IcebergTable icebergTable, Set<Integer> columnIds,
-                                                           TableVersionRange version) {
+                                                           TvrVersionRange version) {
         Map<Integer, Long> colIdToNdv = new HashMap<>();
         Set<Integer> remainingColumnIds = new HashSet<>(columnIds);
 

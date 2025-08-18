@@ -35,6 +35,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -57,7 +60,6 @@ import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.SerializedMetaSpec;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
@@ -144,6 +146,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -512,21 +515,18 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public TableVersionRange getTableVersionRange(String dbName, Table table,
-                                                  Optional<ConnectorTableVersion> startVersion,
-                                                  Optional<ConnectorTableVersion> endVersion) {
-        if (startVersion.isPresent()) {
-            throw new StarRocksConnectorException("Read table with start version is not supported");
-        }
-
-        if (endVersion.isEmpty()) {
-            IcebergTable icebergTable = (IcebergTable) table;
+    public TvrVersionRange getTableVersionRange(String dbName, Table table,
+                                                Optional<ConnectorTableVersion> startVersion,
+                                                Optional<ConnectorTableVersion> endVersion) {
+        final IcebergTable icebergTable = (IcebergTable) table;
+        Optional<Long> start = startVersion.map(v -> getSnapshotIdFromVersion(icebergTable.getNativeTable(), v));
+        Optional<Long> end = endVersion.map(v -> getSnapshotIdFromVersion(icebergTable.getNativeTable(), v));
+        if (start.isEmpty() && end.isEmpty()) {
             Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
                     .map(Snapshot::snapshotId);
-            return TableVersionRange.withEnd(snapshotId);
+            return TvrTableSnapshot.of(snapshotId);
         } else {
-            Long snapshotId = getSnapshotIdFromVersion(((IcebergTable) table).getNativeTable(), endVersion.get());
-            return TableVersionRange.withEnd(Optional.of(snapshotId));
+            return TvrTableDelta.of(start, end);
         }
     }
 
@@ -550,7 +550,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
-        TableVersionRange version = params.getTableVersionRange();
+        TvrVersionRange version = params.getTableVersionRange();
         long snapshotId = version.end().isPresent() ? version.end().get() : -1;
         return getRemoteFiles((IcebergTable) table, snapshotId, params.getPredicate(), params.getLimit());
     }
@@ -586,7 +586,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         icebergTable = (IcebergTable) item.getTable();
         String dbName = icebergTable.getCatalogDBName();
         String tableName = icebergTable.getCatalogTableName();
-        TableVersionRange versionRange = item.getVersion();
+        TvrVersionRange versionRange = item.getVersion();
         if (versionRange.end().isEmpty()) {
             return true;
         }
@@ -682,7 +682,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit, TableVersionRange version) {
+    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit, TvrVersionRange version) {
         IcebergTable icebergTable = (IcebergTable) table;
         String dbName = icebergTable.getCatalogDBName();
         String tableName = icebergTable.getCatalogTableName();
@@ -766,6 +766,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (snapshotId == -1) {
             return;
         }
+        TvrVersionRange tvrVersionRange = TvrTableSnapshot.of(Optional.of(snapshotId));
 
         String dbName = icebergTable.getCatalogDBName();
         String tableName = icebergTable.getCatalogTableName();
@@ -780,7 +781,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         boolean enableCollectColumnStatistics = enableCollectColumnStatistics(connectContext);
 
         Iterator<FileScanTask> iterator =
-                buildFileScanTaskIterator((IcebergTable) table, icebergPredicate, snapshotId,
+                buildFileScanTaskIterator((IcebergTable) table, icebergPredicate, tvrVersionRange,
                         connectContext, enableCollectColumnStatistics);
 
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
@@ -841,6 +842,10 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
         IcebergGetRemoteFilesParams param = params.cast();
+        TvrVersionRange tvrVersionRange = param.getTableVersionRange();
+        if (tvrVersionRange.isEmpty()) {
+            return RemoteFileInfoDefaultSource.EMPTY;
+        }
         Optional<Long> snapshotId = param.getTableVersionRange().end();
         if (snapshotId.isEmpty()) {
             return RemoteFileInfoDefaultSource.EMPTY;
@@ -859,7 +864,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
                     icebergTable.getNativeTable().schema().asStruct());
             Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
-            baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, snapshotId.get(), params);
+            baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, tvrVersionRange, params);
         }
 
         IcebergTableMORParams tableFullMORParams = param.getTableFullMORParams();
@@ -891,10 +896,10 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private RemoteFileInfoSource buildRemoteInfoSource(IcebergTable table,
                                                        Expression icebergPredicate,
-                                                       Long snapshotId,
+                                                       TvrVersionRange tvrVersionRange,
                                                        GetRemoteFilesParams params) {
         Iterator<FileScanTask> iterator =
-                buildFileScanTaskIterator(table, icebergPredicate, snapshotId, ConnectContext.get(),
+                buildFileScanTaskIterator(table, icebergPredicate, tvrVersionRange, ConnectContext.get(),
                         params.isEnableColumnStats());
         return new RemoteFileInfoSource() {
             @Override
@@ -926,9 +931,13 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private Iterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
                                                              Expression icebergPredicate,
-                                                             Long snapshotId,
+                                                             TvrVersionRange tvrVersionRange,
                                                              ConnectContext connectContext,
                                                              boolean enableCollectColumnStats) {
+        if (tvrVersionRange.isEmpty()) {
+            return Collections.emptyIterator();
+        }
+
         String dbName = icebergTable.getCatalogDBName();
         String tableName = icebergTable.getCatalogTableName();
 
@@ -940,6 +949,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         scanContext.setLocalParallelism(catalogProperties.getIcebergJobPlanningThreadNum());
         scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
 
+        final long snapshotId = tvrVersionRange.end().orElseThrow(() -> new StarRocksConnectorException(
+                "Snapshot ID is not present in tvrVersionRange: " + tvrVersionRange));
         TableScan scan = icebergCatalog.getTableScan(nativeTbl, scanContext)
                 .useSnapshot(snapshotId)
                 .metricsReporter(metricsReporter)
@@ -1071,7 +1082,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
                                          long limit,
-                                         TableVersionRange version) {
+                                         TvrVersionRange version) {
         if (!properties.enableGetTableStatsFromExternalMetadata()) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
