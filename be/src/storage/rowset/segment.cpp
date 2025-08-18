@@ -44,6 +44,7 @@
 #include "column/schema.h"
 #include "common/logging.h"
 #include "fs/key_cache.h"
+#include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
@@ -526,9 +527,13 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
 
     // case 3: check if this segment contains the specific field
     auto& column_reader = _column_readers[source_id];
-    if (!column_reader->has_remain_json() ||
-        (column_reader->get_remain_filter() != nullptr &&
-         !column_reader->get_remain_filter()->may_contains_bytes(field_name.data(), field_name.size()))) {
+    bool may_contains = column_reader->has_remain_json();
+    if (may_contains && column_reader->get_remain_filter() != nullptr) {
+        std::vector<std::string> paths = strings::Split(full_path, ".");
+        std::string_view leaf = paths.back();
+        may_contains = column_reader->get_remain_filter()->may_contains_bytes(leaf.data(), leaf.size());
+    }
+    if (!may_contains) {
         // create an iterator always return NULL for fields that don't exist in this segment
         auto default_null_iter = std::make_unique<DefaultValueColumnIterator>(false, "", true, get_type_info(column),
                                                                               column.length(), num_rows());
