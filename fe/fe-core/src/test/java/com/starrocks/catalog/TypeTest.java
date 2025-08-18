@@ -41,6 +41,7 @@ import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PStructField;
 import com.starrocks.proto.PTypeDesc;
 import com.starrocks.proto.PTypeNode;
+import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TTypeNodeType;
 import org.junit.jupiter.api.Assertions;
@@ -394,8 +395,8 @@ public class TypeTest {
     @Test
     public void testExtendedPrecision() {
         ScalarType type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 10, 4);
-        Assertions.assertTrue(type == AggregateType.extendedPrecision(type, true));
-        Assertions.assertTrue(type != AggregateType.extendedPrecision(type, false));
+        Assertions.assertSame(type, ColumnDefAnalyzer.extendedPrecision(type, true));
+        Assertions.assertNotSame(type, ColumnDefAnalyzer.extendedPrecision(type, false));
     }
 
     @Test

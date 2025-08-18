@@ -34,13 +34,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
-import com.starrocks.thrift.TAggregationType;
-
-import java.util.EnumMap;
-import java.util.EnumSet;
-import java.util.List;
-
 public enum AggregateType {
     SUM("SUM"),
     MIN("MIN"),
@@ -53,100 +46,10 @@ public enum AggregateType {
     PERCENTILE_UNION("PERCENTILE_UNION"),
     AGG_STATE_UNION("AGG_STATE_UNION");
 
-    private static EnumMap<AggregateType, EnumSet<PrimitiveType>> compatibilityMap;
-
-    static {
-        compatibilityMap = new EnumMap<>(AggregateType.class);
-        List<PrimitiveType> primitiveTypeList = Lists.newArrayList();
-
-        primitiveTypeList.add(PrimitiveType.INT);
-        primitiveTypeList.add(PrimitiveType.BIGINT);
-        primitiveTypeList.add(PrimitiveType.LARGEINT);
-        primitiveTypeList.add(PrimitiveType.FLOAT);
-        primitiveTypeList.add(PrimitiveType.DOUBLE);
-        primitiveTypeList.add(PrimitiveType.DECIMALV2);
-        primitiveTypeList.add(PrimitiveType.DECIMAL64);
-        primitiveTypeList.add(PrimitiveType.DECIMAL128);
-        compatibilityMap.put(SUM, EnumSet.copyOf(primitiveTypeList));
-
-        primitiveTypeList.clear();
-        primitiveTypeList.add(PrimitiveType.TINYINT);
-        primitiveTypeList.add(PrimitiveType.SMALLINT);
-        primitiveTypeList.add(PrimitiveType.INT);
-        primitiveTypeList.add(PrimitiveType.BIGINT);
-        primitiveTypeList.add(PrimitiveType.LARGEINT);
-        primitiveTypeList.add(PrimitiveType.FLOAT);
-        primitiveTypeList.add(PrimitiveType.DOUBLE);
-        primitiveTypeList.add(PrimitiveType.DECIMALV2);
-        primitiveTypeList.add(PrimitiveType.DATE);
-        primitiveTypeList.add(PrimitiveType.DATETIME);
-        primitiveTypeList.add(PrimitiveType.CHAR);
-        primitiveTypeList.add(PrimitiveType.VARCHAR);
-        primitiveTypeList.add(PrimitiveType.DECIMAL32);
-        primitiveTypeList.add(PrimitiveType.DECIMAL64);
-        primitiveTypeList.add(PrimitiveType.DECIMAL128);
-        compatibilityMap.put(MIN, EnumSet.copyOf(primitiveTypeList));
-
-        primitiveTypeList.clear();
-        primitiveTypeList.add(PrimitiveType.TINYINT);
-        primitiveTypeList.add(PrimitiveType.SMALLINT);
-        primitiveTypeList.add(PrimitiveType.INT);
-        primitiveTypeList.add(PrimitiveType.BIGINT);
-        primitiveTypeList.add(PrimitiveType.LARGEINT);
-        primitiveTypeList.add(PrimitiveType.FLOAT);
-        primitiveTypeList.add(PrimitiveType.DOUBLE);
-        primitiveTypeList.add(PrimitiveType.DECIMALV2);
-        primitiveTypeList.add(PrimitiveType.DATE);
-        primitiveTypeList.add(PrimitiveType.DATETIME);
-        primitiveTypeList.add(PrimitiveType.CHAR);
-        primitiveTypeList.add(PrimitiveType.VARCHAR);
-        primitiveTypeList.add(PrimitiveType.DECIMAL32);
-        primitiveTypeList.add(PrimitiveType.DECIMAL64);
-        primitiveTypeList.add(PrimitiveType.DECIMAL128);
-        compatibilityMap.put(MAX, EnumSet.copyOf(primitiveTypeList));
-
-        primitiveTypeList.clear();
-
-        EnumSet<PrimitiveType> replaceObject = EnumSet.allOf(PrimitiveType.class);
-        replaceObject.remove(PrimitiveType.INVALID_TYPE);
-        compatibilityMap.put(REPLACE, EnumSet.copyOf(replaceObject));
-
-        // all types except bitmap, hll, percentile and complex types.
-        EnumSet<PrimitiveType> excObject = EnumSet.allOf(PrimitiveType.class);
-        excObject.remove(PrimitiveType.HLL);
-        excObject.remove(PrimitiveType.PERCENTILE);
-        excObject.remove(PrimitiveType.INVALID_TYPE);
-        compatibilityMap.put(REPLACE_IF_NOT_NULL, EnumSet.copyOf(excObject));
-
-        primitiveTypeList.clear();
-        primitiveTypeList.add(PrimitiveType.HLL);
-        compatibilityMap.put(HLL_UNION, EnumSet.copyOf(primitiveTypeList));
-
-        primitiveTypeList.clear();
-        primitiveTypeList.add(PrimitiveType.BITMAP);
-        compatibilityMap.put(BITMAP_UNION, EnumSet.copyOf(primitiveTypeList));
-
-        // percentile
-        primitiveTypeList.clear();
-        primitiveTypeList.add(PrimitiveType.PERCENTILE);
-        compatibilityMap.put(PERCENTILE_UNION, EnumSet.copyOf(primitiveTypeList));
-
-        // none
-        compatibilityMap.put(NONE, EnumSet.copyOf(excObject));
-    }
-
     private final String sqlName;
 
     AggregateType(String sqlName) {
         this.sqlName = sqlName;
-    }
-
-    public static boolean checkPrimitiveTypeCompatibility(AggregateType aggType, PrimitiveType priType) {
-        // AGG_STATE_UNION can accept all types, we cannot use compatibilityMap to check it.
-        if (aggType == AGG_STATE_UNION) {
-            return true;
-        }
-        return compatibilityMap.get(aggType).contains(priType);
     }
 
     public String toSql() {
@@ -165,22 +68,6 @@ public enum AggregateType {
         return type == null || type == NONE;
     }
 
-    public boolean checkCompatibility(Type type) {
-        return checkPrimitiveTypeCompatibility(this, type.getPrimitiveType()) ||
-                (this.isReplaceFamily() && type.isComplexType());
-    }
-
-    public static Type extendedPrecision(Type type, boolean legacyCompatible) {
-        if (legacyCompatible) {
-            return type;
-        }
-
-        if (type.isDecimalV3()) {
-            return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, ((ScalarType) type).getScalarScale());
-        }
-        return type;
-    }
-
     public boolean isReplaceFamily() {
         switch (this) {
             case REPLACE:
@@ -188,33 +75,6 @@ public enum AggregateType {
                 return true;
             default:
                 return false;
-        }
-    }
-
-    public TAggregationType toThrift() {
-        switch (this) {
-            case SUM:
-                return TAggregationType.SUM;
-            case MAX:
-                return TAggregationType.MAX;
-            case MIN:
-                return TAggregationType.MIN;
-            case REPLACE:
-                return TAggregationType.REPLACE;
-            case REPLACE_IF_NOT_NULL:
-                return TAggregationType.REPLACE_IF_NOT_NULL;
-            case NONE:
-                return TAggregationType.NONE;
-            case HLL_UNION:
-                return TAggregationType.HLL_UNION;
-            case BITMAP_UNION:
-                return TAggregationType.BITMAP_UNION;
-            case PERCENTILE_UNION:
-                return TAggregationType.PERCENTILE_UNION;
-            case AGG_STATE_UNION:
-                return TAggregationType.AGG_STATE_UNION;
-            default:
-                return null;
         }
     }
 }

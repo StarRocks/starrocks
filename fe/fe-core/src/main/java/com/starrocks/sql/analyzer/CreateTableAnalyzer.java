@@ -231,7 +231,18 @@ public class CreateTableAnalyzer {
         List<Column> columns = new ArrayList<>();
         for (ColumnDef columnDef : columnDefs) {
             try {
-                columnDef.analyze(statement.isOlapEngine(), CatalogMgr.isInternalCatalog(catalogName), engineName);
+                String name = columnDef.getName();
+                boolean isAllowNull = columnDef.isAllowNull();
+
+                if (CatalogMgr.isInternalCatalog(catalogName)) {
+                    if (!isAllowNull && !EngineType.supportNotNullColumn(engineName)) {
+                        // prevent not null for external table
+                        throw new AnalysisException(String.format("All columns must be nullable for external table. " +
+                                "Column %s is not nullable, You can rebuild the external table and " +
+                                "We strongly recommend that you use catalog to access external data", name));
+                    }
+                }
+                ColumnDefAnalyzer.analyze(columnDef, statement.isOlapEngine());
             } catch (AnalysisException e) {
                 LOG.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());
@@ -261,7 +272,7 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("BITMAP_UNION must be used in AGG_KEYS", keysDesc.getPos());
             }
 
-            Column col = columnDef.toColumn(null);
+            Column col = Column.fromColumnDef(null, columnDef);
             if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
                     || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
                     keysDesc.getKeysType() == KeysType.DUP_KEYS)) {

@@ -66,6 +66,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.AggregateTypeAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -693,7 +694,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         }
 
         // If isReplay, don't check compatibility because materialized view maybe already created before.
-        if (!isReplay && !mvAggregateType.checkCompatibility(type)) {
+        if (!isReplay && !AggregateTypeAnalyzer.checkCompatibility(mvAggregateType, type)) {
             throw new SemanticException(
                     String.format("Invalid aggregate function '%s' for '%s'", mvAggregateType, type));
         }
