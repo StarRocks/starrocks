@@ -40,7 +40,6 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TypeDef;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.sql.parser.NodePosition;

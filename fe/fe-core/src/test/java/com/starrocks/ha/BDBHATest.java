@@ -21,6 +21,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.FrontendNodeType;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.utframe.UtFrameUtils;

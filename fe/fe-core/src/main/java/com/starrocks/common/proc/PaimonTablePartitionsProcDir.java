@@ -17,7 +17,6 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.PaimonTable;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
@@ -25,6 +24,7 @@ import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.paimon.Partition;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionType;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -14,17 +14,17 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NgramBfIndexParamsKey;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.KeysType;
 
 import java.util.List;
 import java.util.Locale;

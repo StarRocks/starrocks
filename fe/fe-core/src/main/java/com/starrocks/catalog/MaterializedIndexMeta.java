@@ -43,6 +43,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
 

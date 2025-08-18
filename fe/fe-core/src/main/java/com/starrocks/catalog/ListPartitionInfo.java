@@ -32,6 +32,7 @@ import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.PartitionType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SinglePartitionDesc;

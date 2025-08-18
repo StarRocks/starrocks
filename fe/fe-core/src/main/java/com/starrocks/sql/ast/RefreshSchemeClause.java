@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.parser.NodePosition;
 

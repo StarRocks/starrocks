@@ -19,7 +19,6 @@ import com.staros.manager.StarManager;
 import com.staros.manager.StarManagerServer;
 import com.staros.metrics.MetricsSystem;
 import com.starrocks.common.Config;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.journal.StarMgrCheckpointWorker;
@@ -32,6 +31,7 @@ import com.starrocks.metric.PrometheusRegistryHelper;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.FrontendNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

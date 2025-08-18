@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/AggregateType.java
+//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/PartitionType.java
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -32,50 +32,45 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.catalog;
+package com.starrocks.sql.ast;
 
-public enum AggregateType {
-    SUM("SUM"),
-    MIN("MIN"),
-    MAX("MAX"),
-    REPLACE("REPLACE"),
-    REPLACE_IF_NOT_NULL("REPLACE_IF_NOT_NULL"),
-    HLL_UNION("HLL_UNION"),
-    NONE("NONE"),
-    BITMAP_UNION("BITMAP_UNION"),
-    PERCENTILE_UNION("PERCENTILE_UNION"),
-    AGG_STATE_UNION("AGG_STATE_UNION");
+import com.starrocks.thrift.TPartitionType;
 
-    private final String sqlName;
+public enum PartitionType {
+    UNPARTITIONED("UNPARTITIONED"),
+    RANGE("RANGE"),
+    LIST("LIST"),
+    EXPR_RANGE("EXPR_RANGE"),
+    EXPR_RANGE_V2("EXPR_RANGE_V2");
 
-    AggregateType(String sqlName) {
-        this.sqlName = sqlName;
+    public String typeString;
+
+    private PartitionType(String typeString) {
+        this.typeString = typeString;
     }
 
-    public String toSql() {
-        return sqlName;
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
-    }
-
-    /**
-     * NONE is particular, which is equals to null to make some buggy code compatible
-     */
-    public static boolean isNullOrNone(AggregateType type) {
-        return type == null || type == NONE;
-    }
-
-    public boolean isReplaceFamily() {
-        switch (this) {
-            case REPLACE:
-            case REPLACE_IF_NOT_NULL:
-                return true;
+    public static PartitionType fromThrift(TPartitionType tType) {
+        switch (tType) {
+            case UNPARTITIONED:
+                return UNPARTITIONED;
+            case RANGE_PARTITIONED:
+                return RANGE;
             default:
-                return false;
+                return UNPARTITIONED;
         }
     }
-}
 
+    public TPartitionType toThrift() {
+        switch (this) {
+            case UNPARTITIONED:
+                return TPartitionType.UNPARTITIONED;
+            case RANGE:
+            case EXPR_RANGE:
+            case EXPR_RANGE_V2:
+                return TPartitionType.RANGE_PARTITIONED;
+            default:
+                return TPartitionType.UNPARTITIONED;
+        }
+    }
+
+}

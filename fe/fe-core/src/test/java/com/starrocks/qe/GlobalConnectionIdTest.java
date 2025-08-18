@@ -15,12 +15,12 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.DdlException;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.sql.ast.FrontendNodeType;
 import com.starrocks.system.Frontend;
 import com.starrocks.utframe.MockJournal;
 import mockit.Mock;
