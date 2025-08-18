@@ -283,6 +283,8 @@ struct TPaimonTableSink {
     7: optional bool is_static_partition_sink
     8: optional CloudConfiguration.TCloudConfiguration cloud_configuration
     9: optional bool use_native_writer
+    10: optional list<string> partition_column_names
+    11: optional list<string> partition_column_values
 }
 
 struct TDataSink {

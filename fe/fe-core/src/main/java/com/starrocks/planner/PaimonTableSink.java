@@ -18,6 +18,9 @@ import com.aliyun.datalake.common.impl.Base64Util;
 import com.aliyun.datalake.paimon.fs.DlfPaimonFileIO;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.util.DlfUtil;
@@ -29,6 +32,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
@@ -54,6 +58,7 @@ import org.apache.paimon.types.VarCharType;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class PaimonTableSink extends DataSink {
 
@@ -71,8 +76,9 @@ public class PaimonTableSink extends DataSink {
     private final String tableIdentifier;
     private CloudConfiguration cloudConfiguration;
     private final boolean useNativeWriter;
+    private final PartitionNames partitionNames;
 
-    public PaimonTableSink(PaimonTable paimonTable, TupleDescriptor desc, boolean isStaticPartitionSink, SessionVariable sessionVariable) {
+    public PaimonTableSink(PaimonTable paimonTable, TupleDescriptor desc, boolean isStaticPartitionSink, SessionVariable sessionVariable, PartitionNames partitionNames) {
         this.paimonNativeTable = paimonTable.getNativeTable();
         this.catalogName = paimonTable.getCatalogName();
         this.databaseName = paimonTable.getCatalogDBName();
@@ -95,6 +101,7 @@ public class PaimonTableSink extends DataSink {
             }
         }
         this.useNativeWriter = sessionVariable.isEnablePaimonNativeWriter() && paimonTable.supportNativeWriter();
+        this.partitionNames = partitionNames;
     }
 
     @Override
@@ -115,6 +122,12 @@ public class PaimonTableSink extends DataSink {
         tPaimonTableSink.setLocation(location);
         tPaimonTableSink.setTarget_table_id(targetTableId);
         tPaimonTableSink.setIs_static_partition_sink(isStaticPartitionSink);
+        if (isStaticPartitionSink && partitionNames != null) {
+            tPaimonTableSink.setPartition_column_names(partitionNames.getPartitionColNames());
+            tPaimonTableSink.setPartition_column_values(
+                    partitionNames.getPartitionColValues().stream()
+                            .map(it -> ((LiteralExpr) it).getRealObjectValue().toString()).collect(Collectors.toList()));
+        }
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
         if (this.paimonNativeTable.fileIO() instanceof DlfPaimonFileIO) {
             try {

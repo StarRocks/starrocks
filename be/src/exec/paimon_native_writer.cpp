@@ -46,14 +46,19 @@ PaimonNativeWriter::PaimonNativeWriter(PaimonTableDescriptor* paimon_table, std:
                                        std::vector<ExprContext*> bucket_expr, std::vector<ExprContext*> output_expr,
                                        std::vector<std::string> data_column_names,
                                        std::vector<std::string> data_column_types,
-                                       RuntimeProfile::Counter* convert_timer)
+                                       RuntimeProfile::Counter* convert_timer, bool is_static_partition_sink,
+                                       std::vector<std::string> partition_column_names,
+                                       std::vector<std::string> partition_column_values)
         : _paimon_table(paimon_table),
           _output_expr(std::move(output_expr)),
           _partition_expr(std::move(partition_expr)),
           _bucket_expr(std::move(bucket_expr)),
           _data_column_names(std::move(data_column_names)),
           _data_column_types(std::move(data_column_types)),
-          _convert_timer(convert_timer) {}
+          _convert_timer(convert_timer),
+          _is_static_partition_sink(is_static_partition_sink),
+          _partition_column_names(std::move(partition_column_names)),
+          _partition_column_values(std::move(partition_column_values)) {}
 
 PaimonNativeWriter::~PaimonNativeWriter() = default;
 
@@ -188,6 +193,14 @@ StatusOr<std::unique_ptr<paimon::RecordBatch>> PaimonNativeWriter::convert_chunk
     if (!_paimon_table->get_partition_keys().empty()) {
         ASSIGN_OR_RETURN(auto partition_values, extract_partition_values(chunk))
         builder.SetPartition(partition_values);
+    }
+    if (_is_static_partition_sink) {
+        std::map<std::string, std::string> partition;
+        assert(_partition_column_names.size() == _partition_column_values.size());
+        for (size_t i = 0; i < _partition_column_names.size(); ++i) {
+            partition[_partition_column_names[i]] = _partition_column_values[i];
+        }
+        builder.SetPartition(partition);
     }
 
     // Set bucket information

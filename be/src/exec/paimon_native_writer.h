@@ -50,7 +50,9 @@ public:
     PaimonNativeWriter(PaimonTableDescriptor* paimon_table, std::vector<ExprContext*> partition_expr,
                        std::vector<ExprContext*> bucket_expr, std::vector<ExprContext*> output_expr,
                        std::vector<std::string> data_column_names, std::vector<std::string> data_column_types,
-                       RuntimeProfile::Counter* _convert_timer);
+                       RuntimeProfile::Counter* _convert_timer, bool is_static_partition_sink,
+                       std::vector<std::string> partition_column_names,
+                       std::vector<std::string> partition_column_values);
     ~PaimonNativeWriter() override;
 
     Status do_init(RuntimeState* runtime_state) override;
@@ -81,6 +83,10 @@ private:
     std::vector<std::string> _data_column_types;
 
     RuntimeProfile::Counter* _convert_timer;
+
+    bool _is_static_partition_sink = false;
+    std::vector<std::string> _partition_column_names;
+    std::vector<std::string> _partition_column_values;
 
     std::shared_ptr<arrow::Schema> _schema;
 

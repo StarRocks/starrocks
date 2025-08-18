@@ -95,7 +95,8 @@ Status PaimonTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operato
     auto op = std::make_shared<pipeline::PaimonTableSinkOperatorFactory>(
             context->next_operator_id(), fragment_ctx, paimon_table_desc, thrift_sink.paimon_table_sink, output_exprs,
             partition_expr_ctxs, bucket_expr_ctxs, output_expr_ctxs, column_names, column_types,
-            t_paimon_sink.use_native_writer);
+            t_paimon_sink.use_native_writer, t_paimon_sink.is_static_partition_sink,
+            t_paimon_sink.partition_column_names, t_paimon_sink.partition_column_values);
 
     size_t sink_dop = context->data_sink_dop();
 

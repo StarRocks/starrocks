@@ -31,7 +31,9 @@ public:
                             PaimonTableDescriptor* paimon_table, int32_t driver_sequence,
                             std::vector<ExprContext*> partition_expr_ctxs, std::vector<ExprContext*> bucket_expr_ctxs,
                             std::vector<ExprContext*> output_expr_ctxs, std::vector<std::string> data_column_names,
-                            std::vector<std::string> data_column_types, bool use_native_writer)
+                            std::vector<std::string> data_column_types, bool use_native_writer,
+                            bool is_static_partition_sink, std::vector<std::string> partition_column_names,
+                            std::vector<std::string> partition_column_values)
             : Operator(factory, id, "paimon_table_sink", plan_node_id, false, driver_sequence),
               _paimon_table(paimon_table),
               _partition_expr(std::move(partition_expr_ctxs)),
@@ -39,7 +41,10 @@ public:
               _output_expr(std::move(output_expr_ctxs)),
               _data_column_names(std::move(data_column_names)),
               _data_column_types(std::move(data_column_types)),
-              _use_native_writer(use_native_writer) {}
+              _use_native_writer(use_native_writer),
+              _is_static_partition_sink(is_static_partition_sink),
+              _partition_column_names(std::move(partition_column_names)),
+              _partition_column_values(std::move(partition_column_values)) {}
 
     ~PaimonTableSinkOperator() override = default;
 
@@ -89,11 +94,12 @@ private:
     std::vector<ExprContext*> _bucket_expr;
     std::vector<ExprContext*> _output_expr;
     std::atomic<bool> _is_finished = false;
-    bool _is_static_partition_insert = false;
-    std::vector<std::string> _partition_column_names;
     std::vector<std::string> _data_column_names;
     std::vector<std::string> _data_column_types;
     bool _use_native_writer = false;
+    bool _is_static_partition_sink = false;
+    std::vector<std::string> _partition_column_names;
+    std::vector<std::string> _partition_column_values;
 
     RuntimeProfile::Counter* _init_timer = nullptr;
     RuntimeProfile::Counter* _write_timer = nullptr;
@@ -117,7 +123,9 @@ public:
                                    std::vector<ExprContext*> bucket_expr_ctxs,
                                    std::vector<ExprContext*> output_expr_ctxs,
                                    std::vector<std::string> data_column_names,
-                                   std::vector<std::string> data_column_types, bool use_native_writer);
+                                   std::vector<std::string> data_column_types, bool use_native_writer,
+                                   bool is_static_partition_sink, std::vector<std::string> partition_column_names,
+                                   std::vector<std::string> partition_column_values);
 
     ~PaimonTableSinkOperatorFactory() override = default;
 
@@ -136,6 +144,9 @@ private:
     std::vector<std::string> _data_column_names;
     std::vector<std::string> _data_column_types;
     bool _use_native_writer = false;
+    bool _is_static_partition_sink = false;
+    std::vector<std::string> _partition_column_names;
+    std::vector<std::string> _partition_column_values;
 };
 
 } // namespace starrocks::pipeline

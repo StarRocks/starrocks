@@ -472,7 +472,8 @@ public class InsertPlanner {
             } else if (targetTable instanceof PaimonTable) {
                 descriptorTable.addReferencedTable(targetTable);
                 dataSink = new PaimonTableSink((PaimonTable) targetTable, tupleDesc,
-                        isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
+                        isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable(),
+                        insertStmt.getTargetPartitionNames());
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
