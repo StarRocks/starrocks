@@ -89,6 +89,7 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
@@ -5499,42 +5500,6 @@ public class CreateMaterializedViewTest extends MVTestBase {
         starRocksAssert.withMaterializedView(sql);
         starRocksAssert.refreshMV(connectContext, "mv1");
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testAdaptiveRefreshMVWithExternalTable1() throws Exception {
-        String sql = "create materialized view mv_table_with_external_table " +
-                "partition by str2date(d,'%Y-%m-%d') " +
-                "distributed by hash(a) " +
-                "REFRESH DEFERRED MANUAL " +
-                "PROPERTIES (\n" +
-                "'replication_num' = '1',\n" +
-                "'partition_refresh_strategy' = 'adaptive'" +
-                ") \n" +
-                "as select a, b, d, bitmap_union(to_bitmap(t1.c))" +
-                " from iceberg0.partitioned_db.part_tbl1 as t1 " +
-                " group by a, b, d;";
-        starRocksAssert.withMaterializedView(sql);
-        starRocksAssert.refreshMV(connectContext, "mv_table_with_external_table");
-    }
-
-    private static File newFolder(File root, String... subDirs) throws IOException {
-        String subFolder = String.join("/", subDirs);
-        File result = new File(root, subFolder);
-        if (!result.mkdirs()) {
-            throw new IOException("Couldn't create folders " + root);
-        }
-        return result;
-    }
-
-    @BeforeEach
-    public void setup(TestInfo testInfo) {
-        Optional<Method> testMethod = testInfo.getTestMethod();
-        if (testMethod.isPresent()) {
-            this.name = testMethod.get().getName();
-        }
-    }
 
     @Test
     public void testCreateMVWithFixedLengthChar1() throws Exception {
@@ -5583,5 +5548,4 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals(1048576, scalarType0.getLength());
         Config.transform_type_prefer_string_for_varchar = false;
     }
->>>>>>> ba5d65e4ed ([BugFix] Fix create mv with case-when incompatible varchar type (#61996))
 }
