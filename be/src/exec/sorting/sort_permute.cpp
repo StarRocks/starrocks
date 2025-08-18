@@ -67,7 +67,7 @@ bool TieIterator::next() {
 // Append permutation to column, implements `materialize_by_permutation` function
 class ColumnAppendPermutation final : public ColumnVisitorMutableAdapter<ColumnAppendPermutation> {
 public:
-    explicit ColumnAppendPermutation(const Columns& columns, const PermutationView& perm)
+    explicit ColumnAppendPermutation(const std::vector<const Column*>& columns, const PermutationView& perm)
             : ColumnVisitorMutableAdapter(this), _columns(columns), _perm(perm) {}
 
     Status do_visit(NullableColumn* dst) {
@@ -76,9 +76,11 @@ public:
         }
 
         uint32_t orig_size = dst->size();
-        Columns null_columns, data_columns;
+        std::vector<const Column*> null_columns, data_columns;
+        null_columns.reserve(_columns.size());
+        data_columns.reserve(_columns.size());
         for (auto& col : _columns) {
-            const auto* src_column = down_cast<const NullableColumn*>(col.get());
+            const auto* src_column = down_cast<const NullableColumn*>(col);
             null_columns.push_back(src_column->null_column());
             data_columns.push_back(src_column->data_column());
         }
@@ -107,7 +109,7 @@ public:
         data.resize(output + _perm.size());
         std::vector<const Container*> srcs;
         for (auto& column : _columns) {
-            srcs.push_back(&(down_cast<const ColumnType*>(column.get())->get_data()));
+            srcs.push_back(&(down_cast<const ColumnType*>(column)->get_data()));
         }
 
         for (auto& p : _perm) {
@@ -127,7 +129,7 @@ public:
         data.resize(output + _perm.size());
         std::vector<const Container*> srcs;
         for (auto& column : _columns) {
-            srcs.push_back(&(down_cast<const ColumnType*>(column.get())->get_data()));
+            srcs.push_back(&(down_cast<const ColumnType*>(column)->get_data()));
         }
 
         for (auto& p : _perm) {
@@ -190,7 +192,7 @@ public:
         using Container = typename BinaryColumnBase<T>::BinaryDataProxyContainer;
         std::vector<const Container*> srcs;
         for (auto& column : _columns) {
-            srcs.push_back(&(down_cast<const BinaryColumnBase<T>*>(column.get())->get_proxy_data()));
+            srcs.push_back(&(down_cast<const BinaryColumnBase<T>*>(column)->get_proxy_data()));
         }
 
         auto& offsets = dst->get_offset();
@@ -235,11 +237,12 @@ public:
     }
 
 private:
-    const Columns& _columns;
+    const std::vector<const Column*>& _columns;
     const PermutationView& _perm;
 };
 
-void materialize_column_by_permutation(Column* dst, const Columns& columns, const PermutationView& perm) {
+void materialize_column_by_permutation(Column* dst, const std::vector<const Column*>& columns,
+                                       const PermutationView& perm) {
     ColumnAppendPermutation visitor(columns, perm);
     Status st = dst->accept_mutable(&visitor);
     CHECK(st.ok());
@@ -257,7 +260,7 @@ void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks,
     DCHECK_EQ(dst->num_columns(), chunks[0]->columns().size());
 
     for (size_t col_index = 0; col_index < dst->num_columns(); col_index++) {
-        Columns tmp_columns;
+        std::vector<const Column*> tmp_columns;
         tmp_columns.reserve(chunks.size());
         for (const auto& chunk : chunks) {
             tmp_columns.push_back(chunk->get_column_by_index(col_index));
