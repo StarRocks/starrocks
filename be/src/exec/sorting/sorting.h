@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "exec/sorting/sort_permute.h"
 #include "runtime/chunk_cursor.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -35,9 +36,11 @@ struct SortDescs;
 // @param tie input and output tie
 // @param range sort range, {0, 0} means not build tie but sort data
 Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
+                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie,
+                           const SortDescs* sort_descs = nullptr);
 Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
+                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie,
+                           const SortDescs* sort_descs = nullptr);
 
 // Sort multiple columns using column-wise algorithm, output the order in permutation array
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
@@ -56,7 +59,8 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<const Column*>& columns,
                             const SortDescs& sort_desc, SmallPermutation& perm,
                             const std::span<const uint32_t> src_offsets,
-                            const std::vector<std::span<const uint32_t>>& offsets_per_key);
+                            const std::vector<std::span<const uint32_t>>& offsets_per_key,
+                            const SortDescs* sort_descs = nullptr);
 
 // Sort multiple columns, and stable
 Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
@@ -101,6 +105,11 @@ struct SortDesc {
 };
 struct SortDescs {
     std::vector<SortDesc> descs;
+    mutable bool partial_sort_use_german_string = false;
+    mutable bool merge_use_german_string = false;
+    mutable RuntimeProfile::Counter* _conversion_timer = nullptr;
+    mutable RuntimeProfile::Counter* _merge_sort_timer = nullptr;
+    mutable RuntimeProfile::Counter* _partial_sort_timer = nullptr;
 
     SortDescs() = default;
     ~SortDescs() = default;
@@ -132,6 +141,16 @@ struct SortDescs {
     size_t num_columns() const { return descs.size(); }
 
     SortDesc get_column_desc(int col) const { return descs[col]; }
+    void set_partial_sort_use_german_string(bool value) const { partial_sort_use_german_string = value; }
+    bool is_partial_sort_use_german_string() const { return partial_sort_use_german_string; }
+    void set_merge_use_german_string(bool value) const { merge_use_german_string = value; }
+    bool is_merge_use_german_string() const { return merge_use_german_string; }
+    void set_conversion_timer(RuntimeProfile::Counter* timer) const { _conversion_timer = timer; }
+    RuntimeProfile::Counter* get_conversion_timer() const { return _conversion_timer; }
+    void set_merge_sort_timer(RuntimeProfile::Counter* timer) const { _merge_sort_timer = timer; }
+    RuntimeProfile::Counter* get_merge_sort_timer() const { return _merge_sort_timer; }
+    void set_partial_sort_timer(RuntimeProfile::Counter* timer) const { _partial_sort_timer = timer; }
+    RuntimeProfile::Counter* get_partial_sort_timer() const { return _partial_sort_timer; }
 };
 
 } // namespace starrocks

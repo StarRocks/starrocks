@@ -21,6 +21,7 @@
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/datum.h"
+#include "column/german_string.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -29,6 +30,9 @@
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
+#include "util/defer_op.h"
+#include "util/runtime_profile.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
 
@@ -172,10 +176,35 @@ public:
     template <typename SizeT>
     Status do_visit(const BinaryColumnBase<SizeT>& _) {
         using ColumnType = const BinaryColumnBase<SizeT>;
-        using Container = typename BinaryColumnBase<SizeT>::BinaryDataProxyContainer;
-        auto& left_data = down_cast<const ColumnType*>(_left_col)->get_proxy_data();
-        auto& right_data = down_cast<const ColumnType*>(_right_col)->get_proxy_data();
-        return merge_ordinary_column<Container, Slice>(left_data, right_data);
+        MonotonicStopWatch sw;
+        sw.start();
+        if (use_german_string) {
+            using Container = typename BinaryColumnBase<SizeT>::GermanStringContainer;
+            auto& left_data = down_cast<const ColumnType*>(_left_col)->get_german_strings();
+            auto& right_data = down_cast<const ColumnType*>(_right_col)->get_german_strings();
+            if (_conversion_counter != nullptr) {
+                _conversion_counter->update(sw.reset());
+            }
+            DeferOp defer([&]() {
+                if (_merge_counter != nullptr) {
+                    _merge_counter->update(sw.reset());
+                }
+            });
+            return merge_ordinary_column<Container, GermanString>(left_data, right_data);
+        } else {
+            using Container = typename BinaryColumnBase<SizeT>::BinaryDataProxyContainer;
+            auto& left_data = down_cast<const ColumnType*>(_left_col)->get_proxy_data();
+            auto& right_data = down_cast<const ColumnType*>(_right_col)->get_proxy_data();
+            if (_conversion_counter != nullptr) {
+                _conversion_counter->update(sw.reset());
+            }
+            DeferOp defer([&]() {
+                if (_merge_counter != nullptr) {
+                    _merge_counter->update(sw.reset());
+                }
+            });
+            return merge_ordinary_column<Container, Slice>(left_data, right_data);
+        }
     }
 
     Status do_visit(const NullableColumn& _) {
@@ -185,12 +214,22 @@ public:
             const auto* lhs_data = down_cast<const NullableColumn*>(_left_col)->data_column().get();
             const auto* rhs_data = down_cast<const NullableColumn*>(_right_col)->data_column().get();
             MergeTwoColumn merge2({_sort_order, _null_first}, lhs_data, rhs_data, _equal_ranges, _perm);
+            merge2.set_use_german_string(is_use_german_string());
+            merge2.set_conversion_counter(get_conversion_counter());
+            merge2.set_merge_counter(get_merge_counter());
             return lhs_data->accept(&merge2);
         }
 
         // Slow path
         return do_visit_slow(_);
     }
+
+    bool is_use_german_string() const { return use_german_string; }
+    void set_use_german_string(bool value) { use_german_string = value; }
+    void set_conversion_counter(RuntimeProfile::Counter* counter) { _conversion_counter = counter; }
+    void set_merge_counter(RuntimeProfile::Counter* counter) { _merge_counter = counter; }
+    RuntimeProfile::Counter* get_conversion_counter() const { return _conversion_counter; }
+    RuntimeProfile::Counter* get_merge_counter() const { return _merge_counter; }
 
 private:
     constexpr static uint32_t kLeftIndex = 0;
@@ -202,6 +241,9 @@ private:
     const Column* _right_col;
     std::vector<EqualRange>* _equal_ranges;
     Permutation* _perm;
+    bool use_german_string = false;
+    mutable RuntimeProfile::Counter* _conversion_counter = nullptr;
+    mutable RuntimeProfile::Counter* _merge_counter = nullptr;
 };
 
 // MergeTwoChunk merge two chunk in column-wise
@@ -270,6 +312,9 @@ public:
                     const Column* left_col = left_run.get_column(col);
                     const Column* right_col = right_run.get_column(col);
                     MergeTwoColumn merge2(sort_desc.get_column_desc(col), left_col, right_col, &equal_ranges, output);
+                    merge2.set_use_german_string(sort_desc.is_merge_use_german_string());
+                    merge2.set_conversion_counter(sort_desc.get_conversion_timer());
+                    merge2.set_merge_counter(sort_desc.get_merge_sort_timer());
                     Status st = left_col->accept(&merge2);
                     CHECK(st.ok());
                     if (equal_ranges.size() == 0) {

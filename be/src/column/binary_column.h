@@ -48,6 +48,8 @@ public:
     };
 
     using Container = Buffer<Slice>;
+    using GermanStringContainer = Buffer<GermanString>;
+
     using ProxyContainer = BinaryDataProxyContainer;
 
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
@@ -305,11 +307,26 @@ public:
         }
         return _slices;
     }
+
+    GermanStringContainer& get_german_strings() {
+        if (!_german_strings_cache) {
+            _build_german_strings();
+        }
+        return _german_strings;
+    }
+
     const Container& get_data() const {
         if (!_slices_cache) {
             _build_slices();
         }
         return _slices;
+    }
+
+    const GermanStringContainer& get_german_strings() const {
+        if (!_german_strings_cache) {
+            _build_german_strings();
+        }
+        return _german_strings;
     }
 
     const BinaryDataProxyContainer& get_proxy_data() const { return _immuable_container; }
@@ -350,7 +367,10 @@ public:
         _slices_cache = false;
     }
 
-    void invalidate_slice_cache() { _slices_cache = false; }
+    void invalidate_slice_cache() {
+        _slices_cache = false;
+        _german_strings_cache = false;
+    }
 
     std::string debug_item(size_t idx) const override;
 
@@ -376,12 +396,15 @@ public:
 
 private:
     void _build_slices() const;
+    void _build_german_strings() const;
 
     Bytes _bytes;
     Offsets _offsets;
 
     mutable Container _slices;
     mutable bool _slices_cache = false;
+    mutable GermanStringContainer _german_strings;
+    mutable bool _german_strings_cache = false;
     BinaryDataProxyContainer _immuable_container = BinaryDataProxyContainer(*this);
 };
 

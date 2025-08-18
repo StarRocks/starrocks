@@ -51,7 +51,7 @@ public:
         for (auto i = 0; i < size; i++) {
             const auto* str = p + offsets[i];
             auto len = offsets[i + 1] - offsets[i];
-            _data.emplace_back(reinterpret_cast<const char*>(str), len, _allocator.allocate(len));
+            _data.emplace_back(reinterpret_cast<const char*>(str), len, _allocator->allocate(len));
         }
     }
 
@@ -60,7 +60,7 @@ public:
         _data.reserve(num_rows);
         for (auto i = 0; i < num_rows; i++) {
             const auto& s = rhs._data[i];
-            _data.emplace_back(s, _allocator.allocate(s.len));
+            _data.emplace_back(s, _allocator->allocate(s.len));
         }
     }
 
@@ -109,7 +109,7 @@ public:
 
     size_t type_size() const override { return sizeof(GermanString); }
 
-    size_t byte_size() const override { return _data.size() * sizeof(GermanString) + _allocator.size(); }
+    size_t byte_size() const override { return _data.size() * sizeof(GermanString) + _allocator->size(); }
 
     size_t byte_size(size_t from, size_t size) const override {
         DCHECK(from + size <= _data.size());
@@ -278,7 +278,7 @@ public:
     Datum get(size_t n) const override { return Datum(_data[n]); }
 
     size_t container_memory_usage() const override {
-        return _data.capacity() * sizeof(GermanString) + _allocator.size();
+        return _data.capacity() * sizeof(GermanString) + _allocator->size();
     }
 
     bool is_german_string() const override { return true; }
@@ -295,7 +295,7 @@ public:
 
     void reset_column() override {
         Column::reset_column();
-        _allocator.clear();
+        _allocator->clear();
         _data.clear();
     }
 
@@ -321,8 +321,18 @@ public:
 
     Status capacity_limit_reached() const override;
     ColumnPtr to_binary() const;
-    void from_binary(const BinaryColumn& binary_column);
+    void from_binary(BinaryColumn&& binary_column);
+    void from_large_binary(LargeBinaryColumn&& binary_column);
     size_t get_binary_size() const;
+    static std::optional<ColumnPtr> create_from_binary(ColumnPtr&& column);
+
+    void append_entire_column(GermanStringColumn&& src_col);
+    static ColumnPtr append_entire_column(ColumnPtr& dst_col, ColumnPtr&& src_col);
+    static void to_binary(ColumnPtr& column);
+    std::shared_ptr<GermanStringExternalAllocator> get_allocator() const { return _allocator; }
+    void set_allocator(std::shared_ptr<GermanStringExternalAllocator>&& allocator) {
+        _allocator = std::move(allocator);
+    }
 
 private:
     void _append_string(const char* str, size_t len);
@@ -330,7 +340,7 @@ private:
     ColumnPtr _to_binary_impl(size_t num_bytes) const;
 
     Container _data;
-    GermanStringExternalAllocator _allocator;
+    std::shared_ptr<GermanStringExternalAllocator> _allocator = std::make_shared<GermanStringExternalAllocator>();
 };
 
 } // namespace starrocks

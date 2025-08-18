@@ -45,6 +45,17 @@ ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>*
           _sort_desc(*is_asc, *is_null_first),
           _sort_keys(std::move(sort_keys)),
           _is_topn(is_topn) {
+    if (state->enable_german_string_used_by_sort()) {
+        auto use_gs = std::all_of(sort_exprs->begin(), sort_exprs->end(), [](ExprContext* ctx) {
+            return ctx->root()->is_literal() || ctx->root()->is_slotref();
+        });
+        set_use_german_string(use_gs);
+    }
+    set_partial_sort_use_german_string(state->enable_german_string_used_by_sort_partial_sort_phase());
+    set_merge_use_german_string(state->enable_german_string_used_by_sort_merge_phase());
+    _sort_desc.set_partial_sort_use_german_string(is_partial_sort_use_german_string());
+    _sort_desc.set_merge_use_german_string(is_merge_use_german_string());
+
     DCHECK(_sort_exprs != nullptr);
     DCHECK(is_asc != nullptr);
     DCHECK(is_null_first != nullptr);
@@ -59,9 +70,22 @@ void ChunksSorter::setup_runtime(RuntimeState* state, RuntimeProfile* profile, M
     _sort_timer = ADD_TIMER(profile, "SortingTime");
     _merge_timer = ADD_TIMER(profile, "MergingTime");
     _output_timer = ADD_TIMER(profile, "OutputTime");
-    _sort_cnt = ADD_COUNTER(profile, "SortingCnt", TUnit::UNIT);
+    _concat_timer = ADD_TIMER(profile, "ConcatTime");
+    _materialize_timer = ADD_TIMER(profile, "MaterializeTime");
+    _create_dst_timer = ADD_TIMER(profile, "CreateDstColumnTime");
+    _reserve_memory_timer = ADD_TIMER(profile, "ReserveMemoryTime");
+    _append_entire_timer = ADD_TIMER(profile, "AppendEntireColumnTime");
+    _conversion_timer = ADD_TIMER(profile, "ConversionTime");
+    _partial_sort_timer = ADD_TIMER(profile, "PartialSortTime");
+    _merge_sort_timer = ADD_TIMER(profile, "MergeSortTime");
     profile->add_info_string("SortKeys", _sort_keys);
     profile->add_info_string("SortType", _is_topn ? "TopN" : "All");
+    profile->add_info_string("UseGermanString", is_use_german_string() ? "True" : "False");
+    profile->add_info_string("PartialSortUseGermanString", is_partial_sort_use_german_string() ? "True" : "False");
+    profile->add_info_string("MergeUseGermanString", is_merge_use_german_string() ? "True" : "False");
+    _sort_desc.set_conversion_timer(_conversion_timer);
+    _sort_desc.set_partial_sort_timer(_partial_sort_timer);
+    _sort_desc.set_merge_sort_timer(_merge_sort_timer);
 }
 
 StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, TupleDescriptor* materialized_tuple_desc,

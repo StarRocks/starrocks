@@ -138,6 +138,12 @@ public:
     virtual size_t reserved_bytes(const ChunkPtr& chunk) { return chunk != nullptr ? chunk->memory_usage() : 0; }
 
     virtual void cancel() {}
+    bool is_use_german_string() const { return _use_german_string; }
+    void set_use_german_string(bool value) { this->_use_german_string = value; }
+    bool is_partial_sort_use_german_string() const { return _partial_sort_use_german_string; }
+    void set_partial_sort_use_german_string(bool value) { this->_partial_sort_use_german_string = value; }
+    bool is_merge_use_german_string() const { return _merge_use_german_string; }
+    void set_merge_use_german_string(bool value) { this->_merge_use_german_string = value; }
 
 protected:
     size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
@@ -149,12 +155,23 @@ protected:
     const SortDescs _sort_desc;
     const std::string _sort_keys;
     const bool _is_topn;
+    bool _use_german_string = false;
+    bool _partial_sort_use_german_string = false;
+    bool _merge_use_german_string = false;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _sort_timer = nullptr;
     RuntimeProfile::Counter* _merge_timer = nullptr;
     RuntimeProfile::Counter* _output_timer = nullptr;
     RuntimeProfile::Counter* _sort_cnt = nullptr;
+    RuntimeProfile::Counter* _concat_timer = nullptr;
+    RuntimeProfile::Counter* _materialize_timer = nullptr;
+    RuntimeProfile::Counter* _create_dst_timer = nullptr;
+    RuntimeProfile::Counter* _reserve_memory_timer = nullptr;
+    RuntimeProfile::Counter* _append_entire_timer = nullptr;
+    RuntimeProfile::Counter* _conversion_timer = nullptr;
+    RuntimeProfile::Counter* _partial_sort_timer = nullptr;
+    RuntimeProfile::Counter* _merge_sort_timer = nullptr;
 
     size_t _revocable_mem_bytes = 0;
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;

@@ -23,6 +23,7 @@
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column_base.h"
+#include "column/german_string_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -31,6 +32,8 @@
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "util/orlp/pdqsort.h"
+#include "util/runtime_profile.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
 
@@ -80,7 +83,8 @@ static Status sort_and_tie_helper(const std::atomic<bool>& cancel, const Column*
 }
 
 static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column* column, const SortDesc& sort_desc,
-                                  SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie);
+                                  SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie,
+                                  const SortDescs* sort_descs = nullptr);
 
 template <class NullPred>
 static Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, const NullableColumn* column,
@@ -170,16 +174,49 @@ public:
             DCHECK_GE(column.size(), _permutation.size());
         }
 
-        using ItemType = InlinePermuteItem<Slice>;
-        auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
-            return lhs.inline_value.compare(rhs.inline_value);
-        };
+        MonotonicStopWatch sw;
+        sw.start();
+        if (_use_german_string) {
+            using ItemType = InlinePermuteItem<GermanString>;
+            auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
+                return lhs.inline_value.compare(rhs.inline_value);
+            };
 
-        auto inlined = create_inline_permutation<Slice, IS_RANGES>(_permutation, column.get_proxy_data());
-        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
-                                            _range_or_ranges, _build_tie));
-        restore_inline_permutation(inlined, _permutation);
+            auto inlined =
+                    create_inline_permutation<GermanString, IS_RANGES>(_permutation, column.get_german_strings());
+            if (_conversion_timer != nullptr) {
+                _conversion_timer->update(sw.reset());
+            }
 
+            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
+                                                _range_or_ranges, _build_tie));
+            if (_partial_sort_timer != nullptr) {
+                _partial_sort_timer->update(sw.reset());
+            }
+            restore_inline_permutation(inlined, _permutation);
+            if (_conversion_timer != nullptr) {
+                _conversion_timer->update(sw.reset());
+            }
+        } else {
+            using ItemType = InlinePermuteItem<Slice>;
+            auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
+                return lhs.inline_value.compare(rhs.inline_value);
+            };
+
+            auto inlined = create_inline_permutation<Slice, IS_RANGES>(_permutation, column.get_proxy_data());
+            if (_conversion_timer != nullptr) {
+                _conversion_timer->update(sw.reset());
+            }
+            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
+                                                _range_or_ranges, _build_tie));
+            if (_partial_sort_timer != nullptr) {
+                _partial_sort_timer->update(sw.reset());
+            }
+            restore_inline_permutation(inlined, _permutation);
+            if (_conversion_timer != nullptr) {
+                _conversion_timer->update(sw.reset());
+            }
+        }
         return Status::OK();
     }
 
@@ -219,9 +256,28 @@ public:
     }
 
     Status do_visit(const GermanStringColumn& column) {
-        DCHECK(false) << "not support german column sort_and_tie";
-        return Status::NotSupported("not support german column sort_and_tie");
+        if constexpr (!IS_RANGES) {
+            DCHECK_GE(column.size(), _permutation.size());
+        }
+
+        using ItemType = InlinePermuteItem<GermanString>;
+        auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
+            return lhs.inline_value.compare(rhs.inline_value);
+        };
+
+        auto inlined = create_inline_permutation<GermanString, IS_RANGES>(_permutation, column.get_data());
+        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
+                                            _range_or_ranges, _build_tie));
+        restore_inline_permutation(inlined, _permutation);
+
+        return Status::OK();
     }
+
+    void use_german_string(bool flag) { _use_german_string = flag; }
+    void set_conversion_timer(RuntimeProfile::Counter* timer) { _conversion_timer = timer; }
+    void set_partial_sort_timer(RuntimeProfile::Counter* timer) { _partial_sort_timer = timer; }
+    RuntimeProfile::Counter* get_conversion_timer() const { return _conversion_timer; }
+    RuntimeProfile::Counter* get_partial_sort_timer() const { return _partial_sort_timer; }
 
 private:
     const std::atomic<bool>& _cancel;
@@ -230,6 +286,9 @@ private:
     Tie& _tie;
     R _range_or_ranges;
     bool _build_tie;
+    bool _use_german_string = false;
+    mutable RuntimeProfile::Counter* _conversion_timer = nullptr;
+    mutable RuntimeProfile::Counter* _partial_sort_timer = nullptr;
 };
 
 // Sort multiple a column from multiple chunks(vertical column)
@@ -479,24 +538,37 @@ private:
 };
 
 Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
+                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie,
+                           const SortDescs* sort_descs) {
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
+    if (sort_descs != nullptr) {
+        column_sorter.use_german_string(sort_descs->is_partial_sort_use_german_string());
+        column_sorter.set_conversion_timer(sort_descs->get_conversion_timer());
+        column_sorter.set_partial_sort_timer(sort_descs->get_partial_sort_timer());
+    }
     return column->accept(&column_sorter);
 }
 
 Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
+                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie,
+                           const SortDescs* sort_descs) {
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
         ColumnHelper::as_column<NullableColumn>(column)->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
+    if (sort_descs != nullptr) {
+        column_sorter.use_german_string(sort_descs->is_partial_sort_use_german_string());
+        column_sorter.set_conversion_timer(sort_descs->get_conversion_timer());
+        column_sorter.set_partial_sort_timer(sort_descs->get_partial_sort_timer());
+    }
     return column->accept(&column_sorter);
 }
 
 static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column* column, const SortDesc& sort_desc,
-                                  SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie) {
+                                  SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie,
+                                  const SortDescs* sort_descs) {
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
@@ -504,6 +576,11 @@ static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column*
         down_cast<NullableColumn*>(mutable_col)->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, std::move(ranges), build_tie);
+    if (sort_descs != nullptr) {
+        column_sorter.use_german_string(sort_descs->is_partial_sort_use_german_string());
+        column_sorter.set_conversion_timer(sort_descs->get_conversion_timer());
+        column_sorter.set_partial_sort_timer(sort_descs->get_partial_sort_timer());
+    }
     return column->accept(&column_sorter);
 }
 
@@ -521,7 +598,7 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
         ColumnPtr column = columns[col_index];
         bool build_tie = col_index != columns.size() - 1;
         RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_index), small_perm, tie,
-                                            range, build_tie));
+                                            range, build_tie, &sort_desc));
     }
 
     restore_small_permutation(small_perm, *permutation);
@@ -532,7 +609,8 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<const Column*>& columns,
                             const SortDescs& sort_desc, SmallPermutation& perm,
                             const std::span<const uint32_t> src_offsets,
-                            const std::vector<std::span<const uint32_t>>& offsets_per_key) {
+                            const std::vector<std::span<const uint32_t>>& offsets_per_key,
+                            const SortDescs* sort_descs) {
     if (src_offsets.empty()) {
         return Status::OK();
     }
@@ -582,7 +660,7 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<c
         const bool build_tie = (col_i != (columns.size() - 1));
         shift_perm(offsets_per_key[col_i].data());
         RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_i), perm, tie,
-                                            Ranges(src_offsets, offsets_per_key[col_i]), build_tie));
+                                            Ranges(src_offsets, offsets_per_key[col_i]), build_tie, sort_descs));
     }
     shift_perm(src_offsets.data());
 

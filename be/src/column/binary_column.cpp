@@ -355,6 +355,22 @@ void BinaryColumnBase<T>::_build_slices() const {
 }
 
 template <typename T>
+void BinaryColumnBase<T>::_build_german_strings() const {
+    DCHECK(_offsets.size() > 0);
+    _german_strings_cache = false;
+    _german_strings.clear();
+
+    const auto num_rows = _offsets.size() - 1;
+    _german_strings.resize(num_rows);
+
+    const auto* base = _bytes.data();
+    for (auto i = 0; i < num_rows; ++i) {
+        _german_strings[i] = GermanString(base + _offsets[i], _offsets[i + 1] - _offsets[i]);
+    }
+    _german_strings_cache = true;
+}
+
+template <typename T>
 void BinaryColumnBase<T>::fill_default(const Filter& filter) {
     std::vector<uint32_t> indexes;
     for (size_t i = 0; i < filter.size(); i++) {
@@ -1039,7 +1055,11 @@ void BinaryColumnBase<T>::append_german_strings(const Buffer<GermanString>& germ
     auto* bytes = _bytes.data() + _bytes.size() - total_size;
     for (auto i = 0; i < chunk_size; ++i) {
         auto& gs = german_strings[i];
-        gs.read(0, bytes, gs.len);
+        if (gs.is_inline()) {
+            strings::memcpy_inlined(bytes, gs.short_rep.str, gs.len);
+        } else {
+            strings::memcpy_inlined(bytes, reinterpret_cast<const char*>(gs.long_rep.ptr), gs.len);
+        }
         bytes += gs.len;
     }
 }

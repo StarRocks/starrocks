@@ -451,16 +451,11 @@ struct AggHashMapWithOneStringKeyWithNullable
 
     AggDataPtr get_null_key_data() { return null_key_data; }
 
-    KeyType convert_to_key(const Slice& slice, MemPool* pool) {
+    void poison_if_necessary(KeyType& key) {
         if constexpr (use_german_string) {
-            GermanStringMemPoolExternalAllocator gs_allocator(pool);
-            auto key = KeyType(slice.data, slice.size, gs_allocator.allocate(slice.size));
             if (config::poison_german_string) {
                 key.poison();
             }
-            return key;
-        } else {
-            return slice;
         }
     }
 
@@ -533,7 +528,8 @@ struct AggHashMapWithOneStringKeyWithNullable
         {
             const auto& container_data = column->get_data();
             for (size_t i = 0; i < column_size; i++) {
-                const auto key = convert_to_key(container_data[i], pool);
+                KeyType key = static_cast<KeyType>(container_data[i]);
+                poison_if_necessary(key);
                 size_t hashval = this->hash_map.hash_function()(key);
                 hash_values[i] = hashval;
             }
@@ -541,7 +537,8 @@ struct AggHashMapWithOneStringKeyWithNullable
         size_t __prefetch_index = AGG_HASH_MAP_DEFAULT_PREFETCH_DIST;
         for (size_t i = 0; i < column_size; i++) {
             AGG_HASH_MAP_PREFETCH_HASH_VALUE();
-            const auto key = convert_to_key(column->get_slice(i), pool);
+            KeyType key = static_cast<KeyType>(column->get_slice(i));
+            poison_if_necessary(key);
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     this->template _emplace_key_with_hash<Func>(key, hash_values[i], pool,
@@ -568,7 +565,8 @@ struct AggHashMapWithOneStringKeyWithNullable
         size_t num_rows = column->size();
 
         for (size_t i = 0; i < num_rows; i++) {
-            const auto key = convert_to_key(column->get_slice(i), pool);
+            KeyType key = static_cast<KeyType>(column->get_slice(i));
+            poison_if_necessary(key);
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func), (*agg_states)[i],
@@ -601,7 +599,8 @@ struct AggHashMapWithOneStringKeyWithNullable
                 }
                 (*agg_states)[i] = null_key_data;
             } else {
-                const auto key = convert_to_key(data_column->get_slice(i), pool);
+                KeyType key = static_cast<KeyType>(data_column->get_slice(i));
+                poison_if_necessary(key);
                 if constexpr (HTBuildOp::process_limit) {
                     if (hash_table_size < extra->limits) {
                         this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func),
@@ -626,7 +625,8 @@ struct AggHashMapWithOneStringKeyWithNullable
         auto iter = this->hash_map.lazy_emplace_with_hash(key, hash_val, [&](const auto& ctor) {
             callback();
             if constexpr (use_german_string) {
-                AggDataPtr pv = allocate_func(key);
+                GermanString pk(key, pool->allocate(key.len));
+                AggDataPtr pv = allocate_func(pk);
                 ctor(key, pv);
             } else {
                 uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
@@ -645,7 +645,8 @@ struct AggHashMapWithOneStringKeyWithNullable
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             callback();
             if constexpr (use_german_string) {
-                AggDataPtr pv = allocate_func(key);
+                GermanString pk(key, pool->allocate(key.len));
+                AggDataPtr pv = allocate_func(pk);
                 ctor(key, pv);
             } else {
                 uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);

@@ -363,7 +363,21 @@ public:
     }
 
     bool enable_german_string_used_by_agg() const {
-        return _query_options.__isset.enable_german_string_mask && _query_options.enable_german_string_mask & 0x1;
+        return _query_options.__isset.enable_german_string_mask && _query_options.enable_german_string_mask & (1 << 1);
+    }
+
+    bool enable_german_string_used_by_sort() const {
+        return _query_options.__isset.enable_german_string_mask && _query_options.enable_german_string_mask & (1 << 2);
+    }
+
+    bool enable_german_string_used_by_sort_partial_sort_phase() const {
+        return !enable_german_string_used_by_sort() && _query_options.__isset.enable_german_string_mask &&
+               _query_options.enable_german_string_mask & (1 << 3);
+    }
+
+    bool enable_german_string_used_by_sort_merge_phase() const {
+        return !enable_german_string_used_by_sort() && _query_options.__isset.enable_german_string_mask &&
+               _query_options.enable_german_string_mask & (1 << 4);
     }
 
     int32_t spill_mem_table_size() const {

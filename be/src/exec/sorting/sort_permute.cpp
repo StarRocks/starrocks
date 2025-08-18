@@ -21,6 +21,7 @@
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
 #include "column/fixed_length_column_base.h"
+#include "column/german_string_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -234,8 +235,18 @@ public:
         return Status::OK();
     }
     Status do_visit(GermanStringColumn* dst) {
-        CHECK(false) << "Not support german string column";
-        return Status::NotSupported("Not support german string column");
+        using Container = typename GermanStringColumn::Container;
+        std::vector<const Container*> srcs;
+        for (auto& column : _columns) {
+            srcs.push_back(&(down_cast<const GermanStringColumn*>(column.get())->get_data()));
+        }
+        auto& dst_data = dst->get_data();
+        dst_data.resize(dst_data.size() + _perm.size());
+        auto* data = dst_data.data() + dst_data.size() - _perm.size();
+        for (auto i = 0; i < _perm.size(); i++) {
+            data[i] = (*srcs[_perm[i].chunk_index])[_perm[i].index_in_chunk];
+        }
+        return Status::OK();
     }
 
 private:

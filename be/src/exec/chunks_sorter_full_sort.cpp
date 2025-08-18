@@ -14,6 +14,7 @@
 
 #include "chunks_sorter_full_sort.h"
 
+#include "column/german_string_column.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
@@ -78,6 +79,7 @@ static void concat_chunks(ChunkPtr& dst_chunk, const std::vector<ChunkPtr>& src_
     // Columns like FixedLengthColumn have already reserved memory when invoke Chunk::clone_empty(num_rows).
     dst_chunk = src_chunks.front()->clone_empty(num_rows);
     const auto num_columns = dst_chunk->num_columns();
+
     for (auto i = 0; i < num_columns; ++i) {
         auto dst_col = dst_chunk->get_column_by_index(i);
         auto* dst_data_col = ColumnHelper::get_data_column(dst_col.get());
@@ -88,8 +90,54 @@ static void concat_chunks(ChunkPtr& dst_chunk, const std::vector<ChunkPtr>& src_
             reserve_memory<LargeBinaryColumn>(dst_data_col, src_chunks, i);
         }
     }
+
     for (const auto& src_chk : src_chunks) {
         dst_chunk->append(*src_chk);
+    }
+}
+
+static void concat_chunks_use_german_string(ChunkPtr& dst_chunk, const std::vector<ChunkPtr>& src_chunks,
+                                            size_t num_rows, RuntimeProfile::Counter* create_dst_timer,
+                                            RuntimeProfile::Counter* reserve_memory_timer,
+                                            RuntimeProfile::Counter* append_entire_timer) {
+    DCHECK(!src_chunks.empty());
+    // Columns like FixedLengthColumn have already reserved memory when invoke Chunk::clone_empty(num_rows).
+    dst_chunk = src_chunks.front()->clone_empty(num_rows);
+    {
+        SCOPED_TIMER(create_dst_timer);
+        for (auto c = 0; c < dst_chunk->num_columns(); c++) {
+            auto col = dst_chunk->get_column_by_index(c);
+            auto maybe_gs_column = GermanStringColumn::create_from_binary(std::move(col));
+            if (maybe_gs_column.has_value()) {
+                dst_chunk->update_column_by_index(maybe_gs_column.value(), c);
+            }
+        }
+    }
+
+    {
+        SCOPED_TIMER(reserve_memory_timer);
+        size_t num_rows = 0;
+        for (const auto& src_chk : src_chunks) {
+            num_rows += src_chk->num_rows();
+        }
+
+        for (auto& col : dst_chunk->columns()) {
+            col->reserve(num_rows);
+        }
+    }
+
+    for (const auto& src_chk : src_chunks) {
+        for (auto& p : src_chk->get_slot_id_to_index_map()) {
+            auto& dst_col = dst_chunk->get_column_by_slot_id(p.first);
+            auto& src_col = src_chk->get_column_by_slot_id(p.first);
+            auto may_gs_col = GermanStringColumn::create_from_binary(std::move(src_col));
+            if (may_gs_col.has_value()) {
+                SCOPED_TIMER(append_entire_timer);
+                GermanStringColumn::append_entire_column(dst_col, std::move(may_gs_col.value()));
+            } else {
+                dst_col->append(*src_col);
+            }
+        }
     }
 }
 // Sort the large chunk
@@ -101,7 +149,17 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
     if (done || reach_limit) {
         _max_num_rows = std::max<int>(_max_num_rows, _staging_unsorted_rows);
         _profiler->input_required_memory->update(_staging_unsorted_bytes);
-        concat_chunks(_unsorted_chunk, _staging_unsorted_chunks, _staging_unsorted_rows);
+
+        {
+            SCOPED_TIMER(_concat_timer);
+            if (is_use_german_string()) {
+                concat_chunks_use_german_string(_unsorted_chunk, _staging_unsorted_chunks, _staging_unsorted_rows,
+                                                _create_dst_timer, _reserve_memory_timer, _append_entire_timer);
+            } else {
+                concat_chunks(_unsorted_chunk, _staging_unsorted_chunks, _staging_unsorted_rows);
+            }
+        }
+
         _staging_unsorted_chunks.clear();
         RETURN_IF_ERROR(_unsorted_chunk->upgrade_if_overflow());
 
@@ -273,6 +331,14 @@ Status ChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     if (*chunk != nullptr) {
         if (!_early_materialized_slots.empty()) {
             *chunk = _late_materialize(*chunk);
+        }
+
+        if (is_use_german_string()) {
+            SCOPED_TIMER(_materialize_timer);
+            for (const auto& p : (*chunk)->get_slot_id_to_index_map()) {
+                auto& column = (*chunk)->get_column_by_slot_id(p.first);
+                GermanStringColumn::to_binary(column);
+            }
         }
         RETURN_IF_ERROR((*chunk)->downgrade());
     }

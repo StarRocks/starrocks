@@ -36,7 +36,7 @@ namespace starrocks {
 void GermanStringColumn::check_or_die() const {}
 
 void GermanStringColumn::append(const GermanString& str) {
-    _data.emplace_back(str, _allocator.allocate(str.len));
+    _data.emplace_back(str, _allocator->allocate(str.len));
 }
 
 void GermanStringColumn::append(const Column& src, size_t offset, size_t count) {
@@ -44,7 +44,7 @@ void GermanStringColumn::append(const Column& src, size_t offset, size_t count) 
     const auto& b = down_cast<const GermanStringColumn&>(src);
     for (auto i = offset; i < offset + count; ++i) {
         const auto& str = b._data[i];
-        _data.emplace_back(str, _allocator.allocate(str.len));
+        _data.emplace_back(str, _allocator->allocate(str.len));
     }
 }
 
@@ -55,7 +55,7 @@ void GermanStringColumn::append_selective(const Column& src, const uint32_t* ind
     for (auto i = 0; i < size; ++i) {
         uint32_t row_idx = indexes[from + i];
         const auto& str = src_column._data[row_idx];
-        _data.emplace_back(str, _allocator.allocate(str.len));
+        _data.emplace_back(str, _allocator->allocate(str.len));
     }
 }
 
@@ -64,7 +64,7 @@ void GermanStringColumn::append_value_multiple_times(const Column& src, uint32_t
     DCHECK(index < src_column.size());
     const auto& str = src_column._data[index];
     _data.reserve(_data.size() + size);
-    _data.emplace_back(str, _allocator.allocate(str.len));
+    _data.emplace_back(str, _allocator->allocate(str.len));
     auto& first_str = _data.back();
     _data.insert(_data.end(), size - 1, first_str);
 }
@@ -81,7 +81,7 @@ StatusOr<ColumnPtr> GermanStringColumn::replicate(const Buffer<uint32_t>& offset
 }
 
 void GermanStringColumn::_append_string(const char* str, size_t len) {
-    _data.emplace_back(str, len, _allocator.allocate(len));
+    _data.emplace_back(str, len, _allocator->allocate(len));
 }
 
 void GermanStringColumn::append_string(const char* str, size_t len) {
@@ -103,7 +103,7 @@ bool GermanStringColumn::append_strings(const GermanString* data, size_t size) {
 void GermanStringColumn::append_value_multiple_times(const void* value, size_t count) {
     const auto* str = reinterpret_cast<const GermanString*>(value);
     _data.reserve(_data.size() + count);
-    _data.emplace_back(*str, _allocator.allocate(str->len));
+    _data.emplace_back(*str, _allocator->allocate(str->len));
     auto& first_str = _data.back();
     for (int i = 1; i < count; ++i) {
         _data.emplace_back(first_str);
@@ -135,7 +135,7 @@ void GermanStringColumn::update_rows(const Column& src, const uint32_t* indexes)
         if (src_str.len <= dst_str.len) {
             new (&dst_str) GermanString(src_str, reinterpret_cast<char*>(dst_str.long_rep.ptr));
         } else {
-            new (&dst_str) GermanString(src_str, _allocator.allocate(src_str.len));
+            new (&dst_str) GermanString(src_str, _allocator->allocate(src_str.len));
         }
     }
 }
@@ -144,9 +144,9 @@ void GermanStringColumn::assign(size_t n, size_t idx) {
     if (n == 0) {
         return; // nothing to do
     }
-    GermanString gs(_data[idx], _allocator.allocate(_data[idx].len));
+    GermanString gs(_data[idx], _allocator->allocate(_data[idx].len));
     _data.clear();
-    _allocator.clear();
+    _allocator->clear();
     _data.reserve(n);
     _data.insert(_data.end(), n, gs);
 }
@@ -172,7 +172,7 @@ ColumnPtr GermanStringColumn::cut(size_t start, size_t length) const {
     result_column->reserve(end - start);
     for (size_t i = start; i < end; ++i) {
         const auto& str = _data[i];
-        result_column->_data.emplace_back(str, result_column->_allocator.allocate(str.len));
+        result_column->_data.emplace_back(str, result_column->_allocator->allocate(str.len));
     }
     return result;
 }
@@ -448,18 +448,85 @@ ColumnPtr GermanStringColumn::to_binary() const {
     }
 }
 
-void GermanStringColumn::from_binary(const starrocks::BinaryColumn& binary_column) {
+void GermanStringColumn::from_binary(starrocks::BinaryColumn&& binary_column) {
     _data.clear();
-    _allocator.clear();
-    const auto& bytes = binary_column.get_bytes();
+    auto& bytes = binary_column.get_bytes();
+    auto& offsets = binary_column.get_offset();
+    size_t num_rows = offsets.size() - 1;
+    _data.reserve(num_rows);
+    for (size_t i = 0; i < num_rows; ++i) {
+        auto* p = reinterpret_cast<const char*>(bytes.data() + offsets[i]);
+        size_t len = offsets[i + 1] - offsets[i];
+        _data.emplace_back(p, len);
+    }
+    auto allocator = std::make_shared<GermanStringBinaryColumnExternalAllocator>(std::move(bytes));
+    this->set_allocator(std::dynamic_pointer_cast<GermanStringExternalAllocator>(allocator));
+}
+
+void GermanStringColumn::from_large_binary(starrocks::LargeBinaryColumn&& binary_column) {
+    _data.clear();
+    auto& bytes = binary_column.get_bytes();
     const auto& offsets = binary_column.get_offset();
     size_t num_rows = offsets.size() - 1;
     _data.reserve(num_rows);
     for (size_t i = 0; i < num_rows; ++i) {
         auto* p = reinterpret_cast<const char*>(bytes.data() + offsets[i]);
         size_t len = offsets[i + 1] - offsets[i];
-        _data.emplace_back(p, len, _allocator.allocate(len));
+        _data.emplace_back(p, len);
     }
+    auto allocator = std::make_shared<GermanStringBinaryColumnExternalAllocator>(std::move(bytes));
+    this->set_allocator(std::dynamic_pointer_cast<GermanStringExternalAllocator>(allocator));
+}
+
+std::optional<ColumnPtr> GermanStringColumn::create_from_binary(ColumnPtr&& column) {
+    auto* data_column = ColumnHelper::get_data_column(column.get());
+    if (!data_column->is_binary() && !data_column->is_large_binary()) {
+        return std::nullopt; // Not a binary column
+    }
+    auto gs_column = GermanStringColumn::create();
+    if (data_column->is_binary()) {
+        down_cast<GermanStringColumn*>(gs_column.get())->from_binary(std::move(*down_cast<BinaryColumn*>(data_column)));
+    } else {
+        down_cast<GermanStringColumn*>(gs_column.get())
+                ->from_large_binary(std::move(*down_cast<LargeBinaryColumn*>(data_column)));
+    }
+    if (column->is_nullable()) {
+        auto null_column = ColumnHelper::get_null_column(column.get());
+        return NullableColumn::create(std::move(gs_column), std::move(null_column));
+    } else {
+        return gs_column;
+    }
+}
+
+void GermanStringColumn::append_entire_column(GermanStringColumn&& src_col) {
+    auto num_rows = src_col._data.size();
+    _data.reserve(_data.size() + num_rows);
+    _data.insert(_data.end(), std::make_move_iterator(src_col._data.begin()),
+                 std::make_move_iterator(src_col._data.end()));
+    src_col._data.clear();
+    _allocator->incorporate(std::move(src_col._allocator));
+}
+
+ColumnPtr GermanStringColumn::append_entire_column(ColumnPtr& dst_col, ColumnPtr&& src_col) {
+    if (dst_col->is_nullable() || src_col->is_nullable()) {
+        dst_col = std::move(ColumnHelper::cast_to_nullable_column(dst_col));
+    }
+
+    auto* dst_data_col = down_cast<GermanStringColumn*>(ColumnHelper::get_data_column(dst_col.get()));
+    auto* src_data_col = down_cast<GermanStringColumn*>(ColumnHelper::get_data_column(src_col.get()));
+    dst_data_col->append_entire_column(std::move(*src_data_col));
+
+    if (dst_col->is_nullable()) {
+        auto* dst_null_col = down_cast<NullableColumn*>(dst_col.get())->null_column_mutable_ptr().get();
+        auto* src_null_col = ColumnHelper::get_null_column(src_col.get());
+        if (src_null_col == nullptr) {
+            dst_null_col->append_default(src_data_col->size());
+        } else {
+            dst_null_col->append(*src_null_col, 0, src_data_col->size());
+        }
+        DCHECK(dst_null_col->size() == dst_data_col->size());
+    }
+    return dst_col;
 }
 
 size_t GermanStringColumn::get_binary_size() const {
@@ -469,6 +536,20 @@ size_t GermanStringColumn::get_binary_size() const {
         total_size += _data[i].len;
     }
     return total_size;
+}
+
+void GermanStringColumn::to_binary(ColumnPtr& column) {
+    if (!ColumnHelper::get_data_column(column.get())->is_german_string()) {
+        // Already a binary column, no conversion needed
+        return;
+    }
+    auto binary_column = down_cast<GermanStringColumn*>(ColumnHelper::get_data_column(column.get()))->to_binary();
+    if (column->is_nullable()) {
+        auto& null_column = down_cast<NullableColumn*>(column.get())->null_column();
+        column = NullableColumn::create(std::move(binary_column), std::move(null_column));
+    } else {
+        column = std::move(binary_column);
+    }
 }
 
 } // namespace starrocks
