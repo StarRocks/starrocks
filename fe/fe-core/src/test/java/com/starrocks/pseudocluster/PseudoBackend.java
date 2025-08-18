@@ -92,6 +92,8 @@ import com.starrocks.proto.UnlockTabletMetadataRequest;
 import com.starrocks.proto.UnlockTabletMetadataResponse;
 import com.starrocks.proto.UploadSnapshotsRequest;
 import com.starrocks.proto.UploadSnapshotsResponse;
+import com.starrocks.proto.VacuumFullRequest;
+import com.starrocks.proto.VacuumFullResponse;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.LakeService;
@@ -1204,6 +1206,11 @@ public class PseudoBackend {
 
         @Override
         public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
             return CompletableFuture.completedFuture(null);
         }
     }
