@@ -287,14 +287,14 @@ drop table ice_tbl_${uuid1} force;
 
 create external table ice_tbl_${uuid2}(
     c_int int,
-    dt datetime
+    dt date
 ) partition by (dt);
 
 INSERT INTO ice_tbl_${uuid2} (    
        c_int, dt
 ) VALUES
-(10, '2021-01-01 13:00:00'),
-(20, '2022-01-01 14:00:00');
+(10, '2021-01-01'),
+(20, '2022-01-02');
 
 select min(dt), max(dt) from ice_tbl_${uuid2};
 
