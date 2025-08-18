@@ -1759,7 +1759,7 @@ public class MaterializedViewAnalyzer {
         ColumnDef generatedPartitionColumn = new ColumnDef(
                 columnName, typeDef, null, false, null, null, true,
                 ColumnDef.DefaultValueDef.NOT_SET, null, adjustedPartitionByExpr, "");
-        return generatedPartitionColumn.toColumn(null);
+        return Column.fromColumnDef(null, generatedPartitionColumn);
     }
 
     /**
