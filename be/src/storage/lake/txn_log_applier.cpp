@@ -321,7 +321,7 @@ private:
         RETURN_IF_ERROR(prepare_primary_index());
         if (is_column_mode_partial_update(op_write)) {
             return _tablet.update_mgr()->publish_column_mode_partial_update(op_write, txn_id, _metadata, &_tablet,
-                                                                             _index_entry, &_builder, _base_version);
+                                                                            _index_entry, &_builder, _base_version);
         } else {
             return _tablet.update_mgr()->publish_primary_key_tablet(op_write, txn_id, _metadata, &_tablet, _index_entry,
                                                                     &_builder, _base_version);
