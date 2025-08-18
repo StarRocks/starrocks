@@ -348,6 +348,46 @@ select c4, sum(c1) from all_decimal group by 1 order by 1, 2 limit 1;
 -- result:
 0.00000	0.00
 -- !result
+select c1, c2, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+-- result:
+0.00	0.00	0.00
+-- !result
+select c1, c3, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+-- result:
+0.00	0E-9	0.00
+-- !result
+select c1, c4, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+-- result:
+0.00	0.00000	0.00
+-- !result
+select c2, c3, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+-- result:
+0.00	0E-9	0.00
+-- !result
+select c2, c4, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+-- result:
+0.00	0.00000	0.00
+-- !result
+select c3, c4, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+-- result:
+0E-9	0.00000	0.00
+-- !result
+select c1, c2, c3, sum(c1) from all_decimal group by 1,2,3 order by 1,2,3,4 limit 1;
+-- result:
+0.00	0.00	0E-9	0.00
+-- !result
+select c1, c2, c4, sum(c1) from all_decimal group by 1,2,3 order by 1,2,3,4 limit 1;
+-- result:
+0.00	0.00	0.00000	0.00
+-- !result
+select c2, c3, c4, sum(c1) from all_decimal group by 1,2,3 order by 1,2,3,4 limit 1;
+-- result:
+0.00	0E-9	0.00000	0.00
+-- !result
+select c1, c2, c3, c4, sum(c1) from all_decimal group by 1,2,3,4 order by 1,2,3,4,5 limit 1;
+-- result:
+0.00	0.00	0E-9	0.00000	0.00
+-- !result
 create table all_numbers_t0 (
     c1 tinyint,
     c2 smallint,

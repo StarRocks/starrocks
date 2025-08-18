@@ -16,21 +16,18 @@
 
 #include <algorithm>
 #include <memory>
-#include <optional>
 #include <type_traits>
 #include <utility>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/agg_runtime_filter_builder.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
 #include "exec/exec_node.h"
-#include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/operator.h"
 #include "exprs/agg/agg_state_if.h"
 #include "exprs/agg/agg_state_merge.h"
@@ -1362,6 +1359,7 @@ bool could_apply_bitcompress_opt(
         const std::vector<std::optional<std::pair<VectorizedLiteral*, VectorizedLiteral*>>>& ranges,
         std::vector<std::any>& base, std::vector<int>& used_bytes, size_t* max_size, bool* has_null) {
     size_t accumulated = 0;
+    size_t accumulated_fixed_length_bits = 0;
     for (size_t i = 0; i < group_by_types.size(); i++) {
         size_t size = 0;
         // 1 bytes for null flag.
@@ -1376,6 +1374,7 @@ bool could_apply_bitcompress_opt(
 
         size_t fixed_base_size = get_size_of_fixed_length_type(ltype);
         if (fixed_base_size == 0) return false;
+        accumulated_fixed_length_bits += fixed_base_size * 8;
 
         if (!ranges[i].has_value()) {
             return false;
@@ -1389,8 +1388,28 @@ bool could_apply_bitcompress_opt(
         accumulated += size;
         used_bytes[i] = accumulated;
     }
-    *max_size = accumulated;
-    return true;
+    auto get_level = [](size_t used_bits) {
+        if (used_bits <= sizeof(uint8_t) * 8)
+            return 1;
+        else if (used_bits <= sizeof(uint16_t) * 8)
+            return 2;
+        else if (used_bits <= sizeof(uint32_t) * 8)
+            return 3;
+        else if (used_bits <= sizeof(uint64_t) * 8)
+            return 4;
+        else if (used_bits <= sizeof(int128_t) * 8)
+            return 5;
+        else
+            return 6;
+    };
+    // If they are at the same level, grouping by compressed key will not optimize performance, so we disable it.
+    // eg: For example, two int32 values both have a threshold of 0-2^32, so they need to use group by int64.
+    // In this case, there will be no optimization effect. We disable this situation.
+    if (get_level(accumulated_fixed_length_bits) > get_level(accumulated)) {
+        *max_size = accumulated;
+        return true;
+    }
+    return false;
 }
 
 bool is_group_columns_fixed_size(std::vector<ColumnType>& group_by_types, size_t* max_size, bool* has_null) {
@@ -1489,10 +1508,7 @@ typename HashVariantType::Type Aggregator::_try_to_apply_compressed_key_opt(type
 
         if (could_apply_bitcompress_opt(_group_by_types, _ranges, bases, used_bits, &new_max_bit_size,
                                         &has_null_column)) {
-            if (new_max_bit_size <= 8 && _group_by_types.size() == 1) {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_cx1
-                                                 : HashVariantType::Type::phase2_slice_cx1;
-            } else if (_group_by_types.size() > 1) {
+            if (_group_by_types.size() > 0) {
                 if (new_max_bit_size <= 8) {
                     type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_cx1
                                                      : HashVariantType::Type::phase2_slice_cx1;
