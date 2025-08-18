@@ -52,6 +52,7 @@ CONF_Int32(brpc_num_threads, "-1");
 // The max number of single connections maintained by the brpc client and each server.
 // Theses connections are created during the first few access and will be used thereafter
 CONF_Int32(brpc_max_connections_per_server, "1");
+CONF_mInt64(brpc_stub_cache_expire_s, "3600");
 
 // Declare a selection strategy for those servers have many ips.
 // Note that there should at most one ip match this list.

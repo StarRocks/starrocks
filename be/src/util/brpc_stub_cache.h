@@ -68,8 +68,18 @@ public:
 
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const butil::EndPoint& endpoint) {
         std::lock_guard<SpinLock> l(_lock);
+        const auto current_time_ms = MonotonicMillis();
         auto stub_pool = _stub_map.seek(endpoint);
-        if (stub_pool == nullptr) {
+        auto last_access_time = _endpoint_to_last_access_time[endpoint];
+        _endpoint_to_last_access_time.insert(endpoint, current_time_ms);
+        if (stub_pool == nullptr || (config::brpc_stub_cache_expire_s > 0 &&
+                                     last_access_time + config::brpc_stub_cache_expire_s * 1000 < current_time_ms)) {
+            // If the stub is not used for a long time, we can assume that all the stubs in that stub pool is invalid.
+            // Recreate a stub pool for easier maintenance.
+            if (stub_pool != nullptr) {
+                // should release old one.
+                delete stub_pool;
+            }
             StubPool* pool = new StubPool();
             _stub_map.insert(endpoint, pool);
             return pool->get_or_create(endpoint);
@@ -129,6 +139,7 @@ private:
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, StubPool*> _stub_map;
+    butil::FlatMap<butil::EndPoint, int64_t> _endpoint_to_last_access_time;
 };
 
 class HttpBrpcStubCache {
