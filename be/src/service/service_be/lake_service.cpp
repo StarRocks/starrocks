@@ -35,6 +35,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/vacuum.h"
+#include "storage/lake/vacuum_full.h"
 #include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
 #include "util/countdown_latch.h"
