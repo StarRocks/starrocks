@@ -1431,6 +1431,19 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_compaction_conflict_ch
     config::enable_light_pk_compaction_publish = true;
 }
 
+TEST_P(RowsetColumnPartialUpdateTest, test_dcg_file_size) {
+    const int N = 100;
+    auto tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+    int64_t version = 1;
+    int64_t version_before_partial_update = 1;
+    prepare_tablet(this, tablet, version, version_before_partial_update, N);
+    // get dcg file size
+    int64_t dcg_file_size = StorageEngine::instance()->update_manager()->get_delta_column_group_file_size_by_tablet_id(
+            tablet->tablet_id());
+    ASSERT_GT(dcg_file_size, 0) << "dcg file size should be greater than 0";
+}
+
 INSTANTIATE_TEST_SUITE_P(RowsetColumnPartialUpdateTest, RowsetColumnPartialUpdateTest,
                          ::testing::Values(RowsetColumnPartialUpdateParam{1, false},
                                            RowsetColumnPartialUpdateParam{1024, true},

@@ -127,7 +127,7 @@ public:
 
     Status prepare(const EditVersion& version, size_t n);
 
-    Status commit(PersistentIndexMetaPB* index_meta);
+    Status commit(PersistentIndexMetaPB* index_meta, IOStat* stat = nullptr);
 
     Status on_commited();
 

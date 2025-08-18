@@ -910,6 +910,16 @@ void TabletUpdatesTest::test_apply(bool enable_persistent_index, bool has_merge_
         ASSERT_EQ(N, read_tablet(_tablet, i));
     }
     test_pk_dump(rowsets.size());
+    // test extra file size;
+    // get TabletUpdatesPB
+    TabletUpdatesPB updates_pb;
+    _tablet->updates()->to_updates_pb(&updates_pb);
+    // check extra file size exist.
+    if (enable_persistent_index) {
+        ASSERT_TRUE(updates_pb.extra_file_size().pindex_size() > 0);
+    } else {
+        ASSERT_TRUE(updates_pb.extra_file_size().pindex_size() == 0);
+    }
 }
 
 TEST_F(TabletUpdatesTest, apply) {
