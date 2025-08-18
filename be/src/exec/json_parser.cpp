@@ -48,7 +48,6 @@ Status JsonDocumentStreamParser::parse(char* data, size_t len, size_t allocated)
 }
 
 bool JsonDocumentStreamParser::_check_and_new_doc_stream_iterator() {
-    //LOG(ERROR) << "LXH: CHECK_AND_NEW: " << _doc_stream_itr.current_index();
     size_t cur_left_len = _first_object_parsed ? _len - _last_begin_offset : _len;
     if (_batch_size >= cur_left_len) {
         // nothing can do for the batch_size
@@ -61,13 +60,10 @@ bool JsonDocumentStreamParser::_check_and_new_doc_stream_iterator() {
         _batch_size = std::min(_batch_size * 8, cur_left_len);
         _doc_stream = _parser->iterate_many(_data + _last_begin_offset, cur_left_len, _batch_size);
         _doc_stream_itr = _doc_stream.begin();
-        //LOG(ERROR) << "LXH: CHECK: " << _doc_stream_itr.current_index();
 
         // skip the last parsed object
-        //LOG(ERROR) << "LXH: FIRST: " << _first_object_parsed;
         if (_first_object_parsed) {
             ++_doc_stream_itr;
-            //LOG(ERROR) << "LXH: SECOND: " << _doc_stream_itr.current_index();
         }
     } while (_batch_size < cur_left_len &&
              _doc_stream_itr.error() != simdjson::SUCCESS); /* make sure get a valid iterator after ++ */
@@ -100,7 +96,6 @@ Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* r
                 _curr_ready = true;
 
                 _last_begin_offset = _doc_stream_itr.current_index();
-                //LOG(ERROR) << "LXH: LAST: " << _last_begin_offset;
 
                 if (!_first_object_parsed) {
                     _first_object_parsed = true;
@@ -109,7 +104,6 @@ Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* r
                 return Status::OK();
             }
             _left_bytes = _doc_stream.truncated_bytes();
-            //LOG(ERROR) << "LXH: ITER: " << _doc_stream.truncated_bytes();
             return Status::EndOfFile("all documents of the stream are iterated");
         } catch (simdjson::simdjson_error& e) {
             /*
@@ -151,10 +145,7 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
 Status JsonDocumentStreamParser::advance() noexcept {
     _curr_ready = false;
     _last_offset = _doc_stream_itr.current_index();
-    //LOG(ERROR) << "LXH: ADVANCE_S1: " << _doc_stream_itr.current_index();
     ++_doc_stream_itr;
-    //LOG(ERROR) << "LXH: ADVANCE_S2: " << _doc_stream_itr.current_index();
-    //LOG(ERROR) << "LXH: ADVANCE_S3: " << _doc_stream.end().current_index();
     if (_doc_stream_itr != _doc_stream.end() ||
         /*
          * When the iterator reach the end, we should always to reset the
@@ -169,7 +160,6 @@ Status JsonDocumentStreamParser::advance() noexcept {
         return Status::OK();
     }
     _left_bytes = _doc_stream.truncated_bytes();
-    //LOG(ERROR) << "LXH: ITER_1: " << _doc_stream.truncated_bytes();
     return Status::EndOfFile("all documents of the stream are iterated");
 }
 

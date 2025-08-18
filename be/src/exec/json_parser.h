@@ -94,7 +94,6 @@ private:
     size_t _batch_size = simdjson::dom::DEFAULT_BATCH_SIZE;
     // _first_object_parsed is true if there is at least one object is parsed successfully
     bool _first_object_parsed = false;
-    size_t _last_offset = 0;
     size_t _left_bytes = 0;
 };
 

@@ -811,10 +811,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if (format == THdfsFileFormat::TEXT) {
         if (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr) {
             const auto* hdfs_table = down_cast<const HdfsTableDescriptor*>(_hive_table);
-            LOG(INFO) << "LXH: FORMAT: " << hdfs_table->get_serde_lib();
             if (hdfs_table->get_serde_lib() == "org.openx.data.jsonserde.JsonSerDe") {
-                scanner = new HdfsJsonScanner();
-                //scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
+                if (config::json_scanner_use_jni) {
+                    scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
+                } else {
+                    scanner = new HdfsJsonScanner();
+                }
             } else {
                 scanner = new HdfsTextScanner();
             }
