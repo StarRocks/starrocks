@@ -124,6 +124,7 @@ public:
     void clear_cached_delta_column_group_by_tablet_id(int64_t tablet_id);
     void clear_cached_delta_column_group(const std::vector<TabletSegmentId>& tsids);
 
+    int64_t get_delta_column_group_file_size_by_tablet_id(int64_t tablet_id);
     StatusOr<size_t> clear_delta_column_group_before_version(KVStore* meta, const std::string& tablet_path,
                                                              int64_t tablet_id, int64_t min_readable_version);
 

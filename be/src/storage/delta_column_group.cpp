@@ -24,11 +24,12 @@ namespace starrocks {
 
 void DeltaColumnGroup::init(int64_t version, const std::vector<std::vector<ColumnUID>>& column_ids,
                             const std::vector<std::string>& column_files,
-                            const std::vector<std::string>& encryption_metas) {
+                            const std::vector<std::string>& encryption_metas, int64_t file_size) {
     _version = version;
     _column_uids = column_ids;
     _column_files = column_files;
     _encryption_metas = encryption_metas;
+    _file_size = file_size;
     _calc_memory_usage();
 }
 
@@ -128,6 +129,7 @@ Status DeltaColumnGroup::load(int64_t version, const char* data, size_t length) 
             _column_uids.back().push_back(cid);
         }
     }
+    _file_size = dcg_pb.file_size();
     _calc_memory_usage();
     return Status::OK();
 }
@@ -164,6 +166,7 @@ std::string DeltaColumnGroup::save() const {
             dcg_col_pb->add_column_ids(cid);
         }
     }
+    dcg_pb.set_file_size(_file_size);
     std::string result;
     dcg_pb.SerializeToString(&result);
     return result;
@@ -187,6 +190,7 @@ std::string DeltaColumnGroupListSerializer::serialize_delta_column_group_list(co
                 dcg_col_pb->add_column_ids(cid);
             }
         }
+        dcg_pb.set_file_size(dcg->file_size());
         dcgs_pb.add_dcgs()->CopyFrom(dcg_pb);
     }
 
@@ -232,7 +236,7 @@ Status DeltaColumnGroupListSerializer::_deserialize_delta_column_group_list(cons
                 encryption_metas.push_back(dcgs_pb.dcgs(i).encryption_metas(j));
             }
         }
-        dcg->init(dcgs_pb.versions(i), column_ids, column_files, encryption_metas);
+        dcg->init(dcgs_pb.versions(i), column_ids, column_files, encryption_metas, dcgs_pb.dcgs(i).file_size());
         dcgs->push_back(dcg);
     }
     return Status::OK();

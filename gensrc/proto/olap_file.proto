@@ -257,11 +257,17 @@ message TabletMetaLogPB {
     repeated TabletMetaOpPB ops = 1;
 }
 
+message TabletUpdatesExtraFileSize {
+    optional int64 pindex_size = 1; // total file size of persistent index.
+    optional int64 col_size = 2;    // total file size of delta column files.
+}
+
 message TabletUpdatesPB {
     repeated EditVersionMetaPB versions = 1;
     optional EditVersionPB apply_version = 2;
     optional uint32 next_rowset_id = 3;
     optional uint64 next_log_id = 4;
+    optional TabletUpdatesExtraFileSize extra_file_size = 5;
 }
 
 message BinlogConfigPB {
