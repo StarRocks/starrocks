@@ -29,7 +29,7 @@ public abstract class AlterStorageVolumeClause implements ParseNode {
 
     protected final NodePosition pos;
 
-    protected AlterStorageVolumeClause(AlterOpType opType, NodePosition pos) {
+    protected AlterStorageVolumeClause(NodePosition pos) {
         this.pos = pos;
         this.opType = opType;
     }

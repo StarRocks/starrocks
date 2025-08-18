@@ -33,7 +33,7 @@ public abstract class AlterTableColumnClause extends AlterTableClause {
     // for AddColumnsClause
     private final List<Column> columns = new ArrayList<>();
 
-    protected AlterTableColumnClause(AlterOpType opType, String rollupName, Map<String, String> properties,
+    protected AlterTableColumnClause(String rollupName, Map<String, String> properties,
                                      NodePosition pos) {
         super(opType, pos);
         this.rollupName = rollupName;

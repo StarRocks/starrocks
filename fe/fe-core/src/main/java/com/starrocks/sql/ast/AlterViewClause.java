@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -28,7 +27,7 @@ public class AlterViewClause extends AlterClause {
     protected String inlineViewDef;
     protected String comment;
     public AlterViewClause(List<ColWithComment> colWithComments, QueryStatement queryStatement, NodePosition nodePosition) {
-        super(AlterOpType.ALTER_VIEW, nodePosition);
+        super(nodePosition);
         this.colWithComments = colWithComments;
         this.queryStatement = queryStatement;
     }
