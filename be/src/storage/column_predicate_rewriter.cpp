@@ -27,6 +27,7 @@
 #include "common/config.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
+#include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/runtime_filter_bank.h"
@@ -421,9 +422,29 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
         ObjectPool* pool, const ColumnPtr& raw_dict_column, const ColumnPtr& raw_code_column, bool field_nullable,
         const ColumnPredicate* src_pred, ColumnPredicate** dest_pred) {
     *dest_pred = nullptr;
+    const auto* pred = down_cast<const ColumnExprPredicate*>(src_pred);
+
+    // Check if this is a MATCH expression - MATCH expressions should not be rewritten
+    // because they must be used as pushdown predicates on columns with GIN index
+    if (!pred->get_expr_ctxs().empty()) {
+        ExprContext* ctx = pred->get_expr_ctxs()[0];
+        if (ctx != nullptr && ctx->root() != nullptr) {
+            Expr* expr = ctx->root();
+            // Handle NOT MATCH case
+            if (expr->node_type() == TExprNodeType::COMPOUND_PRED && expr->op() == TExprOpcode::COMPOUND_NOT &&
+                expr->get_num_children() == 1) {
+                expr = expr->get_child(0);
+            }
+            // Check if this is a MATCH expression
+            if (expr->node_type() == TExprNodeType::MATCH_EXPR) {
+                VLOG(2) << "Skipping dictionary rewrite for MATCH expression on column " << pred->column_id();
+                return RewriteStatus::UNCHANGED;
+            }
+        }
+    }
+
     size_t value_size = raw_dict_column->size();
     std::vector<uint8_t> selection(value_size);
-    const auto* pred = down_cast<const ColumnExprPredicate*>(src_pred);
     size_t chunk_size = std::min<size_t>(pred->runtime_state()->chunk_size(), std::numeric_limits<uint16_t>::max());
 
     if (value_size <= chunk_size) {
