@@ -23,6 +23,7 @@
 #include "column/chunk.h"
 #include "common/closure_guard.h"
 #include "common/compiler_util.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -124,7 +125,7 @@ private:
             info->set_schema_hash(0); // required field
             const auto* dict_valid_info = delta_writer->global_dict_columns_valid_info();
             const auto* writer_global_dicts = delta_writer->global_dict_map();
-            if (dict_valid_info == nullptr) return;
+            if (dict_valid_info == nullptr || !config::lake_enable_report_lowcardinality_info) return;
             for (const auto& item : *dict_valid_info) {
                 if (item.second && writer_global_dicts != nullptr &&
                     writer_global_dicts->find(item.first) != writer_global_dicts->end()) {
