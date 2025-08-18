@@ -826,6 +826,7 @@ vectorized_functions = [
     [100018, 'host_name', True, False, 'VARCHAR', [], "UtilityFunctions::host_name"],
     [100020, 'get_query_profile', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::get_query_profile"],
     [100024, 'encode_sort_key', True, False, 'VARBINARY', ['ANY_ELEMENT', '...'], 'UtilityFunctions::encode_sort_key'],
+    [100025, 'zorder_encode', True, False, 'VARBINARY', ['ANY_ELEMENT', '...'], 'UtilityFunctions::zorder_encode'],
 
     # json string function
     [110022, "get_json_int", False, False, "BIGINT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bigint",
