@@ -466,6 +466,52 @@ TEST_F(FileWriterTest, TestWriteArray) {
     Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
+TEST_F(FileWriterTest, TestWriteArrayNullWithOffset) {
+    // type_descs
+    std::vector<TypeDescriptor> type_descs;
+    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    type_int_array.children.push_back(type_int);
+    type_descs.push_back(type_int_array);
+
+    // NULL, [10]
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto elements_data_col = Int32Column::create();
+        std::vector<int32_t> nums{-99, 10};
+        elements_data_col->append_numbers(nums.data(), sizeof(int32_t) * nums.size());
+        auto elements_null_col = UInt8Column::create();
+        std::vector<uint8_t> nulls{1, 0};
+        elements_null_col->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
+        auto elements_col = NullableColumn::create(std::move(elements_data_col), std::move(elements_null_col));
+
+        auto offsets_col = UInt32Column::create();
+        std::vector<uint32_t> offsets{0, 1, 2};
+        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
+        auto array_col = ArrayColumn::create(std::move(elements_col), std::move(offsets_col));
+
+        std::vector<uint8_t> _nulls{1, 0};
+        auto null_col = UInt8Column::create();
+        null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
+        auto nullable_col = NullableColumn::create(std::move(array_col), std::move(null_col));
+
+        std::cout << "nullable_col: " << nullable_col->debug_string() << std::endl;
+
+        chunk->append_column(std::move(nullable_col), chunk->num_columns());
+    }
+
+    // write chunk
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    auto st = _write_chunk(chunk, type_descs, schema);
+    ASSERT_ERROR(st);
+
+    // // read chunk and assert equality
+    // auto read_chunk = _read_chunk(type_descs);
+    // ASSERT_TRUE(read_chunk != nullptr);
+    // Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
 TEST_F(FileWriterTest, TestWriteStruct) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
