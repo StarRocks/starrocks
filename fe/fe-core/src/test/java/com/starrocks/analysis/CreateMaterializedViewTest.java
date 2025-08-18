@@ -30,10 +30,12 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -5497,4 +5499,89 @@ public class CreateMaterializedViewTest extends MVTestBase {
         starRocksAssert.withMaterializedView(sql);
         starRocksAssert.refreshMV(connectContext, "mv1");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testAdaptiveRefreshMVWithExternalTable1() throws Exception {
+        String sql = "create materialized view mv_table_with_external_table " +
+                "partition by str2date(d,'%Y-%m-%d') " +
+                "distributed by hash(a) " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1',\n" +
+                "'partition_refresh_strategy' = 'adaptive'" +
+                ") \n" +
+                "as select a, b, d, bitmap_union(to_bitmap(t1.c))" +
+                " from iceberg0.partitioned_db.part_tbl1 as t1 " +
+                " group by a, b, d;";
+        starRocksAssert.withMaterializedView(sql);
+        starRocksAssert.refreshMV(connectContext, "mv_table_with_external_table");
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
+    }
+
+    @BeforeEach
+    public void setup(TestInfo testInfo) {
+        Optional<Method> testMethod = testInfo.getTestMethod();
+        if (testMethod.isPresent()) {
+            this.name = testMethod.get().getName();
+        }
+    }
+
+    @Test
+    public void testCreateMVWithFixedLengthChar1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tt1(dt date, val int, col1 char(8), col2 varchar(8));");
+        Config.transform_type_prefer_string_for_varchar = true;
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 \n" +
+                "REFRESH DEFERRED MANUAL \n" +
+                "AS SELECT   CASE WHEN (`col1` = '01') THEN '本县区'\n" +
+                "   WHEN (`col1` = '02') THEN '本市其它县区' \n" +
+                "   WHEN (`col1` = '03') THEN '本省其它地市' \n" +
+                "   WHEN (`col1` = '04') THEN '其他省' \n" +
+                "   WHEN (`col1` = '05') THEN '港澳台' \n" +
+                "   WHEN (`col1` = '06') THEN '外籍'\n" +
+                "    ELSE `col1` \n" +
+                "    END AS new_col1,  col1, col2, dt from tt1;");
+        MaterializedView mv = getMv("test_mv1");
+        Assertions.assertTrue(mv != null, "Materialized view should not be null");
+        Column col0 = mv.getBaseSchema().get(0);
+        Type type0 = col0.getType();
+        Assertions.assertTrue(type0.isStringType());
+        ScalarType scalarType0 = (ScalarType) type0;
+        Assertions.assertEquals(1048576, scalarType0.getLength());
+        Config.transform_type_prefer_string_for_varchar = false;
+    }
+
+    @Test
+    public void testCreateMVWithFixedLengthChar2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tt1(dt date, val int, col1 char(8), col2 varchar(8));");
+        Config.transform_type_prefer_string_for_varchar = false;
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 \n" +
+                "REFRESH DEFERRED MANUAL \n" +
+                "AS SELECT   CASE WHEN (`col1` = '01') THEN '本县区'\n" +
+                "   WHEN (`col1` = '02') THEN '本市其它县区' \n" +
+                "   WHEN (`col1` = '03') THEN '本省其它地市' \n" +
+                "   WHEN (`col1` = '04') THEN '其他省' \n" +
+                "   WHEN (`col1` = '05') THEN '港澳台' \n" +
+                "   WHEN (`col1` = '06') THEN '外籍'\n" +
+                "    ELSE `col1` \n" +
+                "    END AS new_col1,  col1, col2, dt from tt1;");
+        MaterializedView mv = getMv("test_mv1");
+        Assertions.assertTrue(mv != null, "Materialized view should not be null");
+        Column col0 = mv.getBaseSchema().get(0);
+        Type type0 = col0.getType();
+        Assertions.assertTrue(type0.isStringType());
+        ScalarType scalarType0 = (ScalarType) type0;
+        Assertions.assertEquals(1048576, scalarType0.getLength());
+        Config.transform_type_prefer_string_for_varchar = false;
+    }
+>>>>>>> ba5d65e4ed ([BugFix] Fix create mv with case-when incompatible varchar type (#61996))
 }
