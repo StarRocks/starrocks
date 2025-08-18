@@ -83,6 +83,11 @@ public class LoadJobMVListener implements LoadJobListener {
     }
 
     @Override
+    public void onDMLStmtFinishedUpdateJobStat(TransactionState transactionState, DmlType dmlType) {
+        // skip
+    }
+
+    @Override
     public void onInsertOverwriteJobCommitFinish(Database db, Table table, InsertOverwriteJobStats stats) {
         triggerToRefreshRelatedMVs(db, table);
     }

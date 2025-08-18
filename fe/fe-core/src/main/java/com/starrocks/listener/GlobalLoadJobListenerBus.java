@@ -67,6 +67,17 @@ public class GlobalLoadJobListenerBus {
     }
 
     /**
+     * Do all callbacks after DML job (INSERT/UPDATE/DELETE) has finished to update their stats
+     * @param transactionState finished transaction states
+     */
+    public void onDMLStmtFinishedUpdateJobStat(TransactionState transactionState, DmlType dmlType) {
+        if (transactionState == null) {
+            return;
+        }
+        listeners.stream().forEach(listener -> listener.onDMLStmtFinishedUpdateJobStat(transactionState, dmlType));
+    }
+
+    /**
      * Do all callbacks after `Insert OVERWRITE` transaction is finished, which is only triggered without an error.
      * @param db database of the target table
      * @param table target table that has changed

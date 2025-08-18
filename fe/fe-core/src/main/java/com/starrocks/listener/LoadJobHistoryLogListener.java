@@ -34,15 +34,28 @@ import java.util.List;
  * Listener to trigger load_history log print after load finished
  */
 public class LoadJobHistoryLogListener implements LoadJobListener {
-
     public static final LoadJobHistoryLogListener INSTANCE = new LoadJobHistoryLogListener();
 
     private static final Logger LOADS_HISTORY_LOG = LogManager.getLogger("loads_history");
     private static final Gson GSON = new Gson();
 
+    private boolean needTrigger() {
+        if (!Config.enable_loads_history_log) {
+            return false;
+        }
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return false;
+        }
+        GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
+        if (stateMgr == null || !stateMgr.isLeader() || !stateMgr.isReady()) {
+            return false;
+        }
+        return true;
+    }
+
     @Override
     public void onStreamLoadTransactionFinish(TransactionState transactionState) {
-        if (!Config.enable_loads_history_log) {
+        if (!needTrigger()) {
             return;
         }
         String label = transactionState.getLabel();
@@ -58,10 +71,31 @@ public class LoadJobHistoryLogListener implements LoadJobListener {
 
     @Override
     public void onLoadJobTransactionFinish(TransactionState transactionState) {
-        if (!Config.enable_loads_history_log) {
+        doJobLog(transactionState.getLabel());
+    }
+
+
+    @Override
+    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table,
+                                              DmlType dmlType) {
+        // only need to log insert load job record after its stat has been updated
+        // skip
+    }
+
+    @Override
+    public void onDMLStmtFinishedUpdateJobStat(TransactionState transactionState, DmlType dmlType) {
+        doJobLog(transactionState.getLabel());
+    }
+
+    @Override
+    public void onInsertOverwriteJobCommitFinish(Database db, Table table, InsertOverwriteJobStats stats) {
+        // skip
+    }
+
+    private void doJobLog(String label) {
+        if (!needTrigger()) {
             return;
         }
-        String label = transactionState.getLabel();
         List<LoadJob> loadJobs = GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(label);
         if (loadJobs != null) {
             loadJobs.parallelStream().forEach(loadJob -> {
@@ -69,17 +103,6 @@ public class LoadJobHistoryLogListener implements LoadJobListener {
                 LOADS_HISTORY_LOG.info(jsonString);
             });
         }
-    }
-
-    @Override
-    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table,
-                                              DmlType dmlType) {
-        // do nothing
-    }
-
-    @Override
-    public void onInsertOverwriteJobCommitFinish(Database db, Table table, InsertOverwriteJobStats stats) {
-        // do nothing
     }
 
     @Override

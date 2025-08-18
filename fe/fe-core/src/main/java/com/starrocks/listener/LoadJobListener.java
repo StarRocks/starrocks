@@ -49,6 +49,17 @@ public interface LoadJobListener {
     void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table, DmlType dmlType);
 
     /**
+     * Listener after INSERT/UPDATE/DELETE job is finished or canceled.
+     *
+     * `onDMLStmtJobTransactionFinish` is called before job stat updated, while `onDMLStmtFinishedUpdateJobStat`
+     * is called after that
+     *
+     * @param transactionState finished transaction states
+     * @param dmlType
+     */
+    void onDMLStmtFinishedUpdateJobStat(TransactionState transactionState, DmlType dmlType);
+
+    /**
      * Listener after `Insert OVERWRITE` transaction is finished, which is only triggered without an error.
      *
      * @param db    database of the target table

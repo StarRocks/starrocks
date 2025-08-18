@@ -60,6 +60,11 @@ public class LoadJobStatsListener implements LoadJobListener {
     }
 
     @Override
+    public void onDMLStmtFinishedUpdateJobStat(TransactionState transactionState, DmlType dmlType) {
+        // skip
+    }
+
+    @Override
     public void onInsertOverwriteJobCommitFinish(Database db, Table table, InsertOverwriteJobStats stats) {
         if (needTrigger()) {
             StatisticUtils.triggerCollectionOnInsertOverwrite(stats, db, table, true, true);

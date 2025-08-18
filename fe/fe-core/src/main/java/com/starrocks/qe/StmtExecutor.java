@@ -2924,6 +2924,9 @@ public class StmtExecutor {
             errMsg = "Record info of insert load with error " + e.getMessage();
         }
 
+        // callback to log load job record
+        GlobalStateMgr.getCurrentState().getOperationListenerBus().onDMLStmtFinishedUpdateJobStat(txnState, dmlType);
+
         StringBuilder sb = new StringBuilder();
         if (!label.startsWith("FAKE")) {
             sb.append("{'label':'").append(label).append("', 'status':'").append(txnStatus.name());
