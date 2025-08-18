@@ -130,7 +130,7 @@ public interface ConnectorMetadata {
     }
 
     /**
-     * Get the Time Versioned Relation (TVR) version range for the table between the specified versions.
+     * Get the Time Varying Relation (TVR) version range for the table between the specified versions.
      */
     default TvrVersionRange getTableVersionRange(String dbName, Table table,
                                                  Optional<ConnectorTableVersion> startVersion,

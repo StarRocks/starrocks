@@ -17,7 +17,7 @@ package com.starrocks.common.tvr;
 import java.util.Objects;
 
 /**
- * TvrTableDeltaTrait represents the delta and associated trait infos of a Time Versioned Relation (TVR).
+ * TvrTableDeltaTrait represents the delta and associated trait infos of a Time Varying Relation (TVR).
  */
 public class TvrTableDeltaTrait {
 
@@ -99,10 +99,10 @@ public class TvrTableDeltaTrait {
 
     @Override
     public String toString() {
-        return "TvrTableDeltaTrait{" +
-                "tvrTableDelta=" + tvrTableDelta +
-                ", tvrChangeType=" + tvrChangeType +
-                ", tvrDeltaStats=" + tvrDeltaStats +
+        return "DeltaTrait{" +
+                "delta=" + tvrTableDelta +
+                ", changeType=" + tvrChangeType +
+                ", stats=" + tvrDeltaStats +
                 '}';
     }
 }

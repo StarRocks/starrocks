@@ -278,13 +278,8 @@ public class HiveMetadataTest {
         columns.put(partColumnRefOperator, null);
         columns.put(dataColumnRefOperator, null);
         Statistics statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
-<<<<<<< HEAD
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TableVersionRange.empty());
-        Assertions.assertEquals(Config.default_statistics_output_row_count, statistics.getOutputRowCount(), 0.001);
-=======
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TvrTableSnapshot.empty());
-        Assertions.assertEquals(1, statistics.getOutputRowCount(), 0.001);
->>>>>>> 19351f0d91 (Refactor TableVersionRange)
+        Assertions.assertEquals(Config.default_statistics_output_row_count, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
         Assertions.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
         Assertions.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());

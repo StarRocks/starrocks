@@ -21,7 +21,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * TvrVersionRange represents a range of versions in a Time Versioned Relation (TVR).
+ * TvrVersionRange represents a range of versions in a Time Varying Relation (TVR).
  */
 public abstract class TvrVersionRange {
     @SerializedName("from")

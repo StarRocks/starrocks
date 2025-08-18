@@ -16,10 +16,8 @@ package com.starrocks.common.tvr;
 
 import com.google.gson.annotations.SerializedName;
 
-import java.util.Objects;
-
 /**
- * TvrVersion represents a specific version in a Time Versioned Relation (TVR).
+ * TvrVersion represents a specific version in a Time Varying Relation (TVR).
  */
 public class TvrVersion implements Comparable<TvrVersion> {
 
@@ -83,7 +81,7 @@ public class TvrVersion implements Comparable<TvrVersion> {
         } else if (this != MIN && o == MIN) {
             return 1;
         }
-        return Long.compare(version, o.version);
+        return Long.compare(this.version, o.version);
     }
 
     public boolean isAfter(TvrVersion other) {
@@ -108,6 +106,6 @@ public class TvrVersion implements Comparable<TvrVersion> {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(version);
+        return Long.hashCode(version);
     }
 }

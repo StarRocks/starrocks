@@ -37,7 +37,7 @@ public class TvrDeltaStats {
 
     @Override
     public String toString() {
-        return "TvrDeltaStats{" +
+        return "Stats{" +
                 "addedRows=" + addedRows +
                 '}';
     }
