@@ -16,6 +16,9 @@ package com.starrocks.epack.http.rest;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.common.DdlException;
 import com.starrocks.epack.system.InvalidLicenseException;
 import com.starrocks.http.ActionController;
@@ -25,10 +28,13 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.Set;
 
 public class LicenseRegisterAction extends RestBaseAction {
     protected static final Logger LOG = LogManager.getLogger(LicenseRegisterAction.class);
@@ -50,8 +56,18 @@ public class LicenseRegisterAction extends RestBaseAction {
             return;
         }
 
-        // require admin role
-        checkUserOwnsAdminRole(ConnectContext.get().getCurrentUserIdentity());
+        // require cluster_admin role
+        try {
+            UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
+            Set<Long> userOwnedRoles = AuthorizationMgr.getOwnedRolesByUser(currentUser);
+            if (!(currentUser.equals(UserIdentity.ROOT) ||
+                    userOwnedRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
+                    userOwnedRoles.contains(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_ID))) {
+                throw new AccessDeniedException();
+            }
+        } catch (PrivilegeException e) {
+            throw new AccessDeniedException();
+        }
 
         String license = null;
         try {
