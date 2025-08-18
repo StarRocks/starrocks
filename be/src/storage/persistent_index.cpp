@@ -3706,6 +3706,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
     }
     if (stat != nullptr) {
         stat->reload_meta_cost += watch.elapsed_time();
+        stat->total_file_size = (_l0 ? _l0->file_size() : 0) + _l1_l2_file_size();
     }
     _calc_memory_usage();
 
