@@ -21,10 +21,8 @@ import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
@@ -43,15 +41,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         // set default config for timeliness mvs
         UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
-    }
-
-    @BeforeEach
-    public void before() throws Exception {
-        super.before();
-    }
-
-    @AfterEach
-    public void after() {
     }
 
     @Test

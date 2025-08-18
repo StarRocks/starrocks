@@ -37,9 +37,9 @@ public abstract class StarRocksTestBase {
     protected static final Logger LOG = LogManager.getLogger(StarRocksTestBase.class);
 
     // StarRocksAssert is a class that provides methods to interact with StarRocks.
-    protected static StarRocksAssert starRocksAssert;
+    public static StarRocksAssert starRocksAssert;
     // existedTables is a set that contains all tables that have been created.
-    protected static Set<Table> existedTables = Sets.newHashSet();
+    public static Set<Table> existedTables = Sets.newHashSet();
 
     @BeforeEach
     public void before() {
