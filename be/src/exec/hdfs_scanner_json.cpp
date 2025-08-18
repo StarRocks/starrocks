@@ -13,19 +13,15 @@
 // limitations under the License.
 
 #include "exec/hdfs_scanner_json.h"
+
+#include "formats/json/nullable_column.h"
 #include "util/compression/compression_utils.h"
 #include "util/simdjson_util.h"
-#include "formats/json/nullable_column.h"
 
 namespace starrocks {
-HdfsScannerJsonReader::HdfsScannerJsonReader(RandomAccessFile* file, size_t file_length,
-                                             std::vector<SlotDescriptor*> slot_descs,
-                                             std::vector<TypeDescriptor> type_descs)
-{
+HdfsScannerJsonReader::HdfsScannerJsonReader(RandomAccessFile* file, std::vector<SlotDescriptor*> slot_descs,
+                                             std::vector<TypeDescriptor> type_descs) {
     _file = file;
-    _offset = 0;
-    _remain_length = file_length;
-    _file_length = file_length;
     _slot_descs = std::move(slot_descs);
     _type_descs = std::move(type_descs);
 
@@ -42,10 +38,7 @@ HdfsScannerJsonReader::HdfsScannerJsonReader(RandomAccessFile* file, size_t file
 }
 
 Status HdfsScannerJsonReader::init() {
-    ASSIGN_OR_RETURN(_buffer, ByteBuffer::allocate_with_tracker(_init_buf_size));
-    _buffer->limit = 0;
-
-    //_parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
+    _buffer = std::make_shared<ByteBufferV2>(_init_buf_size);
     return Status::OK();
 }
 
@@ -53,22 +46,18 @@ Status HdfsScannerJsonReader::_read_and_parse_json() {
     RETURN_IF_ERROR(_read_file_stream());
     _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
     _empty_parser = false;
-    LOG(ERROR) << "LXH: READ AND PARSE: " << _buffer->pos << ":" << _buffer->limit << ":" << _buffer->capacity;
-    return _parser->parse(_buffer->ptr, _buffer->limit, _buffer->capacity);
+    return _parser->parse(_buffer->ptr(), _buffer->size(), _buffer->capacity());
 }
 
 Status HdfsScannerJsonReader::_read_file_stream() {
-    if (_buffer->pos > 0) {
-        _buffer->move_to_front();
-    }
+    _buffer->move_to_front();
 
     size_t try_read_size = _buffer->try_read_size();
-    LOG(ERROR) << "LXH: READ_FILE_STREAM: " << _buffer->pos << ":" << _buffer->limit << ":" << try_read_size;
-    ASSIGN_OR_RETURN(int64_t read_size, _file->read(_buffer->limit_ptr(), try_read_size));
+    ASSIGN_OR_RETURN(int64_t read_size, _file->read(_buffer->try_read_ptr(), try_read_size));
     if (read_size == 0) {
         return Status::EndOfFile("");
     } else {
-        _buffer->read(read_size);
+        _buffer->advance(read_size);
         return Status::OK();
     }
 }
@@ -78,16 +67,12 @@ Status HdfsScannerJsonReader::_construct_column(simdjson::ondemand::value& value
     return add_nullable_column(column, type_desc, col_name, &value, true);
 }
 
-Status HdfsScannerJsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* row,
-                                                              Chunk* chunk) {
+Status HdfsScannerJsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk) {
     _parsed_columns.assign(chunk->num_columns(), false);
     faststring buffer;
     try {
         uint32_t key_index = 0;
-        int tmp_i = 0;
         for (auto field : *row) {
-            //LOG(ERROR) << "LXH: CONSTRUCT: " << tmp_i;
-            tmp_i++;
             int column_index;
             std::string_view key = field_unescaped_key_safe(field, &buffer);
             if (_prev_parsed_position.size() > key_index && _prev_parsed_position[key_index].key == key) {
@@ -157,22 +142,24 @@ Status HdfsScannerJsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int
     while (*rows_read < rows_to_read) {
         auto st = _parser->get_current(&row);
         if (!st.ok()) {
-            LOG(ERROR) << "LXH: EOF" << st;
+            if (!st.is_end_of_file()) {
+                LOG(ERROR) << "LXH: parser get current row failed: " << st;
+            }
             return st;
         }
-        //LOG(ERROR) << "LXH: LEFT_1: " << _parser->left_bytes_string(4096);
-        //LOG(ERROR) << "LXH: LEFT_2: " << _parser->left_bytes();
         st = _construct_row_without_jsonpath(&row, chunk);
         if (!st.ok()) {
-            LOG(ERROR) << "LXH: construct row failed: " << st;
+            if (!st.is_end_of_file()) {
+                LOG(ERROR) << "LXH: construct row with jsonpath failed: " << st;
+            }
             return st;
         }
         ++(*rows_read);
         st = _parser->advance();
-        //LOG(ERROR) << "LXH: LEFT_3: " << _parser->left_bytes_string(4096);
-        //LOG(ERROR) << "LXH: LEFT_4: " << _parser->left_bytes();
         if (!st.ok()) {
-            LOG(ERROR) << "LXH: ADVANCE: " << st;
+            if (!st.is_end_of_file()) {
+                LOG(ERROR) << "LXH: parser advance failed: " << st;
+            }
             return st;
         }
     }
@@ -184,27 +171,25 @@ Status HdfsScannerJsonReader::next_record(Chunk* chunk, int32_t rows_to_read) {
     int32_t rows_read = 0;
     while (rows_read < rows_to_read) {
         if (_empty_parser) {
-            LOG(ERROR) << "LXH: EMPTY PARSER";
             Status st = _read_and_parse_json();
             if (!st.ok()) {
-                LOG(ERROR) << "LXH: read_and_parse_json failed: " << st;
+                if (!st.is_end_of_file()) {
+                    LOG(ERROR) << "LXH: scanner read_and_parse_json failed: " << st;
+                }
                 return st;
             }
             _empty_parser = false;
         }
 
-        //LOG(ERROR) << "LXH: READ ROWS";
         Status st = _read_rows(chunk, rows_to_read, &rows_read);
         if (st.is_end_of_file()) {
             size_t left_bytes = _parser->left_bytes();
-            _buffer->pos = _buffer->limit - left_bytes;
+            _buffer->sub_pos(left_bytes);
             _empty_parser = true;
         } else if (!st.ok()) {
             return st;
         }
     }
-
-    //LOG(INFO) << "LXH: CHUNK: " << (*chunk).num_rows();
 
     return Status::OK();
 }
@@ -267,10 +252,6 @@ Status HdfsJsonScanner::_construct_json_types() {
         }
         _json_types[column_pos] = construct_json_type(slot_desc->type());
     }
-
-    for (size_t i = 0; i < _json_types.size(); i++) {
-        LOG(ERROR) << "LXH: CONSTRUCT JSON: " << i << ":" << _json_types[i].type;
-    }
     return Status::OK();
 }
 
@@ -301,21 +282,9 @@ Status HdfsJsonScanner::do_open(RuntimeState* runtime_state) {
             names.insert(column.name());
         }
         RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
-        int i = 0;
-        for (auto kv : _scanner_ctx.materialized_columns) {
-            LOG(INFO) << "LXH: MATE: " << i << ":" << kv.name() << ":" << kv.slot_type().debug_string();
-            i++;
-        }
     }
 
     RETURN_IF_ERROR(_build_hive_column_name_2_index());
-
-    for (const auto& column : _scanner_ctx.materialized_columns) {
-        // converter
-    }
-
-    LOG(INFO) << "LXH: HdfsJsonScanner OPEN SUCCESS";
-
     return Status::OK();
 }
 
@@ -325,7 +294,6 @@ Status HdfsJsonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
     }
     CHECK(chunk != nullptr);
 
-    //LOG(ERROR) << "LXH: START DO_GET_NEXT";
     Status st = _reader->next_record(chunk->get(), runtime_state->chunk_size());
     if (!st.ok()) {
         if (st.is_end_of_file()) {
@@ -335,42 +303,15 @@ Status HdfsJsonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
             return st;
         }
     }
-    //LOG(ERROR) << "LXH: END DO_GET_NEXT";
-
-    return Status::OK();
-}
-
-Status HdfsJsonScanner::_parse_json(int chunk_size, ChunkPtr* chunk) {
-    DCHECK_EQ(0, (*chunk)->num_rows());
-    int num_columns = (*chunk)->num_columns();
-    _column_raw_ptrs.resize(num_columns);
-    for (int i = 0; i < num_columns; i++) {
-        _column_raw_ptrs[i] = (*chunk)->get_column_by_index(i).get();
-        _column_raw_ptrs[i]->reserve(chunk_size);
-    }
-    LOG(INFO) << "LXH: NUM_COLUMNS: " << num_columns;
-
     return Status::OK();
 }
 
 Status HdfsJsonScanner::_create_csv_reader() {
-    const THdfsScanRange* scan_range = _scanner_ctx.scan_range;
-    if (_compression_type != NO_COMPRESSION) {
-        auto file_size = static_cast<size_t>(-1);
-        _reader = std::make_shared<HdfsScannerJsonReader>(_file.get(), file_size, _scanner_ctx.slot_descs,
-                                                          _json_types);
-        LOG(INFO) << "LXH: JSON_READER_1: " << _file->filename() << ":" << file_size;
-    } else {
-        _reader = std::make_shared<HdfsScannerJsonReader>(_file.get(), scan_range->file_length,
-                                                          _scanner_ctx.slot_descs, _json_types);
-        LOG(INFO) << "LXH: JSON_READER_2: " << _file->filename() << ":" << scan_range->file_length;
-    }
-
+    _reader = std::make_shared<HdfsScannerJsonReader>(_file.get(), _scanner_ctx.slot_descs, _json_types);
     return Status::OK();
 }
 
 Status HdfsJsonScanner::_build_hive_column_name_2_index() {
-    LOG(ERROR) << "LXH: COLUMN_NAMEs: " << _scanner_ctx.hive_column_names->size();
     if (_scanner_ctx.hive_column_names->empty()) {
         _materialize_slots_index_2_csv_column_index.resize(_scanner_ctx.materialized_columns.size());
         for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
@@ -386,7 +327,6 @@ Status HdfsJsonScanner::_build_hive_column_name_2_index() {
         const std::string& name = (*_scanner_ctx.hive_column_names)[i];
         const std::string formatted_column_name = _scanner_ctx.formatted_name(name);
         formatted_hive_column_name_2_index.emplace(formatted_column_name, i);
-        LOG(ERROR) << "LXH: HIVE: " << i << ":" << name << ":" << formatted_column_name;
     }
 
     _materialize_slots_index_2_csv_column_index.resize(_scanner_ctx.materialized_columns.size());
@@ -406,10 +346,8 @@ Status HdfsJsonScanner::_setup_compression_type(const TTextFileDesc& text_file_d
     CompressionTypePB compression_type;
     if (text_file_desc.__isset.compression_type) {
         compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
-        LOG(INFO) << "LXH: C_1: " << compression_type;
     } else {
         compression_type = get_compression_type_from_path(_scanner_params.path);
-        LOG(INFO) << "LXH: C_2: " << compression_type;
     }
     if (compression_type != UNKNOWN_COMPRESSION) {
         _compression_type = compression_type;

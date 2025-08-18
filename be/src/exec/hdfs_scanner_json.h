@@ -22,15 +22,12 @@ namespace starrocks {
 
 class HdfsScannerJsonReader {
 public:
-    HdfsScannerJsonReader(RandomAccessFile* file, size_t file_length,
-                          std::vector<SlotDescriptor*> slot_descs,
+    HdfsScannerJsonReader(RandomAccessFile* file, std::vector<SlotDescriptor*> slot_descs,
                           std::vector<TypeDescriptor> type_descs);
 
     Status init();
 
     Status next_record(Chunk* chunk, int32_t rows_to_read);
-
-    Status next_record(Slice* slice) { return Status::OK(); }
 
     struct PreviousParsedItem {
         PreviousParsedItem(const std::string_view& key) : key(key), column_index(-1) {}
@@ -50,14 +47,10 @@ private:
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                              const std::string& col_name);
 
-    //const size_t _init_buf_size = 64 * 1024 * 1024;
     const size_t _init_buf_size = config::json_read_buf_size;
 
     RandomAccessFile* _file = nullptr;
-    size_t _offset = 0;
-    size_t _remain_length = 0;
-    size_t _file_length = 0;
-    ByteBufferPtr _buffer;
+    std::shared_ptr<ByteBufferV2> _buffer;
     simdjson::ondemand::parser _simdjson_parser;
     std::unique_ptr<JsonParser> _parser;
     std::vector<uint8_t> _parsed_columns;
@@ -66,7 +59,6 @@ private:
     std::vector<TypeDescriptor> _type_descs;
     std::unordered_map<std::string_view, SlotDescriptor*> _slot_desc_dict;
     std::unordered_map<std::string_view, TypeDescriptor> _type_desc_dict;
-    bool _read_finished = false;
     bool _empty_parser = true;
 };
 
@@ -84,7 +76,6 @@ public:
 
 private:
     Status _construct_json_types();
-    Status _parse_json(int chunk_size, ChunkPtr* chunk);
     Status _create_csv_reader();
     Status _setup_compression_type(const TTextFileDesc& text_file_desc);
     Status _build_hive_column_name_2_index();
