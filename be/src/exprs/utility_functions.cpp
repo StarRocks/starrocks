@@ -486,6 +486,92 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
 };
 } // namespace detail
 
+// Visitor to collect order-preserving 64-bit values and null flags for Z-order encoding
+namespace detail {
+struct ZOrderVisitor : public ColumnVisitorAdapter<ZOrderVisitor> {
+    explicit ZOrderVisitor(std::vector<uint64_t>* values_, std::vector<uint8_t>* nulls_)
+            : ColumnVisitorAdapter(this), values(values_), nulls(nulls_) {}
+
+    std::vector<uint64_t>* values;
+    std::vector<uint8_t>* nulls;
+    const Buffer<uint8_t>* null_mask = nullptr;
+    int width_bits = 0;
+
+    Status do_visit(const NullableColumn& column) {
+        auto& nm = column.immutable_null_column_data();
+        // Merge null mask
+        for (size_t i = 0; i < column.size(); i++) {
+            if ((*nulls)[i] == 0 && nm[i]) (*nulls)[i] = 1;
+        }
+        const Buffer<uint8_t>* old = null_mask;
+        null_mask = &nm;
+        Status st = column.data_column()->accept(this);
+        null_mask = old;
+        return st;
+    }
+
+    Status do_visit(const ConstColumn& column) {
+        // Expand const by re-visiting the data column (ConstColumn::size() should equal row count)
+        for (size_t i = 0; i < column.size(); i++) {
+            RETURN_IF_ERROR(column.data_column()->accept(this));
+        }
+        return Status::OK();
+    }
+
+    template <typename T>
+    static inline uint64_t sign_flip(T v) {
+        using UT = std::make_unsigned_t<T>;
+        constexpr int B = sizeof(T) * 8;
+        UT uv = static_cast<UT>(v);
+        uv ^= static_cast<UT>(1) << (B - 1);
+        return static_cast<uint64_t>(uv);
+    }
+
+    static inline uint32_t encode_f32(float v) {
+        uint32_t u; memcpy(&u, &v, sizeof(u));
+        u ^= (u & 0x80000000u) ? 0xFFFFFFFFu : 0x80000000u;
+        return u;
+    }
+    static inline uint64_t encode_f64(double v) {
+        uint64_t u; memcpy(&u, &v, sizeof(u));
+        u ^= (u & 0x8000000000000000ull) ? 0xFFFFFFFFFFFFFFFFull : 0x8000000000000000ull;
+        return u;
+    }
+
+    template <typename T>
+    Status do_visit(const FixedLengthColumn<T>& column) {
+        const auto& data = column.get_data();
+        for (size_t i = 0; i < column.size(); i++) {
+            bool isnull = (null_mask && (*null_mask)[i]);
+            if (isnull) {
+                (*nulls)[i] = 1;
+                (*values)[i] = 0;
+            } else {
+                if constexpr (std::is_same_v<T, float>) {
+                    (*values)[i] = encode_f32(data[i]); width_bits = 32;
+                } else if constexpr (std::is_same_v<T, double>) {
+                    (*values)[i] = encode_f64(data[i]); width_bits = 64;
+                } else if constexpr (std::is_same_v<T, DateValue>) {
+                    (*values)[i] = static_cast<uint64_t>(data[i].julian()); width_bits = 32;
+                } else if constexpr (std::is_same_v<T, TimestampValue>) {
+                    (*values)[i] = static_cast<uint64_t>(data[i].timestamp()); width_bits = 64;
+                } else if constexpr (std::is_integral_v<T>) {
+                    if constexpr (std::is_signed_v<T>) { (*values)[i] = sign_flip(data[i]); }
+                    else { (*values)[i] = static_cast<uint64_t>(data[i]); }
+                    width_bits = static_cast<int>(sizeof(T) * 8);
+                } else {
+                    return Status::NotSupported("zorder_encode: unsupported argument type");
+                }
+            }
+        }
+        return Status::OK();
+    }
+
+    template <typename T>
+    Status do_visit(const T& /*column*/) { return Status::NotSupported("zorder_encode: unsupported argument type"); }
+};
+} // namespace detail
+
 // The encoding strategy of encode_sort_key is as follows:
 //
 // - For each input column, each row's value is encoded into a binary buffer
@@ -566,65 +652,26 @@ StatusOr<ColumnPtr> UtilityFunctions::zorder_encode(FunctionContext* context, co
         RETURN_IF(columns[i]->size() != num_rows, Status::InvalidArgument("all arguments must have the same number of rows"));
     }
 
-    struct DimAccessor {
-        std::function<uint64_t(size_t)> get_u64;
-        std::function<bool(size_t)> is_null;
-        int width_bits = 0;
-    };
-
-    auto sign_flip = [](auto v) -> uint64_t {
-        using T = decltype(v);
-        using UT = std::make_unsigned_t<T>;
-        constexpr int B = sizeof(T) * 8;
-        UT uv = static_cast<UT>(v);
-        uv ^= static_cast<UT>(1) << (B - 1);
-        return static_cast<uint64_t>(uv);
-    };
-    auto f32 = [](float v) -> uint32_t {
-        uint32_t u; memcpy(&u, &v, sizeof(u));
-        u ^= (u & 0x80000000u) ? 0xFFFFFFFFu : 0x80000000u; return u;
-    };
-    auto f64 = [](double v) -> uint64_t {
-        uint64_t u; memcpy(&u, &v, sizeof(u));
-        u ^= (u & 0x8000000000000000ull) ? 0xFFFFFFFFFFFFFFFFull : 0x8000000000000000ull; return u;
-    };
-
-    std::vector<DimAccessor> dims;
-    dims.reserve(num_args);
+    // Build per-dimension accessors with ColumnVisitor
+    struct Dim { std::vector<uint64_t> values; std::vector<uint8_t> nulls; int width_bits = 0; };
+    std::vector<Dim> dims; dims.reserve(num_args);
     for (int j = 0; j < num_args; ++j) {
-        const ColumnPtr& in_col = columns[j];
-        ColumnPtr data_col = FunctionHelper::get_data_column_of_const(in_col);
-        const NullableColumn* nullable = data_col->is_nullable() ? down_cast<const NullableColumn*>(data_col.get()) : nullptr;
-        const Column* raw = nullable ? nullable->data_column().get() : data_col.get();
-        DimAccessor acc;
-        if (nullable) { const auto* nulls = &nullable->immutable_null_column_data(); acc.is_null = [nulls](size_t i){ return (*nulls)[i] != 0; }; }
-        else { acc.is_null = [](size_t){ return false; }; }
-
-        if (auto p = dynamic_cast<const Int8Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b,sign_flip](size_t i){return sign_flip((*b)[i]);}; acc.width_bits=8; }
-        else if (auto p = dynamic_cast<const Int16Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b,sign_flip](size_t i){return sign_flip((*b)[i]);}; acc.width_bits=16; }
-        else if (auto p = dynamic_cast<const Int32Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b,sign_flip](size_t i){return sign_flip((*b)[i]);}; acc.width_bits=32; }
-        else if (auto p = dynamic_cast<const Int64Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b,sign_flip](size_t i){return sign_flip((*b)[i]);}; acc.width_bits=64; }
-        else if (auto p = dynamic_cast<const UInt8Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b](size_t i){return static_cast<uint64_t>((*b)[i]);}; acc.width_bits=8; }
-        else if (auto p = dynamic_cast<const UInt16Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b](size_t i){return static_cast<uint64_t>((*b)[i]);}; acc.width_bits=16; }
-        else if (auto p = dynamic_cast<const UInt32Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b](size_t i){return static_cast<uint64_t>((*b)[i]);}; acc.width_bits=32; }
-        else if (auto p = dynamic_cast<const UInt64Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b](size_t i){return static_cast<uint64_t>((*b)[i]);}; acc.width_bits=64; }
-        else if (auto p = dynamic_cast<const FloatColumn*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b,f32](size_t i){return static_cast<uint64_t>(f32((*b)[i]));}; acc.width_bits=32; }
-        else if (auto p = dynamic_cast<const DoubleColumn*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b,f64](size_t i){return f64((*b)[i]);}; acc.width_bits=64; }
-        else if (auto p = dynamic_cast<const DateColumn*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b](size_t i){return static_cast<uint64_t>((*b)[i].julian());}; acc.width_bits=32; }
-        else if (auto p = dynamic_cast<const TimestampColumn*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b](size_t i){return static_cast<uint64_t>((*b)[i].timestamp());}; acc.width_bits=64; }
-        else { return Status::NotSupported("zorder_encode: unsupported argument type"); }
-
-        dims.emplace_back(std::move(acc));
+        Dim d; d.values.assign(num_rows, 0); d.nulls.assign(num_rows, 0);
+        detail::ZOrderVisitor visitor_dim(&d.values, &d.nulls);
+        ColumnPtr col = FunctionHelper::get_data_column_of_const(columns[j]);
+        RETURN_IF_ERROR(col->accept(&visitor_dim));
+        d.width_bits = visitor_dim.width_bits;
+        dims.emplace_back(std::move(d));
     }
 
     int max_bits = 0; for (const auto& d : dims) max_bits = std::max(max_bits, d.width_bits);
     ColumnBuilder<TYPE_VARBINARY> builder(num_rows);
     std::string out; out.reserve(((size_t)max_bits*dims.size()+7)/8 + dims.size());
     for (size_t i = 0; i < num_rows; ++i) {
-        out.clear(); for (const auto& d : dims) out.push_back(d.is_null(i) ? *NULL_MARKER : *NOT_NULL_MARKER);
+        out.clear(); for (const auto& d : dims) out.push_back(d.nulls[i] ? *NULL_MARKER : *NOT_NULL_MARKER);
         const size_t total_bits = (size_t)max_bits*dims.size(); const size_t total_bytes = (total_bits+7)/8; size_t off = out.size(); out.resize(off+total_bytes, '\0');
         std::vector<uint64_t> aligned; aligned.reserve(dims.size());
-        for (const auto& d : dims) { uint64_t v = d.is_null(i) ? 0ULL : d.get_u64(i); int shift = max_bits - d.width_bits; uint64_t av = (d.width_bits>=64 || shift<=0) ? v : (v << shift); aligned.emplace_back(av); }
+        for (const auto& d : dims) { uint64_t v = d.nulls[i] ? 0ULL : d.values[i]; int shift = max_bits - d.width_bits; uint64_t av = (d.width_bits>=64 || shift<=0) ? v : (v << shift); aligned.emplace_back(av); }
         for (int g = 0; g < max_bits; ++g) { int idx = max_bits - 1 - g; for (size_t j = 0; j < dims.size(); ++j) { uint64_t bit = (aligned[j] >> idx) & 1ULL; size_t ob = (size_t)g*dims.size() + j; size_t byte = ob >> 3; int bit_in_byte = 7 - (ob & 7); out[off+byte] = static_cast<char>(out[off+byte] | (bit << bit_in_byte)); } }
         builder.append(out);
     }
