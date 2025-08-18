@@ -14,16 +14,12 @@
 
 #pragma once
 
-#include <memory>
+#include "gen_cpp/lake_service.pb.h"
 
-#include "gen_cpp/lake_types.pb.h"
+namespace starrocks::lake {
 
-namespace starrocks {
+class TabletManager;
 
-using TabletMetadata = TabletMetadataPB;
-using TabletMetadataPtr = std::shared_ptr<const TabletMetadata>;
-using MutableTabletMetadataPtr = std::shared_ptr<TabletMetadata>;
-using BundleTabletMetadataPtr = std::shared_ptr<BundleTabletMetadataPB>;
-using TabletMetadataPtrs = std::vector<TabletMetadataPtr>;
+void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, VacuumFullResponse* response);
 
-} // namespace starrocks
+} // namespace starrocks::lake
