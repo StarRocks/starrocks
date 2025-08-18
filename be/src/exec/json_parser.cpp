@@ -144,7 +144,6 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
 
 Status JsonDocumentStreamParser::advance() noexcept {
     _curr_ready = false;
-    _last_offset = _doc_stream_itr.current_index();
     ++_doc_stream_itr;
     if (_doc_stream_itr != _doc_stream.end() ||
         /*
