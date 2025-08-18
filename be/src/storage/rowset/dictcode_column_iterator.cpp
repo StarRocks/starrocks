@@ -79,9 +79,7 @@ Status GlobalDictCodeColumnIterator::decode_string_dict_codes(const Column& code
         down_cast<NullableColumn*>(words)->set_has_null(codes.has_null());
         const auto& null_data = down_cast<const NullableColumn&>(codes).immutable_null_column_data();
         word_nulls->resize(0);
-        for (size_t i = 0; i < size; ++i) {
-            word_nulls->append(null_data[i]);
-        }
+        word_nulls->append(null_data);
         if (codes.has_null()) {
             // assign code 0 if input data is null
             for (size_t i = 0; i < size; ++i) {
