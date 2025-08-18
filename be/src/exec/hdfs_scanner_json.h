@@ -28,6 +28,7 @@ public:
     Status init();
 
     Status next_record(Chunk* chunk, int32_t rows_to_read);
+    Status next_record_count(Chunk* chunk, int32_t rows_to_read);
 
     struct PreviousParsedItem {
         PreviousParsedItem(const std::string_view& key) : key(key), column_index(-1) {}
@@ -42,8 +43,10 @@ public:
 private:
     Status _read_and_parse_json();
     Status _read_file_stream();
+    Status _construct_row_without_jsonpath_count(simdjson::ondemand::object* row, Chunk* chunk);
     Status _construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk);
     Status _read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read);
+    Status _read_rows_count(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read);
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                              const std::string& col_name);
 

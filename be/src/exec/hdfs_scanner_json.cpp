@@ -67,6 +67,20 @@ Status HdfsScannerJsonReader::_construct_column(simdjson::ondemand::value& value
     return add_nullable_column(column, type_desc, col_name, &value, true);
 }
 
+Status HdfsScannerJsonReader::_construct_row_without_jsonpath_count(simdjson::ondemand::object* row,
+                                                                    starrocks::Chunk* chunk) {
+    _parsed_columns.assign(chunk->num_columns(), false);
+    faststring buffer;
+
+    for (int i = 0; i < chunk->num_columns(); i++) {
+        if (!_parsed_columns[i]) {
+            auto& column = chunk->get_column_by_index(i);
+            column->append_nulls(1);
+        }
+    }
+    return Status::OK();
+}
+
 Status HdfsScannerJsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk) {
     _parsed_columns.assign(chunk->num_columns(), false);
     faststring buffer;
@@ -148,6 +162,32 @@ Status HdfsScannerJsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int
             return st;
         }
         st = _construct_row_without_jsonpath(&row, chunk);
+        ++(*rows_read);
+        st = _parser->advance();
+        if (!st.ok()) {
+            if (!st.is_end_of_file()) {
+                LOG(ERROR) << "LXH: parser advance failed: " << st;
+            }
+            return st;
+        }
+    }
+
+    return Status::OK();
+}
+
+
+Status HdfsScannerJsonReader::_read_rows_count(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read) {
+    simdjson::ondemand::object row;
+    while (*rows_read < rows_to_read) {
+        auto st = _parser->get_current(&row);
+        if (!st.ok()) {
+            if (!st.is_end_of_file()) {
+                LOG(ERROR) << "LXH: parser get current row failed: " << st;
+            }
+            return st;
+        }
+        st = _construct_row_without_jsonpath_count(nullptr, chunk);
+        //auto st = _construct_row_without_jsonpath_count(nullptr, chunk);
         if (!st.ok()) {
             if (!st.is_end_of_file()) {
                 LOG(ERROR) << "LXH: construct row with jsonpath failed: " << st;
@@ -160,6 +200,33 @@ Status HdfsScannerJsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int
             if (!st.is_end_of_file()) {
                 LOG(ERROR) << "LXH: parser advance failed: " << st;
             }
+            return st;
+        }
+    }
+
+    return Status::OK();
+}
+
+Status HdfsScannerJsonReader::next_record_count(Chunk* chunk, int32_t rows_to_read) {
+    int32_t rows_read = 0;
+    while (rows_read < rows_to_read) {
+        if (_empty_parser) {
+            Status st = _read_and_parse_json();
+            if (!st.ok()) {
+                if (!st.is_end_of_file()) {
+                    LOG(ERROR) << "LXH: scanner read_and_parse_json failed: " << st;
+                }
+                return st;
+            }
+            _empty_parser = false;
+        }
+
+        Status st = _read_rows_count(chunk, rows_to_read, &rows_read);
+        if (st.is_end_of_file()) {
+            size_t left_bytes = _parser->left_bytes();
+            _buffer->sub_pos(left_bytes);
+            _empty_parser = true;
+        } else if (!st.ok()) {
             return st;
         }
     }
@@ -294,13 +361,44 @@ Status HdfsJsonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
     }
     CHECK(chunk != nullptr);
 
-    Status st = _reader->next_record(chunk->get(), runtime_state->chunk_size());
+    Status st;
+    if (_scanner_ctx.materialized_columns.size() > 0) {
+        st = _reader->next_record(chunk->get(), runtime_state->chunk_size());
+    } else {
+        st = _reader->next_record_count(chunk->get(), runtime_state->chunk_size());
+    }
     if (!st.ok()) {
         if (st.is_end_of_file()) {
             _no_data = true;
+            if ((*chunk)->num_rows() > 0) {
+                int64_t rows_read = (*chunk)->num_rows();
+                RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
+                _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
+
+                for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
+                    SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
+                    RETURN_IF_ERROR(ExecNode::eval_conjuncts(it.second, (*chunk).get()));
+                    if ((*chunk)->num_rows() == 0) {
+                        break;
+                    }
+                }
+            }
             return Status::OK();
         } else {
             return st;
+        }
+    }
+    if ((*chunk)->num_rows() > 0) {
+        int64_t rows_read = (*chunk)->num_rows();
+        RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
+        _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
+
+        for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
+            SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(it.second, (*chunk).get()));
+            if ((*chunk)->num_rows() == 0) {
+                break;
+            }
         }
     }
     return Status::OK();
