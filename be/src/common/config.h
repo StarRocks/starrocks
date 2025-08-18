@@ -1442,6 +1442,11 @@ CONF_mBool(dump_metrics_with_bvar, "true");
 
 CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 
+// Used for compatibility.
+// Once the grayscale upgrade is complete, it can be set to true.
+// Once enabled, it can reduce the frequency of low-cardinality dictionary collection.
+CONF_mBool(lake_enable_report_lowcardinality_info, "false");
+
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
 
