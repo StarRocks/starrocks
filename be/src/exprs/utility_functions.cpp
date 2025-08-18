@@ -553,6 +553,85 @@ StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+// Build a Morton(Z-order) encoded key from heterogeneous arguments.
+// Usage: zorder_encode(col1, col2, ...)
+StatusOr<ColumnPtr> UtilityFunctions::zorder_encode(FunctionContext* context, const Columns& columns) {
+    const char* NOT_NULL_MARKER = "\1";
+    const char* NULL_MARKER = "\0";
+    int num_args = columns.size();
+    RETURN_IF(num_args < 1, Status::InvalidArgument("zorder_encode requires at least 1 argument"));
+
+    size_t num_rows = columns[0]->size();
+    for (int i = 1; i < num_args; ++i) {
+        RETURN_IF(columns[i]->size() != num_rows, Status::InvalidArgument("all arguments must have the same number of rows"));
+    }
+
+    struct DimAccessor {
+        std::function<uint64_t(size_t)> get_u64;
+        std::function<bool(size_t)> is_null;
+        int width_bits = 0;
+    };
+
+    auto sign_flip = [](auto v) -> uint64_t {
+        using T = decltype(v);
+        using UT = std::make_unsigned_t<T>;
+        constexpr int B = sizeof(T) * 8;
+        UT uv = static_cast<UT>(v);
+        uv ^= static_cast<UT>(1) << (B - 1);
+        return static_cast<uint64_t>(uv);
+    };
+    auto f32 = [](float v) -> uint32_t {
+        uint32_t u; memcpy(&u, &v, sizeof(u));
+        u ^= (u & 0x80000000u) ? 0xFFFFFFFFu : 0x80000000u; return u;
+    };
+    auto f64 = [](double v) -> uint64_t {
+        uint64_t u; memcpy(&u, &v, sizeof(u));
+        u ^= (u & 0x8000000000000000ull) ? 0xFFFFFFFFFFFFFFFFull : 0x8000000000000000ull; return u;
+    };
+
+    std::vector<DimAccessor> dims;
+    dims.reserve(num_args);
+    for (int j = 0; j < num_args; ++j) {
+        const ColumnPtr& in_col = columns[j];
+        ColumnPtr data_col = FunctionHelper::get_data_column_of_const(in_col);
+        const NullableColumn* nullable = data_col->is_nullable() ? down_cast<const NullableColumn*>(data_col.get()) : nullptr;
+        const Column* raw = nullable ? nullable->data_column().get() : data_col.get();
+        DimAccessor acc;
+        if (nullable) { const auto* nulls = &nullable->immutable_null_column_data(); acc.is_null = [nulls](size_t i){ return (*nulls)[i] != 0; }; }
+        else { acc.is_null = [](size_t){ return false; }; }
+
+        if (auto p = dynamic_cast<const Int8Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b,sign_flip](size_t i){return sign_flip((*b)[i]);}; acc.width_bits=8; }
+        else if (auto p = dynamic_cast<const Int16Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b,sign_flip](size_t i){return sign_flip((*b)[i]);}; acc.width_bits=16; }
+        else if (auto p = dynamic_cast<const Int32Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b,sign_flip](size_t i){return sign_flip((*b)[i]);}; acc.width_bits=32; }
+        else if (auto p = dynamic_cast<const Int64Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b,sign_flip](size_t i){return sign_flip((*b)[i]);}; acc.width_bits=64; }
+        else if (auto p = dynamic_cast<const UInt8Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b](size_t i){return static_cast<uint64_t>((*b)[i]);}; acc.width_bits=8; }
+        else if (auto p = dynamic_cast<const UInt16Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b](size_t i){return static_cast<uint64_t>((*b)[i]);}; acc.width_bits=16; }
+        else if (auto p = dynamic_cast<const UInt32Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b](size_t i){return static_cast<uint64_t>((*b)[i]);}; acc.width_bits=32; }
+        else if (auto p = dynamic_cast<const UInt64Column*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b](size_t i){return static_cast<uint64_t>((*b)[i]);}; acc.width_bits=64; }
+        else if (auto p = dynamic_cast<const FloatColumn*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b,f32](size_t i){return static_cast<uint64_t>(f32((*b)[i]));}; acc.width_bits=32; }
+        else if (auto p = dynamic_cast<const DoubleColumn*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b,f64](size_t i){return f64((*b)[i]);}; acc.width_bits=64; }
+        else if (auto p = dynamic_cast<const DateColumn*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b](size_t i){return static_cast<uint64_t>((*b)[i].julian());}; acc.width_bits=32; }
+        else if (auto p = dynamic_cast<const TimestampColumn*>(raw)) { const auto* b=&p->get_data(); acc.get_u64=[b](size_t i){return static_cast<uint64_t>((*b)[i].timestamp());}; acc.width_bits=64; }
+        else { return Status::NotSupported("zorder_encode: unsupported argument type"); }
+
+        dims.emplace_back(std::move(acc));
+    }
+
+    int max_bits = 0; for (const auto& d : dims) max_bits = std::max(max_bits, d.width_bits);
+    ColumnBuilder<TYPE_VARBINARY> builder(num_rows);
+    std::string out; out.reserve(((size_t)max_bits*dims.size()+7)/8 + dims.size());
+    for (size_t i = 0; i < num_rows; ++i) {
+        out.clear(); for (const auto& d : dims) out.push_back(d.is_null(i) ? *NULL_MARKER : *NOT_NULL_MARKER);
+        const size_t total_bits = (size_t)max_bits*dims.size(); const size_t total_bytes = (total_bits+7)/8; size_t off = out.size(); out.resize(off+total_bytes, '\0');
+        std::vector<uint64_t> aligned; aligned.reserve(dims.size());
+        for (const auto& d : dims) { uint64_t v = d.is_null(i) ? 0ULL : d.get_u64(i); int shift = max_bits - d.width_bits; uint64_t av = (d.width_bits>=64 || shift<=0) ? v : (v << shift); aligned.emplace_back(av); }
+        for (int g = 0; g < max_bits; ++g) { int idx = max_bits - 1 - g; for (size_t j = 0; j < dims.size(); ++j) { uint64_t bit = (aligned[j] >> idx) & 1ULL; size_t ob = (size_t)g*dims.size() + j; size_t byte = ob >> 3; int bit_in_byte = 7 - (ob & 7); out[off+byte] = static_cast<char>(out[off+byte] | (bit << bit_in_byte)); } }
+        builder.append(out);
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
 } // namespace starrocks
 
 #include "gen_cpp/opcode/UtilityFunctions.inc"
