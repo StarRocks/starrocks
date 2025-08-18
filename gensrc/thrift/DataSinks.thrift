@@ -233,6 +233,7 @@ struct TOlapTableSink {
     31: optional binary encryption_meta;
     32: optional bool dynamic_overwrite
     33: optional bool enable_data_file_bundling
+    34: optional bool is_multi_statements_txn
 }
 
 struct TSchemaTableSink {
