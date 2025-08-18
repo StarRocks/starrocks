@@ -1799,9 +1799,7 @@ class LakeColumnUpsertModeTest : public LakePartialUpdateTestBase {
 public:
     LakeColumnUpsertModeTest() : LakePartialUpdateTestBase(kTestDirectory) {}
 
-    void SetUp() override {
-        LakePartialUpdateTestBase::SetUp();
-    }
+    void SetUp() override { LakePartialUpdateTestBase::SetUp(); }
 
     constexpr static const char* const kTestDirectory = "test_lake_column_upsert_mode";
 };
@@ -1817,13 +1815,13 @@ TEST_F(LakeColumnUpsertModeTest, upsert_existing_rows_generates_dcg_only) {
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                               .set_tablet_manager(_tablet_mgr.get())
-                                               .set_tablet_id(tablet_id)
-                                               .set_txn_id(txn_id)
-                                               .set_partition_id(_partition_id)
-                                               .set_mem_tracker(_mem_tracker.get())
-                                               .set_schema_id(_tablet_schema->id())
-                                               .build());
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
@@ -1835,15 +1833,15 @@ TEST_F(LakeColumnUpsertModeTest, upsert_existing_rows_generates_dcg_only) {
     {
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                           .set_tablet_manager(_tablet_mgr.get())
-                                           .set_tablet_id(tablet_id)
-                                           .set_txn_id(txn_id)
-                                           .set_partition_id(_partition_id)
-                                           .set_mem_tracker(_mem_tracker.get())
-                                           .set_schema_id(_tablet_schema->id())
-                                           .set_slot_descriptors(&_slot_pointers)
-                                           .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
-                                           .build());
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
@@ -1867,13 +1865,13 @@ TEST_F(LakeColumnUpsertModeTest, upsert_with_new_rows_adds_new_segments) {
     {
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                           .set_tablet_manager(_tablet_mgr.get())
-                                           .set_tablet_id(tablet_id)
-                                           .set_txn_id(txn_id)
-                                           .set_partition_id(_partition_id)
-                                           .set_mem_tracker(_mem_tracker.get())
-                                           .set_schema_id(_tablet_schema->id())
-                                           .build());
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
@@ -1888,15 +1886,15 @@ TEST_F(LakeColumnUpsertModeTest, upsert_with_new_rows_adds_new_segments) {
     {
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                           .set_tablet_manager(_tablet_mgr.get())
-                                           .set_tablet_id(tablet_id)
-                                           .set_txn_id(txn_id)
-                                           .set_partition_id(_partition_id)
-                                           .set_mem_tracker(_mem_tracker.get())
-                                           .set_schema_id(_tablet_schema->id())
-                                           .set_slot_descriptors(&_slot_pointers)
-                                           .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
-                                           .build());
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk_insert, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
