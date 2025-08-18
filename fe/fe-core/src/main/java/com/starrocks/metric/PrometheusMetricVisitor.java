@@ -38,6 +38,8 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Snapshot;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
+import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.monitor.jvm.JvmStats.BufferPool;
 import com.starrocks.monitor.jvm.JvmStats.GarbageCollector;
@@ -45,10 +47,12 @@ import com.starrocks.monitor.jvm.JvmStats.MemoryPool;
 import com.starrocks.monitor.jvm.JvmStats.Threads;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -279,6 +283,24 @@ public class PrometheusMetricVisitor extends MetricVisitor {
         // only the leader FE has this metric, to help the Grafana knows who is the leader
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             sb.append(NODE_INFO).append("{type=\"is_master\"} ").append(1).append("\n");
+        }
+
+        ImmutableMap<Long, Backend> backends = systemInfoService.getIdToBackend();
+        for (Backend backend : backends.values()) {
+            Optional<DataCacheMetrics> dataCacheMetrics = backend.getDataCacheMetrics();
+            if (dataCacheMetrics.isPresent()) {
+                DataCacheMetrics.Status status = dataCacheMetrics.get().getStatus();
+                if (status != DataCacheMetrics.Status.DISABLED) {
+                    sb.append(NODE_INFO).append("{type=\"datacache_disk_quota\", backend=\"" + backend.getHost() + "\"} ")
+                            .append(dataCacheMetrics.get().getDiskQuotaBytes().getBytes()).append("\n");
+                    sb.append(NODE_INFO).append("{type=\"datacache_disk_used\", backend=\"" + backend.getHost() + "\"} ")
+                            .append(dataCacheMetrics.get().getDiskUsedBytes().getBytes()).append("\n");
+                    sb.append(NODE_INFO).append("{type=\"datacache_mem_quota\", backend=\"" + backend.getHost() + "\"} ")
+                            .append(dataCacheMetrics.get().getMemQuoteBytes().getBytes()).append("\n");
+                    sb.append(NODE_INFO).append("{type=\"datacache_mem_used\", backend=\"" + backend.getHost() + "\"} ")
+                            .append(dataCacheMetrics.get().getMemUsedBytes().getBytes()).append("\n");
+                }
+            }
         }
     }
 

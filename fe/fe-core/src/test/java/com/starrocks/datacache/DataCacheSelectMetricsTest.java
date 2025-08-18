@@ -14,6 +14,7 @@
 
 package com.starrocks.datacache;
 
+import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -115,5 +116,27 @@ public class DataCacheSelectMetricsTest {
                         "[IP: 127.0.0.4, ReadCacheSize: 3MB, AvgReadCacheTime: 3s, WriteCacheSize: 3GB, " +
                         "AvgWriteCacheTime: 15s, TotalCacheUsage: 50.00%]",
                 dataCacheSelectMetrics.debugString(true));
+    }
+
+    @Test
+    public void testDataCacheMetrics() {
+        PrometheusMetricVisitor prometheusMetricVisitor = new PrometheusMetricVisitor("datacache_metrics_test");
+        TDataCacheMetrics tDataCacheMetrics = new TDataCacheMetrics();
+        tDataCacheMetrics.setStatus(TDataCacheStatus.NORMAL);
+        tDataCacheMetrics.setDisk_quota_bytes(2000);
+        tDataCacheMetrics.setDisk_used_bytes(200);
+        tDataCacheMetrics.setMem_quota_bytes(1000);
+        tDataCacheMetrics.setMem_used_bytes(100);
+        DataCacheMetrics metrics = DataCacheMetrics.buildFromThrift(tDataCacheMetrics);
+        for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
+            backend.updateDataCacheMetrics(metrics);
+        }
+
+        prometheusMetricVisitor.getNodeInfo();
+        String metricsInfo = prometheusMetricVisitor.build();
+        Assert.assertTrue(metricsInfo.contains("node_info{type=\"datacache_disk_quota\", backend=\"127.0.0.3\"} 2000"));
+        Assert.assertTrue(metricsInfo.contains("node_info{type=\"datacache_disk_used\", backend=\"127.0.0.3\"} 200"));
+        Assert.assertTrue(metricsInfo.contains("node_info{type=\"datacache_mem_quota\", backend=\"127.0.0.3\"} 1000"));
+        Assert.assertTrue(metricsInfo.contains("node_info{type=\"datacache_mem_used\", backend=\"127.0.0.3\"} 100"));
     }
 }
