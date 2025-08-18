@@ -319,9 +319,13 @@ public class TypeManager {
             }
         }
         if (compatibleType.isStringType()) {
-            return isContainVarcharWithoutLength
-                    ? ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength())
-                    : compatibleType;
+            ScalarType resultType = (ScalarType) compatibleType;
+            // If result type is varchar with length, it may cause the case when result type is not compatible.
+            if (isContainVarcharWithoutLength && resultType.getLength() > 0) {
+                return ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+            } else {
+                return compatibleType;
+            }
         } else {
             return compatibleType;
         }
