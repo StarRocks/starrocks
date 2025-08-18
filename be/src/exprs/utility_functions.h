@@ -70,6 +70,9 @@ public:
 
     // Build an order-preserving composite binary key from heterogeneous arguments
     DEFINE_VECTORIZED_FN(encode_sort_key);
+
+    // Z-Order (Morton) encoding for multi-dimensional clustering
+    DEFINE_VECTORIZED_FN(zorder_encode);
 };
 
 } // namespace starrocks
