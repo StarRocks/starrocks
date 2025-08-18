@@ -34,11 +34,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
->>>>>>> ba5d65e4ed ([BugFix] Fix create mv with case-when incompatible varchar type (#61996))
 import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -86,6 +82,7 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
@@ -3182,6 +3179,10 @@ public class CreateMaterializedViewTest {
         Table table = db.getTable(mvName);
         Assert.assertNotNull(table);
         return table;
+    }
+
+    private MaterializedView getMv(String mvName) {
+        return getMv("test", mvName);
     }
 
     private MaterializedView getMv(String dbName, String mvName) {

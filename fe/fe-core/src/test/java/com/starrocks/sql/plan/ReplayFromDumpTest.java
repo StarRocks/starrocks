@@ -766,15 +766,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/nested_view_with_cte"),
                         null, TExplainLevel.NORMAL);
-<<<<<<< HEAD
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  524:Project\n" +
-                "  |  <slot 8449> : 8449: count\n" +
-                "  |  limit: 100"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  523:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(8449: count)\n" +
-                "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2532: case\n" +
-                "  |  limit: 100"));
-=======
         PlanTestBase.assertContains(replayPair.second, "Project\n" +
                 "  |  <slot 7368> : 7368: count\n" +
                 "  |  limit: 100");
@@ -782,7 +773,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  output: count(7368: count)\n" +
                 "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2134: case\n" +
                 "  |  limit: 100");
->>>>>>> ba5d65e4ed ([BugFix] Fix create mv with case-when incompatible varchar type (#61996))
     }
 
     @Test
