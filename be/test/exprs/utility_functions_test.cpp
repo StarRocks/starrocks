@@ -293,4 +293,112 @@ TEST_F(UtilityFunctionsTest, encodeSortKeyStringEscaping) {
     ASSERT_NE(k0.to_string(), k1.to_string());
 }
 
+TEST_F(UtilityFunctionsTest, zorderEncodeSingleDimOrdering) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    auto c_int = Int32Column::create();
+    c_int->append(-2);
+    c_int->append(-1);
+    c_int->append(0);
+    c_int->append(1);
+    c_int->append(2);
+
+    Columns cols;
+    cols.emplace_back(c_int);
+
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::zorder_encode(ctx, cols));
+    auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
+    ASSERT_EQ(5, bin->size());
+
+    std::vector<Slice> keys = {bin->get_slice(0), bin->get_slice(1), bin->get_slice(2), bin->get_slice(3),
+                               bin->get_slice(4)};
+    ASSERT_LT(keys[0].compare(keys[1]), 0);
+    ASSERT_LT(keys[1].compare(keys[2]), 0);
+    ASSERT_LT(keys[2].compare(keys[3]), 0);
+    ASSERT_LT(keys[3].compare(keys[4]), 0);
+}
+
+TEST_F(UtilityFunctionsTest, zorderEncodeTwoDimsBasicInterleaving) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    auto a = UInt8Column::create();
+    auto b = UInt8Column::create();
+    // (0,0), (1,0), (0,1), (1,1)
+    a->append(0); b->append(0);
+    a->append(1); b->append(0);
+    a->append(0); b->append(1);
+    a->append(1); b->append(1);
+
+    Columns cols;
+    cols.emplace_back(a);
+    cols.emplace_back(b);
+
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::zorder_encode(ctx, cols));
+    auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
+    ASSERT_EQ(4, bin->size());
+
+    // Expect per-row bytes: [marker_a, marker_b, interleaved_hi, interleaved_lo]
+    auto slice_to_vec = [](const Slice& s) {
+        return std::vector<uint8_t>(s.data, s.data + s.size);
+    };
+
+    std::vector<uint8_t> k00 = slice_to_vec(bin->get_slice(0));
+    std::vector<uint8_t> k10 = slice_to_vec(bin->get_slice(1));
+    std::vector<uint8_t> k01 = slice_to_vec(bin->get_slice(2));
+    std::vector<uint8_t> k11 = slice_to_vec(bin->get_slice(3));
+
+    // All non-null markers should be 0x01
+    ASSERT_EQ(0x01, k00[0]); ASSERT_EQ(0x01, k00[1]);
+    ASSERT_EQ(0x01, k10[0]); ASSERT_EQ(0x01, k10[1]);
+    ASSERT_EQ(0x01, k01[0]); ASSERT_EQ(0x01, k01[1]);
+    ASSERT_EQ(0x01, k11[0]); ASSERT_EQ(0x01, k11[1]);
+
+    // Interleaved bytes for 8-bit values MSB-first:
+    // (0,0) -> 0x00 0x00
+    // (1,0) -> 0x00 0x02
+    // (0,1) -> 0x00 0x01
+    // (1,1) -> 0x00 0x03
+    ASSERT_EQ(0x00, k00[2]); ASSERT_EQ(0x00, k00[3]);
+    ASSERT_EQ(0x00, k10[2]); ASSERT_EQ(0x02, k10[3]);
+    ASSERT_EQ(0x00, k01[2]); ASSERT_EQ(0x01, k01[3]);
+    ASSERT_EQ(0x00, k11[2]); ASSERT_EQ(0x03, k11[3]);
+}
+
+TEST_F(UtilityFunctionsTest, zorderEncodeNullHandling) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    auto c1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto c2 = Int32Column::create();
+
+    // (NULL,0), (1,0), (NULL,1), (1,1)
+    c1->append_nulls(1); c2->append(0);
+    c1->append_datum(Datum(int32_t(1))); c2->append(0);
+    c1->append_nulls(1); c2->append(1);
+    c1->append_datum(Datum(int32_t(1))); c2->append(1);
+
+    Columns cols; cols.emplace_back(c1); cols.emplace_back(c2);
+
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::zorder_encode(ctx, cols));
+    auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
+    ASSERT_EQ(4, bin->size());
+
+    Slice k0 = bin->get_slice(0); // (NULL,0)
+    Slice k1 = bin->get_slice(1); // (1,0)
+    Slice k2 = bin->get_slice(2); // (NULL,1)
+    Slice k3 = bin->get_slice(3); // (1,1)
+
+    // Null in first dimension should sort before non-null
+    ASSERT_LT(k0.compare(k1), 0);
+    ASSERT_LT(k2.compare(k3), 0);
+
+    // Verify null markers in first byte
+    ASSERT_EQ('\0', k0.data[0]);
+    ASSERT_EQ('\1', k1.data[0]);
+    ASSERT_EQ('\0', k2.data[0]);
+    ASSERT_EQ('\1', k3.data[0]);
+}
+
 } // namespace starrocks
