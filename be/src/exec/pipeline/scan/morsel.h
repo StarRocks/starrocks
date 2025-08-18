@@ -361,7 +361,7 @@ public:
     virtual StatusOr<bool> ready_for_next() const { return true; }
     virtual Status append_morsels(Morsels&& morsels);
     virtual Type type() const = 0;
-    void set_tablet_schema(TabletSchemaCSPtr tablet_schema) {
+    virtual void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) {
         DCHECK(tablet_schema != nullptr);
         _tablet_schema = tablet_schema;
     }
@@ -421,6 +421,11 @@ public:
     StatusOr<bool> ready_for_next() const override;
     Status append_morsels(Morsels&& morsels) override { return _morsel_queue->append_morsels(std::move(morsels)); }
     Type type() const override { return BUCKET_SEQUENCE; }
+
+    void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) override {
+        MorselQueue::set_tablet_schema(tablet_schema);
+        _morsel_queue->set_tablet_schema(tablet_schema);
+    }
 
 private:
     StatusOr<int64_t> _peek_sequence_id() const;
