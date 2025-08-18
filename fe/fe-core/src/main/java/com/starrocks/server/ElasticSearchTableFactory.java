@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionInfoBuilder;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -63,7 +64,7 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
         PartitionInfo partitionInfo = null;
         Map<String, Long> partitionNameToId = Maps.newHashMap();
         if (partitionDesc != null) {
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            partitionInfo = PartitionInfoBuilder.build(partitionDesc, baseSchema, partitionNameToId, false);
         } else if (null != metastore) {
             long partitionId = metastore.getNextId();
             // use table name as single partition name

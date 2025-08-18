@@ -21,17 +21,11 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ColumnId;
-import com.starrocks.catalog.ListPartitionInfo;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -362,54 +356,7 @@ public class ListPartitionDesc extends PartitionDesc {
         }
     }
 
-    @Override
-    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
-            throws DdlException {
-        try {
-            List<Column> partitionColumns = this.findPartitionColumns(columns);
-            Map<ColumnId, Column> idToColumn = MetaUtils.buildIdToColumn(columns);
-            ListPartitionInfo listPartitionInfo = new ListPartitionInfo(super.type, partitionColumns);
-            for (SingleItemListPartitionDesc desc : this.singleListPartitionDescs) {
-                long partitionId = partitionNameToId.get(desc.getPartitionName());
-                listPartitionInfo.setDataProperty(partitionId, desc.getPartitionDataProperty());
-                listPartitionInfo.setIsInMemory(partitionId, desc.isInMemory());
-                listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
-                listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
-                listPartitionInfo.setValues(partitionId, desc.getValues());
-                listPartitionInfo.setLiteralExprValues(idToColumn, partitionId, desc.getValues());
-                listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
-                listPartitionInfo.setDataCacheInfo(partitionId, desc.getDataCacheInfo());
-            }
-            for (MultiItemListPartitionDesc desc : this.multiListPartitionDescs) {
-                long partitionId = partitionNameToId.get(desc.getPartitionName());
-                listPartitionInfo.setDataProperty(partitionId, desc.getPartitionDataProperty());
-                listPartitionInfo.setIsInMemory(partitionId, desc.isInMemory());
-                listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
-                listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
-                listPartitionInfo.setMultiValues(partitionId, desc.getMultiValues());
-                listPartitionInfo.setMultiLiteralExprValues(idToColumn, partitionId, desc.getMultiValues());
-                listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
-                listPartitionInfo.setDataCacheInfo(partitionId, desc.getDataCacheInfo());
-            }
-            listPartitionInfo.setAutomaticPartition(isAutoPartitionTable);
-            return listPartitionInfo;
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage(), e);
-        }
-    }
 
-    private List<Column> findPartitionColumns(List<Column> columns) {
-        List<Column> partitionColumns = Lists.newArrayList();
-        for (String colName : this.partitionColNames) {
-            for (Column column : columns) {
-                if (column.getName().equalsIgnoreCase(colName)) {
-                    partitionColumns.add(column);
-                    break;
-                }
-            }
-        }
-        return partitionColumns;
-    }
 
     public List<Expr> getPartitionExprs() {
         return partitionExprs;
@@ -425,6 +372,14 @@ public class ListPartitionDesc extends PartitionDesc {
 
     public void setAutoPartitionTable(boolean autoPartitionTable) {
         isAutoPartitionTable = autoPartitionTable;
+    }
+
+    public List<SingleItemListPartitionDesc> getSingleListPartitionDescs() {
+        return singleListPartitionDescs;
+    }
+
+    public List<MultiItemListPartitionDesc> getMultiListPartitionDescs() {
+        return multiListPartitionDescs;
     }
 
     @Override
