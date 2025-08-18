@@ -55,7 +55,10 @@ public class ColumnDefAnalyzer {
         final String name = columnDef.getName();
         final TypeDef typeDef = columnDef.getTypeDef();
         final Boolean isPartitionColumn = columnDef.isPartitionColumn();
+
+        columnDef.setCharsetName(columnDef.getCharsetName().toLowerCase());
         final String charsetName = columnDef.getCharsetName();
+
         final AggregateType aggregateType = columnDef.getAggregateType();
         final AggStateDesc aggStateDesc = columnDef.getAggStateDesc();
         final boolean isKey = columnDef.isKey();
@@ -83,8 +86,6 @@ public class ColumnDefAnalyzer {
                 }
             }
         }
-
-        columnDef.setCharsetName(charsetName.toLowerCase());
 
         if (!CHARSET_NAMES.contains(charsetName)) {
             throw new AnalysisException("Unknown charset name: " + charsetName);
