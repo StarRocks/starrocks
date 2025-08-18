@@ -56,11 +56,11 @@ select dict_merge(get_json_string(c1, 'f3'), 255) from js2 [_META_];
 -- !result
 select dict_merge(get_json_string(c1, 'f4'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'global dict size:500 greater than low_cardinality_threshold:255: BE:10003')
+[REGEX]E: \(1064, 'global dict size:500 greater than low_cardinality_threshold:255: BE:.*'\)
 -- !result
 select dict_merge(get_json_string(c1, 'f5'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'no global dict: BE:10003')
+[REGEX]E: \(1064, 'no global dict: BE:.*'\)
 -- !result
 insert into js2 
 select 
@@ -77,23 +77,23 @@ from (table(generate_series(1, 100)));
 -- !result
 select dict_merge(get_json_string(c1, 'f1'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'no global dict: BE:10003')
+[REGEX]E: \(1064, 'no global dict: BE:.*'\)
 -- !result
 select dict_merge(get_json_string(c1, 'f2'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'no global dict: BE:10003')
+[REGEX]E: \(1064, 'no global dict: BE:.*'\)
 -- !result
 select dict_merge(get_json_string(c1, 'f3'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'no global dict: BE:10003')
+[REGEX]E: \(1064, 'no global dict: BE:.*'\)
 -- !result
 select dict_merge(get_json_string(c1, 'f4'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'global dict size:500 greater than low_cardinality_threshold:255: BE:10003')
+[REGEX]E: \(1064, 'global dict size:500 greater than low_cardinality_threshold:255: BE:.*'\)
 -- !result
 select dict_merge(get_json_string(c1, 'f5'), 255) from js2 [_META_];
 -- result:
-E: (1064, 'no global dict: BE:10003')
+[REGEX]E: \(1064, 'no global dict: BE:.*'\)
 -- !result
 truncate table js2;
 -- result:
