@@ -461,8 +461,16 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
             continue;
         }
 
+        auto array_size = offsets[offset + 1] - offsets[offset];
+        auto array_is_null = (def_level < ctx._max_def_level || (null_col != nullptr && null_col[offset]));
+
         // null in current array_column
-        if (def_level < ctx._max_def_level || (null_col != nullptr && null_col[offset])) {
+        if (array_is_null) {
+            if (array_size > 0) {
+                return Status::DataQualityError(
+                        fmt::format("Array column ({}) has null element at offset {}, but array size is {}",
+                                    type_desc.debug_string(), offset, array_size));
+            }
             (*def_levels)[num_levels] = def_level;
             (*rep_levels)[num_levels] = rep_level;
 
@@ -471,7 +479,6 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
             continue;
         }
 
-        auto array_size = offsets[offset + 1] - offsets[offset];
         // not null but empty array
         if (array_size == 0) {
             (*def_levels)[num_levels] = def_level + node->is_optional();
