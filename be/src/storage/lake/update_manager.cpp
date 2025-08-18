@@ -572,21 +572,33 @@ static StatusOr<std::shared_ptr<Segment>> get_lake_dcg_segment(GetDeltaColumnCon
     // iterate dcg from new ver to old ver
     for (const auto& dcg : ctx.dcgs) {
         std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
-        if (idx.first >= 0) {
-            ASSIGN_OR_RETURN(std::string column_file,
-                             dcg->column_file_by_idx(parent_name(ctx.segment->file_name()), idx.first));
-            if (ctx.dcg_segments.count(column_file) == 0) {
-                ASSIGN_OR_RETURN(auto dcg_segment, ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema));
-                ctx.dcg_segments[column_file] = dcg_segment;
-            }
-            if (col_index != nullptr) {
-                *col_index = idx.second;
-            }
-            return ctx.dcg_segments[column_file];
+        if (idx.first < 0) {
+            // column not found in this DCG, try next one
+            continue;
         }
+
+        auto column_file_result = dcg->column_file_by_idx(parent_name(ctx.segment->file_name()), idx.first);
+        if (!column_file_result.ok()) {
+            return Status::InternalError(
+                    fmt::format("DCG file not found for column {}: {}", ucid, column_file_result.status().to_string()));
+        }
+        std::string column_file = column_file_result.value();
+
+        if (ctx.dcg_segments.count(column_file) == 0) {
+            auto dcg_segment_result = ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema);
+            if (!dcg_segment_result.ok()) {
+                return Status::InternalError(fmt::format("Failed to create DCG segment for column {}: {}", ucid,
+                                                         dcg_segment_result.status().to_string()));
+            }
+            ctx.dcg_segments[column_file] = dcg_segment_result.value();
+        }
+
+        if (col_index != nullptr) {
+            *col_index = idx.second;
+        }
+        return ctx.dcg_segments[column_file];
     }
-    // the column not exist in dcg
-    return Status::NotFound("Column not found in DCG");
+    return Status::NotFound(fmt::format("Column {} not found in any DCG", ucid));
 }
 
 static StatusOr<std::unique_ptr<ColumnIterator>> new_lake_dcg_column_iterator(
@@ -596,11 +608,6 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_lake_dcg_column_iterator(
     int32_t col_index = 0;
     auto dcg_segment_result = get_lake_dcg_segment(ctx, column.unique_id(), &col_index, read_tablet_schema);
     if (!dcg_segment_result.ok()) {
-        // Column not found in DCG, this is expected and not an error
-        if (dcg_segment_result.status().is_not_found()) {
-            return Status::NotFound("Column not found in DCG");
-        }
-        // Other errors should be propagated
         return dcg_segment_result.status();
     }
 
