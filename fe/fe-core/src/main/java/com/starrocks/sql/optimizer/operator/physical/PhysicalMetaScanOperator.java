@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -25,8 +27,14 @@ import java.util.Map;
 import java.util.Objects;
 
 public class PhysicalMetaScanOperator extends PhysicalScanOperator {
-    private final Map<Integer, String> aggColumnIdToNames;
-    private final List<String> selectPartitionNames;
+    private Map<Integer, String> aggColumnIdToNames;
+    private List<String> selectPartitionNames;
+
+    public PhysicalMetaScanOperator() {
+        super(OperatorType.PHYSICAL_META_SCAN);
+        this.aggColumnIdToNames = ImmutableMap.of();
+        this.selectPartitionNames = ImmutableList.of();
+    }
 
     public PhysicalMetaScanOperator(LogicalMetaScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_META_SCAN, scanOperator);
@@ -69,6 +77,27 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), aggColumnIdToNames);
+        return Objects.hash(super.hashCode(), aggColumnIdToNames, selectPartitionNames);
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder
+            extends PhysicalScanOperator.Builder<PhysicalMetaScanOperator, PhysicalScanOperator.Builder> {
+
+        @Override
+        protected PhysicalMetaScanOperator newInstance() {
+            return new PhysicalMetaScanOperator();
+        }
+
+        @Override
+        public PhysicalMetaScanOperator.Builder withOperator(PhysicalMetaScanOperator operator) {
+            super.withOperator(operator);
+            builder.aggColumnIdToNames = ImmutableMap.copyOf(operator.aggColumnIdToNames);
+            builder.selectPartitionNames = ImmutableList.copyOf(operator.selectPartitionNames);
+            return this;
+        }
     }
 }

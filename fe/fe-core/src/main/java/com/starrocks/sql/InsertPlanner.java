@@ -335,6 +335,7 @@ public class InsertPlanner {
                     dict.ifPresent(
                             columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
                 }
+                // TODO: attach the dict for JSON
             }
             tupleDesc.computeMemLayout();
 
