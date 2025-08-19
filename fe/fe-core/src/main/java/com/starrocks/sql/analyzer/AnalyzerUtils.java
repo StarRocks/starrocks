@@ -1398,7 +1398,7 @@ public class AnalyzerUtils {
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
                     distributionDesc, (ExpressionRangePartitionInfo) partitionInfo);
         } else {
-            throw new AnalysisException("Unsupported partition type " + partitionDesc.getType());
+            throw new AnalysisException("Unsupported partition type " + partitionDesc.getClass().getSimpleName());
         }
     }
 
