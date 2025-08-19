@@ -491,7 +491,7 @@ static void do_bench_materialize(benchmark::State& state, LogicalType data_type,
 
     constexpr size_t output_chunk_size = 4096;
     const size_t num_output_chunks = (perm.size() + output_chunk_size - 1) / output_chunk_size;
-    
+
     for (auto _ : state) {
         for (size_t i = 0; i < num_output_chunks; ++i) {
             ChunkPtr dst = template_chunk->clone_empty();
