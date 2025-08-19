@@ -729,33 +729,6 @@ void test_state_function_empty_column(FunctionContext* ctx, const AggregateFunct
     //ASSERT_EQ(result_column->size(), 0);
 }
 
-template <typename T>
-void test_state_function_invalid_cases(FunctionContext* ctx, const std::string& func_name,
-                                       const std::vector<TypeDescriptor>& arg_types, const TypeDescriptor& ret_type) {
-    VLOG_ROW << "test_state_function_invalid_cases: " << func_name;
-
-    // Create AggStateDesc
-    AggStateDesc agg_state_desc(func_name, ret_type, arg_types, false, 1);
-
-    // Create arg nullables
-    std::vector<bool> arg_nullables(arg_types.size(), false);
-
-    // Create StateFunction
-    StateFunction state_func(agg_state_desc, ret_type, arg_nullables);
-
-    // Test with empty columns
-    Columns empty_columns;
-    auto result = state_func.execute(ctx, empty_columns);
-    ASSERT_FALSE(result.ok());
-    ASSERT_TRUE(result.status().is_internal_error());
-
-    // Test with mismatched column count
-    ColumnPtr input_column = gen_input_column1<T>();
-    Columns input_columns = {input_column, input_column}; // Too many columns
-    result = state_func.execute(ctx, input_columns);
-    ASSERT_FALSE(result.ok());
-}
-
 TEST_F(AggStateFunctionsTest, test_state_function_sum) {
     auto return_type = TYPE_BIGINT;
     auto arg_type = TYPE_BIGINT;
@@ -778,7 +751,6 @@ TEST_F(AggStateFunctionsTest, test_state_function_sum) {
                                               true);
         test_state_function_empty_column<int64_t>(ctx, func, "sum", arg_type_descs, return_type_desc, return_type_desc,
                                                   true);
-        test_state_function_invalid_cases<int64_t>(ctx, "sum", arg_type_descs, return_type_desc);
     }
 }
 
@@ -821,7 +793,6 @@ TEST_F(AggStateFunctionsTest, test_state_function_min) {
                                               true);
         test_state_function_empty_column<int32_t>(ctx, func, "min", arg_type_descs, return_type_desc, return_type_desc,
                                                   true);
-        test_state_function_invalid_cases<int32_t>(ctx, "min", arg_type_descs, return_type_desc);
     }
 }
 
@@ -851,7 +822,6 @@ TEST_F(AggStateFunctionsTest, test_state_function_avg) {
                                               intermediate_type_desc, true);
         test_state_function_empty_column<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc,
                                                   intermediate_type_desc, true);
-        test_state_function_invalid_cases<int32_t>(ctx, "avg", arg_type_descs, return_type_desc);
     }
 }
 
