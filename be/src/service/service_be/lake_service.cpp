@@ -306,7 +306,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                   << trace->DumpToString();
     } else if (is_slow) {
         LOG(INFO) << "Published txns=" << JoinMapped(txn_infos, txn_info_string, ",")
-                  << ". tablets=" << JoinMapped(txn_infos, txn_info_string, ",") << " cost=" << cost
+                  << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
                   << "us, trace: " << trace->MetricsAsJSON();
     }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
