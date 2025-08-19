@@ -41,13 +41,8 @@ public:
     }
 
     StatusOr<ColumnPtr> execute(FunctionContext* context, const Columns& columns) override {
-        if (columns.size() == 0) {
-            return Status::InternalError("StateFunction execute columns is empty");
-        }
-        if (columns.size() != _arg_nullables.size()) {
-            return Status::InternalError("StateFunction execute columns size " + std::to_string(columns.size()) +
-                                         " not match with arg_nullables size " + std::to_string(_arg_nullables.size()));
-        }
+        DCHECK_GT(columns.size(), 0);
+        DCHECK_EQ(columns.size(), _arg_nullables.size());
 
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultAggStateMergeFunctionAllocator);
 

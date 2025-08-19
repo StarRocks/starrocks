@@ -30,20 +30,27 @@ public:
         VLOG_ROW << "AggStateCombinator constructor:" << _agg_state_desc.debug_string();
     }
 
-    ~AggStateCombinator() {}
+    ~AggStateCombinator() = default;
 
+    // get the agg state desc
     const AggStateDesc* get_agg_state_desc() const { return &_agg_state_desc; }
 
+    // create the agg state
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { _function->create(ctx, ptr); }
 
+    // destroy the agg state
     void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { _function->destroy(ctx, ptr); }
 
+    // get the size of the agg state
     size_t size() const override { return _function->size(); }
 
+    // get the align of the agg state
     size_t alignof_size() const override { return _function->alignof_size(); }
 
+    // check if the agg state is pod
     bool is_pod_state() const override { return _function->is_pod_state(); }
 
+    // reset the agg state
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         _function->reset(ctx, args, state);
     }

@@ -30,8 +30,6 @@ namespace starrocks {
 
 static MemHookAllocator kDefaultAggStateMergeFunctionAllocator = MemHookAllocator{};
 
-#define ALIGN_TO(size, align) ((size + align - 1) / align * align)
-
 // A base class for all state combinators which is a scalar function.
 class StateCombinator {
 public:
@@ -42,22 +40,24 @@ public:
         _function = AggStateDesc::get_agg_state_func(&_agg_state_desc);
     }
 
-    ~StateCombinator() {}
+    ~StateCombinator() = default;
 
-    virtual Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-        if (_function == nullptr) {
-            return Status::InternalError("AggStateBaseFunction is nullptr  for " + _agg_state_desc.get_func_name());
-        }
-        return Status::OK();
-    }
+    // prepare the state combinator
+    virtual Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) { return Status::OK(); }
 
+    // close the state combinator
     virtual Status close(FunctionContext* context, FunctionContext::FunctionStateScope scope) { return Status::OK(); }
 
+    // execute the state combinator
     virtual StatusOr<ColumnPtr> execute(FunctionContext* context, const Columns& columns) {
         return Status::InternalError("StateCombinator execute is not implemented");
     }
 
+    // align the size to the align
+    static size_t align_to(size_t size, size_t align) noexcept { return (size + align - 1) / align * align; }
+
 protected:
+    // convert the column to the nullable column if the arg is nullable and the column is not nullable
     StatusOr<ColumnPtr> _convert_to_nullable_column(const ColumnPtr& column, bool arg_nullable,
                                                     bool is_unpack_column) const {
         auto unpack_column =
