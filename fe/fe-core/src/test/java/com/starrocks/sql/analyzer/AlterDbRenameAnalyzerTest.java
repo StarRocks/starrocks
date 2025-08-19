@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
@@ -25,30 +26,28 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class AlterDbRenameAnalyzerTest {
 
 
     private static ConnectContext ctx;
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         AnalyzeTestUtil.init();
         String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\");";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(createCatalog);
-        Assert.assertTrue(stmt instanceof CreateCatalogStmt);
+        Assertions.assertTrue(stmt instanceof CreateCatalogStmt);
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         CreateCatalogStmt statement = (CreateCatalogStmt) stmt;
@@ -60,13 +59,14 @@ public class AlterDbRenameAnalyzerTest {
     }
 
     @Test
-    public void testAnalyze() throws Exception {
+    public void testAnalyze() {
         String sql = "alter database `db1` rename db2";
         ctx.setCurrentCatalog("hive_catalog_1");
-        expectedEx.expect(AnalysisException.class);
-        expectedEx.expectMessage("Getting analyzing error. Detail message: " +
-                "Unsupported operation rename db under external catalog.");
-        AlterDatabaseRenameStatement statement = (AlterDatabaseRenameStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Throwable exception = assertThrows(AnalysisException.class, () -> {
+            AlterDatabaseRenameStatement statement = (AlterDatabaseRenameStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        });
+        assertThat(exception.getMessage(), containsString("Getting analyzing error. Detail message: " +
+                "Unsupported operation rename db under external catalog."));
     }
 
 }

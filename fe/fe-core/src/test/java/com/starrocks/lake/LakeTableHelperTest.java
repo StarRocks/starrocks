@@ -44,15 +44,16 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -60,7 +61,7 @@ public class LakeTableHelperTest {
     private static ConnectContext connectContext;
     private static final String DB_NAME = "test_lake_table_helper";
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         // create connect context
@@ -71,7 +72,7 @@ public class LakeTableHelperTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
     }
 
@@ -89,23 +90,23 @@ public class LakeTableHelperTest {
     @Test
     public void testSupportCombinedTxnLog() throws Exception {
         Config.lake_use_combined_txn_log = true;
-        Assert.assertTrue(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.BACKEND_STREAMING));
-        Assert.assertTrue(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK));
-        Assert.assertTrue(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.INSERT_STREAMING));
-        Assert.assertTrue(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.BATCH_LOAD_JOB));
-        Assert.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.LAKE_COMPACTION));
-        Assert.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.FRONTEND_STREAMING));
-        Assert.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.BYPASS_WRITE));
-        Assert.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.DELETE));
-        Assert.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.MV_REFRESH));
+        Assertions.assertTrue(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.BACKEND_STREAMING));
+        Assertions.assertTrue(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK));
+        Assertions.assertTrue(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.INSERT_STREAMING));
+        Assertions.assertTrue(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.BATCH_LOAD_JOB));
+        Assertions.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.LAKE_COMPACTION));
+        Assertions.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.FRONTEND_STREAMING));
+        Assertions.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.BYPASS_WRITE));
+        Assertions.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.DELETE));
+        Assertions.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.MV_REFRESH));
         Config.lake_use_combined_txn_log = false;
-        Assert.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.BACKEND_STREAMING));
+        Assertions.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.BACKEND_STREAMING));
     }
 
     @Test
     public void testEnablePartitionAggregation() throws Exception {
         List<Long> tableIdList = Lists.newArrayList(1001L, 1002L, 1003L);
-        Assert.assertFalse(LakeTableHelper.enablePartitionAggregation(1L, tableIdList));
+        Assertions.assertFalse(LakeTableHelper.fileBundling(1L, tableIdList));
     }
 
     @Test
@@ -155,7 +156,7 @@ public class LakeTableHelperTest {
         };
 
         LakeTableHelper.deleteShardGroupMeta(partition);
-        Assert.assertEquals(0, shardGroupInfos.size());
+        Assertions.assertEquals(0, shardGroupInfos.size());
     }
 
     @Test
@@ -176,7 +177,7 @@ public class LakeTableHelperTest {
         Partition partition = new Partition(partitionId, partitionId + 100, "t0", index, dist);
         TStorageMedium storage = TStorageMedium.HDD;
         TabletMeta tabletMeta =
-                new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
+                new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), storage, true);
         for (int i = 0; i < 10; i++) {
             Tablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId());
             index.addTablet(tablet, tabletMeta);
@@ -191,17 +192,17 @@ public class LakeTableHelperTest {
             // reset column unique id to invalid value
             c0.setUniqueId(-1);
             c1.setUniqueId(0);
-            Assert.assertEquals(2, table.getIndexIdToSchema().size());
+            Assertions.assertEquals(2, table.getIndexIdToSchema().size());
 
             // base schema is fine
-            Assert.assertFalse(LakeTableHelper.restoreColumnUniqueId(baseSchema));
+            Assertions.assertFalse(LakeTableHelper.restoreColumnUniqueId(baseSchema));
             // index schema needs to be restored
-            Assert.assertTrue(LakeTableHelper.restoreColumnUniqueId(newIndexSchema));
-            Assert.assertEquals(0, c0.getUniqueId());
-            Assert.assertEquals(1, c1.getUniqueId());
+            Assertions.assertTrue(LakeTableHelper.restoreColumnUniqueId(newIndexSchema));
+            Assertions.assertEquals(0, c0.getUniqueId());
+            Assertions.assertEquals(1, c1.getUniqueId());
             for (int ordinal = 0; ordinal < baseSchema.size(); ordinal++) {
                 Column column = baseSchema.get(ordinal);
-                Assert.assertEquals(ordinal, column.getUniqueId());
+                Assertions.assertEquals(ordinal, column.getUniqueId());
             }
         }
 
@@ -211,12 +212,12 @@ public class LakeTableHelperTest {
             c1.setUniqueId(0);
             // case for restoring table
             LakeTableHelper.restoreColumnUniqueIdIfNeeded(table);
-            Assert.assertEquals(0, c0.getUniqueId());
-            Assert.assertEquals(1, c1.getUniqueId());
+            Assertions.assertEquals(0, c0.getUniqueId());
+            Assertions.assertEquals(1, c1.getUniqueId());
             baseSchema = table.getBaseSchema();
             for (int ordinal = 0; ordinal < baseSchema.size(); ordinal++) {
                 Column column = baseSchema.get(ordinal);
-                Assert.assertEquals(ordinal, column.getUniqueId());
+                Assertions.assertEquals(ordinal, column.getUniqueId());
             }
         }
 
@@ -227,13 +228,26 @@ public class LakeTableHelperTest {
             baseSchema.get(2).setUniqueId(-1);
             // case for restoring table
             LakeTableHelper.restoreColumnUniqueIdIfNeeded(table);
-            Assert.assertEquals(0, c0.getUniqueId());
-            Assert.assertEquals(1, c1.getUniqueId());
+            Assertions.assertEquals(0, c0.getUniqueId());
+            Assertions.assertEquals(1, c1.getUniqueId());
             baseSchema = table.getBaseSchema();
             for (int ordinal = 0; ordinal < baseSchema.size(); ordinal++) {
                 Column column = baseSchema.get(ordinal);
-                Assert.assertEquals(ordinal, column.getUniqueId());
+                Assertions.assertEquals(ordinal, column.getUniqueId());
             }
         }
+    }
+
+    @Test
+    public void testExtractIdFromPath() {
+        Optional<Long> result = LakeTableHelper.extractIdFromPath(null);
+        Assertions.assertFalse(result.isPresent());
+
+        result = LakeTableHelper.extractIdFromPath("12345");
+        Assertions.assertFalse(result.isPresent());
+
+        result = LakeTableHelper.extractIdFromPath("s3://bucket/path/12345");
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertEquals(12345L, result.get().longValue());
     }
 }

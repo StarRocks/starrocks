@@ -17,7 +17,6 @@
 #include <algorithm>
 
 #include "column/type_traits.h"
-#include "common/logging.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type_infra.h"
 
@@ -40,8 +39,9 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "DOUBLE") return TYPE_DOUBLE;
     if (upper_type_str == "CHAR") return TYPE_CHAR;
     if (upper_type_str == "DATE_V2") return TYPE_DATE;
-    if (upper_type_str == "DATE") return TYPE_DATE_V1;
-    if (upper_type_str == "DATETIME") return TYPE_DATETIME_V1;
+    if (upper_type_str == "DATE") return TYPE_DATE;
+    if (upper_type_str == "TIME") return TYPE_TIME;
+    if (upper_type_str == "DATETIME") return TYPE_DATETIME;
     if (upper_type_str == "TIMESTAMP") return TYPE_DATETIME;
     if (upper_type_str == "DECIMAL_V2") return TYPE_DECIMALV2;
     if (upper_type_str == "DECIMAL") return TYPE_DECIMAL;
@@ -51,13 +51,19 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "STRUCT") return TYPE_STRUCT;
     if (upper_type_str == "ARRAY") return TYPE_ARRAY;
     if (upper_type_str == "MAP") return TYPE_MAP;
+    if (upper_type_str == "BITMAP") return TYPE_OBJECT;
     if (upper_type_str == "OBJECT") return TYPE_OBJECT;
     if (upper_type_str == "PERCENTILE") return TYPE_PERCENTILE;
     if (upper_type_str == "DECIMAL32") return TYPE_DECIMAL32;
     if (upper_type_str == "DECIMAL64") return TYPE_DECIMAL64;
     if (upper_type_str == "DECIMAL128") return TYPE_DECIMAL128;
+    if (upper_type_str == "DECIMAL256") return TYPE_DECIMAL256;
+    if (upper_type_str == "INT256") return TYPE_INT256;
     if (upper_type_str == "JSON") return TYPE_JSON;
     if (upper_type_str == "VARBINARY") return TYPE_VARBINARY;
+    if (upper_type_str == "ANY_ARRAY") return TYPE_ARRAY;
+    if (upper_type_str == "ANY_STRUCT") return TYPE_STRUCT;
+    if (upper_type_str == "ANY_MAP") return TYPE_MAP;
     LOG(WARNING) << "invalid type string. [type='" << type_str << "']";
     return TYPE_UNKNOWN;
 }
@@ -108,6 +114,10 @@ const char* logical_type_to_string(LogicalType type) {
         return "DECIMAL64";
     case TYPE_DECIMAL128:
         return "DECIMAL128";
+    case TYPE_DECIMAL256:
+        return "DECIMAL256";
+    case TYPE_INT256:
+        return "INT256";
     case TYPE_VARCHAR:
         return "VARCHAR";
     case TYPE_BOOLEAN:
@@ -273,6 +283,8 @@ public:
         _data[TYPE_DECIMAL128] = TYPE_DECIMAL128;
         _data[TYPE_JSON] = TYPE_JSON;
         _data[TYPE_VARBINARY] = TYPE_VARBINARY;
+        _data[TYPE_DECIMAL256] = TYPE_DECIMAL256;
+        _data[TYPE_INT256] = TYPE_INT256;
     }
     LogicalType get_logical_type(LogicalType field_type) { return _data[field_type]; }
 

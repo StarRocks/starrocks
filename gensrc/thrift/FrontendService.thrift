@@ -407,6 +407,8 @@ struct TMaterializedViewStatus {
     27: optional string query_rewrite_status
 
     28: optional string creator
+    29: optional string last_refresh_process_time
+    30: optional string last_refresh_job_id
 }
 
 struct TListPipesParams {
@@ -530,6 +532,8 @@ struct TTaskRunInfo {
     13: optional string properties
 
     14: optional string catalog
+    15: optional string job_id
+    16: optional i64 process_time
 }
 
 struct TGetTaskRunInfoResult {
@@ -781,6 +785,7 @@ struct TAuditStatistics {
     6: optional i64 cpu_cost_ns
     7: optional i64 mem_cost_bytes
     8: optional i64 spill_bytes
+    10: optional i64 transmitted_bytes
     9: optional list<TAuditStatisticsItem> stats_items
 }
 
@@ -831,6 +836,7 @@ struct TMasterOpRequest {
     35: optional string session_id
     36: optional i32 connectionId
     37: optional i64 txn_id;
+    38: optional bool isInternalStmt;
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
@@ -1056,6 +1062,8 @@ struct TLoadTxnCommitRequest {
     11: optional TTxnCommitAttachment txnCommitAttachment
     12: optional i64 thrift_rpc_timeout_ms
     13: optional list<Types.TTabletFailInfo> failInfos
+    // The timeout for prepared transaction. Only valid if this requerst is sent by rpc loadTxnPrepare
+    14: optional i32 prepared_timeout_second
 }
 
 struct TLoadTxnCommitResult {
@@ -1512,7 +1520,9 @@ struct TPartitionMetaInfo {
     27: optional i64 version_epoch
     28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
     29: optional i64 storage_size
-    30: optional i64 metadata_switch_version
+    30: optional bool tablet_balanced
+    31: optional i64 metadata_switch_version
+    32: optional i64 path_id
 }
 
 struct TGetPartitionsMetaResponse {
@@ -1623,10 +1633,10 @@ struct TQueryStatisticsInfo {
     10: optional i64 memUsageBytes
     11: optional i64 spillBytes
     12: optional i64 execTime
-    13: optional string execProgress
-    14: optional string wareHouseName
-    15: optional string customQueryId
-    16: optional string resourceGroupName
+    13: optional string wareHouseName
+    14: optional string customQueryId
+    15: optional string resourceGroupName
+    16: optional string execProgress
 }
 
 struct TGetQueryStatisticsResponse {
@@ -1966,6 +1976,7 @@ struct TConnectionInfo {
     9: optional string info;
     10: optional string isPending;
     11: optional string warehouse;
+	12: optional string cngroup;
 }
 
 struct TListConnectionResponse {
@@ -2127,14 +2138,28 @@ struct TUpdateFailPointResponse {
     1: optional Status.TStatus status;
 }
 
-struct TUpdateTabletVersionRequest {
-    1: optional Types.TBackend backend;
-    2: optional i64 signature;
-    3: optional list<MasterService.TTabletVersionPair> tablet_versions;
+struct TDynamicTabletJobsItem {
+    1: optional i64 job_id;
+    2: optional string db_name;
+    3: optional string table_name;
+    4: optional i64 db_id;
+    5: optional i64 table_id;
+    6: optional string job_type;
+    7: optional string job_state;
+    8: optional i64 transaction_id;
+    9: optional i64 parallel_partitions;
+    10: optional i64 parallel_tablets;
+    11: optional i64 created_time;
+    12: optional i64 finished_time;
+    13: optional string error_message;
 }
 
-struct TUpdateTabletVersionResult {
+struct TDynamicTabletJobsRequest {
+}
+
+struct TDynamicTabletJobsResponse {
     1: optional Status.TStatus status;
+    2: optional list<TDynamicTabletJobsItem> items;
 }
 
 service FrontendService {
@@ -2279,6 +2304,6 @@ service FrontendService {
 
     TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
 
-    TUpdateTabletVersionResult updateTabletVersion(1: TUpdateTabletVersionRequest request)
+    TDynamicTabletJobsResponse getDynamicTabletJobsInfo(1: TDynamicTabletJobsRequest request)
 }
 

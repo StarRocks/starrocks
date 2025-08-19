@@ -26,7 +26,7 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 - Storage method: Data is stored in a column-by-column fashion.
 
-  ![img](../_assets/table_design/hybrid_table.png)
+  ![img](../_assets/table_design/columnar_table.png)
 
 - Scenarios: Complex data analysis. <ul><li>Complex queries and analyses on massive datasets, such as aggregate analysis and multi-table join queries.</li><li>Tables consist of many fields (such as wide tables), but queries against these tables involve only a few columns.</li></ul>
 

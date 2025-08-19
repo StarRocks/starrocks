@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -37,10 +38,10 @@ public class CreateTemporaryTableStmt extends CreateTableStmt {
                            DistributionDesc distributionDesc,
                            Map<String, String> properties,
                            Map<String, String> extProperties,
-                           String comment, List<AlterClause> rollupAlterClauseList, List<String> sortKeys,
+                           String comment, List<AlterClause> rollupAlterClauseList, List<OrderByElement> orderByElements,
                            NodePosition pos) {
         super(ifNotExists, isExternal, tableName, columnDefinitions, indexDefs, engineName, charsetName, keysDesc,
-                partitionDesc, distributionDesc, properties, extProperties, comment, rollupAlterClauseList, sortKeys, pos);
+                partitionDesc, distributionDesc, properties, extProperties, comment, rollupAlterClauseList, orderByElements, pos);
     }
 
     public CreateTemporaryTableStmt(boolean ifNotExists,
@@ -55,10 +56,11 @@ public class CreateTemporaryTableStmt extends CreateTableStmt {
                                     DistributionDesc distributionDesc,
                                     Map<String, String> properties,
                                     Map<String, String> extProperties,
-                                    String comment, List<AlterClause> rollupAlterClauseList, List<String> sortKeys) {
+                                    String comment, List<AlterClause> rollupAlterClauseList,
+                                    List<OrderByElement> orderByElements) {
         super(ifNotExists, isExternal, tableName, columnDefinitions, indexDefs, engineName, charsetName, keysDesc,
                 partitionDesc, distributionDesc, properties, extProperties, comment, rollupAlterClauseList,
-                sortKeys, NodePosition.ZERO);
+                orderByElements, NodePosition.ZERO);
     }
 
     public void setSessionId(UUID sessionId) {

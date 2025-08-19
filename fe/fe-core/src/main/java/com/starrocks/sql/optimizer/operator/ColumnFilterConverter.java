@@ -367,8 +367,11 @@ public class ColumnFilterConverter {
 
             ColumnRefOperator column = Utils.extractColumnRef(predicate.getChild(0)).get(0);
             ConstantOperator child = (ConstantOperator) predicate.getChild(1);
-
             PartitionColumnFilter filter = context.getOrDefault(column.getName(), new PartitionColumnFilter());
+            if (!predicate.getChild(0).isColumnRef()) {
+                filter.setFromFunctionCall();
+            }
+
             try {
                 switch (predicate.getBinaryType()) {
                     case EQ:
@@ -500,6 +503,7 @@ public class ColumnFilterConverter {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 literalExpr = new DecimalLiteral(operator.getDecimal());
                 break;
             case CHAR:

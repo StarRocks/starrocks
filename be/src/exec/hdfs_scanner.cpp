@@ -16,6 +16,7 @@
 
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
+#include "column/type_traits.h"
 #include "connector/deletion_vector/deletion_vector.h"
 #include "exec/exec_node.h"
 #include "fs/hdfs/fs_hdfs.h"
@@ -28,8 +29,9 @@
 #include "storage/runtime_range_pruner.hpp"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
-
 namespace starrocks {
+
+static const std::string kCountOptColumnName = "___count___";
 
 class CountedSeekableInputStream final : public io::SeekableInputStreamWrapper {
 public:
@@ -124,19 +126,13 @@ Status HdfsScanner::_build_scanner_context() {
     // build columns of materialized and partition.
     for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto* slot = _scanner_params.materialize_slots[i];
-
-        // if `can_use_any_column`, we can set this column to non-existed column without reading it.
-        if (_scanner_params.can_use_any_column) {
-            ctx.update_with_none_existed_slot(slot);
-        } else {
-            HdfsScannerContext::ColumnInfo column;
-            column.slot_desc = slot;
-            column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
-            column.decode_needed =
-                    slot->is_output_column() || _scanner_params.slots_of_multi_field_conjunct.find(slot->id()) !=
-                                                        _scanner_params.slots_of_multi_field_conjunct.end();
-            ctx.materialized_columns.emplace_back(std::move(column));
-        }
+        HdfsScannerContext::ColumnInfo column;
+        column.slot_desc = slot;
+        column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
+        column.decode_needed =
+                slot->is_output_column() || _scanner_params.slots_of_multi_field_conjunct.find(slot->id()) !=
+                                                    _scanner_params.slots_of_multi_field_conjunct.end();
+        ctx.materialized_columns.emplace_back(std::move(column));
     }
 
     for (size_t i = 0; i < _scanner_params.partition_slots.size(); i++) {
@@ -163,8 +159,8 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.hive_column_names = _scanner_params.hive_column_names;
     ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.orc_use_column_names = _scanner_params.orc_use_column_names;
-    ctx.can_use_any_column = _scanner_params.can_use_any_column;
-    ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
+    ctx.use_min_max_opt = _scanner_params.use_min_max_opt;
+    ctx.use_count_opt = _scanner_params.use_count_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
     ctx.use_file_pagecache = _scanner_params.use_file_pagecache;
     ctx.timezone = _runtime_state->timezone();
@@ -196,12 +192,61 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.rf_scan_range_pruner = opts.obj_pool->add(
             new RuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
 
+    ctx.update_return_count_columns();
+    if (ctx.scan_range->__isset.record_count && ctx.scan_range->delete_files.empty()) {
+        ctx.can_use_file_record_count = true;
+    }
+    if (ctx.scan_range->__isset.is_first_split) {
+        ctx.is_first_split = ctx.scan_range->is_first_split;
+    }
+
+    ctx.update_min_max_columns();
     return Status::OK();
+}
+
+bool HdfsScannerContext::can_use_count_optimization() const {
+    return use_count_opt && can_use_file_record_count;
+}
+
+bool HdfsScannerContext::can_use_min_max_optimization() const {
+    return use_min_max_opt && materialized_columns.empty();
 }
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_total_running_time);
     RETURN_IF_CANCELLED(_runtime_state);
+
+    if (_scanner_ctx.no_more_chunks) {
+        return Status::EndOfFile("");
+    }
+
+    // short circuit for ___count___ optimization.
+    if (_scanner_ctx.can_use_count_optimization()) {
+        int64_t file_record_count = 0;
+        if (_scanner_ctx.is_first_split) {
+            file_record_count = _scanner_ctx.scan_range->record_count;
+        }
+        _scanner_ctx.append_or_update_count_column_to_chunk(chunk, file_record_count);
+        _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, 1);
+        _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, 1);
+        _scanner_ctx.no_more_chunks = true;
+        _app_stats.rows_read += 1;
+        return Status::OK();
+    }
+
+    // short circuit for min/max optimization.
+    if (_scanner_ctx.can_use_min_max_optimization()) {
+        // 3 means we output 3 values: min, max, and null
+        const size_t row_count = 3;
+        (*chunk)->set_num_rows(row_count);
+        _scanner_ctx.append_or_update_min_max_column_to_chunk(chunk, row_count);
+        _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, row_count);
+        _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, row_count);
+        _scanner_ctx.no_more_chunks = true;
+        _app_stats.rows_read += row_count;
+        return Status::OK();
+    }
+
     RETURN_IF_ERROR(_runtime_state->check_mem_limit("get chunk from scanner"));
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
@@ -223,9 +268,14 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_opened) {
         return Status::OK();
     }
-    RETURN_IF_ERROR(_build_scanner_context());
-    RETURN_IF_ERROR(do_open(runtime_state));
     _opened = true;
+    RETURN_IF_ERROR(_build_scanner_context());
+    // short circuit for ___count___ optimization.
+    // short circuit for min/max optimization.
+    if (_scanner_ctx.can_use_count_optimization() || _scanner_ctx.can_use_min_max_optimization()) {
+        return Status::OK();
+    }
+    RETURN_IF_ERROR(do_open(runtime_state));
     VLOG_FILE << "open file success: " << _scanner_params.path << ", scan range = ["
               << _scanner_params.scan_range->offset << ","
               << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset)
@@ -235,6 +285,11 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
 
 void HdfsScanner::close() noexcept {
     if (!_runtime_state) {
+        return;
+    }
+    // short circuit for ___count___ optimization.
+    // short circuit for min/max optimization.
+    if (_scanner_ctx.can_use_count_optimization() || _scanner_ctx.can_use_min_max_optimization()) {
         return;
     }
     VLOG_FILE << "close file success: " << _scanner_params.path << ", scan range = ["
@@ -514,70 +569,81 @@ void HdfsScannerContext::update_with_none_existed_slot(SlotDescriptor* slot) {
     }
 }
 
-Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<std::string>& names) {
-    std::vector<ColumnInfo> updated_columns;
-
+void HdfsScannerContext::update_return_count_columns() {
     // special handling for ___count__ optimization.
-    {
-        for (auto& column : materialized_columns) {
-            if (column.name() == "___count___") {
-                return_count_column = true;
-                break;
-            }
-        }
-
-        if (return_count_column && materialized_columns.size() != 1) {
-            return Status::InternalError("Plan inconsistency. ___count___ column should be unique.");
+    // this is different from `can_use_count_optimization` ,  which uses iceberg metadata to return count value
+    // this optimizaton is to fill with `count` rows of default value from parquet/orc header
+    std::vector<ColumnInfo> updated_columns;
+    for (auto& column : materialized_columns) {
+        if (column.name() == kCountOptColumnName) {
+            update_with_none_existed_slot(column.slot_desc);
+        } else {
+            updated_columns.emplace_back(column);
         }
     }
+    materialized_columns.swap(updated_columns);
+}
 
+void HdfsScannerContext::update_min_max_columns() {
+    if (!use_min_max_opt) {
+        return;
+    }
+    std::vector<ColumnInfo> updated_columns;
+    const std::map<int32_t, TExprMinMaxValue>& min_max_values = scan_range->min_max_values;
+    for (auto& column : materialized_columns) {
+        if (min_max_values.find(column.slot_id()) != min_max_values.end()) {
+            // handled in non existed slot
+            update_with_none_existed_slot(column.slot_desc);
+            continue;
+        } else {
+            updated_columns.emplace_back(column);
+        }
+    }
+    materialized_columns.swap(updated_columns);
+}
+
+Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<std::string>& names) {
+    std::vector<ColumnInfo> updated_columns;
     for (auto& column : materialized_columns) {
         auto col_name = column.formatted_name(case_sensitive);
-        // if `can_use_any_column`, we can set this column to non-existed column without reading it.
         if (names.find(col_name) == names.end()) {
             update_with_none_existed_slot(column.slot_desc);
         } else {
             updated_columns.emplace_back(column);
         }
     }
-
     materialized_columns.swap(updated_columns);
     return Status::OK();
 }
 
 Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
     if (not_existed_slots.empty()) return Status::OK();
+
     ChunkPtr& ck = (*chunk);
 
-    // special handling for ___count___ optimization
-    {
-        for (auto* slot_desc : not_existed_slots) {
-            if (slot_desc->col_name() == "___count___") {
-                return_count_column = true;
-                break;
-            }
-        }
-        if (return_count_column && not_existed_slots.size() != 1) {
-            return Status::InternalError("Plan inconsistency. ___count___ column should be unique.");
-        }
+    if (use_min_max_opt) {
+        append_or_update_min_max_column_to_chunk(chunk, row_count);
     }
 
-    if (return_count_column) {
-        auto* slot_desc = not_existed_slots[0];
-        TypeDescriptor desc;
-        desc.type = TYPE_BIGINT;
-        auto col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
-        col->append_datum(int64_t(1));
-        col->assign(row_count, 0);
-        ck->append_or_update_column(std::move(col), slot_desc->id());
-    } else {
-        for (auto* slot_desc : not_existed_slots) {
-            auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-            if (row_count > 0) {
+    for (auto* slot_desc : not_existed_slots) {
+        if (use_min_max_opt && scan_range->min_max_values.find(slot_desc->id()) != scan_range->min_max_values.end()) {
+            // handled in min max column
+            continue;
+        }
+
+        auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+        if (row_count > 0) {
+            if (slot_desc->col_name() == kCountOptColumnName) {
+                TypeDescriptor desc;
+                desc.type = TYPE_BIGINT;
+                col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
+                col->append_datum(int64_t(1));
+                col->assign(row_count, 0);
+            } else {
                 col->append_default(row_count);
             }
-            ck->append_or_update_column(std::move(col), slot_desc->id());
         }
+        ck->append_or_update_column(std::move(col), slot_desc->id());
     }
     ck->set_num_rows(row_count);
     return Status::OK();
@@ -593,6 +659,92 @@ void HdfsScannerContext::append_or_update_count_column_to_chunk(ChunkPtr* chunk,
     col->append_datum(int64_t(row_count));
     ck->append_or_update_column(std::move(col), slot_desc->id());
     ck->set_num_rows(1);
+}
+
+void HdfsScannerContext::append_or_update_min_max_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    for (SlotDescriptor* slot_desc : not_existed_slots) {
+        auto it = scan_range->min_max_values.find(slot_desc->id());
+        if (it == scan_range->min_max_values.end()) {
+            continue;
+        }
+        const TExprMinMaxValue& min_max_value = it->second;
+        MutableColumnPtr col = create_min_max_value_column(slot_desc, min_max_value, row_count);
+        (*chunk)->append_or_update_column(std::move(col), slot_desc->id());
+    }
+}
+
+MutableColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor* slot_desc,
+                                                                 const TExprMinMaxValue& value, size_t row_count) {
+    auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+    std::vector<Datum> data;
+    if (value.has_null) {
+        data.emplace_back(kNullDatum);
+    }
+    if (value.type != TExprNodeType::NULL_LITERAL) {
+        switch (slot_desc->type().type) {
+#define HANDLE_INT_TYPE(T)                                         \
+    case T: {                                                      \
+        data.emplace_back((RunTimeCppType<T>)value.min_int_value); \
+        data.emplace_back((RunTimeCppType<T>)value.max_int_value); \
+        break;                                                     \
+    }
+#define HANDLE_FLOAT_TYPE(T)                                         \
+    case T: {                                                        \
+        data.emplace_back((RunTimeCppType<T>)value.min_float_value); \
+        data.emplace_back((RunTimeCppType<T>)value.max_float_value); \
+        break;                                                       \
+    }
+            HANDLE_INT_TYPE(TYPE_BOOLEAN);
+            HANDLE_INT_TYPE(TYPE_TINYINT);
+            HANDLE_INT_TYPE(TYPE_SMALLINT);
+            HANDLE_INT_TYPE(TYPE_INT);
+            HANDLE_INT_TYPE(TYPE_BIGINT);
+            HANDLE_FLOAT_TYPE(TYPE_FLOAT);
+            HANDLE_FLOAT_TYPE(TYPE_DOUBLE);
+#undef HANDLE_INT_TYPE
+#undef HANDLE_FLOAT_TYPE
+            // https://iceberg.apache.org/spec/#binary-single-value-serialization
+        case TYPE_DATE:
+            data.emplace_back(DateValue::from_days_since_unix_epoch(value.min_int_value));
+            data.emplace_back(DateValue::from_days_since_unix_epoch(value.max_int_value));
+            break;
+        case TYPE_TIME:
+            data.emplace_back((double)value.min_int_value * 1e-6);
+            data.emplace_back((double)value.max_int_value * 1e-6);
+            break;
+        default:
+            break;
+        }
+    }
+
+    // if this is the first split, we use null/min/max order
+    // otherwise, we reverse it. In that way, we can make sure
+    // null/min/max values all output from this file.
+    if (!is_first_split) {
+        std::reverse(data.begin(), data.end());
+    }
+    for (int i = 0; i < data.size() && row_count > 0; i++) {
+        row_count -= 1;
+        if (data[i].is_null()) {
+            col->append_nulls(1);
+        } else {
+            col->append_datum(data[i]);
+        }
+    }
+    if (row_count > 0) {
+        if (!value.all_null) {
+            // the rest values does not matter, so we just copy the first value.
+            // it's noted that we can not use `append_default` here, we can only put null(maybe)/min/max
+            auto col_tail = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+            // if not all null values, then data[1] is the non-null value for sure.
+            col_tail->append_datum(data[1]);
+            col_tail->assign(row_count, 0);
+            col->append(*col_tail);
+        } else {
+            col->append_nulls(row_count);
+        }
+    }
+    return col;
 }
 
 Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter) {

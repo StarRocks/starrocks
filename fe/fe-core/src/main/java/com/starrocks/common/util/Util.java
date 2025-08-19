@@ -48,8 +48,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.http.WebUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.GrantRevokePrivilegeObjects;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -73,6 +75,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 import java.util.zip.Adler32;
 import java.util.zip.DeflaterOutputStream;
+
+import static com.starrocks.authorization.ObjectType.CASE_INSENSITIVE_NAMES;
 
 public class Util {
     private static final Logger LOG = LogManager.getLogger(Util.class);
@@ -101,6 +105,7 @@ public class Util {
         TYPE_STRING_MAP.put(PrimitiveType.DECIMAL32, "decimal(%d,%d)");
         TYPE_STRING_MAP.put(PrimitiveType.DECIMAL64, "decimal(%d,%d)");
         TYPE_STRING_MAP.put(PrimitiveType.DECIMAL128, "decimal(%d,%d)");
+        TYPE_STRING_MAP.put(PrimitiveType.DECIMAL256, "decimal(%d,%d)");
         TYPE_STRING_MAP.put(PrimitiveType.HLL, "varchar(%d)");
         TYPE_STRING_MAP.put(PrimitiveType.BOOLEAN, "bool");
         TYPE_STRING_MAP.put(PrimitiveType.BITMAP, "bitmap");
@@ -259,6 +264,7 @@ public class Util {
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
+                case DECIMAL256:
                     return String.format(
                             TYPE_STRING_MAP.get(primitiveType), 
                             ((ScalarType) type).getScalarPrecision(),
@@ -507,4 +513,23 @@ public class Util {
     public static boolean isRunningInContainer() {
         return new File("/.dockerenv").exists();
     }
+
+    public static String normalizeName(String name) {
+        return GlobalVariable.enableTableNameCaseInsensitive && name != null ? name.toLowerCase() : name;
+    }
+
+    public static GrantRevokePrivilegeObjects normalizeNames(String objectType, GrantRevokePrivilegeObjects objectsUnResolved) {
+        if (!GlobalVariable.enableTableNameCaseInsensitive || !CASE_INSENSITIVE_NAMES.contains(objectType) ||
+                objectsUnResolved == null || objectType == null) {
+            return objectsUnResolved;
+        }
+
+        List<List<String>> privilegeObjectNameTokensList = objectsUnResolved.getPrivilegeObjectNameTokensList().stream()
+                .map(nameList -> nameList.stream().map(String::toLowerCase).toList())
+                .toList();
+        objectsUnResolved.setPrivilegeObjectNameTokensList(privilegeObjectNameTokensList);
+        return objectsUnResolved;
+    }
+
+
 }

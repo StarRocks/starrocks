@@ -20,7 +20,7 @@
 
 #include "cache/block_cache/io_buffer.h"
 #include "cache/cache_options.h"
-#include "cache/peer_cache_wrapper.h"
+#include "cache/peer_cache_engine.h"
 #include "common/logging.h"
 #include "common/statusor.h"
 
@@ -33,7 +33,7 @@ public:
 };
 
 TEST_F(PeerCacheTest, unsupported_op) {
-    PeerCacheWrapper peer_cache;
+    PeerCacheEngine peer_cache;
     IOBuffer buf;
     Status st = peer_cache.write("test_file", buf, nullptr);
     ASSERT_TRUE(st.is_not_supported());
@@ -43,7 +43,7 @@ TEST_F(PeerCacheTest, unsupported_op) {
 }
 
 TEST_F(PeerCacheTest, io_adaptor) {
-    PeerCacheWrapper peer_cache;
+    PeerCacheEngine peer_cache;
     CacheOptions options;
     options.skip_read_factor = 1.0;
     Status st = peer_cache.init(options);

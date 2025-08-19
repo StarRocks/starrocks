@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
@@ -65,6 +66,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
 
         // check statistic table state
         if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            LOG.warn("Statistic table state check failed, skip auto collection");
             return;
         }
 
@@ -134,7 +136,11 @@ public class StatisticAutoCollector extends FrontendDaemon {
         }
 
         NativeAnalyzeJob job = createDefaultJobAnalyzeAll();
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeJob(job);
+        try {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeJob(job);
+        } catch (AlreadyExistsException e) {
+            LOG.info("analyze job already exists");
+        }
     }
 
     /**

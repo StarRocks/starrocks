@@ -1,18 +1,21 @@
 ---
 displayed_sidebar: docs
 sidebar_label: クラスタースナップショット
-keywords: ['backup', 'restore', 'shared data', 'snapshot']
+keywords: ['バックアップ', '復元', '共有データ', 'スナップショット']
 ---
 
 <head><meta name="docsearch:pagerank" content="100"/></head>
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'
+import ClusterSnapshotTerm from '../_assets/commonMarkdown/cluster_snapshot_term.mdx'
+import ManualCreateDropClusterSnapshot from '../_assets/commonMarkdown/manual_cluster_snapshot.mdx'
+import ClusterSnapshotWarning from '../_assets/commonMarkdown/cluster_snapshot_warning.mdx'
 
-# 自動クラスタースナップショット
+# クラスタースナップショット
 
 <Beta />
 
-このトピックでは、共有データクラスタにおける災害復旧のためのクラスタースナップショットの自動化について説明します。
+このトピックでは、共有データクラスタでの災害復旧にクラスタースナップショットを使用する方法について説明します。
 
 この機能は v3.4.2 以降でサポートされており、共有データクラスタでのみ利用可能です。
 
@@ -20,7 +23,11 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 共有データクラスタの災害復旧の基本的な考え方は、クラスタの全状態（データとメタデータを含む）をオブジェクトストレージに保存することです。これにより、クラスタが障害に遭遇した場合でも、データとメタデータが無事であれば、オブジェクトストレージから復元できます。さらに、クラウドプロバイダーが提供するバックアップやクロスリージョンレプリケーションなどの機能を利用して、リモート復旧やクロスリージョン災害復旧を実現できます。
 
-共有データクラスタでは、CN 状態（データ）はオブジェクトストレージに保存されますが、FE 状態（メタデータ）はローカルに残ります。オブジェクトストレージに復元のためのすべてのクラスタ状態を確保するために、StarRocks はデータとメタデータの両方をオブジェクトストレージに保存する自動クラスタースナップショットをサポートしています。
+共有データクラスタでは、CN 状態（データ）はオブジェクトストレージに保存されますが、FE 状態（メタデータ）はローカルに残ります。オブジェクトストレージに復元のためのすべてのクラスタ状態を確保するために、StarRocks はデータとメタデータの両方をオブジェクトストレージに保存するクラスタースナップショットをサポートしています。
+
+### ワークフロー
+
+![Workflow](../_assets/cluster_snapshot_workflow.png)
 
 ### 用語
 
@@ -28,17 +35,17 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
   クラスタースナップショットとは、ある瞬間のクラスタ状態のスナップショットを指します。カタログ、データベース、テーブル、ユーザーと権限、ロードタスクなど、クラスタ内のすべてのオブジェクトを含みます。ただし、外部カタログの設定ファイルやローカル UDF JAR パッケージなどのすべての外部依存オブジェクトは含まれません。
 
-- **クラスタースナップショットの自動化**
+- **クラスタースナップショットの生成**
 
-  システムは最新のクラスタ状態に密接に従うスナップショットを自動的に維持します。最新のスナップショットが作成されると、古いスナップショットはすぐに削除され、常に1つのスナップショットのみが利用可能です。現在、クラスタースナップショットの自動化タスクはシステムによってのみトリガーされます。手動でスナップショットを作成することはサポートされていません。
+  システムは最新のクラスタ状態に密接に従うスナップショットを自動的に維持します。最新のスナップショットが作成されると、古いスナップショットはすぐに削除され、常に1つのスナップショットのみが利用可能です。
+
+  <ClusterSnapshotTerm />
 
 - **クラスタ復元**
 
   スナップショットからクラスタを復元します。
 
-## 使用法
-
-### 自動クラスタースナップショットを有効にする
+## 自動クラスタースナップショット
 
 自動クラスタースナップショットはデフォルトで無効になっています。
 
@@ -53,13 +60,13 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON
 
 パラメータ:
 
-`storage_volume_name`: スナップショットを保存するために使用されるストレージボリュームを指定します。このパラメータが指定されていない場合、デフォルトのストレージボリュームが使用されます。
+`storage_volume_name`: スナップショットを保存するために使用されるストレージボリュームを指定します。このパラメータが指定されていない場合、デフォルトのストレージボリュームが使用されます。ストレージボリュームの作成の詳細については、[CREATE STORAGE VOLUME](../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) を参照してください。
 
 FE がメタデータチェックポイントを完了した後に新しいメタデータイメージを作成するたびに、自動的にスナップショットが作成されます。スナップショットの名前は、`automated_cluster_snapshot_{timestamp}` という形式でシステムによって生成されます。
 
 メタデータスナップショットは `/{storage_volume_locations}/{service_id}/meta/image/automated_cluster_snapshot_timestamp` に保存されます。データスナップショットは元のデータと同じ場所に保存されます。
 
-FE の設定項目 `automated_cluster_snapshot_interval_seconds` はスナップショットの自動化サイクルを制御します。デフォルト値は 1800 秒（30 分）です。
+FE の設定項目 `automated_cluster_snapshot_interval_seconds` はスナップショットの自動化サイクルを制御します。デフォルト値は 600 秒（10 分）です。
 
 ### 自動クラスタースナップショットを無効にする
 
@@ -71,7 +78,9 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
 
 自動クラスタースナップショットが無効になると、システムは自動的に古いスナップショットを削除します。
 
-### クラスタースナップショットを表示する
+<ManualCreateDropClusterSnapshot />
+
+## クラスタースナップショットを表示する
 
 最新のクラスタースナップショットとまだ削除されていないスナップショットを表示するには、ビュー `information_schema.cluster_snapshots` をクエリできます。
 
@@ -84,7 +93,7 @@ SELECT * FROM information_schema.cluster_snapshots;
 | フィールド            | 説明                                                         |
 | ------------------ | ------------------------------------------------------------ |
 | snapshot_name      | スナップショットの名前。                                       |
-| snapshot_type      | スナップショットのタイプ。現在は `automated` のみ利用可能です。 |
+| snapshot_type      | スナップショットのタイプ。有効な値：`automated` および `manual`。 |
 | created_time       | スナップショットが作成された時間。                             |
 | fe_journal_id      | FE ジャーナルの ID。                                          |
 | starmgr_journal_id | StarManager ジャーナルの ID。                                 |
@@ -92,7 +101,7 @@ SELECT * FROM information_schema.cluster_snapshots;
 | storage_volume     | スナップショットが保存されているストレージボリューム。         |
 | storage_path       | スナップショットが保存されているストレージパス。               |
 
-### クラスタースナップショットジョブを表示する
+## クラスタースナップショットジョブを表示する
 
 クラスタースナップショットのジョブ情報を表示するには、ビュー `information_schema.cluster_snapshot_jobs` をクエリできます。
 
@@ -112,7 +121,9 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
 | detail_info        | 現在の実行ステージの具体的な進捗情報。                         |
 | error_message      | ジョブのエラーメッセージ（ある場合）。                         |
 
-### クラスタを復元する
+## クラスタを復元する
+
+<ClusterSnapshotWarning />
 
 クラスタースナップショットを使用してクラスタを復元する手順は次のとおりです。
 
@@ -205,3 +216,7 @@ storage_volumes:
       - key: username
         value: starrocks
 ```
+
+:::note
+AWS の認証情報の詳細については、[AWS リソースへの認証](../integrations/authenticate_to_aws_resources.md)を参照してください。
+:::

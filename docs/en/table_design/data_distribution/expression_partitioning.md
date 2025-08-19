@@ -165,6 +165,11 @@ partition_columns ::=
 **Required**: YES<br/>
 **Description**: The names of partition columns.<br/> <ul><li>The partition column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partition column allows `NULL` values.</li><li> Each partition can only contain data with the same value in the partition column. To include data with different values in a partition column in a partition, see [List partitioning](./list_partitioning.md).</li></ul> <br/>
 
+:::note
+
+From v3.4 onwards, you can omit the parentheses that are used to wrap the partition columns. For example, you can replace `PARTITION BY (dt,city)` with `PARTITION BY dt,city`.
+
+:::
 
 ### Usage notes
 
@@ -230,6 +235,8 @@ LastConsistencyCheckTime: NULL
 From v3.4.0 onwards, expression partitioning supports any expressions that return DATE or DATETIME types to accommodate to even more complex partitioning scenarios. For the supported time functions, see [Appendix - Supported time functions](#supported-time-functions).
 
 For example, you can define a Unix timestamp column, and use from_unixtime() directly against the column in the partition expression to define the partition key, instead of define a generated DATE or DATETIME column with the function. For more about the usage, see [Examples](#examples-2).
+
+From v3.4.4 onwards, partition pruning are supported for partitions based on most DATETIME-related functions.
 
 ### Examples
 

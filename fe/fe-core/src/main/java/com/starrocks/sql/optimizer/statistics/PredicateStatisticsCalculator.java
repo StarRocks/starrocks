@@ -293,6 +293,18 @@ public class PredicateStatisticsCalculator {
             // For CastOperator, we need use child as column statistics
             leftChild = getChildForCastOperator(leftChild);
             rightChild = getChildForCastOperator(rightChild);
+
+            // For SPM functions, we try to revert to origin scalar operator
+            // in actually, SPMFunction also support the correct statistics, but the implement of binary
+            // predicate depend on ConstantOperator, not ConstantExpression, it's take SPM's plan is
+            // different with origin plan.
+            if (SPMFunctions.isSPMFunctions(leftChild) && SPMFunctions.canRevert2ScalarOperator(leftChild)) {
+                leftChild = SPMFunctions.revertSPMFunctions(leftChild).get(0);
+            }
+            if (SPMFunctions.isSPMFunctions(rightChild) && SPMFunctions.canRevert2ScalarOperator(rightChild)) {
+                rightChild = SPMFunctions.revertSPMFunctions(rightChild).get(0);
+            }
+
             // compute left and right column statistics
             ColumnStatistic leftColumnStatistic = getExpressionStatistic(leftChild);
             ColumnStatistic rightColumnStatistic = getExpressionStatistic(rightChild);

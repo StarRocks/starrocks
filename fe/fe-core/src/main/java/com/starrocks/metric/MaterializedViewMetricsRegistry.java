@@ -49,6 +49,11 @@ public class MaterializedViewMetricsRegistry {
         return INSTANCE;
     }
 
+    public synchronized void remove(MvId mvId) {
+        LOG.info("Removing materialized view metrics for mvId: {}", mvId);
+        idToMVMetrics.remove(mvId);
+    }
+
     public synchronized IMaterializedViewMetricsEntity getMetricsEntity(MvId mvId) {
         if (!Config.enable_materialized_view_metrics_collect) {
             return new MaterializedViewMetricsBlackHoleEntity();
@@ -92,14 +97,6 @@ public class MaterializedViewMetricsRegistry {
                     .addLabel(new MetricLabel("mv_id", String.valueOf(mvId.getId())));
             visitor.visit(m);
         }
-
-        // Histogram metrics should only output once
-        if (!minifyMetrics) {
-            for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
-                    .metricRegistry.getHistograms().entrySet()) {
-                visitor.visitHistogram(e.getKey(), e.getValue());
-            }
-        }
     }
 
     // collect materialized-view-level metrics
@@ -117,6 +114,14 @@ public class MaterializedViewMetricsRegistry {
             } catch (Exception e) {
                 LOG.warn("Failed to collect materialized view metrics for mvId: {}", entry.getKey(),
                         DebugUtil.getStackTrace(e));
+            }
+        }
+
+        // Histogram metrics should only output once
+        if (!minifyMetrics) {
+            for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
+                    .metricRegistry.getHistograms().entrySet()) {
+                visitor.visitHistogram(e.getKey(), e.getValue());
             }
         }
     }

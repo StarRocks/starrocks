@@ -24,9 +24,14 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 ## 返回结果说明
 
 ```SQL
+-- 存算一体集群
 +-------------+---------------+----------------+---------------------+--------------------+--------+--------------+-------+--------------------+---------+----------------+---------------+---------------------+--------------------------+----------+------------+----------+
 | PartitionId | PartitionName | VisibleVersion | VisibleVersionTime  | VisibleVersionHash | State  | PartitionKey | Range | DistributionKey    | Buckets | ReplicationNum | StorageMedium | CooldownTime        | LastConsistencyCheckTime | DataSize | IsInMemory | RowCount |
 +-------------+---------------+----------------+---------------------+--------------------+--------+--------------+-------+--------------------+---------+----------------+---------------+---------------------+--------------------------+----------+------------+----------+
+-- 存算分离集群
++-------------+---------------+----------------+----------------+-------------+--------+--------------+------------------------------------------------------------------------------------------------------+-----------------+---------+----------+-------------+----------+-----------------+------------+-------+-------+-------+-------------+--------------------+----------------+
+| PartitionId | PartitionName | CompactVersion | VisibleVersion | NextVersion | State  | PartitionKey | Range | DistributionKey | Buckets | DataSize | StorageSize | RowCount | EnableDataCache | AsyncWrite | AvgCS | P50CS | MaxCS | DataVersion | VersionEpoch       | VersionTxnType |
++-------------+---------------+----------------+----------------+-------------+--------+--------------+------------------------------------------------------------------------------------------------------+-----------------+---------+----------+-------------+----------+-----------------+------------+-------+-------+-------+-------------+--------------------+----------------+
 ```
 
 | **字段**                     | **说明**                                                         |
@@ -34,6 +39,7 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | PartitionId              | 分区 ID。                                                    |
 | PartitionName            | 分区名。                                                     |
 | VisibleVersion           | 最后一次成功导入的版本号。每次成功导入，则版本号加 1。   |
+| CompactVersion           | 上次 Compaction 成功的版本号。        |
 | VisibleVersionTime       | 最后一次成功导入的时间。                                   |
 | VisibleVersionHash       | 最后一次成功导入的版本号的哈希值。                         |
 | State                    | 分区的状态。固定为 `Normal`。                                |
@@ -47,8 +53,16 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | LastConsistencyCheckTime | 最后一次一致性检查的时间。`NULL` 表示没有进行一致性检查。    |
 | DataSize                 | 分区中数据大小。                                             |
 | IsInMemory               | 该分区数据是否全部存储在内存中。                             |
+| StorageSize              | 分区实际占用的存储空间大小。仅适用于存算分离集群。 |
 | RowCount                 | 该分区数据行数。                                             |
+| EnableDataCache          | 是否启用 Data Cache。仅适用于存算分离集群。 |
+| AsyncWrite               | 是否启用异步写入。仅适用于存算分离集群。                                 |
+| AvgCS                    | 分区的平均 Compaction Score。仅适用于存算分离集群。 |
+| P50CS                    | 分区的 P50 Compaction Score。仅适用于存算分离集群。 |
 | MaxCS                    | 该分区最大 Compaction Score。仅限存算分离集群。                   |
+| DataVersion              | 导入事务的版本号。不包括 Compaction 操作。 |
+| VersionEpoch             | 分区的纪元号。系统会在创建分区时赋值纪元，并在每次分区被 SWAP 时更改版本纪元。 |
+| VersionTxnType           | 生成当前数据版本的事务类型。有效值：`NORMAL`（正常事务）和 `REPLICATION`（数据复制）。 |
 
 ## 示例
 

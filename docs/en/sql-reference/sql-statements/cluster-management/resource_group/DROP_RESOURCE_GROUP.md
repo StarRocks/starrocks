@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # DROP RESOURCE GROUP
 
-DROP RESOURCE GROUP drops the specified resource group.
+DROP RESOURCE GROUP [IF EXISTS] drops the specified resource group.
 
 :::tip
 

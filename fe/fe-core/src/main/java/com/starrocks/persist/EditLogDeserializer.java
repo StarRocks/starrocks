@@ -17,6 +17,7 @@ package com.starrocks.persist;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
+import com.starrocks.alter.dynamictablet.DynamicTabletJob;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
@@ -24,8 +25,8 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -37,6 +38,7 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadMultiStmtTask;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
@@ -48,7 +50,6 @@ import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.spm.BaselinePlan;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -153,6 +154,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2, RoutineLoadJob.class)
             .put(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2, RoutineLoadOperation.class)
             .put(OperationType.OP_CREATE_STREAM_LOAD_TASK_V2, StreamLoadTask.class)
+            .put(OperationType.OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK, StreamLoadMultiStmtTask.class)
             .put(OperationType.OP_CREATE_LOAD_JOB_V2, LoadJob.class)
             .put(OperationType.OP_END_LOAD_JOB_V2, LoadJobFinalOperation.class)
             .put(OperationType.OP_UPDATE_LOAD_JOB, LoadJob.LoadJobStateUpdateInfo.class)
@@ -249,6 +251,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_CREATE_WAREHOUSE, Warehouse.class)
             .put(OperationType.OP_ALTER_WAREHOUSE, Warehouse.class)
             .put(OperationType.OP_DROP_WAREHOUSE, DropWarehouseLog.class)
+            .put(OperationType.OP_WAREHOUSE_INTERNAL_OP, WarehouseInternalOpLog.class)
             .put(OperationType.OP_CLUSTER_SNAPSHOT_LOG, ClusterSnapshotLog.class)
             .put(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, SqlBlackListPersistInfo.class)
             .put(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, DeleteSqlBlackLists.class)
@@ -259,6 +262,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.Info.class)
+            .put(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, DynamicTabletJob.class)
+            .put(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, RemoveDynamicTabletJobLog.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {
@@ -275,10 +280,6 @@ public class EditLogDeserializer {
                 ((Text) data).readFields(in);
                 break;
             }
-            case OperationType.OP_ADD_REPLICA: {
-                data = ReplicaPersistInfo.read(in);
-                break;
-            }
             case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME: {
                 data = ChangeMaterializedViewRefreshSchemeLog.read(in);
                 break;
@@ -286,10 +287,6 @@ public class EditLogDeserializer {
             case OperationType.OP_FINISH_CONSISTENCY_CHECK: {
                 data = new ConsistencyCheckInfo();
                 ((ConsistencyCheckInfo) data).readFields(in);
-                break;
-            }
-            case OperationType.OP_META_VERSION_V2: {
-                data = MetaVersion.read(in);
                 break;
             }
             case OperationType.OP_GLOBAL_VARIABLE_V2: {

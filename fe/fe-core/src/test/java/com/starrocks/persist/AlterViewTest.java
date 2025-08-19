@@ -33,24 +33,24 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.transaction.MockedLocalMetaStore;
 import com.starrocks.transaction.MockedMetadataMgr;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class AlterViewTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.setUpForPersistTest();
     }
 
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
     }
 
-    @AfterClass
+    @AfterAll
     public static void teardown() throws Exception {
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -83,19 +83,19 @@ public class AlterViewTest {
         localMetastore.createView(createViewStmt);
 
         Table table = localMetastore.getTable("db1", "view1");
-        Assert.assertTrue(table.isView());
-        Assert.assertFalse(((View) table).isSecurity());
+        Assertions.assertTrue(table.isView());
+        Assertions.assertFalse(((View) table).isSecurity());
 
         String alterView = "alter view db1.view1 set security invoker";
         AlterViewStmt alterViewStmt = (AlterViewStmt) SqlParser.parseSingleStatement(alterView, SqlModeHelper.MODE_DEFAULT);
         new AlterJobExecutor().process(alterViewStmt, context);
-        Assert.assertTrue(((View) table).isSecurity());
+        Assertions.assertTrue(((View) table).isSecurity());
 
         AlterViewInfo info =
                 (AlterViewInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_SET_VIEW_SECURITY_LOG);
-        Assert.assertEquals(localMetastore.getDb("db1").getId(), info.getDbId());
-        Assert.assertEquals(table.getId(), info.getTableId());
-        Assert.assertTrue(info.getSecurity());
+        Assertions.assertEquals(localMetastore.getDb("db1").getId(), info.getDbId());
+        Assertions.assertEquals(table.getId(), info.getTableId());
+        Assertions.assertTrue(info.getSecurity());
     }
 
     @Test
@@ -126,8 +126,8 @@ public class AlterViewTest {
         localMetastore.createView(createViewStmt);
 
         Table table = localMetastore.getTable("db1", "view1");
-        Assert.assertTrue(table.isView());
-        Assert.assertFalse(((View) table).isSecurity());
+        Assertions.assertTrue(table.isView());
+        Assertions.assertFalse(((View) table).isSecurity());
 
         Database database = localMetastore.getDb("db1");
 
@@ -136,6 +136,6 @@ public class AlterViewTest {
         JournalEntity journalEntity = new JournalEntity(OperationType.OP_SET_VIEW_SECURITY_LOG, alterViewInfo);
         editLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
 
-        Assert.assertTrue(((View) table).isSecurity());
+        Assertions.assertTrue(((View) table).isSecurity());
     }
 }

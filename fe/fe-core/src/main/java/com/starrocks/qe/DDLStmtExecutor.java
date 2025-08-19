@@ -21,6 +21,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
@@ -66,6 +67,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.CallProcedureStatement;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
@@ -138,6 +140,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
@@ -404,7 +407,8 @@ public class DDLStmtExecutor {
                 info.add(taskRunId);
             });
 
-            return new ShowResultSet(RefreshMaterializedViewStatement.META_DATA, Arrays.asList(info));
+            ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+            return new ShowResultSet(metaData, Arrays.asList(info));
         }
 
         @Override
@@ -436,6 +440,15 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCancelAlterTableStatement(CancelAlterTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getLocalMetastore().cancelAlter(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCallProcedureStatement(CallProcedureStatement stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                // Execute the procedure
+                context.getGlobalStateMgr().getMetadataMgr().callProcedure(stmt, context);
             });
             return null;
         }
@@ -532,8 +545,10 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+                UserRef user = stmt.getUser();
+                UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
                 context.getGlobalStateMgr().getAuthenticationMgr()
-                        .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo(), stmt.getProperties());
+                        .alterUser(userIdentity, stmt.getAuthenticationInfo(), stmt.getProperties());
             });
             return null;
         }
@@ -932,7 +947,16 @@ public class DDLStmtExecutor {
                             stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
                             LocalDateTime.MIN);
                 }
-                context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
+                boolean isSetIfNotExists = stmt.isSetIfNotExists();
+                try {
+                    context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
+                } catch (AlreadyExistsException e) {
+                    if (isSetIfNotExists) {
+                        LOG.info("analyze job already exists");
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_ANLZ_JOB_EXISTED_ERROR);
+                    }
+                }
 
                 if (Config.enable_trigger_analyze_job_immediate) {
                     ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
@@ -1045,6 +1069,9 @@ public class DDLStmtExecutor {
             TaskManager taskManager = context.getGlobalStateMgr().getTaskManager();
             String taskName = dropTaskStmt.getTaskName().getName();
             if (!taskManager.containTask(taskName)) {
+                if (dropTaskStmt.isSetIfExists()) {
+                    return null;
+                }
                 throw new SemanticException("Task " + taskName + " is not exist");
             }
             Task task = taskManager.getTask(taskName);

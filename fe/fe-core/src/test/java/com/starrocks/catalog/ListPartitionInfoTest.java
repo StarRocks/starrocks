@@ -37,10 +37,10 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -53,7 +53,7 @@ public class ListPartitionInfoTest {
     private ListPartitionInfo listPartitionInfo;
     private ListPartitionInfo listPartitionInfoForMulti;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
@@ -79,7 +79,7 @@ public class ListPartitionInfoTest {
                         ");");
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws DdlException, AnalysisException {
         this.listPartitionInfo = new ListPartitionDescTest().findSingleListPartitionInfo();
         this.listPartitionInfoForMulti = new ListPartitionDescTest().findMultiListPartitionInfo();
@@ -101,7 +101,7 @@ public class ListPartitionInfoTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(showSql, ctx);
         StmtExecutor executor = new StmtExecutor(ctx, statementBase);
         executor.execute();
-        Assert.assertNotEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
+        Assertions.assertNotEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
     }
 
     @Test
@@ -161,7 +161,7 @@ public class ListPartitionInfoTest {
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
 
-        Assert.assertTrue(sink.toThrift() instanceof TDataSink);
+        Assertions.assertTrue(sink.toThrift() instanceof TDataSink);
     }
 
     @Test
@@ -172,7 +172,7 @@ public class ListPartitionInfoTest {
                 "  PARTITION p1 VALUES IN (\'guangdong\', \'tianjin\'),\n" +
                 "  PARTITION p2 VALUES IN (\'shanghai\', \'beijing\')\n" +
                 ")";
-        Assert.assertEquals(sql, target);
+        Assertions.assertEquals(sql, target);
     }
 
     @Test
@@ -185,7 +185,7 @@ public class ListPartitionInfoTest {
                 "  PARTITION p2 VALUES IN (('2022-04-16', 'shanghai'), ('2022-04-16', 'beijing')) " +
                 "(\"replication_num\" = \"1\")\n" +
                 ")";
-        Assert.assertEquals(sql, target);
+        Assertions.assertEquals(sql, target);
     }
 
     public OlapTable findTableForSingleListPartition() {
@@ -248,12 +248,12 @@ public class ListPartitionInfoTest {
                     "  PARTITION p1 VALUES IN (\'guangdong\', \'tianjin\'),\n" +
                     "  PARTITION p2 VALUES IN (\'shanghai\', \'beijing\')\n" +
                     ")";
-            Assert.assertEquals(sql, target);
+            Assertions.assertEquals(sql, target);
         }
         {
             String sql = this.listPartitionInfo.toSql(this.findTableForSingleListPartition(), true, true);
             String target = "PARTITION BY (`province`)";
-            Assert.assertEquals(sql, target);
+            Assertions.assertEquals(sql, target);
         }
     }
 
@@ -265,12 +265,12 @@ public class ListPartitionInfoTest {
                     "  PARTITION p1 VALUES IN (\'guangdong\', \'tianjin\'),\n" +
                     "  PARTITION p2 VALUES IN (\'shanghai\', \'beijing\')\n" +
                     ")";
-            Assert.assertEquals(sql, target);
+            Assertions.assertEquals(sql, target);
         }
         {
             String sql = this.listPartitionInfo.toSql(this.findTableForSingleListPartition(), true, false);
             String target = "PARTITION BY (`province`)";
-            Assert.assertEquals(sql, target);
+            Assertions.assertEquals(sql, target);
         }
     }
 }

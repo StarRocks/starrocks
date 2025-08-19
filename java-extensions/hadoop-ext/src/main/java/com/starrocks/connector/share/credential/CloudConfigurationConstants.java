@@ -87,6 +87,7 @@ public class CloudConfigurationConstants {
     public static final String AZURE_BLOB_SHARED_KEY = "azure.blob.shared_key";
     public static final String AZURE_BLOB_CONTAINER = "azure.blob.container";
     public static final String AZURE_BLOB_SAS_TOKEN = "azure.blob.sas_token";
+    public static final String AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY = "azure.blob.oauth2_use_managed_identity";
     public static final String AZURE_BLOB_OAUTH2_CLIENT_ID = "azure.blob.oauth2_client_id";
     public static final String AZURE_BLOB_OAUTH2_CLIENT_SECRET = "azure.blob.oauth2_client_secret";
     public static final String AZURE_BLOB_OAUTH2_TENANT_ID = "azure.blob.oauth2_tenant_id";

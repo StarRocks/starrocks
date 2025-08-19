@@ -144,7 +144,7 @@ ExecTime      | 2.583 s
 
 #### リフレッシュ後のリソース消費を分析
 
-リフレッシュタスク後に、クエリプロファイルを通じてリソース消費を分析できます。
+リフレッシュタスク後に、クエリプロファイルを通じてリソース消費を分析できます。クラスターのリーダー FE ノードの Web UI を通じて、マテリアライズドビューのフレッシュタスクのプロファイルを確認できます。
 
 非同期マテリアライズドビューがリフレッシュされる際に、INSERT OVERWRITE ステートメントが実行されます。対応するクエリプロファイルを確認して、リフレッシュタスクによる時間とリソース消費を分析できます。
 
@@ -155,7 +155,7 @@ ExecTime      | 2.583 s
 - `QueryMemCost`: クエリの総メモリコスト。
 - 個々のオペレーターに関する他のメトリクス、例えばジョインオペレーターや集計オペレーター。
 
-クエリプロファイルの確認方法や他のメトリクスの理解についての詳細は、[Analyze query profile](../../administration/query_profile_overview.md)を参照してください。
+クエリプロファイルの確認方法や他のメトリクスの理解についての詳細は、[Analyze query profile](../../best_practices/query_tuning/query_profile_overview.md)を参照してください。
 
 ### 非同期マテリアライズドビューによるクエリの書き換えを確認
 
@@ -295,7 +295,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
 デフォルトのマテリアライズドビューのリフレッシュタスクのタイムアウトは、v3.2より前のバージョンでは5分、v3.2以降では1時間です。タイムアウト例外が発生した場合、次のステートメントを使用してタイムアウト期間を調整できます。
 
   ```sql
-  ALTER MATERIALIZED VIEW mv2 SET ('session.query_timeout' = '4000');
+  ALTER MATERIALIZED VIEW mv2 SET ('session.insert_timeout' = '4000');
   ```
 
 - **マテリアライズドビューのリフレッシュのパフォーマンスボトルネックを分析する**

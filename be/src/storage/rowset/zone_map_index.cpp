@@ -88,6 +88,13 @@ struct ZoneMapDatum<TYPE_DECIMAL128> final : public ZoneMapDatumBase<TYPE_DECIMA
 };
 
 template <>
+struct ZoneMapDatum<TYPE_DECIMAL256> final : public ZoneMapDatumBase<TYPE_DECIMAL256> {
+    std::string to_zone_map_string(TypeInfo* type_info) const override {
+        return get_decimal_zone_map_string(type_info, &value);
+    }
+};
+
+template <>
 struct ZoneMapDatum<TYPE_CHAR> : public ZoneMapDatumBase<TYPE_CHAR> {
     void resize_container_for_fit(TypeInfo* type_info, const void* v) override {
         static const int INIT_SIZE = 64;
@@ -111,6 +118,25 @@ struct ZoneMapDatum<TYPE_CHAR> : public ZoneMapDatumBase<TYPE_CHAR> {
 
 template <>
 struct ZoneMapDatum<TYPE_VARCHAR> final : public ZoneMapDatum<TYPE_CHAR> {};
+
+template <>
+struct ZoneMapDatum<TYPE_VARBINARY> final : public ZoneMapDatum<TYPE_CHAR> {
+    void resize_container_for_fit(TypeInfo* type_info, const void* v) override {
+        static const int INIT_SIZE = 64;
+        const Slice* slice = reinterpret_cast<const Slice*>(v);
+        if (slice->size > _length) {
+            _length = std::max<int>(BitUtil::next_power_of_two(slice->size), INIT_SIZE);
+            raw::stl_string_resize_uninitialized(&_value_container, _length);
+            value.data = _value_container.data();
+            value.size = 0;
+        }
+    }
+
+    void reset(TypeInfo* type_info) override {
+        value.data = _value_container.data();
+        value.size = 0;
+    }
+};
 
 template <LogicalType type>
 struct ZoneMap {

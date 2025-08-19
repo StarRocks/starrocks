@@ -41,6 +41,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/config.h"
 #include "common/status.h"
 #include "fmt/compile.h"
 #include "fs/fs.h"
@@ -56,11 +57,12 @@ static const int kLibShardNum = 128;
 
 // function cache entry, store information for
 struct UserFunctionCacheEntry {
-    UserFunctionCacheEntry(int64_t fid_, std::string checksum_, std::string lib_file_, int function_type_)
+    UserFunctionCacheEntry(int64_t fid_, std::string checksum_, std::string lib_file_,
+                           TFunctionBinaryType::type function_type)
             : function_id(fid_),
               checksum(std::move(checksum_)),
               lib_file(std::move(lib_file_)),
-              function_type(function_type_) {}
+              function_type(function_type) {}
     ~UserFunctionCacheEntry();
 
     int64_t function_id = 0;
@@ -90,7 +92,7 @@ struct UserFunctionCacheEntry {
     void* lib_handle = nullptr;
 
     // function type
-    int function_type;
+    TFunctionBinaryType::type function_type;
 
     std::any cache_handle;
 };
@@ -125,35 +127,47 @@ Status UserFunctionCache::init(const std::string& lib_dir) {
     _lib_dir = lib_dir;
     // 1. dynamic open current process
     RETURN_IF_ERROR(dynamic_open(nullptr, &_current_process_handle));
-    // 2. load all cached
-    RETURN_IF_ERROR(_load_cached_lib());
+    // 2. load all cached or clear all cache
+    if (config::clear_udf_cache_when_start) {
+        RETURN_IF_ERROR(_reset_cache_dir());
+    } else {
+        RETURN_IF_ERROR(_load_cached_lib());
+    }
     return Status::OK();
 }
 
 Status UserFunctionCache::get_libpath(int64_t fid, const std::string& url, const std::string& checksum,
-                                      std::string* libpath) {
+                                      FuncType function_type, std::string* libpath) {
     UserFunctionCacheEntryPtr entry;
-    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, &entry,
+    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, function_type, &entry,
                                      [](const auto& entry) -> StatusOr<std::any> { return std::any{}; }));
     *libpath = entry->lib_file;
     return Status::OK();
 }
 
 StatusOr<std::any> UserFunctionCache::load_cacheable_java_udf(
-        int64_t fid, const std::string& url, const std::string& checksum,
+        int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
         const std::function<StatusOr<std::any>(const std::string& path)>& loader) {
     UserFunctionCacheEntryPtr entry;
-    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, &entry, loader));
+    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, function_type, &entry, loader));
     return entry->cache_handle;
+}
+
+auto UserFunctionCache::_get_function_type(const std::string& url) -> FuncType {
+    if (boost::algorithm::ends_with(url, JAVA_UDF_SUFFIX)) {
+        return UDF_TYPE_JAVA;
+    } else if (boost::algorithm::ends_with(url, PY_UDF_SUFFIX)) {
+        return UDF_TYPE_PYTHON;
+    }
+    return UDF_TYPE_UNKNOWN;
 }
 
 // Now we only support JAVA_UDF
 Status UserFunctionCache::_load_entry_from_lib(const std::string& dir, const std::string& file) {
-    int type = get_function_type(file);
-    if (type != UDF_TYPE_JAVA) {
-        return Status::InternalError(fmt::format("unknown library file format {}", file));
+    auto type = _get_function_type(file);
+    if (type == UDF_TYPE_UNKNOWN) {
+        return Status::InternalError(fmt::format("unknown udf type:{} for file:{}", type, file));
     }
-
     std::vector<std::string> split_parts = strings::Split(file, ".");
     if (split_parts.size() != 3) {
         return Status::InternalError("user function's name should be function_id.checksum.type");
@@ -172,14 +186,6 @@ Status UserFunctionCache::_load_entry_from_lib(const std::string& dir, const std
     _entry_map[function_id] = entry;
 
     return Status::OK();
-}
-int UserFunctionCache::get_function_type(const std::string& url) {
-    if (boost::algorithm::ends_with(url, JAVA_UDF_SUFFIX)) {
-        return UDF_TYPE_JAVA;
-    } else if (boost::algorithm::ends_with(url, PY_UDF_SUFFIX)) {
-        return UDF_TYPE_PYTHON;
-    }
-    return UDF_TYPE_UNKNOWN;
 }
 
 Status UserFunctionCache::_load_cached_lib() {
@@ -206,9 +212,8 @@ Status UserFunctionCache::_load_cached_lib() {
 }
 template <class Loader>
 Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
-                                           UserFunctionCacheEntryPtr* output_entry, Loader&& loader) {
+                                           FuncType type, UserFunctionCacheEntryPtr* output_entry, Loader&& loader) {
     std::string suffix = ".unk";
-    int type = get_function_type(url);
     if (type == UDF_TYPE_JAVA) {
         suffix = JAVA_UDF_SUFFIX;
     }
@@ -276,8 +281,6 @@ Status UserFunctionCache::_download_lib(const std::string& url, UserFunctionCach
     std::string expected_checksum = entry->checksum;
     RETURN_IF_ERROR(DownloadUtil::download(url, target_file, expected_checksum));
 
-    entry->function_type = get_function_type(url);
-
     // check download
     entry->is_downloaded = true;
     return Status::OK();
@@ -302,6 +305,36 @@ std::string UserFunctionCache::_make_lib_file(int64_t function_id, const std::st
                                               const std::string& shuffix) {
     int shard = std::abs(function_id % kLibShardNum);
     return fmt::format("{}/{}/{}.{}{}", _lib_dir, shard, function_id, checksum, shuffix);
+}
+
+Status UserFunctionCache::_reset_cache_dir() {
+    if (!fs::path_exist(_lib_dir)) {
+        return _load_cached_lib();
+    }
+    return _remove_all_lib_file();
+}
+
+Status UserFunctionCache::_remove_all_lib_file() {
+    for (int i = 0; i < kLibShardNum; ++i) {
+        std::string sub_dir = _lib_dir + "/" + std::to_string(i);
+        RETURN_IF_ERROR(fs::create_directories(sub_dir));
+
+        auto scan_cb = [&sub_dir](std::string_view file) {
+            if (file == "." || file == "..") {
+                return true;
+            }
+            if (!boost::algorithm::ends_with(file, JAVA_UDF_SUFFIX) ||
+                !boost::algorithm::ends_with(file, PY_UDF_SUFFIX)) {
+                return true;
+            }
+            if (unlink((sub_dir + "/").append(file).c_str()) != 0) {
+                LOG(INFO) << "Deleting file " << file << " error: " << strerror(errno);
+            }
+            return true;
+        };
+        RETURN_IF_ERROR(FileSystem::Default()->iterate_dir(sub_dir, scan_cb));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

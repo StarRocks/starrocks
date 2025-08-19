@@ -15,21 +15,22 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.planner.ScanNode;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
 public class HiveScanTest extends ConnectorPlanTestBase {
-    @ClassRule
-    public static TemporaryFolder temp = new TemporaryFolder();
+    @TempDir
+    public static File temp;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
-        ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.doInit(newFolder(temp, "junit").toURI().toString());
         connectContext.changeCatalogDb("hive0.partitioned_db");
     }
 
@@ -41,12 +42,12 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 "select count(*) from lineitem_par where l_shipdate = '1998-01-01'"
         };
         boolean[] expected = {true, true};
-        Assert.assertEquals(sqlString.length, expected.length);
+        Assertions.assertEquals(sqlString.length, expected.length);
         for (int i = 0; i < sqlString.length; i++) {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), expected[i]);
+            Assertions.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), expected[i]);
         }
 
         connectContext.getSessionVariable().setEnableCountStarOptimization(false);
@@ -54,30 +55,30 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), false);
+            Assertions.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), false);
         }
         connectContext.getSessionVariable().setEnableCountStarOptimization(true);
     }
 
     @Test
-    public void testLabelMinMaxCountTest() throws Exception {
+    public void testUseMinMaxOptTest() throws Exception {
         String[] sqlString = {
-                "select count(l_orderkey) from lineitem_par", "true",
-                "select count(l_orderkey) from lineitem_par where l_shipdate = '1998-01-01'", "true",
-                "select count(distinct l_orderkey) from lineitem_par", "false",
-                "select count(l_orderkey), min(l_partkey) from lineitem_par", "true",
-                "select count(l_orderkey) from lineitem_par group by l_partkey", "false",
-                "select count(l_orderkey) from lineitem_par limit 10", "true",
-                "select count(l_orderkey), max(l_partkey), avg(l_partkey) from lineitem_par", "false",
-                "select count(l_orderkey), max(l_partkey), min(l_partkey) from lineitem_par", "true",
+                "select min(id) from iceberg0.partitioned_db.t1", "true",
+                "select min(id) from iceberg0.partitioned_db.t1 where date = '2020-01-01'", "true",
+                "select max(id) from iceberg0.partitioned_db.t1 where date = '2020-01-01'", "true",
+                "select count(id) from iceberg0.partitioned_db.t1 where date = '2020-01-01'", "false",
+                "select min(id), date from iceberg0.partitioned_db.t1 group by date", "true",
+                "select max(id), date from iceberg0.partitioned_db.t1 group by date", "true",
+                "select max(id) as x, date from iceberg0.partitioned_db.t1 group by date having x > 10", "false",
+                "select max(id) as x, date from iceberg0.partitioned_db.t1 group by date having date > '2020-01-01'", "true",
         };
-        Assert.assertTrue(sqlString.length % 2 == 0);
+        Assertions.assertTrue(sqlString.length % 2 == 0);
         for (int i = 0; i < sqlString.length; i += 2) {
             String sql = sqlString[i];
             boolean expexted = Boolean.valueOf(sqlString[i + 1]);
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimizeOption().getCanUseMinMaxCountOpt());
+            Assertions.assertEquals(expexted, scanNodeList.get(0).getScanOptimizeOption().getCanUseMinMaxOpt());
         }
     }
 
@@ -87,14 +88,19 @@ public class HiveScanTest extends ConnectorPlanTestBase {
         // positive cases.
         {
             String[] sqlString = {
+                    "select count(*) + 1 from lineitem_par",
+                    "select count(*) + 1 from lineitem_par where l_shipdate = '1998-01-01'",
+                    "select count(*) + 1, l_shipdate from lineitem_par where l_shipdate = '1998-01-01' group by l_shipdate",
                     "select count(*) from lineitem_par",
                     "select count(*) from lineitem_par where l_shipdate = '1998-01-01'",
-                    "select count(*), l_shipdate from lineitem_par where l_shipdate = '1998-01-01' group by l_shipdate"
+                    "select count(*), l_shipdate from lineitem_par where l_shipdate = '1998-01-01' group by l_shipdate",
+                    "select count(*), l_shipdate from lineitem_par group by l_shipdate having l_shipdate > '1998-01-01'",
             };
             for (int i = 0; i < sqlString.length; i++) {
                 String sql = sqlString[i];
                 String plan = getFragmentPlan(sql);
                 assertContains(plan, "___count___");
+                assertContains(plan, "ifnull");
             }
         }
         // negative cases.
@@ -103,7 +109,8 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                     "select count(l_orderkey) from lineitem_par",
                     "select count(*) from lineitem_par where l_shipdate = '1998-01-01' and l_orderkey = 202",
                     "select count(*), count(l_orderkey), l_shipdate from lineitem_par where l_shipdate = '1998-01-01' group by " +
-                            "l_shipdate"
+                            "l_shipdate",
+                    "select count(*) as x, l_shipdate from lineitem_par group by l_shipdate having x > 10",
             };
             for (int i = 0; i < sqlString.length; i++) {
                 String sql = sqlString[i];
@@ -121,6 +128,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 String sql = sqlString[i];
                 // just make sure it's not stuck.
                 String plan = getFragmentPlan(sql);
+                assertNotContains(plan, "___count___");
             }
         }
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
@@ -132,15 +140,21 @@ public class HiveScanTest extends ConnectorPlanTestBase {
         // positive cases.
         {
             String[] sqlString = {
+                    "select count(*) + 1 from iceberg0.partitioned_db.t1",
+                    "select count(*) + 1 from iceberg0.partitioned_db.t1 where date = '2020-01-01'",
+                    "select count(*) + 1, date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
+                            "group by date",
                     "select count(*) from iceberg0.partitioned_db.t1",
                     "select count(*) from iceberg0.partitioned_db.t1 where date = '2020-01-01'",
                     "select count(*), date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
-                            "group by date"
+                            "group by date",
+                    "select count(*), date from iceberg0.partitioned_db.t1 group by date having date > '2020-01-01'",
             };
             for (int i = 0; i < sqlString.length; i++) {
                 String sql = sqlString[i];
                 String plan = getFragmentPlan(sql);
                 assertContains(plan, "___count___");
+                assertContains(plan, "ifnull");
             }
         }
         // negative cases.
@@ -151,7 +165,8 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                             " 202",
                     "select count(*), count(id), date from iceberg0.partitioned_db.t1 where date " +
                             "= '2020-01-01' group by " +
-                            "date"
+                            "date",
+                    "select count(*) as x, date from iceberg0.partitioned_db.t1 group by date having x > 10",
             };
             for (int i = 0; i < sqlString.length; i++) {
                 String sql = sqlString[i];
@@ -160,5 +175,14 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             }
         }
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
     }
 }

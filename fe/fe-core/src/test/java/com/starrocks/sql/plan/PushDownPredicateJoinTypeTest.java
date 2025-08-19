@@ -103,6 +103,9 @@ class PushDownPredicateJoinTypeTest extends PlanTestBase {
     private static Stream<Arguments> antiJoinStream() {
         List<String> sqls = Lists.newArrayList();
         sqls.add("select * from t0 where v1 not in (select v4 from t1 where v1 = 1)");
+        sqls.add("select * from t0 where '1' not in (select v4 from t1)");
+        sqls.add("select * from t0 where 1 not in (select v4 from t1)");
+        sqls.add("select * from t0 where null not in (select v4 from t1)");
         sqls.add("select * from t0 where not exists (select v4 from t1 where v1 = 1)");
         return sqls.stream().map(e -> Arguments.of(e));
     }

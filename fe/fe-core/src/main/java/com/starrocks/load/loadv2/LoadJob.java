@@ -50,7 +50,6 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
@@ -95,9 +94,6 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -176,7 +172,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     @SerializedName("warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-    // no needs to persistent
+    @SerializedName("computeResource")
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     @SerializedName("mc")
@@ -1056,8 +1052,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             info.setNum_scan_bytes(loadingStatus.getLoadStatistic().sourceScanBytes());
             // warehouse
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                info.setWarehouse(warehouse.getName());
+                try {
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                    info.setWarehouse(warehouse.getName());
+                } catch (Exception e) {
+                    LOG.warn("Failed to get warehouse for job {}, error: {}", id, e.getMessage());
+                    info.setWarehouse("");
+                }
             } else {
                 info.setWarehouse("");
             }
@@ -1220,7 +1221,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     @Override
-    public void onTaskFailed(long taskId, FailMsg failMsg) {
+    public void onTaskFailed(long taskId, FailMsg failMsg, TaskAttachment attachment) {
     }
 
     // This analyze will be invoked after the replay is finished.
@@ -1253,8 +1254,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 && this.state.equals(other.state)
                 && this.jobType.equals(other.jobType);
     }
-
-
 
     public void replayUpdateStateInfo(LoadJobStateUpdateInfo info) {
         state = info.getState();
@@ -1304,16 +1303,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             return GsonUtils.GSON.toJson(this);
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            String json = GsonUtils.GSON.toJson(this);
-            Text.writeString(out, json);
-        }
 
-        public static LoadJobStateUpdateInfo read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, LoadJobStateUpdateInfo.class);
-        }
+
+
     }
 
     public static class JSONOptions {

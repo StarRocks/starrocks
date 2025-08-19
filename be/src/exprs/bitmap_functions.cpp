@@ -754,3 +754,5 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_from_binary(FunctionContext* context
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/BitmapFunctions.inc"

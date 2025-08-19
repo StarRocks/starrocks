@@ -15,20 +15,23 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.File;
 import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -40,12 +43,14 @@ import java.util.regex.Pattern;
 import javax.naming.Context;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
+import javax.naming.PartialResultException;
 import javax.naming.directory.Attribute;
 import javax.naming.directory.Attributes;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
 import javax.naming.directory.SearchControls;
 import javax.naming.directory.SearchResult;
+import javax.net.ssl.SSLContext;
 
 public class LDAPGroupProvider extends GroupProvider {
     private static final Logger LOG = LogManager.getLogger(LDAPGroupProvider.class);
@@ -55,6 +60,9 @@ public class LDAPGroupProvider extends GroupProvider {
     public static final String LDAP_PROP_ROOT_DN_KEY = "ldap_bind_root_dn";
     public static final String LDAP_PROP_ROOT_PWD_KEY = "ldap_bind_root_pwd";
     public static final String LDAP_PROP_BASE_DN_KEY = "ldap_bind_base_dn";
+    public static final String LDAP_SSL_CONN_ALLOW_INSECURE = "ldap_ssl_conn_allow_insecure";
+    public static final String LDAP_SSL_CONN_TRUST_STORE_PATH = "ldap_ssl_conn_trust_store_path";
+    public static final String LDAP_SSL_CONN_TRUST_STORE_PWD = "ldap_ssl_conn_trust_store_pwd";
     public static final String LDAP_PROP_CONN_TIMEOUT_MS_KEY = "ldap_conn_timeout";
     public static final String LDAP_PROP_CONN_READ_TIMEOUT_MS_KEY = "ldap_conn_read_timeout";
 
@@ -138,19 +146,20 @@ public class LDAPGroupProvider extends GroupProvider {
             if (getLdapGroupFilter() != null) {
                 SearchControls searchControls = new SearchControls();
                 searchControls.setSearchScope(SearchControls.SUBTREE_SCOPE);
-                NamingEnumeration<SearchResult> results =
-                        ctx.search(getLdapBaseDn(), getLdapGroupFilter(),
-                                searchControls);
-                while (results.hasMore()) {
-                    SearchResult result = results.next();
-                    Attributes attributes = result.getAttributes();
-                    matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
+                NamingEnumeration<SearchResult> results = ctx.search(getLdapBaseDn(), getLdapGroupFilter(), searchControls);
+                try {
+                    while (results.hasMore()) {
+                        SearchResult result = results.next();
+                        Attributes attributes = result.getAttributes();
+                        matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
+                    }
+                } catch (PartialResultException e) {
+                    LOG.warn("LDAP group search partial result exception", e);
                 }
             } else if (getLdapGroupDn() != null) {
                 for (String ldapGroupDN : getLdapGroupDn()) {
-                    Attributes attributes = ctx.getAttributes(ldapGroupDN,
-                            new String[] {getLdapGroupIdentifierAttr(),
-                                    getLDAPGroupMemberAttr()});
+                    Attributes attributes =
+                            ctx.getAttributes(ldapGroupDN, new String[] {getLdapGroupIdentifierAttr(), getLDAPGroupMemberAttr()});
                     matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
                 }
             } else {
@@ -161,6 +170,10 @@ public class LDAPGroupProvider extends GroupProvider {
             LOG.error("LDAP group search failed", e);
         }
 
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("LDAP group refresh completed, userToGroupCache: {}", groups);
+        }
+
         this.userToGroupCache = groups;
     }
 
@@ -169,10 +182,16 @@ public class LDAPGroupProvider extends GroupProvider {
                                           UserNameExtractInterface userNameExtractInterface)
             throws NamingException {
         Attribute ldapGroupIdentifierAttr = attributes.get(getLdapGroupIdentifierAttr());
+        if (ldapGroupIdentifierAttr == null) {
+            LOG.warn("LDAP group identifier attribute '{}' not found in attributes: {}",
+                    getLdapGroupIdentifierAttr(), attributes);
+            return;
+        }
         String groupName = (String) ldapGroupIdentifierAttr.get();
 
         Attribute memberAttribute = attributes.get(getLDAPGroupMemberAttr());
         if (memberAttribute == null) {
+            LOG.warn("LDAP group member attribute '{}' not found in attributes: {}", getLDAPGroupMemberAttr(), attributes);
             return;
         }
 
@@ -180,8 +199,17 @@ public class LDAPGroupProvider extends GroupProvider {
         while (e.hasMore()) {
             String memberDN = (String) e.next();
             String extractUserName = userNameExtractInterface.extract(memberDN);
+
+            if (extractUserName == null) {
+                LOG.debug("Failed to extract user name from member DN: '{}'", memberDN);
+                continue;
+            }
+
             groups.putIfAbsent(extractUserName, new HashSet<>());
             groups.get(extractUserName).add(groupName);
+
+            LOG.debug("Successfully extracted user '{}' from member '{}', added to group '{}'",
+                    extractUserName, memberDN, groupName);
         }
     }
 
@@ -194,7 +222,7 @@ public class LDAPGroupProvider extends GroupProvider {
         UserNameExtractInterface userNameExtractInterface;
         String ldapUserSearchAttr = getLdapUserSearchAttr();
 
-        if (getLdapUserSearchAttr() != null) {
+        if (ldapUserSearchAttr != null) {
             Pattern pattern = Pattern.compile(ldapUserSearchAttr);
             if (pattern.matcher("").groupCount() == 0) {
                 userNameExtractInterface = memberDn -> {
@@ -213,6 +241,7 @@ public class LDAPGroupProvider extends GroupProvider {
                         }
                     }
 
+                    LOG.debug("skip member '{}' because it does not match the search attr '{}'", memberDn, ldapUserSearchAttr);
                     return null;
                 };
             } else {
@@ -221,6 +250,8 @@ public class LDAPGroupProvider extends GroupProvider {
                     if (matcher.find()) {
                         return matcher.group(1);
                     } else {
+                        LOG.debug("skip member '{}' because it does not match the search attr '{}'", memberDN,
+                                ldapUserSearchAttr);
                         return null;
                     }
                 };
@@ -251,7 +282,8 @@ public class LDAPGroupProvider extends GroupProvider {
         }
     }
 
-    public DirContext createDirContextOnConnection(String dn, String pwd) throws NamingException, IOException {
+    public DirContext createDirContextOnConnection(String dn, String pwd) throws NamingException, IOException,
+            GeneralSecurityException {
         if (Strings.isNullOrEmpty(pwd)) {
             LOG.warn("empty password is not allowed for simple authentication");
             throw new IOException("empty password is not allowed for simple authentication");
@@ -267,6 +299,19 @@ public class LDAPGroupProvider extends GroupProvider {
         environment.put(Context.PROVIDER_URL, url);
         environment.put("com.sun.jndi.ldap.connect.timeout", getLdapConnTimeout());
         environment.put("com.sun.jndi.ldap.read.timeout", getLdapConnReadTimeout());
+
+        if (!isLdapSslConnAllowInsecure()) {
+            String trustStorePath = getLdapSslConnTrustStorePath();
+            String trustStorePwd = getLdapSslConnTrustStorePwd();
+            SSLContext sslContext = SslUtils.createSSLContext(
+                    Optional.empty(), /* For now, we don't support server to verify us(client). */
+                    Optional.empty(),
+                    trustStorePath.isEmpty() ? Optional.empty() : Optional.of(new File(trustStorePath)),
+                    trustStorePwd.isEmpty() ? Optional.empty() : Optional.of(trustStorePwd));
+            LdapSslSocketFactory.setSslContextForCurrentThread(sslContext);
+            // Refer to https://docs.oracle.com/javase/jndi/tutorial/ldap/security/ssl.html.
+            environment.put("java.naming.ldap.factory.socket", LdapSslSocketFactory.class.getName());
+        }
 
         return new InitialDirContext(environment);
     }
@@ -293,6 +338,18 @@ public class LDAPGroupProvider extends GroupProvider {
 
     public String getLdapConnReadTimeout() {
         return properties.getOrDefault(LDAP_PROP_CONN_READ_TIMEOUT_MS_KEY, "30000");
+    }
+
+    public boolean isLdapSslConnAllowInsecure() {
+        return Boolean.parseBoolean(properties.getOrDefault(LDAP_SSL_CONN_ALLOW_INSECURE, "true"));
+    }
+
+    public String getLdapSslConnTrustStorePath() {
+        return properties.getOrDefault(LDAP_SSL_CONN_TRUST_STORE_PATH, "");
+    }
+
+    public String getLdapSslConnTrustStorePwd() {
+        return properties.getOrDefault(LDAP_SSL_CONN_TRUST_STORE_PWD, "");
     }
 
     public String getLdapGroupFilter() {

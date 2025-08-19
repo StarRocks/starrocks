@@ -344,6 +344,10 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         }
     }
 
+    public void executePartitionTTLForTable(Long dbId, Long tableId) {
+        ttlPartitionScheduler.executePartitionTTLForTable(dbId, tableId);
+    }
+
     public boolean executeDynamicPartitionForTable(Long dbId, Long tableId) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
@@ -413,7 +417,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         ConnectContext ctx = Util.getOrCreateInnerContext();
-        ctx.setCurrentWarehouse(warehouseManager.getBackgroundWarehouse().getName());
+        ctx.setCurrentWarehouse(warehouseManager.getBackgroundWarehouse(olapTable.getId()).getName());
 
         Locker locker = new Locker();
         for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {

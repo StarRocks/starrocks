@@ -14,14 +14,20 @@
 
 #pragma once
 
-#include "cache/local_cache.h"
+#include "cache/cache_metrics.h"
+#include "cache/local_cache_engine.h"
 #include "gen_cpp/DataCache_types.h"
+#include "storage/options.h"
 
 namespace starrocks {
 
 class DataCacheUtils {
 public:
     static void set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const DataCacheMetrics& metrics);
+
+#ifdef WITH_STARCACHE
+    static void set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const StarCacheMetrics& metrics);
+#endif
 
     static Status parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit,
                                                 size_t* mem_size);
@@ -37,6 +43,12 @@ public:
     static Status change_disk_path(const std::string& old_disk_path, const std::string& new_disk_path);
 
     static dev_t disk_device_id(const std::string& disk_path);
+
+#ifdef USE_STAROS
+    // for each dir in `store_paths`, get each corresponding dir in `starlet_cache_dir`
+    static StatusOr<std::vector<std::string>> get_corresponding_starlet_cache_dir(
+            const std::vector<StorePath>& store_paths, const std::string& starlet_cache_dir);
+#endif
 };
 
 } // namespace starrocks

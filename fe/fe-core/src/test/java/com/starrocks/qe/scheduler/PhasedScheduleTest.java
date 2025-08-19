@@ -26,8 +26,8 @@ import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
 import org.assertj.core.util.Sets;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.List;
@@ -67,7 +67,7 @@ public class PhasedScheduleTest extends SchedulerTestBase {
                 noDispatched.add(execution);
             }
         }
-        Assert.assertFalse(noDispatched.isEmpty());
+        Assertions.assertFalse(noDispatched.isEmpty());
         reportScan(noDispatched, executionDAG, coordinator);
 
     }
@@ -85,7 +85,7 @@ public class PhasedScheduleTest extends SchedulerTestBase {
         final DefaultCoordinator coordinator = startScheduling(sql);
         final ExecutionDAG executionDAG = coordinator.getExecutionDAG();
         final int size = executionDAG.getExecutions().size();
-        Assert.assertEquals(size, 11);
+        Assertions.assertEquals(size, 11);
     }
 
     @Test
@@ -122,7 +122,7 @@ public class PhasedScheduleTest extends SchedulerTestBase {
                 noDispatched.add(execution);
             }
         }
-        Assert.assertFalse(noDispatched.isEmpty());
+        Assertions.assertFalse(noDispatched.isEmpty());
 
         parallelReport(noDispatched, executionDAG, coordinator);
 
@@ -179,7 +179,7 @@ public class PhasedScheduleTest extends SchedulerTestBase {
             }
         };
 
-        Assert.assertThrows("test", StarRocksException.class, () -> startScheduling(sql));
+        Assertions.assertThrows(StarRocksException.class, () -> startScheduling(sql), "test");
     }
 
     private void reportScan(Collection<FragmentInstanceExecState> instances, ExecutionDAG dag, Coordinator coordinator)

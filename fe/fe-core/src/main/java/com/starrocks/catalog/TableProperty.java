@@ -46,9 +46,9 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -56,10 +56,10 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -70,7 +70,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -95,6 +94,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public static final String CLOUD_NATIVE_INDEX_TYPE = "CLOUD_NATIVE";
     public static final String LOCAL_INDEX_TYPE = "LOCAL";
+
+    public static final String DEFAULT_COMPACTION_STRATEGY = "DEFAULT";
+    public static final String REAL_TIME_COMPACTION_STRATEGY = "REAL_TIME";
 
     public enum QueryRewriteConsistencyMode {
         DISABLE,    // 0: disable query rewrite
@@ -321,7 +323,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private Multimap<String, String> location;
 
-    private boolean enablePartitionAggregation = false;
+    private boolean fileBundling = false;
+
+    private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
     public TableProperty() {
         this(Maps.newLinkedHashMap());
@@ -455,11 +459,26 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
             boolean enableFlatJson = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
-            double flatJsonNullFactor = PropertyAnalyzer.analyzeFlatJsonNullFactor(properties);
-            double flatJsonSparsityFactory = PropertyAnalyzer.analyzeFlatJsonSparsityFactor(properties);
-            int flatJsonColumnMax = PropertyAnalyzer.analyzeFlatJsonColumnMax(properties);
-            flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
-                    flatJsonSparsityFactory, flatJsonColumnMax);
+            
+            // If flat_json.enable is false, only allow setting the enable property
+            if (!enableFlatJson && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                throw new RuntimeException("flat JSON configuration must be set after enabling flat JSON.");
+            }
+            
+            try {
+                double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
+                        PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, Config.flat_json_null_factor);
+                double flatJsonSparsityFactory = PropertyAnalyzer.analyzerDoubleProp(properties,
+                        PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, Config.flat_json_sparsity_factory);
+                int flatJsonColumnMax = PropertyAnalyzer.analyzeIntProp(properties,
+                        PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, Config.flat_json_column_max);
+                flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
+                        flatJsonSparsityFactory, flatJsonColumnMax);
+            } catch (AnalysisException e) {
+                throw new RuntimeException("Failed to analyze flat JSON properties: " + e.getMessage(), e);
+            }
         }
         return this;
     }
@@ -818,10 +837,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildEnablePartitionAggregation() {
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
-            enablePartitionAggregation = Boolean.parseBoolean(
-                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION, "false"));
+    public TableProperty buildFileBundling() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+            fileBundling = Boolean.parseBoolean(
+                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, "false"));
         }
         return this;
     }
@@ -859,6 +878,29 @@ public class TableProperty implements Writable, GsonPostProcessable {
             location = null;
         }
         return this;
+    }
+
+    public TableProperty buildCompactionStrategy() {
+        String defaultStrategy = properties.getOrDefault(
+                    PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, DEFAULT_COMPACTION_STRATEGY);
+        if (defaultStrategy.equalsIgnoreCase(DEFAULT_COMPACTION_STRATEGY)) {
+            compactionStrategy = TCompactionStrategy.DEFAULT;
+        } else if (defaultStrategy.equalsIgnoreCase(REAL_TIME_COMPACTION_STRATEGY)) {
+            compactionStrategy = TCompactionStrategy.REAL_TIME;
+        }
+        return this;
+    }
+
+    public static String compactionStrategyToString(TCompactionStrategy strategy) {
+        switch (strategy) {
+            case DEFAULT:
+                return DEFAULT_COMPACTION_STRATEGY;
+            case REAL_TIME:
+                return REAL_TIME_COMPACTION_STRATEGY;
+            default:
+                LOG.warn("unknown compactionStrategy");
+                return "UNKNOWN";
+        }
     }
 
     public void modifyTableProperties(Map<String, String> modifyProperties) {
@@ -1013,8 +1055,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
-    public boolean enablePartitionAggregation() {
-        return enablePartitionAggregation;
+    public boolean isFileBundling() {
+        return fileBundling;
     }
 
     public int primaryIndexCacheExpireSec() {
@@ -1031,6 +1073,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public String storageType() {
         return storageType;
+    }
+
+    public TCompactionStrategy getCompactionStrategy() {
+        return compactionStrategy;
     }
 
     public Multimap<String, String> getLocation() {
@@ -1153,12 +1199,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return useFastSchemaEvolution;
     }
 
-
-
-    public static TableProperty read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), TableProperty.class);
-    }
-
     @Override
     public void gsonPostProcess() throws IOException {
         try {
@@ -1190,7 +1230,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMvProperties();
         buildLocation();
         buildBaseCompactionForbiddenTimeRanges();
-        buildEnablePartitionAggregation();
+        buildFileBundling();
         buildMutableBucketNum();
+        buildCompactionStrategy();
     }
 }

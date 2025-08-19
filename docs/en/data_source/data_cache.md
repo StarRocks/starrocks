@@ -197,6 +197,20 @@ SET GLOBAL enable_file_metacache=true;
 >
 > Footer Cache uses the memory module of the Data Cache for data caching. Therefore, you must ensure that the BE parameter `datacache_enable` is set to `true` and configure a reasonable value for `datacache_mem_size`.
 
+## Page Cache
+
+In addition to caching data from files in remote storage during queries against data lakes, StarRocks also supports caching decompressed Parquet page data. Page Cache stores decompressed Parquet page data in memory. When the same page is accessed in subsequent queries, the data can be obtained directly from the cache, avoiding repetitive I/O operations and decompression.
+
+You can enable Page Cache by setting the following system variable:
+
+```SQL
+SET GLOBAL enable_file_pagecache=true;
+```
+
+> **NOTE**
+>
+> Page Cache uses the memory module of the Data Cache for data caching. Therefore, you must ensure that the BE parameter `datacache_enable` is set to `true` and configure a reasonable value for `datacache_mem_size`.
+
 ## I/O Adaptor
 
 To prevent significant tail latency in disk access due to high cache disk I/O load, which can lead to negative optimization of the cache system, Data Cache provides the I/O adaptor feature. This feature routes some cache requests to remote storage when disk load is high, utilizing both local cache and remote storage to improve I/O throughput. This feature is enabled by default.
@@ -249,9 +263,28 @@ After automatic scaling is enabled:
 - When the disk usage is consistently below the threshold specified by the BE parameter `datacache_disk_low_level` (default value is `60`, that is, 60% of disk space), and the current disk space used by Data Cache is full, the system will automatically expand the cache capacity.
 - When automatically scaling the cache capacity, the system will aim to adjust the cache capacity to the level specified by the BE parameter `datacache_disk_safe_level` (default value is `70`, that is, 70% of disk space).
 
+## Cache Sharing
+
+Because Data Cache depends on the BE node's local disk, when the cluster are being scaled, changes in data routing can cause cache misses, which can easily lead to significant performance degradation during the elastic scaling.
+
+Cache Sharing is used to support accessing cache data between nodes through network. During cluster scaling, if a local cache miss occurs, the system first attempts to fetch cache data from other nodes within the same cluster. Only if all caches miss will the system re-fetch data from the remote storage. This feature effectively reduces the performance jitter caused by cache invalidation during elastic scaling and ensures stable query performance.
+
+![cache sharing workflow](../_assets/cache_sharing_workflow.png)
+
+You can enable the Cache Sharing feature by configuring the following two items:
+
+- Set the FE configuration item `enable_trace_historical_node` to `true`.
+- Set the system variable `enable_datacache_sharing` to `true`.
+
+In addition, you can check the following metrics in query profile to monitor Cache Sharing:
+
+- `DataCacheReadPeerCounter`: The read count from other cache nodes.
+- `DataCacheReadPeerBytes`: The bytes read from other cache nodes.
+- `DataCacheReadPeerTimer`: The time used for accessing cache data from other cache nodes.
+
 ## Configurations and variables
 
-You can configure Data Cache using the following system variables and BE parameters.
+You can configure Data Cache using the following system variables and parameters.
 
 ### System variables
 
@@ -259,6 +292,11 @@ You can configure Data Cache using the following system variables and BE paramet
 - [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
 - [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
 - [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
+- [enable_datacache_sharing](../sql-reference/System_variable.md#enable_datacache_sharing)
+
+### FE Parameters
+
+- [enable_trace_historical_node](../administration/management/FE_configuration.md#enable_trace_historical_node)
 
 ### BE Parameters
 

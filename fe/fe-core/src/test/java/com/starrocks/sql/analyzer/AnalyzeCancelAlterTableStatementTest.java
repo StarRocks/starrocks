@@ -19,9 +19,9 @@ import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
@@ -30,7 +30,7 @@ public class AnalyzeCancelAlterTableStatementTest {
 
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -49,26 +49,26 @@ public class AnalyzeCancelAlterTableStatementTest {
     public void testCancelRollup()  {
         CancelAlterTableStmt stmt = (CancelAlterTableStmt) analyzeSuccess(
                 "cancel alter table rollup from db.tbl (1, 2, 3)");
-        Assert.assertEquals("db", stmt.getDbName());
-        Assert.assertEquals(ShowAlterStmt.AlterType.ROLLUP, stmt.getAlterType());
-        Assert.assertEquals("tbl", stmt.getTableName());
+        Assertions.assertEquals("db", stmt.getDbName());
+        Assertions.assertEquals(ShowAlterStmt.AlterType.ROLLUP, stmt.getAlterType());
+        Assertions.assertEquals("tbl", stmt.getTableName());
     }
 
     @Test
     public void testCancelAlterColumn() {
         CancelAlterTableStmt stmt = (CancelAlterTableStmt) analyzeSuccess(
                 "CANCEL ALTER TABLE COLUMN FROM t0");
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals(ShowAlterStmt.AlterType.COLUMN, stmt.getAlterType());
-        Assert.assertEquals("t0", stmt.getTableName());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals(ShowAlterStmt.AlterType.COLUMN, stmt.getAlterType());
+        Assertions.assertEquals("t0", stmt.getTableName());
     }
 
     @Test
     public void testCancelMaterializedView() {
         CancelAlterTableStmt stmt = (CancelAlterTableStmt) analyzeSuccess(
                 "cancel alter materialized view from materialized_view_test");
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("materialized_view_test", stmt.getTableName());
-        Assert.assertEquals(ShowAlterStmt.AlterType.MATERIALIZED_VIEW, stmt.getAlterType());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("materialized_view_test", stmt.getTableName());
+        Assertions.assertEquals(ShowAlterStmt.AlterType.MATERIALIZED_VIEW, stmt.getAlterType());
     }
 }

@@ -39,7 +39,8 @@
 </div>
 StarRocks is the world's fastest open query engine for sub-second, ad-hoc analytics both on and off the data lakehouse. With average query performance 3x faster than other popular alternatives, StarRocks is a query engine that eliminates the need for denormalization and adapts to your use cases, without having to move your data or rewrite SQL. A Linux Foundation project. <br></br>
 
-Learn more 👉🏻 [What Is StarRocks: Features and Use Cases](https://www.youtube.com/watch?v=RfXO5GOnbW4&ab_channel=CelerData)
+Learn more 👉🏻 [What Is StarRocks: Features and Use Cases](https://www.youtube.com/watch?v=RfXO5GOnbW4&ab_channel=CelerData), 
+Join [StarRocks Summit 2025](https://summit.starrocks.io/2025)!
 
 <br>
  <p align="center">
@@ -133,8 +134,10 @@ This project is used by the following companies. Learn more about their use case
 - [Demandbase](https://starrocks.medium.com/demandbase-ditches-denormalization-by-switching-off-clickhouse-44195d795a83)
 - [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks)
 - [Eightfold.ai](https://www.youtube.com/watch?v=qNk_-QTZk3E)
+- [Fanatics](https://www.youtube.com/watch?v=hbXovqR6tOc)
 - [Grab](https://engineering.grab.com/building-a-spark-observability)
 - [HerdWatch](https://medium.com/p/a7916a7e87bf)
+- [iQiyi](https://medium.com/starrocks-engineering/real-time-analytics-at-scale-why-we-use-starrocks-0aa3c859cbeb)
 - [Naver](https://starrocks.medium.com/how-join-changed-how-we-approach-data-infra-at-naver-3a5bb1dac49f)
 - [Pinterest](https://medium.com/pinterest-engineering/delivering-faster-analytics-at-pinterest-a639cdfad374)
 - [Shopee](https://celerdata.com/blog/how-shopee-3xed-their-query-performance-with-starrocks)
@@ -145,4 +148,5 @@ This project is used by the following companies. Learn more about their use case
 - [Verisoul](https://celerdata.com/blog/verisoul-enables-real-time-analytics-by-transitioning-off-bigquery)
 - [Vivo](https://medium.com/starrocks-engineering/vivos-journey-to-a-high-performance-lakehouse-with-starrocks-56a502a0fde8) 
 - [Xiaohongshu/RedNote](https://www.youtube.com/watch?v=2cvIZY4EDak&list=PL0eWwaesODdiJ0aXLzSTyNfkjjIFYpOTf)
+- [Zepto](https://blog.zeptonow.com/data-that-delivers-real-time-insights-for-brand-success-in-quick-commerce-b8b9e994d20b)
 

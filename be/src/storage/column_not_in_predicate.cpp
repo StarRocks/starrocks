@@ -90,7 +90,17 @@ public:
         return new_size;
     }
 
-    bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
+    bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        if (detail.min_or_null_value() == detail.max_value()) {
+            const auto type_info = this->type_info();
+            for (const ValueType& v : _values) {
+                if (type_info->cmp(Datum(v), detail.max_value()) == 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 
     bool support_bitmap_filter() const override { return false; }
 
@@ -359,6 +369,12 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL128>(scale, strs);
         return new ColumnNotInPredicate<TYPE_DECIMAL128>(type_info, id, std::move(values));
     }
+    case TYPE_DECIMAL256: {
+        const auto scale = type_info->scale();
+        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL256>::CppType>;
+        SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL256>(scale, strs);
+        return new ColumnNotInPredicate<TYPE_DECIMAL256>(type_info, id, std::move(values));
+    }
     case TYPE_CHAR:
         return new BinaryColumnNotInPredicate<TYPE_CHAR>(type_info, id, strs);
     case TYPE_VARCHAR:
@@ -395,6 +411,7 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
     case TYPE_BINARY:
     case TYPE_MAX_VALUE:
     case TYPE_VARBINARY:
+    case TYPE_INT256:
         return nullptr;
         // No default to ensure newly added enumerator will be handled.
     }

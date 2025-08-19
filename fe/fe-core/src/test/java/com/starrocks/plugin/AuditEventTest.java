@@ -14,8 +14,8 @@
 
 package com.starrocks.plugin;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class AuditEventTest {
     @Test
@@ -30,23 +30,36 @@ public class AuditEventTest {
                 .setState("state")
                 .setBigQueryLogCPUSecondThreshold(1)
                 .setCatalog("catalog")
+                .setQueryId("queryId")
+                .setStmtId(123)
+                .setStmt("stmt")
                 .setDigest("digest")
                 .setErrorCode("errorCode")
                 .setIsQuery(true)
-                .setWarehouse("wh");
+                .setWarehouse("wh")
+                .setSessionId("sessionId")
+                .setCustomQueryId("customQueryId")
+                .setCNGroup("test_cngroup");
         AuditEvent event = builder.build();
 
-        Assert.assertEquals(AuditEvent.EventType.CONNECTION, event.type);
-        Assert.assertEquals("user", event.user);
-        Assert.assertEquals("authorizedUser", event.authorizedUser);
-        Assert.assertEquals("clientIp", event.clientIp);
-        Assert.assertEquals("feIp", event.feIp);
-        Assert.assertEquals("db", event.db);
-        Assert.assertEquals("state", event.state);
-        Assert.assertEquals(1, event.bigQueryLogCPUSecondThreshold);
-        Assert.assertEquals("catalog", event.catalog);
-        Assert.assertEquals("errorCode", event.errorCode);
-        Assert.assertEquals(true, event.isQuery);
-        Assert.assertEquals("wh", event.warehouse);
+        Assertions.assertEquals(AuditEvent.EventType.CONNECTION, event.type);
+        Assertions.assertEquals("user", event.user);
+        Assertions.assertEquals("authorizedUser", event.authorizedUser);
+        Assertions.assertEquals("clientIp", event.clientIp);
+        Assertions.assertEquals("feIp", event.feIp);
+        Assertions.assertEquals("db", event.db);
+        Assertions.assertEquals("state", event.state);
+        Assertions.assertEquals(1, event.bigQueryLogCPUSecondThreshold);
+        Assertions.assertEquals("catalog", event.catalog);
+        Assertions.assertEquals("queryId", event.queryId);
+        Assertions.assertEquals(123, event.stmtId);
+        Assertions.assertEquals("stmt", event.stmt);
+        Assertions.assertEquals("digest", event.digest);
+        Assertions.assertEquals("errorCode", event.errorCode);
+        Assertions.assertEquals(true, event.isQuery);
+        Assertions.assertEquals("wh", event.warehouse);
+        Assertions.assertEquals("sessionId", event.sessionId);
+        Assertions.assertEquals("customQueryId", event.customQueryId);
+        Assertions.assertEquals("test_cngroup", event.cnGroup);
     }
 }

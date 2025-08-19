@@ -45,11 +45,11 @@ public class ClusterSnapshot {
     public ClusterSnapshot() {
     }
 
-    public ClusterSnapshot(long id, String snapshotName, String storageVolumeName, long createdTimeMs,
-            long finishedTimeMs, long feJournalId, long starMgrJournalId) {
+    public ClusterSnapshot(long id, String snapshotName, ClusterSnapshotType type, String storageVolumeName,
+                           long createdTimeMs, long finishedTimeMs, long feJournalId, long starMgrJournalId) {
         this.id = id;
         this.snapshotName = snapshotName;
-        this.type = ClusterSnapshotType.AUTOMATED;
+        this.type = type;
         this.storageVolumeName = storageVolumeName;
         this.createdTimeMs = createdTimeMs;
         this.finishedTimeMs = finishedTimeMs;
@@ -92,6 +92,14 @@ public class ClusterSnapshot {
 
     public long getId() {
         return id;
+    }
+
+    public boolean isAutomated() {
+        return type == ClusterSnapshotType.AUTOMATED;
+    }
+
+    public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
+        return;
     }
 
     public TClusterSnapshotsItem getInfo() {

@@ -15,16 +15,18 @@
 package com.starrocks.catalog;
 
 import com.starrocks.common.FeConstants;
-import org.junit.Before;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.when;
 
@@ -42,7 +44,7 @@ public class CatalogUtilsTest {
     @Mock
     private PhysicalPartition physicalPartition;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
     }
@@ -56,6 +58,24 @@ public class CatalogUtilsTest {
         int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 5, true);
 
         assertEquals(FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM, bucketNum);
+    }
+
+    @Test
+    public void testCheckPartitionNameExistForCreatingPartitionNames() {
+        Set<String> partitionNames = new HashSet<>();
+        partitionNames.addAll(List.of("p1", "p2", "p3"));
+        when(olapTable.checkPartitionNameExist("p1")).thenReturn(true);
+        when(olapTable.checkPartitionNameExist("p2")).thenReturn(false);
+        when(olapTable.checkPartitionNameExist("p3")).thenReturn(true);
+
+        boolean willCreateNewPartition = CatalogUtils.checkIfNewPartitionExists(olapTable, partitionNames);
+        Assertions.assertTrue(willCreateNewPartition);
+
+        when(olapTable.checkPartitionNameExist("p1")).thenReturn(true);
+        when(olapTable.checkPartitionNameExist("p2")).thenReturn(true);
+        when(olapTable.checkPartitionNameExist("p3")).thenReturn(true);
+        willCreateNewPartition = CatalogUtils.checkIfNewPartitionExists(olapTable, partitionNames);
+        Assertions.assertFalse(willCreateNewPartition);
     }
 
     @Test

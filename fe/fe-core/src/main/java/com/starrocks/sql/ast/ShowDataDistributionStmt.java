@@ -16,22 +16,9 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableRef;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowDataDistributionStmt extends ShowStmt {
-    private static final ShowResultSetMetaData SHOW_DATA_DISTRIBUTION_META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("PartitionName", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("BucketId", ScalarType.createVarchar(10)))
-                    .addColumn(new Column("RowCount", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("RowCount%", ScalarType.createVarchar(10)))
-                    .addColumn(new Column("DataSize", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("DataSize%", ScalarType.createVarchar(10)))
-                    .build();
-
     private TableRef tblRef;
 
     public ShowDataDistributionStmt(TableRef tblRef) {
@@ -57,11 +44,6 @@ public class ShowDataDistributionStmt extends ShowStmt {
 
     public PartitionNames getPartitionNames() {
         return tblRef.getPartitionNames();
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return SHOW_DATA_DISTRIBUTION_META_DATA;
     }
 
     @Override

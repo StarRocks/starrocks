@@ -16,13 +16,10 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.commons.collections4.MapUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -95,13 +92,6 @@ public class ExternalBasicStatsMeta implements Writable {
 
     public Map<String, String> getProperties() {
         return properties;
-    }
-
-
-
-    public static ExternalBasicStatsMeta read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        return GsonUtils.GSON.fromJson(s, ExternalBasicStatsMeta.class);
     }
 
     public void setProperties(Map<String, String> properties) {

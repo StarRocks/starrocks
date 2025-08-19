@@ -55,3 +55,97 @@ ORDER BY(c1,c6,c11,c2);
 select c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13 from pksk_tbl limit 1;
 
 select c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13 from pksk_tbl;
+
+SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3
+UNION ALL
+SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3;
+
+SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3
+UNION ALL
+SELECT 'test1' AS c1, 'test1' AS c2, 'test1' AS c3;
+
+SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3
+UNION ALL
+SELECT 'test1' AS c1, 'test2' AS c2, 'test3' AS c3;
+
+SELECT 'test1' AS c1, 'test2' AS c2, 'test3' AS c3
+UNION ALL
+SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3;
+
+WITH temp AS (
+		SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3
+		UNION ALL
+		SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3
+	)
+SELECT DISTINCT c1, c2, c3
+FROM (
+	SELECT c1, c2, c3
+	FROM temp
+	UNION ALL
+	SELECT 'test1' AS c1, 'test1' AS c2, 'test1' AS c3
+	UNION ALL
+	SELECT 'test1' AS c1, 'test1' AS c2, 'test1' AS c3
+	UNION ALL
+	SELECT 'test1' AS c1, 'test2' AS c2, 'test3' AS c3
+) t;
+
+WITH temp AS (
+		SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3
+		UNION ALL
+		SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3
+	)
+SELECT c1, c2, c3
+FROM (
+	SELECT c1, c2, c3
+	FROM temp
+	UNION ALL
+	SELECT 'test1' AS c1, 'test1' AS c2, 'test1' AS c3
+	UNION ALL
+	SELECT 'test1' AS c1, 'test2' AS c2, 'test3' AS c3
+) t;
+
+WITH temp AS (
+		SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3
+		UNION ALL
+		SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3
+	)
+SELECT c1, c2, c3
+FROM (
+	SELECT c1, c2, c3
+	FROM temp
+	UNION ALL
+	SELECT 'test1' AS c1, 'test2' AS c2, 'test3' AS c3
+	UNION ALL
+	SELECT 'test1' AS c1, 'test1' AS c2, 'test1' AS c3
+) t;
+
+WITH temp AS (
+		SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3
+		UNION ALL
+		SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3
+	)
+SELECT c1, c2, c3
+FROM (
+	SELECT c1, c2, c3
+	FROM temp
+	UNION ALL
+	SELECT 'test1' AS c1, 'test1' AS c2, 'test1' AS c3
+	UNION ALL
+	SELECT 'test2' AS c1, 'test2' AS c2, 'test2' AS c3
+) t;
+
+
+WITH temp AS (
+		SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3
+		UNION ALL
+		SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3
+	)
+SELECT c1, c2, c3
+FROM (
+	SELECT c1, c2, c3
+	FROM temp
+	UNION ALL
+	SELECT 'test1' AS c1, 'test1' AS c2, 'test2' AS c3
+	UNION ALL
+	SELECT 'test2' AS c1, 'test2' AS c2, 'test3' AS c3
+) t;

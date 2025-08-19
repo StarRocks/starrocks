@@ -29,7 +29,7 @@ public abstract class BaseTaskRunProcessor implements TaskRunProcessor {
     }
 
     @Override
-    public void processTaskRun(TaskRunContext context) throws Exception {
+    public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
         throw new NotImplementedException("Method processTaskRun need to implement");
     }
 
@@ -41,7 +41,7 @@ public abstract class BaseTaskRunProcessor implements TaskRunProcessor {
         }
     }
 
-    protected void auditAfterExec(TaskRunContext context, StatementBase parsedStmt, PQueryStatistics statistics) {
+    public void auditAfterExec(TaskRunContext context, StatementBase parsedStmt, PQueryStatistics statistics) {
         String origStmt = context.getDefinition();
         ConnectContext ctx = context.getCtx();
         ConnectProcessor processor = new ConnectProcessor(ctx);

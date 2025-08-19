@@ -70,6 +70,12 @@ None	None	None
 2	3	None
 2	3	2
 -- !result
+select * from lineitem_nullable l1 where not exists ( select 1 from lineitem_nullable l3 where l3.l_orderkey = l1.l_orderkey and l3.l_suppkey != l1.l_suppkey) order by 1,2,3;
+-- result:
+None	None	None
+2	3	None
+2	3	2
+-- !result
 set pipeline_dop = 1;
 -- result:
 -- !result
@@ -80,4 +86,113 @@ select count(*) from (SELECT * from (SELECT if (generate_series <= 1000, null, g
 select count(*) from (SELECT * from (SELECT if (generate_series <= 1000, null, generate_series) x0 FROM TABLE(generate_series(1,  8192))) t where (x0, concat("l", x0)) not in  ( select l3.l_orderkey, concat("l", l_orderkey) from lineitem l3 ) order by 1) t;
 -- result:
 7192
+-- !result
+CREATE TABLE `aware3` (
+  `k1` int(11) COMMENT "",
+  `k2` int(11)  COMMENT "",
+  `k3` int(11)
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into aware3 SELECT generate_series, if(generate_series<4095, 1, null), if(generate_series<4095, generate_series, null) FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+CREATE TABLE `build1` (
+  `k1` int(11) COMMENT "",
+  `k2` int(11)  COMMENT "",
+  `k3` int(11)
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into build1 values (1,1,1),(1,1,1),(1,1,1),(1,1,1),(1,1,1),(1,1,1),(1,1,1),(2,2,2),(3,3,3),(4,4,4);
+-- result:
+-- !result
+select count(*) from aware3 l where l.k2 not in (select k2 from build1 r where r.k3 = coalesce(l.k3, 2));
+-- result:
+4093
+-- !result
+select count(*) from aware3 l where 1 not in (select k2 from build1 r);
+-- result:
+0
+-- !result
+select count(*) from aware3 l where 5 not in (select k2 from build1 r);
+-- result:
+4096
+-- !result
+select count(*) from aware3 l where null not in (select k2 from build1 r);
+-- result:
+0
+-- !result
+select count(*) from aware3 l where 1 not in (select k2 from build1 r where r.k3 != l.k3);
+-- result:
+3
+-- !result
+select count(*) from aware3 l where 1000 not in (select k2 from build1 r where r.k3 != l.k3);
+-- result:
+4096
+-- !result
+CREATE TABLE `build2` (
+  `k1` int(11) COMMENT "",
+  `k2` int(11)  COMMENT "",
+  `k3` int(11)
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into build2 values (1,1,1),(NULL,NULL,NULL);
+-- result:
+-- !result
+select count(*) from aware3 l where 1 not in (select k2 from build2 r);
+-- result:
+0
+-- !result
+select count(*) from aware3 l where null not in (select k2 from build2 r);
+-- result:
+0
+-- !result
+select count(*) from aware3 l where 5 not in (select k2 from build2 r);
+-- result:
+0
+-- !result
+select count(*) from aware3 l where l.k2 not in (select k2 from build1 r where r.k3 = l.k3 );
+-- result:
+4095
+-- !result
+select count(*) from aware3 l where 1 not in (select k2 from build1 r where r.k3 != l.k3 );
+-- result:
+3
+-- !result
+select count(*) from aware3 l where l.k2 not in (select k2 from build2 r where r.k3 = l.k3 );
+-- result:
+4095
+-- !result
+select count(*) from aware3 l where 1 not in (select k2 from build2 r where r.k3 != l.k3 );
+-- result:
+3
 -- !result

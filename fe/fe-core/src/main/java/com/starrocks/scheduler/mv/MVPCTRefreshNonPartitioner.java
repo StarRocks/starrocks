@@ -24,9 +24,9 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.scheduler.MvTaskRunContext;
-import com.starrocks.scheduler.TableSnapshotInfo;
 import com.starrocks.scheduler.TaskRunContext;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -66,7 +66,7 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public Set<String> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
-                                                Map<Long, TableSnapshotInfo> snapshotBaseTables,
+                                                Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
                                                 MVRefreshParams mvRefreshParams,
                                                 Set<String> mvPotentialPartitionNames) {
         // non-partitioned materialized view
@@ -92,5 +92,10 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     public void filterPartitionByAdaptiveRefreshNumber(Set<String> mvPartitionsToRefresh,
                                                        Set<String> mvPotentialPartitionNames, boolean tentative) {
         // do nothing
+    }
+
+    @Override
+    protected int getAdaptivePartitionRefreshNumber(Iterator<String> partitionNameIter) throws MVAdaptiveRefreshException {
+        return 0;
     }
 }

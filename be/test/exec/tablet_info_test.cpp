@@ -110,7 +110,6 @@ TEST_F(OlapTablePartitionParamTest, unknown_distributed_col) {
     t_partition_param.__set_distributed_columns({"c4"});
     t_partition_param.partitions.resize(1);
     t_partition_param.partitions[0].id = 10;
-    t_partition_param.partitions[0].num_buckets = 1;
     t_partition_param.partitions[0].indexes.resize(2);
     t_partition_param.partitions[0].indexes[0].index_id = 4;
     t_partition_param.partitions[0].indexes[0].tablets = {21};
@@ -137,7 +136,6 @@ TEST_F(OlapTablePartitionParamTest, bad_index) {
         t_partition_param.__set_distributed_columns({"c1", "c3"});
         t_partition_param.partitions.resize(1);
         t_partition_param.partitions[0].id = 10;
-        t_partition_param.partitions[0].num_buckets = 1;
         t_partition_param.partitions[0].indexes.resize(1);
         t_partition_param.partitions[0].indexes[0].index_id = 4;
         t_partition_param.partitions[0].indexes[0].tablets = {21};
@@ -156,7 +154,6 @@ TEST_F(OlapTablePartitionParamTest, bad_index) {
         t_partition_param.__set_distributed_columns({"c1", "c3"});
         t_partition_param.partitions.resize(1);
         t_partition_param.partitions[0].id = 10;
-        t_partition_param.partitions[0].num_buckets = 1;
         t_partition_param.partitions[0].indexes.resize(2);
         t_partition_param.partitions[0].indexes[0].index_id = 4;
         t_partition_param.partitions[0].indexes[0].tablets = {21};
@@ -196,6 +193,44 @@ TEST_F(OlapTablePartitionParamTest, NodesInfo) {
         auto node = nodes.find_node(2);
         ASSERT_TRUE(node == nullptr);
     }
+}
+
+TEST_F(OlapTablePartitionParamTest, removePartition) {
+    Columns columns;
+    for (size_t i = 0; i < 2; i++) {
+        auto column = FixedLengthColumn<int32_t>::create();
+        for (int j = 0; j < 5; j++) {
+            column->append(j);
+        }
+        columns.emplace_back(column);
+    }
+    ChunkRow row1(&columns, 0);
+    ChunkRow row2(&columns, 1);
+    ChunkRow row3(&columns, 2);
+
+    OlapTablePartition partition1;
+    partition1.id = 10;
+
+    OlapTablePartition partition2;
+    partition2.id = 11;
+    partition2.end_key = row1;
+
+    OlapTablePartition partition3;
+    partition3.id = 12;
+    partition3.in_keys.push_back(row2);
+
+    TDescriptorTable t_desc_tbl;
+    auto t_schema = get_schema(&t_desc_tbl);
+    std::shared_ptr<OlapTableSchemaParam> schema(new OlapTableSchemaParam());
+    TOlapTablePartitionParam t_partition_param;
+    OlapTablePartitionParam part(schema, t_partition_param);
+
+    ASSERT_TRUE(part.test_add_partitions(&partition1).ok());
+    ASSERT_TRUE(part.remove_partitions({10}).ok());
+
+    ASSERT_TRUE(part.test_add_partitions(&partition2).ok());
+    ASSERT_TRUE(part.test_add_partitions(&partition3).ok());
+    ASSERT_TRUE(part.remove_partitions({11, 12}).ok());
 }
 
 } // namespace starrocks

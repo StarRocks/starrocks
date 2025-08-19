@@ -67,8 +67,8 @@ public:
 
     PageHandleTmpl& operator=(PageHandleTmpl&& other) noexcept {
         std::swap(_is_data_owner, other._is_data_owner);
-        _data = other._data;
-        _cache_data = std::move(other._cache_data);
+        std::swap(_data, other._data);
+        std::swap(_cache_data, other._cache_data);
         return *this;
     }
 

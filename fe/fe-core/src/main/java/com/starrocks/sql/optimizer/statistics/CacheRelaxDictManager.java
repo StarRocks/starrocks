@@ -155,7 +155,7 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
             .maximumSize(Config.statistic_dict_columns)
             .expireAfterAccess(DICT_EXPIRATION_SECONDS, TimeUnit.SECONDS)
             .refreshAfterWrite(DICT_REFRESH_INTERVAL_SECONDS, TimeUnit.SECONDS)
-            .executor(ThreadPoolManager.getDictCacheThreadPoolForLake())
+            .executor(ThreadPoolManager.getStatsCacheThreadPoolForLake())
             .buildAsync(new DictLoader());
 
     private CacheRelaxDictManager() {

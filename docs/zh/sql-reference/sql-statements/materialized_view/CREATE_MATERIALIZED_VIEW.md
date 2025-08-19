@@ -10,10 +10,10 @@ displayed_sidebar: docs
 
 创建物化视图是一个异步的操作。该命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中同步物化视图的构建状态，或通过查询 [Information Schema](../../information_schema/information_schema.md) 中的 [`tasks`](../../information_schema/tasks.md) 和 [`task_runs`](../../information_schema/task_runs.md) 来查看异步物化视图的构建状态。
 
-> **注意**
->
-> - 只有拥有基表所在数据库的 CREATE MATERIALIZED VIEW 权限的用户才可以创建物化视图。
-> - 自 v3.4.0 起，StarRocks 存算分离集群支持同步物化视图。
+:::note
+- 只有拥有基表所在数据库的 CREATE MATERIALIZED VIEW 权限的用户才可以创建物化视图。
+- 自 v3.4.0 起，StarRocks 存算分离集群支持同步物化视图。
+:::
 
 StarRocks 自 v2.4 起支持异步物化视图。异步物化视图与先前版本中的同步物化视图区别主要体现在以下方面：
 
@@ -74,7 +74,7 @@ SELECT select_expr[, select_expr ...]
   > - 从 v3.1 开始，每个同步物化视图支持为基表的每一列使用多个聚合函数，支持形如 `select b, sum(a), min(a) from table group by b` 形式的查询语句。
   > - 从 v3.1 开始，同步物化视图支持 SELECT 和聚合函数的复杂表达式，即形如 `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` 或 `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table` 的查询语句。同步物化视图的复杂表达式有以下限制：
   >   - 每个复杂表达式必须有一个列名，并且基表所有同步物化视图中的不同复杂表达式的别名必须不同。例如，查询语句 `select b, sum(a + 1) as sum_a from table group by b` 和`select b, sum(a) as sum_a from table group by b` 不能同时用于为相同的基表创建同步物化视图，你可以为同一复杂表达式设置多个不同别名。
-  >   - 您可以通过执行 `EXPLAIN <sql_statement>` 来查看您的查询是否被使用复杂表达式创建的同步物化视图改写。更多信息请参见[查询分析](../../../administration/Query_planning.md)。
+  >   - 您可以通过执行 `EXPLAIN <sql_statement>` 来查看您的查询是否被使用复杂表达式创建的同步物化视图改写。更多信息请参见[查询分析](../../../best_practices/query_tuning/query_planning.md)。
 
 - WHERE （选填）
 
@@ -104,9 +104,9 @@ SELECT select_expr[, select_expr ...]
 SELECT * FROM <mv_name> [_SYNC_MV_];
 ```
 
-> **注意**
->
-> 目前，StarRocks 会自动为同步物化视图中的列生成名称。您为同步物化视图中的列指定的 Alias 将无法生效。
+:::note
+目前，StarRocks 会自动为同步物化视图中的列生成名称。您为同步物化视图中的列指定的 Alias 将无法生效。
+:::
 
 ### 同步物化视图查询自动改写
 
@@ -122,6 +122,30 @@ SELECT * FROM <mv_name> [_SYNC_MV_];
 | count                                                  | count                    |
 | bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union             |
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                |
+
+除了上述函数外，从 StarRocks v3.4.0 开始，同步物化视图还支持通用聚合函数。有关通用聚合函数的更多信息，请参见[通用聚合函数状态](../../../table_design/table_types/aggregate_table.md#use-generic-aggregate-states-in-materialized-views)。
+
+```SQL
+-- Create a synchronous materialized view test_mv1 to store aggregate states.
+CREATE MATERIALIZED VIEW test_mv1 
+AS
+SELECT 
+    dt,
+    -- Original aggregate functions.
+    min(id) AS min_id,
+    max(id) AS max_id,
+    sum(id) AS sum_id,
+    bitmap_union(to_bitmap(id)) AS bitmap_union_id,
+    hll_union(hll_hash(id)) AS hll_union_id,
+    percentile_union(percentile_hash(id)) AS percentile_union_id,
+    -- Generic aggregate state functions.
+    ds_hll_count_distinct_union(ds_hll_count_distinct_state(id)) AS hll_id,
+    avg_union(avg_state(id)) AS avg_id,
+    array_agg_union(array_agg_state(id)) AS array_agg_id,
+    min_by_union(min_by_state(province, id)) AS min_by_province_id
+FROM t1
+GROUP BY dt;
+```
 
 ## 异步物化视图
 
@@ -161,9 +185,9 @@ AS
 - 总长度不能超过 64 个字符。
 - 视图名大小写敏感。
 
-> **注意**
->
-> 同一张基表可以创建多个异步物化视图，但同一数据库内的异步物化视图名称不可重复。
+:::note
+同一张基表可以创建多个异步物化视图，但同一数据库内的异步物化视图名称不可重复。
+:::
 
 **COMMENT**（选填）
 
@@ -173,9 +197,9 @@ AS
 
 异步物化视图的分桶方式，包括哈希分桶和随机分桶（自 3.1 版本起）。如不指定该参数，StarRocks 使用随机分桶方式，并自动设置分桶数量。
 
-> **说明**
->
-> 创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+:::info
+创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+:::
 
 - **哈希分桶**：
 
@@ -214,9 +238,9 @@ AS
 
 **refresh_scheme**（选填）
 
-> **说明**
->
-> 创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+:::note
+创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+:::
 
 物化视图的刷新方式。该参数支持如下值：
 
@@ -238,11 +262,11 @@ AS
   - `str2date` 函数：用于将基表的字符串类型分区键转化为物化视图的分区键所需的日期类型。`PARTITION BY str2date(dt, "%Y%m%d")` 表示 `dt` 列是一个 STRING 类型日期，其日期格式为 `"%Y%m%d"`。`str2date` 函数支持多种日期格式。更多信息，参考[str2date](../../sql-functions/date-time-functions/str2date.md)。自 v3.1.4 起支持。
   - `time_slice` 函数：从 v3.1 开始，您可以进一步使用 time_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`，其中 time_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
 
-自 v3.5.0 起，异步物化视图支持多列分区表达式。您可以为物化视图指定多个分区列，一一映射基表的分区列。
+自 v3.5.0 起，异步物化视图支持多列分区表达式。您可以为物化视图指定多个分区列映射基表的全部或者部分分区列。
 
 **多列分区表达式相关说明**:
 
-- 当前物化视图支持的多列分区只能与基表的多列分区一一映射，或者是 N:1 关系，而不能是 M:N 关系。例如，如果基表的分区列为 `(col1, col2, ..., coln)`，则物化视图定义时的分区只能是单列分区，如 `col1`、`col2`、`coln`，或者与基表分区列一一映射，如 `(col1, col2, ..., coln)`。这是因为通用的 M:N 关系会导致基表与物化视图之间的分区映射逻辑复杂，通过一一映射可以简化刷新和分区补偿逻辑。
+- 当前物化视图支持的多列分区只能与基表的分区列直接映射，不支持基表分区列+函数表达式加工后映射。
 - 由于 Iceberg 分区表达式支持 Transform 功能，若 Iceberg 的分区表达式映射到 StarRocks 时，需要额外处理分区表达式。以下为两者对应关系：
 
   | Iceberg Transform | Iceberg 分区表达式      | 物化视图分区表达式             |
@@ -259,17 +283,21 @@ AS
 
 有关多列分区表达式的详细指导，参考 [示例五](#示例)。
 
-> **注意**
->
-> 自 v3.3.3 起，StarRocks 支持创建基于 List 分区策略的异步物化视图。
->
-> - 您可以基于使用 List 分区或表达式分区策略创建的表来创建 List 分区的物化视图。
-> - 目前，当使用 List 分区策略创建物化视图时，您只能指定一个分区键。如果基表有多个分区键，您只能选择其中一个分区键。
-> - 使用 List 分区策略的物化视图的刷新行为和查询改写逻辑与使用 Range 分区策略的物化视图一致。
+:::note
+自 v3.3.3 起，StarRocks 支持创建基于 List 分区策略的异步物化视图。
+- 您可以基于使用 List 分区或表达式分区策略创建的表来创建 List 分区的物化视图。
+- 目前，当使用 List 分区策略创建物化视图时，您只能指定一个分区键。如果基表有多个分区键，您只能选择其中一个分区键。
+- 使用 List 分区策略的物化视图的刷新行为和查询改写逻辑与使用 Range 分区策略的物化视图一致。
+:::
 
 **order_by_expression**（选填）
 
 异步物化视图的排序键。如不指定该参数，StarRocks 从 SELECT 列中选择部分前缀作为排序键，例如：`select a, b, c, d` 中, 排序列可能为 `a` 和 `b`。此参数自 StarRocks 3.0 起支持。
+
+> **注意**
+> 物化视图中有两种不同的 `ORDER BY` 用法：
+> - CREATE MATERIALIZED VIEW 语句中的 `ORDER BY` 定义物化视图的排序键，有助于基于排序键加速查询。这不会影响物化视图的基于 SPJG 的透明加速能力，但不保证物化视图查询结果的全局排序。
+> - 物化视图查询定义中的 `ORDER BY` 保证查询结果的全局排序，但会阻止物化视图用于基于 SPJG 的透明查询改写。因此，如果物化视图用于查询改写，则不应在物化视图的查询定义中使用 `ORDER BY`。
 
 **INDEX**（选填）
 
@@ -306,7 +334,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
 异步物化视图的属性。您可以使用 [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md) 修改已有异步物化视图的属性。
 
-- `session.`: 如果您想要更改与物化视图相关的 Session 变量属性，必须在属性前添加 `session.` 前缀，例如，`session.query_timeout`。对于非 Session 属性，例如，`mv_rewrite_staleness_second`，则无需指定前缀。
+- `session.`: 如果您想要更改与物化视图相关的 Session 变量属性，必须在属性前添加 `session.` 前缀，例如，`session.insert_timeout`。对于非 Session 属性，例如，`mv_rewrite_staleness_second`，则无需指定前缀。
 - `replication_num`：创建物化视图副本数量。
 - `storage_medium`：存储介质类型。有效值：`HDD` 和 `SSD`。
 - `storage_cooldown_time`: 当设置存储介质为 SSD 时，指定该分区在该时间点之后从 SSD 降冷到 HDD，设置的时间必须大于当前时间。如不指定该属性，默认不进行自动降冷。取值格式为："yyyy-MM-dd HH:mm:ss"。
@@ -314,16 +342,25 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 - `partition_ttl`: 物化视图分区的生存时间 (TTL)。数据在指定的时间范围内的分区将被保留，过期的分区将被自动删除。单位：`YEAR`、`MONTH`、`DAY`、`HOUR` 和 `MINUTE`。例如，您可以将此属性设置为 `2 MONTH`（2个月）。建议您使用此属性，不推荐使用 `partition_ttl_number`。该属性自 v3.1.5 起支持。
 - `partition_ttl_number`：需要保留的最近的物化视图分区数量。对于分区开始时间小于当前时间的分区，当数量超过该值之后，多余的分区将会被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。在[动态分区](../../../table_design/data_distribution/dynamic_partitioning.md)场景下，提前创建的未来分区将不会被纳入 TTL 考虑。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
 - `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。当值为 `-1` 时，将不会拆分刷新任务。自 v3.3 起，默认值由 `-1` 变为 `1`，表示 StarRocks 每次只刷新一个分区。
+- `partition_refresh_strategy`：单次刷新中物化视图的刷新策略。当值为`adaptive`，会根据基表分区的数据量来自行判断此次刷新需要刷新的分区数，此策略会极大地提高刷新效率。如不指定该属性，默认是`strict`, 即单次刷新完全由`partition_refresh_number`来控制。
 - `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
+
+- `excluded_refresh_tables`：在此项属性中列出的基表，其数据产生变化时不会更新至物化视图。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
+
+  :::tip
+  `excluded_trigger_tables` 和 `excluded_refresh_tables` 的区别为：
+  - `excluded_trigger_tables` 控制的是是否触发刷新，而不控制在刷新时是否参与。例如分区物化视图是A、B两个分区表 Join 所得，A、B两个表的分区一一对应。`excluded_trigger_table` 包含表 A, 一段时间内表 A 更新了分区 [1,2,3], 但因为它是 `excluded_trigger_table`，因此没有触发物化视图的刷新。此时表B更新了分区 [3]，物化视图触发了刷新，会刷新 [1,2,3] 三个分区。在这里可以看到，`excluded_trigger_table` 只是控制是否触发刷新。A 表的更新虽然不能触发物化视图刷新，但当B表的更新触发物化视图刷新时，A 表更新的分区也会被加入至刷新任务中。
+  - `excluded_refresh_tables` 控制的是是否参与刷新。上述例子中，如 A 表同时存在于 `excluded_trigger_table` 和 `excluded_refresh_tables` 中时，当 B 表更新触发了物化视图刷新时，只会刷新分区[3]。
+  :::
+
 - `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并刷新当前分区和 N-1 个历史分区。如果分区数不足 N，则刷新所有已存在的分区。如果物化视图存在提前创建的未来分区，将会刷新所有提前创建的分区。
 - `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可直接用于查询改写，无论基表数据是否更新。如果上一次刷新时间早于此属性指定的时间间隔，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询改写。单位：秒。该属性自 v3.0 起支持。
 - `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
 - `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#view-delta-join-改写)。该属性自 v3.0 起支持。
-- `excluded_refresh_tables`：在此项属性中列出的基表，其数据产生变化时不会触发该表的数据刷新到物化视图。通常需要与属性 `excluded_trigger_tables` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
 
-  > **注意**
-  >
-  > Unique Key 约束和外键约束仅用于查询改写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
+  :::note
+  Unique Key 约束和外键约束仅用于查询改写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
+  :::
 
 - `resource_group`: 为物化视图刷新任务设置资源组。默认值为 `default_mv_wg`，即一个系统定义的，专门用于物化视图刷新的资源组。该资源组的 `cpu_core_limit` 为 `1`，`mem_limit` 为 `0.8`。更多关于资源组信息，请参考[资源隔离](../../../administration/management/resource_management/resource_group.md)。
 - `query_rewrite_consistency`: 指定当前异步物化视图的查询改写规则。该属性自 v3.2 起支持。有效值：
@@ -385,9 +422,9 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
   - **半结构化类型**：ARRAY、JSON、MAP（自 v3.1 起）、STRUCT（自 v3.1 起）
   - **其他类型**：BITMAP、HLL
 
-> **说明**
->
-> 自 v2.4.5 起支持 BITMAP、HLL 以及 PERCENTILE。
+:::note
+自 v2.4.5 起支持 BITMAP、HLL 以及 PERCENTILE。
+:::
 
 - 基于 StarRocks 外部数据目录（External Catalog）创建的异步物化视图支持以下数据类型：
 
@@ -773,8 +810,10 @@ PROPERTIES (
 示例一：从源表创建非分区物化视图
 
 ```SQL
+-- 创建一个按 lo_custkey 排序的非分区物化视图
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC
 AS
 select
@@ -784,16 +823,17 @@ select
     sum(lo_revenue) as total_revenue, 
     count(lo_shipmode) as shipmode_count
 from lineorder 
-group by lo_orderkey, lo_custkey 
-order by lo_orderkey;
+group by lo_orderkey, lo_custkey;
 ```
 
 示例二：从源表创建分区物化视图
 
 ```SQL
+-- 创建一个按 `lo_orderdate` 分区并按 `lo_custkey` 排序的分区物化视图
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -804,8 +844,8 @@ select
     sum(lo_revenue) as total_revenue, 
     count(lo_shipmode) as shipmode_count
 from lineorder 
-group by lo_orderkey, lo_orderdate, lo_custkey
-order by lo_orderkey;
+group by lo_orderkey, lo_orderdate, lo_custkey;
+```
 
 # 使用 date_trunc 函数将 `dt` 列截断至以月为单位进行分区。
 CREATE MATERIALIZED VIEW order_mv1
@@ -975,6 +1015,25 @@ PROPERTIES (
     "query_rewrite_consistency" = "force_mv"
 )
 AS SELECT * from t1;
+```
+
+示例七：创建具有特定排序键的分区物化视图：
+```SQL
+CREATE MATERIALIZED VIEW lo_mv2
+PARTITION BY `lo_orderdate`
+DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
+REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+AS
+select
+    lo_orderkey,
+    lo_orderdate,
+    lo_custkey, 
+    sum(lo_quantity) as total_quantity, 
+    sum(lo_revenue) as total_revenue, 
+    count(lo_shipmode) as shipmode_count
+from lineorder 
+group by lo_orderkey, lo_orderdate, lo_custkey;
 ```
 
 

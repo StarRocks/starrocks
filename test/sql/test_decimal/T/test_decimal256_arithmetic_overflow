@@ -1,0 +1,424 @@
+-- name: test_decimal256_arithmetic_overflow
+DROP DATABASE IF EXISTS test_decimal256_overflow;
+CREATE DATABASE test_decimal256_overflow;
+USE test_decimal256_overflow;
+
+-- =============================================================================
+-- TEST-0: int256 boundary values extreme cases
+-- =============================================================================
+
+CREATE TABLE powers_of_2 (
+    power_250 DECIMAL(76, 0)
+) PROPERTIES("replication_num"="1");
+
+-- pow(2, 250)
+insert into powers_of_2 select 1809251394333065553493296640760748560207343510400633813116524750123642650624;
+
+-- INT_256MAX
+select cast(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495 as string) from powers_of_2;
+
+-- INT_256MIN
+select cast((-(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) - 1) as string) from powers_of_2;
+
+-- INT_256MAX + 1 (overflow)
+select cast(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495 + 1 as string) from powers_of_2;
+
+-- INT_256MAX - 1 (INT_256MAX - 1)
+select cast(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495 - 1 as string) from powers_of_2;
+
+-- INT_256MAX * 0 (0)
+select cast((power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) * 0 as string) from powers_of_2;
+
+-- INT_256MAX * -1 (-INT_256MAX)
+select cast((power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) * -1 as string) from powers_of_2;
+
+-- INT_256MAX * 2 (overflow)
+select cast((power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) * 2 as string) from powers_of_2;
+
+-- INT_256MAX * -2 (overflow)
+select cast((power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) * -2 as string) from powers_of_2;
+
+-- INT_256MIN - 1 (overflow)
+select cast((-(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) - 1) - 1 as string) from powers_of_2;
+
+-- INT_256MIN + 1 (not overflow)
+select cast((-(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) - 1) + 1 as string) from powers_of_2;
+
+-- INT_256MIN * 1 (INT_256MIN)
+select cast((-(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) - 1) * 1 as string) from powers_of_2;
+
+-- INT_256MIN * -1 (overflow. special case)
+select cast((-(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) - 1) * -1 as string) from powers_of_2;
+
+-- INT_256MIN * -2 (overflow)
+select cast((-(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) - 1) * -2 as string) from powers_of_2;
+
+-- INT_256MIN * 2 (overflow)
+select cast((-(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) - 1) * 2 as string) from powers_of_2;
+
+-- INT_256MIN * 0 (0)
+select cast((-(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) - 1) * 0 as string) from powers_of_2;
+
+-- INT_256MIN + INT256_MAX(-1)
+select cast(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495 + (-(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) - 1) as string) from powers_of_2;
+
+-- INT_256MAX * INT_256MIN (overflow)
+select cast((power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) * (-(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) - 1) as string) from powers_of_2;
+
+-- INT_256MAX * INT_256MAX (overflow)
+select cast((power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) * (power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) as string) from powers_of_2;
+
+-- INT_256MIN * INT_256MIN (overflow)
+select cast((-(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) - 1) * (-(power_250 * 16 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602496 + 7237005577332262213973186563042994240829374041602535252466099000494570602495) - 1) as string) from powers_of_2;
+
+-- TEST INT_256MAX result (bit count is 256)
+create table test_256max_result(d1 decimal(76, 0)) PROPERTIES("replication_num"="1");
+insert into test_256max_result select 1496577676626844588240573307387100039795808514605057;
+select cast(d1 * 38685626227668133590597631 as string) from test_256max_result;
+
+-- TEST INT_256MIN result (bit count is 257)
+create table test_256min_result(d1 decimal(76, 0), d2 decimal(76, 0)) PROPERTIES("replication_num"="1");
+insert into test_256min_result select 340282366920938463463374607431768211456, -170141183460469231731687303715884105728;
+select cast(d1 * d2 as string) from test_256min_result; -- 2^128 * -2^127
+
+CREATE TABLE test_decimal_multiply_overflow (
+    id INT,
+    case_desc VARCHAR(200),
+    d60_30 DECIMAL(60, 30),
+    d70_20 DECIMAL(70, 20),
+    d76_10 DECIMAL(76, 10),
+    d76_38 DECIMAL(76, 38),
+    d50_0  DECIMAL(50, 0),
+    d38_0  DECIMAL(38, 0)   -- Maximum 38-digit decimal number
+) PROPERTIES("replication_num"="1");
+
+-- Insert test data
+INSERT INTO test_decimal_multiply_overflow VALUES
+-- 1. Small values
+(1, 'Small values',
+ 1.123456789012345678901234567890,
+ 12.12345678901234567890,
+ 123.1234567890,
+ 0.12345678901234567890123456789012345678,
+ 1000,
+ 12345),
+
+-- 2. Medium values
+(2, 'Medium values',
+ 123456789012345678901234567890.123456789012345678901234567890,  -- 60 digits
+ 12345678901234567890123456789012345678901234567890.12345678901234567890,  -- 70 digits
+ 1234567890123456789012345678901234567890123456789012345678901234.1234567890,  -- 76 digits
+ 12345678901234567890123456789012345678.12345678901234567890123456789012345678,  -- 76 digits
+ 12345678901234567890123456789012345678901234567890,  -- 50 digits
+ 12345678901234567890123456789012345678),  -- 38 digits
+
+-- 3. Near maximum values for each type
+(3, 'Near max positive values',
+ 999999999999999999999999999999.999999999999999999999999999999,  -- d60_30 maximum
+ 99999999999999999999999999999999999999999999999999.99999999999999999999,  -- d70_20 maximum
+ 9999999999999999999999999999999999999999999999999999999999999999.9999999999,  -- d76_10 maximum
+ 99999999999999999999999999999999999999.99999999999999999999999999999999999999,  -- d76_38 maximum
+ 99999999999999999999999999999999999999999999999999,  -- d50_0 maximum
+ 99999999999999999999999999999999999999),  -- d38_0 maximum (38 nines)
+
+-- 4. Corresponding negative values
+(4, 'Near max negative values',
+ -999999999999999999999999999999.999999999999999999999999999999,
+ -99999999999999999999999999999999999999999999999999.99999999999999999999,
+ -9999999999999999999999999999999999999999999999999999999999999999.9999999999,
+ -99999999999999999999999999999999999999.99999999999999999999999999999999999999,
+ -99999999999999999999999999999999999999999999999999,
+ -99999999999999999999999999999999999999);
+
+
+-- =============================================================================
+-- Create dedicated boundary value test table
+-- =============================================================================
+
+CREATE TABLE test_boundary_values (
+    id INT,
+    case_desc VARCHAR(200),
+    -- Designed based on actual DECIMAL precision limits
+    val_76_0 DECIMAL(76, 0),
+    val_38_0 DECIMAL(38, 0),
+    val_19_0 DECIMAL(19, 0),
+    val_25_0 DECIMAL(25, 0),
+    val_high_scale DECIMAL(76, 50)
+) PROPERTIES("replication_num"="1");
+
+INSERT INTO test_boundary_values VALUES
+-- 1. Near 76-digit decimal maximum
+(1, 'Near 76-digit decimal max',
+ 9999999999999999999999999999999999999999999999999999999999999999999999999999,  -- 76 nines
+ 99999999999999999999999999999999999999,  -- 38 nines
+ 9999999999999999999,  -- 19 nines
+ 9999999999999999999999999,  -- 25 nines
+ 0.00000000000000000000000000000000000000000000000001),
+
+-- 2. Corresponding negative values
+(2, 'Near 76-digit decimal min',
+ -9999999999999999999999999999999999999999999999999999999999999999999999999999,
+ -99999999999999999999999999999999999999,
+ -9999999999999999999,
+ -9999999999999999999999999,
+ -0.00000000000000000000000000000000000000000000000001),
+
+-- 3. Values for testing multiplication overflow
+(3, 'Multiplication overflow test values',
+ 1000000000000000000000000000000000000000000000000000000000000000000000000000,  -- 76-digit 10^75
+ 10000000000000000000000000000000000000,  -- 38-digit 10^37
+ 1000000000000000000,  -- 19-digit 10^18
+ 1000000000000000000000000,  -- 25-digit 10^24
+ 0.00000000000000000000000000000000000000000000000001),
+
+-- 4. Medium size values
+(4, 'Medium size values',
+ 5000000000000000000000000000000000000000000000000000000000000000000000000000,  -- 76-digit 5*10^75
+ 50000000000000000000000000000000000000,  -- 38-digit 5*10^37
+ 5000000000000000000,  -- 19-digit 5*10^18
+ 5000000000000000000000000,  -- 25-digit 5*10^24
+ 0.50000000000000000000000000000000000000000000000000);
+
+-- =============================================================================
+-- Test 1: Positive number multiplication overflow
+-- =============================================================================
+
+-- Test 76-digit max multiplication (definite overflow)
+SELECT
+    'Test 1.1: 76-digit max * 76-digit max (definite overflow)' as test_case,
+    cast(val_76_0 as string),
+    cast(val_76_0 * val_76_0 as string) as result,
+    'Should overflow: 10^75 * 10^75 = 10^150, way beyond int256' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- Test 38-digit max multiplication (may overflow)
+SELECT
+    'Test 1.2: 38-digit max * 38-digit max (may overflow)' as test_case,
+    cast(val_38_0 as string),
+    cast(cast(val_38_0 as decimal(76, 0)) * val_38_0 as string) as result,
+    'not overflow' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- Test 19-digit multiplication (should not overflow)
+SELECT
+    'Test 1.3: 19-digit * 19-digit (should not overflow)' as test_case,
+    cast(val_19_0 as string),
+    cast(val_19_0 * val_19_0 as string) as result,
+    'Should not overflow: 10^18 * 10^18 = 10^36, within int256' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- Test large number multiplied by 2
+SELECT
+    'Test 1.4: Large value * 2' as test_case,
+    cast(val_76_0 as string),
+    cast(val_76_0 * 2 as string) as result,
+    'Should overflow: near-max * 2' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- Test large number multiplied by 5 (not overflow)
+SELECT
+    'Test 1.5: Large value * 5' as test_case,
+    cast(val_76_0 as string),
+    cast(val_76_0 * 5 as string) as result,
+    'Should overflow: near-max * 5' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- Test large number multiplied by 5.1 (overflow)
+SELECT
+    'Test 1.6: Large value * 5.1' as test_case,
+    cast(val_76_0 as string),
+    cast(val_76_0 * 5.1 as string) as result,
+    'Should overflow: near-max * 5.1' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- Test large number multiplied by 6 (overflow)
+SELECT
+    'Test 1.7: Large value * 6' as test_case,
+    cast(val_76_0 as string),
+    cast(val_76_0 * 6 as string) as result,
+    'Should overflow: near-max * 6' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- =============================================================================
+-- Test 2: Negative number multiplication overflow
+-- =============================================================================
+
+-- Test large negative * large negative = positive overflow
+SELECT
+    'Test 2.1: Large negative * Large negative (positive overflow)' as test_case,
+    cast(val_76_0 as string),
+    cast(val_76_0 * val_76_0 as string) as result,
+    'Should overflow: (-10^75) * (-10^75) = +10^150' as expected
+FROM test_boundary_values WHERE id = 2;
+
+-- Test large negative * positive = negative overflow
+SELECT
+    'Test 2.2: Large negative * Large positive (negative overflow)' as test_case,
+    cast(a.val_76_0 as string) as neg_val,
+    cast(b.val_76_0 as string) as pos_val,
+    cast(a.val_76_0 * b.val_76_0 as string) as result,
+    'Should overflow: (-10^75) * (+10^75) = -10^150' as expected
+FROM test_boundary_values a, test_boundary_values b
+WHERE a.id = 2 AND b.id = 1;
+
+-- Test negative boundary case
+SELECT
+    'Test 2.3: Negative boundary * 5' as test_case,
+    cast(val_76_0 as string),
+    cast(val_76_0 * 5 as string) as result,
+    'Should not overflow' as expected
+FROM test_boundary_values WHERE id = 2;
+
+-- Test negative boundary case
+SELECT
+    'Test 2.4: Negative boundary * 6' as test_case,
+    cast(val_76_0 as string),
+    cast(val_76_0 * 6 as string) as result,
+    'Should overflow' as expected
+FROM test_boundary_values WHERE id = 2;
+
+-- =============================================================================
+-- Test 3: Different precision combination overflow tests
+-- =============================================================================
+
+-- 76-digit * 38-digit
+SELECT
+    'Test 3.1: 76-digit * 38-digit' as test_case,
+    cast(a.val_76_0 as string),
+    cast(b.val_38_0 as string),
+    cast(a.val_76_0 * b.val_38_0 as string) as result,
+    'Should overflow: 10^75 * 10^37 = 10^112' as expected
+FROM test_boundary_values a, test_boundary_values b
+WHERE a.id = 1 AND b.id = 1;
+
+-- 38-digit * 25-digit
+-- can't auto scale up now
+SELECT
+    'Test 3.2: 38-digit * 25-digit' as test_case,
+    cast(a.val_38_0 as string),
+    cast(b.val_25_0 as string),
+    cast(a.val_38_0 * b.val_25_0 as string) as result,
+    'overflow' as expected
+FROM test_boundary_values a, test_boundary_values b
+WHERE a.id = 1 AND b.id = 1;
+
+-- 38-digit * 25-digit
+SELECT
+    'Test 3.2: 38-digit * 25-digit' as test_case,
+    cast(a.val_38_0 as string),
+    cast(b.val_25_0 as string),
+    cast(cast(a.val_38_0 as decimal(50, 10)) * b.val_25_0 as string) as result,
+    'should not overflow' as expected
+FROM test_boundary_values a, test_boundary_values b
+WHERE a.id = 1 AND b.id = 1;
+
+-- 25-digit * 25-digit
+-- can't auto scale up now
+SELECT
+    'Test 3.3: 25-digit * 25-digit' as test_case,
+    cast(val_25_0 as string),
+    cast(val_25_0 * val_25_0 as string) as result,
+    'overflow' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- 25-digit * 25-digit
+SELECT
+    'Test 3.3: 25-digit * 25-digit' as test_case,
+    cast(val_25_0 as string),
+    cast(val_25_0 * cast(val_25_0 as decimal(39, 0)) as string) as result,
+    'should not overflow' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- =============================================================================
+-- Test 4: Progressive boundary testing
+-- =============================================================================
+
+CREATE TABLE test_progressive_boundary (
+    id INT,
+    digits INT,
+    test_val DECIMAL(76, 0)
+) PROPERTIES("replication_num"="1");
+
+-- Insert different digit count test values
+INSERT INTO test_progressive_boundary VALUES
+(1, 10, 9999999999),                    -- 10 digits
+(2, 15, 999999999999999),               -- 15 digits
+(3, 20, 99999999999999999999),          -- 20 digits
+(4, 25, 9999999999999999999999999),     -- 25 digits
+(5, 30, 999999999999999999999999999999), -- 30 digits
+(6, 35, 99999999999999999999999999999999999), -- 35 digits
+(7, 38, 99999999999999999999999999999999999999); -- 38 digits
+
+-- Test self-multiplication, observe overflow boundary
+SELECT
+    id,
+    digits,
+    cast(test_val as string),
+    cast(test_val * test_val as string) as result,
+    CASE
+        WHEN digits <= 19 THEN 'Should succeed'
+        WHEN digits <= 25 THEN 'May succeed'
+        WHEN digits > 30 THEN 'Should succeed'
+        ELSE 'Boundary case'
+    END as expected
+FROM test_progressive_boundary ORDER BY id;
+
+-- =============================================================================
+-- Test 5: Scale overflow vs value overflow distinction
+-- =============================================================================
+
+-- throw exception
+SELECT
+    'Test 5.1: Scale overflow, tiny value' as test_case,
+    cast(val_high_scale * val_high_scale as string) as result,
+    'Should fail due to scale=100 > 76' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- Value overflow but reasonable scale
+SELECT
+    'Test 5.2: Value overflow, scale OK' as test_case,
+        cast(val_38_0 * val_38_0 as string) as result,
+    'Should fail due to value overflow, scale=0 is fine' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- =============================================================================
+-- Test 6: Special values and boundary cases
+-- =============================================================================
+
+-- Multiply by 0
+SELECT
+    'Test 6.1: Large * 0' as test_case,
+    cast(val_76_0 * 0 as string) as result,
+    'Should return 0, no overflow' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- Multiply by 1
+SELECT
+    'Test 6.2: Large * 1' as test_case,
+    cast(val_76_0 * 1 as string) as result,
+    'Should return original value' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- Multiply by decimal
+SELECT
+    'Test 6.3: Large * 0.1' as test_case,
+    cast(val_76_0 * 0.1 as string) as result,
+    'Should succeed, reduces magnitude' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- Multiply by -1
+SELECT
+    'Test 6.4: Large * -1' as test_case,
+    cast(val_76_0 * (-1) as string) as result,
+    'Should return negative of original' as expected
+FROM test_boundary_values WHERE id = 1;
+
+-- =============================================================================
+-- Test 7: Real-world scenario boundary tests
+-- =============================================================================
+-- Test scientific computation scenario
+SELECT
+    'Test 7.2: Scientific calculation' as test_case,
+    cast(d76_10 * d76_10 as string) as result,
+    'Simulates scientific computation overflow' as expected
+FROM test_decimal_multiply_overflow WHERE id = 3;

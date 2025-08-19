@@ -333,20 +333,22 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBE
         // collect all tablets belong to this rollup
         std::vector<PTabletWithPartition> tablets;
         auto* index = _schema->indexes()[i];
-        std::unordered_map<int64_t, std::vector<int64_t>> tablet_to_be;
+        auto& tablet_to_be = index_id_to_tablet_be_map[index->index_id];
         for (auto& [id, part] : partitions) {
-            for (auto tablet : part->indexes[i].tablets) {
-                PTabletWithPartition tablet_info;
-                tablet_info.set_tablet_id(tablet);
+            for (auto tablet_id : part->indexes[i].tablets) {
+                auto& tablet_info = tablets.emplace_back();
+                tablet_info.set_tablet_id(tablet_id);
                 tablet_info.set_partition_id(part->id);
 
                 // setup replicas
-                auto* location = _location->find_tablet(tablet);
+                auto* location = _location->find_tablet(tablet_id);
                 if (location == nullptr) {
-                    auto msg = fmt::format("Failed to find tablet {} location info", tablet);
+                    auto msg = fmt::format("Failed to find tablet_id {} location info", tablet_id);
                     return Status::NotFound(msg);
                 }
-                tablet_to_be.emplace(tablet, location->node_ids);
+                if (!tablet_to_be.emplace(tablet_id, location->node_ids).second) {
+                    return Status::InvalidArgument(fmt::format("Duplicated tablet_id: {}", tablet_id));
+                }
 
                 auto node_ids_size = location->node_ids.size();
                 for (size_t i = 0; i < node_ids_size; ++i) {
@@ -380,11 +382,8 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBE
                         }
                     }
                 }
-
-                tablets.emplace_back(std::move(tablet_info));
             }
         }
-        index_id_to_tablet_be_map.emplace(index->index_id, std::move(tablet_to_be));
 
         auto channel = std::make_unique<IndexChannel>(this, index->index_id, index->where_clause);
         RETURN_IF_ERROR(channel->init(state, tablets, false));
@@ -535,18 +534,22 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
     IndexIdToTabletBEMap index_tablet_bes_map;
     for (auto& t_part : partitions) {
         for (auto& index : t_part.indexes) {
-            std::vector<PTabletWithPartition> tablets;
+            auto& tablets = index_tablets_map[index.index_id];
+            auto& tablet_to_be = index_tablet_bes_map[index.index_id];
             // setup new partitions's tablets
-            for (auto tablet : index.tablets) {
-                PTabletWithPartition tablet_info;
-                tablet_info.set_tablet_id(tablet);
+            for (auto tablet_id : index.tablets) {
+                auto& tablet_info = tablets.emplace_back();
+                tablet_info.set_tablet_id(tablet_id);
                 // TODO: support logical materialized views;
                 tablet_info.set_partition_id(t_part.id);
 
-                auto* location = _location->find_tablet(tablet);
+                auto* location = _location->find_tablet(tablet_id);
                 if (location == nullptr) {
-                    auto msg = fmt::format("Failed to find tablet {} location info in incremental open", tablet);
+                    auto msg = fmt::format("Failed to find tablet_id {} location info in incremental open", tablet_id);
                     return Status::NotFound(msg);
+                }
+                if (!tablet_to_be.emplace(tablet_id, location->node_ids).second) {
+                    return Status::InvalidArgument(fmt::format("Duplicated tablet_id: {}", tablet_id));
                 }
 
                 for (auto& node_id : location->node_ids) {
@@ -558,11 +561,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
                     replica->set_host(node_info->host);
                     replica->set_port(node_info->brpc_port);
                     replica->set_node_id(node_id);
-
-                    index_tablet_bes_map[index.index_id][tablet].emplace_back(node_id);
                 }
-
-                index_tablets_map[index.index_id].emplace_back(std::move(tablet_info));
             }
         }
     }
@@ -897,13 +896,15 @@ void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& s
     if (state->has_reached_max_error_msg_num()) {
         return;
     }
-    std::string error_str = str.to_string();
-    if (error_str.length() > 100) {
-        error_str = error_str.substr(0, 100);
+    std::string error_str;
+    if (str.get_size() > 100) {
+        error_str.assign(str.get_data(), 100);
         error_str.append("...");
+    } else {
+        error_str = str.to_string();
     }
     std::string error_msg = strings::Substitute("String '$0'(length=$1) is too long. The max length of '$2' is $3",
-                                                error_str, str.size, desc->col_name(), desc->type().len);
+                                                error_str, str.get_size(), desc->col_name(), desc->type().len);
 #if BE_TEST
     LOG(INFO) << error_msg;
 #else
@@ -990,26 +991,28 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         if (_has_auto_increment && _auto_increment_slot_id == desc->id() && column_ptr->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(column_ptr.get());
             // If nullable->has_null() && _null_expr_in_auto_increment == true, it means that user specify a
-            // null value in auto increment column, we abort the entire chunk and append a single error msg.
+            // null value in auto increment column, we abort the all rows with null.
             // Because be know nothing about whether this row is specified by the user as null or setted during planning.
             if (nullable->has_null() && _null_expr_in_auto_increment) {
                 std::stringstream ss;
                 ss << "NULL value in auto increment column '" << desc->col_name() << "'";
-
+                NullData& nulls = nullable->null_column_data();
                 for (size_t j = 0; j < num_rows; ++j) {
-                    _validate_selection[j] = VALID_SEL_FAILED;
-                    // If enable_log_rejected_record is true, we need to log the rejected record.
-                    if (nullable->is_null(j) && state->enable_log_rejected_record()) {
-                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(), "");
+                    if (nulls[j] && _validate_selection[j] != VALID_SEL_FAILED) {
+                        _validate_selection[j] = VALID_SEL_FAILED;
+#if BE_TEST
+                        LOG(INFO) << ss.str();
+#else
+                        if (!state->has_reached_max_error_msg_num()) {
+                            state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
+                        }
+#endif
+                        // If enable_log_rejected_record is true, we need to log the rejected record.
+                        if (state->enable_log_rejected_record()) {
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(), "");
+                        }
                     }
                 }
-#if BE_TEST
-                LOG(INFO) << ss.str();
-#else
-                if (!state->has_reached_max_error_msg_num()) {
-                    state->append_error_msg_to_file("", ss.str());
-                }
-#endif
             }
             chunk->update_column(nullable->data_column(), desc->id());
         }
@@ -1120,6 +1123,9 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
             break;
         case TYPE_DECIMAL128:
             _validate_decimal<TYPE_DECIMAL128>(state, chunk, column, desc, &_validate_selection);
+            break;
+        case TYPE_DECIMAL256:
+            _validate_decimal<TYPE_DECIMAL256>(state, chunk, column, desc, &_validate_selection);
             break;
         case TYPE_MAP: {
             column = ColumnHelper::get_data_column(column);

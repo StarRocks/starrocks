@@ -31,19 +31,19 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 
-public class HiveViewTest extends PlanTestBase {
-    @Rule
-    public ExpectedException expectedException = ExpectedException.none();
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-    @BeforeClass
+public class HiveViewTest extends PlanTestBase {
+
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
@@ -83,16 +83,15 @@ public class HiveViewTest extends PlanTestBase {
     }
 
     @Test
-    public void testHiveViewParseFail() throws Exception {
+    public void testHiveViewParseFail() {
         HiveView hiveView = new HiveView(1, "hive0", "testDb", "test", null,
                 "select\n" +
                         "    t1b,t1a\n" +
                         "from\n" +
                         "    test_all_type\n" +
                         "    lateral view explode(split(t1a,',')) t1a", HiveView.Type.Hive);
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("Failed to parse view-definition statement of view");
-        hiveView.getQueryStatement();
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> hiveView.getQueryStatement());
+        assertThat(exception.getMessage(), containsString("Failed to parse view-definition statement of view"));
     }
 
     @Test
@@ -119,10 +118,10 @@ public class HiveViewTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "TABLE: customer");
 
-        expectedException.expect(SemanticException.class);
-        expectedException.expectMessage("Column '`t0`.`v1`' cannot be resolved");
-        sql = "select * from hive0.tpch.customer_case_insensitive_view v1 join test.t0 T0 on v1.c_custkey = t0.v1";
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(SemanticException.class, () -> {
+            getFragmentPlan("select * from hive0.tpch.customer_case_insensitive_view v1 join test.t0 T0 on v1.c_custkey = t0.v1");
+        });
+        assertThat(exception.getMessage(), containsString("Column '`t0`.`v1`' cannot be resolved"));
     }
 
     @Test
@@ -143,14 +142,14 @@ public class HiveViewTest extends PlanTestBase {
         };
         try {
             hiveMetadata.refreshTable("tpch", hiveView, null, false);
-            Assert.assertTrue(hiveView.isHiveView());
+            Assertions.assertTrue(hiveView.isHiveView());
             HiveView view = (HiveView) hiveView;
-            Assert.assertEquals("hive0", view.getCatalogName());
+            Assertions.assertEquals("hive0", view.getCatalogName());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
         HiveMetastore hiveMetastore1 = new HiveMetastore(null, "hive0", MetastoreType.HMS);
-        Assert.assertTrue(hiveMetastore1.refreshView("tpch", "customer_view"));
+        Assertions.assertTrue(hiveMetastore1.refreshView("tpch", "customer_view"));
 
         Table table =
                 connectContext.getGlobalStateMgr().getMetadataMgr().getTable(new ConnectContext(), "hive0", "tpch", "customer");
@@ -170,7 +169,7 @@ public class HiveViewTest extends PlanTestBase {
         try {
             hiveMetadata.refreshTable("tpch", table, null, true);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -183,7 +182,7 @@ public class HiveViewTest extends PlanTestBase {
                         "from\n" +
                         "    test_all_type", HiveView.Type.Hive);
         String viewDdl = AstToStringBuilder.getExternalCatalogViewDdlStmt(hiveView);
-        Assert.assertEquals("CREATE VIEW `test` (`t1a`, `t1b`) AS select\n" +
+        Assertions.assertEquals("CREATE VIEW `test` (`t1a`, `t1b`) AS select\n" +
                 "    t1b,t1a\n" +
                 "from\n" +
                 "    test_all_type;", viewDdl);

@@ -15,8 +15,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 /**
  * Representation of a USE [catalog.]db statement.
@@ -33,8 +34,8 @@ public class UseDbStmt extends StatementBase {
 
     public UseDbStmt(String catalog, String database, NodePosition pos) {
         super(pos);
-        this.catalog = catalog;
-        this.database = database;
+        this.catalog = normalizeName(catalog);
+        this.database = normalizeName(database);
     }
 
     public String getCatalogName() {
@@ -42,7 +43,7 @@ public class UseDbStmt extends StatementBase {
     }
 
     public void setCatalogName(String catalogName) {
-        this.catalog = catalogName;
+        this.catalog = normalizeName(catalogName);
     }
 
     public String getDbName() {
@@ -60,10 +61,5 @@ public class UseDbStmt extends StatementBase {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitUseDbStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 }

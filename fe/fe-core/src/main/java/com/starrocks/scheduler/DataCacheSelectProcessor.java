@@ -31,7 +31,7 @@ public class DataCacheSelectProcessor extends BaseTaskRunProcessor {
     private static final Logger LOG = LogManager.getLogger(DataCacheSelectProcessor.class);
 
     @Override
-    public void processTaskRun(TaskRunContext context) throws Exception {
+    public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
         StmtExecutor executor = null;
         try {
             ConnectContext ctx = context.getCtx();
@@ -64,6 +64,7 @@ public class DataCacheSelectProcessor extends BaseTaskRunProcessor {
             DataCacheSelectStatement dataCacheSelectStatement = (DataCacheSelectStatement) executor.getParsedStmt();
             boolean isVerbose = dataCacheSelectStatement.isVerbose();
             context.getStatus().setExtraMessage(metrics.debugString(isVerbose));
+            return Constants.TaskRunState.SUCCESS;
         } finally {
             Tracers.close();
             if (executor != null) {

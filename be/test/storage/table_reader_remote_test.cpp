@@ -141,7 +141,6 @@ public:
         params.partition_param.__set_distributed_columns({"pk1"});
         params.partition_param.partitions.resize(1);
         params.partition_param.partitions[0].id = 1;
-        params.partition_param.partitions[0].num_buckets = num_buckets;
         params.partition_param.partitions[0].indexes.resize(1);
         params.partition_param.partitions[0].indexes[0].index_id = 1111;
         params.partition_param.partitions[0].indexes[0].tablets = _tablet_ids;

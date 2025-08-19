@@ -224,10 +224,10 @@ dev_t DiskSpace::FileSystemWrapper::device_id(const std::string& path) {
     return DataCacheUtils::disk_device_id(path);
 }
 
-DiskSpaceMonitor::DiskSpaceMonitor(LocalCache* cache)
+DiskSpaceMonitor::DiskSpaceMonitor(LocalCacheEngine* cache)
         : _cache(cache), _fs(std::make_shared<DiskSpace::FileSystemWrapper>()) {}
 
-DiskSpaceMonitor::DiskSpaceMonitor(LocalCache* cache, std::shared_ptr<DiskSpace::FileSystemWrapper> fs)
+DiskSpaceMonitor::DiskSpaceMonitor(LocalCacheEngine* cache, std::shared_ptr<DiskSpace::FileSystemWrapper> fs)
         : _cache(cache), _fs(std::move(fs)) {}
 
 DiskSpaceMonitor::~DiskSpaceMonitor() {
@@ -353,7 +353,7 @@ std::string DiskSpaceMonitor::to_string(const std::vector<DirSpace>& dir_spaces)
 }
 
 void DiskSpaceMonitor::_update_cache_stats() {
-    const auto metrics = _cache->cache_metrics(0);
+    const auto metrics = _cache->cache_metrics();
     _total_cache_usage = metrics.disk_used_bytes;
     _total_cache_quota = metrics.disk_quota_bytes;
 }

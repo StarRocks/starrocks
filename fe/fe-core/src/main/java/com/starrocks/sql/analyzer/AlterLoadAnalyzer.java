@@ -40,8 +40,6 @@ public class AlterLoadAnalyzer {
     public static void analyze(AlterLoadStmt statement, ConnectContext context) {
         statement.setDbName(AnalyzerUtils.getOrDefaultDatabase(statement.getDbName(), context));
         FeNameFormat.checkLabel(statement.getLabel());
-        FeNameFormat.checkCommonName(NAME_TYPE, statement.getLabel());
-
 
         Map<String, String> jobProperties = statement.getJobProperties();
         Optional<String> optional = jobProperties.keySet().stream().filter(

@@ -40,6 +40,7 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
@@ -72,7 +73,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.task.PriorityLeaderTask;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -632,5 +632,12 @@ public class BrokerLoadJob extends BulkLoadJob {
             value += Long.valueOf(deltaValue);
         }
         return String.valueOf(value);
+    }
+
+    @Override
+    protected void updateTabletFailInfos(TaskAttachment attachment) {
+        if (attachment instanceof BrokerLoadingTaskAttachment) {
+            failInfos.addAll(((BrokerLoadingTaskAttachment) attachment).getFailInfoList());
+        }
     }
 }

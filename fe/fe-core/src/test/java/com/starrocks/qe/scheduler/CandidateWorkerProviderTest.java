@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -25,9 +26,9 @@ import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -57,7 +58,7 @@ public class CandidateWorkerProviderTest {
         return ImmutableMap.copyOf(res);
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         for (Backend backend : id2Backend.values()) {
             systemInfoService.addBackend(backend);
@@ -73,8 +74,11 @@ public class CandidateWorkerProviderTest {
         String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         //List<Long> computeNodeIds = Arrays.asList(201L, 202L);
         long updateTime = System.currentTimeMillis();
-        historicalNodeMgr.updateHistoricalBackendIds(id2Backend.keySet().asList(), updateTime, warehouse);
-        historicalNodeMgr.updateHistoricalComputeNodeIds(id2ComputeNode.keySet().asList(), updateTime, warehouse);
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+        historicalNodeMgr.updateHistoricalBackendIds(warehouseId, workerGroupId, id2Backend.keySet().asList(), updateTime);
+        historicalNodeMgr.updateHistoricalComputeNodeIds(warehouseId, workerGroupId, id2ComputeNode.keySet().asList(),
+                updateTime);
     }
 
     @Test
@@ -84,22 +88,22 @@ public class CandidateWorkerProviderTest {
         CandidateWorkerProvider workerProvider = workerProviderFactory.captureAvailableWorkers(systemInfoService, true, 100,
                 ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, WarehouseManager.DEFAULT_RESOURCE);
         Collection<ComputeNode> workers = workerProvider.getAllWorkers();
-        Assert.assertEquals(workers.size(), id2ComputeNode.size());
+        Assertions.assertEquals(workers.size(), id2ComputeNode.size());
 
         CandidateWorkerProvider workerProvider2 = workerProviderFactory.captureAvailableWorkers(systemInfoService, true, 100,
                 ComputationFragmentSchedulingPolicy.ALL_NODES, WarehouseManager.DEFAULT_RESOURCE);
         Collection<ComputeNode> workers2 = workerProvider2.getAllWorkers();
-        Assert.assertEquals(workers2.size(), id2ComputeNode.size() + id2Backend.size());
+        Assertions.assertEquals(workers2.size(), id2ComputeNode.size() + id2Backend.size());
 
         CandidateWorkerProvider workerProvider3 = workerProviderFactory.captureAvailableWorkers(systemInfoService, true, 12,
                 ComputationFragmentSchedulingPolicy.ALL_NODES, WarehouseManager.DEFAULT_RESOURCE);
         Collection<ComputeNode> workers3 = workerProvider3.getAllWorkers();
-        Assert.assertEquals(workers3.size(), 12);
+        Assertions.assertEquals(workers3.size(), 12);
 
         CandidateWorkerProvider workerProvider4 = workerProviderFactory.captureAvailableWorkers(systemInfoService, true, 0,
                 ComputationFragmentSchedulingPolicy.ALL_NODES, WarehouseManager.DEFAULT_RESOURCE);
         Collection<ComputeNode> workers4 = workerProvider4.getAllWorkers();
-        Assert.assertEquals(workers4.size(), id2ComputeNode.size() + id2Backend.size());
+        Assertions.assertEquals(workers4.size(), id2ComputeNode.size() + id2Backend.size());
     }
 
     @Test
@@ -123,6 +127,6 @@ public class CandidateWorkerProviderTest {
         CandidateWorkerProvider workerProvider = workerProviderFactory.captureAvailableWorkers(systemInfoService, true, 100,
                 ComputationFragmentSchedulingPolicy.ALL_NODES, WarehouseManager.DEFAULT_RESOURCE);
         Collection<ComputeNode> workers = workerProvider.getAllWorkers();
-        Assert.assertEquals(workers.size(), id2ComputeNode.size() + id2Backend.size() - 4);
+        Assertions.assertEquals(workers.size(), id2ComputeNode.size() + id2Backend.size() - 4);
     }
 }

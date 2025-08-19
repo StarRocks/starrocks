@@ -40,6 +40,7 @@
 #include <atomic>
 #include <functional>
 #include <iostream>
+#include <mutex>
 #include <optional>
 #include <thread>
 #include <unordered_set>
@@ -438,6 +439,9 @@ public:
         return add_child_counter(name, type, strategy, ROOT_COUNTER);
     }
 
+    template <class Visitor>
+    void foreach_children(Visitor&& callback);
+
     // Add a derived counter with 'name'/'type'. The counter is owned by the
     // RuntimeProfile object.
     // If parent_name is a non-empty string, the counter is added as a child of
@@ -486,7 +490,7 @@ public:
 
     // Returns a pointer to the info string value for 'key'.  Returns NULL if
     // the key does not exist.
-    const std::string* get_info_string(const std::string& key);
+    std::string* get_info_string(const std::string& key);
 
     // Copy all the string infos from src profile
     void copy_all_info_strings_from(RuntimeProfile* src_profile);
@@ -506,7 +510,10 @@ public:
     // Divides all counters by n
     void divide(int n);
 
-    size_t num_children() const { return _child_map.size(); }
+    size_t num_children() const {
+        std::lock_guard guard(_children_lock);
+        return _child_map.size();
+    }
 
     // Get child of given name
     RuntimeProfile* get_child(const std::string& name);
@@ -578,6 +585,8 @@ private:
     void add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos);
     Counter* add_counter_unlock(const std::string& name, TUnit::type type, const TCounterStrategy& strategy,
                                 const std::string& parent_name);
+
+    RuntimeProfile* get_child_unlock(const std::string& name);
 
     RuntimeProfile* _parent;
 

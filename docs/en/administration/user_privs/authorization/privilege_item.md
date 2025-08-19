@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 20
+sidebar_label: "Privilege Items"
 ---
 
 # Privileges supported by StarRocks
@@ -26,11 +27,12 @@ This section describes privileges that are available on different objects.
 | CREATE EXTERNAL CATALOG | Creates an external catalog.                                 |
 | PLUGIN                  | Installs or uninstalls a plugin.                             |
 | REPOSITORY              | Creates, deletes, or views repositories.                     |
-| BLACKLIST               | Creates, deletes, or displays SQL blacklists and BE Blacklist.     |
+| BLACKLIST               | Creates, deletes, or displays SQL blacklists and BE Blacklist. |
 | FILE                    | Creates, deletes, or views files.                            |
 | OPERATE                 | Manages replicas, configuration items, variables, and transactions. |
-| CREATE GLOBAL FUNCTION  | Creates a global UDF.                           |
-| CREATE STORAGE VOLUME  | Creates a storage volume for a remote storage system.    |
+| CREATE GLOBAL FUNCTION  | Creates a global UDF.                                        |
+| CREATE STORAGE VOLUME   | Creates a storage volume for a remote storage system.        |
+| SECURITY                | Creates or manages security integrations and group providers. |
 
 ### RESOURCE GROUP
 
@@ -38,7 +40,7 @@ This section describes privileges that are available on different objects.
 | --------- | ------------------------------------------------- |
 | ALTER     | Adds or deletes classifiers for a resource group. |
 | DROP      | Deletes a resource group.                         |
-| ALL       | Has all the above privileges on a resource group.  |
+| ALL       | Has all the above privileges on a resource group. |
 
 ### RESOURCE
 
@@ -65,14 +67,14 @@ This section describes privileges that are available on different objects.
 
 ### CATALOG
 
-| Object                      | Privilege                                             | Description                                    |
-| --------------------------- | ----------------------------------------------------- | ---------------------------------------------- |
-| CATALOG (internal catalog) | USAGE                                                 | Uses the internal catalog (default_catalog).   |
-| CATALOG (internal catalog)             | CREATE DATABASE           |        Creates databases in the internal catalog.                                   |
-| CATALOG (internal catalog)                        | ALL  |               Has all the above privileges on the internal catalog.                           |
-| CATALOG (external catalog)  | USAGE                                                 | Uses an external catalog. |
-| CATALOG (external catalog)                        |   DROP                       |    Deletes an external catalog.                                   |
-| CATALOG (external catalog)                         |  ALL   |              Has all the above privileges on the external catalog.                                |
+| Object                      | Privilege       | Description                                    |
+| --------------------------- | --------------- | ---------------------------------------------- |
+| CATALOG (internal catalog)  | USAGE           | Uses the internal catalog (default_catalog).   |
+| CATALOG (internal catalog)  | CREATE DATABASE | Creates databases in the internal catalog.     |
+| CATALOG (internal catalog)  | ALL             | Has all the above privileges on the internal catalog. |
+| CATALOG (external catalog)  | USAGE           | Uses an external catalog.                      |
+| CATALOG (external catalog)  | DROP            | Deletes an external catalog.                   |
+| CATALOG (external catalog)  | ALL             | Has all the above privileges on the external catalog. |
 
 > Notes: StarRocks internal catalog cannot be deleted.
 
@@ -130,12 +132,12 @@ This section describes privileges that are available on different objects.
 
 ### STORAGE VOLUME
 
-| Privilege | Description                             |
-| ------- | ------------------------------------------------------------ |
-| ALTER | Alters the credential properties, comment, or status (enabled) of a storage volume.      |
-| DROP  | Drops a storage volume.               |
-| USAGE | Describes a storage volume and sets a storage volume as the default storage volume.   |
-| ALL   | Has all the above privileges on a storage volume.  |
+| Privilege | Description                                                                         |
+| --------- | ----------------------------------------------------------------------------------- |
+| ALTER     | Alters the credential properties, comment, or status (enabled) of a storage volume. |
+| DROP      | Drops a storage volume.                                                             |
+| USAGE     | Describes a storage volume and sets a storage volume as the default storage volume. |
+| ALL       | Has all the above privileges on a storage volume.                                   |
 
 ## Upgrade notes
 

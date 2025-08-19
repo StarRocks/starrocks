@@ -96,6 +96,11 @@ enum TPersistentIndexType {
     CLOUD_NATIVE = 1
 }
 
+enum TCompactionStrategy {
+    DEFAULT = 0
+    REAL_TIME = 1
+}
+
 struct TCreateTabletReq {
     1: required Types.TTabletId tablet_id
     2: required TTabletSchema tablet_schema
@@ -130,6 +135,7 @@ struct TCreateTabletReq {
     // Global transaction id
     24: optional i64 gtid = 0;
     25: optional TFlatJsonConfig flat_json_config;
+    26: optional TCompactionStrategy compaction_strategy;
 }
 
 struct TDropTabletReq {
@@ -438,7 +444,8 @@ enum TTabletMetaType {
     ENABLE_LOAD_PROFILE,
     BASE_COMPACTION_FORBIDDEN_TIME_RANGES,
     FLAT_JSON_CONFIG,
-    ENABLE_PARTITION_AGGREGATION
+    ENABLE_FILE_BUNDLING,
+    COMPACTION_STRATEGY
 }
 
 struct TTabletMetaInfo {
@@ -455,7 +462,8 @@ struct TTabletMetaInfo {
     10: optional bool create_schema_file;
     11: optional TPersistentIndexType persistent_index_type;
     12: optional TFlatJsonConfig flat_json_config;
-    13: optional bool aggregate_tablet_metadata;
+    13: optional bool bundle_tablet_metadata;
+    14: optional TCompactionStrategy compaction_strategy;
 }
 
 struct TUpdateTabletMetaInfoReq {

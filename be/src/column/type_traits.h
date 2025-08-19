@@ -24,6 +24,7 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "types/constexpr.h"
+#include "types/int256.h"
 #include "types/logical_type.h"
 #include "util/json.h"
 
@@ -41,6 +42,11 @@ template <>
 inline constexpr bool IsInt128<int128_t> = true;
 
 template <typename T>
+constexpr bool IsInt256 = false;
+template <>
+inline constexpr bool IsInt256<int256_t> = true;
+
+template <typename T>
 constexpr bool IsSlice = false;
 template <>
 inline constexpr bool IsSlice<Slice> = true;
@@ -53,7 +59,8 @@ template <>
 inline constexpr bool IsDateTime<DateValue> = true;
 
 template <typename T>
-using is_starrocks_arithmetic = std::integral_constant<bool, std::is_arithmetic_v<T> || IsDecimal<T>>;
+using is_starrocks_arithmetic =
+        std::integral_constant<bool, std::is_arithmetic_v<T> || IsDecimal<T> || std::is_same_v<T, int256_t>>;
 
 // If isArithmeticLT is true, means this type support +,-,*,/
 template <LogicalType logical_type>
@@ -202,6 +209,20 @@ template <>
 struct RunTimeTypeTraits<TYPE_DECIMAL128> {
     using CppType = int128_t;
     using ColumnType = Decimal128Column;
+    using ProxyContainerType = ColumnType::Container;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_DECIMAL256> {
+    using CppType = int256_t;
+    using ColumnType = Decimal256Column;
+    using ProxyContainerType = ColumnType::Container;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_INT256> {
+    using CppType = int256_t;
+    using ColumnType = Int256Column;
     using ProxyContainerType = ColumnType::Container;
 };
 
@@ -399,6 +420,11 @@ struct ColumnTraits<DateValue> {
 template <>
 struct ColumnTraits<TimestampValue> {
     using ColumnType = TimestampColumn;
+};
+
+template <>
+struct ColumnTraits<int256_t> {
+    using ColumnType = Int256Column;
 };
 
 // Length of fixed-length type, 0 for dynamic-length type

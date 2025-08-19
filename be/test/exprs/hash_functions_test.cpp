@@ -17,6 +17,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "column/array_column.h"
 #include "exprs/mock_vectorized_expr.h"
 
 namespace starrocks {
@@ -205,6 +206,45 @@ TEST_F(HashFunctionsTest, emptyTest) {
     BinaryColumn b;
     b.crc32_hash(&h3, 0, 1);
     ASSERT_EQ(123456, h3);
+}
+
+TEST_F(HashFunctionsTest, test_crc32_hash_array) {
+    {
+        Columns columns;
+        auto data_column = Int32Column::create();
+        auto offsets = UInt32Column::create();
+        NullableColumn::Ptr elements = NullableColumn::create(data_column, NullColumn::create());
+        ArrayColumn::Ptr arr = ArrayColumn::create(elements, offsets);
+
+        data_column->append(1);
+        data_column->append(2);
+        data_column->append(3);
+        offsets->append(3);
+
+        data_column->append(4);
+        data_column->append(5);
+        data_column->append(6);
+        offsets->append(6);
+
+        columns.emplace_back(arr);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = HashFunctions::crc32_hash(ctx.get(), columns).value();
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+        ASSERT_EQ(2, result->size());
+        ASSERT_EQ(1799959227, v->get_data()[0]);
+        ASSERT_EQ(3471948928, v->get_data()[1]);
+    }
+
+    {
+        Columns columns;
+        ColumnPtr only_null_column = ColumnHelper::create_const_null_column(5);
+        columns.emplace_back(only_null_column);
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = HashFunctions::crc32_hash(ctx.get(), columns).value();
+        ASSERT_EQ(5, result->size());
+        ASSERT_TRUE(result->only_null());
+    }
 }
 
 } // namespace starrocks

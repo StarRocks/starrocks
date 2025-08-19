@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifdef __AVX2__
-#include <arrow/util/bpacking_avx2.h>
-#endif
-
 #include <benchmark/benchmark.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -26,9 +22,8 @@
 
 #include "bench/bit_copy.h"
 #include "util/bit_packing.h"
-#include "util/bit_packing_adapter.h"
-#include "util/bit_packing_simd.h"
-#include "util/bit_stream_utils.inline.h"
+#include "util/bit_packing_arrow.h"
+#include "util/bit_packing_avx2.h"
 
 namespace starrocks {
 
@@ -104,15 +99,16 @@ void BitUnpackBench::SetUp() {
                                                                                                                     \
     void BitUnpackBench::do_bench_##WIDTH##_avx2(int bit_width) {                                                   \
         auto source = bitPackedData[bit_width];                                                                     \
-        starrocks::BitPackingAdapter::UnpackValues_ARROW(bit_width, reinterpret_cast<uint8_t*>(source.data()),      \
-                                                         source.size() * sizeof(uint64_t), kNumValues,              \
-                                                         result##WIDTH##_.data());                                  \
+        starrocks::util::bitpacking_arrow::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),       \
+                                                        source.size() * sizeof(uint64_t), kNumValues,               \
+                                                        result##WIDTH##_.data());                                   \
     }                                                                                                               \
                                                                                                                     \
     void BitUnpackBench::do_bench_##WIDTH##_bmi(int bit_width) {                                                    \
         auto source = bitPackedData[bit_width];                                                                     \
-        starrocks::util::unpack(bit_width, reinterpret_cast<uint8_t*>(source.data()),                               \
-                                source.size() * sizeof(uint64_t), kNumValues, result##WIDTH##_.data());             \
+        starrocks::util::bitpacking_avx2::unpack(bit_width, reinterpret_cast<uint8_t*>(source.data()),              \
+                                                 source.size() * sizeof(uint64_t), kNumValues,                      \
+                                                 result##WIDTH##_.data());                                          \
     }
 
 DO_BENCH_DEFINE(32);

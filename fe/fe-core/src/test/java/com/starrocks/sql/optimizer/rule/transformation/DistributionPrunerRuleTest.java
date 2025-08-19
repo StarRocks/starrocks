@@ -44,15 +44,16 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class DistributionPrunerRuleTest {
 
@@ -178,7 +179,10 @@ public class DistributionPrunerRuleTest {
                 partition.getDistributionInfo();
                 result = distributionInfo;
 
-                index.getTabletIdsInOrder();
+                index.getVirtualBuckets();
+                result = Stream.concat(tabletIds.stream(), tabletIds.stream()).collect(Collectors.toList());
+
+                index.getTabletIds();
                 result = tabletIds;
 
                 distributionInfo.getDistributionColumns();
@@ -186,9 +190,6 @@ public class DistributionPrunerRuleTest {
 
                 distributionInfo.getType();
                 result = DistributionInfo.DistributionInfoType.HASH;
-
-                distributionInfo.getBucketNum();
-                result = tabletIds.size();
             }
         };
 

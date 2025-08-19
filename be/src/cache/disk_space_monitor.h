@@ -20,7 +20,7 @@
 #include <unordered_map>
 
 #include "cache/cache_options.h"
-#include "cache/local_cache.h"
+#include "cache/local_cache_engine.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "util/disk_info.h"
@@ -77,7 +77,8 @@ public:
 
     size_t cache_quota();
 
-    // The align unit when adjusting cache disk quota. We set it to 10G to keep consistent with underlying cache file size,
+    // The alignment unit when adjusting cache disk quota.
+    // We set it to 10G to keep consistent with underlying cache file size,
     // which can help reduce processing the special tail files.
     const static size_t kQuotaAlignUnit;
 
@@ -117,8 +118,8 @@ private:
 
 class DiskSpaceMonitor {
 public:
-    DiskSpaceMonitor(LocalCache* cache);
-    DiskSpaceMonitor(LocalCache* cache, std::shared_ptr<DiskSpace::FileSystemWrapper> fs);
+    DiskSpaceMonitor(LocalCacheEngine* cache);
+    DiskSpaceMonitor(LocalCacheEngine* cache, std::shared_ptr<DiskSpace::FileSystemWrapper> fs);
     ~DiskSpaceMonitor();
 
     Status init(std::vector<DirSpace>* dir_spaces);
@@ -151,7 +152,7 @@ private:
 
     size_t _total_cache_usage = 0;
     size_t _total_cache_quota = 0;
-    LocalCache* _cache = nullptr;
+    LocalCacheEngine* _cache = nullptr;
     std::shared_ptr<DiskSpace::FileSystemWrapper> _fs = nullptr;
 };
 

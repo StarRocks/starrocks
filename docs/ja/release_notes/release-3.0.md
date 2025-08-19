@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# StarRocks バージョン 3.0
+# StarRocks version 3.0
 
 ## 3.0.9
 

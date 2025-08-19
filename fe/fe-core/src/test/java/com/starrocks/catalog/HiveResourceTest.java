@@ -24,16 +24,16 @@ import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 public class HiveResourceTest {
     private static ConnectContext connectContext;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
     }
@@ -58,9 +58,9 @@ public class HiveResourceTest {
 
         Analyzer.analyze(stmt, connectContext);
         HiveResource resource = (HiveResource) Resource.fromStmt(stmt);
-        Assert.assertEquals("hive0", resource.getName());
-        Assert.assertEquals(type, resource.getType().name().toLowerCase());
-        Assert.assertEquals(metastoreURIs, resource.getHiveMetastoreURIs());
+        Assertions.assertEquals("hive0", resource.getName());
+        Assertions.assertEquals(type, resource.getType().name().toLowerCase());
+        Assertions.assertEquals(metastoreURIs, resource.getHiveMetastoreURIs());
     }
 
     @Test
@@ -73,7 +73,7 @@ public class HiveResourceTest {
 
         String json = GsonUtils.GSON.toJson(resource);
         Resource resource2 = GsonUtils.GSON.fromJson(json, Resource.class);
-        Assert.assertTrue(resource2 instanceof HiveResource);
-        Assert.assertEquals(metastoreURIs, ((HiveResource) resource2).getHiveMetastoreURIs());
+        Assertions.assertTrue(resource2 instanceof HiveResource);
+        Assertions.assertEquals(metastoreURIs, ((HiveResource) resource2).getHiveMetastoreURIs());
     }
 }

@@ -16,7 +16,6 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 #include "util/failpoint/fail_point.h"
 
@@ -25,15 +24,15 @@ DEFINE_FAIL_POINT(schema_scan_rpc_failed);
 
 SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_vars_columns[] = {
         //   name,       type,          size
-        {"VARIABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"VARIABLE_VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VARIABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"VARIABLE_VALUE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
 };
 
 SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_verbose_vars_columns[] = {
         //   name,       type,          size
-        {"VARIABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"VARIABLE_VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DEFAULT_VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VARIABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"VARIABLE_VALUE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DEFAULT_VALUE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"IS_CHANGED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), 1, false},
 };
 

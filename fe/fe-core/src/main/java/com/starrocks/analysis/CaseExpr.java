@@ -36,7 +36,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
@@ -160,10 +159,6 @@ public class CaseExpr extends Expr {
         msg.node_type = TExprNodeType.CASE_EXPR;
         msg.case_expr = new TCaseExpr(hasCaseExpr, hasElseExpr);
         msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
-    }
-
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
     @Override

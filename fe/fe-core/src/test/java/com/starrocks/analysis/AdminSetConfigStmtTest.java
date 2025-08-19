@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -51,24 +52,23 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class AdminSetConfigStmtTest {
     private static ConnectContext connectContext;
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -90,7 +90,7 @@ public class AdminSetConfigStmtTest {
         AdminSetConfigStmt adminSetConfigStmt =
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
-        Assert.assertEquals("5.1.1", GlobalVariable.version);
+        Assertions.assertEquals("5.1.1", GlobalVariable.version);
     }
 
     @Test
@@ -98,9 +98,9 @@ public class AdminSetConfigStmtTest {
         String stmt = "admin set frontend config(\"unknown_config\" = \"unknown\");";
         AdminSetConfigStmt adminSetConfigStmt =
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-        expectedEx.expect(DdlException.class);
-        expectedEx.expectMessage("Config 'unknown_config' does not exist or is not mutable");
-        ConfigBase.setConfig(adminSetConfigStmt);
+        Throwable exception = assertThrows(DdlException.class, () ->
+            ConfigBase.setConfig(adminSetConfigStmt));
+        assertThat(exception.getMessage(), containsString("Config 'unknown_config' does not exist or is not mutable"));
     }
 
     @Test
@@ -115,9 +115,12 @@ public class AdminSetConfigStmtTest {
                     .thenReturn(response);
 
             Frontend leader = new Frontend(FrontendNodeType.LEADER, "fe1", "192.168.0.1", 9091);
+            leader.setAlive(true);
+            Frontend follower = new Frontend(FrontendNodeType.FOLLOWER, "fe2", "192.168.0.2", 9092);
+            follower.setAlive(true);
             List<Frontend> frontends = new ArrayList<>();
             frontends.add(leader);
-            frontends.add(new Frontend(FrontendNodeType.FOLLOWER, "fe2", "192.168.0.2", 9092));
+            frontends.add(follower);
 
             new MockUp<NodeMgr>() {
                 @Mock
@@ -134,9 +137,39 @@ public class AdminSetConfigStmtTest {
             String stmt = "admin set frontend config(\"alter_table_timeout_second\" = \"60\");";
             AdminSetConfigStmt adminSetConfigStmt =
                     (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-            expectedEx.expect(DdlException.class);
-            ConfigBase.setConfig(adminSetConfigStmt);
+            assertThrows(DdlException.class, () ->
+                ConfigBase.setConfig(adminSetConfigStmt));
         }
+    }
+
+    @Test
+    public void testSetConfigNotAlive() throws Exception {
+        Frontend leader = new Frontend(FrontendNodeType.LEADER, "fe1", "192.168.0.1", 9091);
+        leader.setAlive(true);
+        Frontend follower = new Frontend(FrontendNodeType.FOLLOWER, "fe2", "192.168.0.2", 9092);
+        follower.setAlive(false);
+        List<Frontend> frontends = new ArrayList<>();
+        frontends.add(leader);
+        frontends.add(follower);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public List<Frontend> getFrontends(FrontendNodeType nodeType) {
+                return frontends;
+            }
+
+            @Mock
+            public Pair<String, Integer> getSelfNode() {
+                return new Pair<>("192.168.0.1", 9091);
+            }
+        };
+
+        String stmt = "admin set frontend config(\"alter_table_timeout_second\" = \"60\");";
+        AdminSetConfigStmt adminSetConfigStmt =
+                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
+        ConfigBase.setConfig(adminSetConfigStmt);
+
+        Assertions.assertEquals(60, Config.alter_table_timeout_second);
     }
 }
 

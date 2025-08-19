@@ -57,6 +57,7 @@ static constexpr int64_t kcacheMinSize = 268435456;
 // TODO(zc): We should add some metric to see cache hit/miss rate.
 class StoragePageCache {
 public:
+    StoragePageCache() = default;
     virtual ~StoragePageCache() = default;
 
     void init_metrics();
@@ -65,7 +66,12 @@ public:
     // Client should call create_global_cache before.
     static StoragePageCache* instance() { return DataCache::GetInstance()->page_cache(); }
 
-    StoragePageCache(ObjectCache* obj_cache) : _cache(obj_cache) {}
+    StoragePageCache(LocalCacheEngine* cache_engine) : _cache(cache_engine), _initialized(true) {}
+
+    void init(LocalCacheEngine* cache_engine) {
+        _cache = cache_engine;
+        _initialized.store(true, std::memory_order_relaxed);
+    }
 
     // Lookup the given page in the cache.
     //
@@ -87,7 +93,7 @@ public:
     Status insert(const std::string& key, void* data, int64_t size, ObjectCacheDeleter deleter,
                   const ObjectCacheWriteOptions& opts, PageCacheHandle* handle);
 
-    size_t memory_usage() const { return _cache->usage(); }
+    size_t memory_usage() const { return _cache->mem_usage(); }
 
     void set_capacity(size_t capacity);
 
@@ -101,8 +107,12 @@ public:
 
     void prune();
 
+    bool is_initialized() const { return _initialized.load(std::memory_order_relaxed); }
+    bool available() const { return is_initialized() && _cache->mem_cache_available(); }
+
 private:
-    ObjectCache* _cache = nullptr;
+    LocalCacheEngine* _cache = nullptr;
+    std::atomic<bool> _initialized = false;
 };
 
 // A handle for StoragePageCache entry. This class make it easy to handle
@@ -111,7 +121,7 @@ private:
 class PageCacheHandle {
 public:
     PageCacheHandle() = default;
-    PageCacheHandle(ObjectCache* cache, ObjectCacheHandle* handle) : _cache(cache), _handle(handle) {}
+    PageCacheHandle(LocalCacheEngine* cache, ObjectCacheHandle* handle) : _cache(cache), _handle(handle) {}
     ~PageCacheHandle() {
         if (_handle != nullptr) {
             _cache->release(_handle);
@@ -130,11 +140,11 @@ public:
         return *this;
     }
 
-    ObjectCache* cache() const { return _cache; }
+    LocalCacheEngine* cache() const { return _cache; }
     const void* data() const { return _cache->value(_handle); }
 
 private:
-    ObjectCache* _cache = nullptr;
+    LocalCacheEngine* _cache = nullptr;
     ObjectCacheHandle* _handle = nullptr;
 
     // Don't allow copy and assign

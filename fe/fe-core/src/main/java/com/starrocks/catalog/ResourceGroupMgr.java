@@ -24,11 +24,9 @@ import com.starrocks.authorization.RolePrivilegeCollectionV2;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ResourceGroupOpEntry;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -50,8 +48,6 @@ import com.starrocks.thrift.TWorkGroupType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -280,26 +276,8 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        List<ResourceGroup> resourceGroups = new ArrayList<>(resourceGroupMap.values());
-        SerializeData data = new SerializeData();
-        data.resourceGroups = resourceGroups;
 
-        String s = GsonUtils.GSON.toJson(data);
-        Text.writeString(out, s);
-    }
 
-    public void readFields(DataInputStream dis) throws IOException {
-        String s = Text.readString(dis);
-        SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
-        if (null != data && null != data.resourceGroups) {
-            data.resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
-            for (ResourceGroup workgroup : data.resourceGroups) {
-                replayAddResourceGroup(workgroup);
-            }
-        }
-    }
 
     private void replayAddResourceGroup(ResourceGroup workgroup) {
         addResourceGroupInternal(workgroup);
@@ -454,7 +432,10 @@ public class ResourceGroupMgr implements Writable {
         try {
             String name = stmt.getName();
             if (!resourceGroupMap.containsKey(name)) {
-                throw new DdlException("RESOURCE_GROUP(" + name + ") does not exist");
+                if (!stmt.isIfExists()) {
+                    throw new DdlException("RESOURCE_GROUP(" + name + ") does not exist");
+                }
+                return;
             }
             dropResourceGroupUnlocked(name);
         } finally {

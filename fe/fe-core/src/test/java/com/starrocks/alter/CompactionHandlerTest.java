@@ -25,15 +25,16 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 
 public class CompactionHandlerTest {
@@ -45,7 +46,7 @@ public class CompactionHandlerTest {
 
     private CompactionHandler compactionHandler = new CompactionHandler();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         // create connect context
@@ -74,7 +75,7 @@ public class CompactionHandlerTest {
                     .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         GlobalStateMgr.getCurrentState().getCompactionMgr().clearPartitions();
         db.dropTable(olapTable.getName());
@@ -85,10 +86,10 @@ public class CompactionHandlerTest {
         List<AlterClause> alterList = Collections.singletonList(compactionClause);
         try {
             compactionHandler.process(alterList, db, olapTable);
-            Assert.assertEquals(expectedValue, GlobalStateMgr.getCurrentState().getCompactionMgr().getPartitionStatsCount());
+            Assertions.assertEquals(expectedValue, GlobalStateMgr.getCurrentState().getCompactionMgr().getPartitionStatsCount());
         } catch (StarRocksException e) {
             e.printStackTrace();
-            Assert.fail("process should not throw exceptions here");
+            Assertions.fail("process should not throw exceptions here");
         }
     }
 
@@ -108,14 +109,16 @@ public class CompactionHandlerTest {
         processAlterClauses(Collections.emptyList(), 2);
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testProcessNonCompactionClause() {
-        AlterClause nonCompactionClause = mock(AlterClause.class);
-        List<AlterClause> alterList = Collections.singletonList((nonCompactionClause));
-        try {
-            compactionHandler.process(alterList, db, olapTable);
-        } catch (StarRocksException e) {
-            Assert.fail("process should not throw user exceptions here");
-        }
+        assertThrows(IllegalStateException.class, () -> {
+            AlterClause nonCompactionClause = mock(AlterClause.class);
+            List<AlterClause> alterList = Collections.singletonList((nonCompactionClause));
+            try {
+                compactionHandler.process(alterList, db, olapTable);
+            } catch (StarRocksException e) {
+                Assertions.fail("process should not throw user exceptions here");
+            }
+        });
     }
 }

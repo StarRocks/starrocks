@@ -39,7 +39,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -158,20 +157,7 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
-    }
-
-    /**
-     * Must be called after addChild()/addConstExprList(). Computes the materialized
-     * result/const expr lists based on the materialized slots of this UnionNode's
-     * produced tuple. The UnionNode doesn't need an smap: like a ScanNode, it
-     * materializes an original tuple.
-     * There is no need to call assignConjuncts() because all non-constant conjuncts
-     * have already been assigned to the set operation operands, and all constant conjuncts have
-     * been evaluated during registration to set analyzer.hasEmptyResultSet_.
-     */
-    @Override
-    public void init(Analyzer analyzer) {
+    public void computeStats() {
     }
 
     protected void toThrift(TPlanNode msg, TPlanNodeType nodeType) {

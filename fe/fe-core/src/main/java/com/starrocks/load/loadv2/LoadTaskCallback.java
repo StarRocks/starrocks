@@ -24,5 +24,5 @@ public interface LoadTaskCallback {
 
     void onTaskFinished(TaskAttachment attachment);
 
-    void onTaskFailed(long taskId, FailMsg failMsg);
+    void onTaskFailed(long taskId, FailMsg failMsg, TaskAttachment attachment);
 }

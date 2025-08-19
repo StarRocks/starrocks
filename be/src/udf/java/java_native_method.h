@@ -34,7 +34,6 @@ struct JavaNativeMethods {
     // for nullable array column [null_array_start, offset_array_start, elements_addr]
     // for nullable map column [null_array_start, offset_array_start, keys_addr, values_addr]
     static jlongArray getAddrs(JNIEnv* env, jclass clazz, jlong columnAddr);
-
     static jlong memory_malloc(JNIEnv* env, jclass clazz, jlong bytes);
 
     static void memory_free(JNIEnv* env, jclass clazz, jlong address);

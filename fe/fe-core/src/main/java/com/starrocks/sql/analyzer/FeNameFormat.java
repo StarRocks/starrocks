@@ -51,8 +51,6 @@ public class FeNameFormat {
 
     private static final String SHARED_DATE_COLUMN_NAME_REGEX = "^[^\0]{1,1024}$";
 
-
-
     // The username by kerberos authentication may include the host name, so additional adaptation is required.
     private static final String MYSQL_USER_NAME_REGEX = "^\\w{1,64}/?[.\\w-]{0,63}$";
 
@@ -64,6 +62,8 @@ public class FeNameFormat {
         FORBIDDEN_COLUMN_NAMES = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         FORBIDDEN_COLUMN_NAMES.add("__op");
         FORBIDDEN_COLUMN_NAMES.add("__row");
+        // see RewriteSimpleAggToHDFSScanRule
+        FORBIDDEN_COLUMN_NAMES.add("___count___");
         String allowedSpecialCharacters = "";
         for (Character c : SPECIAL_CHARACTERS_IN_DB_NAME) {
             allowedSpecialCharacters += c;
@@ -136,7 +136,6 @@ public class FeNameFormat {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
 
-
         if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
@@ -183,6 +182,10 @@ public class FeNameFormat {
 
     public static void checkWarehouseName(String warehouseName) {
         checkCommonName("warehouse", warehouseName);
+    }
+
+    public static void checkCNGroupName(String cngroupName) {
+        checkCommonName("cngroup", cngroupName);
     }
 
     public static void checkStorageVolumeName(String svName) {

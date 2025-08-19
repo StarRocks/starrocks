@@ -45,9 +45,9 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.thrift.TException;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
@@ -57,9 +57,10 @@ import java.util.UUID;
 
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
 import static com.starrocks.connector.metadata.MetadataTableType.LOGICAL_ICEBERG_METADATA;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class MetadataMgrTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -85,10 +86,10 @@ public class MetadataMgrTest {
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         List<String> internalListDbs = metadataMgr.listDbNames(AnalyzeTestUtil.getConnectContext(), "default_catalog");
-        Assert.assertTrue(internalListDbs.contains("db1"));
+        Assertions.assertTrue(internalListDbs.contains("db1"));
 
         List<String> externalListDbs = metadataMgr.listDbNames(AnalyzeTestUtil.getConnectContext(), "hive_catalog");
-        Assert.assertTrue(externalListDbs.contains("db2"));
+        Assertions.assertTrue(externalListDbs.contains("db2"));
     }
 
     @Test
@@ -104,18 +105,18 @@ public class MetadataMgrTest {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
         List<String> internalTables = metadataMgr.listTableNames(AnalyzeTestUtil.getConnectContext(), "default_catalog", "db1");
-        Assert.assertTrue(internalTables.contains("tbl1"));
+        Assertions.assertTrue(internalTables.contains("tbl1"));
         try {
             metadataMgr.listTableNames(AnalyzeTestUtil.getConnectContext(), "default_catalog", "db_foo");
-            Assert.fail();
+            Assertions.fail();
         } catch (StarRocksConnectorException e) {
-            Assert.assertTrue(e.getMessage().contains("Database db_foo doesn't exist"));
+            Assertions.assertTrue(e.getMessage().contains("Database db_foo doesn't exist"));
         }
 
         List<String> externalTables = metadataMgr.listTableNames(AnalyzeTestUtil.getConnectContext(), "hive_catalog", "db2");
-        Assert.assertTrue(externalTables.contains("tbl2"));
+        Assertions.assertTrue(externalTables.contains("tbl2"));
         externalTables = metadataMgr.listTableNames(AnalyzeTestUtil.getConnectContext(), "hive_catalog", "db3");
-        Assert.assertTrue(externalTables.isEmpty());
+        Assertions.assertTrue(externalTables.isEmpty());
     }
 
     @Test
@@ -132,27 +133,27 @@ public class MetadataMgrTest {
 
         com.starrocks.catalog.Database database =
                 metadataMgr.getDb(AnalyzeTestUtil.getConnectContext(), "default_catalog", "db1");
-        Assert.assertNotNull(database);
+        Assertions.assertNotNull(database);
         database = metadataMgr.getDb(AnalyzeTestUtil.getConnectContext(), "default_catalog", "db1");
-        Assert.assertNotNull(database);
+        Assertions.assertNotNull(database);
 
         com.starrocks.catalog.Database database1 = metadataMgr.getDb(AnalyzeTestUtil.getConnectContext(), "hive_catalog", "db2");
-        Assert.assertNotNull(database1);
-        Assert.assertEquals("hive_catalog.db2", database1.getUUID());
+        Assertions.assertNotNull(database1);
+        Assertions.assertEquals("hive_catalog.db2", database1.getUUID());
 
         com.starrocks.catalog.Database database2 = metadataMgr.getDb(AnalyzeTestUtil.getConnectContext(), "hive_catalog", "db3");
-        Assert.assertNull(database2);
+        Assertions.assertNull(database2);
 
-        Assert.assertNull(metadataMgr.getDb(AnalyzeTestUtil.getConnectContext(), "not_exist_catalog", "xxx"));
+        Assertions.assertNull(metadataMgr.getDb(AnalyzeTestUtil.getConnectContext(), "not_exist_catalog", "xxx"));
     }
 
     @Test
     public void testGetTableWithDefaultCatalog() {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Assert.assertTrue(metadataMgr.getOptionalMetadata("").isPresent());
+        Assertions.assertTrue(metadataMgr.getOptionalMetadata("").isPresent());
         com.starrocks.catalog.Table internalTable =
                 metadataMgr.getTable(AnalyzeTestUtil.getConnectContext(), "default_catalog", "db1", "tbl1");
-        Assert.assertEquals(internalTable.getName(), "tbl1");
+        Assertions.assertEquals(internalTable.getName(), "tbl1");
     }
 
     @Test
@@ -182,22 +183,24 @@ public class MetadataMgrTest {
 
         com.starrocks.catalog.Table internalTable =
                 metadataMgr.getTable(AnalyzeTestUtil.getConnectContext(), "default_catalog", "db1", "tbl1");
-        Assert.assertNotNull(internalTable);
-        Assert.assertNull(metadataMgr.getTable(AnalyzeTestUtil.getConnectContext(), "default_catalog", "not_exist_db", "xxx"));
-        Assert.assertNull(metadataMgr.getTable(AnalyzeTestUtil.getConnectContext(), "default_catalog", "db1", "not_exist_table"));
+        Assertions.assertNotNull(internalTable);
+        Assertions.assertNull(
+                metadataMgr.getTable(AnalyzeTestUtil.getConnectContext(), "default_catalog", "not_exist_db", "xxx"));
+        Assertions.assertNull(
+                metadataMgr.getTable(AnalyzeTestUtil.getConnectContext(), "default_catalog", "db1", "not_exist_table"));
 
         com.starrocks.catalog.Table tbl1 =
                 metadataMgr.getTable(AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db", "hive_table");
-        Assert.assertNotNull(tbl1);
-        Assert.assertEquals("hive_catalog.hive_db.hive_table.20201010", tbl1.getUUID());
+        Assertions.assertNotNull(tbl1);
+        Assertions.assertEquals("hive_catalog.hive_db.hive_table.20201010", tbl1.getUUID());
 
         com.starrocks.catalog.Table tbl2 =
                 metadataMgr.getTable(AnalyzeTestUtil.getConnectContext(), "not_exist_catalog", "xxx", "xxx");
-        Assert.assertNull(tbl2);
+        Assertions.assertNull(tbl2);
 
-        Assert.assertThrows(StarRocksConnectorException.class,
+        Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadataMgr.getTable(AnalyzeTestUtil.getConnectContext(), "hive_catalog", "not_exist_db", "xxx"));
-        Assert.assertThrows(StarRocksConnectorException.class,
+        Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadataMgr.getTable(AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db", "not_exist_tbl"));
     }
 
@@ -210,7 +213,7 @@ public class MetadataMgrTest {
                 result = true;
             }
         };
-        Assert.assertTrue(
+        Assertions.assertTrue(
                 metadataMgr.tableExists(AnalyzeTestUtil.getConnectContext(), "iceberg_catalog", "iceberg_db", "iceberg_tbl"));
     }
 
@@ -245,10 +248,10 @@ public class MetadataMgrTest {
 
         try {
             metadataMgr.createTable(AnalyzeTestUtil.getConnectContext(), createTableStmt);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof DdlException);
-            Assert.assertTrue(e.getMessage().contains("Unknown database"));
+            Assertions.assertTrue(e instanceof DdlException);
+            Assertions.assertTrue(e.getMessage().contains("Unknown database"));
         }
 
         new Expectations(metadataMgr) {
@@ -265,14 +268,14 @@ public class MetadataMgrTest {
 
         try {
             metadataMgr.createTable(AnalyzeTestUtil.getConnectContext(), createTableStmt);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof DdlException);
-            Assert.assertTrue(e.getMessage().contains("Table 'iceberg_table' already exists"));
+            Assertions.assertTrue(e instanceof DdlException);
+            Assertions.assertTrue(e.getMessage().contains("Table 'iceberg_table' already exists"));
         }
 
         createTableStmt.setIfNotExists();
-        Assert.assertFalse(metadataMgr.createTable(AnalyzeTestUtil.getConnectContext(), createTableStmt));
+        Assertions.assertFalse(metadataMgr.createTable(AnalyzeTestUtil.getConnectContext(), createTableStmt));
         AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
     }
 
@@ -336,8 +339,8 @@ public class MetadataMgrTest {
         try {
             mockedHiveMetadataMgr.createTableLike(connectContext, createTableLikeStmt);
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof DdlException);
-            Assert.assertTrue(e.getMessage().contains("Invalid catalog hive_catalog_1"));
+            Assertions.assertTrue(e instanceof DdlException);
+            Assertions.assertTrue(e.getMessage().contains("Invalid catalog hive_catalog_1"));
         }
 
         stmt = "create external table hive_catalog.hive_db.hive_tbl_1 like hive_catalog.hive_db.hive_table";
@@ -347,8 +350,8 @@ public class MetadataMgrTest {
         try {
             mockedHiveMetadataMgr.createTableLike(connectContext, createTableLikeStmt);
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof DdlException);
-            Assert.assertTrue(e.getMessage().contains("Table 'hive_tbl_1' already exists"));
+            Assertions.assertTrue(e instanceof DdlException);
+            Assertions.assertTrue(e.getMessage().contains("Table 'hive_tbl_1' already exists"));
         }
 
         stmt = "create external table hive_catalog.hive_db.hive_tbl_2 like hive_catalog.hive_db.hive_tbl";
@@ -358,7 +361,7 @@ public class MetadataMgrTest {
         try {
             mockedHiveMetadataMgr.createTableLike(connectContext, createTableLikeStmt);
         } catch (Exception e) {
-            Assert.assertNull(e);
+            Assertions.assertNull(e);
         }
 
         stmt = "create external table if not exists hive_catalog.hive_db.hive_tbl_1 like hive_catalog.hive_db.hive_table";
@@ -368,7 +371,7 @@ public class MetadataMgrTest {
         try {
             mockedHiveMetadataMgr.createTableLike(connectContext, createTableLikeStmt);
         } catch (Exception e) {
-            Assert.assertNull(e);
+            Assertions.assertNull(e);
         }
 
         stmt = "create external table if not exists hive_catalog.hive_db.hive_tbl_2 like hive_catalog.hive_db.hive_table";
@@ -378,7 +381,7 @@ public class MetadataMgrTest {
         try {
             mockedHiveMetadataMgr.createTableLike(connectContext, createTableLikeStmt);
         } catch (Exception e) {
-            Assert.assertNull(e);
+            Assertions.assertNull(e);
         }
 
         // set back to original metadataMrg
@@ -389,9 +392,9 @@ public class MetadataMgrTest {
     public void testGetOptionalMetadata() {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Optional<ConnectorMetadata> metadata = metadataMgr.getOptionalMetadata("hive_catalog");
-        Assert.assertTrue(metadata.isPresent());
+        Assertions.assertTrue(metadata.isPresent());
         metadata = metadataMgr.getOptionalMetadata("hive_catalog_not_exist");
-        Assert.assertFalse(metadata.isPresent());
+        Assertions.assertFalse(metadata.isPresent());
     }
 
     @Test
@@ -403,7 +406,7 @@ public class MetadataMgrTest {
             UUID queryId = UUIDUtil.genUUID();
             ConnectContext.get().setQueryId(queryId);
             Optional<ConnectorMetadata> metadata = mgr.getOptionalMetadata("hive_catalog");
-            Assert.assertTrue(metadata.isPresent());
+            Assertions.assertTrue(metadata.isPresent());
             queryIdSet.put(queryId, metadata.get());
         }
 
@@ -411,22 +414,24 @@ public class MetadataMgrTest {
         UUID queryId = UUIDUtil.genUUID();
         ConnectContext.get().setQueryId(queryId);
         Optional<ConnectorMetadata> metadata = mgr.getOptionalMetadata("hive_catalog");
-        Assert.assertTrue(metadata.isPresent());
-        Assert.assertFalse(queryIdSet.containsValue(metadata.get()));
+        Assertions.assertTrue(metadata.isPresent());
+        Assertions.assertFalse(queryIdSet.containsValue(metadata.get()));
         mgr.removeQueryMetadata();
     }
 
-    @Test(expected = MetaNotFoundException.class)
-    public void testDropDbIfExists() throws DdlException, MetaNotFoundException {
-        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-        new Expectations(metadataMgr) {
-            {
-                metadataMgr.getDb(AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db");
-                result = null;
-                minTimes = 0;
-            }
-        };
-        metadataMgr.dropDb(AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db", false);
+    @Test
+    public void testDropDbIfExists() {
+        assertThrows(MetaNotFoundException.class, () -> {
+            MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+            new Expectations(metadataMgr) {
+                {
+                    metadataMgr.getDb(AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db");
+                    result = null;
+                    minTimes = 0;
+                }
+            };
+            metadataMgr.dropDb(AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db", false);
+        });
     }
 
     @Test
@@ -445,12 +450,12 @@ public class MetadataMgrTest {
         com.starrocks.catalog.Table table =
                 metadataMgr.getTable(AnalyzeTestUtil.getConnectContext(), "iceberg_catalog", "iceberg_db",
                         "t1$logical_iceberg_metadata");
-        Assert.assertTrue(table instanceof LogicalIcebergMetadataTable);
+        Assertions.assertTrue(table instanceof LogicalIcebergMetadataTable);
         LogicalIcebergMetadataTable metadataTable = (LogicalIcebergMetadataTable) table;
-        Assert.assertEquals("iceberg_db", metadataTable.getOriginDb());
-        Assert.assertEquals("t1", metadataTable.getOriginTable());
-        Assert.assertEquals(LOGICAL_ICEBERG_METADATA, metadataTable.getMetadataTableType());
-        Assert.assertTrue(metadataTable.isSupported());
+        Assertions.assertEquals("iceberg_db", metadataTable.getOriginDb());
+        Assertions.assertEquals("t1", metadataTable.getOriginTable());
+        Assertions.assertEquals(LOGICAL_ICEBERG_METADATA, metadataTable.getMetadataTableType());
+        Assertions.assertTrue(metadataTable.isSupported());
         AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
     }
 
@@ -465,14 +470,14 @@ public class MetadataMgrTest {
                 () -> MetadataTableName.from("table$unknown_type"));
 
         MetadataTableName metadataTableName = MetadataTableName.from("iceberg_table$logical_iceberg_metadata");
-        Assert.assertEquals("iceberg_table", metadataTableName.getTableName());
-        Assert.assertEquals(LOGICAL_ICEBERG_METADATA, metadataTableName.getTableType());
-        Assert.assertEquals("iceberg_table$logical_iceberg_metadata", metadataTableName.getTableNameWithType());
-        Assert.assertEquals("iceberg_table$logical_iceberg_metadata", metadataTableName.toString());
+        Assertions.assertEquals("iceberg_table", metadataTableName.getTableName());
+        Assertions.assertEquals(LOGICAL_ICEBERG_METADATA, metadataTableName.getTableType());
+        Assertions.assertEquals("iceberg_table$logical_iceberg_metadata", metadataTableName.getTableNameWithType());
+        Assertions.assertEquals("iceberg_table$logical_iceberg_metadata", metadataTableName.toString());
 
-        Assert.assertFalse(MetadataTableName.isMetadataTable("aaaaaaa"));
-        Assert.assertFalse(MetadataTableName.isMetadataTable("table$"));
-        Assert.assertFalse(MetadataTableName.isMetadataTable("table$unknown_type"));
-        Assert.assertTrue(MetadataTableName.isMetadataTable("table$logical_iceberg_metadata"));
+        Assertions.assertFalse(MetadataTableName.isMetadataTable("aaaaaaa"));
+        Assertions.assertFalse(MetadataTableName.isMetadataTable("table$"));
+        Assertions.assertFalse(MetadataTableName.isMetadataTable("table$unknown_type"));
+        Assertions.assertTrue(MetadataTableName.isMetadataTable("table$logical_iceberg_metadata"));
     }
 }

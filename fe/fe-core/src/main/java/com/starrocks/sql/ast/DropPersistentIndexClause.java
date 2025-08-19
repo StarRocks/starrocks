@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Set;
@@ -27,7 +26,7 @@ public class DropPersistentIndexClause extends AlterTableClause {
     }
 
     public DropPersistentIndexClause(Set<Long> tabletIds, NodePosition pos) {
-        super(AlterOpType.MODIFY_TABLE_PROPERTY, pos);
+        super(pos);
         this.tabletIds = tabletIds;
     }
 

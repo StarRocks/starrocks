@@ -49,6 +49,7 @@ under the License.
         <parquet.version>1.15.2</parquet.version>
         <hadoop.version>3.4.1</hadoop.version>
         <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
+        <antlr.version>4.9.3</antlr.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>1.0.2</hudi.version>
         <hive-apache.version>3.1.2-22</hive-apache.version>
@@ -61,7 +62,7 @@ under the License.
         <kafka-clients.version>3.4.0</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
         <grpc.version>1.63.0</grpc.version>
-        <io.netty.version>4.1.118.Final</io.netty.version>
+        <io.netty.version>4.1.124.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
         <aws-v2-sdk.version>2.29.52</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
@@ -71,7 +72,7 @@ under the License.
         <paimon.version>1.0.1</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.9.0</iceberg.version>
-        <staros.version>3.5-rc1</staros.version>
+        <staros.version>3.5-rc3</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.57.v20241219</jetty.version>
@@ -81,6 +82,7 @@ under the License.
         <fastutil.version>8.5.15</fastutil.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
+        <async-profiler.version>4.0</async-profiler.version>
     </properties>
 
     <profiles>
@@ -407,6 +409,10 @@ under the License.
                         <groupId>org.codehaus.plexus</groupId>
                         <artifactId>plexus-utils</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>junit</groupId>
+                        <artifactId>junit</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -426,6 +432,10 @@ under the License.
                         <groupId>com.baidu</groupId>
                         <artifactId>jprotobuf</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>junit</groupId>
+                        <artifactId>junit</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -436,11 +446,11 @@ under the License.
                 <version>20231013</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/junit/junit -->
+            <!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter -->
             <dependency>
-                <groupId>junit</groupId>
-                <artifactId>junit</artifactId>
-                <version>4.13.1</version>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>5.8.2</version>
                 <scope>test</scope>
             </dependency>
 
@@ -951,6 +961,10 @@ under the License.
                         <groupId>org.jdom</groupId>
                         <artifactId>jdom2</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.ini4j</groupId>
+                        <artifactId>ini4j</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -1121,13 +1135,6 @@ under the License.
                 <version>12.4.2.jre11</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
-            <dependency>
-                <groupId>com.mysql</groupId>
-                <artifactId>mysql-connector-j</artifactId>
-                <version>9.2.0</version>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
             <dependency>
                 <groupId>com.mockrunner</groupId>
@@ -1138,6 +1145,10 @@ under the License.
                     <exclusion>
                         <groupId>xerces</groupId>
                         <artifactId>xercesImpl</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>junit</groupId>
+                        <artifactId>junit</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -1170,6 +1181,12 @@ under the License.
             </dependency>
 
             <dependency>
+                <groupId>io.airlift</groupId>
+                <artifactId>security</artifactId>
+                <version>202</version>
+            </dependency>
+
+            <dependency>
                 <groupId>com.aliyun.odps</groupId>
                 <artifactId>odps-sdk-core</artifactId>
                 <version>${odps.version}</version>
@@ -1177,6 +1194,10 @@ under the License.
                     <exclusion>
                         <groupId>org.codehaus.jackson</groupId>
                         <artifactId>jackson-mapper-asl</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.ini4j</groupId>
+                        <artifactId>ini4j</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -1440,17 +1461,11 @@ under the License.
                 </exclusions>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/org.antlr/antlr4 -->
+            <!-- https://mvnrepository.com/artifact/org.antlr/antlr4-runtime -->
             <dependency>
                 <groupId>org.antlr</groupId>
-                <artifactId>antlr4</artifactId>
-                <version>4.9.2</version>
-                <exclusions>
-                    <exclusion>
-                        <groupId>commons-lang</groupId>
-                        <artifactId>commons-lang</artifactId>
-                    </exclusion>
-                </exclusions>
+                <artifactId>antlr4-runtime</artifactId>
+                <version>${antlr.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.jboss.byteman/byteman -->
@@ -1474,6 +1489,13 @@ under the License.
                 <groupId>it.unimi.dsi</groupId>
                 <artifactId>fastutil</artifactId>
                 <version>${fastutil.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/tools.profiler/async-profiler -->
+            <dependency>
+                <groupId>tools.profiler</groupId>
+                <artifactId>async-profiler</artifactId>
+                <version>${async-profiler.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

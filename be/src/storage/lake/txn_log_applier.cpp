@@ -85,8 +85,15 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             metadata->mutable_schema()->CopyFrom(alter_meta.tablet_schema());
         }
 
-        if (alter_meta.has_aggregate_tablet_metadata()) {
+        if (alter_meta.has_bundle_tablet_metadata()) {
             // do nothing
+        }
+
+        if (alter_meta.has_compaction_strategy()) {
+            LOG(INFO) << fmt::format("alter compaction strategy from {} to {} for tablet id: {}",
+                                     CompactionStrategyPB_Name(metadata->compaction_strategy()),
+                                     CompactionStrategyPB_Name(alter_meta.compaction_strategy()), metadata->id());
+            metadata->set_compaction_strategy(alter_meta.compaction_strategy());
         }
     }
     return Status::OK();
@@ -139,6 +146,7 @@ public:
                 FileMetaPB file_meta;
                 file_meta.set_name(sstable.filename());
                 file_meta.set_size(sstable.filesize());
+                file_meta.set_shared(sstable.shared());
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
             _metadata->clear_sstable_meta();

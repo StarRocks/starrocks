@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 public class UninstallPluginStmt extends DdlStmt {
@@ -33,11 +32,6 @@ public class UninstallPluginStmt extends DdlStmt {
 
     public String getPluginName() {
         return pluginName;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     @Override

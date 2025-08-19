@@ -15,8 +15,9 @@
 package com.starrocks.transaction;
 
 import com.starrocks.lake.LakeTable;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
     @Test
@@ -30,16 +31,43 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
 
         applier.applyCommitLog(state, tableCommitInfo);
-        Assert.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
-        Assert.assertEquals(3, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+        Assertions.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(3, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
 
         state.setTransactionStatus(TransactionStatus.VISIBLE);
         partitionCommitInfo.setVersionTime(System.currentTimeMillis());
         applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
-        Assert.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
-        Assert.assertEquals(3, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
-        Assert.assertEquals(partitionCommitInfo.getVersionTime(), table.getPartition(partitionId).getDefaultPhysicalPartition()
-                .getVisibleVersionTime());
+        Assertions.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(3, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+        Assertions.assertEquals(partitionCommitInfo.getVersionTime(),
+                table.getPartition(partitionId).getDefaultPhysicalPartition()
+                        .getVisibleVersionTime());
+    }
+
+    @Test
+    public void testCommitAndApplyCompaction() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newCompactionTransactionState();
+        CompactionTxnCommitAttachment attachment = new CompactionTxnCommitAttachment(true);
+        state.setTxnCommitAttachment(attachment);
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(3, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+        Assertions.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(3, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+        Assertions.assertEquals(partitionCommitInfo.getVersionTime(),
+                table.getPartition(partitionId).getDefaultPhysicalPartition()
+                        .getVisibleVersionTime());
     }
 
     @Test
@@ -52,13 +80,13 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
 
         applier.applyCommitLog(state, tableCommitInfo);
-        Assert.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
-        Assert.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+        Assertions.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
 
         state.setTransactionStatus(TransactionStatus.VISIBLE);
         partitionCommitInfo.setVersionTime(System.currentTimeMillis());
         applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
-        Assert.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
-        Assert.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+        Assertions.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
     }
 }

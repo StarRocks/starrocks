@@ -16,18 +16,19 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class ShowLoadWarningsStmtTest {
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -36,22 +37,22 @@ public class ShowLoadWarningsStmtTest {
     public void testNormal() throws Exception {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
         ShowLoadWarningsStmt stmt = (ShowLoadWarningsStmt) analyzeSuccess("SHOW LOAD WARNINGS FROM test WHERE `label` = 'abc' LIMIT 10");
-        Assert.assertEquals(10, stmt.getLimitNum());
-        Assert.assertEquals(0, stmt.getLimitElement().getOffset());
-        Assert.assertEquals("abc", stmt.getLabel());
-        Assert.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals(10, stmt.getLimitNum());
+        Assertions.assertEquals(0, stmt.getLimitElement().getOffset());
+        Assertions.assertEquals("abc", stmt.getLabel());
+        Assertions.assertEquals("test", stmt.getDbName());
 
         stmt = (ShowLoadWarningsStmt) analyzeSuccess("SHOW LOAD WARNINGS FROM test WHERE `load_job_id` = 123");
-        Assert.assertEquals(123, stmt.getJobId());
+        Assertions.assertEquals(123, stmt.getJobId());
 
         stmt = (ShowLoadWarningsStmt) analyzeSuccess("SHOW LOAD WARNINGS ON 'http://127.0.0.1:8000'");
-        Assert.assertEquals("http://127.0.0.1:8000", stmt.getRawUrl());
-        ShowResultSetMetaData metaData = stmt.getMetaData();
-        Assert.assertNotNull(metaData);
-        Assert.assertEquals(3, metaData.getColumnCount());
-        Assert.assertEquals("JobId", metaData.getColumn(0).getName());
-        Assert.assertEquals("Label", metaData.getColumn(1).getName());
-        Assert.assertEquals("ErrorMsgDetail", metaData.getColumn(2).getName());
+        Assertions.assertEquals("http://127.0.0.1:8000", stmt.getRawUrl());
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+        Assertions.assertNotNull(metaData);
+        Assertions.assertEquals(3, metaData.getColumnCount());
+        Assertions.assertEquals("JobId", metaData.getColumn(0).getName());
+        Assertions.assertEquals("Label", metaData.getColumn(1).getName());
+        Assertions.assertEquals("ErrorMsgDetail", metaData.getColumn(2).getName());
     }
 
     @Test
@@ -85,11 +86,5 @@ public class ShowLoadWarningsStmtTest {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
         analyzeFail("SHOW LOAD WARNINGS ON 'xxx'", "Invalid url: no protocol: xxx");
         analyzeFail("SHOW LOAD WARNINGS ON ''", "Error load url is missing");
-    }
-
-    @Test
-    public void testGetRedirectStatus() {
-        ShowLoadWarningsStmt stmt = new ShowLoadWarningsStmt(null, null, null, null);
-        Assert.assertEquals(stmt.getRedirectStatus(), RedirectStatus.NO_FORWARD);
     }
 }

@@ -17,20 +17,19 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SysFeLocks::_s_columns[] = {
-        {"lock_type", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"lock_object", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"lock_mode", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"lock_type", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"lock_object", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"lock_mode", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"start_time", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"hold_time_ms", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
-        {"thread_info", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"thread_info", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"granted", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), true},
-        {"waiter_list", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"waiter_list", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 
 };
 

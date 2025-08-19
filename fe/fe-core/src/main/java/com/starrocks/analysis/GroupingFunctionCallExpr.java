@@ -34,7 +34,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -71,10 +70,6 @@ public class GroupingFunctionCallExpr extends FunctionCallExpr {
     @Override
     public Expr clone() {
         return new GroupingFunctionCallExpr(this);
-    }
-
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
     // set child to virtual slot

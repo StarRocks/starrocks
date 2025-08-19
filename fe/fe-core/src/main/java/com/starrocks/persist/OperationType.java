@@ -84,9 +84,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_ALTER_JOB_V2 = 125;
 
-    @Deprecated
-    public static final short OP_ADD_REPLICA = 42;
-
     public static final short OP_SET_REPLICA_STATUS = 47;
 
     @IgnorableOnReplayFailed
@@ -144,8 +141,6 @@ public class OperationType {
     public static final short OP_DROP_RESOURCE = 277;
 
     // NOTICE newly added type starts from 10000, to avoid conflicting with community added type
-
-    public static final short OP_META_VERSION_V2 = 10000;
 
     @IgnorableOnReplayFailed
     public static final short OP_SWAP_TABLE = 10001;
@@ -544,6 +539,9 @@ public class OperationType {
     public static final short OP_CREATE_STREAM_LOAD_TASK_V2 = 13070;
 
     @IgnorableOnReplayFailed
+    public static final short OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK = 13071;
+
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_COLUMN_COMMENT = 13080;
 
     // storage volume
@@ -633,6 +631,12 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DISABLE_SPM_BASELINE_LOG = 13544;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_UPDATE_DYNAMIC_TABLET_JOB_LOG = 13550;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_REMOVE_DYNAMIC_TABLET_JOB_LOG = 13551;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */
@@ -642,6 +646,8 @@ public class OperationType {
     public static final short OP_CREATE_WAREHOUSE = 20101;
     public static final short OP_DROP_WAREHOUSE = 20102;
     public static final short OP_ALTER_WAREHOUSE = 20103;
+    // warehouse internal op
+    public static final short OP_WAREHOUSE_INTERNAL_OP = 20111;
 
     // security integration and role mapping
     public static final short OP_CREATE_SECURITY_INTEGRATION = 20269;
@@ -670,6 +676,7 @@ public class OperationType {
                     opType != OP_CREATE_WAREHOUSE &&
                     opType != OP_DROP_WAREHOUSE &&
                     opType != OP_ALTER_WAREHOUSE &&
+                    opType != OP_WAREHOUSE_INTERNAL_OP &&
                     opType != OP_CREATE_SECURITY_INTEGRATION &&
                     opType != OP_DROP_SECURITY_INTEGRATION &&
                     opType != OP_ALTER_SECURITY_INTEGRATION) {

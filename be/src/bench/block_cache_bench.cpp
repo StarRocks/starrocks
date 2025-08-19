@@ -24,7 +24,7 @@
 #include <filesystem>
 #include <memory>
 
-#include "cache/starcache_wrapper.h"
+#include "cache/starcache_engine.h"
 #include "starcache/common/types.h"
 #include "util/logging.h"
 #include "util/random.h"
@@ -106,7 +106,7 @@ public:
 
     BlockCacheBenchSuite(const CacheOptions& options, const BenchParams& params) {
         _params = new BlockCacheBenchSuite::BenchParams(params);
-        _cache = new StarCacheWrapper;
+        _cache = new StarCacheEngine();
         Status st = _cache->init(options);
         DCHECK(st.ok()) << st.message();
         _ctx = new BenchContext();

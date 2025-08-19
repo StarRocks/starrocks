@@ -38,7 +38,6 @@ set(RUNTIME_FILES
     result_sink.cpp
     result_buffer_mgr.cpp
     runtime_state.cpp
-    string_value.cpp
     decimalv2_value.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp
@@ -108,6 +107,7 @@ set(RUNTIME_FILES
     customized_result_writer.cpp
     int128_to_double.cpp
     diagnose_daemon.cpp
+    load_fail_point.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

@@ -58,8 +58,8 @@ Status EngineChecksumTask::execute() {
 
 Status EngineChecksumTask::_compute_checksum() {
     int64_t begin_us = butil::gettimeofday_us();
-    LOG(INFO) << "begin to process compute checksum."
-              << "tablet_id=" << _tablet_id << ", version=" << _version;
+    VLOG(1) << "begin to process compute checksum."
+            << "tablet_id=" << _tablet_id << ", version=" << _version;
 
     if (_checksum == nullptr) {
         LOG(WARNING) << "The input checksum is a null pointer";

@@ -82,7 +82,7 @@ public:
 
     Status cache_tablet_metadata(const TabletMetadataPtr& metadata);
 
-    Status put_aggregate_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas);
+    Status put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas);
 
     // When using get_tablet_metadata to determine whether a new version exists in publish version,
     // a valid expected_gtid must be passed in.
@@ -98,6 +98,12 @@ public:
     StatusOr<TabletMetadataPtr> get_single_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true,
                                                            int64_t expected_gtid = 0,
                                                            const std::shared_ptr<FileSystem>& fs = nullptr);
+
+    static StatusOr<BundleTabletMetadataPtr> parse_bundle_tablet_metadata(const std::string& path,
+                                                                          const std::string& serialized_string);
+
+    static StatusOr<TabletMetadataPtrs> get_metas_from_bundle_tablet_metadata(const std::string& location,
+                                                                              FileSystem* input_fs = nullptr);
 
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
@@ -161,7 +167,7 @@ public:
 
     std::string tablet_initial_metadata_location(int64_t tablet_id) const;
 
-    std::string aggregate_tablet_metadata_location(int64_t tablet_id, int64_t version) const;
+    std::string bundle_tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 
@@ -250,6 +256,7 @@ private:
 
     bthreads::singleflight::Group<std::string, StatusOr<TabletSchemaPtr>> _schema_group;
     bthreads::singleflight::Group<std::string, StatusOr<CombinedTxnLogPtr>> _combined_txn_log_group;
+    bthreads::singleflight::Group<std::string, StatusOr<std::string>> _bundle_tablet_metadata_group;
 };
 
 } // namespace starrocks::lake

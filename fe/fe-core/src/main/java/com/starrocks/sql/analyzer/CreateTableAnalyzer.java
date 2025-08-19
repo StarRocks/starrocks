@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
@@ -230,7 +231,18 @@ public class CreateTableAnalyzer {
         List<Column> columns = new ArrayList<>();
         for (ColumnDef columnDef : columnDefs) {
             try {
-                columnDef.analyze(statement.isOlapEngine(), CatalogMgr.isInternalCatalog(catalogName), engineName);
+                String name = columnDef.getName();
+                boolean isAllowNull = columnDef.isAllowNull();
+
+                if (CatalogMgr.isInternalCatalog(catalogName)) {
+                    if (!isAllowNull && !EngineType.supportNotNullColumn(engineName)) {
+                        // prevent not null for external table
+                        throw new AnalysisException(String.format("All columns must be nullable for external table. " +
+                                "Column %s is not nullable, You can rebuild the external table and " +
+                                "We strongly recommend that you use catalog to access external data", name));
+                    }
+                }
+                ColumnDefAnalyzer.analyze(columnDef, statement.isOlapEngine());
             } catch (AnalysisException e) {
                 LOG.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());
@@ -260,7 +272,7 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("BITMAP_UNION must be used in AGG_KEYS", keysDesc.getPos());
             }
 
-            Column col = columnDef.toColumn(null);
+            Column col = Column.fromColumnDef(null, columnDef);
             if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
                     || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
                     keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
@@ -418,20 +430,24 @@ public class CreateTableAnalyzer {
         KeysType keysType = keysDesc.getKeysType();
 
         List<ColumnDef> columnDefs = stmt.getColumnDefs();
-        List<String> sortKeys = stmt.getSortKeys();
+        List<OrderByElement> orderByElements = stmt.getOrderByElements();
         List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
-        if (sortKeys != null) {
+        if (orderByElements != null) {
             // we should check sort key column type if table is primary key table
             if (keysType == KeysType.PRIMARY_KEYS) {
-                for (String column : sortKeys) {
+                for (OrderByElement orderByElement : orderByElements) {
+                    String column = orderByElement.castAsSlotRef();
+                    if (column == null) {
+                        throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                    }
                     int idx = columnNames.indexOf(column);
                     if (idx == -1) {
                         throw new SemanticException("Unknown column '%s' does not exist", column);
                     }
                     ColumnDef cd = columnDefs.get(idx);
                     Type t = cd.getType();
-                    if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
-                            t.isDatetime())) {
+                    if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isBinaryType() ||
+                            t.isDate() || t.isDatetime())) {
                         throw new SemanticException("sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
                     }
                 }
@@ -439,7 +455,11 @@ public class CreateTableAnalyzer {
                 // sort key column of duplicate table has no limitation
             } else if (keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) {
                 List<Integer> sortKeyIdxes = Lists.newArrayList();
-                for (String column : sortKeys) {
+                for (OrderByElement orderByElement : orderByElements) {
+                    String column = orderByElement.castAsSlotRef();
+                    if (column == null) {
+                        throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                    }
                     int idx = columnNames.indexOf(column);
                     if (idx == -1) {
                         throw new SemanticException("Unknown column '%s' does not exist", column);
@@ -621,9 +641,8 @@ public class CreateTableAnalyzer {
                     throw new SemanticException("Currently not support default distribution in " + keysDesc.getKeysType());
                 }
             }
-            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS
-                    && !(keysDesc.getKeysType() == KeysType.AGG_KEYS && !stmt.isHasReplace())) {
-                throw new SemanticException(keysDesc.getKeysType().toSql() + (stmt.isHasReplace() ? " with replace " : "")
+            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
+                throw new SemanticException(keysDesc.getKeysType().toSql()
                         + " must use hash distribution", distributionDesc.getPos());
             }
             if (distributionDesc.getBuckets() > Config.max_bucket_number_per_partition && stmt.isOlapEngine()

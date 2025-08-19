@@ -27,6 +27,8 @@ public class MaterializedViewExceptions {
     // reason for base table optimized, base table's partition is optimized which mv cannot be actived again.
     public static final String INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED = "base-table optimized:";
 
+    public static final String INACTIVE_REASON_FOR_BASE_TABLE_REORDER_COLUMNS = "base-table reordered columns:";
+
     /**
      * Create the inactive reason when base table not exists
      */
@@ -55,6 +57,10 @@ public class MaterializedViewExceptions {
 
     public static String inactiveReasonForBaseTableOptimized(String tableName) {
         return INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED + tableName;
+    }
+
+    public static String inactiveReasonForBaseTableReorderColumns(String tableName) {
+        return INACTIVE_REASON_FOR_BASE_TABLE_REORDER_COLUMNS + tableName;
     }
 
     public static String inactiveReasonForBaseTableActive(String tableName) {

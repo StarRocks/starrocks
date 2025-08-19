@@ -16,12 +16,9 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TTabletType;
@@ -62,12 +59,7 @@ public class PartitionDesc implements ParseNode {
         return pos;
     }
 
-    // Currently, RANGE is used for materialized view ExpressionRangePartitionInfo, which is isExprPartition=false,
-    // and EXPR_RANGE is used for ordinary table ExpressionRangePartitionInfo, which is isExprPartition=true
-    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
-            throws DdlException {
-        throw new NotImplementedException();
-    }
+
 
     public String getPartitionName() throws NotImplementedException {
         throw new NotImplementedException();

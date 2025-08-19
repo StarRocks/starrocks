@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
@@ -25,7 +26,6 @@ import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.ast.SubmitTaskStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
@@ -33,9 +33,9 @@ import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -46,7 +46,7 @@ public class ShowTaskTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -101,12 +101,12 @@ public class ShowTaskTest {
         tGetTasksParams.setCurrent_user_ident(new TUserIdentity(currentUserIdentity.toThrift()));
         TGetTaskInfoResult taskResult = frontendService.getTasks(tGetTasksParams);
         List<TTaskInfo> tasks = taskResult.getTasks();
-        Assert.assertEquals(2, tasks.size());
+        Assertions.assertEquals(2, tasks.size());
         for (TTaskInfo task : tasks) {
             if(task.getTask_name().equals("test_periodical")) {
-                Assert.assertEquals("PERIODICAL START(2020-04-21T00:00) EVERY(5 SECONDS)", task.getSchedule());
+                Assertions.assertEquals("PERIODICAL START(2020-04-21T00:00) EVERY(5 SECONDS)", task.getSchedule());
             } else {
-                Assert.assertEquals(task.getSchedule(),"MANUAL");
+                Assertions.assertEquals(task.getSchedule(),"MANUAL");
             }
         }
         taskManager.dropTasks(ImmutableList.of(periodTask.getId(), manualTask.getId()), false);
@@ -141,12 +141,12 @@ public class ShowTaskTest {
         tGetTasksParams.setCurrent_user_ident(new TUserIdentity(currentUserIdentity.toThrift()));
         TGetTaskInfoResult taskResult = frontendService.getTasks(tGetTasksParams);
         List<TTaskInfo> tasks = taskResult.getTasks();
-        Assert.assertEquals(2, tasks.size());
+        Assertions.assertEquals(2, tasks.size());
         for (TTaskInfo task : tasks) {
             if(task.getTask_name().equals("test_unknown")) {
-                Assert.assertEquals(task.getSchedule(),"UNKNOWN");
+                Assertions.assertEquals(task.getSchedule(),"UNKNOWN");
             } else {
-                Assert.assertEquals(task.getSchedule(),"MANUAL");
+                Assertions.assertEquals(task.getSchedule(),"MANUAL");
             }
         }
         taskManager.dropTasks(ImmutableList.of(unknownTask.getId(), manualTask.getId()), false);

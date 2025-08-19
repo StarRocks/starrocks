@@ -13,7 +13,7 @@ The following fields are provided in `tables`:
 | TABLE_CATALOG   | Name of the catalog that stores the table.                   |
 | TABLE_SCHEMA    | Name of the database that stores the table.                  |
 | TABLE_NAME      | Name of the table.                                           |
-| TABLE_TYPE      | Type of the table. Valid values: `BASE TABLE` or `VIEW`.     |
+| TABLE_TYPE      | Type of the table. Valid values: `TABLE`(`BASE TABLE`), `VIEW` and `SYSTEM VIEW` (supported only when `mysql_server_version` is `8.0.33`).     |
 | ENGINE          | Engine type of the table. Valid values: `StarRocks`, `MySQL`, `MEMORY` or an empty string. |
 | VERSION         | Applies to a feature not available in StarRocks.             |
 | ROW_FORMAT      | Applies to a feature not available in StarRocks.             |

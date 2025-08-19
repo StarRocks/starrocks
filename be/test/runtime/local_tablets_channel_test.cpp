@@ -382,7 +382,8 @@ void LocalTabletsChannelTest::test_cancel_secondary_replica_base(bool is_empty_t
         EXPECT_EQ(request->txn_id(), _txn_id);
         EXPECT_EQ(1, request->tablet_ids().size());
         EXPECT_EQ(tablet->tablet_id(), request->tablet_ids().Get(0));
-        EXPECT_EQ(request->reason(), is_empty_tablet ? "" : "primary replica failed to sync data");
+        EXPECT_EQ(request->reason(),
+                  is_empty_tablet ? "" : "primary replica on host [] failed to sync data to secondary replica");
         google::protobuf::Closure* closure = std::get<1>(*rpc_tuple);
         closure->Run();
         num_cancel += 1;

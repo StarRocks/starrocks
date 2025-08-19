@@ -42,7 +42,8 @@ namespace starrocks {
     M(TYPE_DOUBLE)                   \
     M(TYPE_DECIMAL32)                \
     M(TYPE_DECIMAL64)                \
-    M(TYPE_DECIMAL128)
+    M(TYPE_DECIMAL128)               \
+    M(TYPE_DECIMAL256)
 
 #define APPLY_FOR_ALL_SCALAR_TYPE(M) \
     APPLY_FOR_ALL_NUMBER_TYPE(M)     \
@@ -89,6 +90,7 @@ namespace starrocks {
     M(DECIMAL)                          \
     M(CHAR)                             \
     M(LARGEINT)                         \
+    M(INT256)                           \
     M(VARCHAR)                          \
     M(HLL)                              \
     M(DECIMALV2)                        \
@@ -98,10 +100,19 @@ namespace starrocks {
     M(DECIMAL32)                        \
     M(DECIMAL64)                        \
     M(DECIMAL128)                       \
+    M(DECIMAL256)                       \
     M(FUNCTION)                         \
     M(BINARY)                           \
     M(VARBINARY)                        \
     M(JSON)
+
+#define APPLY_FOR_MIN_MAX_COMPRESSABLE_TYPE(M) \
+    APPLY_FOR_ALL_INT_TYPE(M)                  \
+    M(TYPE_DECIMAL32)                          \
+    M(TYPE_DECIMAL64)                          \
+    M(TYPE_DECIMAL128)                         \
+    M(TYPE_DATE)                               \
+    M(TYPE_DATETIME)
 
 #define APPLY_FOR_BITSET_FILTER_SUPPORTED_TYPE(M) \
     M(TYPE_BOOLEAN)                               \

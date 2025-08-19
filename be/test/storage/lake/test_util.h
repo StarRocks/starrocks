@@ -174,7 +174,7 @@ inline Status TEST_aggregate_publish_version(TabletManager* tablet_mgr, std::vec
         for (const auto& meta : response.tablet_metas()) {
             tablet_metas.emplace(meta.first, meta.second);
         }
-        return tablet_mgr->put_aggregate_tablet_metadata(tablet_metas);
+        return tablet_mgr->put_bundle_tablet_metadata(tablet_metas);
     } else {
         return Status::InternalError(fmt::format("failed to publish version. tablet_sz={} txn_id={} new_version={}",
                                                  tablet_ids.size(), txn_id, new_version));

@@ -14,23 +14,24 @@
 
 #pragma once
 
-#include <future>
-#include <string>
-#include <vector>
+#include <list>
 
+#include "common/config.h"
+#include "common/statusor.h"
 #include "gen_cpp/lake_service.pb.h"
+#include "storage/lake/async_file_deleter.h"
 
 namespace starrocks {
 class Status;
-}
+class FileSystem;
+class DirEntry;
+} // namespace starrocks
 
 namespace starrocks::lake {
 
 class TabletManager;
 
 void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response);
-
-void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, VacuumFullResponse* response);
 
 // REQUIRES:
 //  - tablet_mgr != NULL
@@ -54,7 +55,25 @@ std::future<Status> delete_files_callable(std::vector<std::string> files_to_dele
 // Run a clear task async
 void run_clear_task_async(std::function<void()> task);
 
-Status datafile_gc(std::string_view root_location, std::string_view audit_file_path, int64_t expired_seconds = 86400,
-                   bool do_delete = false);
+StatusOr<int64_t> datafile_gc(std::string_view root_location, std::string_view audit_file_path,
+                              int64_t expired_seconds = 86400, bool do_delete = false);
+
+// Check if there are any garbage files in the given root location.
+// Returns the number of garbage files found.
+StatusOr<int64_t> garbage_file_check(std::string_view root_location);
+
+Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files,
+                      int64_t* vacuumed_file_size);
+
+StatusOr<std::pair<std::list<std::string>, std::list<std::string>>> list_meta_files(
+        FileSystem* fs, const std::string& metadata_root_location);
+
+StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs, std::string_view root_location,
+                                                                 int64_t expired_seconds,
+                                                                 const std::list<std::string>& meta_files,
+                                                                 const std::list<std::string>& bundle_meta_files,
+                                                                 std::ostream* audit_ostream);
+
+Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths);
 
 } // namespace starrocks::lake

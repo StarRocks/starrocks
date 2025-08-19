@@ -128,7 +128,7 @@ public class MysqlSerializer {
     }
 
     public void writeField(String db, String table, Column column, boolean sendDefault) {
-        MysqlCodec.writeField(out, db, table, column, sendDefault);
+        MysqlCodec.writeField(out, db, table, column.getName(), column.getType(), sendDefault, column.getDefaultValue());
     }
 
     public void writeField(String colName, Type type) {

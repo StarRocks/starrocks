@@ -20,6 +20,7 @@ import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.io.FileIO;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -41,7 +42,12 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     private final int fetchSize;
     protected final ClassLoader classLoader;
     protected Table table;
+    protected FileIO fileIO;
     protected String timezone;
+
+    // expire after 600 seconds long enough for most credential expiration
+    // max 1000 entries large enough for most use cases
+    private static final TableFileIOCache TABLE_FILE_IO_CACHE = new TableFileIOCache(600, 1000);
 
     public AbstractIcebergMetadataScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
@@ -58,6 +64,7 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             this.table = deserializeFromBase64(serializedTable);
+            this.fileIO = TABLE_FILE_IO_CACHE.get(table);
             parseRequiredTypes();
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
             doOpen();

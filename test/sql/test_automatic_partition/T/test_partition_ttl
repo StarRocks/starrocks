@@ -3,3 +3,52 @@ CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION B
 show create table ss;
 alter table ss set ("partition_ttl" = "6 month");
 show create table ss;
+
+-- name: test_multi_partition_ttl
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE ss(event_day DATETIME, pv BIGINT) PARTITION BY pv, date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_retention_condition" = "event_day >= current_date() - interval 3 day");
+show create table ss;
+CREATE TABLE ss1(event_day DATETIME, pv BIGINT) PARTITION BY pv, date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_retention_condition" = "event_day >= current_date() - interval 3 day and pv = 1");
+show create table ss1;
+insert into ss1 values(current_date(), 1);
+insert into ss1 values(current_date() - interval 4 day, 1);
+insert into ss1 values(current_date(), 2);
+shell: curl --location-trusted -u root: "${url}/api/trigger?type=dynamic_partition&db=db_${uuid0}&tbl=ss1"
+select count(*) from ss1;
+
+-- name: test_alter_multi_partition_ttl
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE ss1(event_day DATETIME, pv BIGINT) PARTITION BY pv, date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_retention_condition" = "event_day >= current_date() - interval 3 day");
+show create table ss1;
+insert into ss1 values(current_date(), 1);
+insert into ss1 values(current_date() - interval 4 day, 1);
+insert into ss1 values(current_date(), 2);
+shell: curl --location-trusted -u root: "${url}/api/trigger?type=dynamic_partition&db=db_${uuid0}&tbl=ss1"
+select count(*) from ss1;
+
+ALTER TABLE ss1 set ("partition_retention_condition" = "event_day >= current_date() - interval 3 day and pv = 1");
+show create table ss1;
+shell: curl --location-trusted -u root: "${url}/api/trigger?type=dynamic_partition&db=db_${uuid0}&tbl=ss1"
+select count(*) from ss1;
+
+-- name: test_multi_partition_ttl_with_str2date
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE ss(event_day string, pv BIGINT) PARTITION BY pv, date_trunc('day', str2date(event_day, '%Y-%m-%d')) DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_retention_condition" = "str2date(event_day, '%Y-%m-%d') >= current_date() - interval 3 day");
+show create table ss;
+insert into ss values(current_date(), 1);
+insert into ss values(current_date() - interval 4 day, 1);
+insert into ss values(current_date(), 2);
+shell: curl --location-trusted -u root: "${url}/api/trigger?type=dynamic_partition&db=db_${uuid0}&tbl=ss"
+select count(*) from ss;
+
+DROP TABLE ss;
+CREATE TABLE ss(event_day string, pv BIGINT) PARTITION BY pv, str2date(event_day, '%Y-%m-%d') DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_retention_condition" = "str2date(event_day, '%Y-%m-%d') >= current_date() - interval 3 day");
+show create table ss;
+insert into ss values(current_date(), 1);
+insert into ss values(current_date() - interval 4 day, 1);
+insert into ss values(current_date(), 2);
+shell: curl --location-trusted -u root: "${url}/api/trigger?type=dynamic_partition&db=db_${uuid0}&tbl=ss"
+select count(*) from ss;

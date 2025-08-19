@@ -486,10 +486,11 @@ public:
 
 #define CASE_DECIMAL_TYPE(OP) CASE_TYPE(TYPE_DECIMALV2, OP);
 
-#define CASE_DECIMAL_V3_TYPE(OP)  \
-    CASE_TYPE(TYPE_DECIMAL32, OP) \
-    CASE_TYPE(TYPE_DECIMAL64, OP) \
-    CASE_TYPE(TYPE_DECIMAL128, OP)
+#define CASE_DECIMAL_V3_TYPE(OP)   \
+    CASE_TYPE(TYPE_DECIMAL32, OP)  \
+    CASE_TYPE(TYPE_DECIMAL64, OP)  \
+    CASE_TYPE(TYPE_DECIMAL128, OP) \
+    CASE_TYPE(TYPE_DECIMAL256, OP)
 
 #define SWITCH_INT_TYPE(OP)                                                   \
     switch (resultType) {                                                     \

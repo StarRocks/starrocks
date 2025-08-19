@@ -18,13 +18,13 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.WarehouseManager;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class DefaultSlotSelectionStrategyTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() {
         MetricRepo.init();
     }

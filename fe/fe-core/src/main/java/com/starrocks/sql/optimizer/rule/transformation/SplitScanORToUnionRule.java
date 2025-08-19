@@ -245,9 +245,10 @@ public class SplitScanORToUnionRule extends TransformationRule {
         scan.getColumnMetaToColRefMap().forEach((meta, ref) -> {
             ColumnRefOperator newRef = factory.create(ref.getName(), ref.getType(), ref.isNullable());
             columnToRefs.put(meta, newRef);
-            refToColumns.put(newRef, meta);
             replaceRefs.put(ref, newRef);
         });
+
+        scan.getColRefToColumnMetaMap().forEach((ref, meta) -> refToColumns.put(replaceRefs.get(ref), meta));
 
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(replaceRefs);
         LogicalOlapScanOperator.Builder builder = LogicalOlapScanOperator.builder().withOperator(scan)

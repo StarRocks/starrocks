@@ -36,7 +36,7 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/object_cache/lrucache_module.h"
+#include "cache/lrucache_engine.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -47,22 +47,17 @@ protected:
     ~StoragePageCacheTest() override = default;
 
     void SetUp() override;
-    void create_obj_cache(size_t capacity);
 
-    std::shared_ptr<Cache> _lru_cache;
-    std::shared_ptr<ObjectCache> _obj_cache;
+    std::shared_ptr<LRUCacheEngine> _lru_cache;
     std::shared_ptr<StoragePageCache> _page_cache;
     size_t _capacity = kNumShards * 2048;
 };
 
 void StoragePageCacheTest::SetUp() {
-    create_obj_cache(_capacity);
-    _page_cache = std::make_shared<StoragePageCache>(_obj_cache.get());
-}
-
-void StoragePageCacheTest::create_obj_cache(size_t capacity) {
-    _lru_cache = std::make_shared<ShardedLRUCache>(capacity);
-    _obj_cache = std::make_shared<LRUCacheModule>(_lru_cache);
+    CacheOptions opts{.mem_space_size = _capacity};
+    _lru_cache = std::make_shared<LRUCacheEngine>();
+    ASSERT_OK(_lru_cache->init(opts));
+    _page_cache = std::make_shared<StoragePageCache>(_lru_cache.get());
 }
 
 TEST_F(StoragePageCacheTest, insert_with_deleter) {

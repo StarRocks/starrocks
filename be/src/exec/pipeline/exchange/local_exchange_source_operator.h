@@ -65,7 +65,7 @@ public:
     Status add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes, uint32_t from,
                      uint32_t size, size_t memory_bytes);
 
-    Status add_chunk(const std::vector<std::string>& partition_key,
+    Status add_chunk(const std::vector<std::optional<std::string>>& partition_key,
                      const std::vector<std::pair<TypeDescriptor, ColumnPtr>>& partition_datum,
                      std::unique_ptr<Chunk> chunk);
 
@@ -114,7 +114,7 @@ private:
 
     int64_t _key_partition_max_rows() const;
 
-    std::unordered_map<std::vector<std::string>, LocalExchangeSourceOperator::PartialChunks>::iterator
+    std::map<std::vector<std::optional<std::string>>, LocalExchangeSourceOperator::PartialChunks>::iterator
     _max_row_partition_chunks();
 
     bool _local_buffer_almost_full() const { return _local_memory_usage >= _local_memory_limit; }
@@ -138,7 +138,7 @@ private:
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;
     const std::shared_ptr<ChunkBufferMemoryManager>& _memory_manager;
-    std::unordered_map<std::vector<std::string>, PartialChunks> _partition_key2partial_chunks;
+    std::map<std::vector<std::optional<std::string>>, PartialChunks> _partition_key2partial_chunks;
 
     // STREAM MV
     bool _is_epoch_finished = false;

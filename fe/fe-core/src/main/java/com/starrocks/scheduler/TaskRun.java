@@ -24,9 +24,12 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
@@ -37,7 +40,6 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -117,7 +119,7 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private ExecuteOption executeOption;
 
-    TaskRun() {
+    public TaskRun() {
         future = new CompletableFuture<>();
         taskRunId = UUIDUtil.genUUID().toString();
     }
@@ -259,7 +261,7 @@ public class TaskRun implements Comparable<TaskRun> {
         return context;
     }
 
-    public boolean executeTaskRun() throws Exception {
+    public Constants.TaskRunState executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
 
         // Definition will cause a lot of repeats and cost a lot of metadata memory resources, so
@@ -274,9 +276,15 @@ public class TaskRun implements Comparable<TaskRun> {
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
-        for (String key : properties.keySet()) {
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey();
+            // if task contains session properties, we should remove the prefix
+            if (key.startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                key = key.substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+            }
+            String value = entry.getValue();
             try {
-                runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(properties.get(key))), true);
+                runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(value)), true);
             } catch (DdlException e) {
                 // not session variable
                 taskRunContextProperties.put(key, properties.get(key));
@@ -308,8 +316,12 @@ public class TaskRun implements Comparable<TaskRun> {
 
         // prepare to execute task run, move it here so that we can catch the exception and set the status
         processor.prepare(taskRunContext);
+
         // process task run
-        processor.processTaskRun(taskRunContext);
+        Constants.TaskRunState taskRunState;
+        try (Timer ignored = Tracers.watchScope("TaskRunProcess")) {
+            taskRunState = processor.processTaskRun(taskRunContext);
+        }
 
         QueryState queryState = runCtx.getState();
         LOG.info("[QueryId:{}] finished to execute task run, task_id:{}, query_state:{}",
@@ -321,16 +333,17 @@ public class TaskRun implements Comparable<TaskRun> {
                 errorCode = queryState.getErrorCode().getCode();
             }
             status.setErrorCode(errorCode);
-            return false;
+            return Constants.TaskRunState.FAILED;
         }
 
-        // Execute post task action, but ignore any exception
-        try {
+        // post process task run
+        try (Timer ignored = Tracers.watchScope("TaskRunPostProcess")) {
             processor.postTaskRun(taskRunContext);
-        } catch (Exception ignored) {
-            LOG.warn("Execute post taskRun failed {} ", status, ignored);
+        } catch (Exception e) {
+            LOG.warn("Failed to post task run, task_id: {}, task_run_id: {}, error: {}",
+                    taskId, taskRunId, e.getMessage());
         }
-        return true;
+        return taskRunState;
     }
 
     public ConnectContext getRunCtx() {
@@ -391,6 +404,7 @@ public class TaskRun implements Comparable<TaskRun> {
         TaskRunStatus status = new TaskRunStatus();
         long created = createTime == null ? System.currentTimeMillis() : createTime;
         status.setQueryId(queryId);
+        status.setTaskRunId(taskRunId);
         status.setTaskId(task.getId());
         status.setTaskName(task.getName());
         status.setSource(task.getSource());

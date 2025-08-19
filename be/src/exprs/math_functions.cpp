@@ -29,7 +29,6 @@
 #include "exprs/function_helper.h"
 #include "exprs/math_functions.h"
 #include "util/murmur_hash3.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -161,10 +160,6 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
     DEFINE_BINARY_FUNCTION(NAME##Impl, FN);                                                        \
     DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE);
 
-#define DEFINE_MATH_BINARY_WITH_OUTPUT_INF_NAN_CHECK_FN_WITH_IMPL(NAME, LTYPE, RTYPE, RESULT_TYPE, FN) \
-    DEFINE_BINARY_FUNCTION(NAME##Impl, FN);                                                            \
-    DEFINE_MATH_BINARY_WITH_OUTPUT_INF_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE);
-
 // ============ math function impl ==========
 StatusOr<ColumnPtr> MathFunctions::pi(FunctionContext* context, const Columns& columns) {
     return ColumnHelper::create_const_column<TYPE_DOUBLE>(M_PI, 1);
@@ -265,6 +260,7 @@ DEFINE_MATH_UNARY_FN_CAST_WITH_IMPL(abs_tinyint, TYPE_TINYINT, TYPE_SMALLINT, st
 DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal32, TYPE_DECIMAL32, TYPE_DECIMAL32, std::abs);
 DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal64, TYPE_DECIMAL64, TYPE_DECIMAL64, std::abs);
 DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal128, TYPE_DECIMAL128, TYPE_DECIMAL128, std::abs);
+DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal256, TYPE_DECIMAL256, TYPE_DECIMAL256, std::abs);
 
 // degrees
 DEFINE_UNARY_FN_WITH_IMPL(abs_decimalv2valImpl, v) {
@@ -308,10 +304,24 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(round_up_toImpl, l, r) {
     return MathFunctions::double_round(l, r, false, false);
 }
 
+DEFINE_BINARY_FUNCTION_WITH_IMPL(powImpl, l, r) {
+    // fast path
+    if (r == 1.0) {
+        return l;
+    } else if (r == 2.0) {
+        return l * l;
+    } else if (r == -1.0) {
+        return 1.0 / l;
+    } else if (r == 0) {
+        return 1.0;
+    }
+    return std::pow(l, r);
+}
+DEFINE_MATH_BINARY_WITH_OUTPUT_INF_NAN_CHECK_FN(pow, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE);
+
 // binary math
 DEFINE_MATH_BINARY_FN_WITH_NAN_CHECK(truncate, TYPE_DOUBLE, TYPE_INT, TYPE_DOUBLE);
 DEFINE_MATH_BINARY_FN(round_up_to, TYPE_DOUBLE, TYPE_INT, TYPE_DOUBLE);
-DEFINE_MATH_BINARY_WITH_OUTPUT_INF_NAN_CHECK_FN_WITH_IMPL(pow, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE, std::pow);
 DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(atan2, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE, std::atan2);
 
 template <LogicalType Type>
@@ -1216,7 +1226,11 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
             }
         }
         if constexpr (!isNorm) {
-            result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+            if (base_sum == 0 || target_sum == 0) {
+                result_value = 0;
+            } else {
+                result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+            }
         } else {
             result_value = sum;
         }
@@ -1337,3 +1351,5 @@ StatusOr<ColumnPtr> MathFunctions::l2_distance(FunctionContext* context, const C
 template StatusOr<ColumnPtr> MathFunctions::l2_distance<TYPE_FLOAT>(FunctionContext* context, const Columns& columns);
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/MathFunctions.inc"

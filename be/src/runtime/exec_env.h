@@ -107,6 +107,10 @@ namespace spill {
 class DirManager;
 }
 
+namespace connector {
+class ConnectorSinkSpillExecutor;
+}
+
 class GlobalEnv {
 public:
     static GlobalEnv* GetInstance() {
@@ -151,7 +155,6 @@ public:
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
     MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
-    MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker.get(); }
     MemTracker* passthrough_mem_tracker() { return _passthrough_mem_tracker.get(); }
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
@@ -220,7 +223,6 @@ private:
     // The memory tracker for update manager
     std::shared_ptr<MemTracker> _update_mem_tracker;
 
-    std::shared_ptr<MemTracker> _chunk_allocator_mem_tracker;
     // record mem usage in passthrough
     std::shared_ptr<MemTracker> _passthrough_mem_tracker;
 
@@ -312,6 +314,8 @@ public:
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
+
+    connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor() { return _connector_sink_spill_executor; }
 
     ThreadPool* automatic_partition_pool() { return _automatic_partition_pool.get(); }
 
@@ -409,6 +413,8 @@ private:
     RoutineLoadTaskExecutor* _routine_load_task_executor = nullptr;
     SmallFileMgr* _small_file_mgr = nullptr;
     HeartbeatFlags* _heartbeat_flags = nullptr;
+
+    connector::ConnectorSinkSpillExecutor* _connector_sink_spill_executor = nullptr;
 
     std::unique_ptr<ThreadPool> _automatic_partition_pool;
 

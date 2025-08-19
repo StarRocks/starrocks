@@ -133,6 +133,32 @@ public class PartitionTTLScheduler {
         }
     }
 
+    public void executePartitionTTLForTable(Long dbId, Long tableId) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            LOG.warn("Automatically removes the schedule because database does not exist, dbId: {}", dbId);
+            return;
+        }
+
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (table == null) {
+            LOG.warn("Automatically removes the schedule because table does not exist, " +
+                    "tableId: {}", tableId);
+            return;
+        }
+        if (!(table instanceof OlapTable)) {
+            LOG.warn("Automatically removes the schedule because table is not olap table, " +
+                    "tableId: {}", tableId);
+            return;
+        }
+        OlapTable olapTable = (OlapTable) table;
+        if (!isValidRangePartitionTTL(db, olapTable, olapTable.getPartitionInfo())) {
+            LOG.warn("database={}, table={} have no ttl. remove it from scheduler", db.getOriginName(), olapTable.getName());
+            return;
+        }
+        doScheduleTableTTLPartition(db, olapTable);
+    }
+
     private void doScheduleTableTTLPartition(Database db, OlapTable olapTable) {
         // get expired partition names
         final PartitionInfo partitionInfo = olapTable.getPartitionInfo();

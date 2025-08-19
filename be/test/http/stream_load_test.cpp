@@ -95,6 +95,7 @@ public:
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
 
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
+        _evhttp_req->remote_host = nullptr;
         _limiter.reset(new ConcurrentLimiter(1000));
     }
     void TearDown() override {
@@ -164,11 +165,6 @@ TEST_F(StreamLoadActionTest, normal) {
     StreamLoadAction action(&_env, _limiter.get());
 
     HttpRequest request(_evhttp_req);
-
-    struct evhttp_request ev_req;
-    ev_req.remote_host = nullptr;
-    request._ev_req = &ev_req;
-
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
     request.set_handler(&action);
@@ -178,17 +174,15 @@ TEST_F(StreamLoadActionTest, normal) {
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("Success", doc["Status"].GetString());
+    auto* val = evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), "Content-Type");
+    ASSERT_NE(val, nullptr);
+    ASSERT_STREQ("application/json", val);
 }
 
 TEST_F(StreamLoadActionTest, process_exit_abort_stream_load) {
     StreamLoadAction action(&_env, _limiter.get());
 
     HttpRequest request(_evhttp_req);
-
-    struct evhttp_request ev_req;
-    ev_req.remote_host = nullptr;
-    request._ev_req = &ev_req;
-
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
     request.set_handler(&action);
@@ -221,10 +215,6 @@ TEST_F(StreamLoadActionTest, put_fail) {
 
     HttpRequest request(_evhttp_req);
 
-    struct evhttp_request ev_req;
-    ev_req.remote_host = nullptr;
-    request._ev_req = &ev_req;
-
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
     Status status = Status::InternalError("TestFail");
@@ -242,9 +232,6 @@ TEST_F(StreamLoadActionTest, commit_fail) {
     StreamLoadAction action(&_env, _limiter.get());
 
     HttpRequest request(_evhttp_req);
-    struct evhttp_request ev_req;
-    ev_req.remote_host = nullptr;
-    request._ev_req = &ev_req;
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
     Status status = Status::InternalError("TestFail");
@@ -262,9 +249,6 @@ TEST_F(StreamLoadActionTest, commit_try) {
     StreamLoadAction action(&_env, _limiter.get());
 
     HttpRequest request(_evhttp_req);
-    struct evhttp_request ev_req;
-    ev_req.remote_host = nullptr;
-    request._ev_req = &ev_req;
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
     Status status = Status::ServiceUnavailable("service_unavailable");
@@ -282,9 +266,6 @@ TEST_F(StreamLoadActionTest, begin_fail) {
     StreamLoadAction action(&_env, _limiter.get());
 
     HttpRequest request(_evhttp_req);
-    struct evhttp_request ev_req;
-    ev_req.remote_host = nullptr;
-    request._ev_req = &ev_req;
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
     Status status = Status::InternalError("TestFail");
@@ -323,9 +304,6 @@ TEST_F(StreamLoadActionTest, plan_fail) {
     StreamLoadAction action(&_env, _limiter.get());
 
     HttpRequest request(_evhttp_req);
-    struct evhttp_request ev_req;
-    ev_req.remote_host = nullptr;
-    request._ev_req = &ev_req;
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
 
@@ -349,11 +327,7 @@ TEST_F(StreamLoadActionTest, huge_malloc) {
     HttpRequest request(_evhttp_req);
     std::string content = "abc";
 
-    struct evhttp_request ev_req;
-    ev_req.remote_host = nullptr;
-    auto evb = evbuffer_new();
-    ev_req.input_buffer = evb;
-    request._ev_req = &ev_req;
+    auto evb = request.get_evhttp_request()->input_buffer;
 
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
@@ -419,7 +393,6 @@ TEST_F(StreamLoadActionTest, huge_malloc) {
     if (ctx->unref()) {
         delete ctx;
     }
-    evbuffer_free(evb);
 }
 
 TEST_F(StreamLoadActionTest, batch_write_csv) {
@@ -442,12 +415,7 @@ TEST_F(StreamLoadActionTest, batch_write_csv) {
     request._headers.emplace(HTTP_MERGE_COMMIT_ASYNC, "true");
 
     std::string content = "a|b|c|d";
-    struct evhttp_request ev_req;
-    ev_req.remote_host = nullptr;
-    auto evb = evbuffer_new();
-    DeferOp defer_evb([&] { evbuffer_free(evb); });
-    ev_req.input_buffer = evb;
-    request._ev_req = &ev_req;
+    auto evb = request.get_evhttp_request()->input_buffer;
     request._headers.emplace(HTTP_FORMAT_KEY, "csv");
     request._headers.emplace(HTTP_COLUMN_SEPARATOR, "|");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
@@ -506,12 +474,7 @@ TEST_F(StreamLoadActionTest, batch_write_json) {
     request._headers.emplace(HTTP_MERGE_COMMIT_ASYNC, "true");
 
     std::string content = "{\"c0\":\"a\",\"c1\":\"b\"}";
-    struct evhttp_request ev_req;
-    ev_req.remote_host = nullptr;
-    auto evb = evbuffer_new();
-    DeferOp defer_evb([&] { evbuffer_free(evb); });
-    ev_req.input_buffer = evb;
-    request._ev_req = &ev_req;
+    auto evb = request.get_evhttp_request()->input_buffer;
     request._headers.emplace(HTTP_FORMAT_KEY, "json");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
     request.set_handler(&action);
@@ -552,11 +515,6 @@ TEST_F(StreamLoadActionTest, enable_batch_write_wrong_argument) {
     StreamLoadAction action(&_env, _limiter.get());
 
     HttpRequest request(_evhttp_req);
-
-    struct evhttp_request ev_req;
-    ev_req.remote_host = nullptr;
-    request._ev_req = &ev_req;
-
     request._params.emplace(HTTP_DB_KEY, "db");
     request._params.emplace(HTTP_TABLE_KEY, "tbl");
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -643,6 +601,25 @@ TEST_F(StreamLoadActionTest, merge_commit_response) {
                 "}",
                 result);
     }
+}
+
+TEST_F(StreamLoadActionTest, url_db_key_decode_fail) {
+    StreamLoadAction action(&_env, _limiter.get());
+
+    HttpRequest request(_evhttp_req);
+    request._params.emplace(HTTP_DB_KEY, "%RR");
+    request.set_handler(&action);
+    ASSERT_EQ(-1, action.on_header(&request));
+}
+
+TEST_F(StreamLoadActionTest, url_table_key_decode_fail) {
+    StreamLoadAction action(&_env, _limiter.get());
+
+    HttpRequest request(_evhttp_req);
+    request._params.emplace(HTTP_DB_KEY, "db");
+    request._params.emplace(HTTP_TABLE_KEY, "%RR");
+    request.set_handler(&action);
+    ASSERT_EQ(-1, action.on_header(&request));
 }
 
 } // namespace starrocks

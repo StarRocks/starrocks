@@ -140,7 +140,7 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -212,7 +212,7 @@ public class AstToStringBuilder {
         @Override
         public String visitCreateUserStatement(CreateUserStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append("CREATE USER ").append(stmt.getUserIdentity());
+            sb.append("CREATE USER ").append(stmt.getUser());
             sb.append(buildAuthOptionSql(stmt.getAuthOption()));
 
             if (!stmt.getDefaultRoles().isEmpty()) {
@@ -227,7 +227,7 @@ public class AstToStringBuilder {
         @Override
         public String visitAlterUserStatement(AlterUserStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append("ALTER USER ").append(stmt.getUserIdentity());
+            sb.append("ALTER USER ").append(stmt.getUser());
             sb.append(buildAuthOptionSql(stmt.getAuthOption()));
 
             return sb.toString();
@@ -297,8 +297,8 @@ public class AstToStringBuilder {
             } else {
                 sb.append(" FROM ");
             }
-            if (stmt.getUserIdentity() != null) {
-                sb.append("USER ").append(stmt.getUserIdentity());
+            if (stmt.getUser() != null) {
+                sb.append("USER ").append(stmt.getUser());
             } else {
                 sb.append("ROLE '").append(stmt.getRole()).append("'");
             }
@@ -330,7 +330,7 @@ public class AstToStringBuilder {
             if (statement.getGrantType().equals(GrantType.ROLE)) {
                 sqlBuilder.append("ROLE ").append(statement.getRoleOrGroup());
             } else {
-                sqlBuilder.append(statement.getUserIdentity());
+                sqlBuilder.append(statement.getUser());
             }
 
             return sqlBuilder.toString();
@@ -368,7 +368,7 @@ public class AstToStringBuilder {
                     setVarList.add(setVarSql);
                 } else if (setVar instanceof SetPassVar) {
                     SetPassVar setPassVar = (SetPassVar) setVar;
-                    UserIdentity userIdentity = setPassVar.getUserIdent();
+                    UserRef userIdentity = setPassVar.getUser();
                     String setPassSql = "";
                     if (userIdentity == null) {
                         setPassSql += "PASSWORD";
@@ -1971,12 +1971,7 @@ public class AstToStringBuilder {
 
         if (!properties.isEmpty()) {
             createTableSql.append("\nPROPERTIES (");
-            for (Map.Entry<String, String> kv : properties.entrySet()) {
-                createTableSql.append("\"" + kv.getKey() + "\" = \"").append(kv.getValue()).append("\",");
-            }
-            if (createTableSql.charAt(createTableSql.length() - 1) == ',') {
-                createTableSql.deleteCharAt(createTableSql.length() - 1);
-            }
+            createTableSql.append(new PrintableMap<>(properties, "=", true, false, true).toString());
             createTableSql.append(")");
         }
         createTableSql.append(";");

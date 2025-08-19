@@ -52,6 +52,7 @@ public:
     virtual Status visit(const Decimal32Column& column);
     virtual Status visit(const Decimal64Column& column);
     virtual Status visit(const Decimal128Column& column);
+    virtual Status visit(const Decimal256Column& column);
     virtual Status visit(const HyperLogLogColumn& column);
     virtual Status visit(const BitmapColumn& column);
     virtual Status visit(const PercentileColumn& column);
@@ -71,6 +72,7 @@ public:
     virtual Status visit(const FixedLengthColumnBase<int64_t>& column);
     virtual Status visit(const FixedLengthColumnBase<uint64_t>& column);
     virtual Status visit(const FixedLengthColumnBase<int128_t>& column);
+    virtual Status visit(const FixedLengthColumnBase<int256_t>& column);
     virtual Status visit(const FixedLengthColumnBase<float>& column);
     virtual Status visit(const FixedLengthColumnBase<double>& column);
     virtual Status visit(const FixedLengthColumnBase<DateValue>& column);

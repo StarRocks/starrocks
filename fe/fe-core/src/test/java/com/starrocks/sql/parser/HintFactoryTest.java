@@ -19,7 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.qe.SessionVariable;
 import org.antlr.v4.runtime.CommonToken;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -37,7 +37,7 @@ class HintFactoryTest {
         HintNode hint = HintFactory.buildHintNode(token, new SessionVariable());
         String message = "actual: " + hint.getValue() + ". expect: " + expectMap;
         for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
-            Assert.assertEquals(message, expectMap.get(entry.getKey()), entry.getValue());
+            Assertions.assertEquals(expectMap.get(entry.getKey()), entry.getValue(), message);
         }
     }
 
@@ -47,9 +47,9 @@ class HintFactoryTest {
         CommonToken token = new CommonToken(1, hintStr);
         try {
             HintNode hint = HintFactory.buildHintNode(token, new SessionVariable());
-            Assert.assertEquals(null, hint);
+            Assertions.assertEquals(null, hint);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Invalid hint value"));
+            Assertions.assertTrue(e.getMessage().contains("Invalid hint value"), e.getMessage());
         }
     }
 

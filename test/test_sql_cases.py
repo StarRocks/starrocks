@@ -88,6 +88,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         super().setUp()
         self.connect_starrocks()
         self.create_starrocks_conn_pool()
+        self.check_cluster_status()
         self._init_global_configs()
 
     def _init_global_configs(self):
@@ -232,7 +233,9 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                     tools.ok_(False, "Check db uniqueness error!")
 
         error_info_dict = {db: list(cases) for db, cases in all_db_dict.items() if len(cases) > 1}
-        tools.assert_true(len(error_info_dict) <= 0, "Pre Check Failed, Duplicate DBs: \n%s" % json.dumps(error_info_dict, indent=2))
+        tools.assert_true(
+            len(error_info_dict) <= 0, "Pre Check Failed, Duplicate DBs: \n%s" % json.dumps(error_info_dict, indent=2)
+        )
 
     @staticmethod
     def _replace_uuid_variables(sql_list: List) -> List:
@@ -308,7 +311,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     def _get_resource_name(sql: str) -> str:
         matches = list()
         if "CREATE EXTERNAL RESOURCE" in sql.upper():
-            matches = re.findall(r'CREATE EXTERNAL RESOURCE \"?([a-zA-Z0-9_-]+)\"?', sql, flags=re.IGNORECASE)
+            matches = re.findall(r"CREATE EXTERNAL RESOURCE \"?([a-zA-Z0-9_-]+)\"?", sql, flags=re.IGNORECASE)
         return matches[0] if len(matches) > 0 else ""
 
     # -------------------------------------------
@@ -356,8 +359,20 @@ Start to run: %s
         for sql_id, sql in enumerate(sql_list):
             if arrow_mode and isinstance(sql, str):
                 sql = sql.strip()
-                if sql.startswith(("mysql:", "shell:", "--", "function:", "CHECK:", "PROPERTY:", "LOOP", "END LOOP",
-                                   "CONCURRENCY", "END CONCURRENCY")):
+                if sql.startswith(
+                    (
+                        "mysql:",
+                        "shell:",
+                        "--",
+                        "function:",
+                        "CHECK:",
+                        "PROPERTY:",
+                        "LOOP",
+                        "END LOOP",
+                        "CONCURRENCY",
+                        "END CONCURRENCY",
+                    )
+                ):
                     self_print(f"[arrow_mode] Skip non-arrow SQL: {sql}", ColorEnum.YELLOW)
                     continue
                 if not sql.startswith("arrow:"):
@@ -375,7 +390,7 @@ Start to run: %s
                 # uncheck flag, owns the highest priority
                 if sql.startswith(sr_sql_lib.UNCHECK_FLAG):
                     uncheck = True
-                    sql = sql[len(sr_sql_lib.UNCHECK_FLAG):]
+                    sql = sql[len(sr_sql_lib.UNCHECK_FLAG) :]
 
                 actual_res, actual_res_log, var, order = self.execute_single_statement(sql, sql_id, record_mode)
 
@@ -385,9 +400,11 @@ Start to run: %s
                     expect_res = case_info.result[sql_id]
                     expect_res_for_log = expect_res if len(expect_res) < 1000 else expect_res[:1000] + "..."
 
-                    log.info(f"""[{sql_id}.result]: 
+                    log.info(
+                        f"""[{sql_id}.result]: 
     - [exp]: {expect_res_for_log}
-    - [act]: {actual_res}""")
+    - [act]: {actual_res}"""
+                    )
 
                     # -------------------------------------------
                     #               [CHECKER]
@@ -436,15 +453,17 @@ Start to run: %s
 
                     # thread exec, set count in (*)
                     for _t_exec_id in range(_t_count):
-                        this_t_id = f'{_t_name}-{_t_info_id}-{_t_exec_id}'
+                        this_t_id = f"{_t_name}-{_t_info_id}-{_t_exec_id}"
 
                         # init a conn for thread
                         this_conn = self.connection_pool.connection()
                         _t_conn_list.append([this_conn, this_t_id])
 
-                        t = threading.Thread(name=f"Thread-{this_t_id}",
-                                             target=self.execute_thread,
-                                             args=(this_t_id, _t_cmd, _t_res, _t_ori_cmd, record_mode, _outer_db, this_conn))
+                        t = threading.Thread(
+                            name=f"Thread-{this_t_id}",
+                            target=self.execute_thread,
+                            args=(this_t_id, _t_cmd, _t_res, _t_ori_cmd, record_mode, _outer_db, this_conn),
+                        )
                         thread_list.append(t)
 
                 threading.excepthook = self.custom_except_hook
@@ -476,19 +495,28 @@ Start to run: %s
                     for _t_info_id, _thread in enumerate(t_info_list):
                         _t_name = _thread["name"]
                         _t_count = _thread["count"]
-                        _t_uid = f'{_t_name}-{_t_info_id}'
+                        _t_uid = f"{_t_name}-{_t_info_id}"
 
                         _t_info_line = _thread["info"]
                         self.res_log.append(_t_info_line)
 
                         # check thread result info
                         tools.assert_in(_t_uid, self.thread_res_log, f"Thread log of {_t_uid} is not found!")
-                        tools.eq_(len(self.thread_res_log[_t_uid]), _t_count, f"Thread log size: {len(self.thread_res_log[_t_uid])} error, maybe you used the same thread name?")
+                        tools.eq_(
+                            len(self.thread_res_log[_t_uid]),
+                            _t_count,
+                            f"Thread log size: {len(self.thread_res_log[_t_uid])} error, maybe you used the same thread name?",
+                        )
 
                         s_thread_log = self.thread_res_log[_t_uid][0]
                         for exec_res_log in self.thread_res_log[_t_uid]:
                             if exec_res_log != s_thread_log:
-                                self_print("Thread result of exec not equal: \n - %s\n - %s" % (exec_res_log, s_thread_log), color=ColorEnum.RED, logout=True, bold=True)
+                                self_print(
+                                    "Thread result of exec not equal: \n - %s\n - %s" % (exec_res_log, s_thread_log),
+                                    color=ColorEnum.RED,
+                                    logout=True,
+                                    bold=True,
+                                )
 
                         self.res_log.extend(s_thread_log)
                         self.res_log.append("")
@@ -496,4 +524,3 @@ Start to run: %s
                 self_print(f"[CONCURRENCY] SUCCESS!", color=ColorEnum.CYAN, logout=True)
                 if record_mode:
                     self.res_log.append("} " + END_CONCURRENCY_FLAG + "\n")
-

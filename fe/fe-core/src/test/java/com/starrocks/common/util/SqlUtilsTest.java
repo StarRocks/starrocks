@@ -15,43 +15,43 @@ package com.starrocks.common.util;
 
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class SqlUtilsTest {
 
     @Test
     public void testIsPreQuerySQL() {
-        Assert.assertTrue(SqlUtils.isPreQuerySQL(
+        Assertions.assertTrue(SqlUtils.isPreQuerySQL(
                 SqlParser.parseSingleStatement("select @@query_timeout", SqlModeHelper.MODE_DEFAULT)));
 
-        Assert.assertTrue(SqlUtils.isPreQuerySQL(
+        Assertions.assertTrue(SqlUtils.isPreQuerySQL(
                 SqlParser.parseSingleStatement("SET NAMES utf8mb4", SqlModeHelper.MODE_DEFAULT)));
 
-        Assert.assertTrue(SqlUtils.isPreQuerySQL(
+        Assertions.assertTrue(SqlUtils.isPreQuerySQL(
                 SqlParser.parseSingleStatement("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
                         SqlModeHelper.MODE_DEFAULT)));
 
-        Assert.assertFalse(SqlUtils.isPreQuerySQL(
+        Assertions.assertFalse(SqlUtils.isPreQuerySQL(
                 SqlParser.parseSingleStatement("SET password = 'xxx'", SqlModeHelper.MODE_DEFAULT)));
 
-        Assert.assertFalse(SqlUtils.isPreQuerySQL(
+        Assertions.assertFalse(SqlUtils.isPreQuerySQL(
                 SqlParser.parseSingleStatement("SET @ a = 1", SqlModeHelper.MODE_DEFAULT)));
 
-        Assert.assertFalse(SqlUtils.isPreQuerySQL(
+        Assertions.assertFalse(SqlUtils.isPreQuerySQL(
                 SqlParser.parseSingleStatement("SET property for 'root' \"max_user_connections\"=\"1000\"",
                         SqlModeHelper.MODE_DEFAULT)));
 
-        Assert.assertTrue(SqlUtils.isPreQuerySQL(
+        Assertions.assertTrue(SqlUtils.isPreQuerySQL(
                 SqlParser.parseSingleStatement("set query_timeout=600", SqlModeHelper.MODE_DEFAULT)));
 
-        Assert.assertFalse(SqlUtils.isPreQuerySQL(
+        Assertions.assertFalse(SqlUtils.isPreQuerySQL(
                 SqlParser.parseSingleStatement("select sleep(10)", SqlModeHelper.MODE_DEFAULT)));
 
-        Assert.assertTrue(SqlUtils.isPreQuerySQL(
+        Assertions.assertTrue(SqlUtils.isPreQuerySQL(
                 SqlParser.parseSingleStatement("select connection_id()", SqlModeHelper.MODE_DEFAULT)));
 
-        Assert.assertTrue(SqlUtils.isPreQuerySQL(
+        Assertions.assertTrue(SqlUtils.isPreQuerySQL(
                 SqlParser.parseSingleStatement("select session_id()", SqlModeHelper.MODE_DEFAULT)));
     }
 }

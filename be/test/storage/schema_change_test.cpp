@@ -32,6 +32,7 @@
 #include "testutil/column_test_helper.h"
 #include "testutil/schema_test_helper.h"
 #include "testutil/tablet_test_helper.h"
+#include "util/failpoint/fail_point.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -840,11 +841,11 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
     auto base_tablet = _tablet_mgr->get_tablet(base_tablet_id);
 
     {
-        std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
+        std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_related_rs;
         _txn_mgr->get_txn_related_tablets(txn_id, partition_id, &tablet_related_rs);
         for (auto& tablet_rs : tablet_related_rs) {
-            ASSERT_OK(
-                    _txn_mgr->publish_txn(partition_id, base_tablet, txn_id, version.second, tablet_rs.second, 10000));
+            ASSERT_OK(_txn_mgr->publish_txn(partition_id, base_tablet, txn_id, version.second, tablet_rs.second.first,
+                                            10000));
         }
     }
 
@@ -853,6 +854,40 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
     ASSERT_TRUE(base_rowset->is_overlapped());
 
     create_dest_tablet_with_index(base_tablet_id, new_tablet_id, TKeysType::DUP_KEYS);
+
+    {
+        SchemaChangeHandler handler;
+        TAlterTabletReqV2 req1 = gen_alter_tablet_req(100003, 100004, version);
+        ASSERT_FALSE(handler.process_alter_tablet(req1).ok());
+
+        TAlterTabletReqV2 req2 = gen_alter_tablet_req(base_tablet_id, 100004, version);
+        ASSERT_FALSE(handler.process_alter_tablet(req2).ok());
+
+        TTabletId new_tablet_id2 = 1405;
+        create_dest_tablet_with_index(base_tablet_id, new_tablet_id2, TKeysType::DUP_KEYS);
+        auto new_tablet = _tablet_mgr->get_tablet(new_tablet_id2);
+        ASSERT_TRUE(new_tablet != nullptr);
+        new_tablet->set_tablet_state(TabletState::TABLET_RUNNING);
+
+        TAlterTabletReqV2 req3 = gen_alter_tablet_req(base_tablet_id, new_tablet_id2, version);
+        ASSERT_FALSE(handler.process_alter_tablet(req3).ok());
+        new_tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
+
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("add_rowset_failed");
+        fp->setMode(trigger_mode);
+        ASSERT_FALSE(handler.process_alter_tablet(req3).ok());
+
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+        fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("add_rowset_already_exist");
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        fp->setMode(trigger_mode);
+        ASSERT_TRUE(handler.process_alter_tablet(req3).ok());
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+    }
 
     TAlterTabletReqV2 req = gen_alter_tablet_req(base_tablet_id, new_tablet_id, version);
 

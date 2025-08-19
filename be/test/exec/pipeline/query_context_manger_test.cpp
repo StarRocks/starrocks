@@ -171,6 +171,34 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         sleep(2);
         ASSERT_TRUE(query_ctx_mgr->get(query_id) == nullptr);
     }
+
+    {
+        auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
+        ASSERT_TRUE(query_ctx_mgr->init().ok());
+        TUniqueId query_id;
+        query_id.hi = 100;
+        query_id.lo = 3;
+        ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
+        query_ctx->set_total_fragments(8);
+        query_ctx->set_delivery_expire_seconds(60);
+        query_ctx->set_query_expire_seconds(300);
+        query_ctx->extend_delivery_lifetime();
+        query_ctx->extend_query_lifetime();
+        query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
+        // port query_ctx to second map
+        query_ctx->count_down_fragments(query_ctx_mgr.get());
+
+        // Single thread cannot reproduce query context registration success,
+        // while this query context is in the second case. So let's simulate it here.
+        query_ctx->increment_num_fragments();
+
+        // cancel
+        query_ctx->cancel(Status::Cancelled("cannelled"), true);
+
+        ASSERT_TRUE(query_ctx_mgr->get_or_register(query_id).status().is_cancelled());
+
+        ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
+    }
 }
 
 TEST(QueryContextManagerTest, testMulitiThreadOperations) {

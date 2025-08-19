@@ -23,10 +23,10 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
 import org.assertj.core.api.Assertions;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.List;
@@ -40,12 +40,12 @@ public class SlotSelectionStrategyV2Test {
 
     private boolean prevEnableQueryQueueV2 = false;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() {
         MetricRepo.init();
     }
 
-    @Before
+    @BeforeEach
     public void before() {
         prevEnableQueryQueueV2 = Config.enable_query_queue_v2;
         Config.enable_query_queue_v2 = true;
@@ -53,7 +53,7 @@ public class SlotSelectionStrategyV2Test {
         BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, NUM_CORES);
     }
 
-    @After
+    @AfterEach
     public void after() {
         Config.enable_query_queue_v2 = prevEnableQueryQueueV2;
 

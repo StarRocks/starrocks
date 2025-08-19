@@ -44,6 +44,7 @@
 #include "common/configbase.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
+#include "connector/connector_sink_executor.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
@@ -233,7 +234,6 @@ Status GlobalEnv::_init_mem_tracker() {
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(MemTrackerType::UPDATE, bytes_limit * update_mem_percent / 100, nullptr);
     _update_mem_tracker->set_level(2);
-    _chunk_allocator_mem_tracker = regist_tracker(MemTrackerType::CHUNK_ALLOCATOR, -1, process_mem_tracker());
     _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
     _passthrough_mem_tracker->set_level(2);
     _clone_mem_tracker = regist_tracker(MemTrackerType::CLONE, -1, process_mem_tracker());
@@ -244,7 +244,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _poco_connection_pool_mem_tracker = regist_tracker(MemTrackerType::POCO_CONNECTION_POOL, -1, process_mem_tracker());
     _replication_mem_tracker = regist_tracker(MemTrackerType::REPLICATION, -1, process_mem_tracker());
 
-    MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
+    MemChunkAllocator::init_metrics();
 
     return Status::OK();
 }
@@ -518,6 +518,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     RETURN_IF_ERROR(_routine_load_task_executor->init());
 
+    _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
+    RETURN_IF_ERROR(_connector_sink_spill_executor->init());
+
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
     _runtime_filter_worker = new RuntimeFilterWorker(this);
     _runtime_filter_cache = new RuntimeFilterCache(8);
@@ -584,7 +587,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 #endif
 
     _agent_server = new AgentServer(this, false);
-    _agent_server->init_or_die();
+    RETURN_IF_ERROR(_agent_server->init());
 
     _broker_mgr->init();
     RETURN_IF_ERROR(_small_file_mgr->init());
@@ -733,6 +736,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_stream_context_mgr);
     SAFE_DELETE(_routine_load_task_executor);
     SAFE_DELETE(_stream_load_executor);
+    SAFE_DELETE(_connector_sink_spill_executor);
     SAFE_DELETE(_fragment_mgr);
     SAFE_DELETE(_load_stream_mgr);
     SAFE_DELETE(_load_channel_mgr);

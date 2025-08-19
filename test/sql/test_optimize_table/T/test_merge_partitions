@@ -55,3 +55,24 @@ insert into t values
 alter table t partition by date_trunc('month',b);
 alter table t partition by date_trunc('day',b);
 
+-- name: test_merge_partitions_infer_distributition
+create table t(k date) partition by date_trunc('day', k) distributed by hash(k) buckets 3;
+insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
+show partitions from t;
+alter table t partition by date_trunc('month',k) between '2020-02-01' and '2020-02-28';
+function: wait_optimize_table_finish()
+show partitions from t;
+
+
+-- name: test_merge_partitions_specify_distributition
+create table t(k date) partition by date_trunc('day', k) distributed by hash(k) buckets 3;
+insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
+show partitions from t;
+alter table t partition by date_trunc('month',k) distributed by hash(k) buckets 4 between '2020-02-01' and '2020-02-28';
+function: wait_optimize_table_finish()
+show partitions from t;
+
+-- name: test_merge_partitions_specify_distributition_fail
+create table t(k date, v int) partition by date_trunc('day', k) distributed by hash(k) buckets 3;
+alter table t partition by date_trunc('month',k) distributed by hash(v) buckets 4 between '2020-02-01' and '2020-02-28';
+alter table t partition by date_trunc('month',k) distributed by random between '2020-02-01' and '2020-02-28';

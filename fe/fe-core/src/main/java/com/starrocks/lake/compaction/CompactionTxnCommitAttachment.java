@@ -15,13 +15,8 @@
 package com.starrocks.lake.compaction;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
-
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class CompactionTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("fc")
@@ -41,10 +36,6 @@ public class CompactionTxnCommitAttachment extends TxnCommitAttachment {
         return forceCommit;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
-    }
+
+
 }

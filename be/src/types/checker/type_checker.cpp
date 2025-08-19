@@ -245,6 +245,17 @@ StatusOr<LogicalType> LocalDateTimeTypeChecker::check(const std::string& java_cl
     return TYPE_VARCHAR;
 }
 
+StatusOr<LogicalType> LocalDateTypeChecker::check(const std::string& java_class,
+                                                  const SlotDescriptor* slot_desc) const {
+    auto type = slot_desc->type().type;
+    if (type != TYPE_DATE) {
+        return Status::NotSupported(
+                fmt::format("Type mismatches on column[{}], JDBC result type is LocalDate, please set the type to date",
+                            slot_desc->col_name()));
+    }
+    return TYPE_VARCHAR;
+}
+
 StatusOr<LogicalType> BigDecimalTypeChecker::check(const std::string& java_class,
                                                    const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
@@ -253,6 +264,7 @@ StatusOr<LogicalType> BigDecimalTypeChecker::check(const std::string& java_class
     case TYPE_DECIMAL32:
     case TYPE_DECIMAL64:
     case TYPE_DECIMAL128:
+    case TYPE_DECIMAL256:
     case TYPE_VARCHAR:
     case TYPE_DOUBLE:
         return TYPE_VARCHAR;

@@ -14,8 +14,14 @@
 
 package com.starrocks.connector;
 
+import com.starrocks.authorization.AllowAllAccessController;
+import com.starrocks.authorization.NativeAccessController;
+import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
+import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -41,6 +47,26 @@ public class LazyConnector implements Connector {
         synchronized (this) {
             if (delegate == null) {
                 try {
+                    // init access control
+                    String serviceName = context.getProperties().get("ranger.plugin.hive.service.name");
+                    String accessControl =
+                            context.getProperties().getOrDefault("catalog.access.control", Config.access_control);
+                    if (serviceName == null || serviceName.isEmpty()) {
+                        if (accessControl.equals("ranger")) {
+                            Authorizer.getInstance()
+                                    .setAccessControl(context.getCatalogName(), new RangerStarRocksAccessController());
+                        } else if (accessControl.equals("allowall")) {
+                            Authorizer.getInstance()
+                                    .setAccessControl(context.getCatalogName(), new AllowAllAccessController());
+                        } else {
+                            Authorizer.getInstance()
+                                    .setAccessControl(context.getCatalogName(), new NativeAccessController());
+                        }
+                    } else {
+                        Authorizer.getInstance().setAccessControl(context.getCatalogName(),
+                                new RangerHiveAccessController(serviceName));
+                    }
+                    // create connector
                     delegate = ConnectorFactory.createRealConnector(context);
                 } catch (Exception e) {
                     LOG.error("Failed to init connector [type: {}, name: {}]",

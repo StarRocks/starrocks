@@ -346,7 +346,7 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
         auto resource_group_connector_scan_bytes = std::make_unique<IntGauge>(MetricUnit::BYTES);
         bool mem_connector_scan_registered = StarRocksMetrics::instance()->metrics()->register_metric(
                 "resource_group_connector_scan_bytes", MetricLabels().add("name", wg->name()),
-                resource_group_mem_allocated_bytes.get());
+                resource_group_connector_scan_bytes.get());
         // running queries
         auto resource_group_running_queries = std::make_unique<IntGauge>(MetricUnit::NOUNIT);
         bool running_registered = StarRocksMetrics::instance()->metrics()->register_metric(

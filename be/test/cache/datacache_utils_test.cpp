@@ -134,6 +134,18 @@ TEST_F(DataCacheUtilsTest, parse_cache_space_paths) {
     fs::remove_all(cache_dir).ok();
 }
 
+TEST_F(DataCacheUtilsTest, get_device_id_func) {
+    ASSERT_GT(DataCacheUtils::disk_device_id("/"), 0);
+    ASSERT_GT(DataCacheUtils::disk_device_id("/not_exist1/not_exist2"), 0);
+    ASSERT_EQ(DataCacheUtils::disk_device_id("/"), DataCacheUtils::disk_device_id("/not_exist/not_exist2"));
+
+    // Get the device id for relative path
+    ASSERT_GT(DataCacheUtils::disk_device_id("not_exist"), 0);
+    ASSERT_GT(DataCacheUtils::disk_device_id("./not_exist"), 0);
+    ASSERT_GT(DataCacheUtils::disk_device_id("./not_exist1/not_exist2"), 0);
+    ASSERT_EQ(DataCacheUtils::disk_device_id("./not_exist"), DataCacheUtils::disk_device_id("./not_exist1/not_exist2"));
+}
+
 TEST_F(DataCacheUtilsTest, change_cache_path_suc) {
     const std::string old_dir = "./old_disk_cache_path";
     const std::string new_dir = "./new_disk_cache_path";
@@ -146,15 +158,119 @@ TEST_F(DataCacheUtilsTest, change_cache_path_suc) {
     fs::remove_all(new_dir);
 }
 
-TEST_F(DataCacheUtilsTest, change_cache_path_fail) {
-    const std::string old_dir = "./old_disk_cache_path2";
-    const std::string new_dir = "./old_disk_cache_path2/subdir";
+TEST_F(DataCacheUtilsTest, change_cache_path_to_sub_path) {
+    const std::string old_dir = "./old_disk_cache_path";
+    const std::string new_dir = "./old_disk_cache_path/subdir";
     ASSERT_TRUE(fs::create_directories(old_dir).ok());
     ASSERT_TRUE(fs::create_directories(new_dir).ok());
 
     ASSERT_FALSE(DataCacheUtils::change_disk_path(old_dir, new_dir).ok());
 
     fs::remove_all(old_dir);
+    fs::remove_all(new_dir);
 }
+
+TEST_F(DataCacheUtilsTest, change_cache_path_to_nonexist_dest) {
+    const std::string old_dir = "./old_disk_cache_path";
+    const std::string new_dir = "./new_disk_cache_path";
+    ASSERT_TRUE(fs::create_directories(old_dir).ok());
+
+    ASSERT_TRUE(DataCacheUtils::change_disk_path(old_dir, new_dir).ok());
+
+    fs::remove_all(old_dir);
+    fs::remove_all(new_dir);
+}
+
+TEST_F(DataCacheUtilsTest, change_cache_path_from_nonexist_src) {
+    const std::string old_dir = "./old_disk_cache_path";
+    const std::string new_dir = "./new_disk_cache_path";
+    ASSERT_TRUE(fs::create_directories(new_dir).ok());
+
+    ASSERT_TRUE(DataCacheUtils::change_disk_path(old_dir, new_dir).ok());
+
+    fs::remove_all(old_dir);
+    fs::remove_all(new_dir);
+}
+
+#ifdef USE_STAROS
+TEST_F(DataCacheUtilsTest, get_corresponding_starlet_cache_dir) {
+    // normal
+    {
+        std::string starlet_dir = "./starlet_dir_path";
+        std::string storage_dir = "./storage";
+        ASSERT_TRUE(fs::create_directories(starlet_dir).ok());
+        ASSERT_TRUE(fs::create_directories(storage_dir).ok());
+        std::vector<StorePath> store_paths;
+        store_paths.push_back(StorePath(storage_dir));
+        auto vec_or = DataCacheUtils::get_corresponding_starlet_cache_dir(store_paths, starlet_dir);
+        ASSERT_TRUE(vec_or.ok());
+        auto vec = *vec_or;
+        ASSERT_TRUE(vec.size() == 1);
+        ASSERT_EQ(vec[0], starlet_dir + "/star_cache");
+        fs::remove_all(starlet_dir);
+        fs::remove_all(storage_dir);
+    }
+
+    // starlet cache dir on the same device
+    {
+        std::string starlet_dir = "./starlet_dir_path";
+        std::string starlet_dir2 = "./starlet_dir_path2";
+        ASSERT_TRUE(fs::create_directories(starlet_dir).ok());
+        ASSERT_TRUE(fs::create_directories(starlet_dir2).ok());
+        std::string starlet_dirs = "./starlet_dir_path:./starlet_dir_path2";
+        auto vec_or = DataCacheUtils::get_corresponding_starlet_cache_dir({}, starlet_dirs);
+        ASSERT_FALSE(vec_or.ok());
+        ASSERT_TRUE(vec_or.status().message().find("Find 2 starlet cache dir on same device") != std::string::npos);
+        fs::remove_all(starlet_dir);
+        fs::remove_all(starlet_dir2);
+    }
+
+    // starlet cache dir count is bigger
+    {
+        std::string starlet_dir = "./starlet_dir_path";
+        ASSERT_TRUE(fs::create_directories(starlet_dir).ok());
+        auto vec_or = DataCacheUtils::get_corresponding_starlet_cache_dir({}, starlet_dir);
+        ASSERT_FALSE(vec_or.ok());
+        ASSERT_TRUE(vec_or.status().message().find("can not find corresponding storage path for starlet cache dir") !=
+                    std::string::npos);
+        fs::remove_all(starlet_dir);
+    }
+
+    // storage dir count is bigger
+    {
+        std::string starlet_dir = "./starlet_dir_path";
+        std::string storage_dir = "./storage";
+        std::string storage_dir2 = "./storage2";
+        ASSERT_TRUE(fs::create_directories(starlet_dir).ok());
+        ASSERT_TRUE(fs::create_directories(storage_dir).ok());
+        ASSERT_TRUE(fs::create_directories(storage_dir2).ok());
+        std::vector<StorePath> store_paths;
+        store_paths.push_back(StorePath(storage_dir));
+        store_paths.push_back(StorePath(storage_dir2));
+        auto vec_or = DataCacheUtils::get_corresponding_starlet_cache_dir(store_paths, starlet_dir);
+        ASSERT_TRUE(vec_or.ok());
+        auto vec = *vec_or;
+        ASSERT_TRUE(vec.size() == 2);
+        ASSERT_EQ(vec[0], starlet_dir + "/star_cache");
+        ASSERT_EQ(vec[1], "./storage2/starlet_cache/star_cache");
+        fs::remove_all(starlet_dir);
+        fs::remove_all(storage_dir);
+        fs::remove_all(storage_dir2);
+    }
+
+    // empty starlet cache dir
+    {
+        std::string starlet_dir = "";
+        auto vec_or = DataCacheUtils::get_corresponding_starlet_cache_dir({}, starlet_dir);
+        ASSERT_TRUE(vec_or.ok());
+        ASSERT_TRUE((*vec_or).empty());
+
+        std::string starlet_dir2 = "   ";
+        auto vec_or2 = DataCacheUtils::get_corresponding_starlet_cache_dir({}, starlet_dir2);
+        ASSERT_TRUE(vec_or2.ok());
+        ASSERT_TRUE((*vec_or2).empty());
+    }
+}
+#endif
 
 } // namespace starrocks

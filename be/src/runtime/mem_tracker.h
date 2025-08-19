@@ -109,7 +109,6 @@ enum class MemTrackerType {
     PAGE_CACHE,
     JIT_CACHE,
     UPDATE,
-    CHUNK_ALLOCATOR,
     CLONE,
     DATACACHE,
     POCO_CONNECTION_POOL,

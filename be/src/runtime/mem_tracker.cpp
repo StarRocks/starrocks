@@ -70,7 +70,6 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::PAGE_CACHE, "page_cache"},
         {MemTrackerType::JIT_CACHE, "jit_cache"},
         {MemTrackerType::UPDATE, "update"},
-        {MemTrackerType::CHUNK_ALLOCATOR, "chunk_allocator"},
         {MemTrackerType::CLONE, "clone"},
         {MemTrackerType::DATACACHE, "datacache"},
         {MemTrackerType::POCO_CONNECTION_POOL, "poco_connection_pool"},

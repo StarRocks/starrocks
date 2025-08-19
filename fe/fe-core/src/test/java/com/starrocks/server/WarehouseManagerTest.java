@@ -25,6 +25,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
@@ -36,18 +37,20 @@ import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class WarehouseManagerTest {
     @Mocked
@@ -72,7 +75,9 @@ public class WarehouseManagerTest {
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
                 () -> mgr.getAllComputeNodeIds(WarehouseComputeResource.of(1L)));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
-                () -> mgr.getComputeNodeId(WarehouseComputeResource.of(1L), null));
+                () -> mgr.getComputeNodeId(WarehouseComputeResource.of(1L), 0));
+        ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
+                () -> mgr.getAliveComputeNodeId(WarehouseComputeResource.of(1L), 0));
     }
 
     @Test
@@ -91,6 +96,22 @@ public class WarehouseManagerTest {
             }
         };
 
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId)
+                    throws StarRocksException {
+                throw new StarRocksException("get all node ids by shard failure");
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                minTimes = 0;
+                result = Lists.newArrayList(10003L, 10004L);
+            }
+        };
+
         new MockUp<SystemInfoService>() {
             @Mock
             public ComputeNode getBackendOrComputeNode(long nodeId) {
@@ -105,22 +126,18 @@ public class WarehouseManagerTest {
             }
         };
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-                minTimes = 0;
-                result = Lists.newArrayList(10003L, 10004L);
-            }
-        };
-
         WarehouseManager mgr = new WarehouseManager();
         mgr.initDefaultWarehouse();
 
         List<Long> nodeIds = mgr.getAllComputeNodeIds(WarehouseManager.DEFAULT_RESOURCE);
-        Assert.assertEquals(2, nodeIds.size());
+        Assertions.assertEquals(2, nodeIds.size());
 
         List<ComputeNode> nodes = mgr.getAliveComputeNodes(WarehouseManager.DEFAULT_RESOURCE);
-        Assert.assertEquals(1, nodes.size());
+        Assertions.assertEquals(1, nodes.size());
+
+        LakeTablet tablet = new LakeTablet(1L);
+        Long nodeId = mgr.getAliveComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tablet.getId());
+        Assertions.assertNull(nodeId);
     }
 
     public Optional<Long> getWorkerGroupId(WarehouseManager warehouseManager, long warehouseId) {
@@ -199,16 +216,16 @@ public class WarehouseManagerTest {
         WarehouseManager warehouseManager = new WarehouseManager();
         warehouseManager.initDefaultWarehouse();
         Optional<Long> workerGroupId = getWorkerGroupId(warehouseManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assert.assertFalse(workerGroupId.isEmpty());
-        Assert.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
+        Assertions.assertFalse(workerGroupId.isEmpty());
+        Assertions.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
 
         try {
             workerGroupId = Optional.ofNullable(null);
             workerGroupId = getWorkerGroupId(warehouseManager, 1111L);
-            Assert.assertEquals(1, 2);   // can not be here
+            Assertions.assertEquals(1, 2);   // can not be here
         } catch (ErrorReportException e) {
-            Assert.assertTrue(workerGroupId.isEmpty());
-            Assert.assertEquals(workerGroupId.orElse(1000L).longValue(), 1000L);
+            Assertions.assertTrue(workerGroupId.isEmpty());
+            Assertions.assertEquals(workerGroupId.orElse(1000L).longValue(), 1000L);
         }
     }
 
@@ -274,9 +291,9 @@ public class WarehouseManagerTest {
             WarehouseManager warehouseManager = new WarehouseManager();
             warehouseManager.initDefaultWarehouse();
             Optional<Long> workerGroupId = getWorkerGroupId(warehouseManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
-            Assert.assertTrue(workerGroupId.isEmpty());
+            Assertions.assertTrue(workerGroupId.isEmpty());
         } catch (ErrorReportException e) {
-            Assert.assertEquals(1, 2);   // can not be here
+            Assertions.assertEquals(1, 2);   // can not be here
         }
 
         new MockUp<RunMode>() {
@@ -289,10 +306,10 @@ public class WarehouseManagerTest {
         OlapScanNode scanNode = newOlapScanNode();
         Partition partition = new Partition(123, 456, "aaa", null, null);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
-        ErrorReportException ex = Assert.assertThrows(ErrorReportException.class,
+        ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class,
                 () -> scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(),
                         index, Collections.emptyList(), 1));
-        Assert.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
+        Assertions.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
     }
 
     @Test
@@ -378,5 +395,134 @@ public class WarehouseManagerTest {
         table.setDefaultDistributionInfo(new HashDistributionInfo(3, Collections.emptyList()));
         desc.setTable(table);
         return new OlapScanNode(new PlanNodeId(1), desc, "OlapScanNode");
+    }
+
+    @Test
+    public void testBackgroundWarehouse() {
+        WarehouseManager mgr = new WarehouseManager();
+        mgr.initDefaultWarehouse();
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, mgr.getBackgroundWarehouse(123).getId());
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, mgr.getBackgroundComputeResource(123).getWarehouseId());
+    }
+
+    @Test
+    public void getWarehouseComputeResourceName_returnsEmptyStringWhenSharedNothingMode() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedNothingMode() {
+                return true;
+            }
+        };
+        WarehouseManager warehouseManager = new WarehouseManager();
+        ComputeResource computeResource = WarehouseComputeResource.of(0);
+        Assertions.assertEquals("", warehouseManager.getWarehouseComputeResourceName(computeResource));
+    }
+
+    @Test
+    public void getWarehouseComputeResourceName_returnsWarehouseNameWhenValidComputeResource() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        Warehouse warehouse = new DefaultWarehouse(1L, "test_warehouse");
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.addWarehouse(warehouse);
+        ComputeResource computeResource = WarehouseComputeResource.of(1L);
+        Assertions.assertEquals("test_warehouse", warehouseManager.getWarehouseComputeResourceName(computeResource));
+    }
+
+    @Test
+    public void getWarehouseListeners_returnsEmptyListWhenNoListenersRegistered() {
+        WarehouseManager warehouseManager = new WarehouseManager();
+        Assertions.assertTrue(warehouseManager.getWarehouseListeners().isEmpty());
+    }
+
+    class MockWarehouseEventListener implements WarehouseEventListener {
+        @Override
+        public void onCreateWarehouse(Warehouse wh) {
+
+        }
+
+        @Override
+        public void onDropWarehouse(Warehouse wh) {
+
+        }
+
+        @Override
+        public void onCreateCNGroup(Warehouse wh, long workerGroupId) {
+
+        }
+
+        @Override
+        public void onDropCNGroup(Warehouse wh, long workerGroupId) {
+
+        }
+    }
+
+    @Test
+    public void getWarehouseListeners_returnsRegisteredListeners() {
+        WarehouseEventListener listener1 = new MockWarehouseEventListener() {};
+        WarehouseEventListener listener2 = new MockWarehouseEventListener() {};
+        WarehouseComputeResourceProvider warehouseComputeResourceProvider = new WarehouseComputeResourceProvider();
+        WarehouseManager warehouseManager = new WarehouseManager(warehouseComputeResourceProvider,
+                Lists.newArrayList(listener1, listener2));
+        Assertions.assertEquals(2, warehouseManager.getWarehouseListeners().size());
+        Assertions.assertTrue(warehouseManager.getWarehouseListeners().contains(listener1));
+        Assertions.assertTrue(warehouseManager.getWarehouseListeners().contains(listener2));
+        Assertions.assertTrue(warehouseManager.getComputeResourceProvider().equals(warehouseComputeResourceProvider));
+    }
+
+    @Test
+    public void getComputeResourceProvider_returnsDefaultProviderWhenNotSpecified() {
+        WarehouseManager warehouseManager = new WarehouseManager();
+        Assertions.assertTrue(warehouseManager.getComputeResourceProvider() instanceof WarehouseComputeResourceProvider);
+    }
+
+    @Test
+    public void getWarehouseComputeResourceName_returnsEmptyStringWhenSharedNothingMode(
+            @Mocked ComputeResource computeResource) {
+        new Expectations() {
+            {
+                RunMode.isSharedDataMode();
+                result = false;
+            }
+        };
+
+        WarehouseManager warehouseManager = new WarehouseManager();
+        String warehouseName = warehouseManager.getWarehouseComputeResourceName(computeResource);
+        Assertions.assertEquals("", warehouseName);
+    }
+
+    @Test
+    public void getWarehouseComputeResourceName_logsWarningAndReturnsEmptyStringOnException(
+            @Mocked ComputeResource computeResource) {
+        new Expectations() {
+            {
+                RunMode.isSharedDataMode();
+                result = true;
+            }
+        };
+
+        WarehouseManager warehouseManager = new WarehouseManager();
+        String warehouseName = warehouseManager.getWarehouseComputeResourceName(computeResource);
+        Assertions.assertEquals("", warehouseName);
+    }
+
+    @Test
+    public void getNextComputeNodeIndexFromWarehouse_returnsSameAtomicIntegerInstance(@Mocked ComputeResource computeResource) {
+        WarehouseManager warehouseManager = new WarehouseManager();
+        AtomicInteger result = warehouseManager.getNextComputeNodeIndexFromWarehouse(computeResource);
+        Assertions.assertNotNull(result);
+        Assertions.assertSame(warehouseManager.getNextComputeNodeIndexFromWarehouse(computeResource), result);
+    }
+
+    @Test
+    public void getNextComputeNodeIndexFromWarehouse_returnsNonNullAtomicInteger(@Mocked ComputeResource computeResource) {
+        WarehouseManager warehouseManager = new WarehouseManager();
+        AtomicInteger result = warehouseManager.getNextComputeNodeIndexFromWarehouse(computeResource);
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals(0, result.get());
     }
 }

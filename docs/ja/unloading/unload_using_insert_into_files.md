@@ -217,10 +217,11 @@ INSERT INTO FILES(
 )
 SELECT * FROM sales_records;
 
--- Parquet ファイルへのデータのアンロード。
+-- データを Parquet ファイルに書き出し、Parquet バージョンを 1.0 に設定します。
 INSERT INTO FILES(
   'path' = 'file:///home/ubuntu/parquetfile/',
-   'format' = 'parquet'
+  'format' = 'parquet',
+  'parquet.version' = '1.0'
 )
 SELECT * FROM sales_records;
 ```

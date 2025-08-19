@@ -15,15 +15,15 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeSPMTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -48,6 +48,7 @@ public class AnalyzeSPMTest {
         analyzeSuccess("show baseline where id = 2 and bindSQLDigest = 'asdf'");
         analyzeSuccess("show baseline where bindSQLDigest = 'asdf' or updateTime <= now()");
         analyzeSuccess("show baseline where bindSQLDigest like 'asdf' or updateTime <= now()");
+        analyzeSuccess("show baseline on select * from tb1");
 
         // error field
         analyzeFail("show baseline where xxx = 'asdf'");

@@ -17,12 +17,20 @@
 
 package com.starrocks.fs;
 
+import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.StarRocksException;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.fs.hdfs.HdfsFs;
+import com.starrocks.fs.hdfs.HdfsFsManager;
+import com.starrocks.thrift.THdfsProperties;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class HdfsUtilTest {
     @Test
@@ -30,20 +38,47 @@ public class HdfsUtilTest {
         try {
             // normal case
             List<String> columns = HdfsUtil.parseColumnsFromPath("hdfs://key1=val1/some_path/key2=val2/key3=val3/*", Arrays.asList("key3", "key2", "key1"));
-            Assert.assertEquals(3, columns.size());
-            Assert.assertEquals("val3", columns.get(0));
-            Assert.assertEquals("val2", columns.get(1));
-            Assert.assertEquals("val1", columns.get(2));
+            Assertions.assertEquals(3, columns.size());
+            Assertions.assertEquals("val3", columns.get(0));
+            Assertions.assertEquals("val2", columns.get(1));
+            Assertions.assertEquals("val1", columns.get(2));
 
             // invalid path
-            Assert.assertThrows(StarRocksException.class, () ->
+            Assertions.assertThrows(StarRocksException.class, () ->
                     HdfsUtil.parseColumnsFromPath("invalid_path", Arrays.asList("key3", "key2", "key1")));
 
             // missing key of columns from path
-            Assert.assertThrows(StarRocksException.class, () ->
+            Assertions.assertThrows(StarRocksException.class, () ->
                     HdfsUtil.parseColumnsFromPath("hdfs://key1=val1/some_path/key3=val3/*", Arrays.asList("key3", "key2", "key1")));
         } catch (StarRocksException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
+    }
+
+    @Test
+    public void testException() {
+        new MockUp<HdfsFsManager>() {
+            @Mock
+            public HdfsFs getFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+                                        throws StarRocksException {
+                return null;
+            }
+        };
+
+        Assertions.assertThrows(StarRocksException.class, () ->
+                HdfsUtil.deletePath("hdfs://abc/dbf", new BrokerDesc(new HashMap<>())));
+
+        Assertions.assertThrows(StarRocksException.class, () ->
+                HdfsUtil.rename("hdfs://abc/dbf", "hdfs://abc/dba", new BrokerDesc(new HashMap<>()), 1000));
+
+        Assertions.assertThrows(StarRocksException.class, () ->
+                HdfsUtil.checkPathExist("hdfs://abc/dbf", new BrokerDesc(new HashMap<>())));
+
+        HdfsFsManager fileSystemManager = new HdfsFsManager();
+        Assertions.assertThrows(StarRocksException.class, () ->
+                fileSystemManager.openReader("hdfs://abc/dbf", 0, new HashMap<>()));
+
+        Assertions.assertThrows(StarRocksException.class, () ->
+                fileSystemManager.openWriter("hdfs://abc/dbf", new HashMap<>()));
     }
 }

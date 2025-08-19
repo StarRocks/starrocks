@@ -17,7 +17,7 @@ displayed_sidebar: docs
 ## 構文
 
 ```SQL
-DROP RESOURCE GROUP <resource_group_name>
+DROP RESOURCE GROUP [IF EXISTS] <resource_group_name>
 ```
 
 ## パラメーター

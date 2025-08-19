@@ -20,8 +20,8 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 
 public class RevokeRoleStmt extends BaseGrantRevokeRoleStmt {
-    public RevokeRoleStmt(List<String> granteeRole, UserIdentity userIdent, NodePosition pos) {
-        super(granteeRole, userIdent, pos);
+    public RevokeRoleStmt(List<String> granteeRole, UserRef user, NodePosition pos) {
+        super(granteeRole, user, pos);
     }
 
     public RevokeRoleStmt(List<String> granteeRole, String group, GrantType grantType, NodePosition pos) {

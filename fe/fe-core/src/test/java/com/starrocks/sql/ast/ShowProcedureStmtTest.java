@@ -16,9 +16,10 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ShowProcedureStmtTest {
     @Mocked
@@ -34,16 +35,16 @@ public class ShowProcedureStmtTest {
         stmt = (ShowProcedureStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "SHOW PROCEDURE STATUS LIKE 'abc'", 32).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("abc", stmt.getPattern());
+        Assertions.assertEquals("abc", stmt.getPattern());
 
         stmt = (ShowProcedureStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "SHOW PROCEDURE STATUS where name='abc'", 32).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         stmt = new ShowProcedureStmt("abc", null);
-        Assert.assertNotNull(stmt.getPattern());
-        Assert.assertEquals(11, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("Db", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertNotNull(stmt.getPattern());
+        Assertions.assertEquals(11, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Db", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
 
         // MySQLWorkbench use
         stmt = (ShowProcedureStmt) com.starrocks.sql.parser.SqlParser.parse(

@@ -16,10 +16,10 @@ package com.starrocks.alter;
 
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.BeforeAll;
 
 public class PseudoClusterAlterNewPublishTest extends PseudoClusterAlterTest {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         Config.alter_scheduler_interval_millisecond = 10000;
         System.out.println("enable new publish for PseudoClusterAlterNewPublishTest");

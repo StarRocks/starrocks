@@ -17,15 +17,15 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzerAlterDbQuotaTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -34,7 +34,7 @@ public class AnalyzerAlterDbQuotaTest {
     private void testAlterDatabaseDataQuotaStmt(String dbName, String quotaQuantity, long quotaSize) {
         String sql = "ALTER DATABASE " + dbName + " SET DATA QUOTA " + quotaQuantity;
         AlterDatabaseQuotaStmt stmt = (AlterDatabaseQuotaStmt) analyzeSuccess(sql);
-        Assert.assertEquals(quotaSize, stmt.getQuota());
+        Assertions.assertEquals(quotaSize, stmt.getQuota());
     }
 
     @Test

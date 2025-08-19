@@ -17,8 +17,15 @@
 
 package com.starrocks.http;
 
+import com.starrocks.common.Config;
+
 public interface IAction {
 
-    public void handleRequest(BaseRequest request) throws Exception;
+    void handleRequest(BaseRequest request) throws Exception;
 
+    // Whether to support to handle the request asynchronously, that is,
+    // handle it in a separate thread pool instead of netty workers.
+    default boolean supportAsyncHandler() {
+        return Config.enable_http_async_handler;
+    }
 }

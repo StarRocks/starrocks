@@ -111,6 +111,7 @@ public class SPMPlanBuilder {
                 }
             }
             session.setSessionVariable(cloneVariable);
+            session.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         }
 
         try {

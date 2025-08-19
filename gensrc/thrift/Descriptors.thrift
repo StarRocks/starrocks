@@ -187,6 +187,8 @@ enum TSchemaTableType {
 
     SCH_WAREHOUSE_METRICS,
     SCH_WAREHOUSE_QUERIES,
+
+    SCH_DYNAMIC_TABLET_JOBS,
 }
 
 enum THdfsCompression {
@@ -243,6 +245,10 @@ struct TColumn {
 struct TOlapTableIndexTablets {
     1: required i64 index_id
     2: required list<i64> tablets
+
+    // Virtual buckets. There is a tablet id for each virtual bucket,
+    // which means this virtual bucket's data is stored in this tablet.
+    3: optional list<i64> virtual_buckets
 }
 
 // its a closed-open range
@@ -252,8 +258,8 @@ struct TOlapTablePartition {
     2: optional Exprs.TExprNode start_key
     3: optional Exprs.TExprNode end_key
 
-    // how many tablets in one partition
-    4: required i32 num_buckets
+    // Deprecated, different indexes could have different buckets
+    4: optional i32 deprecated_num_buckets = 0
 
     5: required list<TOlapTableIndexTablets> indexes
 
@@ -484,6 +490,7 @@ struct TTableFunctionTable {
     9: optional string csv_column_seperator
 
     10: optional bool parquet_use_legacy_encoding
+    11: optional Types.TParquetOptions parquet_options
 }
 
 struct TIcebergSchemaField {

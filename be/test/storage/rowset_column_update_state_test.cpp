@@ -219,6 +219,21 @@ static uint32_t calc_update_row_cnt(const ColumnPartialUpdateState& state) {
     return total;
 }
 
+static bool is_rowid_pairs_ordered(const std::map<uint32_t, std::vector<RowidPairs>>& rss_rowid_to_update_rowid) {
+    for (const auto& each_rss : rss_rowid_to_update_rowid) {
+        const auto& rowid_pairs = each_rss.second;
+        if (rowid_pairs.size() < 2) {
+            continue;
+        }
+        for (size_t i = 1; i < rowid_pairs.size(); i++) {
+            if (rowid_pairs[i].first <= rowid_pairs[i - 1].first) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 static uint32_t find_upt_row_id(const ColumnPartialUpdateState& state, uint64_t src_rss_id) {
     std::map<uint64_t, uint32_t> m;
     for (const auto& each_rss : state.rss_rowid_to_update_rowid) {
@@ -288,6 +303,8 @@ TEST_F(RowsetColumnUpdateStateTest, prepare_partial_update_states) {
         ASSERT_EQ(parital_update_states.size(), 1);
         ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
         ASSERT_EQ(calc_update_row_cnt(parital_update_states[0]), 0);
+        // check rowid pairs ordered
+        ASSERT_TRUE(is_rowid_pairs_ordered(parital_update_states[0].rss_rowid_to_update_rowid));
     }
 }
 
@@ -334,6 +351,10 @@ TEST_F(RowsetColumnUpdateStateTest, partial_update_states_batch_get_index) {
         for (int upt_id = 0; upt_id < parital_update_states[0].src_rss_rowids.size(); upt_id++) {
             uint64_t src_rss_rowid = parital_update_states[0].src_rss_rowids[upt_id];
             ASSERT_EQ(find_upt_row_id(parital_update_states[0], src_rss_rowid), upt_id);
+        }
+        // check rowid pairs ordered
+        for (const auto& each : parital_update_states) {
+            ASSERT_TRUE(is_rowid_pairs_ordered(each.rss_rowid_to_update_rowid));
         }
         // check upserts
         std::vector<BatchPKsPtr> upserts = state.upserts();

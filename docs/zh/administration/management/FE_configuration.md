@@ -19,7 +19,7 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 
 ```SQL
  ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
- ```
+```
 
 详细的命令返回字段解释，参见 [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md)。
 
@@ -513,6 +513,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 -->
 
+##### enable_http_async_handler
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许系统异步处理 HTTP 请求。如果启用此功能，Netty 工作线程收到的 HTTP 请求将提交到单独的线程池进行业务逻辑处理，以避免阻塞 HTTP 服务器。如果禁用，Netty 工作线程将处理业务逻辑。
+- 引入版本：4.0.0
+
+##### http_async_threads_num
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：用于异步处理 HTTP 请求的线程池大小。别名为 `max_http_sql_service_task_threads_num`。
+- 引入版本：4.0.0
+
+##### enable_https
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：No
+- 描述：是否在 FE 节点上同时启用 HTTPS 服务器和 HTTP 服务器。
+- 引入版本：v4.0
+
+##### https_port
+
+- 默认值：8443
+- 类型：Int
+- 单位：-
+- 是否动态：No
+- 描述：FE 节点中 HTTPS 服务器监听的端口。
+- 引入版本：v4.0
+
 ##### cluster_name
 
 - 默认值：StarRocks Cluster
@@ -667,20 +703,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：MySQL 服务器中用于处理任务的最大线程数。
 - 引入版本：-
 
-<!--
-##### max_http_sql_service_task_threads_num
-
-- 默认值：4096
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
 ##### mysql_server_version
 
-- 默认值：5.1.0
+- 默认值：8.0.33
 - 类型：String
 - 单位：-
 - 是否动态：是
@@ -1006,6 +1031,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否收集查询的 Profile 信息。设置为 `true` 时，系统会收集查询的 Profile。设置为 `false` 时，系统不会收集查询的 profile。
 - 引入版本：-
 
+##### profile_info_format
+
+- 默认值：default
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：系统输出 Profile 的格式。有效值：`default` 和 `json`。设置为 `default` 时，Profile 为默认格式。设置为 `json` 时，系统输出 JSON 格式 Profile。
+- 引入版本：V2.5
+
 ##### enable_background_refresh_connector_metadata
 
 - 默认值：true in v3.0 and later and false in v2.5
@@ -1126,6 +1160,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：自动化集群快照任务的触发间隔。
 - 引入版本：v3.4.2
+
+##### enable_table_name_case_insensitive
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否启用针对 Catalog 名称、数据库名称、表名称、视图名称以及异步物化视图名称的大小写不敏感处理。目前，表名称默认区分大小写。
+  - 启用此功能后，所有相关名称将以小写形式存储，且所有包含这些名称的 SQL 命令将自动将其转换为小写。
+  - 您只能在创建集群时启用此功能。**集群启动后，此配置项的值无法通过任何方式修改**。任何修改尝试均会导致错误。当 FE 检测到此配置项的值与集群首次启动时不一致时，FE 将无法启动。  
+  - 目前，此功能不支持 JDBC Catalog 和表名。若需对 JDBC 或 ODBC 数据源进行大小写不敏感处理，请勿启用此功能。
+- 引入版本：v4.0
 
 ### 用户，角色及权限
 
@@ -1497,6 +1543,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：是
 - 描述：优化器重写 ScalarOperator 允许的最大次数。
+- 引入版本：-
+
+##### max_scalar_operator_optimize_depth
+
+- 默认值：256
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：优化器中 ScalarOperator 进行优化的最大深度。
+- 引入版本：-
+
+##### max_scalar_operator_flat_children
+
+- 默认值：10000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：优化器中 ScalarOperator 允许最多后代节点数量, 这个限制通常是避免优化器使用过多内存。
 - 引入版本：-
 
 ##### enable_statistic_collect
@@ -1885,6 +1949,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：低基数字典阈值。
 - 引入版本：v3.5.0
 
+##### enable_manual_collect_array_ndv
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许手动采集 ARRAY 类型列的 NDV 信息。
+- 引入版本：v4.0
+
+##### enable_auto_collect_array_ndv
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许自动采集 ARRAY 类型列的 NDV 信息。
+- 引入版本：v4.0
+
 ### 导入导出
 
 ##### load_straggler_wait_second
@@ -2005,17 +2087,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 -->
 
-<!--
-##### prepared_transaction_default_timeout_second
-
-- 默认值：86400
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### max_load_timeout_second
 
 - 默认值：259200
@@ -2032,6 +2103,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：Seconds
 - 是否动态：是
 - 描述：导入作业的最小超时时间，适用于所有导入。
+- 引入版本：-
+
+##### prepared_transaction_default_timeout_second
+
+- 默认值：86400
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：预提交事务的默认超时时间。
 - 引入版本：-
 
 ##### spark_dpp_version
@@ -2246,6 +2326,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：Routine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
 - 引入版本：-
 
+##### enable_routine_load_lag_metrics
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否收集 Routine Load Partition Offset Lag 的指标。请注意，将此项目设置为 `true` 会调用 Kafka API 来获取 Partition 的最新 Offset。
+- 引入版本：-
+
+##### min_routine_load_lag_for_metrics
+
+- 默认值：10000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：要在监控指标中显示的 Routine Load 任务的最小 Offset Lag。Offset Lag 大于此值的 Routine Load 任务将显示在指标中。
+- 引入版本：-
+
 ##### max_tolerable_backend_down_num
 
 - 默认值：0
@@ -2423,6 +2521,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：已结束事务的清理间隔。建议清理间隔尽量短，从而确保已完成的事务能够及时清理掉。
 - 引入版本：-
+
+
+##### transaction_stream_load_coordinator_cache_capacity
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存储事务标签到coordinator节点映射的缓存容量。
+- 引入版本：-
+
+##### transaction_stream_load_coordinator_cache_expire_seconds
+
+- 默认值：900
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：事务标签与coordinator节点映射关系在缓存中的存活时间(TTL)。
+- 引入版本：-
+
+##### enable_file_bundling
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为云原生表启用 File Bundling 优化功能。当启用该功能（设置为 `true`）时，系统会自动将导入、Compaction 或 Publish 操作生成的数据文件进行打包，从而减少因频繁访问外部存储系统而产生的 API 成本。您还可以通过 CREATE TABLE 语句的 `file_bundling` 属性在表级别控制此行为。有关详细说明，请参阅 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
+- 引入版本：v4.0
 
 ### 存储
 
@@ -2892,27 +3018,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 引入版本：-
 
-<!--
-##### shard_group_clean_threshold_sec
-
-- 默认值：3600
-- 类型：Long
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### star_mgr_meta_sync_interval_sec
-
-- 默认值：600
-- 类型：Long
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
 
 ##### cloud_native_meta_port
 
@@ -2940,7 +3045,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：您使用的存储类型。在存算分离模式下，StarRocks 支持将数据存储在 HDFS 、Azure Blob（自 v3.1.1 起支持）、Azure Data Lake Storage Gen2（自 v3.4.1 起支持）、以及兼容 S3 协议的对象存储中（例如 AWS S3、Google GCP、阿里云 OSS 以及 MinIO）。有效值：`S3`（默认）、`AZBLOB`、`ADLS2` 和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。如果您将此项指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的配置项。如果您将此项指定为 `ADLS2`，则必须添加以 `azure_adls2` 为前缀的配置项。如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。
+- 描述：您使用的存储类型。在存算分离模式下，StarRocks 支持将数据存储在 HDFS 、Azure Blob（自 v3.1.1 起支持）、Azure Data Lake Storage Gen2（自 v3.4.1 起支持）、Google Storage（Native SDK 自 v3.5.1 起支持）以及兼容 S3 协议的对象存储中（例如 AWS S3、阿里云 OSS 以及 MinIO）。有效值：`S3`（默认）、`AZBLOB`、`ADLS2` 和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。如果您将此项指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的配置项。如果您将此项指定为 `ADLS2`，则必须添加以 `azure_adls2` 为前缀的配置项。如果您将此项指定为 `GS`，则必须添加以 `gcp_gcs` 为前缀的配置项。如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。
 - 引入版本：-
 
 ##### cloud_native_hdfs_url
@@ -2958,7 +3063,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, `testbucket/subpath`.
+- 描述：用于存储数据的 S3 路径。它由 S3 存储桶的名称及其下的子路径（如有）组成，例如，`testbucket/subpath`。
 - 引入版本：v3.0
 
 ##### aws_s3_region
@@ -3072,6 +3177,132 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：访问 Azure Blob Storage 的共享访问签名（SAS）。
 - 引入版本：v3.1
+
+##### azure_adls2_endpoint
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：Azure Data Lake Storage Gen2 帐户的端点。示例：`https://test.dfs.core.windows.net`。
+- 引入版本：v3.4.1
+
+##### azure_adls2_path
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于存储数据的 Azure Data Lake Storage Gen2 路径，由文件系统名称和目录名称组成。示例：`testfilesystem/starrocks`。
+- 引入版本：v3.4.1
+
+##### azure_adls2_shared_key
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于授权 Azure Data Lake Storage Gen2 请求的 Shared Key。
+- 引入版本：v3.4.1
+
+##### azure_adls2_sas_token
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于授权 Azure Data Lake Storage Gen2 请求的共享访问签名 (SAS)。
+- 引入版本：v3.4.1
+
+##### azure_adls2_oauth2_use_managed_identity
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否使用 Managed Identity 用于授权 Azure Data Lake Storage Gen2 请求。
+- 引入版本：v3.4.4
+
+##### azure_adls2_oauth2_tenant_id
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Tenant ID。
+- 引入版本：v3.4.4
+
+##### azure_adls2_oauth2_client_id
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Client ID。
+- 引入版本：v3.4.4
+
+##### azure_use_native_sdk
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否使用 Native SDK 访问 Azure Blob Storage，从而允许使用 Managed Identity 和 Service Principal 进行身份验证。如果该项设置为 `false`，则只允许使用 Shared Key 和 SAS 令牌进行身份验证。
+- 引入版本：v3.4.4
+
+##### gcp_gcs_path
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于存储数据的 Google Storage 路径。它由 Google Storage 存储桶的名称及其下的子路径（如有）组成，例如，`testbucket/subpath`。
+- 引入版本：v3.5.1
+
+##### gcp_gcs_service_account_email
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：创建 Service Account 时生成的 JSON 文件中的 Email。示例：`user@hello.iam.gserviceaccount.com`。
+- 引入版本：v3.5.1
+
+##### gcp_gcs_service_account_private_key_id
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：创建 Service Account 时生成的 JSON 文件中的 Private Key ID。
+- 引入版本：v3.5.1
+
+##### gcp_gcs_service_account_private_key
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：创建 Service Account 时生成的 JSON 文件中的 Private Key。示例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。
+- 引入版本：v3.5.1
+
+##### gcp_gcs_impersonation_service_account
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：如果使用基于模拟身份的身份验证，需要要模拟的 Service Account。
+- 引入版本：v3.5.1
+
+##### gcp_gcs_use_compute_engine_service_account
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否使用 Compute Engine 上面绑定的 Service Account。
+- 引入版本：v3.5.1
 
 <!--
 ##### starmgr_grpc_timeout_seconds
@@ -3249,11 +3480,20 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：禁止存算分离内表 compaction 的 table 或 partition id 名单。格式为 `tableId1;partitionId2`，id 之间用分号隔开，例如 `12345;98765`。
 - 引入版本：v3.4.4
 
+##### lake_compaction_allow_partial_success
+
+- 默认值: true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：如果该项设置为 `true`，存算分离集群中的 Compaction 操作即使只有其中一个子任务成功，系统也将认为操作成功。
+- 引入版本：v3.5.2
+
 ##### lake_enable_balance_tablets_between_workers
 
 - 默认值：false
 - 类型：Boolean
-- Unit: -
+- 单位：-
 - 是否动态：是
 - 描述：是否在存算分离集群内表的 Tablet 调度过程中平衡 CN 节点之间的 Tablet 数量。`true` 表示启用平衡 Tablet 数量，`false` 表示禁用此功能。
 - 引入版本：v3.3.4
@@ -3262,10 +3502,37 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 默认值：0.15
 - 类型：Double
-- Unit: -
+- 单位：-
 - 是否动态：是
 - 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
 - 引入版本：v3.3.4
+
+##### shard_group_clean_threshold_sec
+
+- 默认值：3600
+- 类型：Long
+- 单位：秒
+- 是否动态：是
+- 描述：存算分离集群中，FE 清理未使用的 Tablet 和 Shard Group 的时间阈值。在此时间阈值内创建的 Tablet 和 Shard Group 不会被自动清理。
+- 引入版本：-
+
+##### star_mgr_meta_sync_interval_sec
+
+- 默认值：600
+- 类型：Long
+- 单位：秒
+- 是否动态：否
+- 描述：存算分离集群下 FE 与 StarMgr 定期同步元数据的时间间隔。
+- 引入版本：-
+
+##### meta_sync_force_delete_shard_meta
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许直接删除存算分离集群元数据，不清理远程存储上对应的数据。建议只在存算分离集群中待清理 Shard 数量过多，导致 FE 节点 JVM 内存压力过大的情况下将此项设为 `true`。注意，开启此功能会导致元数据被清理的 Shard 对应在远程存储上的数据文件无法被自动清理。
+- 引入版本：v3.2.10, v3.3.3
 
 ### 其他
 
@@ -3703,6 +3970,123 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：检索用户时，使用的管理员账号的密码。
 - 引入版本：-
+
+##### jwt_jwks_url
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：JSON Web Key Set (JWKS) 服务的 URL 或 `fe/conf` 目录下公钥本地文件的路径。
+- 引入版本：v3.5.0
+
+##### jwt_principal_field
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于标识 JWT 中主体 (`sub`) 的字段的字符串。默认值为 `sub`。此字段的值必须与登录 StarRocks 的用户名相同。
+- 引入版本：v3.5.0
+
+##### jwt_required_issuer
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于标识 JWT 中发行者 (`iss`) 的字符串列表。仅当列表中的某个值与 JWT 发行者匹配时，JWT 才被视为有效。
+- 引入版本：v3.5.0
+
+##### jwt_required_audience
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于标识 JWT 中受众 (`aud`) 的字符串列表。仅当列表中的某个值与 JWT 受众匹配时，JWT 才被视为有效。
+- 引入版本：v3.5.0
+
+##### oauth2_auth_server_url
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：授权 URL。用户浏览器将被重定向到此 URL，以开始 OAuth 2.0 授权过程。
+- 引入版本：v3.5.0
+
+##### oauth2_token_server_url
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：授权服务器上用于获取访问令牌的端点 URL。
+- 引入版本：v3.5.0
+
+##### oauth2_client_id
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：StarRocks 客户端的公共标识符。
+- 引入版本：v3.5.0
+
+##### oauth2_client_secret
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于授权 StarRocks 客户端与授权服务器通信的密钥。
+- 引入版本：v3.5.0
+
+##### oauth2_redirect_url
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：OAuth 2.0 认证成功后，用户浏览器将被重定向到的 URL。授权码将发送到此 URL。在大多数情况下，需要配置为 `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`。
+- 引入版本：v3.5.0
+
+##### oauth2_jwks_url
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：JSON Web Key Set (JWKS) 服务的 URL 或 `conf` 目录下本地文件的路径。
+- 引入版本：v3.5.0
+
+##### oauth2_principal_field
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于标识 JWT 中表示主体 (`sub`) 的字段的字符串。默认值为 `sub`。此字段的值必须与登录 StarRocks 的用户名相同。
+- 引入版本：v3.5.0
+
+##### oauth2_required_issuer
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于标识 JWT 中发行者 (`iss`) 的字符串列表。仅当列表中的某个值与 JWT 发行者匹配时，JWT 才被视为有效。
+- 引入版本：v3.5.0
+
+##### oauth2_required_audience
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于标识 JWT 中受众 (`aud`) 的字符串列表。仅当列表中的某个值与 JWT 受众匹配时，JWT 才被视为有效。
+- 引入版本：v3.5.0
 
 <!--
 ##### enable_token_check
@@ -4453,17 +4837,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
-##### profile_info_format
-
-- 默认值：default
-- 类型：String
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### ignore_invalid_privilege_authentications
 
 - 默认值：false
@@ -5010,7 +5383,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 默认值：8
 - 类型：Int
 - 单位：-
-- 是否动态：是
+- 是否动态：否
 - 描述：访问 JDBC Catalog 时，JDBC Connection Pool 的容量上限。
 - 引入版本：-
 
@@ -5019,7 +5392,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 默认值：1
 - 类型：Int
 - 单位：-
-- 是否动态：是
+- 是否动态：否
 - 描述：访问 JDBC Catalog 时，JDBC Connection Pool 中处于 idle 状态的连接最低数量。
 - 引入版本：-
 
@@ -5028,7 +5401,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 默认值：600000
 - 类型：Int
 - 单位：Milliseconds
-- 是否动态：是
+- 是否动态：否
 - 描述：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
 - 引入版本：-
 
@@ -5155,3 +5528,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：FE 加载镜像后是否进行重载标志检测。如果某个 Base MV 已完成重载，其他依赖它的 MV 则无需再次重载。
 - 引入版本：v3.5.0
+
+##### enable_trace_historical_node
+- 默认值：false
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：是否允许系统跟踪历史节点。将此项设置为 `true`，就可以启用 Cache Sharing 功能，并允许系统在弹性扩展过程中选择正确的缓存节点。
+- 引入版本：v3.5.1
