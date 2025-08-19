@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PrintableMap;
@@ -46,7 +45,7 @@ public class SplitTabletClause extends AlterTableClause {
             TabletList tabletList,
             Map<String, String> properties,
             NodePosition pos) {
-        super(AlterOpType.SPLIT_TABLET, pos);
+        super(pos);
         this.partitionNames = partitionNames;
         this.tabletList = tabletList;
         this.properties = properties;
