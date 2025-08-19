@@ -839,8 +839,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 }
 
                 if (!isFileBundling) {
-                    Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, 1, commitVersion, computeResource,
-                            isFileBundling);
+                    Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1, commitVersion, 
+                            computeResource, isFileBundling);
                 } else {
                     Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo),
                             commitVersion - 1, commitVersion, null, computeResource, request);
