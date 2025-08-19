@@ -1656,7 +1656,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                     "p20250105_20250106",
                     "p20250106_20250107",
                     "p20250107_20250108");
-            mv.getVirtualPartitionMapping().forEach((key, value) -> {;
+            mv.getVirtualPartitionMapping().forEach((key, value) -> {
                 Assertions.assertTrue(expectedPartitions.contains(key));
             });
         });
