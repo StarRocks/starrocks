@@ -107,13 +107,10 @@ public:
         auto& data = dst->get_data();
         size_t output = data.size();
         data.resize(output + _perm.size());
-        std::vector<const Container*> srcs;
-        for (auto& column : _columns) {
-            srcs.push_back(&(down_cast<const ColumnType*>(column)->get_data()));
-        }
 
         for (auto& p : _perm) {
-            data[output++] = (*srcs[p.chunk_index])[p.index_in_chunk];
+            const Container& container = down_cast<const ColumnType*>(_columns[p.chunk_index])->get_data();
+            data[output++] = container[p.index_in_chunk];
         }
 
         return Status::OK();
@@ -127,13 +124,10 @@ public:
         auto& data = dst->get_data();
         size_t output = data.size();
         data.resize(output + _perm.size());
-        std::vector<const Container*> srcs;
-        for (auto& column : _columns) {
-            srcs.push_back(&(down_cast<const ColumnType*>(column)->get_data()));
-        }
 
         for (auto& p : _perm) {
-            data[output++] = (*srcs[p.chunk_index])[p.index_in_chunk];
+            const Container& container = down_cast<const ColumnType*>(_columns[p.chunk_index])->get_data();
+            data[output++] = container[p.index_in_chunk];
         }
 
         return Status::OK();
