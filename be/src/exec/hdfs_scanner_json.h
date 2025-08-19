@@ -23,7 +23,8 @@ namespace starrocks {
 class HdfsScannerJsonReader {
 public:
     HdfsScannerJsonReader(RandomAccessFile* file, std::vector<SlotDescriptor*> slot_descs,
-                          std::vector<TypeDescriptor> type_descs);
+                          std::vector<TypeDescriptor> type_descs,
+                          const std::map<std::string_view, std::string_view>& name_map);
 
     Status init();
 
@@ -62,12 +63,15 @@ private:
     std::vector<TypeDescriptor> _type_descs;
     std::unordered_map<std::string_view, SlotDescriptor*> _slot_desc_dict;
     std::unordered_map<std::string_view, TypeDescriptor> _type_desc_dict;
+    const std::map<std::string_view, std::string_view>& _name_map;
+    size_t _map_size = 0;
     bool _empty_parser = true;
 };
 
 class HdfsJsonScanner final : public HdfsScanner {
 public:
     HdfsJsonScanner() = default;
+    HdfsJsonScanner(std::map<std::string, std::string> name_map);
     ~HdfsJsonScanner() override = default;
 
     Status do_open(RuntimeState* runtime_state) override;
@@ -84,6 +88,8 @@ private:
     Status _build_hive_column_name_2_index();
 
     bool _no_data = false;
+    std::map<std::string, std::string> _old_name_map;
+    std::map<std::string_view, std::string_view> _name_map;
     std::shared_ptr<HdfsScannerJsonReader> _reader = nullptr;
     std::vector<Column*> _column_raw_ptrs;
     std::vector<size_t> _materialize_slots_index_2_csv_column_index;

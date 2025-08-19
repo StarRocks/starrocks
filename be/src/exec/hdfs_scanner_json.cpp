@@ -20,10 +20,13 @@
 
 namespace starrocks {
 HdfsScannerJsonReader::HdfsScannerJsonReader(RandomAccessFile* file, std::vector<SlotDescriptor*> slot_descs,
-                                             std::vector<TypeDescriptor> type_descs) {
+                                             std::vector<TypeDescriptor> type_descs,
+                                             const std::map<std::string_view, std::string_view>& name_map)
+        : _name_map(name_map) {
     _file = file;
     _slot_descs = std::move(slot_descs);
     _type_descs = std::move(type_descs);
+    _map_size = name_map.size();
 
     int index = 0;
     for (size_t i = 0; i < _slot_descs.size(); i++) {
@@ -89,6 +92,12 @@ Status HdfsScannerJsonReader::_construct_row_without_jsonpath(simdjson::ondemand
         for (auto field : *row) {
             int column_index;
             std::string_view key = field_unescaped_key_safe(field, &buffer);
+            if (_map_size > 0) {
+                auto iter = _name_map.find(key);
+                if (iter != _name_map.end()) {
+                    key = iter->second;
+                }
+            }
             if (_prev_parsed_position.size() > key_index && _prev_parsed_position[key_index].key == key) {
                 column_index = _prev_parsed_position[key_index].column_index;
                 if (column_index < 0) {
@@ -151,13 +160,39 @@ Status HdfsScannerJsonReader::_construct_row_without_jsonpath(simdjson::ondemand
     return Status::OK();
 }
 
+bool parseToMap(const std::string& str1, const std::string& str2,
+                std::map<std::string, std::string>& result) {
+    // 检查str1是否包含"mapping."前缀
+    const std::string prefix = "mapping.";
+    size_t prefixLen = prefix.length();
+
+    if (str1.size() <= prefixLen || str1.substr(0, prefixLen) != prefix) {
+        return false;
+    }
+
+    // 提取键（如从"mapping.c1"中提取"c1"）
+    std::string key = str1.substr(prefixLen);
+    if (key.empty()) {
+        return false;
+    }
+
+    // 检查str2是否为空
+    if (str2.empty()) {
+        return false;
+    }
+
+    // 存入map
+    result[str2] = key;
+    return true;
+}
+
 Status HdfsScannerJsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read) {
     simdjson::ondemand::object row;
     while (*rows_read < rows_to_read) {
         auto st = _parser->get_current(&row);
         if (!st.ok()) {
             if (!st.is_end_of_file()) {
-                LOG(ERROR) << "LXH: parser get current row failed: " << st;
+                LOG(ERROR) << "JSON: parser get current row failed: " << st;
             }
             return st;
         }
@@ -166,7 +201,7 @@ Status HdfsScannerJsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int
         st = _parser->advance();
         if (!st.ok()) {
             if (!st.is_end_of_file()) {
-                LOG(ERROR) << "LXH: parser advance failed: " << st;
+                LOG(ERROR) << "JSON: parser advance failed: " << st;
             }
             return st;
         }
@@ -182,7 +217,7 @@ Status HdfsScannerJsonReader::_read_rows_count(Chunk* chunk, int32_t rows_to_rea
         auto st = _parser->get_current(&row);
         if (!st.ok()) {
             if (!st.is_end_of_file()) {
-                LOG(ERROR) << "LXH: parser get current row failed: " << st;
+                LOG(ERROR) << "JSON: parser get current row failed: " << st;
             }
             return st;
         }
@@ -190,7 +225,7 @@ Status HdfsScannerJsonReader::_read_rows_count(Chunk* chunk, int32_t rows_to_rea
         //auto st = _construct_row_without_jsonpath_count(nullptr, chunk);
         if (!st.ok()) {
             if (!st.is_end_of_file()) {
-                LOG(ERROR) << "LXH: construct row with jsonpath failed: " << st;
+                LOG(ERROR) << "JSON: construct row with jsonpath failed: " << st;
             }
             return st;
         }
@@ -198,7 +233,7 @@ Status HdfsScannerJsonReader::_read_rows_count(Chunk* chunk, int32_t rows_to_rea
         st = _parser->advance();
         if (!st.ok()) {
             if (!st.is_end_of_file()) {
-                LOG(ERROR) << "LXH: parser advance failed: " << st;
+                LOG(ERROR) << "JSON: parser advance failed: " << st;
             }
             return st;
         }
@@ -214,7 +249,7 @@ Status HdfsScannerJsonReader::next_record_count(Chunk* chunk, int32_t rows_to_re
             Status st = _read_and_parse_json();
             if (!st.ok()) {
                 if (!st.is_end_of_file()) {
-                    LOG(ERROR) << "LXH: scanner read_and_parse_json failed: " << st;
+                    LOG(ERROR) << "JSON: scanner read_and_parse_json failed: " << st;
                 }
                 return st;
             }
@@ -241,7 +276,7 @@ Status HdfsScannerJsonReader::next_record(Chunk* chunk, int32_t rows_to_read) {
             Status st = _read_and_parse_json();
             if (!st.ok()) {
                 if (!st.is_end_of_file()) {
-                    LOG(ERROR) << "LXH: scanner read_and_parse_json failed: " << st;
+                    LOG(ERROR) << "JSON: scanner read_and_parse_json failed: " << st;
                 }
                 return st;
             }
@@ -306,6 +341,15 @@ static TypeDescriptor construct_json_type(const TypeDescriptor& src_type) {
     default:
         // Treat other types as VARCHAR.
         return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    }
+}
+
+HdfsJsonScanner::HdfsJsonScanner(std::map<std::string, std::string> name_map) {
+    for (const auto& item : name_map) {
+        (void) parseToMap(item.first, item.second, _old_name_map);
+    }
+    for (const auto& item : _old_name_map) {
+        _name_map[item.first] = item.second;
     }
 }
 
@@ -405,7 +449,7 @@ Status HdfsJsonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
 }
 
 Status HdfsJsonScanner::_create_csv_reader() {
-    _reader = std::make_shared<HdfsScannerJsonReader>(_file.get(), _scanner_ctx.slot_descs, _json_types);
+    _reader = std::make_shared<HdfsScannerJsonReader>(_file.get(), _scanner_ctx.slot_descs, _json_types, _name_map);
     return Status::OK();
 }
 

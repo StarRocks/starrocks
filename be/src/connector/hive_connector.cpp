@@ -815,7 +815,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                 if (config::json_scanner_use_jni) {
                     scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
                 } else {
-                    scanner = new HdfsJsonScanner();
+                    scanner = new HdfsJsonScanner(hdfs_table->get_serde_properties());
                 }
             } else {
                 scanner = new HdfsTextScanner();
