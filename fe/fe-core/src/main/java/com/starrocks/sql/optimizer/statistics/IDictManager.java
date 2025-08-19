@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.statistics;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.FeConstants;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface IDictManager {
@@ -35,6 +36,24 @@ public interface IDictManager {
 
     // You should call `hasGlobalDict` firstly to ensure the global dict exist
     Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName);
+
+    /**
+     * For JSON type column, we use a different dict manager
+     * For example, '{"f1": "a", "f2": "b"}' will be stored as multiple entries in the cache.
+     * Cache Invalidation: All fields in the JSON will be invalidated when the JSON is updated
+     * Cache Population: the cache is populated when the JSON field is first accessed
+     * TODO(murphy) invalidate individual json field when the JSON is updated
+     */
+    default boolean hasGlobalDictForJson(long tableId, ColumnId columnName) {
+        return false;
+    }
+
+    default List<ColumnDict> getGlobalDictForJson(long tableId, ColumnId columnName) {
+        return List.of();
+    }
+
+    default void removeGlobalDictForJson(long tableId, ColumnId columnName) {
+    }
 
     static IDictManager getInstance() {
         if (FeConstants.USE_MOCK_DICT_MANAGER) {

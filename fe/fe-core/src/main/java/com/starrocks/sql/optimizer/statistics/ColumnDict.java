@@ -16,7 +16,9 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.gson.Gson;
 import com.starrocks.common.Config;
+import com.starrocks.persist.gson.GsonUtils;
 
 import java.nio.ByteBuffer;
 
@@ -45,5 +47,27 @@ public final class ColumnDict extends StatsVersion {
 
     public int getDictSize() {
         return dict.size();
+    }
+
+    public String toJson() {
+        Gson gson = GsonUtils.GSON;
+        // Manually build a JSON object with all fields
+        // Convert ByteBuffer keys to base64 strings for JSON compatibility
+        java.util.Map<String, Integer> dictMap = new java.util.HashMap<>();
+        for (java.util.Map.Entry<ByteBuffer, Integer> entry : dict.entrySet()) {
+            ByteBuffer key = entry.getKey();
+            // Duplicate to avoid changing position
+            ByteBuffer dup = key.duplicate();
+            byte[] bytes = new byte[dup.remaining()];
+            dup.get(bytes);
+            // Convert bytes to string using UTF-8 encoding
+            String strKey = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+            dictMap.put(strKey, entry.getValue());
+        }
+        java.util.Map<String, Object> jsonMap = new java.util.HashMap<>();
+        jsonMap.put("dict", dictMap);
+        jsonMap.put("collectedVersion", collectedVersion);
+        jsonMap.put("version", version);
+        return gson.toJson(jsonMap);
     }
 }

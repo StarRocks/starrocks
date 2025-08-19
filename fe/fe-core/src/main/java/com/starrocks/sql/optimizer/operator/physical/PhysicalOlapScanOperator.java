@@ -322,6 +322,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             builder.prunedPartitionPredicates = operator.prunedPartitionPredicates;
             builder.vectorSearchOptions = operator.vectorSearchOptions;
             builder.sample = operator.getSample();
+            builder.columnAccessPaths = operator.columnAccessPaths;
             return this;
         }
 

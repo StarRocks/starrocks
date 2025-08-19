@@ -317,29 +317,27 @@ public class SubfieldAccessPathNormalizer {
     //  $.a#b.c -> [a#b, c]
     //  $.a.b.c.d.e.f -> [a, b] -- don't support overflown JSON_FLATTEN_DEPTH
     //  a.b.c -> [a, b, c]
-    public static boolean parseSimpleJsonPath(int jsonFlattenDepth, String path, List<String> result) {
+    public static List<String> parseSimpleJsonPath(String path) {
+        List<String> result = Lists.newArrayList();
         path = StringUtils.trimToEmpty(path);
         if (StringUtils.isBlank(path) || StringUtils.contains(path, "..") || StringUtils.equals("$", path) ||
                 StringUtils.countMatches(path, "\"") % 2 != 0) {
             // .. is recursive search in json path, not supported
             // unpaired quota char
-            return false;
+            return result;
         }
 
         StrTokenizer tokenizer = new StrTokenizer(path, '.', '"');
         String[] tokens = tokenizer.getTokenArray();
 
         if (tokens.length < 1) {
-            return false;
+            return result;
         }
-        int size = jsonFlattenDepth;
         int i = 0;
         if (tokens[0].equals("$")) {
-            size++;
             i++;
         }
-        size = Math.min(tokens.length, size);
-        for (; i < size; i++) {
+        for (; i < tokens.length; i++) {
             if (tokens[i].contains(".")) {
                 result.add("\"" + tokens[i] + "\"");
                 continue;
@@ -347,7 +345,7 @@ public class SubfieldAccessPathNormalizer {
                 result.add(tokens[i]);
             }
         }
-        return size < tokens.length;
+        return result;
     }
 
     public void collect(List<ScalarOperator> scalarOperators) {

@@ -284,6 +284,14 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             return (B) this;
         }
 
+        public B addColumnAccessPaths(List<ColumnAccessPath> paths) {
+            builder.columnAccessPaths = ImmutableList.<ColumnAccessPath>builder()
+                    .addAll(paths)
+                    .addAll(builder.columnAccessPaths)
+                    .build();
+            return (B) this;
+        }
+
         public B setTable(Table table) {
             builder.table = table;
             return (B) this;

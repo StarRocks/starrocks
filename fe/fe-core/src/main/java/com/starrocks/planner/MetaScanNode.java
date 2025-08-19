@@ -41,6 +41,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -176,6 +177,10 @@ public class MetaScanNode extends ScanNode {
             columnsDesc.add(tColumn);
         }
         msg.meta_scan_node.setColumns(columnsDesc);
+
+        if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
+            msg.meta_scan_node.setColumn_access_paths(columnAccessPathToThrift());
+        }
     }
 
     @Override
@@ -192,6 +197,10 @@ public class MetaScanNode extends ScanNode {
         }
         if (!selectPartitionNames.isEmpty()) {
             output.append(prefix).append("Partitions: ").append(selectPartitionNames).append("\n");
+        }
+
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            output.append(explainColumnAccessPath(prefix));
         }
         return output.toString();
     }
