@@ -33,13 +33,13 @@ public class SortAggOptimizationTest extends PlanTestBase {
 
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
-        // Test 1: GROUP BY prefix of sort key
+            // Test 1: GROUP BY prefix of sort key
             "select user_id, count(*) from sort_key_table group by user_id | true",
-        // Test 2: GROUP BY exact match with sort key
+            // Test 2: GROUP BY exact match with sort key
             "select user_id, event_time, count(*) from sort_key_table group by user_id, event_time | true",
-        // Test 3: GROUP BY not prefix of sort key (should not use sort agg)
+            // Test 3: GROUP BY not prefix of sort key (should not use sort agg)
             "select event_time, count(*) from sort_key_table group by event_time | false",
-        // Test 4: GROUP BY with wrong order (should not use sort agg)
+            // Test 4: GROUP BY with wrong order (should not use sort agg)
             "select event_time, user_id, count(*) from sort_key_table group by event_time, user_id | true"
     })
     public void testSortAggWithOrderBySyntax(String sql, boolean shouldUseSortAgg) throws Exception {
@@ -67,23 +67,23 @@ public class SortAggOptimizationTest extends PlanTestBase {
 
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
-        // Test 1: Equality predicate on non-GROUP BY column (should work)
+            // Test 1: Equality predicate on non-GROUP BY column (should work)
             "select user_id, count(*) from events_table where event_type = 'click' group by user_id | true",
-        // Test 2: Equality predicate on GROUP BY column (should work)
+            // Test 2: Equality predicate on GROUP BY column (should work)
             "select user_id, count(*) from events_table where user_id = 123 group by user_id | true",
-        // Test 3: Multiple equality predicates (should work)
+            // Test 3: Multiple equality predicates (should work)
             "select user_id, count(*) from events_table where event_type = 'click' and value > 0 group by user_id | " +
                     "true",
-        // Test 4: Equality predicate on both GROUP BY and non-GROUP BY columns (should work)
+            // Test 4: Equality predicate on both GROUP BY and non-GROUP BY columns (should work)
             "select user_id, count(*) from events_table where user_id = 123 and event_type = 'click' group by user_id" +
                     " | true",
-        // Test 5: Equality predicate on sort key prefix (should work)
+            // Test 5: Equality predicate on sort key prefix (should work)
             "select user_id, event_time, count(*) from events_table where user_id = 123 group by user_id, event_time " +
                     "| true",
-        // Test 6: Complex case with multiple equality predicates
+            // Test 6: Complex case with multiple equality predicates
             "select user_id, event_time, count(*) from events_table where user_id = 123 and event_time = '2023-01-01'" +
                     " group by user_id, event_time | true",
-        // Test 7: Non-Equality Predicate
+            // Test 7: Non-Equality Predicate
             "select event_time, count(*) from events_table where user_id < 123 group by event_time | false"
     })
     public void testSortAggWithEqualityPredicates(String sql, boolean shouldUseSortAgg) throws Exception {
@@ -112,11 +112,11 @@ public class SortAggOptimizationTest extends PlanTestBase {
 
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
-        // Test 1: GROUP BY prefix of key columns
+            // Test 1: GROUP BY prefix of key columns
             "select user_id, count(*) from key_sort_table group by user_id | true",
-        // Test 2: GROUP BY exact match with key columns
+            // Test 2: GROUP BY exact match with key columns
             "select user_id, event_time, count(*) from key_sort_table group by user_id, event_time | true",
-        // Test 3: GROUP BY not prefix of key columns (should not use sort agg)
+            // Test 3: GROUP BY not prefix of key columns (should not use sort agg)
             "select event_time, count(*) from key_sort_table group by event_time | false",
             // Test 4: GROUP BY with different order
             "select event_time, user_id, count(*) from key_sort_table group by event_time, user_id | true"
@@ -146,13 +146,13 @@ public class SortAggOptimizationTest extends PlanTestBase {
 
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
-        // Test 1: AND predicates with equality
+            // Test 1: AND predicates with equality
             "select user_id, count(*) from complex_pred_table where event_type = 'click' and value > 0 and user_id = " +
                     "123 group by user_id | true",
-        // Test 2: Range predicates (should still work if they don't interfere with sort key)
+            // Test 2: Range predicates (should still work if they don't interfere with sort key)
             "select user_id, count(*) from complex_pred_table where event_time >= '2023-01-01' and event_time < " +
                     "'2023-02-01' group by user_id | true",
-        // Test 3: Complex AND predicates
+            // Test 3: Complex AND predicates
             "select user_id, count(*) from complex_pred_table where event_type = 'click' and value > 0 and event_time" +
                     " >= '2023-01-01' group by user_id | true"
     })
@@ -180,12 +180,15 @@ public class SortAggOptimizationTest extends PlanTestBase {
         }
     }
 
-
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
             "select get_json_int(data, 'k1') k1, count(*) from json_sorted_table group by k1 | true",
             "select get_json_int(data, 'k1') k1, get_json_string(data, 'k2') k2, count(*) from json_sorted_table " +
                     "group by k1, k2| true",
+            "select get_json_string(data, 'k2') k2, count(*) " +
+                    "from json_sorted_table " +
+                    "where get_json_int(data, 'k1') = 123 " +
+                    "group by k2| true",
 
             // Unsupported cases
             "select get_json_string(data, 'k1') k1, count(*) from json_sorted_table group by k1 | false",
