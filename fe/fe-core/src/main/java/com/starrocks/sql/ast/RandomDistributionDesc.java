@@ -34,14 +34,10 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
-import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.List;
 import java.util.Set;
 
 public class RandomDistributionDesc extends DistributionDesc {
@@ -72,14 +68,6 @@ public class RandomDistributionDesc extends DistributionDesc {
     public int getBuckets() {
         return numBucket;
     }
-
-    @Override
-    public DistributionInfo toDistributionInfo(List<Column> columns) {
-        return new RandomDistributionInfo(numBucket);
-    }
-
-
-
 
     @Override
     public String toString() {

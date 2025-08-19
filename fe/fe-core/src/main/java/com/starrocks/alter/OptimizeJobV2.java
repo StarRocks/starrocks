@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
@@ -528,7 +529,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             targetTable.lastSchemaUpdateTime.set(System.nanoTime());
 
             if (allPartitionOptimized && optimizeClause.getDistributionDesc() != null) {
-                this.distributionInfo = optimizeClause.getDistributionDesc().toDistributionInfo(targetTable.getColumns());
+                this.distributionInfo =
+                        DistributionInfoBuilder.build(optimizeClause.getDistributionDesc(), targetTable.getColumns());
                 targetTable.setDefaultDistributionInfo(distributionInfo);
             }
             targetTable.setState(OlapTableState.NORMAL);
