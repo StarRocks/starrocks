@@ -682,7 +682,21 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     allOtherPartitionTablets.addAll(index.getTablets());
                 }
 
+<<<<<<< HEAD
                 Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, 1, commitVersion, warehouseId);
+=======
+                if (!isFileBundling) {
+                    Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1, commitVersion, 
+                            computeResource, isFileBundling);
+                } else {
+                    Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo),
+                            commitVersion - 1, commitVersion, null, computeResource, request);
+                }
+
+                if (isFileBundling) {
+                    Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null);
+                }
+>>>>>>> e346ade5eb ([BugFix]  Fix error base version in schema change job with lake rollup (#62046))
             }
             return true;
         } catch (Exception e) {
