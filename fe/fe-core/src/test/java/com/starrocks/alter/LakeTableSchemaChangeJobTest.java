@@ -404,7 +404,7 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testAlterTabletSuccessEnablePartitionAgg() throws Exception {
+    public void testAlterTabletSuccessEnableFileBundling() throws Exception {
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -415,6 +415,51 @@ public class LakeTableSchemaChangeJobTest {
         LakeTable table1 = createTable(connectContext, 
                     "CREATE TABLE t1(c0 INT) duplicate key(c0) distributed by hash(c0) buckets 3 " +
                                 "PROPERTIES('file_bundling'='true')");
+        
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        alterTable(connectContext, "ALTER TABLE t1 ADD COLUMN c1 BIGINT AS c0 + 2");
+        LakeTableSchemaChangeJob schemaChangeJob1 = getAlterJob(table1);
+        
+        schemaChangeJob1.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob1.getJobState());
+
+        schemaChangeJob1.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob1.getJobState());
+
+        schemaChangeJob1.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+        Assertions.assertTrue(schemaChangeJob1.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
+        Collection<Partition> partitions = table1.getPartitions();
+        Assertions.assertEquals(1, partitions.size());
+        Partition partition = partitions.stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
+        List<MaterializedIndex> shadowIndexes =
+                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        Assertions.assertEquals(1, shadowIndexes.size());
+
+        // Does not support cancel job in FINISHED_REWRITING state.
+        schemaChangeJob.cancel("test");
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+
+        while (schemaChangeJob1.getJobState() != AlterJobV2.JobState.FINISHED) {
+            schemaChangeJob1.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+    }
+
+    @Test
+    public void testAlterTabletSuccessDisableFileBundling() throws Exception {
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        LakeTable table1 = createTable(connectContext, 
+                    "CREATE TABLE t1(c0 INT) duplicate key(c0) distributed by hash(c0) buckets 3 " +
+                                "PROPERTIES('file_bundling'='false')");
         
         Config.enable_fast_schema_evolution_in_share_data_mode = false;
         alterTable(connectContext, "ALTER TABLE t1 ADD COLUMN c1 BIGINT AS c0 + 2");
