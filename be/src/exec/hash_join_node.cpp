@@ -99,9 +99,11 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
-    if (tnode.hash_join_node.__isset.asof_join_conjunct_left) {
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, tnode.hash_join_node.asof_join_conjunct_left, &_asof_left_expr_ctx, state));
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, tnode.hash_join_node.asof_join_conjunct_right, &_asof_right_expr_ctx, state));
+    if (tnode.hash_join_node.__isset.asof_join_condition) {
+        auto asof_join_condition = tnode.hash_join_node.asof_join_condition;
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, asof_join_condition.left, &_asof_join_probe_expr_ctx, state));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, asof_join_condition.right, &_asof_join_build_expr_ctx, state));
+        _asof_join_condition_op = tnode.hash_join_node.asof_join_condition.opcode;
     }
 
     if (tnode.hash_join_node.__isset.partition_exprs) {
@@ -133,12 +135,6 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.hash_join_node.other_join_conjuncts,
                                             &_other_join_conjunct_ctxs, state));
-
-    // Initialize AsOf Join conjunct if present
-    if (tnode.hash_join_node.__isset.asof_join_conjunct) {
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, tnode.hash_join_node.asof_join_conjunct,
-                                               &_asof_join_conjunct_ctx, state));
-    }
 
     for (const auto& desc : tnode.hash_join_node.build_runtime_filters) {
         auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
@@ -199,12 +195,10 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_build_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_probe_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_other_join_conjunct_ctxs, state));
-    
-    // Prepare AsOf Join conjunct if present
-    if (_asof_join_conjunct_ctx != nullptr) {
-        RETURN_IF_ERROR(_asof_join_conjunct_ctx->prepare(state));
-        RETURN_IF_ERROR(_asof_left_expr_ctx->prepare(state));
-        RETURN_IF_ERROR(_asof_right_expr_ctx->prepare(state));
+
+    if (_asof_join_build_expr_ctx != nullptr && _asof_join_probe_expr_ctx != nullptr) {
+        RETURN_IF_ERROR(_asof_join_build_expr_ctx->prepare(state));
+        RETURN_IF_ERROR(_asof_join_probe_expr_ctx->prepare(state));
     }
 
     HashTableParam param;
@@ -220,7 +214,6 @@ Status HashJoinNode::prepare(RuntimeState* state) {
 void HashJoinNode::_init_hash_table_param(HashTableParam* param, RuntimeState* runtime_state) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
 
-    param->asof_conjunct_ctx = _asof_join_conjunct_ctx;
     param->join_type = _join_type;
     param->build_row_desc = &child(1)->row_desc();
     param->probe_row_desc = &child(0)->row_desc();
@@ -246,29 +239,23 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param, RuntimeState* r
         expr_context->root()->get_slot_ids(&expr_slots);
         predicate_slots.insert(expr_slots.begin(), expr_slots.end());
     }
-    if (_asof_join_conjunct_ctx != nullptr) {
-        std::vector<SlotId> expr_slots;
-        _asof_join_conjunct_ctx->root()->get_slot_ids(&expr_slots);
-        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
-    }
-    param->predicate_slots = std::move(predicate_slots);
-    param->asof_build_ctx = _asof_right_expr_ctx;
-    param->asof_probe_ctx = _asof_left_expr_ctx;
 
-    if (_asof_right_expr_ctx != nullptr) {
-        std::vector<SlotId> asof_build_slots;
-        _asof_right_expr_ctx->root()->get_slot_ids(&asof_build_slots);
-        if (!asof_build_slots.empty()) {
-            param->asof_build_slot_id = asof_build_slots[0];
-        }
+    if (_asof_join_build_expr_ctx && _asof_join_probe_expr_ctx) {
+        std::vector<SlotId> build_slots, probe_slots;
+        _asof_join_probe_expr_ctx->root()->get_slot_ids(&probe_slots);
+        _asof_join_build_expr_ctx->root()->get_slot_ids(&build_slots);
+
+        DCHECK_EQ(probe_slots.size(), 1);
+        DCHECK_EQ(build_slots.size(), 1);
+
+        LogicalType probe_type = _asof_join_probe_expr_ctx->root()->type().type;
+        LogicalType build_type = _asof_join_build_expr_ctx->root()->type().type;
+        SlotId build_slot = build_slots[0], probe_slot = probe_slots[0];
+        param->asof_join_condition_desc = {probe_slot, probe_type, build_slot, build_type, _asof_join_condition_op};
+        predicate_slots.insert({build_slot, probe_slot});
     }
-    if (_asof_left_expr_ctx != nullptr) {
-        std::vector<SlotId> asof_probe_slots;
-        _asof_left_expr_ctx->root()->get_slot_ids(&asof_probe_slots);
-        if (!asof_probe_slots.empty()) {
-            param->asof_probe_slot_id = asof_probe_slots[0];
-        }
-    }
+
+    param->predicate_slots = std::move(predicate_slots);
     for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
         Expr* expr = _build_expr_ctxs[i]->root();
         if (expr->is_slotref()) {
@@ -288,9 +275,8 @@ Status HashJoinNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_build_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_probe_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_other_join_conjunct_ctxs, state));
-    RETURN_IF_ERROR(_asof_join_conjunct_ctx->open(state));
-    RETURN_IF_ERROR(_asof_left_expr_ctx->open(state));
-    RETURN_IF_ERROR(_asof_right_expr_ctx->open(state));
+    RETURN_IF_ERROR(_asof_join_build_expr_ctx->open(state));
+    RETURN_IF_ERROR(_asof_join_probe_expr_ctx->open(state));
 
     {
         build_timer.stop();
@@ -528,7 +514,8 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
                           _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
                           child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters,
                           _output_slots, _output_slots, _distribution_mode, _enable_late_materialization,
-                          _enable_partition_hash_join, _is_skew_join, _asof_join_conjunct_ctx, _asof_right_expr_ctx, _asof_left_expr_ctx);
+                          _enable_partition_hash_join, _is_skew_join, _asof_join_condition_op,
+                          _asof_join_build_expr_ctx, _asof_join_probe_expr_ctx);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param);
 
     // Create a shared RefCountedRuntimeFilterCollector
@@ -620,7 +607,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     // Use ChunkAccumulateOperator, when any following condition occurs:
     // - not left outer join,
     // - left outer join, with conjuncts or runtime filters.
-    bool need_accumulate_chunk = _join_type != TJoinOp::LEFT_OUTER_JOIN || !_conjunct_ctxs.empty() ||
+    bool need_accumulate_chunk = (_join_type != TJoinOp::LEFT_OUTER_JOIN && _join_type != TJoinOp::ASOF_LEFT_OUTER_JOIN) || !_conjunct_ctxs.empty() ||
                                  !_other_join_conjunct_ctxs.empty() || lhs_operators.back()->has_runtime_filters();
     if (need_accumulate_chunk) {
         may_add_chunk_accumulate_operator(lhs_operators, context, id());

@@ -225,12 +225,6 @@ private:
 
     void _copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
-    void extract_asof_values_from_column(const Column* column, int64_t* output_values, size_t row_count);
-
-    int64_t convert_datum_to_int64_safely(const Datum& datum);
-
-    uint32_t find_best_asof_match_in_bucket(uint32_t probe_row_index, int64_t probe_asof_value);
-
     void _probe_index_output(ChunkPtr* chunk);
     void _build_index_output(ChunkPtr* chunk);
 
@@ -311,6 +305,13 @@ private:
     template <bool first_probe, bool is_collision_free_and_unique>
     void _probe_from_ht_for_asof_inner_join(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
     HashTableProbeState::ProbeCoroutine _probe_from_ht_for_asof_inner_join(RuntimeState* state,
+                                                                           const Buffer<CppType>& build_data,
+                                                                           const Buffer<CppType>& probe_data);
+
+    // for AsOf left outer join
+    template <bool first_probe, bool is_collision_free_and_unique>
+    void _probe_from_ht_for_asof_left_outer_join(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
+    HashTableProbeState::ProbeCoroutine _probe_from_ht_for_asof_left_outer_join(RuntimeState* state,
                                                                            const Buffer<CppType>& build_data,
                                                                            const Buffer<CppType>& probe_data);
 

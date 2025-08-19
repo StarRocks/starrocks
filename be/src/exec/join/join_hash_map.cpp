@@ -315,13 +315,7 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items->build_chunk = std::make_shared<Chunk>();
     _table_items->with_other_conjunct = param.with_other_conjunct;
 
-    _table_items->asof_conjunct_ctx = param.asof_conjunct_ctx;
-    _table_items->asof_build_ctx = param.asof_build_ctx;
-    _table_items->asof_probe_ctx = param.asof_probe_ctx;
-    _table_items->asof_build_slot_id = param.asof_build_slot_id;
-    _table_items->asof_probe_slot_id = param.asof_probe_slot_id;
     _table_items->join_type = param.join_type;
-
     _table_items->enable_late_materialization = param.enable_late_materialization;
 
     if (_table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN ||
@@ -338,6 +332,7 @@ void JoinHashTable::create(const HashTableParam& param) {
         _table_items->right_to_nullable = true;
     }
     _table_items->join_keys = param.join_keys;
+    _table_items->asof_join_condition_desc = param.asof_join_condition_desc;
 
     _init_probe_column(param);
     _init_build_column(param);

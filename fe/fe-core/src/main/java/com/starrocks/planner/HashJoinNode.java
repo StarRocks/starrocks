@@ -44,6 +44,7 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.thrift.TAsofJoinCondition;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.THashJoinNode;
 import com.starrocks.thrift.TNormalHashJoinNode;
@@ -130,11 +131,15 @@ public class HashJoinNode extends JoinNode {
             }
             sqlJoinPredicatesBuilder.append(eqJoinPredicate.toSql());
         }
-        if (joinOp.isAsofJoin()) {
-            msg.hash_join_node.setAsof_join_conjunct(otherJoinConjuncts.get(0).treeToThrift());
-            msg.hash_join_node.setAsof_join_conjunct_left(otherJoinConjuncts.get(0).getChild(0).treeToThrift());
-            msg.hash_join_node.setAsof_join_conjunct_right(otherJoinConjuncts.get(0).getChild(1).treeToThrift());
-            otherJoinConjuncts.clear();
+
+        if (joinOp.isAsofJoin() && asofJoinConjunct != null) {
+            TAsofJoinCondition asofJoinCondition = new TAsofJoinCondition(asofJoinConjunct.getChild(0).treeToThrift(),
+                    asofJoinConjunct.getChild(1).treeToThrift(), asofJoinConjunct.getOpcode());
+            msg.hash_join_node.setAsof_join_condition(asofJoinCondition);
+            if (sqlJoinPredicatesBuilder.length() > 0) {
+                sqlJoinPredicatesBuilder.append(", ");
+            }
+            sqlJoinPredicatesBuilder.append(asofJoinConjunct.toSql());
         }
 
         for (Expr e : otherJoinConjuncts) {

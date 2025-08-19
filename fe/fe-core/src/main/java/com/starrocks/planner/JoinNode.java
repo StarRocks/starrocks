@@ -76,6 +76,8 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     protected List<BinaryPredicate> eqJoinConjuncts = Lists.newArrayList();
     // join conjuncts from the JOIN clause that aren't equi-join predicates
     protected List<Expr> otherJoinConjuncts;
+    // ASOF join specific non-equality predicate (for temporal matching)
+    protected BinaryPredicate asofJoinConjunct;
     protected boolean isPushDown;
     protected DistributionMode distrMode;
     protected String colocateReason = ""; // if can not do colocate join, set reason here
@@ -428,6 +430,15 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
     public List<BinaryPredicate> getEqJoinConjuncts() {
         return eqJoinConjuncts;
+    }
+
+    public Expr getAsofJoinConjunct() {
+        return asofJoinConjunct;
+    }
+
+    public void setAsofJoinConjunct(Expr asofJoinConjunct) {
+        Preconditions.checkArgument(asofJoinConjunct instanceof BinaryPredicate);
+        this.asofJoinConjunct = (BinaryPredicate) asofJoinConjunct;
     }
 
     public DistributionMode getDistrMode() {

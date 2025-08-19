@@ -20,13 +20,20 @@
 
 #include <coroutine>
 #include <cstdint>
+#include <optional>
 #include <set>
 
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
+#include "column/fixed_length_column.h"
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "exec/sorting/sort_helper.h"
 #include "simd/simd.h"
+#include "types/date_value.h"
+#include "types/timestamp_value.h"
+#include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
@@ -41,6 +48,232 @@ struct JoinKeyDesc {
     bool is_null_safe_equal;
     ColumnRef* col_ref = nullptr;
 };
+
+struct AsofJoinConditionDesc {
+    SlotId probe_slot_id;
+    LogicalType probe_logical_type;
+    SlotId build_slot_id;
+    LogicalType build_logical_type;
+    TExprOpcode::type condition_op = TExprOpcode::INVALID_OPCODE;
+};
+
+template <typename ValueType, TExprOpcode::type OpCode>
+class AsofLookupVector {
+public:
+    struct Entry {
+        ValueType asof_value;
+        uint32_t row_index;
+
+        Entry() = default;
+        Entry(ValueType value, uint32_t index) : asof_value(value), row_index(index) {}
+    };
+
+private:
+    using Entries = std::vector<Entry>;
+
+    static constexpr bool is_descending = (OpCode == TExprOpcode::GE || OpCode == TExprOpcode::GT);
+    static constexpr bool is_strict = (OpCode == TExprOpcode::LT || OpCode == TExprOpcode::GT);
+
+    Entries _entries;
+
+public:
+    void add_row(ValueType asof_value, uint32_t row_index) {
+        LOG(INFO) << "AsofLookupVector::add_row: adding asof_value=" << asof_value << ", row_index=" << row_index;
+        _entries.emplace_back(asof_value, row_index);
+        LOG(INFO) << "AsofLookupVector::add_row: _entries size now=" << _entries.size();
+    }
+
+    void sort() {
+        auto comparator = [](const Entry& lhs, const Entry& rhs) {
+            if constexpr (is_descending) {
+                return SorterComparator<ValueType>::compare(lhs.asof_value, rhs.asof_value) > 0;
+            } else {
+                return SorterComparator<ValueType>::compare(lhs.asof_value, rhs.asof_value) < 0;
+            }
+        };
+
+        ::pdqsort(_entries.begin(), _entries.end(), comparator);
+    }
+
+    uint32_t find_asof_match(ValueType probe_value) const {
+        LOG(INFO) << "find_asof_match: OpCode=" << OpCode << ", is_descending=" << is_descending
+                  << ", is_strict=" << is_strict << ", _entries.size()=" << _entries.size();
+        if (_entries.empty()) {
+            LOG(INFO) << "find_asof_match: _entries is empty, returning 0";
+            return 0;
+        }
+
+        // 打印所有entries用于调试
+        LOG(INFO) << "find_asof_match: All entries:";
+        for (size_t i = 0; i < _entries.size(); i++) {
+            LOG(INFO) << "  entry[" << i << "]: asof_value=" << _entries[i].asof_value
+                      << ", row_index=" << _entries[i].row_index;
+        }
+
+        size_t size = _entries.size();
+        size_t low = 0;
+        LOG(INFO) << "find_asof_match: searching for probe_value=" << probe_value << ", initial size=" << size;
+
+        while (size >= 8) {
+            _bound_search_iteration(probe_value, low, size);
+            _bound_search_iteration(probe_value, low, size);
+            _bound_search_iteration(probe_value, low, size);
+        }
+
+        while (size > 0) {
+            _bound_search_iteration(probe_value, low, size);
+        }
+
+        uint32_t result = (low < _entries.size()) ? _entries[low].row_index : 0;
+        LOG(INFO) << "find_asof_match: final low=" << low << ", result=" << result;
+
+        if (low < _entries.size()) {
+            LOG(INFO) << "find_asof_match: matched entry[" << low << "] with asof_value=" << _entries[low].asof_value
+                      << ", row_index=" << _entries[low].row_index;
+        }
+
+        return result;
+    }
+
+    size_t size() const { return _entries.size(); }
+    bool empty() const { return _entries.empty(); }
+    void clear() { _entries.clear(); }
+
+private:
+    ALWAYS_INLINE void _bound_search_iteration(ValueType probe_value, size_t& low, size_t& size) const {
+        size_t half = size / 2;
+        size_t other_half = size - half;
+        size_t probe_pos = low + half;
+        size_t other_low = low + other_half;
+        const ValueType& entry_value = _entries[probe_pos].asof_value;
+
+        LOG(INFO) << "_bound_search_iteration: low=" << low << ", size=" << size << ", probe_pos=" << probe_pos
+                  << ", entry_value=" << entry_value << ", probe_value=" << probe_value;
+
+        size = half;
+
+        bool condition_result;
+        if constexpr (is_descending) {
+            if constexpr (is_strict) {
+                condition_result = (SorterComparator<ValueType>::compare(probe_value, entry_value) <= 0);
+                low = condition_result ? other_low : low;
+                LOG(INFO) << "  descending+strict: compare result <= 0: " << condition_result;
+            } else {
+                condition_result = (SorterComparator<ValueType>::compare(probe_value, entry_value) < 0);
+                low = condition_result ? other_low : low;
+                LOG(INFO) << "  descending+non-strict: compare result < 0: " << condition_result;
+            }
+        } else {
+            if constexpr (is_strict) {
+                condition_result = (SorterComparator<ValueType>::compare(probe_value, entry_value) >= 0);
+                low = condition_result ? other_low : low;
+                LOG(INFO) << "  ascending+strict: compare result >= 0: " << condition_result;
+            } else {
+                condition_result = (SorterComparator<ValueType>::compare(probe_value, entry_value) > 0);
+                low = condition_result ? other_low : low;
+                LOG(INFO) << "  ascending+non-strict: compare result > 0: " << condition_result;
+            }
+        }
+        LOG(INFO) << "  new_low=" << low << ", new_size=" << size;
+    }
+};
+
+// Non-template base class for unified storage
+class AsofLookupVectorBase {
+public:
+    virtual ~AsofLookupVectorBase() = default;
+    virtual void finalize() = 0;
+    virtual size_t size() const = 0;
+    virtual bool empty() const = 0;
+    virtual void clear() = 0;
+
+    template <typename CppType>
+    void add_row(CppType asof_value, uint32_t row_index) {
+        _add_row_any(typeid(CppType), static_cast<const void*>(&asof_value), row_index);
+    }
+
+    template <typename CppType>
+    uint32_t find_match(CppType probe_value) const {
+        return _find_match_any(typeid(CppType), static_cast<const void*>(&probe_value));
+    }
+
+private:
+    virtual void _add_row_any(const std::type_info& type_info, const void* asof_value, uint32_t row_index) = 0;
+    virtual uint32_t _find_match_any(const std::type_info& type_info, const void* probe_value) const = 0;
+};
+
+template <typename CppType, TExprOpcode::type OpCode>
+class TypedAsofLookupVector : public AsofLookupVectorBase {
+private:
+    AsofLookupVector<CppType, OpCode> _impl;
+
+public:
+    void finalize() override { _impl.sort(); }
+
+    size_t size() const override { return _impl.size(); }
+
+    bool empty() const override { return _impl.empty(); }
+
+    void clear() override { _impl.clear(); }
+
+private:
+    void _add_row_any(const std::type_info& type_info, const void* asof_value, uint32_t row_index) override {
+        if (type_info == typeid(CppType)) {
+            const CppType& value = *static_cast<const CppType*>(asof_value);
+            LOG(INFO) << "TypedAsofLookupVector::add_row: adding value, row_index=" << row_index;
+            _impl.add_row(value, row_index);
+            LOG(INFO) << "TypedAsofLookupVector::add_row: entries size now=" << _impl.size();
+        } else {
+            LOG(ERROR) << "Type mismatch in add_row: expected " << typeid(CppType).name() << ", got "
+                       << type_info.name();
+        }
+    }
+
+    uint32_t _find_match_any(const std::type_info& type_info, const void* probe_value) const override {
+        if (type_info == typeid(CppType)) {
+            const CppType& value = *static_cast<const CppType*>(probe_value);
+            return _impl.find_asof_match(value);
+        } else {
+            LOG(ERROR) << "Type mismatch in find_match: expected " << typeid(CppType).name() << ", got "
+                       << type_info.name();
+            return 0;
+        }
+    }
+};
+
+#define MAKE_ASOF_VECTOR(CppType, OpCode) std::make_unique<TypedAsofLookupVector<CppType, TExprOpcode::OpCode>>()
+
+template <typename CppType>
+std::unique_ptr<AsofLookupVectorBase> create_typed_asof_vector(TExprOpcode::type opcode) {
+    switch (opcode) {
+    case TExprOpcode::LT:
+        return MAKE_ASOF_VECTOR(CppType, LT);
+    case TExprOpcode::LE:
+        return MAKE_ASOF_VECTOR(CppType, LE);
+    case TExprOpcode::GT:
+        return MAKE_ASOF_VECTOR(CppType, GT);
+    case TExprOpcode::GE:
+        return MAKE_ASOF_VECTOR(CppType, GE);
+    default:
+        CHECK(false) << "Unsupported opcode: " << opcode;
+    }
+}
+
+inline std::unique_ptr<AsofLookupVectorBase> create_asof_lookup_vector_base(LogicalType logical_type,
+                                                                            TExprOpcode::type opcode) {
+    switch (logical_type) {
+    case TYPE_BIGINT:
+        return create_typed_asof_vector<int64_t>(opcode);
+    case TYPE_DATE:
+        return create_typed_asof_vector<DateValue>(opcode);
+    case TYPE_DATETIME:
+        return create_typed_asof_vector<TimestampValue>(opcode);
+    default:
+        CHECK(false) << "Unsupported logical type: " << logical_type;
+    }
+}
+
+#undef MAKE_ASOF_VECTOR
 
 struct HashTableSlotDescriptor {
     SlotDescriptor* slot;
@@ -93,213 +326,50 @@ struct JoinHashTableItems {
     bool right_to_nullable = false;
     bool has_large_column = false;
     float keys_per_bucket = 0;
-    SlotId asof_build_slot_id = -1;
-    SlotId asof_probe_slot_id = -1;
+    AsofJoinConditionDesc asof_join_condition_desc;
 
-    struct AsofBucketData {
-        std::vector<std::pair<int64_t, uint32_t>> sorted_pairs;  // {asof_value, row_index}
+    // AsOf Join lookup vectors - unified base class storage
+    Buffer<std::unique_ptr<AsofLookupVectorBase>> asof_lookup_vectors;
 
-        void add_row(int64_t asof_value, uint32_t row_index) {
-            sorted_pairs.emplace_back(asof_value, row_index);
-        }
-
-        void sort_by_asof_value() {
-            std::sort(sorted_pairs.begin(), sorted_pairs.end(),
-                     [](const std::pair<int64_t, uint32_t>& a, const std::pair<int64_t, uint32_t>& b) {
-                         return a.first < b.first;  // Sort by AsOf value (timestamp/datetime/long)
-                     });
-        }
-
-        uint32_t find_asof_match(int64_t left_asof_value) const {
-            LOG(INFO) << "=== Entering find_asof_match ===";
-            LOG(INFO) << "left_asof_value: " << left_asof_value;
-            LOG(INFO) << "sorted_pairs.size(): " << sorted_pairs.size();
-
-            if (sorted_pairs.empty()) {
-                LOG(WARNING) << "sorted_pairs is empty! No match can be found.";
-                return 0;
-            }
-
-            for (size_t i = 0; i < sorted_pairs.size(); i++) {
-                LOG(INFO) << "  sorted_pairs[" << i << "]: value=" << sorted_pairs[i].first 
-                          << ", row=" << sorted_pairs[i].second;
-            }
-
-            LOG(INFO) << "Performing upper_bound search to find first value > left_asof_value...";
-            auto it = std::upper_bound(sorted_pairs.begin(), sorted_pairs.end(),
-                                       std::make_pair(left_asof_value, 0),
-                                       [](const std::pair<int64_t, uint32_t>& a, const std::pair<int64_t, uint32_t>& b) {
-                                           return a.first < b.first;
-                                       });
-
-            if (it == sorted_pairs.begin()) {
-                LOG(INFO) << "No match found: left_asof_value " << left_asof_value 
-                          << " is less than smallest right value " << sorted_pairs[0].first;
-                return 0;
-            }
-
-            --it;
-            LOG(INFO) << "Match found!";
-            LOG(INFO) << "Matched value: " << it->first << ", Row index: " << it->second;
-            LOG(INFO) << "AsOf logic: max(right_value) where right_value <= " << left_asof_value 
-                      << " is " << it->first;
-
-            LOG(INFO) << "=== Exiting find_asof_match ===";
-            return it->second;
-        }
-
-
-    };
-    Buffer<AsofBucketData> asof_buckets;
-
-    ExprContext* asof_conjunct_ctx = nullptr;
-    ExprContext* asof_build_ctx = nullptr;
-    ExprContext* asof_probe_ctx = nullptr;
-
-    int64_t extract_build_asof_value(uint32_t row_index) const {
-        LOG(INFO) << "=== extract_build_asof_value ===";
-        LOG(INFO) << "row_index: " << row_index << " (1-based)";
-
-        if (build_chunk == nullptr || row_index == 0 || asof_build_slot_id == -1) {
-            LOG(INFO) << "Invalid parameters: build_chunk=" << (build_chunk ? "valid" : "null") 
-                      << ", row_index=" << row_index << ", asof_build_slot_id=" << asof_build_slot_id;
-            return INT64_MIN;
-        }
-
-        size_t chunk_row_index = row_index;
-        LOG(INFO) << "chunk_row_index: " << chunk_row_index << " (0-based)";
-        LOG(INFO) << "build_chunk->num_rows(): " << build_chunk->num_rows();
-        
-        if (chunk_row_index > build_chunk->num_rows()) {
-            LOG(INFO) << "Invalid row index: " << chunk_row_index << " >= " << build_chunk->num_rows();
-            return INT64_MIN;
-        }
-
-        try {
-            const ColumnPtr& asof_column = build_chunk->get_column_by_slot_id(asof_build_slot_id);
-            LOG(INFO) << "asof_column type: " << asof_column->get_name();
-            LOG(INFO) << "asof_column size: " << asof_column->size();
-            
-            if (asof_column->is_null(chunk_row_index)) {
-                LOG(INFO) << "AsOf value is null at row " << chunk_row_index;
-                return INT64_MIN;
-            }
-            
-            int64_t result = extract_asof_value_from_column(asof_column.get(), chunk_row_index);
-            LOG(INFO) << "Final extracted value: " << result;
-            return result;
-        } catch (const std::exception& e) {
-            LOG(INFO) << "Exception in extract_build_asof_value: " << e.what();
-            return INT64_MIN;
-        } catch (...) {
-            LOG(INFO) << "Unknown exception in extract_build_asof_value";
-            return INT64_MIN;
-        }
+    // Clean template-based operations - no casting, no switch statements!
+    template <typename CppType>
+    void add_asof_row(uint32_t lookup_index, CppType asof_value, uint32_t row_index) {
+        LOG(INFO) << "add_asof_row called with lookup_index=" << lookup_index << ", row_index=" << row_index;
+        LOG(INFO) << "asof_lookup_vectors.size()=" << asof_lookup_vectors.size();
+        DCHECK(asof_lookup_vectors[lookup_index]);
+        asof_lookup_vectors[lookup_index]->add_row(asof_value, row_index);
     }
 
-private:
-    int64_t extract_asof_value_from_column(const Column* column, size_t row_index) const {
-        LOG(INFO) << "  === extract_asof_value_from_column ===";
-        LOG(INFO) << "  column: " << (column ? "valid" : "null");
-        LOG(INFO) << "  row_index: " << row_index;
-        
-        if (column == nullptr || row_index >= column->size()) {
-            LOG(INFO) << "  Invalid column or row_index: column_size=" 
-                      << (column ? column->size() : 0) << ", row_index=" << row_index;
-            return INT64_MIN;
+    template <typename CppType>
+    uint32_t find_asof_match(uint32_t lookup_index, CppType probe_value) const {
+        LOG(INFO) << "find_asof_match called with lookup_index=" << lookup_index;
+        LOG(INFO) << "asof_lookup_vectors.size()=" << asof_lookup_vectors.size();
+
+        if (lookup_index >= asof_lookup_vectors.size() || !asof_lookup_vectors[lookup_index]) {
+            LOG(INFO) << "find_asof_match: invalid lookup_index or null vector, returning 0";
+            return 0; // No match found
         }
 
-        LOG(INFO) << "  column->get_name(): " << column->get_name();
-        LOG(INFO) << "  column->is_nullable(): " << column->is_nullable();
-
-        const Column* data_column = column;
-        if (column->is_nullable()) {
-            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
-            data_column = nullable_column->data_column().get();
-            LOG(INFO) << "  Using data_column from NullableColumn";
-        }
-
-        LOG(INFO) << "  data_column->get_name(): " << data_column->get_name();
-
-        try {
-            Datum datum = data_column->get(row_index);
-            LOG(INFO) << "  Datum extracted successfully";
-            
-            if (datum.is_null()) {
-                LOG(INFO) << "  Datum is null";
-                return INT64_MIN;
-            }
-
-            LOG(INFO) << "  Calling convert_datum_to_int64_safely...";
-            int64_t result = convert_datum_to_int64_safely(datum);
-            LOG(INFO) << "  Conversion result: " << result;
-            return result;
-        } catch (const std::exception& e) {
-            LOG(INFO) << "  Exception in extract_asof_value_from_column: " << e.what();
-            return INT64_MIN;
-        } catch (...) {
-            LOG(INFO) << "  Unknown exception in extract_asof_value_from_column";
-            return INT64_MIN;
-        }
+        // Direct template call - automatic type dispatch through virtual function!
+        return asof_lookup_vectors[lookup_index]->find_match(probe_value);
     }
 
-    int64_t convert_datum_to_int64_safely(const Datum& datum) const {
-        LOG(INFO) << "    === convert_datum_to_int64_safely ===";
-        LOG(INFO) << "    datum.is_null(): " << datum.is_null();
-        
-        try {
-            // For TimestampValue (DateTime/Timestamp columns)
-            if (!datum.is_null()) {
-                LOG(INFO) << "    Datum is not null, trying type conversions...";
-                
-                try {
-                    TimestampValue ts = datum.get_timestamp();
-                    int64_t timestamp_value = ts.timestamp();
-                    LOG(INFO) << "    TimestampValue conversion: " << ts.to_string() << " -> " << timestamp_value;
-                    return timestamp_value;
-                } catch (const std::bad_variant_access&) {
-                    LOG(INFO) << "    Not a TimestampValue, trying other types...";
-                }
+    void finalize_asof_lookup_vectors() {
+        LOG(INFO) << "finalize_asof_lookup_vectors: starting finalization";
+        LOG(INFO) << "asof_lookup_vectors.size()=" << asof_lookup_vectors.size();
 
-                // Try to get as DateValue
-                try {
-                    DateValue date = datum.get_date();
-                    int64_t date_value = static_cast<int64_t>(date.julian());
-                    LOG(INFO) << "  DateValue conversion: " << date.to_string() << " -> " << date_value;
-                    return date_value;
-                } catch (const std::bad_variant_access&) {
-                    LOG(INFO) << "  Not a DateValue, trying other types...";
-                }
-
-                // Try to get as int64_t directly (for Long/BigInt columns)
-                try {
-                    int64_t int64_value = datum.get_int64();
-                    LOG(INFO) << "  Int64 direct conversion: " << int64_value;
-                    return int64_value;
-                } catch (const std::bad_variant_access&) {
-                    LOG(INFO) << "  Not int64_t, trying other numeric types...";
-                }
-
-                // Try to get as int32_t and convert
-                try {
-                    int32_t int32_value = datum.get_int32();
-                    int64_t converted_value = static_cast<int64_t>(int32_value);
-                    LOG(INFO) << "  Int32 conversion: " << int32_value << " -> " << converted_value;
-                    return converted_value;
-                } catch (const std::bad_variant_access&) {
-                    LOG(INFO) << "  Not int32_t either, exhausted type attempts";
-                }
+        for (size_t i = 0; i < asof_lookup_vectors.size(); i++) {
+            auto& vector_ptr = asof_lookup_vectors[i];
+            if (vector_ptr) {
+                LOG(INFO) << "finalize_asof_lookup_vectors: finalizing vector[" << i
+                          << "], size=" << vector_ptr->size();
+                vector_ptr->finalize();
+                LOG(INFO) << "finalize_asof_lookup_vectors: finalized vector[" << i << "]";
             } else {
-                LOG(INFO) << "    Datum is null, returning INT64_MIN";
+                LOG(INFO) << "finalize_asof_lookup_vectors: vector[" << i << "] is null, skipping";
             }
-        } catch (const std::exception& e) {
-            LOG(INFO) << "    Exception in convert_datum_to_int64_safely: " << e.what();
-        } catch (...) {
-            LOG(INFO) << "    Unknown exception in convert_datum_to_int64_safely";
         }
-
-        LOG(INFO) << "    Fallback: returning INT64_MIN for unsupported types or errors";
-        return INT64_MIN;  // Fallback for unsupported types or errors
+        LOG(INFO) << "finalize_asof_lookup_vectors: completed finalization";
     }
 
 public:
@@ -362,8 +432,6 @@ struct HashTableProbeState {
     // the rows of src probe chunk
     size_t probe_row_count = 0;
 
-    Buffer<uint32_t> probe_bucket_ids;
-
     // 0: normal
     // 1: all match one
     JoinMatchFlag match_flag = JoinMatchFlag::NORMAL; // all match one
@@ -385,8 +453,8 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
-    SlotId asof_probe_slot_id = -1;
-    Buffer<int64_t> probe_asof_values;
+
+    ColumnPtr asof_temporal_condition_column = nullptr;
 
     HashTableProbeState()
             : build_index_column(UInt32Column::create()),
@@ -488,6 +556,7 @@ struct HashTableParam {
     std::set<SlotId> probe_output_slots;
     std::set<SlotId> predicate_slots;
     std::vector<JoinKeyDesc> join_keys;
+    AsofJoinConditionDesc asof_join_condition_desc;
 
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;

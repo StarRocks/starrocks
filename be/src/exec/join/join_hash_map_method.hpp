@@ -16,6 +16,7 @@
 
 #include "join_hash_map_method.h"
 #include "simd/gather.h"
+#include "storage/olap_type_infra.h"
 
 namespace starrocks {
 
@@ -187,6 +188,9 @@ void RangeDirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinH
     table_items->bucket_size = value_interval;
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
+    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
+        table_items->asof_lookup_vectors.resize(table_items->row_count + 1);
+    }
 }
 
 template <LogicalType LT>
@@ -196,101 +200,118 @@ void RangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems*
     const uint64_t min_value = table_items->min_value;
     const auto num_rows = 1 + table_items->row_count;
     
-    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN) {
-        // AsOf Join: Initialize AsOf buckets (one per hash bucket)
-        table_items->asof_buckets.resize(table_items->bucket_size);
-        
-        LOG(INFO) << "=== ASOF BUILD DEBUG ===";
-        LOG(INFO) << "AsOf Inner Join detected in construct_hash_table";
-        LOG(INFO) << "bucket_size: " << table_items->bucket_size;
-        LOG(INFO) << "row_count: " << table_items->row_count;
-        LOG(INFO) << "num_rows (1 + row_count): " << num_rows;
-        LOG(INFO) << "min_value: " << min_value;
-        LOG(INFO) << "asof_build_slot_id: " << table_items->asof_build_slot_id;
-        LOG(INFO) << "build_chunk rows: " << (table_items->build_chunk ? table_items->build_chunk->num_rows() : -1);
-        
-        if (is_nulls == nullptr) {
+    LOG(INFO) << "=== RangeDirectMappingJoinHashMap::construct_hash_table ===";
+    LOG(INFO) << "min_value: " << min_value;
+    LOG(INFO) << "max_value: " << table_items->max_value;
+    LOG(INFO) << "num_rows: " << num_rows;
+    LOG(INFO) << "bucket_size: " << table_items->bucket_size;
+    LOG(INFO) << "join_type: " << table_items->join_type;
+    LOG(INFO) << "is_nulls: " << (is_nulls ? "not null" : "null");
+
+    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
+        LogicalType asof_join_build_type = table_items->asof_join_condition_desc.build_logical_type;
+        LOG(INFO) << "Processing ASOF_INNER_JOIN with build_type: " << asof_join_build_type;
+
+        auto process_build_rows = [&]<LogicalType ASOF_LT>() {
+            using CppType = RunTimeCppType<ASOF_LT>;
+
+            const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
+                    table_items->asof_join_condition_desc.build_slot_id);
+            const auto* typed_column = ColumnHelper::get_data_column_by_type<ASOF_LT>(asof_temporal_column.get());
+            const NullColumn* nullable_asof_column = ColumnHelper::get_null_column(asof_temporal_column);
+            const CppType* probe_temporal_values = typed_column->get_data().data();
+
             for (uint32_t i = 1; i < num_rows; i++) {
+                if (is_nulls != nullptr && is_nulls->data()[i] != 0) {
+                    continue;
+                }
+
+                if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
+                    continue;
+                }
+
                 const size_t bucket_num = keys[i] - min_value;
-                LOG(INFO) << "Build row " << i << ": key=" << keys[i] << ", bucket_num=" << bucket_num;
-                
-                table_items->next[i] = table_items->first[bucket_num];
-                table_items->first[bucket_num] = i;
-                LOG(INFO) << "  Hash table: next[" << i << "]=" << table_items->next[i] 
-                          << ", first[" << bucket_num << "]=" << i;
-                
-                int64_t asof_value = table_items->extract_build_asof_value(i);
-                table_items->asof_buckets[bucket_num].add_row(asof_value, i);
-                LOG(INFO) << "  AsOf bucket[" << bucket_num << "]: added value=" << asof_value << ", row=" << i;
-            }
-        } else {
-            const auto* is_nulls_data = is_nulls->data();
-            for (uint32_t i = 1; i < num_rows; i++) {
-                LOG(INFO) << "Build row " << i << ": key=" << keys[i] << ", is_null=" << (is_nulls_data[i] != 0 ? "true" : "false");
-                if (is_nulls_data[i] == 0) {
-                    const size_t bucket_num = keys[i] - min_value;
-                    LOG(INFO) << "  Valid row: bucket_num=" << bucket_num;
-                    
-                    table_items->next[i] = table_items->first[bucket_num];
+                if (table_items->first[bucket_num] == 0) {
                     table_items->first[bucket_num] = i;
-                    LOG(INFO) << "  Hash table: next[" << i << "]=" << table_items->next[i] 
-                              << ", first[" << bucket_num << "]=" << i;
-                    
-                    int64_t asof_value = table_items->extract_build_asof_value(i);
-                    table_items->asof_buckets[bucket_num].add_row(asof_value, i);
-                    LOG(INFO) << "  AsOf bucket[" << bucket_num << "]: added value=" << asof_value << ", row=" << i;
+                    LOG(INFO) << "Setting first[" << bucket_num << "] = " << i;
+                }
+
+                uint32_t asof_lookup_index = table_items->first[bucket_num];
+                LOG(INFO) << "Processing build row " << i << ", bucket_num=" << bucket_num 
+                          << ", asof_lookup_index=" << asof_lookup_index;
+
+                if (!table_items->asof_lookup_vectors[asof_lookup_index]) {
+                    LOG(INFO) << "Creating new asof_lookup_vector for index " << asof_lookup_index;
+                    table_items->asof_lookup_vectors[asof_lookup_index] = create_asof_lookup_vector_base(
+                            asof_join_build_type, table_items->asof_join_condition_desc.condition_op);
                 } else {
-                    LOG(INFO) << "  Skipping null row";
+                    LOG(INFO) << "Using existing asof_lookup_vector for index " << asof_lookup_index;
                 }
+
+                LOG(INFO) << "Adding row to asof_lookup_vector[" << asof_lookup_index 
+                          << "] with asof_value=" << probe_temporal_values[i] << ", row_index=" << i;
+                table_items->add_asof_row(asof_lookup_index, probe_temporal_values[i], i);
             }
+        };
+
+
+        switch (asof_join_build_type) {
+            case TYPE_BIGINT:
+                process_build_rows.template operator()<TYPE_BIGINT>();
+                break;
+            case TYPE_DATE:
+                process_build_rows.template operator()<TYPE_DATE>();
+                break;
+            case TYPE_DATETIME:
+                process_build_rows.template operator()<TYPE_DATETIME>();
+                break;
+            default:
+                CHECK(false) << "ASOF JOIN: Unsupported build_type: " << asof_join_build_type
+                             << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
+                __builtin_unreachable();
         }
-        
-        size_t total_asof_rows = 0;
-        for (size_t bucket_idx = 0; bucket_idx < table_items->asof_buckets.size(); bucket_idx++) {
-            auto& bucket = table_items->asof_buckets[bucket_idx];
-            bucket.sort_by_asof_value();
-            if (!bucket.sorted_pairs.empty()) {
-                total_asof_rows += bucket.sorted_pairs.size();
-                LOG(INFO) << "Bucket " << bucket_idx << " has " << bucket.sorted_pairs.size() << " AsOf rows";
-                for (size_t i = 0; i < std::min(3UL, bucket.sorted_pairs.size()); i++) {
-                    LOG(INFO) << "  AsOf value[" << i << "]: " << bucket.sorted_pairs[i].first 
-                              << " -> row " << bucket.sorted_pairs[i].second;
-                }
-            }
-        }
-        LOG(INFO) << "Total AsOf rows processed: " << total_asof_rows;
+
+        table_items->finalize_asof_lookup_vectors();
+        LOG(INFO) << "Completed ASOF_INNER_JOIN processing and finalized lookup vectors";
     } else {
-        LOG(INFO) << "=== REGULAR JOIN BUILD DEBUG ===";
-        LOG(INFO) << "Regular Join detected in construct_hash_table";
-        LOG(INFO) << "num_rows (1 + row_count): " << num_rows;
-        LOG(INFO) << "min_value: " << min_value;
-        
+        LOG(INFO) << "Processing non-ASOF join";
         if (is_nulls == nullptr) {
+            LOG(INFO) << "Building hash table without null checks";
             for (uint32_t i = 1; i < num_rows; i++) {
                 const size_t bucket_num = keys[i] - min_value;
-                LOG(INFO) << "Build row " << i << ": key=" << keys[i] << ", bucket_num=" << bucket_num;
                 table_items->next[i] = table_items->first[bucket_num];
                 table_items->first[bucket_num] = i;
-                LOG(INFO) << "  Hash table: next[" << i << "]=" << table_items->next[i] 
-                          << ", first[" << bucket_num << "]=" << i;
-            }
-        } else {
-            const auto* is_nulls_data = is_nulls->data();
-            for (uint32_t i = 1; i < num_rows; i++) {
-                LOG(INFO) << "Build row " << i << ": key=" << keys[i] << ", is_null=" << (is_nulls_data[i] != 0 ? "true" : "false");
-                if (is_nulls_data[i] == 0) {
-                    const size_t bucket_num = keys[i] - min_value;
-                    LOG(INFO) << "  Valid row: bucket_num=" << bucket_num;
-                    table_items->next[i] = table_items->first[bucket_num];
-                    table_items->first[bucket_num] = i;
-                    LOG(INFO) << "  Hash table: next[" << i << "]=" << table_items->next[i] 
-                              << ", first[" << bucket_num << "]=" << i;
-                } else {
-                    LOG(INFO) << "  Skipping null row";
+                if (i % 10000 == 0 || i < 10) {
+                    LOG(INFO) << "Processed row " << i << ", key=" << keys[i] 
+                              << ", bucket_num=" << bucket_num;
                 }
             }
+            LOG(INFO) << "Completed building hash table for " << (num_rows - 1) << " rows";
+        } else {
+            const auto* is_nulls_data = is_nulls->data();
+            LOG(INFO) << "Building hash table with null checks";
+            uint32_t non_null_count = 0;
+            for (uint32_t i = 1; i < num_rows; i++) {
+                if (is_nulls_data[i] == 0) {
+                    const size_t bucket_num = keys[i] - min_value;
+                    table_items->next[i] = table_items->first[bucket_num];
+                    table_items->first[bucket_num] = i;
+                    non_null_count++;
+                    if (non_null_count % 10000 == 0 || non_null_count < 10) {
+                        LOG(INFO) << "Processed non-null row " << i << ", key=" << keys[i] 
+                                  << ", bucket_num=" << bucket_num;
+                    }
+                } else {
+                    if (i < 10) {
+                        LOG(INFO) << "Skipped null row " << i;
+                    }
+                }
+            }
+            LOG(INFO) << "Completed building hash table: processed " << non_null_count 
+                      << " non-null rows out of " << (num_rows - 1) << " total rows";
         }
     }
+    LOG(INFO) << "=== RangeDirectMappingJoinHashMap::construct_hash_table completed ===";
 }
 
 template <LogicalType LT>
@@ -302,58 +323,53 @@ void RangeDirectMappingJoinHashMap<LT>::lookup_init(const JoinHashTableItems& ta
     const int64_t min_value = table_items.min_value;
     const int64_t max_value = table_items.max_value;
     const size_t num_rows = probe_state->probe_row_count;
-    
+
     LOG(INFO) << "=== RangeDirectMappingJoinHashMap::lookup_init ===";
     LOG(INFO) << "min_value: " << min_value;
     LOG(INFO) << "max_value: " << max_value;
     LOG(INFO) << "num_rows: " << num_rows;
     LOG(INFO) << "table_items.first.size(): " << table_items.first.size();
-    
-    if (table_items.join_type == TJoinOp::ASOF_INNER_JOIN) {
-        probe_state->probe_bucket_ids.resize(num_rows);
-        LOG(INFO) << "AsOf Join: initializing probe_bucket_ids with size " << num_rows;
-    }
-    
+
     if (is_nulls == nullptr) {
         for (size_t i = 0; i < num_rows; i++) {
             LOG(INFO) << "Processing probe row " << i << ", key=" << keys[i];
             if ((keys[i] >= min_value) & (keys[i] <= max_value)) {
                 const uint64_t bucket_id = keys[i] - min_value;
                 probe_state->next[i] = table_items.first[bucket_id];
-                
-                if (table_items.join_type == TJoinOp::ASOF_INNER_JOIN) {
-                    probe_state->probe_bucket_ids[i] = bucket_id;
-                    LOG(INFO) << "  AsOf: stored bucket_id=" << bucket_id << " for probe row " << i;
-                }
-                
+
                 LOG(INFO) << "  In range: bucket_id=" << bucket_id << ", build_index=" << table_items.first[bucket_id];
-            } else {
-                probe_state->next[i] = 0;
-                if (table_items.join_type == TJoinOp::ASOF_INNER_JOIN) {
-                    probe_state->probe_bucket_ids[i] = UINT32_MAX; // Invalid bucket
+
+                // 检查对应的asof_lookup_vector是否存在
+                uint32_t build_index = table_items.first[bucket_id];
+                if (table_items.asof_lookup_vectors.size() > build_index && table_items.asof_lookup_vectors[build_index]) {
+                    LOG(INFO) << "  asof_lookup_vectors[" << build_index << "] exists with size=" << table_items.asof_lookup_vectors[build_index]->size();
+                } else {
+                    LOG(INFO) << "  asof_lookup_vectors[" << build_index << "] does NOT exist or is null! vectors.size()=" << table_items.asof_lookup_vectors.size();
                 }
+            } else {
                 LOG(INFO) << "  Out of range: setting build_index=0";
             }
         }
     } else {
         const auto* is_nulls_data = is_nulls->data();
         for (size_t i = 0; i < num_rows; i++) {
-            LOG(INFO) << "Processing probe row " << i << ", key=" << keys[i] << ", is_null=" << (is_nulls_data[i] != 0 ? "true" : "false");
+            LOG(INFO) << "Processing probe row " << i << ", key=" << keys[i]
+                      << ", is_null=" << (is_nulls_data[i] != 0 ? "true" : "false");
             if ((is_nulls_data[i] == 0) & (keys[i] >= min_value) & (keys[i] <= max_value)) {
                 const uint64_t bucket_id = keys[i] - min_value;
                 probe_state->next[i] = table_items.first[bucket_id];
+                LOG(INFO) << "  Valid and in range: bucket_id=" << bucket_id
+                          << ", build_index=" << table_items.first[bucket_id];
                 
-                if (table_items.join_type == TJoinOp::ASOF_INNER_JOIN) {
-                    probe_state->probe_bucket_ids[i] = bucket_id;
-                    LOG(INFO) << "  AsOf: stored bucket_id=" << bucket_id << " for probe row " << i;
+                // 检查对应的asof_lookup_vector是否存在
+                uint32_t build_index = table_items.first[bucket_id];
+                if (table_items.asof_lookup_vectors.size() > build_index && table_items.asof_lookup_vectors[build_index]) {
+                    LOG(INFO) << "  asof_lookup_vectors[" << build_index << "] exists with size=" << table_items.asof_lookup_vectors[build_index]->size();
+                } else {
+                    LOG(INFO) << "  asof_lookup_vectors[" << build_index << "] does NOT exist or is null! vectors.size()=" << table_items.asof_lookup_vectors.size();
                 }
-                
-                LOG(INFO) << "  Valid and in range: bucket_id=" << bucket_id << ", build_index=" << table_items.first[bucket_id];
             } else {
                 probe_state->next[i] = 0;
-                if (table_items.join_type == TJoinOp::ASOF_INNER_JOIN) {
-                    probe_state->probe_bucket_ids[i] = UINT32_MAX; // Invalid bucket
-                }
                 LOG(INFO) << "  Null or out of range: setting build_index=0";
             }
         }

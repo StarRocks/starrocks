@@ -693,6 +693,15 @@ struct TEqJoinCondition {
   3: optional Opcodes.TExprOpcode opcode;
 }
 
+struct TAsofJoinCondition {
+  // left-hand side of the asof condition (probe side)
+  1: required Exprs.TExpr left;
+  // right-hand side of the asof condition (build side)
+  2: required Exprs.TExpr right;
+  // operator for asof join: LT, LE, GT, GE
+  3: required Opcodes.TExprOpcode opcode;
+}
+
 enum TStreamingPreaggregationMode {
   AUTO,
   FORCE_STREAMING,
@@ -769,9 +778,7 @@ struct THashJoinNode {
   57: optional bool enable_partition_hash_join = false
   58: optional bool is_skew_join = false
 
-  70: optional Exprs.TExpr asof_join_conjunct
-  71: optional Exprs.TExpr asof_join_conjunct_left
-  72: optional Exprs.TExpr asof_join_conjunct_right
+  70: optional TAsofJoinCondition asof_join_condition
 }
 
 struct TMergeJoinNode {

@@ -2852,6 +2852,11 @@ public class PlanFragmentBuilder {
                         context.getNextNodeId(),
                         leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
                         joinOperator, eqJoinConjuncts, otherJoinConjuncts);
+                
+                // Set ASOF join conjunct if present
+                if (joinExpr.asofJoinConjunct != null) {
+                    joinNode.setAsofJoinConjunct(joinExpr.asofJoinConjunct);
+                }
                 UKFKConstraints constraints = optExpr.getConstraints();
                 if (constraints != null) {
                     UKFKConstraints.JoinProperty joinProperty = constraints.getJoinProperty();
@@ -3615,11 +3620,17 @@ public class PlanFragmentBuilder {
             public final List<Expr> eqJoinConjuncts;
             public final List<Expr> otherJoin;
             public final List<Expr> conjuncts;
+            public final Expr asofJoinConjunct;
 
             public JoinExprInfo(List<Expr> eqJoinConjuncts, List<Expr> otherJoin, List<Expr> conjuncts) {
+                this(eqJoinConjuncts, otherJoin, conjuncts, null);
+            }
+
+            public JoinExprInfo(List<Expr> eqJoinConjuncts, List<Expr> otherJoin, List<Expr> conjuncts, Expr asofJoinConjunct) {
                 this.eqJoinConjuncts = eqJoinConjuncts;
                 this.otherJoin = otherJoin;
                 this.conjuncts = conjuncts;
+                this.asofJoinConjunct = asofJoinConjunct;
             }
         }
 
@@ -3667,10 +3678,19 @@ public class PlanFragmentBuilder {
             List<ScalarOperator> otherJoin = Utils.extractConjuncts(onPredicate);
             otherJoin.removeAll(eqOnPredicates);
 
+            Expr asofJoinConjunct = null;
             if (joinOperator.isAsofJoin()) {
+                validateAsofJoinNonEqualityCondition(otherJoin);
                 ColumnRefSet leftColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
                 ColumnRefSet rightColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
-                otherJoin = JoinHelper.applyCommutativeToPredicates(otherJoin, leftColumns, rightColumns);
+                
+                // Extract ASOF predicate and remove from otherJoin
+                List<ScalarOperator> asofPredicates = JoinHelper.applyCommutativeToPredicates(otherJoin, leftColumns, rightColumns);
+                if (!asofPredicates.isEmpty()) {
+                    asofJoinConjunct = ScalarOperatorToExpr.buildExecExpression(asofPredicates.get(0),
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+                    otherJoin.clear(); // Clear other join predicates as ASOF predicate is handled separately
+                }
             }
 
             List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
@@ -3682,7 +3702,7 @@ public class PlanFragmentBuilder {
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
 
-            return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts);
+            return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts, asofJoinConjunct);
         }
 
         // TODO(murphy) consider state distribution
@@ -3731,6 +3751,12 @@ public class PlanFragmentBuilder {
             JoinNode joinNode =
                     new StreamJoinNode(context.getNextNodeId(), leftFragmentPlanRoot, rightFragmentPlanRoot,
                             node.getJoinType(), eqJoinConjuncts, otherJoinConjuncts);
+            
+            // Set ASOF join conjunct if present
+            if (joinExpr.asofJoinConjunct != null) {
+                joinNode.setAsofJoinConjunct(joinExpr.asofJoinConjunct);
+            }
+            
             currentExecGroup.add(joinNode, true);
             // 4. Build outputColumns
             fillSlotsInfo(node.getProjection(), joinNode, optExpr);
@@ -4182,6 +4208,36 @@ public class PlanFragmentBuilder {
                 parentFragment.addChildren(fragment.getChildren());
                 parentFragment.mergeQueryGlobalDicts(fragment.getQueryGlobalDicts());
                 parentFragment.mergeQueryDictExprs(fragment.getQueryGlobalDictExprs());
+            }
+        }
+        
+        /**
+         * Validates ASOF JOIN non-equality condition to ensure it meets requirements
+         * @param otherJoinPredicates List of non-equality join predicates  
+         * @throws IllegalStateException if validation fails
+         */
+        private void validateAsofJoinNonEqualityCondition(List<ScalarOperator> otherJoinPredicates) {
+            // ASOF JOIN must have exactly one non-equality predicate
+            if (otherJoinPredicates.size() != 1) {
+                throw new IllegalStateException(String.format(
+                    "ASOF JOIN requires exactly one non-equality predicate, but found %d", 
+                    otherJoinPredicates.size()));
+            }
+            
+            ScalarOperator nonEqPredicate = otherJoinPredicates.get(0);
+            
+            // The non-equality predicate must be a binary predicate
+            if (!(nonEqPredicate instanceof BinaryPredicateOperator binaryPredicate)) {
+                throw new IllegalStateException(String.format(
+                    "ASOF JOIN non-equality predicate must be a binary comparison, but found: %s", 
+                    nonEqPredicate.getClass().getSimpleName()));
+            }
+
+            // The binary predicate must be a range operator (LT, LE, GT, GE)
+            if (!binaryPredicate.getBinaryType().isRange()) {
+                throw new IllegalStateException(String.format(
+                    "ASOF JOIN non-equality predicate must be a range comparison (LT, LE, GT, GE), but found: %s", 
+                    binaryPredicate.getBinaryType()));
             }
         }
     }
