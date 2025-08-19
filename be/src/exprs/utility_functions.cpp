@@ -566,9 +566,9 @@ StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, 
 // - For each row, the bits from all encoded sequences are interleaved in z-order (Morton order).
 // - The resulting byte sequence forms the final Z-order encoded key for that row.
 // - The output is a VARBINARY column, where each entry is the Z-order encoded key for the corresponding row.
-StatusOr<ColumnPtr> UtilityFunctions::zorder_encode(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::encode_zorder_key(FunctionContext* context, const Columns& columns) {
     int num_args = columns.size();
-    RETURN_IF(num_args < 1, Status::InvalidArgument("zorder_encode requires at least 1 argument"));
+    RETURN_IF(num_args < 1, Status::InvalidArgument("encode_zorder_key requires at least 1 argument"));
 
     size_t num_rows = columns[0]->size();
     for (int i = 1; i < num_args; ++i) {

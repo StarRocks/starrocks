@@ -336,7 +336,7 @@ TEST_F(UtilityFunctionsTest, zorderEncodeSingleDimOrdering) {
     Columns cols;
     cols.emplace_back(c_int);
 
-    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::zorder_encode(ctx, cols));
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::encode_zorder_key(ctx, cols));
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
     ASSERT_EQ(5, bin->size());
 
@@ -379,7 +379,7 @@ TEST_F(UtilityFunctionsTest, zorderEncodeTwoDimsBasicInterleaving) {
     cols.emplace_back(a);
     cols.emplace_back(b);
 
-    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::zorder_encode(ctx, cols));
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::encode_zorder_key(ctx, cols));
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
     ASSERT_EQ(test_data.size(), bin->size());
 
@@ -424,7 +424,7 @@ TEST_F(UtilityFunctionsTest, zorderEncodeNullHandling) {
     cols.emplace_back(c1);
     cols.emplace_back(c2);
 
-    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::zorder_encode(ctx, cols));
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::encode_zorder_key(ctx, cols));
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
     ASSERT_EQ(4, bin->size());
 
@@ -488,7 +488,7 @@ TEST_F(UtilityFunctionsTest, zorderEncodeMixedDataTypes) {
     cols.emplace_back(date_col);
     cols.emplace_back(timestamp_col);
 
-    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::zorder_encode(ctx, cols));
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::encode_zorder_key(ctx, cols));
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
     ASSERT_EQ(5, bin->size());
 
