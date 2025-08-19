@@ -44,6 +44,7 @@
 #include "common/configbase.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
+#include "connector/connector_sink_executor.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
@@ -517,6 +518,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     RETURN_IF_ERROR(_routine_load_task_executor->init());
 
+    _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
+    RETURN_IF_ERROR(_connector_sink_spill_executor->init());
+
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
     _runtime_filter_worker = new RuntimeFilterWorker(this);
     _runtime_filter_cache = new RuntimeFilterCache(8);
@@ -732,6 +736,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_stream_context_mgr);
     SAFE_DELETE(_routine_load_task_executor);
     SAFE_DELETE(_stream_load_executor);
+    SAFE_DELETE(_connector_sink_spill_executor);
     SAFE_DELETE(_fragment_mgr);
     SAFE_DELETE(_load_stream_mgr);
     SAFE_DELETE(_load_channel_mgr);

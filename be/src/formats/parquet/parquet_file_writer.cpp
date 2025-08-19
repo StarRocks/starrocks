@@ -96,6 +96,10 @@ int64_t ParquetFileWriter::get_allocated_bytes() {
     return _memory_pool.bytes_allocated();
 }
 
+int64_t ParquetFileWriter::get_flush_batch_size() {
+    return _writer_options->rowgroup_size;
+}
+
 Status ParquetFileWriter::_flush_row_group() {
     DCHECK(_rowgroup_writer != nullptr);
     try {

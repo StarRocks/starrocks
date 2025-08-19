@@ -80,6 +80,7 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(this->get_output_expr(), runtime_state);
     sink_ctx->transform_exprs = iceberg_table_desc->get_transform_exprs();
     sink_ctx->fragment_context = fragment_ctx;
+    sink_ctx->tuple_desc_id = t_iceberg_sink.tuple_id;
 
     auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
     auto sink_provider = connector->create_data_sink_provider();
