@@ -30,9 +30,11 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -58,6 +60,7 @@ import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -72,14 +75,13 @@ import mockit.Mocked;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
@@ -96,7 +98,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
-public class CreateMaterializedViewTest {
+public class CreateMaterializedViewTest extends MVTestBase  {
     private static final Logger LOG = LogManager.getLogger(CreateMaterializedViewTest.class);
 
     @Rule
@@ -109,12 +111,10 @@ public class CreateMaterializedViewTest {
     public static TemporaryFolder temp = new TemporaryFolder();
 
     private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
     private static Database testDb;
     private static GlobalStateMgr currentState;
 
     private static long startSuiteTime = 0;
-    private long startCaseTime = 0;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -327,17 +327,6 @@ public class CreateMaterializedViewTest {
     @AfterClass
     public static void afterClass() throws Exception {
         PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        // cleanup mv after each case
-        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     private static void dropMv(String mvName) throws Exception {
@@ -3171,20 +3160,6 @@ public class CreateMaterializedViewTest {
         testMVColumnAlias("c_1_9 + c_1_10");
     }
 
-    private Table getTable(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        Table table = db.getTable(mvName);
-        Assert.assertNotNull(table);
-        return table;
-    }
-
-    private MaterializedView getMv(String dbName, String mvName) {
-        Table table = getTable(dbName, mvName);
-        Assert.assertTrue(table instanceof MaterializedView);
-        MaterializedView mv = (MaterializedView) table;
-        return mv;
-    }
-
     @Test
     public void testMvNullable() throws Exception {
         starRocksAssert.withTable("create table emps (\n" +
@@ -4719,5 +4694,53 @@ public class CreateMaterializedViewTest {
         starRocksAssert.withMaterializedView(sql);
         starRocksAssert.refreshMV(connectContext, "test_mv11");
         starRocksAssert.dropMaterializedView("test_mv11");
+    }
+
+    @Test
+    public void testCreateMVWithFixedLengthChar1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tt1(dt date, val int, col1 char(8), col2 varchar(8));");
+        Config.transform_type_prefer_string_for_varchar = true;
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 \n" +
+                "REFRESH DEFERRED MANUAL \n" +
+                "AS SELECT   CASE WHEN (`col1` = '01') THEN '本县区'\n" +
+                "   WHEN (`col1` = '02') THEN '本市其它县区' \n" +
+                "   WHEN (`col1` = '03') THEN '本省其它地市' \n" +
+                "   WHEN (`col1` = '04') THEN '其他省' \n" +
+                "   WHEN (`col1` = '05') THEN '港澳台' \n" +
+                "   WHEN (`col1` = '06') THEN '外籍'\n" +
+                "    ELSE `col1` \n" +
+                "    END AS new_col1,  col1, col2, dt from tt1;");
+        MaterializedView mv = getMv("test_mv1");
+        Assertions.assertTrue(mv != null, "Materialized view should not be null");
+        Column col0 = mv.getBaseSchema().get(0);
+        Type type0 = col0.getType();
+        Assertions.assertTrue(type0.isStringType());
+        ScalarType scalarType0 = (ScalarType) type0;
+        Assertions.assertEquals(1048576, scalarType0.getLength());
+        Config.transform_type_prefer_string_for_varchar = false;
+    }
+
+    @Test
+    public void testCreateMVWithFixedLengthChar2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tt1(dt date, val int, col1 char(8), col2 varchar(8));");
+        Config.transform_type_prefer_string_for_varchar = false;
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 \n" +
+                "REFRESH DEFERRED MANUAL \n" +
+                "AS SELECT   CASE WHEN (`col1` = '01') THEN '本县区'\n" +
+                "   WHEN (`col1` = '02') THEN '本市其它县区' \n" +
+                "   WHEN (`col1` = '03') THEN '本省其它地市' \n" +
+                "   WHEN (`col1` = '04') THEN '其他省' \n" +
+                "   WHEN (`col1` = '05') THEN '港澳台' \n" +
+                "   WHEN (`col1` = '06') THEN '外籍'\n" +
+                "    ELSE `col1` \n" +
+                "    END AS new_col1,  col1, col2, dt from tt1;");
+        MaterializedView mv = getMv("test_mv1");
+        Assertions.assertTrue(mv != null, "Materialized view should not be null");
+        Column col0 = mv.getBaseSchema().get(0);
+        Type type0 = col0.getType();
+        Assertions.assertTrue(type0.isStringType());
+        ScalarType scalarType0 = (ScalarType) type0;
+        Assertions.assertEquals(1048576, scalarType0.getLength());
+        Config.transform_type_prefer_string_for_varchar = false;
     }
 }
