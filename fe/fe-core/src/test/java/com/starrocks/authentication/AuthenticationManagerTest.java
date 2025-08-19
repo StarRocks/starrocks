@@ -502,7 +502,8 @@ public class AuthenticationManagerTest {
         // 3. alter user
         sql = "alter user test identified by 'abc'";
         AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        masterManager.alterUser(alterUserStmt.getUserIdentity(), alterUserStmt.getAuthenticationInfo(), null);
+        UserIdentity userIdentity = new UserIdentity(alterUserStmt.getUser().getUser(), alterUserStmt.getUser().getHost());
+        masterManager.alterUser(userIdentity, alterUserStmt.getAuthenticationInfo(), null);
         Assertions.assertEquals(testUser, AuthenticationHandler.authenticate(ctx,
                 testUser.getUser(), "10.1.1.1", scramble));
 

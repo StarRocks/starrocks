@@ -15,25 +15,24 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 
 // EXECUTE AS XX WITH NO REVERT
 public class ExecuteAsStmt extends StatementBase {
-    protected UserIdentity toUser;
+    protected UserRef toUser;
     protected boolean allowRevert;
 
-    public ExecuteAsStmt(UserIdentity toUser, boolean allowRevert) {
+    public ExecuteAsStmt(UserRef toUser, boolean allowRevert) {
         this(toUser, allowRevert, NodePosition.ZERO);
     }
 
-    public ExecuteAsStmt(UserIdentity toUser, boolean allowRevert, NodePosition pos) {
+    public ExecuteAsStmt(UserRef toUser, boolean allowRevert, NodePosition pos) {
         super(pos);
         this.toUser = toUser;
         this.allowRevert = allowRevert;
     }
 
-    public UserIdentity getToUser() {
+    public UserRef getToUser() {
         return toUser;
     }
 
