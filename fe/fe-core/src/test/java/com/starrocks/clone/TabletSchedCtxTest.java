@@ -326,7 +326,7 @@ public class TabletSchedCtxTest {
         Assertions.assertNotNull(res);
         Assertions.assertEquals(1000L, res.getTablet_id());
         Assertions.assertEquals("REPAIR", res.getType());
-        Assertions.assertEquals("VERSION_INCOMPLETE", res.getTablet_status());
+        Assertions.assertEquals("VERSION_INCOMPLETE", res.getSchedule_reason());
         Assertions.assertEquals(be1.getId(), res.getSrc_be_id());
         Assertions.assertEquals("123456789", res.getSrc_path());
         Assertions.assertEquals(be2.getId(), res.getDest_be_id());

@@ -1583,7 +1583,7 @@ struct TTabletSchedule {
     4: optional string type
     5: optional string priority
     6: optional string state
-    7: optional string tablet_status
+    7: optional string schedule_reason
     8: optional double create_time
     9: optional double schedule_time
     10: optional double finish_time

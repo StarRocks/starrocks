@@ -36,7 +36,7 @@ public class FeTabletSchedulesSystemTable {
                         .column("PARTITION_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLET_STATUS", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("SCHEDULE_REASON", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("MEDIUM", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("PRIORITY", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("ORIG_PRIORITY", ScalarType.createVarchar(NAME_CHAR_LEN))

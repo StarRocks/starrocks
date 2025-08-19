@@ -27,7 +27,7 @@ SchemaScanner::ColumnDesc SchemaFeTabletSchedulesScanner::_s_columns[] = {
         {"PARTITION_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
-        {"TABLET_STATUS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"SCHEDULE_REASON", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"MEDIUM", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"PRIORITY", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"ORIG_PRIORITY", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
@@ -128,7 +128,7 @@ Status SchemaFeTabletSchedulesScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 6: {
-                Slice v = Slice(info.tablet_status);
+                Slice v = Slice(info.schedule_reason);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
                 break;
             }

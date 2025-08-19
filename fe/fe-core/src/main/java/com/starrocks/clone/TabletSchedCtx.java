@@ -1280,7 +1280,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         result.setPartition_id(physicalPartitionId);
         result.setType(type.name());
         result.setState(state != null ? state.name() : "");
-        result.setTablet_status(getTabletScheduleStatus());
+        result.setSchedule_reason(getTabletScheduleStatus());
         result.setMedium(storageMedium == null ? "" : storageMedium.name());
         result.setPriority(dynamicPriority != null ? dynamicPriority.name() : "");
         result.setOrig_priority(origPriority.name());

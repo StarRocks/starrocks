@@ -52,7 +52,7 @@ TEST_F(SchemaFeTabletSchedulesScannerTest, test_normal) {
     s1.__set_partition_id(2);
     s1.__set_type("REPAIR");
     s1.__set_state("FINISHED");
-    s1.__set_tablet_status("DISK_MIGRATION");
+    s1.__set_schedule_reason("DISK_MIGRATION");
     s1.__set_medium("HDD");
     s1.__set_priority("HIGH");
     s1.__set_orig_priority("NORMAL");
@@ -80,7 +80,7 @@ TEST_F(SchemaFeTabletSchedulesScannerTest, test_normal) {
     s2.__set_partition_id(2);
     s2.__set_type("BALANCE");
     s2.__set_state("PENDING");
-    s2.__set_tablet_status("DISK_MIGRATION");
+    s2.__set_schedule_reason("DISK_MIGRATION");
     s2.__set_medium("SSD");
     s2.__set_priority("NORMAL");
     s2.__set_orig_priority("NORMAL");
