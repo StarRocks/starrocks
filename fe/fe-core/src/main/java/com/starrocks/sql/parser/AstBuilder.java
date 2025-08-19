@@ -8120,6 +8120,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             case "MATCH_ANY":
                 operator = MatchExpr.MatchOperator.MATCH_ANY;
                 break;
+            case "MATCH_ALL":
+                operator = MatchExpr.MatchOperator.MATCH_ALL;
+                break;
             default:
                 throw new SemanticException("Unknown match operator: " + matchOp);
         }
