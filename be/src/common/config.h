@@ -1516,8 +1516,10 @@ CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
 
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
+
+// ======================= FLAT JSON start ==============================================
 // json flat flag
-CONF_mBool(enable_json_flat, "false");
+CONF_mBool(enable_json_flat, "true");
 
 // enable compaction is base on flat json, not whole json
 CONF_mBool(enable_compaction_flat_json, "true");
@@ -1551,6 +1553,7 @@ CONF_mInt32(json_flat_column_max, "100");
 
 // for whitelist on flat json remain data, max set 1kb
 CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");
+// ======================= FLAT JSON end ==============================================
 
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0
