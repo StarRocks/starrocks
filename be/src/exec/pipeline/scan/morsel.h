@@ -345,9 +345,10 @@ public:
 
     virtual std::vector<TInternalScanRange*> prepare_olap_scan_ranges() const;
     virtual void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {}
-    virtual void set_key_ranges(TabletReaderParams::RangeStartOperation _range_start_op,
-                                TabletReaderParams::RangeEndOperation _range_end_op,
-                                std::vector<OlapTuple> _range_start_key, std::vector<OlapTuple> _range_end_key) {}
+    virtual void set_key_ranges(const TabletReaderParams::RangeStartOperation& range_start_op,
+                                const TabletReaderParams::RangeEndOperation& range_end_op,
+                                const std::vector<OlapTuple>& range_start_key,
+                                const std::vector<OlapTuple>& range_end_key) {}
     virtual void set_tablets(const std::vector<BaseTabletSharedPtr>& tablets) { _tablets = tablets; }
     virtual void set_tablet_rowsets(const std::vector<std::vector<BaseRowsetSharedPtr>>& tablet_rowsets) {
         _tablet_rowsets = tablet_rowsets;
@@ -405,11 +406,11 @@ public:
         _morsel_queue->set_key_ranges(key_ranges);
     }
 
-    void set_key_ranges(TabletReaderParams::RangeStartOperation _range_start_op,
-                        TabletReaderParams::RangeEndOperation _range_end_op, std::vector<OlapTuple> _range_start_key,
-                        std::vector<OlapTuple> _range_end_key) override {
-        _morsel_queue->set_key_ranges(_range_start_op, _range_end_op, std::move(_range_start_key),
-                                      std::move(_range_end_key));
+    void set_key_ranges(const TabletReaderParams::RangeStartOperation& range_start_op,
+                        const TabletReaderParams::RangeEndOperation& range_end_op,
+                        const std::vector<OlapTuple>& range_start_key,
+                        const std::vector<OlapTuple>& range_end_key) override {
+        _morsel_queue->set_key_ranges(range_start_op, range_end_op, range_start_key, range_end_key);
     }
 
     void set_tablets(const std::vector<BaseTabletSharedPtr>& tablets) override { _morsel_queue->set_tablets(tablets); }
@@ -485,9 +486,10 @@ public:
     ~PhysicalSplitMorselQueue() override = default;
 
     void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override;
-    void set_key_ranges(TabletReaderParams::RangeStartOperation _range_start_op,
-                        TabletReaderParams::RangeEndOperation _range_end_op, std::vector<OlapTuple> _range_start_key,
-                        std::vector<OlapTuple> _range_end_key) override;
+    void set_key_ranges(const TabletReaderParams::RangeStartOperation& range_start_op,
+                        const TabletReaderParams::RangeEndOperation& range_end_op,
+                        const std::vector<OlapTuple>& range_start_key,
+                        const std::vector<OlapTuple>& range_end_key) override;
     bool empty() const override { return _unget_morsel == nullptr && _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
 
@@ -542,9 +544,10 @@ public:
     ~LogicalSplitMorselQueue() override = default;
 
     void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override;
-    void set_key_ranges(TabletReaderParams::RangeStartOperation range_start_op,
-                        TabletReaderParams::RangeEndOperation range_end_op, std::vector<OlapTuple> range_start_key,
-                        std::vector<OlapTuple> range_end_key) override;
+    void set_key_ranges(const TabletReaderParams::RangeStartOperation& range_start_op,
+                        const TabletReaderParams::RangeEndOperation& range_end_op,
+                        const std::vector<OlapTuple>& range_start_key,
+                        const std::vector<OlapTuple>& range_end_key) override;
     bool empty() const override { return _unget_morsel == nullptr && _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
 
