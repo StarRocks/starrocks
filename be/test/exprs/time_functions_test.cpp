@@ -374,6 +374,25 @@ TEST_F(TimeFunctionsTest, dayofweekisoTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, weekdayTest) {
+    TimestampColumn::Ptr tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(2023, 1, 1, 0, 5, 0));
+    tc->append(TimestampValue::create(2023, 1, 2, 0, 9, 0));
+    tc->append(TimestampValue::create(2023, 1, 3, 0, 2, 0));
+
+    int days[] = {6, 0, 1};
+
+    Columns columns;
+    columns.emplace_back(tc);
+
+    ColumnPtr result = TimeFunctions::week_day(_utils->get_fn_ctx(), columns).value();
+
+    auto ret = ColumnHelper::cast_to<TYPE_INT>(result);
+    for (size_t i = 0; i < sizeof(days) / sizeof(days[0]); ++i) {
+        ASSERT_EQ(days[i], ret->get_data()[i]);
+    }
+}
+
 TEST_F(TimeFunctionsTest, weekWithModeTest) {
     TimestampColumn::Ptr tc = TimestampColumn::create();
     tc->append(TimestampValue::create(2007, 1, 1, 0, 0, 0));

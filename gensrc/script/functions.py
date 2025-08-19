@@ -486,6 +486,8 @@ vectorized_functions = [
     [50089, 'second', True, False, 'TINYINT', ['DATETIME'], 'TimeFunctions::secondV2'],
     [50090, 'second', True, False, 'INT', ['DATETIME'], 'TimeFunctions::second'],
 
+    [50100, 'weekday', True, False, 'INT', ['DATETIME'], 'TimeFunctions::week_day'],
+
     [50110, 'years_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_add'],
     [50111, 'years_sub', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_sub'],
     [50115, 'quarters_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::quarters_add'],
