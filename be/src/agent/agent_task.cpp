@@ -412,6 +412,8 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
                 LOG(INFO) << "clone success, set tablet infos. status:" << status
                           << ", signature:" << agent_task_req->signature;
                 finish_task_request.__set_finish_tablet_infos(tablet_infos);
+                finish_task_request.__set_copy_size(engine_task.get_copy_size());
+                finish_task_request.__set_copy_time_ms(engine_task.get_copy_time_ms());
             }
         }
     }
