@@ -161,7 +161,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         this.table = table;
 
         List<AlterOpType> alterOpTypes = statement.getAlterClauseList()
-                .stream().map(AlterClause::getOpType).collect(Collectors.toList());
+                .stream().map(AlterOpType::getOpType).collect(Collectors.toList());
 
         if (alterOpTypes.contains(AlterOpType.SCHEMA_CHANGE) || alterOpTypes.contains(AlterOpType.OPTIMIZE)) {
             Locker locker = new Locker();

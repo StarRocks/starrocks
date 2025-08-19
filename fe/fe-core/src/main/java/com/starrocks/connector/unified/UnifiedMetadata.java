@@ -22,6 +22,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
@@ -31,7 +32,6 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
@@ -133,9 +133,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public TableVersionRange getTableVersionRange(String dbName, Table table,
-                                                  Optional<ConnectorTableVersion> startVersion,
-                                                  Optional<ConnectorTableVersion> endVersion) {
+    public TvrVersionRange getTableVersionRange(String dbName, Table table,
+                                                Optional<ConnectorTableVersion> startVersion,
+                                                Optional<ConnectorTableVersion> endVersion) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
     }
@@ -202,7 +202,7 @@ public class UnifiedMetadata implements ConnectorMetadata {
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
-                                         TableVersionRange version) {
+                                         TvrVersionRange version) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, version);
     }

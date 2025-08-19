@@ -26,6 +26,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -149,9 +150,9 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public TableVersionRange getTableVersionRange(String dbName, Table table,
-                                                  Optional<ConnectorTableVersion> startVersion,
-                                                  Optional<ConnectorTableVersion> endVersion) {
+    public TvrVersionRange getTableVersionRange(String dbName, Table table,
+                                                Optional<ConnectorTableVersion> startVersion,
+                                                Optional<ConnectorTableVersion> endVersion) {
         ConnectorMetadata metadata = metadataOfTable(table);
         if (metadata == null) {
             metadata = metadataOfDb(dbName);
@@ -200,7 +201,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
-                                         TableVersionRange version) {
+                                         TvrVersionRange version) {
         return normal.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, version);
     }
 

@@ -20,15 +20,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -168,42 +163,11 @@ public class RangePartitionDesc extends PartitionDesc {
         this.isAutoPartitionTable = autoPartitionTable;
     }
 
-    @Override
-    public PartitionInfo toPartitionInfo(List<Column> schema, Map<String, Long> partitionNameToId, boolean isTemp)
-            throws DdlException {
-        List<Column> partitionColumns = Lists.newArrayList();
-
-        // check and get partition column
-        for (String colName : partitionColNames) {
-            ExpressionPartitionDesc.findRangePartitionColumn(schema, partitionColumns, colName);
-            for (Column column : partitionColumns) {
-                try {
-                    RangePartitionInfo.checkRangeColumnType(column);
-                } catch (AnalysisException e) {
-                    throw new DdlException(e.getMessage());
-                }
-            }
-        }
-
-        /*
-         * validate key range
-         * eg.
-         * VALUE LESS THEN (10, 100, 1000)
-         * VALUE LESS THEN (50, 500)
-         * VALUE LESS THEN (80)
-         *
-         * key range is:
-         * ( {MIN, MIN, MIN},     {10,  100, 1000} )
-         * [ {10,  100, 1000},    {50,  500, MIN } )
-         * [ {50,  500, MIN },    {80,  MIN, MIN } )
-         */
-        RangePartitionInfo rangePartitionInfo = new RangePartitionInfo(partitionColumns);
-        for (SingleRangePartitionDesc desc : singleRangePartitionDescs) {
-            long partitionId = partitionNameToId.get(desc.getPartitionName());
-            rangePartitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), desc, partitionId, isTemp);
-        }
-        return rangePartitionInfo;
+    public boolean isAutoPartitionTable() {
+        return isAutoPartitionTable;
     }
+
+
 
     @Override
     public String toString() {

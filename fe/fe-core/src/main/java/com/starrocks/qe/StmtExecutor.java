@@ -307,6 +307,7 @@ public class StmtExecutor {
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
+    private boolean statisticsConsumed = false;
     private List<StmtExecutor> subStmtExecutors;
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
@@ -2286,28 +2287,46 @@ public class StmtExecutor {
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {
-        if (statisticsForAuditLog == null && coord != null) {
-            statisticsForAuditLog = coord.getAuditStatistics();
+        // for one StmtExecutor, only consume PQueryStatistics once
+        // so call getQueryStatisticsForAuditLog will return a emtpy PQueryStatistics if this is not the first call
+        if (statisticsConsumed) {
+            // create a empty PQueryStatistics
+            PQueryStatistics stats = normalizeQueryStatistics(null);
+            statisticsForAuditLog = stats;
+            return stats;
         }
-        if (statisticsForAuditLog == null) {
-            statisticsForAuditLog = new PQueryStatistics();
+
+        PQueryStatistics stats = statisticsForAuditLog;
+        if (stats == null && coord != null) {
+            // for insert stmt
+            stats = coord.getAuditStatistics();
         }
-        if (statisticsForAuditLog.scanBytes == null) {
-            statisticsForAuditLog.scanBytes = 0L;
+
+        stats = normalizeQueryStatistics(stats);
+
+        statisticsForAuditLog = stats;
+        statisticsConsumed = true;
+        return stats;
+    }
+
+    private PQueryStatistics normalizeQueryStatistics(PQueryStatistics stats) {
+        PQueryStatistics normalized = (stats != null) ? stats : new PQueryStatistics();
+        if (normalized.scanBytes == null) {
+            normalized.scanBytes = 0L;
         }
-        if (statisticsForAuditLog.scanRows == null) {
-            statisticsForAuditLog.scanRows = 0L;
+        if (normalized.scanRows == null) {
+            normalized.scanRows = 0L;
         }
-        if (statisticsForAuditLog.cpuCostNs == null) {
-            statisticsForAuditLog.cpuCostNs = 0L;
+        if (normalized.cpuCostNs == null) {
+            normalized.cpuCostNs = 0L;
         }
-        if (statisticsForAuditLog.memCostBytes == null) {
-            statisticsForAuditLog.memCostBytes = 0L;
+        if (normalized.memCostBytes == null) {
+            normalized.memCostBytes = 0L;
         }
-        if (statisticsForAuditLog.spillBytes == null) {
-            statisticsForAuditLog.spillBytes = 0L;
+        if (normalized.spillBytes == null) {
+            normalized.spillBytes = 0L;
         }
-        return statisticsForAuditLog;
+        return normalized;
     }
 
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {

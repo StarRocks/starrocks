@@ -131,7 +131,11 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      */
     private long visibleTxnId = -1;
 
+    // Autovacuum
     private final AtomicLong lastVacuumTime = new AtomicLong(0);
+
+    // Full vacuum (orphan data files and redundant db/table/partition)
+    private volatile long lastFullVacuumTime;
 
     private final AtomicLong minRetainVersion = new AtomicLong(0);
 
@@ -225,6 +229,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setLastVacuumTime(long lastVacuumTime) {
         this.lastVacuumTime.set(lastVacuumTime);
+    }
+
+    public long getLastFullVacuumTime() {
+        return lastFullVacuumTime;
+    }
+
+    public void setLastFullVacuumTime(long lastVacuumTime) {
+        this.lastFullVacuumTime = lastVacuumTime;
     }
 
     public long getMinRetainVersion() {

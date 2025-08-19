@@ -20,6 +20,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
@@ -29,7 +30,9 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
+import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.logging.log4j.LogManager;
@@ -48,6 +51,34 @@ import java.util.concurrent.Executor;
 
 import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
 
+/**
+ * CacheDictManager manages global dictionary caching for low cardinality string columns.
+ * <p>
+ * Global Dictionary Maintenance:
+ * <p>
+ * 1. Dictionary Collection:
+ * - Dictionaries are collected from BE (Backend) nodes via queryDictSync()
+ * - Only columns with cardinality <= LOW_CARDINALITY_THRESHOLD are considered
+ * - Dictionary data size must be <= 1MB to ensure BE can generate dictionary pages after compaction
+ * <p>
+ * 2. Cache Management:
+ * - Uses Caffeine AsyncLoadingCache with maximum size from Config.statistic_dict_columns
+ * - Cache entries are keyed by ColumnIdentifier (tableId + columnName)
+ * - Cache automatically loads dictionaries asynchronously when accessed
+ * <p>
+ * 3. Version Control:
+ * - Each dictionary has a version timestamp for consistency checking
+ * - Dictionaries are invalidated when versions become outdated
+ * - Version mismatches trigger dictionary removal and re-collection
+ * <p>
+ * 4. Data Update Handling:
+ * - When data is updated (INSERT/UPDATE/DELETE), the dictionary version becomes stale
+ * - hasGlobalDict() checks version timestamps and invalidates outdated dictionaries
+ * - updateGlobalDict() updates version timestamps when new data is collected
+ * - Version mismatches between collectVersion and dictCollectVersion trigger removal
+ * - During data updates, queries may fall back to non-dictionary optimization temporarily
+ * - New dictionaries are automatically collected when cache is accessed after invalidation
+ */
 public class CacheDictManager implements IDictManager, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CacheDictManager.class);
     private static final Set<ColumnIdentifier> NO_DICT_STRING_COLUMNS = Sets.newConcurrentHashSet();
@@ -60,7 +91,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
     private static final CacheDictManager INSTANCE = new CacheDictManager();
 
-    protected static CacheDictManager getInstance() {
+    public static CacheDictManager getInstance() {
         return INSTANCE;
     }
 
@@ -235,6 +266,28 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
         LOG.info("remove dict for table:{} column:{}", tableId, columnName);
         dictStatistics.synchronous().invalidate(columnIdentifier);
+
+        // Remove all subfields' dicts if the column is a JSON type
+        try {
+            List<String> parts = SubfieldAccessPathNormalizer.parseSimpleJsonPath(columnName.getId());
+            if (parts.size() > 1) {
+                String rootColumn = parts.get(0);
+                columnIdentifier = new ColumnIdentifier(tableId, ColumnId.create(rootColumn));
+
+                // Set dbId for the columnIdentifier to enable MetaUtils.getColumnByColumnId lookup
+                long dbId = MetaUtils.lookupDbIdByTableId(tableId);
+                if (dbId != -1) {
+                    columnIdentifier.setDbId(dbId);
+                    Column column = MetaUtils.getColumnByColumnId(columnIdentifier);
+                    if (column.getType().isJsonType()) {
+                        removeGlobalDictForJson(tableId, column.getColumnId());
+                    }
+                } else {
+                    LOG.debug("Could not find db id for table {}, skipping JSON subfield cleanup", tableId);
+                }
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
@@ -297,6 +350,83 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
         }
         return Optional.empty();
     }
+
+    public Optional<ColumnDict> getGlobalDictSync(long tableId, ColumnId columnName) {
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+
+        // NOTE: it's used to patch the dbId, because asyncLoad requires the dbId
+        long dbId = MetaUtils.lookupDbIdByTableId(tableId);
+        if (dbId == -1) {
+            throw new RuntimeException("table not found " + tableId);
+        }
+        columnIdentifier.setDbId(dbId);
+
+        CompletableFuture<Optional<ColumnDict>> columnFuture = dictStatistics.get(columnIdentifier);
+        try {
+            return columnFuture.get();
+        } catch (Exception e) {
+            LOG.warn(String.format("get dict cache for %d: %s failed", tableId, columnName), e);
+        }
+        return Optional.empty();
+    }
+
+    // TODO(murphy) support an efficient dict cache for JSON subfields
+    @Override
+    public boolean hasGlobalDictForJson(long tableId, ColumnId columnName) {
+        // TODO(murphy) optimizer performance
+        return dictStatistics.asMap().keySet().stream().anyMatch(column -> {
+            if (column.getTableId() != tableId) {
+                return false;
+            }
+            List<String> parts = SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnName().getId());
+            if (parts.size() > 1 && parts.get(0).equalsIgnoreCase(columnName.getId())) {
+                return true;
+            }
+            return false;
+        });
+    }
+
+    // TODO(murphy) support an efficient dict cache for JSON subfields
+    @Override
+    public List<ColumnDict> getGlobalDictForJson(long tableId, ColumnId columnName) {
+        // TODO(murphy) optimizer performance
+        return dictStatistics.synchronous().asMap().entrySet().stream().filter(kv -> {
+            ColumnIdentifier column = kv.getKey();
+            if (column.getTableId() != tableId) {
+                return false;
+            }
+            List<String> parts = SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnName().getId());
+            if (parts.size() > 1 && parts.get(0).equalsIgnoreCase(columnName.getId())) {
+                return true;
+            }
+            return false;
+        }).flatMap(x -> x.getValue().stream()).toList();
+    }
+
+    // TODO(murphy) support an efficient dict cache for JSON subfields
+    @Override
+    public void removeGlobalDictForJson(long tableId, ColumnId columnName) {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return;
+        }
+        // TODO(murphy) optimizer performance
+        // Remove all global dict entries for JSON subfields of the given column in the given table.
+        // This is used to invalidate all dicts for subfields of a JSON column (e.g., c2.f1, c2.f2, etc.)
+        List<ColumnIdentifier> toRemove = new ArrayList<>();
+        for (ColumnIdentifier column : dictStatistics.asMap().keySet()) {
+            if (column.getTableId() != tableId) {
+                continue;
+            }
+            List<String> parts = SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnName().getId());
+            if (parts.size() > 1 && parts.get(0).equalsIgnoreCase(columnName.getId())) {
+                toRemove.add(column);
+            }
+        }
+        for (ColumnIdentifier column : toRemove) {
+            dictStatistics.synchronous().invalidate(column);
+        }
+    }
+
 
     @Override
     public Map<String, Long> estimateCount() {

@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropIndexClause extends AlterTableClause {
@@ -26,7 +25,7 @@ public class DropIndexClause extends AlterTableClause {
     }
 
     public DropIndexClause(String indexName, NodePosition pos) {
-        super(AlterOpType.SCHEMA_CHANGE, pos);
+        super(pos);
         this.indexName = indexName;
     }
 

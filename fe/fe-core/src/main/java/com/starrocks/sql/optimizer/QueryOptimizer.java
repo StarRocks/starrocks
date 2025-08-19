@@ -683,6 +683,9 @@ public class QueryOptimizer extends Optimizer {
             CTEUtils.collectCteOperators(tree, context);
         }
 
+        // Rewrite the jsonpath in META-SCAN
+        scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForMetaScan());
+
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.META_SCAN_REWRITE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
@@ -692,6 +695,8 @@ public class QueryOptimizer extends Optimizer {
 
         // After this rule, we shouldn't generate logical project operator
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+
+        scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForOlapScan());
 
         scheduler.rewriteOnce(tree, rootTaskContext, new EliminateSortColumnWithEqualityPredicateRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
@@ -963,8 +968,6 @@ public class QueryOptimizer extends Optimizer {
         Preconditions.checkState(result.getOp().isPhysical());
 
         int planCount = result.getPlanCount();
-
-        result = new JsonPathRewriteRule().rewrite(result, rootTaskContext);
 
         // Since there may be many different plans in the logic phase, it's possible
         // that this switch can't turned on after logical optimization, so we only determine

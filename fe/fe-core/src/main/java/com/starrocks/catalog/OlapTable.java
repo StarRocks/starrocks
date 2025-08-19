@@ -446,6 +446,7 @@ public class OlapTable extends Table {
             olapTable.curBinlogConfig = new BinlogConfig(this.curBinlogConfig);
         }
         olapTable.dbName = this.dbName;
+        olapTable.maxColUniqueId = new AtomicInteger(this.maxColUniqueId.get());
     }
 
     public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {

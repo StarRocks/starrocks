@@ -86,6 +86,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionInfoBuilder;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
@@ -3185,7 +3186,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
                 Expr partitionByExpr = partitionByExprs.get(0);
                 ExpressionPartitionDesc expressionPartitionDesc = new ExpressionPartitionDesc(partitionByExpr);
-                return expressionPartitionDesc.toPartitionInfo(mvPartitionColumns, Maps.newHashMap(), false);
+                return PartitionInfoBuilder.build(expressionPartitionDesc, mvPartitionColumns, Maps.newHashMap(), false);
             }
         } else {
             if (partitionType != PartitionType.UNPARTITIONED && partitionType != null) {

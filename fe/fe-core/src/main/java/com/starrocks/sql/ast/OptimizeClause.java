@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -58,7 +57,7 @@ public class OptimizeClause extends AlterTableClause {
                           PartitionNames partitionNames,
                           OptimizeRange range,
                           NodePosition pos) {
-        super(AlterOpType.OPTIMIZE, pos);
+        super(pos);
         this.keysDesc = keysDesc;
         this.partitionDesc = partitionDesc;
         this.distributionDesc = distributionDesc;

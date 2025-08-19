@@ -239,6 +239,7 @@ import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
@@ -757,7 +758,7 @@ public class ShowExecutor {
                                             String mvName = olapTable.getIndexNameById(mvMeta.getIndexId());
                                             rows.add(Lists.newArrayList(showStmt.getTable(),
                                                     ShowMaterializedViewStatus.buildCreateMVSql(olapTable,
-                                                    mvName, mvMeta), "utf8", "utf8_general_ci"));
+                                                            mvName, mvMeta), "utf8", "utf8_general_ci"));
                                         } else {
                                             rows.add(Lists.newArrayList(showStmt.getTable(), mvMeta.getOriginStmt(),
                                                     "utf8", "utf8_general_ci"));
@@ -2070,7 +2071,8 @@ public class ShowExecutor {
                     infos.addAll(privilegeToRowString(authorizationManager,
                             new GrantRevokeClause(null, statement.getGroupOrRole()), typeToPrivilegeEntryList));
                 } else {
-                    UserIdentity userIdentity = statement.getUserIdent();
+                    UserRef user = statement.getUser();
+                    UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
                     List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(userIdentity);
                     if (granteeRole != null) {
                         infos.add(granteeRole);
@@ -2078,9 +2080,9 @@ public class ShowExecutor {
 
                     if (!userIdentity.isEphemeral()) {
                         Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                                authorizationManager.getTypeToPrivilegeEntryListByUser(statement.getUserIdent());
+                                authorizationManager.getTypeToPrivilegeEntryListByUser(userIdentity);
                         infos.addAll(privilegeToRowString(authorizationManager,
-                                new GrantRevokeClause(statement.getUserIdent(), null), typeToPrivilegeEntryList));
+                                new GrantRevokeClause(statement.getUser(), null), typeToPrivilegeEntryList));
                     }
                 }
                 return new ShowResultSet(showResultMetaFactory.getMetadata(statement), infos);
@@ -2106,7 +2108,7 @@ public class ShowExecutor {
                     }
                     List<String> info = new ArrayList<>();
                     info.add(userOrRoleName.getRoleName() != null ?
-                            userOrRoleName.getRoleName() : userOrRoleName.getUserIdentity().toString());
+                            userOrRoleName.getRoleName() : userOrRoleName.getUser().toString());
                     info.add(catalogName);
 
                     GrantPrivilegeStmt grantPrivilegeStmt = new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(),
@@ -2680,16 +2682,16 @@ public class ShowExecutor {
             if (statement.isAll()) {
                 authenticationInfoMap.putAll(authenticationManager.getUserToAuthenticationInfo());
             } else {
+                UserRef user = statement.getUser();
+                UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
                 UserAuthenticationInfo userAuthenticationInfo;
-                if (statement.getUserIdent() == null) {
+                if (statement.getUser() == null) {
                     userAuthenticationInfo = authenticationManager
                             .getUserAuthenticationInfoByUserIdentity(context.getCurrentUserIdentity());
                 } else {
-                    userAuthenticationInfo =
-                            authenticationManager.getUserAuthenticationInfoByUserIdentity(
-                                    statement.getUserIdent());
+                    userAuthenticationInfo = authenticationManager.getUserAuthenticationInfoByUserIdentity(userIdentity);
                 }
-                authenticationInfoMap.put(statement.getUserIdent(), userAuthenticationInfo);
+                authenticationInfoMap.put(userIdentity, userAuthenticationInfo);
             }
             for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : authenticationInfoMap.entrySet()) {
                 UserAuthenticationInfo userAuthenticationInfo = entry.getValue();

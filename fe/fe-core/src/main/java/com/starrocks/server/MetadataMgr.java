@@ -44,6 +44,8 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -59,7 +61,6 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -522,12 +523,12 @@ public class MetadataMgr {
         return connectorTable;
     }
 
-    public TableVersionRange getTableVersionRange(String dbName, Table table,
-                                                  Optional<ConnectorTableVersion> startVersion,
-                                                  Optional<ConnectorTableVersion> endVersion) {
+    public TvrVersionRange getTableVersionRange(String dbName, Table table,
+                                                Optional<ConnectorTableVersion> startVersion,
+                                                Optional<ConnectorTableVersion> endVersion) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
         return connectorMetadata.map(metadata -> metadata.getTableVersionRange(dbName, table, startVersion, endVersion))
-                .orElse(TableVersionRange.empty().empty());
+                .orElse(TvrTableSnapshot.empty());
     }
 
     public Optional<Database> getDatabase(ConnectContext context, BaseTableInfo baseTableInfo) {
@@ -695,7 +696,7 @@ public class MetadataMgr {
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
                                          long limit,
-                                         TableVersionRange versionRange) {
+                                         TvrVersionRange versionRange) {
         // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
         // Get basic/histogram stats from internal statistics.
         Statistics internalStatistics = FeConstants.runningUnitTest ? null :
@@ -744,7 +745,8 @@ public class MetadataMgr {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate) {
-        return getTableStatistics(session, catalogName, table, columns, partitionKeys, predicate, -1, TableVersionRange.empty());
+        return getTableStatistics(session, catalogName, table, columns, partitionKeys, predicate, -1,
+                TvrTableSnapshot.empty());
     }
 
     public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {

@@ -1252,6 +1252,7 @@ public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, 
                 .addColumn(new Column("CpuCores", ScalarType.createVarchar(20)))
                 .addColumn(new Column("MemUsedPct", ScalarType.createVarchar(20)))
                 .addColumn(new Column("CpuUsedPct", ScalarType.createVarchar(20)))
+                .addColumn(new Column("CNGroupName", ScalarType.createVarchar(256)))
                 .build();
     }
 

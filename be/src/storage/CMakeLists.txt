@@ -191,6 +191,7 @@ set(STORAGE_FILES
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp
+    lake/vacuum_full.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
     lake/primary_key_compaction_policy.cpp

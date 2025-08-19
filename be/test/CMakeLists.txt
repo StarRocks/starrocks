@@ -33,6 +33,7 @@ set(EXEC_FILES
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp
+        ./connector_sink/partition_chunk_writer_test.cpp
         ./connector_sink/async_flush_output_stream_test.cpp
         ./fs/azure/azblob_uri_test.cpp
         ./fs/azure/fs_azblob_test.cpp
@@ -117,6 +118,7 @@ set(EXEC_FILES
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/agg/window_test.cpp
+        ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/arithmetic_expr_test.cpp
         ./exprs/arithmetic_operation_test.cpp
         ./exprs/array_element_expr_test.cpp

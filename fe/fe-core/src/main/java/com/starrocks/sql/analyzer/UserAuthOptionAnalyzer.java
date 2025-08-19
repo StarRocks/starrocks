@@ -17,15 +17,15 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.UserAuthenticationInfo;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.sql.ast.UserAuthOption;
+import com.starrocks.sql.ast.UserRef;
 
 import java.util.Arrays;
 
 public class UserAuthOptionAnalyzer {
-    public static UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption) {
+    public static UserAuthenticationInfo analyzeAuthOption(UserRef user, UserAuthOption userAuthOption) {
         try {
             String authPluginUsing;
             if (userAuthOption == null || userAuthOption.getAuthPlugin() == null) {
@@ -55,7 +55,7 @@ public class UserAuthOptionAnalyzer {
                 info.setAuthString(userAuthOption == null ? null : userAuthOption.getAuthString());
             }
 
-            info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
+            info.setOrigUserHost(user.getUser(), user.getHost());
 
             return info;
         } catch (AuthenticationException e) {

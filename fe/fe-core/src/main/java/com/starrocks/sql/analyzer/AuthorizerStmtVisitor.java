@@ -212,6 +212,7 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -1191,7 +1192,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, ConnectContext context) {
         try {
-            if (statement.getUserIdentity().equals(UserIdentity.ROOT)
+            if (statement.getUser().equals(UserRef.ROOT)
                     && !context.getCurrentUserIdentity().equals(UserIdentity.ROOT)) {
                 throw new SemanticException("Can not modify root user, except root itself");
             }
@@ -1236,8 +1237,13 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
-        UserIdentity user = statement.getUserIdent();
-        if (user != null && !user.equals(context.getCurrentUserIdentity()) || statement.isAll()) {
+        UserRef user = statement.getUser();
+        UserRef contextUser = new UserRef(
+                context.getCurrentUserIdentity().getUser(),
+                context.getCurrentUserIdentity().getHost(),
+                context.getCurrentUserIdentity().isDomain());
+
+        if (user != null && !user.equals(contextUser) || statement.isAll()) {
             try {
                 Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
             } catch (AccessDeniedException e) {
@@ -1253,8 +1259,9 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitExecuteAsStatement(ExecuteAsStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkUserAction(context, statement.getToUser(),
-                    PrivilegeType.IMPERSONATE);
+            UserRef user = statement.getToUser();
+            UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+            Authorizer.checkUserAction(context, userIdentity, PrivilegeType.IMPERSONATE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -1361,7 +1368,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         }
 
         if (statement.getGranteeRole().stream().anyMatch(r -> r.equals(PrivilegeBuiltinConstants.ROOT_ROLE_NAME))) {
-            if (statement.getUserIdentity() != null && statement.getUserIdentity().equals(UserIdentity.ROOT)) {
+            if (statement.getUser() != null && statement.getUser().equals(UserRef.ROOT)) {
                 throw new SemanticException("Can not revoke root role from root user");
             }
         }
@@ -1379,8 +1386,13 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt statement, ConnectContext context) {
-        UserIdentity user = statement.getUserIdentity();
-        if (user != null && !user.equals(context.getCurrentUserIdentity())) {
+        UserRef user = statement.getUser();
+        if (user == null) {
+            return null;
+        }
+
+        UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+        if (!userIdentity.equals(context.getCurrentUserIdentity())) {
             try {
                 Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
             } catch (AccessDeniedException e) {
@@ -1413,10 +1425,13 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext context) {
-        UserIdentity user = statement.getUserIdent();
+        UserRef user = statement.getUser();
         try {
-            if (user != null && !user.equals(context.getCurrentUserIdentity())) {
-                Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
+            if (user != null) {
+                UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+                if (!userIdentity.equals(context.getCurrentUserIdentity())) {
+                    Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
+                }
             } else if (statement.getGroupOrRole() != null) {
                 AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
                 Set<String> roleNames =
@@ -2152,7 +2167,8 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         List<SetListItem> varList = statement.getSetListItems();
         varList.forEach(setVar -> {
             if ((setVar instanceof SetPassVar)) {
-                UserIdentity prepareChangeUser = ((SetPassVar) setVar).getUserIdent();
+                UserRef user = ((SetPassVar) setVar).getUser();
+                UserIdentity prepareChangeUser = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
                 if (!context.getCurrentUserIdentity().equals(prepareChangeUser)) {
                     if (prepareChangeUser.equals(UserIdentity.ROOT)) {
                         throw new SemanticException("Can not set password for root user, except root itself");
@@ -2376,7 +2392,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         AbstractJob job = null;
         try {
             job = GlobalStateMgr.getCurrentState().getBackupHandler().getAbstractJob(statement.isExternalCatalog(),
-                                                                                     statement.getDbName());
+                    statement.getDbName());
         } catch (DdlException e) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
         }
