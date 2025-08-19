@@ -22,20 +22,31 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaFeTabletSchedulesScanner::_s_columns[] = {
+        {"TABLET_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"TABLE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"PARTITION_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"TABLET_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
-        {"PRIORITY", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
-        {"TABLET_STATUS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"SCHEDULE_REASON", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"MEDIUM", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"PRIORITY", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"ORIG_PRIORITY", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"LAST_PRIORITY_ADJUST_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"VISIBLE_VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"COMMITTED_VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"SRC_BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"SRC_PATH", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DEST_BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"DEST_PATH", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TIMEOUT", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"SCHEDULE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
-        {"CLONE_SRC", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"CLONE_DEST", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"CLONE_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"CLONE_DURATION", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"CLONE_RATE", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"FAILED_SCHEDULE_COUNT", TypeDescriptor::from_logical_type(TYPE_INT), sizeof(int32_t), false},
+        {"FAILED_RUNNING_COUNT", TypeDescriptor::from_logical_type(TYPE_INT), sizeof(int32_t), false},
         {"MSG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
 };
 
@@ -89,21 +100,21 @@ Status SchemaFeTabletSchedulesScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 15) {
+            if (slot_id < 1 || slot_id > 26) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.table_id);
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.tablet_id);
                 break;
             }
             case 2: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.partition_id);
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.table_id);
                 break;
             }
             case 3: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.tablet_id);
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.partition_id);
                 break;
             }
             case 4: {
@@ -112,21 +123,71 @@ Status SchemaFeTabletSchedulesScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 5: {
-                Slice v = Slice(info.priority);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
-                break;
-            }
-            case 6: {
                 Slice v = Slice(info.state);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
                 break;
             }
+            case 6: {
+                Slice v = Slice(info.schedule_reason);
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                break;
+            }
             case 7: {
-                Slice v = Slice(info.tablet_status);
+                Slice v = Slice(info.medium);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
                 break;
             }
             case 8: {
+                Slice v = Slice(info.priority);
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                break;
+            }
+            case 9: {
+                Slice v = Slice(info.orig_priority);
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                break;
+            }
+            case 10: {
+                if (info.last_priority_adjust_time > 0) {
+                    DateTimeValue v;
+                    v.from_unixtime(info.last_priority_adjust_time, _runtime_state->timezone_obj());
+                    fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&v);
+                } else {
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                }
+                break;
+            }
+            case 11: {
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.visible_version);
+                break;
+            }
+            case 12: {
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.committed_version);
+                break;
+            }
+            case 13: {
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.src_be_id);
+                break;
+            }
+            case 14: {
+                Slice v = Slice(info.src_path);
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                break;
+            }
+            case 15: {
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.dest_be_id);
+                break;
+            }
+            case 16: {
+                Slice v = Slice(info.dest_path);
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                break;
+            }
+            case 17: {
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.timeout);
+                break;
+            }
+            case 18: {
                 if (info.create_time > 0) {
                     DateTimeValue v;
                     v.from_unixtime(static_cast<int64_t>(info.create_time), _runtime_state->timezone_obj());
@@ -136,7 +197,7 @@ Status SchemaFeTabletSchedulesScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 9: {
+            case 19: {
                 if (info.schedule_time > 0) {
                     DateTimeValue v;
                     v.from_unixtime(static_cast<int64_t>(info.schedule_time), _runtime_state->timezone_obj());
@@ -146,7 +207,7 @@ Status SchemaFeTabletSchedulesScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 10: {
+            case 20: {
                 if (info.finish_time > 0) {
                     DateTimeValue v;
                     v.from_unixtime(static_cast<int64_t>(info.finish_time), _runtime_state->timezone_obj());
@@ -156,23 +217,27 @@ Status SchemaFeTabletSchedulesScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 11: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.clone_src);
-                break;
-            }
-            case 12: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.clone_dest);
-                break;
-            }
-            case 13: {
+            case 21: {
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.clone_bytes);
                 break;
             }
-            case 14: {
+            case 22: {
                 fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.clone_duration);
                 break;
             }
-            case 15: {
+            case 23: {
+                fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.clone_rate);
+                break;
+            }
+            case 24: {
+                fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.failed_schedule_count);
+                break;
+            }
+            case 25: {
+                fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.failed_running_count);
+                break;
+            }
+            case 26: {
                 Slice v = Slice(info.error_msg);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
                 break;
