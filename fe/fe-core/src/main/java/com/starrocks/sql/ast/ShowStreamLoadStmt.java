@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
