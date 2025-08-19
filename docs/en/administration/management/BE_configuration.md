@@ -3418,7 +3418,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Default: false in v3.1 and true from v3.2.3
 - Type: Boolean
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: Whether to enable Data Cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
 - Introduced in: v3.1
 
