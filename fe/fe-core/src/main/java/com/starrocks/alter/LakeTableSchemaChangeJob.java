@@ -823,8 +823,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 for (MaterializedIndex index : originMaterializedIndex) {
                     allOtherPartitionTablets.addAll(index.getTablets());
                 }
-
-                Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, 1, commitVersion, warehouseId);
+                Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1, commitVersion, warehouseId);
             }
             return true;
         } catch (Exception e) {
