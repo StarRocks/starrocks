@@ -248,6 +248,97 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- !result
+CREATE TABLE rewrite_test (
+    AAA DATETIME not NULL COMMENT "",
+    BBB VARCHAR(200) not NULL COMMENT "",
+    CCC VARCHAR(200) not NULL COMMENT "",
+    DDD VARCHAR(2000) COMMENT "",
+    EEE LARGEINT  NULL COMMENT "",
+    FFF DECIMAL(20,10) NULL COMMENT "",
+    GGG VARCHAR(200)  NULL COMMENT "",
+    HHH FLOAT  NULL COMMENT "",
+    III BOOLEAN  NULL COMMENT "",
+    KKK CHAR(20)   NULL COMMENT "",
+    LLL STRING   NULL COMMENT "",
+    MMM VARCHAR(20)   NULL COMMENT "",
+    NNN BINARY  NULL COMMENT "",
+    OOO TINYINT NULL COMMENT "",
+    PPP DATETIME NULL COMMENT "",
+    QQQ ARRAY<INT> NULL COMMENT "",
+    RRR JSON NULL COMMENT "",
+    SSS MAP<INT,INT> NULL COMMENT "",
+    TTT STRUCT<a INT, b INT> NULL COMMENT "",
+    INDEX init_bitmap_index (KKK) USING BITMAP
+)
+primary KEY(AAA, BBB, CCC)
+PARTITION BY RANGE (`AAA`) (
+    START ("1970-01-01") END ("2030-01-01") EVERY (INTERVAL 30 YEAR)
+)
+DISTRIBUTED BY HASH(`AAA`, `BBB`) BUCKETS 1
+ORDER BY(`AAA`,`BBB`,`CCC`,`DDD`)
+PROPERTIES (
+      "replicated_storage"="true",
+      "replication_num" = "1",
+      "storage_format" = "v2",
+      "enable_persistent_index" = "true",
+      "bloom_filter_columns" = "MMM"
+  );
+-- result:
+-- !result
+CREATE INDEX idx ON rewrite_test(DDD) USING GIN('parser' = 'english');
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+show create table rewrite_test;
+-- result:
+rewrite_test	CREATE TABLE `rewrite_test` (
+  `AAA` datetime NOT NULL COMMENT "",
+  `BBB` varchar(200) NOT NULL COMMENT "",
+  `CCC` varchar(200) NOT NULL COMMENT "",
+  `DDD` varchar(2000) NULL COMMENT "",
+  `EEE` largeint(40) NULL COMMENT "",
+  `FFF` decimal(20, 10) NULL COMMENT "",
+  `GGG` varchar(200) NULL COMMENT "",
+  `HHH` float NULL COMMENT "",
+  `III` boolean NULL COMMENT "",
+  `KKK` char(20) NULL COMMENT "",
+  `LLL` varchar(65533) NULL COMMENT "",
+  `MMM` varchar(20) NULL COMMENT "",
+  `NNN` varbinary NULL COMMENT "",
+  `OOO` tinyint(4) NULL COMMENT "",
+  `PPP` datetime NULL COMMENT "",
+  `QQQ` array<int(11)> NULL COMMENT "",
+  `RRR` json NULL COMMENT "",
+  `SSS` map<int(11),int(11)> NULL COMMENT "",
+  `TTT` struct<a int(11), b int(11)> NULL COMMENT "",
+  INDEX init_bitmap_index (`KKK`) USING BITMAP COMMENT '',
+  INDEX idx (`DDD`) USING GIN("imp_lib" = "clucene", "parser" = "english") COMMENT ''
+) ENGINE=OLAP 
+PRIMARY KEY(`AAA`, `BBB`, `CCC`)
+PARTITION BY RANGE(`AAA`)
+(PARTITION p1970 VALUES [("1970-01-01 00:00:00"), ("2000-01-01 00:00:00")),
+PARTITION p2000 VALUES [("2000-01-01 00:00:00"), ("2030-01-01 00:00:00")))
+DISTRIBUTED BY HASH(`AAA`, `BBB`) BUCKETS 1 
+ORDER BY(`AAA`, `BBB`, `CCC`, `DDD`)
+PROPERTIES (
+"bloom_filter_columns" = "MMM",
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
+-- !result
+insert into rewrite_test values ('1977-10-08 20:50:42', 'AgMXONftRPruaiBlvJHO', 'uemCTOqkQCJZZwDxGrIW', 'srCfYYvbThIBOwSaMErV', 5187, -69123.51853, 'wUEOQaCkRLZvSHRBhseT', 599331301.446185, False, 'aMUVBOGurHVaHmErWVJq', 'PnuvSmQaKeJnMzfZMbAj', 'WUxeIhcQNraNBlfHkptk', '', 9, '2017-12-03 04:20:42', [3243, 7145, 12296], '{"job": "Archivist", "company": "Kelley-Booth", "ssn": "168-18-5592", "residence": "743 Mcpherson Street Suite 502\nPort Zachary, UT 66496", "current_location": ["43.016968", "154.620014"], "blood_group": "A+", "website": ["https://www.castillo.info/", "http://www.cuevas.biz/", "https://www.rogers-mendez.biz/", "https://www.hall.info/"], "username": "nicole21", "name": "Kaylee Turner", "sex": "F", "address": "421 Andrew Prairie Apt. 354\nJamesville, NC 40343", "mail": "kchurch@gmail.com", "birthdate": "1975-11-19"}', null, null);
+-- result:
+-- !result
+select * from rewrite_test where DDD match 'srcfyyvbthibowsamerv';
+-- result:
+1977-10-08 20:50:42	AgMXONftRPruaiBlvJHO	uemCTOqkQCJZZwDxGrIW	srCfYYvbThIBOwSaMErV	5187	-69123.5185300000	wUEOQaCkRLZvSHRBhseT	599331300.0	0	aMUVBOGurHVaHmErWVJq	PnuvSmQaKeJnMzfZMbAj	WUxeIhcQNraNBlfHkptk		9	2017-12-03 04:20:42	[3243,7145,12296]	None	None	None
+-- !result
 drop database test_gin_index;
 -- result:
 -- !result
