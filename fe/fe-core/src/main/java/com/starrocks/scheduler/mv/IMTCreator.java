@@ -26,6 +26,7 @@ import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
@@ -106,7 +107,7 @@ class IMTCreator {
 
         // Refresh
         MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-        mvRefreshScheme.setType(MaterializedView.RefreshType.INCREMENTAL);
+        mvRefreshScheme.setType(MaterializedViewRefreshType.INCREMENTAL);
 
         String mvName = stmt.getTableName().getTbl();
         return new MaterializedView(mvId, dbId, mvName, columns, stmt.getKeysType(), partitionInfo,
