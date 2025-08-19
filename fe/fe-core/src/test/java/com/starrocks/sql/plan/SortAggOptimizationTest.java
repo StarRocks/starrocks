@@ -16,7 +16,8 @@ package com.starrocks.sql.plan;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 public class SortAggOptimizationTest extends PlanTestBase {
 
@@ -30,8 +31,18 @@ public class SortAggOptimizationTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableSortAggregate(false);
     }
 
-    @Test
-    public void testSortAggWithOrderBySyntax() throws Exception {
+    @ParameterizedTest
+    @CsvSource({
+        // Test 1: GROUP BY prefix of sort key
+        "select user_id, count(*) from sort_key_table group by user_id, true",
+        // Test 2: GROUP BY exact match with sort key
+        "select user_id, event_time, count(*) from sort_key_table group by user_id, event_time, true",
+        // Test 3: GROUP BY not prefix of sort key (should not use sort agg)
+        "select event_time, count(*) from sort_key_table group by event_time, false",
+        // Test 4: GROUP BY with wrong order (should not use sort agg)
+        "select event_time, user_id, count(*) from sort_key_table group by event_time, user_id, true"
+    })
+    public void testSortAggWithOrderBySyntax(String sql, boolean shouldUseSortAgg) throws Exception {
         // Create a table with ORDER BY syntax for sort key
         starRocksAssert.withTable("CREATE TABLE `sort_key_table` (\n" +
                 "  `user_id` bigint NULL COMMENT \"\",\n" +
@@ -46,29 +57,32 @@ public class SortAggOptimizationTest extends PlanTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        // Test 1: GROUP BY prefix of sort key
-        String sql = "select user_id, count(*) from sort_key_table group by user_id";
         String plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 2: GROUP BY exact match with sort key
-        sql = "select user_id, event_time, count(*) from sort_key_table group by user_id, event_time";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 3: GROUP BY not prefix of sort key (should not use sort agg)
-        sql = "select event_time, count(*) from sort_key_table group by event_time";
-        plan = getCostExplain(sql);
-        assertNotContains(plan, "sorted streaming: true");
-
-        // Test 4: GROUP BY with wrong order (should not use sort agg)
-        sql = "select event_time, user_id, count(*) from sort_key_table group by event_time, user_id";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
+        if (shouldUseSortAgg) {
+            assertContains(plan, "sorted streaming: true");
+        } else {
+            assertNotContains(plan, "sorted streaming: true");
+        }
     }
 
-    @Test
-    public void testSortAggWithEqualityPredicates() throws Exception {
+    @ParameterizedTest
+    @CsvSource({
+        // Test 1: Equality predicate on non-GROUP BY column (should work)
+        "select user_id, count(*) from events_table where event_type = 'click' group by user_id, true",
+        // Test 2: Equality predicate on GROUP BY column (should work)
+        "select user_id, count(*) from events_table where user_id = 123 group by user_id, true",
+        // Test 3: Multiple equality predicates (should work)
+        "select user_id, count(*) from events_table where event_type = 'click' and value > 0 group by user_id, true",
+        // Test 4: Equality predicate on both GROUP BY and non-GROUP BY columns (should work)
+        "select user_id, count(*) from events_table where user_id = 123 and event_type = 'click' group by user_id, true",
+        // Test 5: Equality predicate on sort key prefix (should work)
+        "select user_id, event_time, count(*) from events_table where user_id = 123 group by user_id, event_time, true",
+        // Test 6: Complex case with multiple equality predicates
+        "select user_id, event_time, count(*) from events_table where user_id = 123 and event_time = '2023-01-01' group by user_id, event_time, true",
+        // Test 7: Non-Equality Predicate
+        "select user_id, count(*) from events_table where user_id < 123 and event_type < 'click' group by user_id, false"
+    })
+    public void testSortAggWithEqualityPredicates(String sql, boolean shouldUseSortAgg) throws Exception {
         // Create a table with ORDER BY syntax for sort key
         starRocksAssert.withTable("CREATE TABLE `events_table` (\n" +
                 "  `user_id` bigint NULL COMMENT \"\",\n" +
@@ -84,59 +98,34 @@ public class SortAggOptimizationTest extends PlanTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        // Test 1: Equality predicate on non-GROUP BY column (should work)
-        // WHERE event_type = 'click' GROUP BY user_id
-        // The new logic checks each GROUP BY key individually
-        String sql = "select user_id, count(*) from events_table where event_type = 'click' group by user_id";
         String plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 2: Equality predicate on GROUP BY column (should work)
-        // WHERE user_id = 123 GROUP BY user_id
-        // The equality predicate on user_id is detected and skipped in the check
-        sql = "select user_id, count(*) from events_table where user_id = 123 group by user_id";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 3: Multiple equality predicates (should work)
-        // WHERE event_type = 'click' and value > 0 GROUP BY user_id
-        // The range predicate on value doesn't interfere with sort aggregation
-        sql = "select user_id, count(*) from events_table where event_type = 'click' and value > 0 group by user_id";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 4: Equality predicate on both GROUP BY and non-GROUP BY columns (should work)
-        // WHERE user_id = 123 and event_type = 'click' GROUP BY user_id
-        sql = "select user_id, count(*) from events_table where user_id = 123 and event_type = 'click' group by " +
-                "user_id";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 5: Equality predicate on sort key prefix (should work)
-        // WHERE user_id = 123 GROUP BY user_id, event_time
-        // user_id has equality predicate, so it's skipped; event_time is checked against sort key
-        sql = "select user_id, event_time, count(*) from events_table where user_id = 123 group by user_id, event_time";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 6: Complex case with multiple equality predicates
-        // WHERE user_id = 123 AND event_time = '2023-01-01' GROUP BY user_id, event_time
-        sql =
-                "select user_id, event_time, count(*) from events_table where user_id = 123 and event_time = " +
-                        "'2023-01-01' group by user_id, event_time";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 7: Non-Equality Predicate
-        sql = "select user_id, count(*) from events_table where user_id < 123 and event_type < 'click' group by " +
-                "user_id";
-        plan = getCostExplain(sql);
-        assertNotContains(plan, "sorted streaming: true");
-
+        if (shouldUseSortAgg) {
+            assertContains(plan, "sorted streaming: true");
+        } else {
+            assertNotContains(plan, "sorted streaming: true");
+        }
     }
 
-    @Test
-    public void testSortAggWithSortKeyTraversal() throws Exception {
+    @ParameterizedTest
+    @CsvSource({
+        // Test 1: All sort keys covered by GROUP BY
+        "select a, b, c, d, count(*) from sort_key_traversal_table group by a, b, c, d, true",
+        // Test 2: Sort key prefix covered by GROUP BY
+        "select a, b, count(*) from sort_key_traversal_table group by a, b, true",
+        // Test 3: Equality predicate on first sort key
+        "select b, c, d, count(*) from sort_key_traversal_table where a = 1 group by b, c, d, true",
+        // Test 4: Equality predicate on second sort key
+        "select a, c, d, count(*) from sort_key_traversal_table where b = 2 group by a, c, d, true",
+        // Test 5: Multiple equality predicates
+        "select b, d, count(*) from sort_key_traversal_table where a = 1 and c = 3 group by b, d, true",
+        // Test 6: encode_sort_key covering sort keys
+        "select encode_sort_key(a, b, c), count(*) from sort_key_traversal_table group by encode_sort_key(a, b, c), true",
+        // Test 7: Mixed case with equality predicate and encode_sort_key
+        "select encode_sort_key(b, c), d, count(*) from sort_key_traversal_table where a = 1 group by encode_sort_key(b, c), d, true",
+        // Test 8: Case where sort aggregation should NOT be used
+        "select c, d, count(*) from sort_key_traversal_table where a = 1 group by c, d, false"
+    })
+    public void testSortAggWithSortKeyTraversal(String sql, boolean shouldUseSortAgg) throws Exception {
         // Test the new logic that traverses sort keys and checks each against GROUP BY and equality predicates
         starRocksAssert.withTable("CREATE TABLE `sort_key_traversal_table` (\n" +
                 "  `a` bigint NULL COMMENT \"\",\n" +
@@ -153,68 +142,26 @@ public class SortAggOptimizationTest extends PlanTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        // Test 1: All sort keys covered by GROUP BY
-        // GROUP BY a, b, c, d - all sort keys are covered
-        String sql = "select a, b, c, d, count(*) from sort_key_traversal_table group by a, b, c, d";
         String plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 2: Sort key prefix covered by GROUP BY
-        // GROUP BY a, b - first two sort keys are covered
-        sql = "select a, b, count(*) from sort_key_traversal_table group by a, b";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 3: Equality predicate on first sort key
-        // WHERE a = 1 GROUP BY b, c, d
-        // a is covered by equality predicate; b, c, d are covered by GROUP BY
-        sql = "select b, c, d, count(*) from sort_key_traversal_table where a = 1 group by b, c, d";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 4: Equality predicate on second sort key
-        // WHERE b = 2 GROUP BY a, c, d
-        // a is covered by GROUP BY; b is covered by equality predicate; c, d are covered by GROUP BY
-        sql = "select a, c, d, count(*) from sort_key_traversal_table where b = 2 group by a, c, d";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 5: Multiple equality predicates
-        // WHERE a = 1 AND c = 3 GROUP BY b, d
-        // a and c are covered by equality predicates; b and d are covered by GROUP BY
-        sql = "select b, d, count(*) from sort_key_traversal_table where a = 1 and c = 3 group by b, d";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 6: encode_sort_key covering sort keys
-        // GROUP BY encode_sort_key(a, b, c)
-        // a, b, c are covered by encode_sort_key; d is not covered (but that's OK for prefix)
-        sql =
-                "select encode_sort_key(a, b, c), count(*) from sort_key_traversal_table group by encode_sort_key(a, " +
-                        "b, c)";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 7: Mixed case with equality predicate and encode_sort_key
-        // WHERE a = 1 GROUP BY encode_sort_key(b, c), d
-        // a is covered by equality predicate; b, c are covered by encode_sort_key; d is covered by GROUP BY
-        sql =
-                "select encode_sort_key(b, c), d, count(*) from sort_key_traversal_table where a = 1 group by " +
-                        "encode_sort_key(b, c), d";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 8: Case where sort aggregation should NOT be used
-        // WHERE a = 1 GROUP BY c, d
-        // a is covered by equality predicate; b is NOT covered (missing from GROUP BY and no equality predicate)
-        sql = "select c, d, count(*) from sort_key_traversal_table where a = 1 group by c, d";
-        plan = getCostExplain(sql);
-        assertNotContains(plan, "sorted streaming: true");
-
+        if (shouldUseSortAgg) {
+            assertContains(plan, "sorted streaming: true");
+        } else {
+            assertNotContains(plan, "sorted streaming: true");
+        }
     }
 
-    @Test
-    public void testSortAggFallbackToKeyColumns() throws Exception {
+    @ParameterizedTest
+    @CsvSource({
+        // Test 1: GROUP BY prefix of key columns
+        "select user_id, count(*) from key_sort_table group by user_id, true",
+        // Test 2: GROUP BY exact match with key columns
+        "select user_id, event_time, count(*) from key_sort_table group by user_id, event_time, true",
+        // Test 3: GROUP BY not prefix of key columns (should not use sort agg)
+        "select event_time, count(*) from key_sort_table group by event_time, false",
+        // Test 4: GROUP BY with wrong order (should not use sort agg)
+        "select event_time, user_id, count(*) from key_sort_table group by event_time, user_id, false"
+    })
+    public void testSortAggFallbackToKeyColumns(String sql, boolean shouldUseSortAgg) throws Exception {
         // Create a table without ORDER BY syntax (uses key columns as sort key)
         starRocksAssert.withTable("CREATE TABLE `key_sort_table` (\n" +
                 "  `user_id` bigint NULL COMMENT \"\",\n" +
@@ -229,30 +176,24 @@ public class SortAggOptimizationTest extends PlanTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        // Test 1: GROUP BY prefix of key columns
-        String sql = "select user_id, count(*) from key_sort_table group by user_id";
         String plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 2: GROUP BY exact match with key columns
-        sql = "select user_id, event_time, count(*) from key_sort_table group by user_id, event_time";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 3: GROUP BY not prefix of key columns (should not use sort agg)
-        sql = "select event_time, count(*) from key_sort_table group by event_time";
-        plan = getCostExplain(sql);
-        assertNotContains(plan, "sorted streaming: true");
-
-        // Test 4: GROUP BY with wrong order (should not use sort agg)
-        sql = "select event_time, user_id, count(*) from key_sort_table group by event_time, user_id";
-        plan = getCostExplain(sql);
-        assertNotContains(plan, "sorted streaming: true");
-
+        if (shouldUseSortAgg) {
+            assertContains(plan, "sorted streaming: true");
+        } else {
+            assertNotContains(plan, "sorted streaming: true");
+        }
     }
 
-    @Test
-    public void testSortAggWithComplexPredicates() throws Exception {
+    @ParameterizedTest
+    @CsvSource({
+        // Test 1: AND predicates with equality
+        "select user_id, count(*) from complex_pred_table where event_type = 'click' and value > 0 and user_id = 123 group by user_id, true",
+        // Test 2: Range predicates (should still work if they don't interfere with sort key)
+        "select user_id, count(*) from complex_pred_table where event_time >= '2023-01-01' and event_time < '2023-02-01' group by user_id, true",
+        // Test 3: Complex AND predicates
+        "select user_id, count(*) from complex_pred_table where event_type = 'click' and value > 0 and event_time >= '2023-01-01' group by user_id, true"
+    })
+    public void testSortAggWithComplexPredicates(String sql, boolean shouldUseSortAgg) throws Exception {
         // Create a table with ORDER BY syntax for sort key
         starRocksAssert.withTable("CREATE TABLE `complex_pred_table` (\n" +
                 "  `user_id` bigint NULL COMMENT \"\",\n" +
@@ -268,31 +209,22 @@ public class SortAggOptimizationTest extends PlanTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        // Test 1: AND predicates with equality
-        String sql = "select user_id, count(*) from complex_pred_table " +
-                "where event_type = 'click' and value > 0 and user_id = 123 " +
-                "group by user_id";
         String plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 2: Range predicates (should still work if they don't interfere with sort key)
-        sql = "select user_id, count(*) from complex_pred_table " +
-                "where event_time >= '2023-01-01' and event_time < '2023-02-01' " +
-                "group by user_id";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 3: Complex AND predicates
-        sql = "select user_id, count(*) from complex_pred_table " +
-                "where event_type = 'click' and value > 0 and event_time >= '2023-01-01' " +
-                "group by user_id";
-        plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
+        if (shouldUseSortAgg) {
+            assertContains(plan, "sorted streaming: true");
+        } else {
+            assertNotContains(plan, "sorted streaming: true");
+        }
     }
 
-    @Test
-    public void testSortAggWithMixedExpressions() throws Exception {
+    @ParameterizedTest
+    @CsvSource({
+        // Test 1: Mix of column references and encode_sort_key
+        "select a, encode_sort_key(b, c), count(*) from mixed_expr_table group by a, encode_sort_key(b, c), true",
+        // Test 2: encode_sort_key followed by column reference (should not work)
+        "select encode_sort_key(a, b), c, count(*) from mixed_expr_table group by encode_sort_key(a, b), c, false"
+    })
+    public void testSortAggWithMixedExpressions(String sql, boolean shouldUseSortAgg) throws Exception {
         // Create a table with ORDER BY syntax for sort key
         starRocksAssert.withTable("CREATE TABLE `mixed_expr_table` (\n" +
                 "  `a` bigint NULL COMMENT \"\",\n" +
@@ -308,17 +240,12 @@ public class SortAggOptimizationTest extends PlanTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        // Test 1: Mix of column references and encode_sort_key
-        String sql =
-                "select a, encode_sort_key(b, c), count(*) from mixed_expr_table group by a, encode_sort_key(b, c)";
         String plan = getCostExplain(sql);
-        assertContains(plan, "sorted streaming: true");
-
-        // Test 2: encode_sort_key followed by column reference (should not work)
-        sql = "select encode_sort_key(a, b), c, count(*) from mixed_expr_table group by encode_sort_key(a, b), c";
-        plan = getCostExplain(sql);
-        assertNotContains(plan, "sorted streaming: true");
-
+        if (shouldUseSortAgg) {
+            assertContains(plan, "sorted streaming: true");
+        } else {
+            assertNotContains(plan, "sorted streaming: true");
+        }
     }
 
 }
