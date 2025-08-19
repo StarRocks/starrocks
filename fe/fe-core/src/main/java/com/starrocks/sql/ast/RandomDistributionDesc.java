@@ -34,7 +34,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.sql.parser.NodePosition;
 
 public class RandomDistributionDesc extends DistributionDesc {
@@ -50,7 +49,6 @@ public class RandomDistributionDesc extends DistributionDesc {
 
     public RandomDistributionDesc(int numBucket, NodePosition pos) {
         super(pos);
-        type = DistributionInfoType.RANDOM;
         this.numBucket = numBucket;
     }
 

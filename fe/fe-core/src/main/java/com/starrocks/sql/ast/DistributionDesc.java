@@ -15,13 +15,10 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.NotImplementedException;
 
 public class DistributionDesc implements ParseNode {
-    protected DistributionInfoType type;
-
     protected final NodePosition pos;
 
     public DistributionDesc() {
@@ -30,11 +27,6 @@ public class DistributionDesc implements ParseNode {
 
     public DistributionDesc(NodePosition pos) {
         this.pos = pos;
-    }
-
-
-    public DistributionInfoType getType() {
-        return type;
     }
 
     public int getBuckets() {

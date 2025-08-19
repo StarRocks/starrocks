@@ -14,7 +14,9 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
@@ -22,11 +24,11 @@ import com.starrocks.sql.ast.RandomDistributionDesc;
 import java.util.Set;
 
 public class DistributionDescAnalyzer {
-    
+
     public static void analyze(DistributionDesc distributionDesc, Set<String> colSet) {
-        if (distributionDesc.getType() == DistributionInfoType.HASH) {
+        if (distributionDesc instanceof HashDistributionDesc) {
             analyzeHashDistribution((HashDistributionDesc) distributionDesc, colSet);
-        } else if (distributionDesc.getType() == DistributionInfoType.RANDOM) {
+        } else if (distributionDesc instanceof RandomDistributionDesc) {
             analyzeRandomDistribution((RandomDistributionDesc) distributionDesc, colSet);
         }
     }
@@ -50,5 +52,17 @@ public class DistributionDescAnalyzer {
         if (distributionDesc.getBuckets() < 0) {
             throw new SemanticException("Number of random distribution is zero.");
         }
+    }
+
+    public static boolean isDifferentDistributionType(DistributionDesc distributionDesc, DistributionInfo distributionInfo) {
+        if (distributionDesc == null || distributionInfo == null) {
+            return true;
+        }
+        if (distributionDesc instanceof HashDistributionDesc && distributionInfo instanceof HashDistributionInfo) {
+            return false;
+        } else if (distributionDesc instanceof RandomDistributionDesc && distributionInfo instanceof RandomDistributionInfo) {
+            return false;
+        }
+        return true;
     }
 }

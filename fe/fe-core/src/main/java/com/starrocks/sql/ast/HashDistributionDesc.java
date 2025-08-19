@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -35,7 +34,6 @@ public class HashDistributionDesc extends DistributionDesc {
 
     public HashDistributionDesc(int numBucket, List<String> distributionColumnNames, NodePosition pos) {
         super(pos);
-        type = DistributionInfoType.HASH;
         this.numBucket = numBucket;
         this.distributionColumnNames = distributionColumnNames;
     }
