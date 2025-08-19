@@ -107,6 +107,10 @@ namespace spill {
 class DirManager;
 }
 
+namespace connector {
+class ConnectorSinkSpillExecutor;
+}
+
 class GlobalEnv {
 public:
     static GlobalEnv* GetInstance() {
@@ -311,6 +315,8 @@ public:
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
 
+    connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor() { return _connector_sink_spill_executor; }
+
     ThreadPool* automatic_partition_pool() { return _automatic_partition_pool.get(); }
 
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
@@ -407,6 +413,8 @@ private:
     RoutineLoadTaskExecutor* _routine_load_task_executor = nullptr;
     SmallFileMgr* _small_file_mgr = nullptr;
     HeartbeatFlags* _heartbeat_flags = nullptr;
+
+    connector::ConnectorSinkSpillExecutor* _connector_sink_spill_executor = nullptr;
 
     std::unique_ptr<ThreadPool> _automatic_partition_pool;
 

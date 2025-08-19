@@ -143,6 +143,10 @@ int64_t ORCFileWriter::get_allocated_bytes() {
     return _memory_pool.bytes_allocated();
 }
 
+int64_t ORCFileWriter::get_flush_batch_size() {
+    return 0;
+}
+
 Status ORCFileWriter::write(Chunk* chunk) {
     ASSIGN_OR_RETURN(auto cvb, _convert(chunk));
     _writer->add(*cvb);

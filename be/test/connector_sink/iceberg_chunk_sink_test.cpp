@@ -27,6 +27,7 @@
 #include "formats/file_writer.h"
 #include "formats/utils.h"
 #include "testutil/assert.h"
+#include "testutil/scoped_updater.h"
 #include "util/defer_op.h"
 #include "util/integer_util.h"
 
@@ -35,6 +36,7 @@ namespace {
 
 using CommitResult = formats::FileWriter::CommitResult;
 using WriterAndStream = formats::WriterAndStream;
+using Stream = io::AsyncFlushOutputStream;
 using ::testing::Return;
 using ::testing::ByMove;
 using ::testing::_;
@@ -65,6 +67,7 @@ public:
     MOCK_METHOD(Status, init, (), (override));
     MOCK_METHOD(int64_t, get_written_bytes, (), (override));
     MOCK_METHOD(int64_t, get_allocated_bytes, (), (override));
+    MOCK_METHOD(int64_t, get_flush_batch_size, (), (override));
     MOCK_METHOD(Status, write, (Chunk * chunk), (override));
     MOCK_METHOD(CommitResult, commit, (), (override));
 };
@@ -83,7 +86,7 @@ public:
 
 class MockPoller : public AsyncFlushStreamPoller {
 public:
-    MOCK_METHOD(void, enqueue, (std::unique_ptr<Stream> stream), (override));
+    MOCK_METHOD(void, enqueue, (std::shared_ptr<Stream> stream), (override));
 };
 
 TEST_F(IcebergChunkSinkTest, test_callback) {
@@ -92,18 +95,24 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
         std::vector<std::string> transform = {"identity"};
         std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators =
                 ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
-        auto mock_writer_factory = std::make_unique<MockFileWriterFactory>();
-        auto location_provider = std::make_unique<LocationProvider>("base_path", "ffffff", 0, 0, "parquet");
+        auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
+        auto location_provider = std::make_shared<LocationProvider>("base_path", "ffffff", 0, 0, "parquet");
         WriterAndStream ws;
         ws.writer = std::make_unique<MockWriter>();
-        ws.stream = std::make_unique<io::AsyncFlushOutputStream>(std::make_unique<MockFile>(), nullptr, nullptr);
+        ws.stream = std::make_unique<Stream>(std::make_unique<MockFile>(), nullptr, nullptr);
         EXPECT_CALL(*mock_writer_factory, create(::testing::_))
                 .WillRepeatedly(::testing::Return(ByMove(StatusOr<WriterAndStream>(std::move(ws)))));
-        auto sink = std::make_unique<IcebergChunkSink>(
-                partition_column_names, transform, std::move(partition_column_evaluators), std::move(location_provider),
-                std::move(mock_writer_factory), 100, _runtime_state);
+
+        auto partition_chunk_writer_ctx = std::make_shared<BufferPartitionChunkWriterContext>(
+                BufferPartitionChunkWriterContext{mock_writer_factory, location_provider, 100, false});
+        auto partition_chunk_writer_factory =
+                std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
+        auto sink = std::make_unique<connector::IcebergChunkSink>(
+                partition_column_names, transform, std::move(partition_column_evaluators),
+                std::move(partition_chunk_writer_factory), _runtime_state);
         auto poller = MockPoller();
         sink->set_io_poller(&poller);
+
         Columns partition_key_columns;
         ChunkPtr chunk = std::make_shared<Chunk>();
         std::vector<ChunkExtraColumnsMeta> extra_metas;
@@ -132,12 +141,16 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
                 .location = "path/to/directory/data.parquet",
         }
                                          .set_extra_data("0"));
+        sink->set_status(Status::OK());
 
+        EXPECT_EQ(sink->is_finished(), true);
+        EXPECT_EQ(sink->status().ok(), true);
         EXPECT_EQ(_runtime_state->num_rows_load_sink(), 100);
     }
 }
 
 TEST_F(IcebergChunkSinkTest, test_factory) {
+    SCOPED_UPDATE(bool, config::enable_connector_sink_spill, false);
     IcebergChunkSinkProvider provider;
 
     {

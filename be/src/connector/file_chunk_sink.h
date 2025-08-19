@@ -36,9 +36,7 @@ class FileChunkSink : public ConnectorChunkSink {
 public:
     FileChunkSink(std::vector<std::string> partition_columns,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
-                  std::unique_ptr<LocationProvider> location_provider,
-                  std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
-                  RuntimeState* state);
+                  std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state);
 
     ~FileChunkSink() override = default;
 
