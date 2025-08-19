@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -31,7 +32,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -40,6 +40,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -203,6 +204,7 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
             return checkGroupByAgainstTargetColumns(scan, agg, sortedColumns);
         }
 
+        // ORDER BY (encode_sort_key(k1, k2, k3))
         private Optional<List<Column>> resolveEncodeSortKeys(Column column, List<Column> schema, OlapTable olapTable) {
             Expr gen = column.getGeneratedColumnExpr(schema);
             List<Column> res = Lists.newArrayList();
@@ -218,10 +220,21 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
                         } else {
                             return Optional.empty();
                         }
+                    } else if (expr instanceof FunctionCallExpr) {
+                        // JSON expression like: get_json_int(data, 'k1')
+                        // The extracted column is data.k1
+                        Column col = JsonPathRewriteRule.resolveJsonExpr(expr, olapTable);
+                        if (col == null) {
+                            break;
+                        }
+                        res.add(col);
                     } else {
                         return Optional.empty();
                     }
                 }
+            }
+            if (res.isEmpty()) {
+                return Optional.empty();
             }
             return Optional.of(res);
         }
@@ -247,23 +260,17 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
             }
 
             // Create a set of GROUP BY columns for quick lookup
-            Set<Column> groupByColumns = new HashSet<>();
+            Map<Column, Column> groupByColumns = Maps.newHashMap();
             for (ColumnRefOperator ref : groupBys) {
-                if (!scan.getColRefToColumnMetaMap().containsKey(ref)) {
+                if (!extractGroupByColumns(scan, ref, groupByColumns)) {
                     return false;
                 }
-                Column col = scan.getColRefToColumnMetaMap().get(ref);
-                groupByColumns.add(col);
             }
 
-            // Traverse each sort key column
-            for (int i = 0; i < targetColumns.size(); i++) {
-                Column sortKeyColumn = targetColumns.get(i);
-
-                // Check if this sort key column is covered by either:
-                // 1. An equality predicate, OR
-                // 2. A GROUP BY key
-
+            // Check if this sort key column is covered by either:
+            // 1. An equality predicate, OR
+            // 2. A GROUP BY key
+            for (Column sortKeyColumn : targetColumns) {
                 // Check equality predicates
                 boolean isCovered = false;
                 if (equalityPredicateColumns.contains(sortKeyColumn)) {
@@ -271,55 +278,40 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
                 }
 
                 // If not covered by equality predicate, check GROUP BY keys
-                if (groupByColumns.contains(sortKeyColumn)) {
+                Column column = groupByColumns.get(sortKeyColumn);
+                if (column != null && column.getType().equals(sortKeyColumn.getType())) {
                     isCovered = true;
                     groupByColumns.remove(sortKeyColumn);
                 }
 
                 // If this sort key column is not covered, we can't use sort aggregation
                 if (!isCovered) {
-                    return groupByColumns.isEmpty();
+                    break;
                 }
             }
 
-            return true;
+            return groupByColumns.isEmpty();
         }
 
-        /**
-         * Check if the monotonic expression covers the specified sort key column
-         * For example: encode_sort_key(a, b, c) covers column 'b' at position 1
-         */
-        private boolean isMonotonicExpressionCoveringColumn(ScalarOperator expr, Column targetColumn, int targetIndex,
-                                                            PhysicalOlapScanOperator scan) {
-            if (!(expr instanceof CallOperator)) {
-                return false;
+        private static boolean extractGroupByColumns(PhysicalOlapScanOperator scan, ColumnRefOperator ref,
+                                                     Map<Column, Column> groupByColumns) {
+            boolean resolved = false;
+            if (scan.getColRefToColumnMetaMap().containsKey(ref)) {
+                Column col = scan.getColRefToColumnMetaMap().get(ref);
+                groupByColumns.put(col, col);
+                resolved = true;
+            } else {
+                ScalarOperator resolvedRef = scan.getProjection().resolveColumnRef(ref);
+                if (resolvedRef instanceof ColumnRefOperator) {
+                    Column col = scan.getColRefToColumnMetaMap().get(resolvedRef);
+                    if (col.getType().equals(ref.getType())) {
+                        groupByColumns.put(col, col);
+                        resolved = true;
+                    }
+                }
             }
 
-            CallOperator callOp = (CallOperator) expr;
-            String functionName = callOp.getFnName();
-
-            // Check if it's encode_sort_key function
-            if (!FunctionSet.ENCODE_SORT_KEY.equals(functionName)) {
-                return false;
-            }
-
-            List<ScalarOperator> arguments = callOp.getArguments();
-
-            // Check if the target index is within the range of arguments
-            if (targetIndex >= arguments.size()) {
-                return false;
-            }
-
-            // Check if the argument at the target index maps to the target column
-            ScalarOperator arg = arguments.get(targetIndex);
-            if (!arg.isColumnRef()) {
-                return false;
-            }
-
-            // Check if the column reference maps to the target column
-            ColumnRefOperator colRef = (ColumnRefOperator) arg;
-            Column mappedColumn = scan.getColRefToColumnMetaMap().get(colRef);
-            return mappedColumn != null && mappedColumn.equals(targetColumn);
+            return resolved;
         }
 
         /**
