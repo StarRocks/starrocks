@@ -30,7 +30,7 @@ Digest=f58bb71850d112014f773717830e7f77
 
 ## 使用方法
 
-您需要通过设置FE配置项 `enable_sql_digest` 为 `true` 来启用向量索引功能。
+您需要通过设置FE配置项 `enable_sql_digest` 为 `true` 来启用 SQL Digest 功能。
 
 您可以通过以下命令动态启用此功能：
 
