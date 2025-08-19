@@ -6,6 +6,7 @@
         <artifactId>starrocks-fe</artifactId>
         <groupId>com.starrocks</groupId>
         <version>3.4.0</version>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -21,7 +22,7 @@
         </dependency>
         <dependency>
             <groupId>com.starrocks</groupId>
-            <artifactId>plugin-common</artifactId>
+            <artifactId>fe-utils</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.hadoop</groupId>
