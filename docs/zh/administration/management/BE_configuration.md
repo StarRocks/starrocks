@@ -3377,7 +3377,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值：false（v3.1）true（v3.2.3 起）
 - 类型：Boolean
 - 单位：-
-- 是否动态：是
+- 是否动态：否
 - 描述：存算分离模式下是否使用 Data Cache。`true` 表示启用该功能，`false` 表示禁用。自 v3.2.3 起，默认值由 `false` 调整为 `true`。
 - 引入版本：v3.1
 

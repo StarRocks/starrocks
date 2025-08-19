@@ -232,10 +232,6 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return Status::OK();
         });
 #ifdef USE_STAROS
-        _config_callback.emplace("starlet_use_star_cache", [&]() -> Status {
-            update_staros_starcache();
-            return Status::OK();
-        });
         _config_callback.emplace("starlet_star_cache_mem_size_percent", [&]() -> Status {
             update_staros_starcache();
             return Status::OK();
