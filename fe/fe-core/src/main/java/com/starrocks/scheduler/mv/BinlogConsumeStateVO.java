@@ -18,16 +18,12 @@ package com.starrocks.scheduler.mv;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanRange;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -103,10 +99,8 @@ public class BinlogConsumeStateVO implements Writable {
             this.tabletId = tabletId;
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            Text.writeString(out, GsonUtils.GSON.toJson(this));
-        }
+
+
 
         public long getTabletId() {
             return tabletId;
@@ -157,10 +151,8 @@ public class BinlogConsumeStateVO implements Writable {
             return res;
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            Text.writeString(out, GsonUtils.GSON.toJson(this));
-        }
+
+
 
         @Override
         public int compareTo(@NotNull BinlogLSNVO o) {

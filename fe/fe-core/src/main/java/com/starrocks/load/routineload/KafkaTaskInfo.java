@@ -242,7 +242,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         // plan for each task, in case table has change(rollup or schema change)
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
         if (tExecPlanFragmentParams.query_options.enable_profile) {
-            StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().
+            StreamLoadTask streamLoadTask = (StreamLoadTask) GlobalStateMgr.getCurrentState().
                     getStreamLoadMgr().getTaskByLabel(label);
             setStreamLoadTask(streamLoadTask);
         }

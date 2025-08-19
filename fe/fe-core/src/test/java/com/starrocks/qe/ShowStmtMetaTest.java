@@ -1409,7 +1409,7 @@ public class ShowStmtMetaTest {
     public void testShowNodesStmt() {
         ShowNodesStmt stmt = new ShowNodesStmt("test_cluster", "test_warehouse", "test_node", NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(20, metaData.getColumnCount());
+        Assertions.assertEquals(21, metaData.getColumnCount());
         Assertions.assertEquals("WarehouseName", metaData.getColumn(0).getName());
         Assertions.assertEquals("CNGroupId", metaData.getColumn(1).getName());
         Assertions.assertEquals("WorkerGroupId", metaData.getColumn(2).getName());
@@ -1430,6 +1430,7 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("CpuCores", metaData.getColumn(17).getName());
         Assertions.assertEquals("MemUsedPct", metaData.getColumn(18).getName());
         Assertions.assertEquals("CpuUsedPct", metaData.getColumn(19).getName());
+        Assertions.assertEquals("CNGroupName", metaData.getColumn(20).getName());
     }
 
     @Test

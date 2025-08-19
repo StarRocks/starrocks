@@ -116,6 +116,7 @@ set(EXEC_FILES
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
+        ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/arithmetic_expr_test.cpp
         ./exprs/arithmetic_operation_test.cpp
         ./exprs/array_element_expr_test.cpp
@@ -304,8 +305,8 @@ set(EXEC_FILES
         ./storage/lake/compaction_scheduler_test.cpp
         ./storage/lake/compaction_task_context_test.cpp
         ./storage/lake/lake_primary_key_consistency_test.cpp
-        ./storage/lake/load_spill_block_manager_test.cpp
         ./storage/lake/spill_mem_table_sink_test.cpp
+        ./storage/load_spill_block_manager_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -563,6 +564,7 @@ set(EXEC_FILES
         ./util/thrift_client_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
+        ./udf/java/java_udf_test.cpp
         ./util/table_metrics_mgr_test.cpp
         )
 

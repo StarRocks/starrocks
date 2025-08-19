@@ -42,8 +42,6 @@ import com.starrocks.thrift.TBoolLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Objects;
@@ -153,12 +151,6 @@ public class BoolLiteral extends LiteralExpr {
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.BOOL_LITERAL;
         msg.bool_literal = new TBoolLiteral(value);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeBoolean(value);
     }
 
     @Override

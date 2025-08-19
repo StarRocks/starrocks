@@ -70,11 +70,11 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             short newShortKeyColumnCount = newIndexShortKeyCount.get(originIndexId);
             long shadowIndexId = globalStateMgr.getNextId();
 
-            // create SHADOW index for each partition
-            for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-                long partitionId = partition.getParentId();
-                long physicalPartitionId = partition.getId();
-                MaterializedIndex originIndex = partition.getIndex(originIndexId);
+            // create SHADOW index for each physicalPartition
+            for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+                long partitionId = physicalPartition.getParentId();
+                long physicalPartitionId = physicalPartition.getId();
+                MaterializedIndex originIndex = physicalPartition.getIndex(originIndexId);
                 long shardGroupId = originIndex.getShardGroupId();
 
                 List<Tablet> originTablets = originIndex.getTablets();
@@ -85,10 +85,10 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
                 properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
-                List<Long> shadowTabletIds =
-                        createShards(originTablets.size(), table.getPartitionFilePathInfo(physicalPartitionId),
-                                table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
-                                originTabletIds, properties, computeResource);
+                List<Long> shadowTabletIds = createShards(originTablets.size(),
+                        table.getPartitionFilePathInfo(physicalPartition.getPathId()),
+                        table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
+                        originTabletIds, properties, computeResource);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -111,7 +111,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 shadowIndex.setVirtualBuckets(virtualBuckets);
 
                 schemaChangeJob.addPartitionShadowIndex(physicalPartitionId, shadowIndexId, shadowIndex);
-            } // end for partition
+            } // end for physicalPartition
             schemaChangeJob.addIndexSchema(shadowIndexId, originIndexId, newIndexName, newShortKeyColumnCount,
                     entry.getValue());
         } // end for index

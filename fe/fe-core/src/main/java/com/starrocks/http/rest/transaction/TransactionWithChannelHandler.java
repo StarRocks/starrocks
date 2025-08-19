@@ -70,7 +70,7 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                 return new ResultWrapper(result);
             case TXN_PREPARE:
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().prepareLoadTask(
-                        label, channel.getId(), request.getRequest().headers(), result);
+                        label, tableName, channel.getId(), request.getRequest().headers(), result);
                 if (!result.stateOK() || result.containMsg()) {
                     return new ResultWrapper(result);
                 }
@@ -78,7 +78,8 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                         txnOperationParams.getPreparedTimeoutMillis(), result);
                 return new ResultWrapper(result);
             case TXN_COMMIT:
-                GlobalStateMgr.getCurrentState().getStreamLoadMgr().commitLoadTask(label, result);
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().commitLoadTask(
+                        label, request.getRequest().headers(), result);
                 return new ResultWrapper(result);
             case TXN_ROLLBACK:
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().rollbackLoadTask(label, result);

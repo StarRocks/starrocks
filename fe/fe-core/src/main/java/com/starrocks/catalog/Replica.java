@@ -35,14 +35,10 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Comparator;
 
 /**
@@ -603,42 +599,6 @@ public class Replica implements Writable {
         strBuffer.append(state.name());
         strBuffer.append("]");
         return strBuffer.toString();
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(id);
-        out.writeLong(backendId);
-        out.writeLong(version);
-        out.writeLong(0); // write a version_hash for compatibility
-        out.writeLong(dataSize);
-        out.writeLong(rowCount);
-        Text.writeString(out, state.name());
-
-        out.writeLong(lastFailedVersion);
-        out.writeLong(minReadableVersion); // originally used as version_hash, now reused as minReadableVersion
-        out.writeLong(lastSuccessVersion);
-        out.writeLong(0); // write a version_hash for compatibility
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        id = in.readLong();
-        backendId = in.readLong();
-        version = in.readLong();
-        in.readLong(); // read a version_hash for compatibility
-        dataSize = in.readLong();
-        rowCount = in.readLong();
-        state = ReplicaState.valueOf(Text.readString(in));
-        lastFailedVersion = in.readLong();
-        minReadableVersion = in.readLong(); // originally used as version_hash, now reused as minReadableVersion
-        lastSuccessVersion = in.readLong();
-        in.readLong(); // read a version_hash for compatibility
-    }
-
-    public static Replica read(DataInput in) throws IOException {
-        Replica replica = new Replica();
-        replica.readFields(in);
-        return replica;
     }
 
     @Override

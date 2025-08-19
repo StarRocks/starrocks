@@ -25,8 +25,6 @@ import com.starrocks.common.io.Writable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -214,11 +212,6 @@ public class BrokerFileGroupAggInfo implements Writable {
         return sb.toString();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // The pull load source info doesn't need to be persisted.
-        // It will be recreated by origin stmt in prepare of load job.
-        // write 0 just for compatibility
-        out.writeInt(0);
-    }
+
+
 }

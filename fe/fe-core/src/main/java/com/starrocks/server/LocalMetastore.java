@@ -86,6 +86,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionInfoBuilder;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
@@ -1385,7 +1386,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             DropPartitionsInfo info =
                     new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(), null, true);
             editLog.logDropPartitions(info);
-            LOG.info("succeed in dropping all partitions, is temp : {}, is force : {}", isTempPartition,
+            LOG.info("succeed in dropping all partitions, db: {}, table: {}, is temp: {}, is force: {}",
+                    db.getFullName(), olapTable.getName(),
+                    isTempPartition,
                     clause.isForceDrop());
             return;
         }
@@ -1466,13 +1469,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             String partitionName = clause.getPartitionName();
             DropPartitionInfo info = new DropPartitionInfo(dbId, tableId, partitionName, isTempPartition, clause.isForceDrop());
             editLog.logDropPartition(info);
-            LOG.info("succeed in dropping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
+            LOG.info("succeed in dropping partition[{}], db: {}, table: {}, is temp : {}, is force : {}", partitionName,
+                    db.getFullName(), olapTable.getName(),
+                    isTempPartition,
                     clause.isForceDrop());
         } else {
             DropPartitionsInfo info =
                     new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(), existPartitions);
             editLog.logDropPartitions(info);
-            LOG.info("succeed in dropping partitions[{}], is temp : {}, is force : {}", existPartitions, isTempPartition,
+            LOG.info("succeed in dropping partitions[{}], db: {}, table: {}, is temp : {}, is force : {}", existPartitions,
+                    db.getFullName(), olapTable.getName(),
+                    isTempPartition,
                     clause.isForceDrop());
         }
 
@@ -2051,6 +2058,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
             throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
         }
+        // Use physical partition id as path id when creating a new physical partition
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
@@ -3179,7 +3187,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
                 Expr partitionByExpr = partitionByExprs.get(0);
                 ExpressionPartitionDesc expressionPartitionDesc = new ExpressionPartitionDesc(partitionByExpr);
-                return expressionPartitionDesc.toPartitionInfo(mvPartitionColumns, Maps.newHashMap(), false);
+                return PartitionInfoBuilder.build(expressionPartitionDesc, mvPartitionColumns, Maps.newHashMap(), false);
             }
         } else {
             if (partitionType != PartitionType.UNPARTITIONED && partitionType != null) {

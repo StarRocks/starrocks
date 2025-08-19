@@ -44,9 +44,6 @@ import com.starrocks.common.io.Writable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
-import java.io.IOException;
-
 /**
  * Statistics for a single column.
  */
@@ -135,12 +132,8 @@ public class ColumnStats implements Writable {
                 "numNulls", numNulls).toString();
     }
 
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(numDistinctValues);
-        out.writeFloat(avgSerializedSize);
-        out.writeLong(maxSize);
-        out.writeLong(numNulls);
-    }
+
+
 
     @Override
     public int hashCode() {

@@ -34,11 +34,7 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
-import com.starrocks.common.io.Text;
-
-import java.io.DataOutput;
-import java.io.IOException;
+import com.starrocks.mysql.MysqlCodec;
 
 public abstract class ColumnType {
     private static Boolean[][] schemaChangeMatrix;
@@ -127,7 +123,7 @@ public abstract class ColumnType {
             }
             // change decimalv3 to varchar type, the string must be sufficient to hold decimalv3
             if (rhs.isVarchar()) {
-                return lhsScalarType.getMysqlResultSetFieldLength() <= rhsScalarType.getLength();
+                return MysqlCodec.getMysqlResultSetFieldLength(lhsScalarType) <= rhsScalarType.getLength();
             }
             // decimalv3 to decimalv3 schema change must guarantee invariant:
             // 1. rhs's fraction part is wide enough to hold lhs's, namely lhs.scale <= rhs.scale;
@@ -161,17 +157,6 @@ public abstract class ColumnType {
             return isSchemaChangeAllowedInvolvingDecimalV3(lhs, rhs);
         }
         return schemaChangeMatrix[lhs.getPrimitiveType().ordinal()][rhs.getPrimitiveType().ordinal()];
-    }
-
-    public static void write(DataOutput out, Type type) throws IOException {
-        Preconditions.checkArgument(type.isScalarType(), "only support scalar type serialization");
-        ScalarType scalarType = (ScalarType) type;
-        Text.writeString(out, scalarType.getPrimitiveType().name());
-        out.writeInt(scalarType.getScalarScale());
-        out.writeInt(scalarType.getScalarPrecision());
-        out.writeInt(scalarType.getLength());
-        // Actually, varcharLimit need not to write here, write true to back compatible
-        out.writeBoolean(true);
     }
 }
 

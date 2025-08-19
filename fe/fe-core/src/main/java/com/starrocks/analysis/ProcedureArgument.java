@@ -12,19 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.analysis;
 
-import com.starrocks.sql.ast.ShowRestoreStmt;
-import org.junit.jupiter.api.Test;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import java.util.Optional;
 
-public class ShowRestoreStmtTest {
-    
-    @Test
-    public void checkShowRestoreStmtRedirectStatus() {
-        ShowRestoreStmt stmt = new ShowRestoreStmt("", null);
-        assertEquals(stmt.getRedirectStatus(), RedirectStatus.NO_FORWARD);
+public class ProcedureArgument {
+    private final Optional<String> name;
+    private final Expr value;
+
+    public ProcedureArgument(String name, Expr value) {
+        this.name = Optional.ofNullable(name);
+        this.value = value;
+    }
+
+    public Optional<String> getName() {
+        return name;
+    }
+
+    public Expr getValue() {
+        return value;
+    }
+
+    @Override
+    public String toString() {
+        String valueSql = AstToSQLBuilder.toSQL(value);
+        return name.map(n -> n + " => " + valueSql).orElse(valueSql);
     }
 }

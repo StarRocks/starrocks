@@ -42,7 +42,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.loadv2.dpp.DppResult;
@@ -53,7 +52,6 @@ import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.collections.map.HashedMap;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -233,30 +231,8 @@ public class EtlStatus implements Writable {
                 '}';
     }
 
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, state.name());
-        Text.writeString(out, trackingUrl);
 
-        // persist load statics in stat counter
-        stats.put(LOAD_STATISTIC, loadStatistic.toJson());
-        int statsCount = stats.size();
-        out.writeInt(statsCount);
-        for (Map.Entry<String, String> entry : stats.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            Text.writeString(out, entry.getValue());
-        }
 
-        int countersCount = (counters == null) ? 0 : counters.size();
-        out.writeInt(countersCount);
-        if (counters != null) {
-            for (Map.Entry<String, String> entry : counters.entrySet()) {
-                Text.writeString(out, entry.getKey());
-                Text.writeString(out, entry.getValue());
-            }
-        }
-        // TODO: Persist `tableCounters`
-        // Text.writeString(out, GsonUtils.GSON.toJson(tableCounters));
-    }
 
     public void setLoadFileInfo(int filenum, long filesize) {
         this.loadStatistic.fileNum = filenum;

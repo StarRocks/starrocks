@@ -19,17 +19,13 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.NotImplementedException;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
-public class DistributionDesc implements ParseNode, Writable {
+public class DistributionDesc implements ParseNode {
     protected DistributionInfoType type;
 
     protected final NodePosition pos;
@@ -56,13 +52,6 @@ public class DistributionDesc implements ParseNode, Writable {
 
     public DistributionInfo toDistributionInfo(List<Column> columns) throws DdlException {
         throw new NotImplementedException();
-    }
-
-     
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, type.name());
     }
 
     @Override

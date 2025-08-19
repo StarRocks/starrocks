@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowFrontendsStmt extends ShowStmt {
@@ -26,11 +25,6 @@ public class ShowFrontendsStmt extends ShowStmt {
 
     public ShowFrontendsStmt(NodePosition pos) {
         super(pos);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

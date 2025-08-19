@@ -15,11 +15,11 @@
 package com.starrocks.authorization;
 
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.List;
 import java.util.Set;

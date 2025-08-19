@@ -24,11 +24,9 @@ import com.starrocks.authorization.RolePrivilegeCollectionV2;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ResourceGroupOpEntry;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -50,7 +48,6 @@ import com.starrocks.thrift.TWorkGroupType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -279,15 +276,8 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        List<ResourceGroup> resourceGroups = new ArrayList<>(resourceGroupMap.values());
-        SerializeData data = new SerializeData();
-        data.resourceGroups = resourceGroups;
 
-        String s = GsonUtils.GSON.toJson(data);
-        Text.writeString(out, s);
-    }
+
 
     private void replayAddResourceGroup(ResourceGroup workgroup) {
         addResourceGroupInternal(workgroup);

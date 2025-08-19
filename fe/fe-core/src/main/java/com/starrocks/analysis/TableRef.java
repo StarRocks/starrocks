@@ -37,13 +37,10 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -371,21 +368,6 @@ public class TableRef implements ParseNode, Writable {
         return sb.toString();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        name.write(out);
-        if (partitionNames == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            partitionNames.write(out);
-        }
 
-        if (hasExplicitAlias()) {
-            out.writeBoolean(true);
-            Text.writeString(out, getExplicitAlias());
-        } else {
-            out.writeBoolean(false);
-        }
-    }
+
 }

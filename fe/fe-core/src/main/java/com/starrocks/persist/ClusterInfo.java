@@ -18,11 +18,8 @@
 package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 
 public class ClusterInfo implements Writable {
@@ -65,16 +62,8 @@ public class ClusterInfo implements Writable {
         this.newInstanceNum = 0;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, clusterName);
-        out.writeLong(clusterId);
-        out.writeInt(instanceNum);
-        out.writeInt(expandBackendIds.size());
-        for (long id : expandBackendIds) {
-            out.writeLong(id);
-        }
-    }
+
+
 
     public String getClusterName() {
         return clusterName;

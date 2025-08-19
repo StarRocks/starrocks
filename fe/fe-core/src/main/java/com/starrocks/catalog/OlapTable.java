@@ -446,6 +446,7 @@ public class OlapTable extends Table {
             olapTable.curBinlogConfig = new BinlogConfig(this.curBinlogConfig);
         }
         olapTable.dbName = this.dbName;
+        olapTable.maxColUniqueId = new AtomicInteger(this.maxColUniqueId.get());
     }
 
     public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {
@@ -1519,6 +1520,9 @@ public class OlapTable extends Table {
 
     // check input partition has temporary partition
     public boolean inputHasTempPartition(List<Long> partitionIds) {
+        if (partitionIds == null) {
+            return false;
+        }
         for (Long pid : partitionIds) {
             if (tempPartitions.getPartition(pid) != null) {
                 return true;
@@ -3670,10 +3674,10 @@ public class OlapTable extends Table {
     }
 
     @Nullable
-    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionId) {
+    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionPathId) {
         FilePathInfo pathInfo = getDefaultFilePathInfo();
         if (pathInfo != null) {
-            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionId);
+            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionPathId);
         }
         return null;
     }

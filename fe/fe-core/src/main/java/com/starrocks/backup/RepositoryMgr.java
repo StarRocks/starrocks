@@ -45,7 +45,6 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -142,13 +141,8 @@ public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessab
         return infos;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeInt(repoNameMap.size());
-        for (Repository repo : repoNameMap.values()) {
-            repo.write(out);
-        }
-    }
+
+
 
     @Override
     public void gsonPostProcess() throws IOException {

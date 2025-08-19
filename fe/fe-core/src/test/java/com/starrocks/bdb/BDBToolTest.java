@@ -90,7 +90,7 @@ public class BDBToolTest {
 
             // write something
             ReplicaPersistInfo info = ReplicaPersistInfo.createForAdd(1, 2, 3, 4, 5, 6, 7, 8, 0, 10, 11, 12, 14, 0);
-            JournalEntity entity = new JournalEntity(OperationType.OP_ADD_REPLICA, info);
+            JournalEntity entity = new JournalEntity(OperationType.OP_ADD_REPLICA_V2, info);
 
             // id is the key
             Long journalId = 23456L;

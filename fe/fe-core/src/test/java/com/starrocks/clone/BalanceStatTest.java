@@ -14,9 +14,16 @@
 
 package com.starrocks.clone;
 
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.clone.BalanceStat.BalanceType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Set;
 
 public class BalanceStatTest {
 
@@ -70,6 +77,33 @@ public class BalanceStatTest {
             Assertions.assertEquals(
                     "{\"maxTabletNum\":9,\"minTabletNum\":1,\"beId\":1,\"maxPath\":\"disk1\",\"minPath\":\"disk2\"," +
                             "\"type\":\"BACKEND_TABLET\",\"balanced\":false}",
+                    stat.toString());
+        }
+
+        {
+            Set<Long> currentBes = Sets.newHashSet(1L, 2L);
+            Set<Long> expectedBes = Sets.newHashSet(2L, 3L);
+            BalanceStat stat = BalanceStat.createColocationGroupBalanceStat(1L, currentBes, expectedBes);
+            Assertions.assertFalse(stat.isBalanced());
+            Assertions.assertEquals(BalanceType.COLOCATION_GROUP, stat.getBalanceType());
+            Assertions.assertEquals("colocation group", stat.getBalanceType().label());
+            Assertions.assertEquals(
+                    "{\"tabletId\":1,\"currentBes\":[1,2],\"expectedBes\":[2,3],\"type\":\"COLOCATION_GROUP\"," +
+                            "\"balanced\":false}",
+                    stat.toString());
+        }
+
+        {
+            Set<Long> currentBes = Sets.newHashSet(1L, 2L);
+            Map<String, Collection<String>> expectedLocations = Maps.newHashMap();
+            expectedLocations.put("rack", Arrays.asList("rack1", "rack2"));
+            BalanceStat stat = BalanceStat.createLabelLocationBalanceStat(1L, currentBes, expectedLocations);
+            Assertions.assertFalse(stat.isBalanced());
+            Assertions.assertEquals(BalanceType.LABEL_LOCATION, stat.getBalanceType());
+            Assertions.assertEquals("label-aware location", stat.getBalanceType().label());
+            Assertions.assertEquals(
+                    "{\"tabletId\":1,\"currentBes\":[1,2],\"expectedLocations\":{\"rack\":[\"rack1\",\"rack2\"]}," +
+                            "\"type\":\"LABEL_LOCATION\",\"balanced\":false}",
                     stat.toString());
         }
     }

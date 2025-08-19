@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -68,11 +67,6 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
 
     public void setStatus(ReplicaStatus status) {
         this.status = status;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     @Override
