@@ -92,9 +92,8 @@ public class ColumnAccessPath {
     }
 
     public static ColumnAccessPath createFromLinearPath(String linearPath, Type valueType) {
-        final int jsonFlattenDepth = 20;
-        List<String> pieces = Lists.newArrayList();
-        if (SubfieldAccessPathNormalizer.parseSimpleJsonPath(jsonFlattenDepth, linearPath, pieces)) {
+        List<String> pieces = SubfieldAccessPathNormalizer.parseSimpleJsonPath(linearPath);
+        if (pieces.isEmpty()) {
             throw new IllegalArgumentException("illegal json path: " + linearPath);
         }
         return createLinearPath(pieces, valueType);

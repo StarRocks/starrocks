@@ -826,7 +826,8 @@ public class PlanFragmentBuilder {
                     .collect(Collectors.toSet());
             if (scan.getPredicate() == null) {
                 // remove path which has pruned
-                return scan.getColumnAccessPaths().stream().filter(p -> checkNames.contains(p.getPath()))
+                return scan.getColumnAccessPaths().stream()
+                        .filter(p -> checkNames.contains(p.getPath()) || p.isExtended())
                         .collect(Collectors.toList());
             }
 
@@ -1032,6 +1033,7 @@ public class PlanFragmentBuilder {
                     scan.getSelectPartitionNames(),
                     context.getConnectContext().getCurrentComputeResource());
 
+            scanNode.setColumnAccessPaths(scan.getColumnAccessPaths());
             scanNode.computeRangeLocations(computeResource);
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);

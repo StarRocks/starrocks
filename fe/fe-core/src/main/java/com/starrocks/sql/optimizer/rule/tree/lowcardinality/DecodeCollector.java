@@ -65,6 +65,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rule.tree.JsonPathRewriteRule;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.CacheRelaxDictManager;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
@@ -264,7 +265,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             List<ScalarOperator> dictExprList = stringExpressions.getOrDefault(cid, Collections.emptyList());
             long allExprNum = dictExprList.size();
             // only query original string-column
-            long worthless = dictExprList.stream().filter(ScalarOperator::isColumnRef).count();
+            long worthless = dictExprList.stream()
+                    .filter(ScalarOperator::isColumnRef)
+                    .filter(x -> !((ColumnRefOperator) x).getHints().contains(JsonPathRewriteRule.COLUMN_REF_HINT))
+                    .count();
             // we believe that the more complex expressions using the dict-column, and the preformance will be better
             if (worthless == 0 && allExprNum != 0) {
                 context.allStringColumns.add(cid);
@@ -690,16 +694,21 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
-            ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
-                    .getColumnStatistic(table, column.getName());
-            // Condition 2: the varchar column is low cardinality string column
+            // If it's not an extended column, we have to check the cardinality of the column.
+            // TODO(murphy) support collect cardinality of extended column
+            if (!checkExtendedColumn(scan, column)) {
+                ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                        .getColumnStatistic(table, column.getName());
+                // Condition 2: the varchar column is low cardinality string column
 
-            boolean alwaysCollectDict = sessionVariable.isAlwaysCollectDict();
-            if (!alwaysCollectDict && !column.getType().isArrayType() && !FeConstants.USE_MOCK_DICT_MANAGER &&
-                    (columnStatistic.isUnknown() ||
-                            columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
-                LOG.debug("{} isn't low cardinality string column", column.getName());
-                continue;
+                boolean alwaysCollectDict = sessionVariable.isAlwaysCollectDict();
+                if (!alwaysCollectDict && !column.getType().isArrayType() && !FeConstants.USE_MOCK_DICT_MANAGER &&
+                        (columnStatistic.isUnknown() ||
+                                columnStatistic.getDistinctValuesCount() >
+                                        CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
+                    LOG.debug("{} isn't low cardinality string column", column.getName());
+                    continue;
+                }
             }
 
             // Condition 3: the varchar column has collected global dict
@@ -872,6 +881,26 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
         }
         return true;
+    }
+
+    /**
+     * Check if the column is an extended string column, if so, it can be used for global dict optimization.
+     */
+    private boolean checkExtendedColumn(PhysicalOlapScanOperator scan, ColumnRefOperator column) {
+        if (!sessionVariable.isEnableJSONV2DictOpt()) {
+            return false;
+        }
+        String colName = scan.getColRefToColumnMetaMap().get(column).getName();
+        for (ColumnAccessPath path : scan.getColumnAccessPaths()) {
+            if (path.isExtended() &&
+                    path.getLinearPath().equals(colName) &&
+                    path.getType() == TAccessPathType.ROOT &&
+                    path.getValueType().isStringType()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void collectPredicate(Operator operator, DecodeInfo info) {

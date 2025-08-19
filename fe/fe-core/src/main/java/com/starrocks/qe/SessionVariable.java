@@ -391,6 +391,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "cbo_enable_single_node_prefer_two_stage_aggregate";
 
     public static final String CBO_JSON_V2_REWRITE = "cbo_json_v2_rewrite";
+    public static final String CBO_JSON_V2_DICT_OPT = "cbo_json_v2_dict_opt";
 
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
@@ -1248,6 +1249,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_JSON_V2_REWRITE)
     private boolean cboJSONV2Rewrite = true;
+
+    @VarAttr(name = CBO_JSON_V2_DICT_OPT)
+    private boolean cboJSONV2DictOpt = true;
 
 
     /*
@@ -5196,6 +5200,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableDropTableCheckMvDependency(boolean enableDropTableCheckMvDependency) {
         this.enableDropTableCheckMvDependency = enableDropTableCheckMvDependency;
+    }
+
+    public boolean isEnableJSONV2DictOpt() {
+        return cboJSONV2DictOpt;
+    }
+
+    public void setEnableJSONV2DictOpt(boolean value) {
+        this.cboJSONV2DictOpt = value;
     }
 
     // Serialize to thrift object

@@ -79,7 +79,7 @@ public class EliminateOveruseColumnAccessPathRule implements TreeRewriteRule {
         }
 
         @Override
-        public Optional<ColumnRefSet> visitPhysicalScan(OptExpression optExpression,
+        public Optional<ColumnRefSet> visitPhysicalOlapScan(OptExpression optExpression,
                                                         ColumnRefSet parentUsedColumnRefs) {
             Preconditions.checkState(parentUsedColumnRefs != null);
             PhysicalScanOperator scan = optExpression.getOp().cast();
@@ -107,6 +107,7 @@ public class EliminateOveruseColumnAccessPathRule implements TreeRewriteRule {
                     .collect(Collectors.toMap(e -> e.getValue().getName(), Map.Entry::getKey));
 
             Predicate<ColumnAccessPath> isOveruseProjecting = accessPath ->
+                    columnNameToIdMap.containsKey(accessPath.getPath()) &&
                     parentUsedColumnRefs.contains(Objects.requireNonNull(columnNameToIdMap.get(accessPath.getPath())));
 
             Map<Boolean, List<ColumnAccessPath>> subfieldPruningProjectingGroups = subfieldPruningProjectings
