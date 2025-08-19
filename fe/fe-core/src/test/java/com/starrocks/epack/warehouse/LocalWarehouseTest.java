@@ -16,7 +16,9 @@ package com.starrocks.epack.warehouse;
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.epack.warehouse.cngroup.CNGroupMetricEntity;
 import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
@@ -32,11 +34,15 @@ import com.starrocks.qe.scheduler.warehouse.WarehouseMetricEntity;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
+import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -271,6 +277,87 @@ public class LocalWarehouseTest extends LocalWarehouseTestBase {
 
             ensureCnGroupDropped("default_warehouse", cngroupName);
         }
+    }
+
+    private static class NodeAddressCnGroup {
+        String nodeAddress;
+        String cnGroupName;
+        ComputeNode computeNode;
+    }
+
+    @Test
+    public void testShowNodesStmt() {
+        String warehouseName = randomWarehouseName();
+        String cnGroupName = randomCNGroupName();
+        String builtinCnGroupName = LocalWarehouse.DEFAULT_CLUSTER_NAME;
+        ensureWarehouseCreated(warehouseName);
+        ensureCnGroupCreated(warehouseName, cnGroupName);
+
+        List<NodeAddressCnGroup> testNodes = new ArrayList<>();
+        testNodes.add(new NodeAddressCnGroup());
+        testNodes.add(new NodeAddressCnGroup());
+        testNodes.add(new NodeAddressCnGroup());
+        testNodes.get(0).cnGroupName = builtinCnGroupName;
+        testNodes.get(1).cnGroupName = cnGroupName;
+        testNodes.get(2).cnGroupName = cnGroupName;
+
+        for (NodeAddressCnGroup testNode : testNodes) {
+            testNode.nodeAddress = randomNodeAddress();
+            String sql =
+                    "ALTER SYSTEM ADD COMPUTE NODE '" + testNode.nodeAddress + "' INTO WAREHOUSE " + warehouseName
+                            + " CNGROUP " + testNode.cnGroupName;
+            ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.ddl(sql));
+
+            ComputeNode node = getComputeNode(testNode.nodeAddress);
+            testNode.computeNode = node;
+            Assert.assertNotNull(testNode.computeNode);
+
+            node.setStarletPort(node.getHeartbeatPort());
+            String workerAddress = NetUtils.getHostPortInAccessibleFormat(node.getHost(), node.getHeartbeatPort());
+            GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .addWorker(node.getId(), workerAddress, node.getWorkerGroupId());
+        }
+
+        int warehouseNameIndex = 0;
+        int cnGroupNameIndex = 20;
+        int nodeAddressIndex = 5;
+        {
+            ShowNodesStmt stmt = new ShowNodesStmt(warehouseName, null, null, NodePosition.ZERO);
+            ShowResultSet resultSet = ShowExecutor.execute(stmt, connectContext);
+            Assert.assertEquals(3L, resultSet.getResultRows().size());
+            for (int row = 0; row < 3; ++row) {
+                Assert.assertEquals(warehouseName, resultSet.getResultRows().get(row).get(warehouseNameIndex));
+                Assert.assertEquals(testNodes.get(row).computeNode.getHost(),
+                        resultSet.getResultRows().get(row).get(nodeAddressIndex));
+                Assert.assertEquals(testNodes.get(row).cnGroupName,
+                        resultSet.getResultRows().get(row).get(cnGroupNameIndex));
+            }
+        }
+        {
+            ShowNodesStmt stmt = new ShowNodesStmt(warehouseName, builtinCnGroupName, null, NodePosition.ZERO);
+            ShowResultSet resultSet = ShowExecutor.execute(stmt, connectContext);
+            Assert.assertEquals(1L, resultSet.getResultRows().size());
+            Assert.assertEquals(warehouseName, resultSet.getResultRows().get(0).get(warehouseNameIndex));
+            Assert.assertEquals(testNodes.get(0).computeNode.getHost(),
+                    resultSet.getResultRows().get(0).get(nodeAddressIndex));
+            Assert.assertEquals(testNodes.get(0).cnGroupName, resultSet.getResultRows().get(0).get(cnGroupNameIndex));
+        }
+        {
+            ShowNodesStmt stmt = new ShowNodesStmt(warehouseName, cnGroupName, null, NodePosition.ZERO);
+            ShowResultSet resultSet = ShowExecutor.execute(stmt, connectContext);
+            Assert.assertEquals(2L, resultSet.getResultRows().size());
+            for (int row = 0; row < 2; ++row) {
+                // testNodes[1] and testNodes[2] are in the same cngroup
+                Assert.assertEquals(warehouseName, resultSet.getResultRows().get(row).get(warehouseNameIndex));
+                Assert.assertEquals(testNodes.get(row + 1).computeNode.getHost(),
+                        resultSet.getResultRows().get(row).get(nodeAddressIndex));
+                Assert.assertEquals(testNodes.get(row + 1).cnGroupName,
+                        resultSet.getResultRows().get(row).get(cnGroupNameIndex));
+            }
+        }
+
+        ensureCnGroupDropped(warehouseName, cnGroupName);
+        ensureWarehouseDropped(warehouseName);
     }
 
     @Test

@@ -15,6 +15,7 @@
 package com.starrocks.epack.qe;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -139,6 +140,8 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                     CaseSensibility.WAREHOUSE.getCaseSensibility());
         }
 
+        String cngroupName = statement.getCnGroupName();
+
         List<Warehouse> warehouseList = warehouseMgr.getAllWarehouses().stream().filter(
                 warehouse -> {
                     try {
@@ -161,6 +164,9 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
 
             LocalWarehouse localWarehouse = (LocalWarehouse) wh;
             for (Cluster cluster : localWarehouse.getClusters().values()) {
+                if (!Strings.isNullOrEmpty(cngroupName) && !cluster.getName().equalsIgnoreCase(cngroupName)) {
+                    continue;
+                }
                 List<Long> computeNodes = cluster.getComputeNodeIds();
                 for (Long computeNodeId : computeNodes) {
                     ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
@@ -198,6 +204,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                     double memUsedPct = node.getMemUsedPct();
                     computeNodeInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
                     computeNodeInfo.add(String.format("%.1f", node.getCpuUsedPermille() / 10.0) + " %");
+                    computeNodeInfo.add(cluster.getName());
 
                     rows.add(computeNodeInfo);
                 }
