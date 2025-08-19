@@ -55,6 +55,7 @@ class BrpcStubCache {
 public:
     BrpcStubCache() {
         _stub_map.init(239);
+        _endpoint_to_last_access_time.init(239);
         REGISTER_GAUGE_STARROCKS_METRIC(brpc_endpoint_stub_count, [this]() {
             std::lock_guard<SpinLock> l(_lock);
             return _stub_map.size();
