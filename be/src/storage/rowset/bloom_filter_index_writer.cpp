@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE/2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -34,6 +34,8 @@
 
 #include "storage/rowset/bloom_filter_index_writer.h"
 
+#include <algorithm>
+#include <cctype>
 #include <map>
 #include <memory>
 #include <utility>
@@ -55,14 +57,30 @@ namespace starrocks {
 
 namespace {
 
+struct CaseInsensitiveSliceComparator {
+    bool operator()(const Slice& a, const Slice& b) const {
+        size_t min_size = std::min(a.size, b.size);
+        for (size_t i = 0; i < min_size; ++i) {
+            char a_char = std::tolower(static_cast<unsigned char>(a.data[i]));
+            char b_char = std::tolower(static_cast<unsigned char>(b.data[i]));
+            if (a_char != b_char) {
+                return a_char < b_char;
+            }
+        }
+        return a.size < b.size;
+    }
+};
+
 template <typename CppType>
 struct BloomFilterTraits {
     using ValueDict = std::set<CppType>;
+    using CaseInsensitiveValueDict = std::set<CppType>;
 };
 
 template <>
 struct BloomFilterTraits<Slice> {
     using ValueDict = std::set<Slice, Slice::Comparator>;
+    using CaseInsensitiveValueDict = std::set<Slice, CaseInsensitiveSliceComparator>;
 };
 
 // supported slice types are: TYPE_CHAR|TYPE_VARCHAR
@@ -106,11 +124,12 @@ inline void update_bf(BloomFilter* bf, const typename CppTypeTraits<type>::CppTy
 // This builder builds a bloom filter page by every data page, with a page id index.
 // Meanswhile, It adds an ordinal index to load bloom filter index according to requirement.
 //
-template <LogicalType field_type>
+template <LogicalType field_type, bool case_sensitive>
 class OriginalBloomFilterIndexWriterImpl : public BloomFilterIndexWriter {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
-    using ValueDict = typename BloomFilterTraits<CppType>::ValueDict;
+    using ValueDict = std::conditional_t<case_sensitive, typename BloomFilterTraits<CppType>::ValueDict,
+                                         typename BloomFilterTraits<CppType>::CaseInsensitiveValueDict>;
 
     explicit OriginalBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
             : _bf_options(bf_options), _typeinfo(std::move(typeinfo)) {}
@@ -179,33 +198,31 @@ protected:
     ValueDict _values;
     TypeInfoPtr _typeinfo;
     MemPool _pool;
-
-private:
     bool _has_null{false};
     uint64_t _bf_buffer_size{0};
     std::vector<std::unique_ptr<BloomFilter>> _bfs;
 };
 
-template <LogicalType field_type, typename Enable = void>
-class NgramBloomFilterIndexWriterImpl : public OriginalBloomFilterIndexWriterImpl<field_type> {
+template <LogicalType field_type, bool case_sensitive, typename Enable = void>
+class NgramBloomFilterIndexWriterImpl : public OriginalBloomFilterIndexWriterImpl<field_type, true> {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
-    using OriginalBloomFilterIndexWriterImpl<field_type>::_values;
+    using OriginalBloomFilterIndexWriterImpl<field_type, true>::_values;
 
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
-            : OriginalBloomFilterIndexWriterImpl<field_type>(bf_options, typeinfo) {}
+            : OriginalBloomFilterIndexWriterImpl<field_type, true>(bf_options, typeinfo) {}
 
     void add_values(const void* values, size_t count) override { return; }
 };
 
-template <LogicalType field_type>
-class NgramBloomFilterIndexWriterImpl<field_type, std::enable_if_t<is_slice_type<field_type>()>>
-        : public OriginalBloomFilterIndexWriterImpl<field_type> {
+template <LogicalType field_type, bool case_sensitive>
+class NgramBloomFilterIndexWriterImpl<field_type, case_sensitive, std::enable_if_t<is_slice_type<field_type>()>>
+        : public OriginalBloomFilterIndexWriterImpl<field_type, case_sensitive> {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
-    using OriginalBloomFilterIndexWriterImpl<field_type>::_values;
+    using OriginalBloomFilterIndexWriterImpl<field_type, case_sensitive>::_values;
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
-            : OriginalBloomFilterIndexWriterImpl<field_type>(bf_options, std::move(typeinfo)) {}
+            : OriginalBloomFilterIndexWriterImpl<field_type, case_sensitive>(bf_options, std::move(typeinfo)) {}
 
     void add_values(const void* values, size_t count) override {
         size_t gram_num = this->_bf_options.gram_num;
@@ -223,19 +240,35 @@ public:
 
                 // add this ngram into set
                 if (_values.find(unaligned_load<CppType>(&cur_ngram)) == _values.end()) {
-                    if (this->_bf_options.case_sensitive) {
-                        _values.insert(get_value<field_type>(&cur_ngram, this->_typeinfo, &this->_pool));
-                    } else {
-                        // todo::exist two copy of ngram, need to optimize
-                        std::string lower_ngram;
-                        Slice lower_ngram_slice = cur_ngram.tolower(lower_ngram);
-                        _values.insert(get_value<field_type>(&lower_ngram_slice, this->_typeinfo, &this->_pool));
-                    }
+                    _values.insert(get_value<field_type>(&cur_ngram, this->_typeinfo, &this->_pool));
                 }
             }
             // move to next row
             ++cur_slice;
         }
+    }
+
+    Status flush() override {
+        if (this->_bf_options.case_sensitive) {
+            return OriginalBloomFilterIndexWriterImpl<field_type, case_sensitive>::flush();
+        }
+
+        std::unique_ptr<BloomFilter> bf;
+        RETURN_IF_ERROR(BloomFilter::create(BLOCK_BLOOM_FILTER, &bf));
+        RETURN_IF_ERROR(bf->init(_values.size(), this->_bf_options.fpp, this->_bf_options.strategy));
+        bf->set_has_null(this->_has_null);
+
+        std::string lower_str;
+        for (auto& v : _values) {
+            const auto* s = reinterpret_cast<const Slice*>(&v);
+            Slice lower_slice = s->tolower(lower_str);
+            bf->add_bytes(lower_slice.data, lower_slice.size);
+        }
+
+        this->_bf_buffer_size += bf->size();
+        this->_bfs.push_back(std::move(bf));
+        _values.clear();
+        return Status::OK();
     }
 };
 } // namespace
@@ -245,9 +278,13 @@ struct BloomFilterBuilderFunctor {
     Status operator()(std::unique_ptr<BloomFilterIndexWriter>* res, const BloomFilterOptions& bf_options,
                       const TypeInfoPtr& typeinfo) {
         if (bf_options.use_ngram) {
-            *res = std::make_unique<NgramBloomFilterIndexWriterImpl<ftype>>(bf_options, typeinfo);
+            if (bf_options.case_sensitive) {
+                *res = std::make_unique<NgramBloomFilterIndexWriterImpl<ftype, true>>(bf_options, typeinfo);
+            } else {
+                *res = std::make_unique<NgramBloomFilterIndexWriterImpl<ftype, false>>(bf_options, typeinfo);
+            }
         } else {
-            *res = std::make_unique<OriginalBloomFilterIndexWriterImpl<ftype>>(bf_options, typeinfo);
+            *res = std::make_unique<OriginalBloomFilterIndexWriterImpl<ftype, true>>(bf_options, typeinfo);
         }
         return Status::OK();
     }
