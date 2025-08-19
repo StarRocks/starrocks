@@ -340,6 +340,9 @@ public:
     MorselQueue(Morsels&& morsels) : _morsels(std::move(morsels)), _num_morsels(_morsels.size()) {}
     virtual ~MorselQueue() = default;
 
+    // NOTE: some subclasses of MorselQueue nest another MorselQueue, such as BucketSequenceMorselQueue.
+    // When adding a new virtual method, DO NOT forget to invoke it on the nested MorselQueue as well.
+
     virtual std::vector<TInternalScanRange*> prepare_olap_scan_ranges() const;
     virtual void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {}
     virtual void set_key_ranges(TabletReaderParams::RangeStartOperation _range_start_op,
@@ -400,6 +403,13 @@ public:
 
     void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override {
         _morsel_queue->set_key_ranges(key_ranges);
+    }
+
+    void set_key_ranges(TabletReaderParams::RangeStartOperation _range_start_op,
+                        TabletReaderParams::RangeEndOperation _range_end_op, std::vector<OlapTuple> _range_start_key,
+                        std::vector<OlapTuple> _range_end_key) override {
+        _morsel_queue->set_key_ranges(_range_start_op, _range_end_op, std::move(_range_start_key),
+                                      std::move(_range_end_key));
     }
 
     void set_tablets(const std::vector<BaseTabletSharedPtr>& tablets) override { _morsel_queue->set_tablets(tablets); }
