@@ -17,7 +17,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 // rename table
@@ -30,7 +29,7 @@ public class RollupRenameClause extends AlterTableClause {
     }
 
     public RollupRenameClause(String rollupName, String newRollupName, NodePosition pos) {
-        super(AlterOpType.RENAME, pos);
+        super(pos);
         this.rollupName = rollupName;
         this.newRollupName = newRollupName;
     }

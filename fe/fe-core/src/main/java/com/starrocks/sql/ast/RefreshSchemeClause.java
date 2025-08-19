@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -26,7 +25,7 @@ public class RefreshSchemeClause extends AlterTableClause {
     protected final NodePosition pos;
 
     public RefreshSchemeClause(MaterializedView.RefreshType type, NodePosition pos, MaterializedView.RefreshMoment moment) {
-        super(AlterOpType.REFRESH_SCHEMA, pos);
+        super(pos);
         this.type = type;
         this.moment = moment;
         this.pos = pos;

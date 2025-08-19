@@ -439,7 +439,7 @@ public class HiveMetadata implements ConnectorMetadata {
                 addPartition(context, stmt, alterClause);
             } else {
                 throw new StarRocksConnectorException("This connector doesn't support alter table type: %s",
-                        alterClause.getOpType());
+                        alterClause.getClass().getSimpleName());
             }
         }
     }

@@ -17,7 +17,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -60,7 +59,7 @@ public class AddRollupClause extends AlterTableClause {
     public AddRollupClause(String rollupName, List<String> columnNames,
                            List<String> dupKeys, String baseRollupName,
                            Map<String, String> properties, NodePosition pos) {
-        super(AlterOpType.ADD_ROLLUP, pos);
+        super(pos);
         this.rollupName = rollupName;
         this.columnNames = columnNames;
         this.dupKeys = dupKeys;

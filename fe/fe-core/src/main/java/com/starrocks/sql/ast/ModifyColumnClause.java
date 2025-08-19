@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -41,7 +40,7 @@ public class ModifyColumnClause extends AlterTableColumnClause {
 
     public ModifyColumnClause(ColumnDef columnDef, ColumnPosition colPos, String rollup,
                               Map<String, String> properties, NodePosition pos) {
-        super(AlterOpType.SCHEMA_CHANGE, rollup, properties, pos);
+        super(rollup, properties, pos);
         this.columnDef = columnDef;
         this.colPos = colPos;
     }

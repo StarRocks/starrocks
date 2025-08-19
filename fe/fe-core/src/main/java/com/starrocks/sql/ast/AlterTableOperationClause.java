@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -47,7 +46,7 @@ public class AlterTableOperationClause extends AlterTableClause {
     private RewriteDataOptions rewriteDataOptions;
 
     public AlterTableOperationClause(NodePosition pos, String tableOperationName, List<Expr> exprs, Expr where) {
-        super(AlterOpType.ALTER_TABLE_OPERATION, pos);
+        super(pos);
         this.tableOperationName = tableOperationName;
         this.exprs = exprs;
         rewriteDataOptions = new RewriteDataOptions(where, false, 256L * 1024 * 1024, 10L * 1024 * 1024 * 1024);

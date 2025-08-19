@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 public class AlterTableCommentClause extends AlterTableClause {
@@ -22,7 +21,7 @@ public class AlterTableCommentClause extends AlterTableClause {
     private final String newComment;
 
     public AlterTableCommentClause(String newComment, NodePosition pos) {
-        super(AlterOpType.ALTER_COMMENT, pos);
+        super(pos);
         this.newComment = newComment;
     }
 

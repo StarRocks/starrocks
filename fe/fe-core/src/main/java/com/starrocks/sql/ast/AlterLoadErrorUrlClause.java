@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.load.LoadErrorHub;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -34,7 +33,7 @@ public class AlterLoadErrorUrlClause extends AlterClause {
     }
 
     public AlterLoadErrorUrlClause(Map<String, String> properties, NodePosition pos) {
-        super(AlterOpType.ALTER_OTHER, pos);
+        super(pos);
         this.properties = properties;
     }
 
