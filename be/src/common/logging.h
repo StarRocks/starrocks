@@ -78,10 +78,6 @@
 #define VLOG_OPERATOR VLOG(3)
 #define VLOG_ROW VLOG(10)
 #define VLOG_PROGRESS VLOG(2)
-<<<<<<< HEAD
-=======
-#define VLOG_CACHE VLOG(3)
->>>>>>> 3309b7555e ([Refactor] Change some vlog level (#61995))
 
 #define VLOG_CONNECTION_IS_ON VLOG_IS_ON(2)
 #define VLOG_RPC_IS_ON VLOG_IS_ON(2)
