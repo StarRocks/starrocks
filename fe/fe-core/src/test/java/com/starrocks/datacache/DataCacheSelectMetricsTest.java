@@ -134,9 +134,9 @@ public class DataCacheSelectMetricsTest {
 
         prometheusMetricVisitor.getNodeInfo();
         String metricsInfo = prometheusMetricVisitor.build();
-        Assert.assertTrue(metricsInfo.contains("node_info{type=\"datacache_disk_quota\", backend=\"127.0.0.3\"} 2000"));
-        Assert.assertTrue(metricsInfo.contains("node_info{type=\"datacache_disk_used\", backend=\"127.0.0.3\"} 200"));
-        Assert.assertTrue(metricsInfo.contains("node_info{type=\"datacache_mem_quota\", backend=\"127.0.0.3\"} 1000"));
-        Assert.assertTrue(metricsInfo.contains("node_info{type=\"datacache_mem_used\", backend=\"127.0.0.3\"} 100"));
+        Assertions.assertTrue(metricsInfo.contains("node_info{type=\"datacache_disk_quota\", backend=\"127.0.0.3\"} 2000"));
+        Assertions.assertTrue(metricsInfo.contains("node_info{type=\"datacache_disk_used\", backend=\"127.0.0.3\"} 200"));
+        Assertions.assertTrue(metricsInfo.contains("node_info{type=\"datacache_mem_quota\", backend=\"127.0.0.3\"} 1000"));
+        Assertions.assertTrue(metricsInfo.contains("node_info{type=\"datacache_mem_used\", backend=\"127.0.0.3\"} 100"));
     }
 }
