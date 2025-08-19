@@ -141,9 +141,7 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getInputs().get(0).getOp();
             PhysicalHashAggregateOperator agg = (PhysicalHashAggregateOperator) optExpression.getOp();
 
-            // Now we only support one-stage AGG
-            // TODO: support multi-stage AGG
-            if (!agg.getType().isGlobal() || agg.getGroupBys().isEmpty()) {
+            if (agg.getGroupBys().isEmpty()) {
                 return null;
             }
 
@@ -183,7 +181,8 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
                         if (!column.isGeneratedColumn()) {
                             sortedColumns.add(schema.get(idx));
                         } else {
-                            Optional<List<Column>> columns = resolveEncodeSortKeys(column, schema, olapTable);
+
+                            Optional<List<Column>> columns = resolveGeneratedExpr(column, schema, olapTable);
                             if (columns.isEmpty()) {
                                 return false;
                             }
@@ -205,7 +204,7 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
         }
 
         // ORDER BY (encode_sort_key(k1, k2, k3))
-        private Optional<List<Column>> resolveEncodeSortKeys(Column column, List<Column> schema, OlapTable olapTable) {
+        private Optional<List<Column>> resolveGeneratedExpr(Column column, List<Column> schema, OlapTable olapTable) {
             Expr gen = column.getGeneratedColumnExpr(schema);
             List<Column> res = Lists.newArrayList();
             if (gen instanceof FunctionCallExpr funcCall &&
@@ -232,6 +231,8 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
                         return Optional.empty();
                     }
                 }
+            } else {
+                res.add(column);
             }
             if (res.isEmpty()) {
                 return Optional.empty();
