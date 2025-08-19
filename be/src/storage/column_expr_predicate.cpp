@@ -341,6 +341,8 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     // TODO: The logic for determining query_type will be abstracted into a separate method in the future.
     if (valid_match && expr->op() == TExprOpcode::MATCH_ANY) {
         query_type = InvertedIndexQueryType::MATCH_ANY_QUERY;
+    } else if (valid_match && expr->op() == TExprOpcode::MATCH_ALL) {
+        query_type = InvertedIndexQueryType::MATCH_ALL_QUERY;
     } else {
         query_type = has_wildcard ? InvertedIndexQueryType::MATCH_WILDCARD_QUERY : InvertedIndexQueryType::EQUAL_QUERY;
     }

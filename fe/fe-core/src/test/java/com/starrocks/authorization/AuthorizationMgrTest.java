@@ -57,6 +57,7 @@ import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -902,7 +903,10 @@ public class AuthorizationMgrTest {
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_role_user", ctx);
         ctx.getGlobalStateMgr().getAuthenticationMgr().createUser(createUserStmt);
-        UserIdentity testUser = createUserStmt.getUserIdentity();
+
+        UserRef user = createUserStmt.getUser();
+        UserIdentity testUser = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
 

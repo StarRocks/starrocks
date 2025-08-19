@@ -15,25 +15,19 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 // Alter clause.
 public abstract class AlterClause implements ParseNode {
 
-    protected AlterOpType opType;
 
     protected final NodePosition pos;
 
-    protected AlterClause(AlterOpType opType, NodePosition pos) {
+    protected AlterClause(NodePosition pos) {
         this.pos = pos;
-        this.opType = opType;
     }
 
-    public AlterOpType getOpType() {
-        return opType;
-    }
 
     @Override
     public NodePosition getPos() {

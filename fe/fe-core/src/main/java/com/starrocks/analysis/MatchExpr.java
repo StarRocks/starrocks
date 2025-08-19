@@ -62,7 +62,8 @@ public class MatchExpr extends Expr {
 
     public enum MatchOperator {
         MATCH("MATCH", TExprOpcode.MATCH),
-        MATCH_ANY("MATCH_ANY", TExprOpcode.MATCH_ANY);
+        MATCH_ANY("MATCH_ANY", TExprOpcode.MATCH_ANY),
+        MATCH_ALL("MATCH_ALL", TExprOpcode.MATCH_ALL);
 
         private final String name;
         private final TExprOpcode opcode;
