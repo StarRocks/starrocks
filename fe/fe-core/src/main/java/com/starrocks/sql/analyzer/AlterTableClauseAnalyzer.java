@@ -617,7 +617,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             if (distributionDesc instanceof RandomDistributionDesc && targetKeysType != KeysType.DUP_KEYS) {
                 throw new SemanticException(targetKeysType.toSql() + " must use hash distribution", distributionDesc.getPos());
             }
-            distributionDesc.analyze(columnSet);
+            DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
             clause.setDistributionDesc(distributionDesc);
 
             if (distributionDesc.getType() != olapTable.getDefaultDistributionInfo().getType()

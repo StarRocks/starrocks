@@ -19,8 +19,6 @@ import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.NotImplementedException;
 
-import java.util.Set;
-
 public class DistributionDesc implements ParseNode {
     protected DistributionInfoType type;
 
@@ -34,9 +32,6 @@ public class DistributionDesc implements ParseNode {
         this.pos = pos;
     }
 
-    public void analyze(Set<String> colSet) {
-        throw new NotImplementedException();
-    }
 
     public DistributionInfoType getType() {
         return type;

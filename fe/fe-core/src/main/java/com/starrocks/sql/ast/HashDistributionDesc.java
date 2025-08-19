@@ -17,11 +17,9 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
-import java.util.Set;
 
 public class HashDistributionDesc extends DistributionDesc {
     private final int numBucket;
@@ -51,21 +49,6 @@ public class HashDistributionDesc extends DistributionDesc {
         return numBucket;
     }
 
-    @Override
-    public void analyze(Set<String> cols) {
-        if (numBucket < 0) {
-            throw new SemanticException("Number of hash distribution is zero.");
-        }
-
-        if (distributionColumnNames == null || distributionColumnNames.size() == 0) {
-            throw new SemanticException("Number of hash column is zero.");
-        }
-        for (String columnName : distributionColumnNames) {
-            if (!cols.contains(columnName)) {
-                throw new SemanticException("Distribution column(" + columnName + ") doesn't exist.");
-            }
-        }
-    }
 
     @Override
     public String toString() {

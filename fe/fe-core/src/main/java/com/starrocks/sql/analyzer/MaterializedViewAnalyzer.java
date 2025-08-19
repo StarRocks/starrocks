@@ -234,6 +234,7 @@ public class MaterializedViewAnalyzer {
     /**
      * We can support some external tables for creating materialized view.
      * For more details see: https://github.com/StarRocks/starrocks/issues/19581
+     *
      * @param table : table to check
      * @return true if the external table is supported for materialized view
      */
@@ -1105,6 +1106,7 @@ public class MaterializedViewAnalyzer {
                 }
             }
         }
+
         private boolean shouldMVPartitionByListType(CreateMaterializedViewStatement statement,
                                                     List<Expr> mvPartitionByExprs,
                                                     Expr partitionRefTableExpr,
@@ -1213,7 +1215,7 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private  void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
+        private void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
             if (partitionByExprs.size() > 1) {
                 throw new SemanticException("Materialized view with range partition type " +
                         "only supports single column");
@@ -1266,8 +1268,9 @@ public class MaterializedViewAnalyzer {
 
         /**
          * Check if the partition function of base table is supported.
+         *
          * @param partitionByExpr : base table's partition function
-         * @param table : base table
+         * @param table           : base table
          */
         private void checkBaseTableSupportedPartitionFunc(Expr partitionByExpr,
                                                           OlapTable table) {
@@ -1521,7 +1524,7 @@ public class MaterializedViewAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
                 }
             }
-            distributionDesc.analyze(columnSet);
+            DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
         }
 
         private Short autoInferReplicationNum(Map<TableName, Table> tableNameTableMap) {
