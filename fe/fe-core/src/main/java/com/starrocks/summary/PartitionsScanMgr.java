@@ -15,14 +15,14 @@
 package com.starrocks.summary;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SimpleExecutor;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
@@ -33,7 +33,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
 public class PartitionsScanMgr {
@@ -47,7 +49,8 @@ public class PartitionsScanMgr {
             1, Integer.MAX_VALUE,
             "partitions-scan-executor", true);
 
-    private final List<PartitionsScan> infos = Lists.newArrayListWithCapacity(CONVERT_BATCH_SIZE + 1);
+    private final List<PartitionsScan> infosList = Lists.newArrayListWithCapacity(CONVERT_BATCH_SIZE + 1);
+    private final Map<String, Double> infosMap = new HashMap<>(CONVERT_BATCH_SIZE + 1);
 
     private StringBuffer buffer = new StringBuffer("[");
 
@@ -71,22 +74,28 @@ public class PartitionsScanMgr {
 
         List<ScanNode> scanNodes = plan.getScanNodes();
         for (ScanNode sn : scanNodes) {
-            Database db = MetaUtils.getDatabaseByTableId(sn.getTableId());
-            if (db.getOriginName() != "") {
+            if (sn instanceof OlapScanNode) {
+                OlapScanNode osn = (OlapScanNode) sn;
+                OlapTable olapTable = osn.getOlapTable();
                 String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-                String dbName = db.getOriginName();
-                String tableName = sn.getTableName();
-                List<String> selectedPartitionNames = sn.getSelectedPartitionNames();
-                for (String selectedPartitionName : selectedPartitionNames) {
-                    infos.add(new PartitionsScan(catalogName, dbName, tableName, selectedPartitionName, 1.0));
+                String dbName = olapTable.mayGetDatabaseName().orElse("Unknown");
+                String tableName = osn.getTableName();
+                for (String selectedPartitionName : osn.getSelectedPartitionNames()) {
+                    String key = catalogName + "-" + dbName + "-" + tableName + "-" + selectedPartitionName;
+                    infosMap.put(key, infosMap.getOrDefault(key, 0.0d) + 1);
                 }
             }
         }
 
-        if (infos.size() > CONVERT_BATCH_SIZE || lastLoadTime.plusSeconds(
+        if (infosMap.size() > CONVERT_BATCH_SIZE || lastLoadTime.plusSeconds(
                 GlobalVariable.partitionsScanLoadIntervalSeconds).isBefore(LocalDateTime.now())) {
-            loadPartitionsScan(Lists.newArrayList(infos));
-            infos.clear();
+            for (String key : infosMap.keySet()) {
+                infosList.add(new PartitionsScan(key.split("-")[0], key.split("-")[1], key.split("-")[2],
+                        key.split("-")[3], infosMap.get(key)));
+            }
+            loadPartitionsScan(Lists.newArrayList(infosList));
+            infosMap.clear();
+            infosList.clear();
         }
     }
 

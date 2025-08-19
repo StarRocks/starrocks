@@ -24,7 +24,7 @@ set global partitions_scan_load_interval_seconds=0;
 
 select count(*) from test_partitions_scan_db.test_partitions_scan_tab;
 
-select sleep(2);
+select sleep(3);
 
 select count(*) from _statistics_.partitions_scan where db_name='test_partitions_scan_db' and table_name='test_partitions_scan_tab';
 
@@ -33,7 +33,7 @@ select cast(sum(scan_count) as int) from _statistics_.partitions_scan where db_n
 
 select count(*) from test_partitions_scan_db.test_partitions_scan_tab;
 
-select sleep(2);
+select sleep(3);
 
 select count(*) from _statistics_.partitions_scan where db_name='test_partitions_scan_db' and table_name='test_partitions_scan_tab';
 

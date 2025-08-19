@@ -503,10 +503,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return getNodeExplainString(prefix, TExplainLevel.VERBOSE);
     }
 
-    public List<String> getSelectedPartitionNames() {
-        return Lists.newArrayList();
-    }
-
     // Convert this plan node, including all children, to its Thrift representation.
     public TPlan treeToThrift() {
         TPlan result = new TPlan();

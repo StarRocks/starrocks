@@ -129,10 +129,6 @@ public abstract class ScanNode extends PlanNode {
     public int getBucketNums() throws StarRocksException {
         throw new StarRocksException("Error when using bucket-aware execution");
     }
-  
-    public long getTableId() {
-        return desc.getTable().getId();
-    }
 
     public boolean isLocalNativeTable() {
         return false;

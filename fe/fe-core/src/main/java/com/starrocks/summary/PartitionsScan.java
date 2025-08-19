@@ -80,18 +80,6 @@ public class PartitionsScan {
         this.scanCount = scanCount;
     }
 
-    @Override
-    public String toString() {
-        return "PartitionsScan{" +
-                "dt='" + dt.format(DateUtils.DATE_FORMATTER_UNIX) + '\'' +
-                "catalogName='" + catalogName + '\'' +
-                ", dbName='" + dbName + '\'' +
-                ", tableName='" + tableName + '\'' +
-                ", partitionName='" + partitionName + '\'' +
-                ", scanCount=" + scanCount +
-                '}';
-    }
-
     String toJSON() {
         Map<String, Object> jsonMaps = Maps.newHashMap();
         jsonMaps.put("dt", dt.format(DateUtils.DATE_FORMATTER_UNIX));

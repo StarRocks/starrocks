@@ -91,18 +91,6 @@ public class MetaUtils {
         }
     }
 
-    public static Database getDatabaseByTableId(long tableId) {
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
-        for (long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-            Table table = db.getTable(tableId);
-            if (table != null) {
-                return db;
-            }
-        }
-        return new Database();
-    }
-
     // get table by tableName, unlike getTable, this interface is session aware,
     // which means if there is a temporary table with the same name,
     // use temporary table first, otherwise, treat it as a permanent table
