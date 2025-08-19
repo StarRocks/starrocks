@@ -496,7 +496,19 @@
                 "administration/Data_recovery",
                 "administration/Meta_recovery",
                 "administration/data_migration_tool",
+<<<<<<< HEAD
                  "administration/http_interface",
+=======
+                "administration/http_interface",
+                "administration/sql_digest",
+        {
+            "type": "category",
+            "label": "User Privileges and Authentication",
+            "link": {
+                "type": "generated-index"
+            },
+            "items": [
+>>>>>>> c8a5f412e5 ([Doc] Fix SQL Digest (#62075))
                 {
                     "type": "category",
                     "label": "User Privileges and Authentication",
