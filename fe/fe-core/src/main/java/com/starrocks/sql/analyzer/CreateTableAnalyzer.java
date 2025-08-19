@@ -33,7 +33,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -574,7 +573,6 @@ public class CreateTableAnalyzer {
                         partitionDesc instanceof RangePartitionDesc ||
                         partitionDesc instanceof SingleItemListPartitionDesc ||
                         partitionDesc instanceof SingleRangePartitionDesc) {
-                    //if (partitionDesc.getType() == PartitionType.RANGE || partitionDesc.getType() == PartitionType.LIST) {
                     try {
                         PartitionDescAnalyzer.analyze(partitionDesc);
                         partitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
@@ -654,7 +652,8 @@ public class CreateTableAnalyzer {
                 throw new SemanticException(keysDesc.getKeysType().toSql()
                         + " must use hash distribution", distributionDesc.getPos());
             }
-            if (distributionDesc.getBuckets() > Config.max_bucket_number_per_partition && stmt.isOlapEngine()) {
+            if (distributionDesc.getBuckets() > Config.max_bucket_number_per_partition && stmt.isOlapEngine()
+                    && stmt.getPartitionDesc() != null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TOO_MANY_BUCKETS, Config.max_bucket_number_per_partition);
             }
             Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
