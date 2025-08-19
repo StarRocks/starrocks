@@ -519,6 +519,13 @@ DEFINE_UNARY_FN_WITH_IMPL(day_of_week_isoImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(day_of_week_iso, TYPE_DATETIME, TYPE_INT);
 
+// week_day
+DEFINE_UNARY_FN_WITH_IMPL(week_dayImpl, v) {
+    int day = ((DateValue)v).weekday();
+    return (day + 6) % 7;
+}
+DEFINE_TIME_UNARY_FN(week_day, TYPE_DATETIME, TYPE_INT);
+
 DEFINE_UNARY_FN_WITH_IMPL(time_to_secImpl, v) {
     return static_cast<int64_t>(v);
 }

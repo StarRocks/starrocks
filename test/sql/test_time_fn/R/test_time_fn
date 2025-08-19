@@ -761,6 +761,28 @@ select dayofweek_iso(NULL);
 None
 -- !result
 
+-- name: test_week_day
+select weekday("2023-01-01");
+-- result:
+6
+-- !result
+select weekday("2023-01-02");
+-- result:
+0
+-- !result
+select weekday("2023-01-03");
+-- result:
+1
+-- !result
+select weekday("");
+-- result:
+None
+-- !result
+select weekday(NULL);
+-- result:
+None
+-- !result
+
 -- name: test_makedate
 CREATE TABLE IF NOT EXISTS `makedate_test` (
   `id` int,
