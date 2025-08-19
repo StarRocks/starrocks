@@ -67,6 +67,31 @@ Status MatchAnyOperator::_match_internal(lucene::search::HitCollector* hit_colle
     return Status::OK();
 }
 
+Status MatchAllOperator::_match_internal(lucene::search::HitCollector* hit_collector) {
+    try {
+        std::vector<TermPtr> terms;
+        std::vector<TermQueryPtr> queries;
+
+        terms.reserve(_tokens.size());
+        queries.reserve(_tokens.size());
+
+        for (const auto& token : _tokens) {
+            terms.push_back(makeTerm(_field_name, token));
+            queries.push_back(makeTermQuery(terms.back().get()));
+        }
+
+        lucene::search::BooleanQuery boolean_query;
+        for (auto& query : queries) {
+            boolean_query.add(query.get(), lucene::search::BooleanClause::MUST);
+        }
+
+        _searcher->_search(&boolean_query, nullptr, hit_collector);
+    } catch (...) {
+        return Status::InternalError("Unexpected exception caught in MatchAllOperator::_match_internal()");
+    }
+    return Status::OK();
+}
+
 Status MatchRangeOperator::_match_internal(lucene::search::HitCollector* hit_collector) {
     std::wstring search_word(_bound.begin(), _bound.end());
     lucene::index::Term term(_field_name.c_str(), search_word.c_str());
