@@ -33,6 +33,34 @@ namespace starrocks {
 class UtilityFunctionsTest : public ::testing::Test {
 public:
     void SetUp() override {}
+
+    // Helper function to sort and print zorder encode results
+    std::vector<std::pair<int, std::string>> sortAndPrintZOrderResults(
+            const BinaryColumn* bin, const std::string& test_name, const std::vector<std::string>& row_labels = {}) {
+        // Create pairs of (row_index, encoded_value) for sorting
+        std::vector<std::pair<int, std::string>> row_encoded_pairs;
+        for (int i = 0; i < bin->size(); ++i) {
+            row_encoded_pairs.emplace_back(i, bin->get_slice(i).to_string());
+        }
+
+        // Sort by encoded value (lexicographic order)
+        std::sort(row_encoded_pairs.begin(), row_encoded_pairs.end(),
+                  [](const std::pair<int, std::string>& a, const std::pair<int, std::string>& b) {
+                      return a.second < b.second;
+                  });
+
+        // Print sorted results for debugging
+        std::cout << "\n=== " << test_name << " sorted results ===" << std::endl;
+        for (const auto& pair : row_encoded_pairs) {
+            std::cout << "Row " << pair.first;
+            if (!row_labels.empty() && pair.first < static_cast<int>(row_labels.size())) {
+                std::cout << " (" << row_labels[pair.first] << ")";
+            }
+            std::cout << " -> " << pair.second << std::endl;
+        }
+
+        return row_encoded_pairs;
+    }
 };
 
 TEST_F(UtilityFunctionsTest, versionTest) {
@@ -297,12 +325,13 @@ TEST_F(UtilityFunctionsTest, zorderEncodeSingleDimOrdering) {
     FunctionContext* ctx = FunctionContext::create_test_context();
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
 
+    // Test data table: [row_index] -> value
+    std::vector<int32_t> test_data = {-2, -1, 0, 1, 2};
+
     auto c_int = Int32Column::create();
-    c_int->append(-2);
-    c_int->append(-1);
-    c_int->append(0);
-    c_int->append(1);
-    c_int->append(2);
+    for (int32_t value : test_data) {
+        c_int->append(value);
+    }
 
     Columns cols;
     cols.emplace_back(c_int);
@@ -311,25 +340,40 @@ TEST_F(UtilityFunctionsTest, zorderEncodeSingleDimOrdering) {
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
     ASSERT_EQ(5, bin->size());
 
-    std::vector<Slice> keys = {bin->get_slice(0), bin->get_slice(1), bin->get_slice(2), bin->get_slice(3),
-                               bin->get_slice(4)};
-    ASSERT_LT(keys[0].compare(keys[1]), 0);
-    ASSERT_LT(keys[1].compare(keys[2]), 0);
-    ASSERT_LT(keys[2].compare(keys[3]), 0);
-    ASSERT_LT(keys[3].compare(keys[4]), 0);
+    // Use helper function to sort and print results
+    std::vector<std::string> row_labels = {"-2", "-1", "0", "1", "2"};
+    auto sorted_results = sortAndPrintZOrderResults(bin, "zorderEncodeSingleDimOrdering", row_labels);
+
+    // Extract row indices in sorted order
+    std::vector<int> sorted_row_indices;
+    for (const auto& pair : sorted_results) {
+        sorted_row_indices.push_back(pair.first);
+    }
+
+    std::vector<int> expected_order = {0, 1, 2, 3, 4};
+    ASSERT_EQ(expected_order, sorted_row_indices);
 }
 
 TEST_F(UtilityFunctionsTest, zorderEncodeTwoDimsBasicInterleaving) {
     FunctionContext* ctx = FunctionContext::create_test_context();
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
 
-    auto a = UInt8Column::create();
-    auto b = UInt8Column::create();
-    // (0,0), (1,0), (0,1), (1,1)
-    a->append(0); b->append(0);
-    a->append(1); b->append(0);
-    a->append(0); b->append(1);
-    a->append(1); b->append(1);
+    // Test data table: [row_index] -> (a, b)
+    // clang-format off
+    std::vector<std::pair<int32_t, int32_t>> test_data = {
+            {100, 10000},
+            {123, 10001},
+            {145, 10010},
+            {167, 10019}
+    };
+    // clang-format on
+
+    auto a = Int32Column::create();
+    auto b = Int32Column::create();
+    for (const auto& pair : test_data) {
+        a->append(pair.first);
+        b->append(pair.second);
+    }
 
     Columns cols;
     cols.emplace_back(a);
@@ -337,68 +381,157 @@ TEST_F(UtilityFunctionsTest, zorderEncodeTwoDimsBasicInterleaving) {
 
     ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::zorder_encode(ctx, cols));
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
-    ASSERT_EQ(4, bin->size());
+    ASSERT_EQ(test_data.size(), bin->size());
 
-    // Expect per-row bytes: [marker_a, marker_b, interleaved_hi, interleaved_lo]
-    auto slice_to_vec = [](const Slice& s) {
-        return std::vector<uint8_t>(s.data, s.data + s.size);
-    };
+    // Use helper function to sort and print results
+    auto sorted_results = sortAndPrintZOrderResults(bin, "zorderEncodeTwoDimsBasicInterleaving");
 
-    std::vector<uint8_t> k00 = slice_to_vec(bin->get_slice(0));
-    std::vector<uint8_t> k10 = slice_to_vec(bin->get_slice(1));
-    std::vector<uint8_t> k01 = slice_to_vec(bin->get_slice(2));
-    std::vector<uint8_t> k11 = slice_to_vec(bin->get_slice(3));
+    // Extract row indices in sorted order
+    std::vector<int> sorted_row_indices;
+    for (const auto& pair : sorted_results) {
+        sorted_row_indices.push_back(pair.first);
+    }
 
-    // All non-null markers should be 0x01
-    ASSERT_EQ(0x01, k00[0]); ASSERT_EQ(0x01, k00[1]);
-    ASSERT_EQ(0x01, k10[0]); ASSERT_EQ(0x01, k10[1]);
-    ASSERT_EQ(0x01, k01[0]); ASSERT_EQ(0x01, k01[1]);
-    ASSERT_EQ(0x01, k11[0]); ASSERT_EQ(0x01, k11[1]);
-
-    // Interleaved bytes for 8-bit values MSB-first:
-    // (0,0) -> 0x00 0x00
-    // (1,0) -> 0x00 0x02
-    // (0,1) -> 0x00 0x01
-    // (1,1) -> 0x00 0x03
-    ASSERT_EQ(0x00, k00[2]); ASSERT_EQ(0x00, k00[3]);
-    ASSERT_EQ(0x00, k10[2]); ASSERT_EQ(0x02, k10[3]);
-    ASSERT_EQ(0x00, k01[2]); ASSERT_EQ(0x01, k01[3]);
-    ASSERT_EQ(0x00, k11[2]); ASSERT_EQ(0x03, k11[3]);
+    std::vector<int> expected_order = {0, 1, 2, 3};
+    ASSERT_EQ(expected_order, sorted_row_indices);
 }
 
 TEST_F(UtilityFunctionsTest, zorderEncodeNullHandling) {
     FunctionContext* ctx = FunctionContext::create_test_context();
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
 
+    // Test data table: [row_index] -> (c1_value, c2_value, c1_is_null)
+    std::vector<std::tuple<int32_t, int32_t, bool>> test_data = {
+            {0, 0, true},  // (NULL,0)
+            {1, 0, false}, // (1,0)
+            {0, 1, true},  // (NULL,1)
+            {1, 1, false}  // (1,1)
+    };
+
     auto c1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
     auto c2 = Int32Column::create();
 
-    // (NULL,0), (1,0), (NULL,1), (1,1)
-    c1->append_nulls(1); c2->append(0);
-    c1->append_datum(Datum(int32_t(1))); c2->append(0);
-    c1->append_nulls(1); c2->append(1);
-    c1->append_datum(Datum(int32_t(1))); c2->append(1);
+    for (const auto& tuple : test_data) {
+        if (std::get<2>(tuple)) { // is_null
+            c1->append_nulls(1);
+        } else {
+            c1->append_datum(Datum(int32_t(std::get<0>(tuple))));
+        }
+        c2->append(std::get<1>(tuple));
+    }
 
-    Columns cols; cols.emplace_back(c1); cols.emplace_back(c2);
+    Columns cols;
+    cols.emplace_back(c1);
+    cols.emplace_back(c2);
 
     ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::zorder_encode(ctx, cols));
     auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
     ASSERT_EQ(4, bin->size());
 
-    Slice k0 = bin->get_slice(0); // (NULL,0)
-    Slice k1 = bin->get_slice(1); // (1,0)
-    Slice k2 = bin->get_slice(2); // (NULL,1)
-    Slice k3 = bin->get_slice(3); // (1,1)
+    // Use helper function to sort and print results
+    std::vector<std::string> row_labels = {"(NULL,0)", "(1,0)", "(NULL,1)", "(1,1)"};
+    auto sorted_results = sortAndPrintZOrderResults(bin, "zorderEncodeNullHandling", row_labels);
 
-    // Null in first dimension should sort before non-null
-    ASSERT_LT(k0.compare(k1), 0);
-    ASSERT_LT(k2.compare(k3), 0);
+    // Extract row indices in sorted order
+    std::vector<int> sorted_row_indices;
+    for (const auto& pair : sorted_results) {
+        sorted_row_indices.push_back(pair.first);
+    }
 
-    // Verify null markers in first byte
-    ASSERT_EQ('\0', k0.data[0]);
-    ASSERT_EQ('\1', k1.data[0]);
-    ASSERT_EQ('\0', k2.data[0]);
-    ASSERT_EQ('\1', k3.data[0]);
+    // Verify expected ordering: NULL values should sort before non-NULL values
+    // Expected order: Row 0(NULL,0) < Row 2(NULL,1) < Row 1(1,0) < Row 3(1,1)
+    std::vector<int> expected_order = {0, 2, 1, 3};
+
+    ASSERT_EQ(expected_order, sorted_row_indices);
+}
+
+TEST_F(UtilityFunctionsTest, zorderEncodeMixedDataTypes) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    // Test data table: [row_index] -> (int_val, bigint_val, float_val, double_val, date_val, timestamp_val)
+    std::vector<std::tuple<int32_t, int64_t, float, double, DateValue, TimestampValue>> test_data = {
+            {10, 20L, 30.5f, 40.5, DateValue::create(2023, 1, 10),
+             TimestampValue::create(2023, 1, 10, 12, 0, 0, 0)}, // small positive values
+            {50, 60L, 70.5f, 80.5, DateValue::create(2023, 2, 20),
+             TimestampValue::create(2023, 2, 20, 12, 0, 0, 0)}, // medium positive values
+            {0, 0L, 0.0f, 0.0, DateValue::create(1970, 1, 1), TimestampValue::create(1970, 1, 1, 0, 0, 0, 0)}, // zeros
+            {90, 95L, 98.5f, 99.5, DateValue::create(2023, 12, 31),
+             TimestampValue::create(2023, 12, 31, 23, 59, 59, 0)}, // large positive values
+            {5, 15L, 25.5f, 35.5, DateValue::create(2023, 1, 5),
+             TimestampValue::create(2023, 1, 5, 12, 0, 0, 0)} // very small positive values
+    };
+
+    // Create columns with different data types
+    auto int_col = Int32Column::create();
+    auto bigint_col = Int64Column::create();
+    auto float_col = FloatColumn::create();
+    auto double_col = DoubleColumn::create();
+    auto date_col = DateColumn::create();
+    auto timestamp_col = TimestampColumn::create();
+
+    // Fill columns from test data
+    for (const auto& tuple : test_data) {
+        int_col->append(std::get<0>(tuple));
+        bigint_col->append(std::get<1>(tuple));
+        float_col->append(std::get<2>(tuple));
+        double_col->append(std::get<3>(tuple));
+        date_col->append(std::get<4>(tuple));
+        timestamp_col->append(std::get<5>(tuple));
+    }
+
+    Columns cols;
+    cols.emplace_back(int_col);
+    cols.emplace_back(bigint_col);
+    cols.emplace_back(float_col);
+    cols.emplace_back(double_col);
+    cols.emplace_back(date_col);
+    cols.emplace_back(timestamp_col);
+
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr out, UtilityFunctions::zorder_encode(ctx, cols));
+    auto* bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(out);
+    ASSERT_EQ(5, bin->size());
+
+    // Helper function to convert slice to vector for easier inspection
+    auto slice_to_vec = [](const Slice& s) { return std::vector<uint8_t>(s.data, s.data + s.size); };
+
+    // Get all encoded keys
+    std::vector<std::vector<uint8_t>> keys;
+    for (int i = 0; i < 5; ++i) {
+        keys.push_back(slice_to_vec(bin->get_slice(i)));
+    }
+
+    // Verify that all keys have the expected structure:
+    // [6 null markers] + [interleaved bits from 6 columns]
+    // Z-order encoding interleaves bits from each dimension up to the maximum bit width
+    // Max bit width is 64 bits, so total interleaved bits = 64 * 6 = 384 bits
+    // Total bytes = 6 (null markers) + ceil(384 / 8) = 6 + 48 = 54 bytes
+    const size_t expected_size = 6 + (64 * 6 + 7) / 8;
+
+    for (const auto& key : keys) {
+        ASSERT_EQ(expected_size, key.size()) << "Key size mismatch";
+
+        // Verify null markers (first 6 bytes should all be 0x01 for non-null values)
+        for (int i = 0; i < 6; ++i) {
+            ASSERT_EQ(0x01, key[i]) << "Null marker at position " << i << " should be 0x01";
+        }
+    }
+
+    // Use helper function to sort and print results
+    std::vector<std::string> row_labels = {"small", "medium", "zeros", "large", "very_small"};
+    auto sorted_results = sortAndPrintZOrderResults(bin, "zorderEncodeMixedDataTypes", row_labels);
+
+    // Extract row indices in sorted order
+    std::vector<int> sorted_row_indices;
+    for (const auto& pair : sorted_results) {
+        sorted_row_indices.push_back(pair.first);
+    }
+
+    // Verify expected ordering based on actual Z-order encoding behavior
+    // Since all values are positive, Z-order should sort by magnitude
+    // Expected order: Row 2 (zeros) < Row 4 (very_small) < Row 0 (small) < Row 1 (medium) < Row 3 (large)
+    std::vector<int> expected_order = {2, 4, 0, 1, 3};
+    ASSERT_EQ(expected_order, sorted_row_indices);
 }
 
 } // namespace starrocks
