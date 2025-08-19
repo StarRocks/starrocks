@@ -195,9 +195,9 @@ public class InsertPlanner {
                 olapTable.getBaseSchemaWithoutGeneratedColumn().size();
         int totalColumnCount = olapTable.getBaseSchemaWithoutGeneratedColumn().size();
         // use COLUMN_UPSERT_MODE when explicitly set to column mode
-        if (sessionPartialUpdateMode.equals("column")) {
+        if (sessionPartialUpdateMode.equalsIgnoreCase("column")) {
             return true;
-        } else if (sessionPartialUpdateMode.equals("auto")) {
+        } else if (sessionPartialUpdateMode.equalsIgnoreCase("auto")) {
             // @see com.starrocks.sql.analyzer.UpdateAnalyzer#checkIfUsePartialUpdate
             return insertColumnCount <= 3 && insertColumnCount < totalColumnCount * 0.3;
         }
