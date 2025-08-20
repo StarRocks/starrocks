@@ -57,7 +57,6 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.Pair;
@@ -103,7 +102,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.opentest4j.AssertionFailedError;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -113,7 +111,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
-import static com.starrocks.common.Config.http_port;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public abstract class StarRocksHttpTestCase {
@@ -567,7 +564,7 @@ public abstract class StarRocksHttpTestCase {
 
                 nodeMgr.getSelfNode();
                 minTimes = 0;
-                result = new Pair<>(frontend.getHost(),  HTTP_PORT);
+                result = new Pair<>(frontend.getHost(), HTTP_PORT);
             }
         };
 

@@ -146,7 +146,6 @@ public class BaseRequest {
         return params.get(key) != null ? params.get(key) : defaultValue;
     }
 
-
     public String getContent() throws DdlException {
         if (request instanceof FullHttpRequest) {
             FullHttpRequest fullHttpRequest = (FullHttpRequest) request;

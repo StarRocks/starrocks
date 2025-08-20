@@ -14,7 +14,6 @@
 
 package com.starrocks.http.rest.v2;
 
-import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.starrocks.common.Pair;
 import com.starrocks.http.StarRocksHttpTestCase;
@@ -22,7 +21,6 @@ import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
-import io.netty.handler.codec.http.HttpMethod;
 import mockit.Mock;
 import mockit.MockUp;
 import okhttp3.Request;
