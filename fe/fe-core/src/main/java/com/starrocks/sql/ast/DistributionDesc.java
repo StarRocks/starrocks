@@ -15,19 +15,10 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
-import com.starrocks.common.DdlException;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.NotImplementedException;
 
-import java.util.List;
-import java.util.Set;
-
 public class DistributionDesc implements ParseNode {
-    protected DistributionInfoType type;
-
     protected final NodePosition pos;
 
     public DistributionDesc() {
@@ -38,19 +29,7 @@ public class DistributionDesc implements ParseNode {
         this.pos = pos;
     }
 
-    public void analyze(Set<String> colSet) {
-        throw new NotImplementedException();
-    }
-
-    public DistributionInfoType getType() {
-        return type;
-    }
-
     public int getBuckets() {
-        throw new NotImplementedException();
-    }
-
-    public DistributionInfo toDistributionInfo(List<Column> columns) throws DdlException {
         throw new NotImplementedException();
     }
 

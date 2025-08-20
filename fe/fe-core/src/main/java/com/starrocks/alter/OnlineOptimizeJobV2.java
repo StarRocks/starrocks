@@ -23,6 +23,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
@@ -434,7 +435,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         try {
             targetTable.setState(OlapTableState.UPDATING_META);
             if (allPartitionOptimized && optimizeClause.getDistributionDesc() != null) {
-                this.distributionInfo = optimizeClause.getDistributionDesc().toDistributionInfo(targetTable.getColumns());
+                this.distributionInfo =
+                        DistributionInfoBuilder.build(optimizeClause.getDistributionDesc(), targetTable.getColumns());
                 targetTable.setDefaultDistributionInfo(distributionInfo);
             }
             targetTable.setState(OlapTableState.NORMAL);

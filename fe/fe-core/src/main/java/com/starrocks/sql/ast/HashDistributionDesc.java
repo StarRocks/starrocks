@@ -16,20 +16,12 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
-import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.common.DdlException;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
-import java.util.Set;
 
 public class HashDistributionDesc extends DistributionDesc {
-    private int numBucket;
+    private final int numBucket;
     private final List<String> distributionColumnNames;
 
     public HashDistributionDesc() {
@@ -42,7 +34,6 @@ public class HashDistributionDesc extends DistributionDesc {
 
     public HashDistributionDesc(int numBucket, List<String> distributionColumnNames, NodePosition pos) {
         super(pos);
-        type = DistributionInfoType.HASH;
         this.numBucket = numBucket;
         this.distributionColumnNames = distributionColumnNames;
     }
@@ -55,54 +46,6 @@ public class HashDistributionDesc extends DistributionDesc {
     public int getBuckets() {
         return numBucket;
     }
-
-    @Override
-    public void analyze(Set<String> cols) {
-        if (numBucket < 0) {
-            throw new SemanticException("Number of hash distribution is zero.");
-        }
-
-        if (distributionColumnNames == null || distributionColumnNames.size() == 0) {
-            throw new SemanticException("Number of hash column is zero.");
-        }
-        for (String columnName : distributionColumnNames) {
-            if (!cols.contains(columnName)) {
-                throw new SemanticException("Distribution column(" + columnName + ") doesn't exist.");
-            }
-        }
-    }
-
-    @Override
-    public DistributionInfo toDistributionInfo(List<Column> columns) throws DdlException {
-        List<Column> distributionColumns = Lists.newArrayList();
-
-        // check and get distribution column
-        for (String colName : distributionColumnNames) {
-            boolean find = false;
-            for (Column column : columns) {
-                if (column.getName().equalsIgnoreCase(colName)) {
-                    if (!column.isKey() && column.getAggregationType() != AggregateType.NONE) {
-                        throw new DdlException("Distribution column[" + colName + "] is not key column");
-                    }
-
-                    if (!column.getType().canDistributedBy()) {
-                        throw new DdlException(column.getType() + " column can not be distribution column");
-                    }
-
-                    distributionColumns.add(column);
-                    find = true;
-                    break;
-                }
-            }
-            if (!find) {
-                throw new DdlException("Distribution column[" + colName + "] does not found");
-            }
-        }
-
-        return new HashDistributionInfo(numBucket, distributionColumns);
-    }
-
-
 
 
     @Override

@@ -70,6 +70,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -902,7 +903,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         List<Column> baseSchema = olapTable.getBaseSchema();
         DistributionInfo defaultDistributionInfo = olapTable.getDefaultDistributionInfo();
         if (distributionDesc != null) {
-            distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
+            distributionInfo = DistributionInfoBuilder.build(distributionDesc, baseSchema);
             // for now. we only support modify distribution's bucket num
             if (distributionInfo.getType() != defaultDistributionInfo.getType()) {
                 throw new DdlException("Cannot assign different distribution type. default is: "
@@ -2915,7 +2916,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
-        DistributionInfo baseDistribution = distributionDesc.toDistributionInfo(baseSchema);
+        DistributionInfo baseDistribution = DistributionInfoBuilder.build(distributionDesc, baseSchema);
         // create refresh scheme
         MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeClause refreshSchemeDesc = stmt.getRefreshSchemeDesc();
@@ -5033,7 +5034,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             Partition newPartition = null;
             if (distributionDesc != null) {
-                DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(olapTable.getColumns());
+                DistributionInfo distributionInfo = DistributionInfoBuilder.build(distributionDesc, olapTable.getColumns());
                 if (distributionInfo.getBucketNum() == 0) {
                     Partition sourcePartition = olapTable.getPartition(sourcePartitionId);
                     olapTable.optimizeDistribution(distributionInfo, sourcePartition);
