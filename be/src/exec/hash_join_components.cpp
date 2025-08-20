@@ -140,8 +140,6 @@ public:
 
     bool not_empty() const { return !is_empty(); }
 
-    size_t memory_usage() const { return _tracker->consumption(); }
-
 private:
     MemTracker* _tracker;
     std::deque<ChunkPtr> _chunks;
