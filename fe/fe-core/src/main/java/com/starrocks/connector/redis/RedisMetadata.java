@@ -21,7 +21,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.RedisTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
@@ -121,8 +120,7 @@ public class RedisMetadata implements ConnectorMetadata {
                 }
                 if (table.getSchemaName().equalsIgnoreCase(dbName) && table.getTableName().equalsIgnoreCase(tblName)) {
                     LOG.debug("Redis table %s.%s: %s", dbName, tblName, table);
-                    properties.put(RedisTable.VALUE_DATA_FORMAT, table.getValue().getDataFormat());
-                    return toRedisTable(table, properties, tblName, dbName, catalogName);
+                    return toRedisTable(table, properties, tblName, dbName, catalogName, table.getValue().getDataFormat());
                 }
             }
         }
@@ -146,17 +144,11 @@ public class RedisMetadata implements ConnectorMetadata {
     }
 
     public static RedisTable toRedisTable(RedisTableDescription table, Map<String, String> properties,
-                                          String tableName, String dbName, String catalogName) {
+                                          String tableName, String dbName, String catalogName, String valueDataFormat) {
 
         List<Column> columns = RedisUtil.convertColumnSchema(table);
-        RedisTable redisTable = null;
-        try {
-            redisTable = new RedisTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
-                    catalogName, dbName, tableName, columns, properties);
-        } catch (DdlException e) {
-            throw new RuntimeException(e);
-        }
 
-        return redisTable;
+        return new RedisTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                catalogName, dbName, tableName, columns, properties, valueDataFormat);
     }
 }
