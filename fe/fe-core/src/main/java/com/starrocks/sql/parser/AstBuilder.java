@@ -2240,6 +2240,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName mvName = qualifiedNameToTableName(mvQualifiedName);
         PartitionRangeDesc rangePartitionDesc = null;
         Set<PListCell> cells = null;
+
         if (context.partitionRangeDesc() != null) {
             rangePartitionDesc =
                     (PartitionRangeDesc) visit(context.partitionRangeDesc());
@@ -2260,10 +2261,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         .collect(Collectors.toSet());
             }
         }
-        return new RefreshMaterializedViewStatement(mvName, new EitherOr(rangePartitionDesc, cells),
-                context.FORCE() != null, context.SYNC() != null,
+        RefreshMaterializedViewStatement statement =
+                new RefreshMaterializedViewStatement(mvName, new EitherOr(rangePartitionDesc, cells),
+                        context.FORCE() != null, context.SYNC() != null,
                 context.priority != null ? Integer.parseInt(context.priority.getText()) : null,
                 createPos(context));
+
+        if (context.explainDesc() != null) {
+            StatementBase.ExplainLevel explainLevel = getExplainType(context.explainDesc());
+            statement.setIsExplain(true, explainLevel);
+        }
+
+        if (context.optimizerTrace() != null) {
+            String module = "base";
+            if (context.optimizerTrace().identifier() != null) {
+                module = ((Identifier) visit(context.optimizerTrace().identifier())).getValue();
+            }
+            statement.setIsTrace(getTraceMode(context.optimizerTrace()), module);
+        }
+        return statement;
     }
 
     @Override
