@@ -78,7 +78,7 @@ public class PartitionsScanMgr {
                 OlapScanNode osn = (OlapScanNode) sn;
                 OlapTable olapTable = osn.getOlapTable();
                 String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-                String dbName = olapTable.mayGetDatabaseName().orElse("Unknown");
+                String dbName = olapTable.mayGetDatabaseName().orElse("unknown");
                 String tableName = osn.getTableName();
                 for (String selectedPartitionName : osn.getSelectedPartitionNames()) {
                     String key = catalogName + "-" + dbName + "-" + tableName + "-" + selectedPartitionName;
