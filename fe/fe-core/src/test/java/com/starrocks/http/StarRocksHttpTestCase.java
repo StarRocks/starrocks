@@ -546,7 +546,7 @@ public abstract class StarRocksHttpTestCase {
             }
         };
 
-        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "","localhost", 0);
+        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", "localhost", 0);
         frontend.setAlive(true);
         new Expectations(nodeMgr) {
             {

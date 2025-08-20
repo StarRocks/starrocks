@@ -25,7 +25,6 @@ import com.starrocks.qe.QueryDetailQueue;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
