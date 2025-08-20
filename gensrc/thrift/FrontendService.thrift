@@ -1583,15 +1583,26 @@ struct TTabletSchedule {
     4: optional string type
     5: optional string priority
     6: optional string state
-    7: optional string tablet_status
+    7: optional string schedule_reason
     8: optional double create_time
     9: optional double schedule_time
     10: optional double finish_time
-    11: optional i64 clone_src
-    12: optional i64 clone_dest
+    11: optional i64 src_be_id
+    12: optional i64 dest_be_id
     13: optional i64 clone_bytes
     14: optional double clone_duration
     15: optional string error_msg
+    16: optional double clone_rate
+    17: optional i64 timeout
+    18: optional string medium
+    19: optional string src_path
+    20: optional string dest_path
+    21: optional string orig_priority
+    22: optional i64 last_priority_adjust_time
+    23: optional i64 visible_version
+    24: optional i64 committed_version
+    25: optional i32 failed_schedule_count
+    26: optional i32 failed_running_count
 }
 
 struct TGetTabletScheduleRequest {
