@@ -465,7 +465,7 @@ public class SetStmtAnalyzer {
                     userIdentity + ", AuthPlugin: " + userAuthenticationInfo.getAuthPlugin());
         }
 
-        var.setUserAuthenticationInfo(UserAuthOptionAnalyzer.analyzeAuthOption(var.getUser(), var.getAuthOption()));
+        UserAuthOptionAnalyzer.analyzeAuthOption(var.getUser(), var.getAuthOption());
     }
 
     private static boolean checkUserVariableType(Type type) {
