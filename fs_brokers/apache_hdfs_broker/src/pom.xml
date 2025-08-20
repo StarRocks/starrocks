@@ -47,7 +47,7 @@ under the License.
         <thrift.version>0.14.1</thrift.version>
         <tomcat.version>9.0.106</tomcat.version>
         <log4j.version>2.17.1</log4j.version>
-        <jackson.version>2.13.4.2</jackson.version>
+        <jackson.version>2.15.2</jackson.version>
         <avro.version>1.11.4</avro.version>
         <jetty.version>9.4.57.v20241219</jetty.version>
         <io.netty.version>4.1.124.Final</io.netty.version>
