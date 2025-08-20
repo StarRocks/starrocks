@@ -130,8 +130,8 @@ public class AggStateUtils {
      * @param fnName combinator function name
      */
     public static String getAggFuncNameOfCombinator(String fnName) {
-        if (fnName.endsWith(FunctionSet.AGG_STATE_SUFFIX)) {
-            return fnName.substring(0, fnName.length() - FunctionSet.AGG_STATE_SUFFIX.length());
+        if (fnName.endsWith(FunctionSet.STATE_SUFFIX)) {
+            return fnName.substring(0, fnName.length() - FunctionSet.STATE_SUFFIX.length());
         } else if (fnName.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX)) {
             return fnName.substring(0, fnName.length() - FunctionSet.AGG_STATE_UNION_SUFFIX.length());
         } else if (fnName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)) {
@@ -161,7 +161,7 @@ public class AggStateUtils {
                                                          Boolean[] argumentIsConstants,
                                                          NodePosition pos) {
         Optional<? extends Function> result = Optional.empty();
-        if (func instanceof AggStateCombinator) {
+        if (func instanceof StateFunctionCombinator) {
             // correct aggregate function for type correction
             // `_state`'s input types are the same with inputs' types.
             String aggFuncName = AggStateUtils.getAggFuncNameOfCombinator(func.functionName());
@@ -177,9 +177,9 @@ public class AggStateUtils {
                 // only copy argument if it's a decimal type
                 AggregateFunction argFnCopy = (AggregateFunction) aggFunc.copy();
                 argFnCopy.setArgsType(argumentTypes);
-                result = AggStateCombinator.of(argFnCopy);
+                result = StateFunctionCombinator.of(argFnCopy);
             } else {
-                result = AggStateCombinator.of(aggFunc);
+                result = StateFunctionCombinator.of(aggFunc);
             }
         } else if (func instanceof AggStateUnionCombinator) {
             AggregateFunction argFn = getAggStateFunction(session, func, argumentTypes, pos);
@@ -287,7 +287,7 @@ public class AggStateUtils {
     }
 
     public static String aggStateFunctionName(String aggFuncName) {
-        return aggFuncName  + FunctionSet.AGG_STATE_SUFFIX;
+        return aggFuncName  + FunctionSet.STATE_SUFFIX;
     }
 
     public static String aggStateUnionFunctionName(String aggFuncName) {
@@ -296,5 +296,20 @@ public class AggStateUtils {
 
     public static String aggStateMergeFunctionName(String aggFuncName) {
         return aggFuncName + FunctionSet.AGG_STATE_MERGE_SUFFIX;
+    }
+
+    public static boolean isAggStateCombinator(Function function) {
+        return function instanceof AggStateIf ||
+                function instanceof AggStateUnionCombinator ||
+                function instanceof AggStateMergeCombinator ||
+                // scalar functions
+                function instanceof StateFunctionCombinator;
+    }
+
+    public static boolean isAggStateCombinator(String functionName) {
+        return functionName.endsWith(FunctionSet.STATE_SUFFIX) ||
+                functionName.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX) ||
+                functionName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX) ||
+                functionName.endsWith(FunctionSet.AGG_STATE_IF_SUFFIX);
     }
 }

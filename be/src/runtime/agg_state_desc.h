@@ -83,6 +83,7 @@ public:
     bool is_result_nullable() const { return _is_result_nullable; }
     int get_func_version() const { return _func_version; }
     std::string debug_string() const;
+    void set_is_result_nullable(bool is_result_nullable) { _is_result_nullable = is_result_nullable; }
 
     // Transform this AggStateDesc to a thrift TTypeDesc.
     void to_thrift(TAggStateDesc* t);
@@ -96,7 +97,7 @@ public:
     // Convert thrift TAggStateDesc to protobuf AggStateDescPB.
     static void thrift_to_protobuf(const TAggStateDesc& desc, AggStateDescPB* pb);
     // Get the aggregate function state descriptor.
-    static const AggregateFunction* get_agg_state_func(AggStateDesc* agg_state_desc);
+    static const AggregateFunction* get_agg_state_func(const AggStateDesc* agg_state_desc);
 
 private:
     // nested aggregate function name

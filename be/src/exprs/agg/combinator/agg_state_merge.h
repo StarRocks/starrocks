@@ -16,37 +16,22 @@
 
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/combinator/agg_state_combinator.h"
 
 namespace starrocks {
-struct AggStateUnionState {};
+struct AggStateMergeState {};
 
-/**
- * @brief  Union combinator for aggregate function to union the agg state to return the immediate result of aggregate function.
- * DESC: immediate_type {agg_func}_union(immediate_type)
- *  input type          : aggregate function's immediate_type
- *  intermediate type   : aggregate function's immediate_type
- *  return type         : aggregate function's immediate_type
- */
-class AggStateUnion final : public AggregateFunctionBatchHelper<AggStateUnionState, AggStateUnion> {
+// An aggregate merge combinator that merges aggregate intermediate states to compute the final result of aggregate function.
+//
+// DESC: return_type {agg_func}_merge(immediate_type)
+//  input type          : aggregate function's immediate_type
+//  intermediate type   : aggregate function's immediate_type
+//  return type         : aggregate function's return type
+class AggStateMerge final : public AggStateCombinator<AggStateMergeState, AggStateMerge> {
 public:
-    AggStateUnion(AggStateDesc agg_state_desc, const AggregateFunction* function)
-            : _agg_state_desc(std::move(agg_state_desc)), _function(function) {
+    AggStateMerge(AggStateDesc agg_state_desc, const AggregateFunction* function)
+            : AggStateCombinator(agg_state_desc, function) {
         DCHECK(_function != nullptr);
-    }
-    const AggStateDesc* get_agg_state_desc() const { return &_agg_state_desc; }
-
-    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { _function->create(ctx, ptr); }
-
-    void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { _function->destroy(ctx, ptr); }
-
-    size_t size() const override { return _function->size(); }
-
-    size_t alignof_size() const override { return _function->alignof_size(); }
-
-    bool is_pod_state() const override { return _function->is_pod_state(); }
-
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
-        _function->reset(ctx, args, state);
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -56,6 +41,12 @@ public:
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         _function->merge(ctx, column, state, row_num);
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        DCHECK_GT(end, start);
+        _function->get_values(ctx, state, dst, start, end);
     }
 
     void serialize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
@@ -71,14 +62,10 @@ public:
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                             Column* to) const override {
-        _function->serialize_to_column(ctx, state, to);
+        _function->finalize_to_column(ctx, state, to);
     }
 
-    std::string get_name() const override { return "agg_state_union"; }
-
-private:
-    const AggStateDesc _agg_state_desc;
-    const AggregateFunction* _function;
+    std::string get_name() const override { return "agg_state_merge"; }
 };
 
 } // namespace starrocks
