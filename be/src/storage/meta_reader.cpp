@@ -318,7 +318,14 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
 Status SegmentMetaCollecter::_collect_dict_for_column(ColumnIterator* column_iter, ColumnId cid, Column* column) {
     std::vector<Slice> words;
     if (!column_iter->all_page_dict_encoded()) {
-        return Status::GlobalDictError("no global dict");
+        auto& tablet_column = _params->tablet_schema->column(cid);
+        // For JSON data, the schema may be heterogeneous, meaning that some segments might not contain the dictionary column,
+        // but a global dictionary could still be present and usable.
+        if (!tablet_column.is_extended()) {
+            return Status::GlobalDictError("no global dict");
+        } else {
+            return Status::OK();
+        }
     } else {
         RETURN_IF_ERROR(column_iter->fetch_all_dict_words(&words));
     }
