@@ -199,6 +199,9 @@ public:
 
     bool has_remain_json() const { return _has_remain; }
 
+    // Return the pointer to the remain filter if it exists, otherwise return nullptr.
+    const BloomFilter* get_remain_filter() const { return _remain_filter ? _remain_filter.get() : nullptr; }
+
 private:
     StatusOr<std::unique_ptr<ColumnIterator>> _new_json_iterator(ColumnAccessPath* path = nullptr,
                                                                  const TabletColumn* column = nullptr);
