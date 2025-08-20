@@ -454,14 +454,17 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
 #define HANDLE_TASK(t_task_type, all_tasks, do_func, AGENT_REQ, request, env)                                          \
     {                                                                                                                  \
         std::string submit_log = "Submit task success. type=" + to_string(t_task_type) + ", signatures=";              \
-        size_t task_count = 0;                                                                                         \
+        size_t log_count = 0;                                                                                          \
+        size_t queue_len = 0;                                                                                          \
         for (auto* task : all_tasks) {                                                                                 \
             auto pool = get_thread_pool(t_task_type);                                                                  \
             auto signature = task->signature;                                                                          \
             std::pair<bool, size_t> register_pair = register_task_info(task_type, signature);                          \
             if (register_pair.first) {                                                                                 \
-                submit_log += std::to_string(signature) + ",";                                                         \
-                task_count = register_pair.second;                                                                     \
+                if (log_count++ < 100) {                                                                               \
+                    submit_log += std::to_string(signature) + ",";                                                     \
+                }                                                                                                      \
+                queue_len = register_pair.second;                                                                      \
                 ret_st = pool->submit_func(                                                                            \
                         std::bind(do_func, std::make_shared<AGENT_REQ>(*task, task->request, time(nullptr)), env));    \
                 if (!ret_st.ok()) {                                                                                    \
@@ -471,8 +474,11 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
                 LOG(INFO) << "Submit task failed, already exists type=" << t_task_type << ", signature=" << signature; \
             }                                                                                                          \
         }                                                                                                              \
-        if (task_count > 0) {                                                                                          \
-            LOG(INFO) << submit_log << " task_count_in_queue=" << task_count;                                          \
+        if (queue_len > 0) {                                                                                           \
+            if (log_count >= 100) {                                                                                    \
+                submit_log += "...,";                                                                                  \
+            }                                                                                                          \
+            LOG(INFO) << submit_log << " task_count_in_queue=" << queue_len;                                           \
         }                                                                                                              \
     }
 
