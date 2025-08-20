@@ -38,6 +38,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
@@ -255,6 +256,10 @@ public class IcebergApiConverterTest {
         source = ImmutableMap.of("file_format", "avro", "compression_codec", "zstd");
         target = IcebergApiConverter.rebuildCreateTableProperties(source);
         assertEquals("zstd", target.get(AVRO_COMPRESSION));
+
+        source = ImmutableMap.of(TableProperties.FORMAT_VERSION, "2");
+        target = IcebergApiConverter.rebuildCreateTableProperties(source);
+        assertEquals("2", target.get(TableProperties.FORMAT_VERSION));
     }
 
     @Test
