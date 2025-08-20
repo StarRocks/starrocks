@@ -187,4 +187,23 @@ PARALLEL_TEST(VariantColumnTest, put_mysql_row_buffer) {
     EXPECT_EQ("\n1234567890", buf.data());
 }
 
+// NOLINTNEXTLINE
+PARALLEL_TEST(VariantColumnTest, test_create_variant_column) {
+    auto variant_column = VariantColumn::create();
+
+    // Test basic column operations that exercise visitor patterns
+    EXPECT_EQ(0, variant_column->size());
+    EXPECT_TRUE(variant_column->empty());
+    EXPECT_FALSE(variant_column->is_nullable());
+    EXPECT_FALSE(variant_column->is_constant());
+
+    // Test column cloning which uses visitor patterns internally
+    auto cloned = variant_column->clone();
+    EXPECT_EQ(0, cloned->size());
+
+    // Test memory operations
+    size_t memory_usage = variant_column->memory_usage();
+    EXPECT_GE(memory_usage, 0);
+}
+
 } // namespace starrocks
