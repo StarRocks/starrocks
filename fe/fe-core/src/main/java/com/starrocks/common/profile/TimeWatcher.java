@@ -14,12 +14,14 @@
 
 package com.starrocks.common.profile;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Table;
 import com.starrocks.common.util.DebugUtil;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -29,26 +31,28 @@ import java.util.stream.Collectors;
 public class TimeWatcher {
     private int levels = 0;
 
-    private final Map<String, ScopedTimer> timers = new LinkedHashMap<>();
+    private final Table<String, Integer, ScopedTimer> scopedTimers = HashBasedTable.create();
 
     public Timer scope(long time, String name) {
         ScopedTimer t;
-        if (timers.containsKey(name)) {
-            t = timers.get(name);
+        if (scopedTimers.row(name).containsKey(levels)) {
+            t = scopedTimers.row(name).get(levels);
         } else {
             t = new ScopedTimer(time, name);
-            timers.put(name, t);
+            scopedTimers.put(name, levels, t);
         }
         t.start();
         return t;
     }
 
     public Optional<Timer> getTimer(String name) {
-        return Optional.ofNullable(timers.get(name));
+        Map<Integer, ScopedTimer> timers = scopedTimers.row(name);
+        Preconditions.checkState(timers.size() == 1, "Timer %s has %d scopes", name, timers.size());
+        return Optional.of(timers.values().stream().findFirst().get());
     }
 
     public List<Timer> getAllTimerWithOrder() {
-        return timers.values().stream().sorted(Comparator.comparingLong(o -> o.firstTimePoints))
+        return scopedTimers.values().stream().sorted(Comparator.comparingLong(o -> o.firstTimePoints))
                 .collect(Collectors.toList());
     }
 
