@@ -182,40 +182,6 @@ Must include category prefix:
 
 **Example:** `[Feature] Add Apache Paimon table format support`
 
-**Commit Message Format:**
-Follow this structured format for all commit messages:
-
-```
-[Category] Brief description (50 chars or less)
-
-Detailed explanation of what this commit does and why.
-Wrap lines at 72 characters.
-
-- Key change 1
-- Key change 2  
-- Key change 3
-
-Fixes: #issue_number (if applicable)
-Closes: #issue_number (if applicable)
-```
-
-**Categories:** BugFix, Enhancement, Feature, Refactor, Test, Doc, Build, Performance
-
-**Example:**
-```
-[Feature] Add Apache Iceberg table format support
-
-Implement Iceberg connector to enable querying Iceberg tables
-directly from StarRocks. This includes metadata reading,
-partition pruning, and schema evolution support.
-
-- Add IcebergConnector and IcebergMetadata classes
-- Implement partition and file pruning optimizations  
-- Support for Iceberg v1 and v2 table formats
-- Add comprehensive unit tests
-
-Closes: #12345
-```
 
 ### Code Review Focus Areas
 
