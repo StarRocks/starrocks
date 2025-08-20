@@ -60,7 +60,7 @@ select dict_merge(get_json_string(c1, 'f4'), 255) from js2 [_META_];
 -- !result
 select dict_merge(get_json_string(c1, 'f5'), 255) from js2 [_META_];
 -- result:
-[REGEX]E: \(1064, 'no global dict: BE:.*'\)
+None
 -- !result
 insert into js2 
 select 
@@ -77,15 +77,15 @@ from (table(generate_series(1, 100)));
 -- !result
 select dict_merge(get_json_string(c1, 'f1'), 255) from js2 [_META_];
 -- result:
-[REGEX]E: \(1064, 'no global dict: BE:.*'\)
+{"2":{"lst":["str",10,"YTA","YTE","YTI","YTM","YTQ","YTU","YTY","YTc","YTg","YTk"]},"3":{"lst":["i32",10,1,2,3,4,5,6,7,8,9,10]}}
 -- !result
 select dict_merge(get_json_string(c1, 'f2'), 255) from js2 [_META_];
 -- result:
-[REGEX]E: \(1064, 'no global dict: BE:.*'\)
+{"2":{"lst":["str",100,"YTA","YTE","YTEw","YTEx","YTEy","YTEz","YTE0","YTE1","YTE2","YTE3","YTE4","YTE5","YTI","YTIw","YTIx","YTIy","YTIz","YTI0","YTI1","YTI2","YTI3","YTI4","YTI5","YTM","YTMw","YTMx","YTMy","YTMz","YTM0","YTM1","YTM2","YTM3","YTM4","YTM5","YTQ","YTQw","YTQx","YTQy","YTQz","YTQ0","YTQ1","YTQ2","YTQ3","YTQ4","YTQ5","YTU","YTUw","YTUx","YTUy","YTUz","YTU0","YTU1","YTU2","YTU3","YTU4","YTU5","YTY","YTYw","YTYx","YTYy","YTYz","YTY0","YTY1","YTY2","YTY3","YTY4","YTY5","YTc","YTcw","YTcx","YTcy","YTcz","YTc0","YTc1","YTc2","YTc3","YTc4","YTc5","YTg","YTgw","YTgx","YTgy","YTgz","YTg0","YTg1","YTg2","YTg3","YTg4","YTg5","YTk","YTkw","YTkx","YTky","YTkz","YTk0","YTk1","YTk2","YTk3","YTk4","YTk5"]},"3":{"lst":["i32",100,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100]}}
 -- !result
 select dict_merge(get_json_string(c1, 'f3'), 255) from js2 [_META_];
 -- result:
-[REGEX]E: \(1064, 'no global dict: BE:.*'\)
+{"2":{"lst":["str",200,"YTA","YTE","YTEw","YTEwMA","YTEwMQ","YTEwMg","YTEwMw","YTEwNA","YTEwNQ","YTEwNg","YTEwNw","YTEwOA","YTEwOQ","YTEx","YTExMA","YTExMQ","YTExMg","YTExMw","YTExNA","YTExNQ","YTExNg","YTExNw","YTExOA","YTExOQ","YTEy","YTEyMA","YTEyMQ","YTEyMg","YTEyMw","YTEyNA","YTEyNQ","YTEyNg","YTEyNw","YTEyOA","YTEyOQ","YTEz","YTEzMA","YTEzMQ","YTEzMg","YTEzMw","YTEzNA","YTEzNQ","YTEzNg","YTEzNw","YTEzOA","YTEzOQ","YTE0","YTE0MA","YTE0MQ","YTE0Mg","YTE0Mw","YTE0NA","YTE0NQ","YTE0Ng","YTE0Nw","YTE0OA","YTE0OQ","YTE1","YTE1MA","YTE1MQ","YTE1Mg","YTE1Mw","YTE1NA","YTE1NQ","YTE1Ng","YTE1Nw","YTE1OA","YTE1OQ","YTE2","YTE2MA","YTE2MQ","YTE2Mg","YTE2Mw","YTE2NA","YTE2NQ","YTE2Ng","YTE2Nw","YTE2OA","YTE2OQ","YTE3","YTE3MA","YTE3MQ","YTE3Mg","YTE3Mw","YTE3NA","YTE3NQ","YTE3Ng","YTE3Nw","YTE3OA","YTE3OQ","YTE4","YTE4MA","YTE4MQ","YTE4Mg","YTE4Mw","YTE4NA","YTE4NQ","YTE4Ng","YTE4Nw","YTE4OA","YTE4OQ","YTE5","YTE5MA","YTE5MQ","YTE5Mg","YTE5Mw","YTE5NA","YTE5NQ","YTE5Ng","YTE5Nw","YTE5OA","YTE5OQ","YTI","YTIw","YTIx","YTIy","YTIz","YTI0","YTI1","YTI2","YTI3","YTI4","YTI5","YTM","YTMw","YTMx","YTMy","YTMz","YTM0","YTM1","YTM2","YTM3","YTM4","YTM5","YTQ","YTQw","YTQx","YTQy","YTQz","YTQ0","YTQ1","YTQ2","YTQ3","YTQ4","YTQ5","YTU","YTUw","YTUx","YTUy","YTUz","YTU0","YTU1","YTU2","YTU3","YTU4","YTU5","YTY","YTYw","YTYx","YTYy","YTYz","YTY0","YTY1","YTY2","YTY3","YTY4","YTY5","YTc","YTcw","YTcx","YTcy","YTcz","YTc0","YTc1","YTc2","YTc3","YTc4","YTc5","YTg","YTgw","YTgx","YTgy","YTgz","YTg0","YTg1","YTg2","YTg3","YTg4","YTg5","YTk","YTkw","YTkx","YTky","YTkz","YTk0","YTk1","YTk2","YTk3","YTk4","YTk5"]},"3":{"lst":["i32",200,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200]}}
 -- !result
 select dict_merge(get_json_string(c1, 'f4'), 255) from js2 [_META_];
 -- result:
@@ -93,7 +93,7 @@ select dict_merge(get_json_string(c1, 'f4'), 255) from js2 [_META_];
 -- !result
 select dict_merge(get_json_string(c1, 'f5'), 255) from js2 [_META_];
 -- result:
-[REGEX]E: \(1064, 'no global dict: BE:.*'\)
+None
 -- !result
 truncate table js2;
 -- result:
@@ -264,7 +264,7 @@ from (table(generate_series(1, 1000)));
 -- !result
 select get_json_string(inspect_global_dict('js2', 'c1.f1'), 'dict');
 -- result:
-None
+{"a0": 1, "a1": 2, "a2": 3, "a3": 4, "a4": 5, "a5": 6, "a6": 7, "a7": 8, "a8": 9, "a9": 10}
 -- !result
 select get_json_string(inspect_global_dict('js2', 'c1.f2'), 'dict');
 -- result:
@@ -287,7 +287,7 @@ truncate table js2;
 -- !result
 select get_json_string(inspect_global_dict('js2', 'c1.f1'), 'dict');
 -- result:
-None
+{"a0": 1, "a1": 2, "a2": 3, "a3": 4, "a4": 5, "a5": 6, "a6": 7, "a7": 8, "a8": 9, "a9": 10}
 -- !result
 select get_json_string(inspect_global_dict('js2', 'c1.f2'), 'dict');
 -- result:
@@ -353,23 +353,23 @@ from (table(generate_series(1, 1000)));
 -- !result
 select get_json_string(inspect_global_dict('js2', 'c1.f1'), 'dict');
 -- result:
-None
+{"a0": 1, "a1": 2, "a2": 3, "a3": 4, "a4": 5, "a5": 6, "a6": 7, "a7": 8, "a8": 9, "a9": 10}
 -- !result
 select get_json_string(inspect_global_dict('js2', 'c1.f2'), 'dict');
 -- result:
-None
+{"a0": 1, "a1": 2, "a10": 3, "a11": 4, "a12": 5, "a13": 6, "a14": 7, "a15": 8, "a16": 9, "a17": 10, "a18": 11, "a19": 12, "a2": 13, "a3": 14, "a4": 15, "a5": 16, "a6": 17, "a7": 18, "a8": 19, "a9": 20}
 -- !result
 select get_json_string(inspect_global_dict('js2', 'c1.f3'), 'dict');
 -- result:
-None
+{"a0": 1, "a1": 2, "a10": 3, "a11": 4, "a12": 5, "a13": 6, "a14": 7, "a15": 8, "a16": 9, "a17": 10, "a18": 11, "a19": 12, "a2": 13, "a20": 14, "a21": 15, "a22": 16, "a23": 17, "a24": 18, "a25": 19, "a26": 20, "a27": 21, "a28": 22, "a29": 23, "a3": 24, "a4": 25, "a5": 26, "a6": 27, "a7": 28, "a8": 29, "a9": 30}
 -- !result
 select get_json_string(inspect_global_dict('js2', 'c1.f4'), 'dict');
 -- result:
-None
+{"a0": 1, "a1": 2, "a10": 3, "a11": 4, "a12": 5, "a13": 6, "a14": 7, "a15": 8, "a16": 9, "a17": 10, "a18": 11, "a19": 12, "a2": 13, "a20": 14, "a21": 15, "a22": 16, "a23": 17, "a24": 18, "a25": 19, "a26": 20, "a27": 21, "a28": 22, "a29": 23, "a3": 24, "a30": 25, "a31": 26, "a32": 27, "a33": 28, "a34": 29, "a35": 30, "a36": 31, "a37": 32, "a38": 33, "a39": 34, "a4": 35, "a5": 36, "a6": 37, "a7": 38, "a8": 39, "a9": 40}
 -- !result
 select get_json_string(inspect_global_dict('js2', 'c1.f5'), 'dict');
 -- result:
-None
+{"a0": 1, "a1": 2, "a10": 3, "a11": 4, "a12": 5, "a13": 6, "a14": 7, "a15": 8, "a16": 9, "a17": 10, "a18": 11, "a19": 12, "a2": 13, "a20": 14, "a21": 15, "a22": 16, "a23": 17, "a24": 18, "a25": 19, "a26": 20, "a27": 21, "a28": 22, "a29": 23, "a3": 24, "a30": 25, "a31": 26, "a32": 27, "a33": 28, "a34": 29, "a35": 30, "a36": 31, "a37": 32, "a38": 33, "a39": 34, "a4": 35, "a40": 36, "a41": 37, "a42": 38, "a43": 39, "a44": 40, "a45": 41, "a46": 42, "a47": 43, "a48": 44, "a49": 45, "a5": 46, "a6": 47, "a7": 48, "a8": 49, "a9": 50}
 -- !result
 CREATE TABLE js3 (
     v1 BIGINT NULL,
