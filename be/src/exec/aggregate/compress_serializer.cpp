@@ -229,7 +229,7 @@ public:
     }
 
     template <typename T>
-    Status do_visit(const DecimalV3Column<T>& column) {
+    Status do_visit(DecimalV3Column<T>* column) {
         bit_decompress<DecimalV3Column<T>, T>(column);
         return Status::OK();
     }
