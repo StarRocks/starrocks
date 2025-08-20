@@ -146,6 +146,8 @@ PARALLEL_TEST(ColumnViewTest, test_create_variant_column_view) {
         DCHECK(opt_variant_column_view.has_value());
         auto variant_column_view = std::move(opt_variant_column_view.value());
         DCHECK(variant_column_view->is_variant_view());
+        EXPECT_TRUE(variant_column_view->is_nullable() == nullable);
+        EXPECT_TRUE(variant_column_view->is_variant_view());
     }
 }
 PARALLEL_TEST(ColumnViewTest, test_create_binary_column_view) {
