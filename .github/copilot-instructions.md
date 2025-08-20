@@ -149,23 +149,6 @@ public class ScanNodePlanner extends PlanFragment {
 }
 ```
 
-### SQL Testing (Python)
-```python
-# Use existing test framework patterns
-# Focus on SQL correctness and performance regression testing
-# Include both positive and negative test cases
-
-def test_materialized_view_query():
-    """Test materialized view automatic selection."""
-    # Setup test data
-    sql = """
-    CREATE MATERIALIZED VIEW mv1 AS 
-    SELECT date_trunc('day', dt), sum(sales) 
-    FROM sales_table GROUP BY 1
-    """
-    # Execute and validate results
-    assert_sql_result(sql, expected_result)
-```
 
 ## ⚠️ CRITICAL BUILD SYSTEM WARNING
 **DO NOT attempt to build or run unit tests (UT) for this project unless explicitly requested by the user.**
