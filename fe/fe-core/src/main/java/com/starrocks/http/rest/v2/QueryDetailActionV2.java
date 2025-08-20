@@ -83,7 +83,8 @@ public class QueryDetailActionV2 extends RestBaseAction {
                     if (data != null) {
                         Gson gson = new Gson();
                         QueryDetail[] queryDetailArray = gson.fromJson(data, QueryDetail[].class);
-                        queryDetails.addAll(Arrays.asList(queryDetailArray));                    }
+                        queryDetails.addAll(Arrays.asList(queryDetailArray));
+                    }
                 }
             }
         }
