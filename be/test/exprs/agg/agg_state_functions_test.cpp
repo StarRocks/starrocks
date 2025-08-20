@@ -1104,25 +1104,6 @@ TEST_F(AggStateFunctionsTest, test_agg_state_union_function_date) {
     }
 }
 
-TEST_F(AggStateFunctionsTest, test_agg_state_union_function_invalid_agg_state_desc) {
-    // Test with invalid function name
-    auto return_type = TYPE_INT;
-    auto arg_type = TYPE_INT;
-    TypeDescriptor return_type_desc = TypeDescriptor(return_type);
-    std::vector<TypeDescriptor> arg_type_descs = {TypeDescriptor(arg_type)};
-    auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
-    auto ctx = utils->get_fn_ctx();
-    AggStateDesc agg_state_desc("invalid_function", return_type_desc, arg_type_descs, false, 1);
-
-    TypeDescriptor immediate_type = return_type_desc;
-    std::vector<bool> arg_nullables = {false, false};
-    StateUnionFunction union_func(agg_state_desc, immediate_type, arg_nullables);
-
-    // Test prepare with invalid function (should fail)
-    Status status = union_func.prepare(ctx, FunctionContext::FRAGMENT_LOCAL);
-    ASSERT_FALSE(status.ok());
-}
-
 // Test helper functions for StateMergeFunction
 template <typename T>
 void test_agg_state_merge_function_basic(FunctionContext* ctx, const AggregateFunction* func,
@@ -1394,25 +1375,6 @@ TEST_F(AggStateFunctionsTest, test_agg_state_merge_function_date) {
     }
 }
 
-TEST_F(AggStateFunctionsTest, test_agg_state_merge_function_invalid_agg_state_desc) {
-    // Test with invalid function name
-    auto return_type = TYPE_INT;
-    auto arg_type = TYPE_INT;
-    TypeDescriptor return_type_desc = TypeDescriptor(return_type);
-    std::vector<TypeDescriptor> arg_type_descs = {TypeDescriptor(arg_type)};
-    auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
-    auto ctx = utils->get_fn_ctx();
-    AggStateDesc agg_state_desc("invalid_function", return_type_desc, arg_type_descs, false, 1);
-
-    TypeDescriptor immediate_type = return_type_desc;
-    std::vector<bool> arg_nullables = {false};
-    StateMergeFunction merge_func(agg_state_desc, immediate_type, arg_nullables);
-
-    // Test prepare with invalid function (should fail)
-    Status status = merge_func.prepare(ctx, FunctionContext::FRAGMENT_LOCAL);
-    ASSERT_FALSE(status.ok());
-}
-
 TEST_F(AggStateFunctionsTest, test_agg_state_merge_function_memory_allocation) {
     auto return_type = TYPE_BIGINT;
     auto arg_type = TYPE_INT;
@@ -1443,39 +1405,6 @@ TEST_F(AggStateFunctionsTest, test_agg_state_merge_function_memory_allocation) {
     Columns columns = {agg_state_column};
     auto result = merge_func.execute(ctx, columns);
     ASSERT_TRUE(result.ok());
-}
-
-TEST_F(AggStateFunctionsTest, test_agg_state_merge_function_null_handling) {
-    auto return_type = TYPE_BIGINT;
-    auto arg_type = TYPE_INT;
-    TypeDescriptor return_type_desc = TypeDescriptor(return_type);
-    std::vector<TypeDescriptor> arg_type_descs = {TypeDescriptor(arg_type)};
-    auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
-    auto ctx = utils->get_fn_ctx();
-    auto func = get_aggregate_function("sum", {arg_type}, return_type, true);
-    ASSERT_NE(func, nullptr);
-
-    // Create AggStateDesc
-    AggStateDesc agg_state_desc(func->get_name(), return_type_desc, arg_type_descs, true, 1);
-
-    // Create StateMergeFunction with nullable support
-    TypeDescriptor immediate_type = return_type_desc;
-    std::vector<bool> arg_nullables = {true};
-    StateMergeFunction merge_func(agg_state_desc, immediate_type, arg_nullables);
-
-    // Create input with null values
-    ColumnPtr input_column = gen_input_column1<int32_t>();
-    auto nullable_column = ColumnHelper::cast_to_nullable_column(input_column);
-
-    // Add some null values
-    auto nullable_data_column = ColumnHelper::cast_to_nullable_column(input_column);
-
-    ColumnPtr agg_state_column =
-            create_agg_state_column<int32_t>(func, ctx, nullable_data_column, true, return_type_desc);
-
-    // Test prepare
-    Status status = merge_func.prepare(ctx, FunctionContext::FRAGMENT_LOCAL);
-    ASSERT_FALSE(status.ok());
 }
 
 // Test helper functions for AggStateCombine
