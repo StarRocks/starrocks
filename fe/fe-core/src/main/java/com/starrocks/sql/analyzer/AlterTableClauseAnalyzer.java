@@ -291,31 +291,31 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
             if (!table.isCloudNativeTable()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
-                                    " only support cloud native table");
+                        "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
+                                " only support cloud native table");
             }
 
             boolean fileBundling = properties.get(
-                            PropertyAnalyzer.PROPERTIES_FILE_BUNDLING).equalsIgnoreCase("true");
+                    PropertyAnalyzer.PROPERTIES_FILE_BUNDLING).equalsIgnoreCase("true");
             OlapTable olapTable = (OlapTable) table;
             if (fileBundling == olapTable.isFileBundling()) {
                 String msg = String.format("table: %s file_bundling is %s, nothing need to do",
                         olapTable.getName(), fileBundling);
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, msg);
             }
-            
+
             if (!olapTable.allowUpdateFileBundling()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
-                                    " cannot be updated now because this table contains mixed metadata types "  + 
-                                    "(both split and aggregate). Please wait until old metadata versions are vacuumed");
+                        "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
+                                " cannot be updated now because this table contains mixed metadata types " +
+                                "(both split and aggregate). Please wait until old metadata versions are vacuumed");
             }
 
             if (!((LakeTable) olapTable).checkLakeRollupAllowFileBundling()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
-                                    " cannot be updated now because this table contains LakeRollup created in old version."  + 
-                                    " You can rebuild the Rollup and retry");
+                        "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
+                                " cannot be updated now because this table contains LakeRollup created in old version." +
+                                " You can rebuild the Rollup and retry");
             }
 
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
@@ -408,8 +408,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             // Allow setting flat_json.enable to true or false
             PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
-                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
-                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getFlatJsonConfig() != null && olapTable.getFlatJsonConfig().getFlatJsonEnable()) {
@@ -429,19 +429,19 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY).equalsIgnoreCase("default") &&
                     !properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY).equalsIgnoreCase("real_time")) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown compaction strategy: " + 
-                            properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY));
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown compaction strategy: " +
+                        properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY));
             }
             if (!table.isCloudNativeTableOrMaterializedView()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            "Property " + PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY +
-                                    " can be only set to the cloud native table");
+                        "Property " + PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY +
+                                " can be only set to the cloud native table");
             }
 
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "The compaction strategy can be only " +
-                            "update for a primary key table. ");
+                        "update for a primary key table. ");
             }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
@@ -546,14 +546,15 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                         ErrorCode.ERR_COMMON_ERROR, functionName);
             }
             if (clause.getDistributionDesc() != null) {
-                DistributionDesc defaultDistributionInfo = olapTable.getDefaultDistributionInfo()
+                DistributionDesc defaultDistributionDesc = olapTable.getDefaultDistributionInfo()
                         .toDistributionDesc(olapTable.getIdToColumn());
-                if (clause.getDistributionDesc().getType() != defaultDistributionInfo.getType()) {
+                if (DistributionDescAnalyzer.isDifferentDistributionType(clause.getDistributionDesc(),
+                        olapTable.getDefaultDistributionInfo())) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Unsupported change distribution type when merge partitions");
                 }
-                if (defaultDistributionInfo instanceof HashDistributionDesc) {
-                    HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) defaultDistributionInfo;
+                if (defaultDistributionDesc instanceof HashDistributionDesc) {
+                    HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) defaultDistributionDesc;
                     if (!hashDistributionDesc.getDistributionColumnNames().equals(
                             ((HashDistributionDesc) clause.getDistributionDesc()).getDistributionColumnNames())) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -617,10 +618,10 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             if (distributionDesc instanceof RandomDistributionDesc && targetKeysType != KeysType.DUP_KEYS) {
                 throw new SemanticException(targetKeysType.toSql() + " must use hash distribution", distributionDesc.getPos());
             }
-            distributionDesc.analyze(columnSet);
+            DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
             clause.setDistributionDesc(distributionDesc);
 
-            if (distributionDesc.getType() != olapTable.getDefaultDistributionInfo().getType()
+            if (DistributionDescAnalyzer.isDifferentDistributionType(distributionDesc, olapTable.getDefaultDistributionInfo())
                     && clause.getPartitionNames() != null) {
                 throw new SemanticException("not support change distribution type when specify partitions");
             }
@@ -1522,7 +1523,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         for (Expr expr : clause.getExprs()) {
             ScalarOperator result;
             try {
-                if (IcebergTableOperation.fromString(clause.getTableOperationName()) 
+                if (IcebergTableOperation.fromString(clause.getTableOperationName())
                         == IcebergTableOperation.REWRITE_DATA_FILES) {
                     if (!(expr instanceof BinaryPredicate)) {
                         throw new SemanticException("Invalid parameter format: expected 'param = value', but got: " + expr);
@@ -1538,12 +1539,12 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                     }
                     LiteralExpr constExpr = (LiteralExpr) binExpr.getChild(0);
                     if (!(constExpr instanceof StringLiteral)) {
-                        throw new SemanticException("Invalid expression:" + 
+                        throw new SemanticException("Invalid expression:" +
                                 "the left side of the predicate must be a string literal, but got: " + constExpr);
-                    } 
-                    IcebergTableOperation.RewriteFileOption option = 
+                    }
+                    IcebergTableOperation.RewriteFileOption option =
                             IcebergTableOperation.RewriteFileOption.fromString(((StringLiteral) constExpr).getValue());
-                    LiteralExpr valExpr = (LiteralExpr) binExpr.getChild(1); 
+                    LiteralExpr valExpr = (LiteralExpr) binExpr.getChild(1);
                     switch (option) {
                         case REWRITE_ALL:
                             if (valExpr instanceof BoolLiteral) {
@@ -1596,23 +1597,23 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 throw new SemanticException("rewrite table is not an iceberg table");
             }
             IcebergTable icebergTable = (IcebergTable) table;
-            
+
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             List<ColumnRefOperator> columnRefOperators = table.getBaseSchema()
                     .stream()
                     .map(col -> columnRefFactory.create(col.getName(), col.getType(), col.isAllowNull()))
                     .collect(Collectors.toList());
             Scope scope = new Scope(RelationId.anonymous(), new RelationFields(columnRefOperators.stream()
-                    .map(col -> new Field(col.getName(), col.getType(), 
+                    .map(col -> new Field(col.getName(), col.getType(),
                             new TableName(context.getDatabase(), icebergTable.getName()), null))
-                                    .collect(Collectors.toList())));
+                    .collect(Collectors.toList())));
             ExpressionAnalyzer.analyzeExpression(clause.getWhere(), new AnalyzeState(), scope, context);
             ExpressionMapping expressionMapping = new ExpressionMapping(scope, columnRefOperators);
             ScalarOperator res = SqlToScalarOperatorTranslator.translate(
                     clause.getWhere(), expressionMapping, columnRefFactory);
             clause.setPartitionFilter(res);
             List<Column> partitionCols = icebergTable.getPartitionColumnsIncludeTransformed();
-            if (res.getColumnRefs().stream().anyMatch(col -> 
+            if (res.getColumnRefs().stream().anyMatch(col ->
                     partitionCols.stream().noneMatch(partCol -> partCol.getName().equals(col.getName())))) {
                 throw new SemanticException("Partition filter contains columns that are not partition columns");
             }
