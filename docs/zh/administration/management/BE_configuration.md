@@ -3927,8 +3927,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值：0
 - 类型：String
 - 单位：-
-<<<<<<< HEAD
-- 是否动态：否
+- 是否动态：是
 - 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。举例：在 `datacache_disk_path` 中配置了 2 个磁盘，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
 - 引入版本：-
 
@@ -3948,10 +3947,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：-
 - 是否动态：否
 - 描述：Block 的元数据存储目录，可自定义。推荐创建在 `$STARROCKS_HOME` 路径下。
-=======
-- 是否动态：是
-- 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。假设系统使用了两块磁盘进行缓存，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
->>>>>>> f4f596e282 ([Doc] datacache_mem_size、datacache_disk_size is mutable now (#62111))
 - 引入版本：-
 
 ##### datacache_auto_adjust_enable
