@@ -25,6 +25,12 @@ select /*+ SET_VAR(enable_per_bucket_optimize=false,enable_query_cache=false) */
 2	5
 3	4
 -- !result
+select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false,tablet_internal_parallel_mode='force_split',pipeline_dop=2) */c2, count() from t0 group by c2 order by c2;
+-- result:
+1	5
+2	5
+3	4
+-- !result
 CREATE TABLE t1 (
     c1 int,
     c2 int
@@ -51,6 +57,12 @@ select /*+ SET_VAR(enable_per_bucket_optimize=false,enable_query_cache=false) */
 2	6
 3	4
 -- !result
+select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false,tablet_internal_parallel_mode='force_split',pipeline_dop=2) */c2, count() from t1 group by c2 order by c2;
+-- result:
+1	5
+2	6
+3	4
+-- !result
 CREATE TABLE t2 (
     c1 int,
     c2 int
@@ -72,6 +84,12 @@ select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false) */c
 3	4
 -- !result
 select /*+ SET_VAR(enable_per_bucket_optimize=false,enable_query_cache=false) */c2, count() from t2 group by c2 order by c2;
+-- result:
+1	5
+2	6
+3	4
+-- !result
+select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false,tablet_internal_parallel_mode='force_split',pipeline_dop=2) */c2, count() from t2 group by c2 order by c2;
 -- result:
 1	5
 2	6
@@ -105,6 +123,13 @@ select /*+ SET_VAR(enable_per_bucket_optimize=false,enable_query_cache=false) */
 3	4
 11	1
 -- !result
+select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false,tablet_internal_parallel_mode='force_split',pipeline_dop=2) */c2, count() from t3 group by c2 order by c2;
+-- result:
+1	5
+2	6
+3	4
+11	1
+-- !result
 CREATE TABLE t4 (
     c1 int, c2 int
 ) DUPLICATE KEY(c1, c2)
@@ -122,6 +147,12 @@ select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false) */c
 3	4
 -- !result
 select /*+ SET_VAR(enable_per_bucket_optimize=false,enable_query_cache=false) */c2, count() from t4 group by c2 order by c2;
+-- result:
+1	5
+2	6
+3	4
+-- !result
+select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false,tablet_internal_parallel_mode='force_split',pipeline_dop=2) */c2, count() from t4 group by c2 order by c2;
 -- result:
 1	5
 2	6
