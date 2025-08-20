@@ -31,6 +31,7 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_utility.cpp
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
+  agg/combinator/agg_state_utils.cpp
   base64.cpp
   binary_functions.cpp
   expr_context.cpp

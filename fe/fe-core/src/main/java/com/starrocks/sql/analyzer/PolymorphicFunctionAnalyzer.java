@@ -217,14 +217,22 @@ public class PolymorphicFunctionAnalyzer {
             // it's mock, need handle it in expressionAnalyzer
             .put(FunctionSet.NAMED_STRUCT, new RowDeduce())
             .put(FunctionSet.ANY_VALUE, types -> types[0])
+            // any_value functions
             .put(FunctionSet.getAggStateName(FunctionSet.ANY_VALUE), types -> types[0])
             .put(FunctionSet.getAggStateUnionName(FunctionSet.ANY_VALUE), types -> types[0])
             .put(FunctionSet.getAggStateMergeName(FunctionSet.ANY_VALUE), types -> types[0])
             .put(FunctionSet.getAggStateIfName(FunctionSet.ANY_VALUE), types -> types[0])
+            .put(FunctionSet.getStateUnionName(FunctionSet.ANY_VALUE), types -> types[0])
+            .put(FunctionSet.getStateMergeName(FunctionSet.ANY_VALUE), types -> types[0])
+            .put(FunctionSet.getAggStateCombineName(FunctionSet.ANY_VALUE), types -> types[0])
+            // array functions
             .put(FunctionSet.getAggStateName(FunctionSet.ARRAY_AGG), new ArrayAggStateDeduce())
             .put(FunctionSet.getAggStateUnionName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.getAggStateMergeName(FunctionSet.ARRAY_AGG), new ArrayAggMergeDeduce())
             .put(FunctionSet.getAggStateIfName(FunctionSet.ARRAY_AGG), types -> types[0])
+            .put(FunctionSet.getStateMergeName(FunctionSet.ARRAY_AGG), new ArrayAggMergeDeduce())
+            .put(FunctionSet.getStateUnionName(FunctionSet.ARRAY_AGG), types -> types[0])
+            .put(FunctionSet.getAggStateCombineName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.MAP_AGG, new MapAggDeduce())
             .build();
 
