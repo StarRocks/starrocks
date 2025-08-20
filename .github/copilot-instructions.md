@@ -31,6 +31,8 @@ The core analytical engine responsible for data storage, processing, and query e
 - Memory-efficient algorithms
 - SIMD optimizations where applicable
 
+📋 **Note:** See `be/.cursorrules` for detailed backend component breakdown
+
 ### Frontend (fe/) - Java
 SQL interface and query coordination layer:
 
@@ -44,12 +46,18 @@ SQL interface and query coordination layer:
   - `backup/` - Backup and restore functionality
   - `privilege/` - Authentication and authorization
   - `qe/` - Query execution coordination and session management
+- `fe/fe-common/` - Common frontend utilities
+- `fe/plugin-common/` - Plugin framework common components
+- `fe/spark-dpp/` - Spark data preprocessing integration
+- `fe/hive-udf/` - Hive UDF compatibility layer
 
 **Key Responsibilities:**
 - Parse and validate SQL statements
 - Generate optimized query plans using Cost-Based Optimizer (CBO)
 - Manage cluster metadata and coordination
 - Handle user sessions and security
+
+📋 **Note:** See `fe/.cursorrules` for detailed frontend component breakdown
 
 ### Java Extensions (java-extensions/) - Java
 External connectivity and extensibility:
@@ -66,6 +74,33 @@ External connectivity and extensibility:
 - `udf-extensions/` - User-Defined Function framework
 - `common-runtime/` - Shared runtime for extensions
 - `hadoop-ext/` - Hadoop ecosystem integration
+
+📋 **Note:** See `java-extensions/.cursorrules` for detailed extensions breakdown
+
+### Additional Important Directories
+
+**Generated Sources (gensrc/):**
+- `gensrc/proto/` - Protocol buffer definitions
+- `gensrc/thrift/` - Thrift interface definitions
+- `gensrc/script/` - Code generation scripts
+
+**Testing Framework (test/):**
+- `test/sql/` - SQL test cases organized by functionality
+- `test/common/` - Common test utilities
+- `test/lib/` - Test libraries and helpers
+
+**Tools and Utilities:**
+- `tools/` - Diagnostic tools, benchmarks, and utilities
+- `bin/` - Binary executables and scripts
+- `conf/` - Configuration files and templates
+- `build-support/` - Build system support files
+- `docker/` - Docker build configurations
+
+**Other Key Directories:**
+- `thirdparty/` - External dependencies and patches
+- `fs_brokers/` - File system broker implementations
+- `webroot/` - Web UI static files
+- `format-sdk/` - Format SDK for data interchange
 
 ## Coding Guidelines
 
@@ -132,15 +167,22 @@ def test_materialized_view_query():
     assert_sql_result(sql, expected_result)
 ```
 
-## Important Guidelines
+## ⚠️ CRITICAL BUILD SYSTEM WARNING
+**DO NOT attempt to build or run unit tests (UT) for this project unless explicitly requested by the user.**
 
-### ⚠️ Build and Test Warnings
-**DO NOT run build or test commands without explicit user request:**
-- `build.sh` - Extremely resource-intensive (hours to complete)
-- `run-be-ut.sh` / `run-fe-ut.sh` - Unit test execution (time-consuming)
+The build system is extremely resource-intensive and time-consuming. Building the full project can take hours and requires significant system resources.
+
+**Specific commands and files to AVOID:**
+- `build.sh` - Main build script (extremely resource intensive)
+- `build-in-docker.sh` - Docker-based build
+- `run-be-ut.sh` / `run-fe-ut.sh` / `run-java-exts-ut.sh` - Unit test runners
 - `docker-compose` commands - Heavy resource usage
+- `Makefile*` - Make build files
+- `pom.xml` - Maven build files (for Java components)
 
 **Focus on code analysis and targeted changes instead of full builds.**
+
+## Important Guidelines
 
 ### Pull Request Requirements
 
@@ -152,21 +194,44 @@ Must include category prefix:
 - `[Refactor]` - Code refactoring without functional changes
 - `[Test]` - Test-related changes
 - `[Doc]` - Documentation updates
+- `[Build]` - Build system and CI/CD changes
+- `[Performance]` - Performance optimizations
 
 **Example:** `[Feature] Add Apache Paimon table format support`
 
 **Commit Message Format:**
+Follow this structured format for all commit messages:
+
 ```
 [Category] Brief description (50 chars or less)
 
 Detailed explanation of what this commit does and why.
-Include context and reasoning for the change.
+Wrap lines at 72 characters.
 
 - Key change 1
 - Key change 2  
 - Key change 3
 
 Fixes: #issue_number (if applicable)
+Closes: #issue_number (if applicable)
+```
+
+**Categories:** BugFix, Enhancement, Feature, Refactor, Test, Doc, Build, Performance
+
+**Example:**
+```
+[Feature] Add Apache Iceberg table format support
+
+Implement Iceberg connector to enable querying Iceberg tables
+directly from StarRocks. This includes metadata reading,
+partition pruning, and schema evolution support.
+
+- Add IcebergConnector and IcebergMetadata classes
+- Implement partition and file pruning optimizations  
+- Support for Iceberg v1 and v2 table formats
+- Add comprehensive unit tests
+
+Closes: #12345
 ```
 
 ### Code Review Focus Areas
@@ -217,7 +282,7 @@ Fixes: #issue_number (if applicable)
 ## Quick Reference
 
 **Key File Extensions:**
-- `.cpp`, `.h` - C++ backend code
+- `.cpp`, `.h`, `.cc` - C++ backend code
 - `.java` - Java frontend/extensions code  
 - `.sql` - SQL test cases
 - `.py` - Python test scripts
@@ -233,5 +298,12 @@ Fixes: #issue_number (if applicable)
 - `test/sql/` - SQL correctness tests organized by functionality
 - `be/test/` - C++ unit tests
 - `fe/fe-core/src/test/` - Java unit tests
+
+**Build System Files to Avoid:**
+- `build.sh` - Main build script (very resource intensive)
+- `build-in-docker.sh` - Docker-based build
+- `run-*-ut.sh` - Unit test runners
+- `Makefile*` - Make build files
+- `pom.xml` - Maven build files (for Java components)
 
 This project prioritizes **performance**, **correctness**, and **scalability**. When contributing, consider the impact on query performance and ensure changes maintain SQL standard compliance.
