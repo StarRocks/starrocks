@@ -104,7 +104,7 @@ public class PartitionInfoBuilder {
         try {
             List<Column> partitionColumns = findPartitionColumns(listPartitionDesc.getPartitionColNames(), schema);
             Map<ColumnId, Column> idToColumn = MetaUtils.buildIdToColumn(schema);
-            ListPartitionInfo listPartitionInfo = new ListPartitionInfo(listPartitionDesc.getType(), partitionColumns);
+            ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST, partitionColumns);
 
             // Handle SingleItemListPartitionDesc
             for (SingleItemListPartitionDesc desc : listPartitionDesc.getSingleListPartitionDescs()) {
