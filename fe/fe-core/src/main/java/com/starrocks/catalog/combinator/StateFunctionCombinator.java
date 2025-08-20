@@ -33,25 +33,25 @@ import java.util.Optional;
  *  input type  : aggregate function's argument types
  *  return type : aggregate function's immediate type
  */
-public final class AggStateCombinator extends ScalarFunction  {
-    private static final Logger LOG = LogManager.getLogger(AggStateCombinator.class);
+public final class StateFunctionCombinator extends ScalarFunction  {
+    private static final Logger LOG = LogManager.getLogger(StateFunctionCombinator.class);
 
-    public AggStateCombinator(FunctionName functionName, List<Type> argTypes, Type intermediateType) {
+    public StateFunctionCombinator(FunctionName functionName, List<Type> argTypes, Type intermediateType) {
         super(functionName, argTypes, intermediateType, false);
     }
 
-    public AggStateCombinator(AggStateCombinator other) {
+    public StateFunctionCombinator(StateFunctionCombinator other) {
         super(other);
         this.setBinaryType(TFunctionBinaryType.BUILTIN);
         this.setPolymorphic(other.isPolymorphic());
         this.setAggStateDesc(other.aggStateDesc.clone());
     }
 
-    public static Optional<AggStateCombinator> of(AggregateFunction aggFunc) {
+    public static Optional<StateFunctionCombinator> of(AggregateFunction aggFunc) {
         try {
             Type intermediateType = aggFunc.getIntermediateTypeOrReturnType().clone();
             FunctionName funcName = new FunctionName(AggStateUtils.aggStateFunctionName(aggFunc.functionName()));
-            AggStateCombinator aggStateFunc = new AggStateCombinator(funcName, Arrays.asList(aggFunc.getArgs()),
+            StateFunctionCombinator aggStateFunc = new StateFunctionCombinator(funcName, Arrays.asList(aggFunc.getArgs()),
                     intermediateType);
             aggStateFunc.setBinaryType(TFunctionBinaryType.BUILTIN);
             aggStateFunc.setPolymorphic(aggFunc.isPolymorphic());
@@ -64,21 +64,21 @@ public final class AggStateCombinator extends ScalarFunction  {
             aggStateFunc.setIsNullable(aggStateDesc.getResultNullable());
             return Optional.of(aggStateFunc);
         } catch (Exception e) {
-            LOG.warn("Failed to create AggStateCombinator for function: {}", aggFunc.functionName(), e);
+            LOG.warn("Failed to create StateFunctionCombinator for function: {}", aggFunc.functionName(), e);
             return Optional.empty();
         }
     }
 
     @Override
     public Function copy() {
-        return new AggStateCombinator(this);
+        return new StateFunctionCombinator(this);
     }
 
     @Override
     public ScalarFunction withNewTypes(List<Type> newArgTypes, Type newRetType) {
         // NOTE: It's fine that only changes agg state function's arg types and return type but inner agg state desc's,
         // since FunctionAnalyzer will adjust it later.
-        AggStateCombinator newFn = new AggStateCombinator(this.getFunctionName(), newArgTypes, newRetType);
+        StateFunctionCombinator newFn = new StateFunctionCombinator(this.getFunctionName(), newArgTypes, newRetType);
         newFn.setLocation(this.getLocation());
         newFn.setSymbolName(this.getSymbolName());
         newFn.setPrepareFnSymbol(this.getPrepareFnSymbol());

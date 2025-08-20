@@ -69,7 +69,6 @@ public class AggStateDesc {
         this.resultNullable = resultNullable;
     }
 
-
     public AggStateDesc(String functionName,
                         Type returnType,
                         List<Type> argTypes) {
@@ -82,15 +81,11 @@ public class AggStateDesc {
         this.resultNullable = isAggFuncResultNullable(functionName);
     }
 
-    private boolean isAggFuncResultNullable(String functionName) {
+    public static boolean isAggFuncResultNullable(String functionName) {
         // To be more compatible, always set result nullable to true here. This may decrease the performance of runtime
         // but can be more compatible with different aggregate functions and inputs.
         // this.resultNullable = !FunctionSet.alwaysReturnNonNullableFunctions.contains(functionName);
-        if (FunctionSet.COUNT.equalsIgnoreCase(functionName)) {
-            return false;
-        } else {
-            return true;
-        }
+        return !FunctionSet.COUNT.equalsIgnoreCase(functionName);
     }
 
     public List<Type> getArgTypes() {
