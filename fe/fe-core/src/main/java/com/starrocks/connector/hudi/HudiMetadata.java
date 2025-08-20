@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
@@ -30,7 +31,6 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFileOperations;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
@@ -189,7 +189,7 @@ public class HudiMetadata implements ConnectorMetadata {
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate, long limit, TableVersionRange version) {
+                                         ScalarOperator predicate, long limit, TvrVersionRange version) {
         if (!properties.enableGetTableStatsFromExternalMetadata()) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }

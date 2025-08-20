@@ -21,6 +21,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -29,7 +30,6 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergConnectorScanRangeSource;
 import com.starrocks.connector.iceberg.IcebergGetRemoteFilesParams;
@@ -68,7 +68,7 @@ public class IcebergScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private ScalarOperator icebergJobPlanningPredicate = null;
     private CloudConfiguration cloudConfiguration = null;
-    protected Optional<Long> snapshotId;
+    protected TvrVersionRange tvrVersionRange;
     private IcebergConnectorScanRangeSource scanRangeSource = null;
     private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
@@ -95,7 +95,7 @@ public class IcebergScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        if (snapshotId.isEmpty() || scanRangeSource == null) {
+        if (tvrVersionRange.isEmpty() || scanRangeSource == null) {
             return List.of();
         }
 
@@ -111,8 +111,8 @@ public class IcebergScanNode extends ScanNode {
     }
 
     public void rebuildScanRange(List<RemoteFileInfo> splits) throws StarRocksException {
-        Preconditions.checkNotNull(snapshotId, "snapshot id is null");
-        if (snapshotId.isEmpty()) {
+        Preconditions.checkNotNull(tvrVersionRange, "snapshot id is null");
+        if (tvrVersionRange.isEmpty()) {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
             return;
         }
@@ -140,8 +140,8 @@ public class IcebergScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
-        Preconditions.checkNotNull(snapshotId, "snapshot id is null");
-        if (snapshotId.isEmpty()) {
+        Preconditions.checkNotNull(tvrVersionRange, "tvrVersionRange id is null");
+        if (tvrVersionRange.isEmpty()) {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
             return;
         }
@@ -150,7 +150,7 @@ public class IcebergScanNode extends ScanNode {
                 IcebergGetRemoteFilesParams.newBuilder()
                         .setAllParams(tableFullMORParams)
                         .setParams(morParams)
-                        .setTableVersionRange(TableVersionRange.withEnd(snapshotId))
+                        .setTableVersionRange(tvrVersionRange)
                         .setPredicate(icebergJobPlanningPredicate)
                         .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt())
                         .build();
@@ -235,8 +235,8 @@ public class IcebergScanNode extends ScanNode {
         return tableFullMORParams;
     }
 
-    public void setSnapshotId(Optional<Long> snapshotId) {
-        this.snapshotId = snapshotId;
+    public void setTvrVersionRange(TvrVersionRange tvrVersionRange) {
+        this.tvrVersionRange = tvrVersionRange;
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -296,6 +296,10 @@ public class IcebergScanNode extends ScanNode {
             output.append(prefix).append("MIN/MAX PREDICATES: ").append(
                     getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
+        if (tvrVersionRange != null) {
+            output.append(prefix).append("TABLE VERSION: ").append(
+                    tvrVersionRange.toString()).append("\n");
+        }
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));
         output.append("\n");
@@ -319,7 +323,7 @@ public class IcebergScanNode extends ScanNode {
 
         if (detailLevel == TExplainLevel.VERBOSE && !isResourceMappingCatalog(icebergTable.getCatalogName())) {
             ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
-            requestContext.setTableVersionRange(TableVersionRange.withEnd(snapshotId));
+            requestContext.setTableVersionRange(tvrVersionRange);
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     icebergTable.getCatalogName(), icebergTable.getCatalogDBName(),
                     icebergTable.getCatalogTableName(), requestContext);

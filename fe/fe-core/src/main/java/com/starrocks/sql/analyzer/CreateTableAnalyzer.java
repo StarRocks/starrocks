@@ -33,7 +33,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -61,8 +60,12 @@ import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.collections.CollectionUtils;
@@ -231,7 +234,18 @@ public class CreateTableAnalyzer {
         List<Column> columns = new ArrayList<>();
         for (ColumnDef columnDef : columnDefs) {
             try {
-                columnDef.analyze(statement.isOlapEngine(), CatalogMgr.isInternalCatalog(catalogName), engineName);
+                String name = columnDef.getName();
+                boolean isAllowNull = columnDef.isAllowNull();
+
+                if (CatalogMgr.isInternalCatalog(catalogName)) {
+                    if (!isAllowNull && !EngineType.supportNotNullColumn(engineName)) {
+                        // prevent not null for external table
+                        throw new AnalysisException(String.format("All columns must be nullable for external table. " +
+                                "Column %s is not nullable, You can rebuild the external table and " +
+                                "We strongly recommend that you use catalog to access external data", name));
+                    }
+                }
+                ColumnDefAnalyzer.analyze(columnDef, statement.isOlapEngine());
             } catch (AnalysisException e) {
                 LOG.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());
@@ -261,7 +275,7 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("BITMAP_UNION must be used in AGG_KEYS", keysDesc.getPos());
             }
 
-            Column col = columnDef.toColumn(null);
+            Column col = Column.fromColumnDef(null, columnDef);
             if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
                     || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
                     keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
@@ -554,7 +568,11 @@ public class CreateTableAnalyzer {
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
         if (stmt.isOlapEngine()) {
             if (partitionDesc != null) {
-                if (partitionDesc.getType() == PartitionType.RANGE || partitionDesc.getType() == PartitionType.LIST) {
+                if (partitionDesc instanceof ListPartitionDesc ||
+                        partitionDesc instanceof MultiItemListPartitionDesc ||
+                        partitionDesc instanceof RangePartitionDesc ||
+                        partitionDesc instanceof SingleItemListPartitionDesc ||
+                        partitionDesc instanceof SingleRangePartitionDesc) {
                     try {
                         PartitionDescAnalyzer.analyze(partitionDesc);
                         partitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
@@ -586,7 +604,7 @@ public class CreateTableAnalyzer {
         } else {
             if (engineName.equalsIgnoreCase(Table.TableType.ELASTICSEARCH.name())) {
                 EsUtil.analyzePartitionDesc(partitionDesc);
-            } else if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name()) 
+            } else if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name())
                     || engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
                 if (partitionDesc != null) {
                     ((ListPartitionDesc) partitionDesc).analyzeExternalPartitionColumns(stmt.getColumnDefs(), engineName);
@@ -635,12 +653,12 @@ public class CreateTableAnalyzer {
                         + " must use hash distribution", distributionDesc.getPos());
             }
             if (distributionDesc.getBuckets() > Config.max_bucket_number_per_partition && stmt.isOlapEngine()
-                    && stmt.getPartitionDesc() != null && stmt.getPartitionDesc().getType() != PartitionType.UNPARTITIONED) {
+                    && stmt.getPartitionDesc() != null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TOO_MANY_BUCKETS, Config.max_bucket_number_per_partition);
             }
             Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             columnSet.addAll(columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toSet()));
-            distributionDesc.analyze(columnSet);
+            DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
             stmt.setDistributionDesc(distributionDesc);
             stmt.setProperties(properties);
         } else {
@@ -661,7 +679,7 @@ public class CreateTableAnalyzer {
     private static void analyzeGeneratedColumnForIceberg(CreateTableStmt stmt, ConnectContext context) {
         List<Column> columns = stmt.getColumns();
         ListPartitionDesc desc = (ListPartitionDesc) stmt.getPartitionDesc();
-        
+
         for (Column column : columns) {
             if (column.isGeneratedColumn()) {
                 if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
@@ -690,7 +708,7 @@ public class CreateTableAnalyzer {
                             throw new SemanticException("Iceberg transform expression's parameter should be a column reference");
                         }
                     } else if (fnName.equalsIgnoreCase("truncate") ||
-                                fnName.equalsIgnoreCase("bucket")) {
+                            fnName.equalsIgnoreCase("bucket")) {
                         if (expr.getChildren().size() != 2) {
                             throw new SemanticException("Iceberg transform expression parameter's count not valid");
                         } else if (!(expr.getChild(0) instanceof SlotRef)) {
@@ -699,7 +717,7 @@ public class CreateTableAnalyzer {
                             throw new SemanticException("Iceberg transform expression's second parameter is not valid");
                         }
                     } else {
-                        throw new SemanticException("Iceberg partition column does not support " + fnName + 
+                        throw new SemanticException("Iceberg partition column does not support " + fnName +
                                 " transform expression");
                     }
                 } else {
@@ -809,7 +827,7 @@ public class CreateTableAnalyzer {
             List<String> vectorIndexNames = indexDefs.stream()
                     .filter(indexDef -> indexDef.getIndexType() == IndexDef.IndexType.VECTOR)
                     .map(IndexDef::getIndexName)
-                    .toList();
+                    .collect(Collectors.toList());
             if (vectorIndexNames.size() > 1) {
                 throw new SemanticException(
                         String.format("At most one vector index is allowed for a table, but %d were found: %s",

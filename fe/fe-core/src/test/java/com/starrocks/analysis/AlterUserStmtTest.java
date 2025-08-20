@@ -63,7 +63,7 @@ public class AlterUserStmtTest {
 
         sql = "ALTER USER 'user' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'";
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
-        Assertions.assertEquals("user", stmt.getUserIdentity().getUser());
+        Assertions.assertEquals("user", stmt.getUser().getUser());
         Assertions.assertEquals("ALTER USER 'user'@'%' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'",
                 AstToSQLBuilder.toSQL(stmt));
         Assertions.assertEquals(new String(stmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8),

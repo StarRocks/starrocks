@@ -148,7 +148,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         } else if (scanOperator instanceof LogicalIcebergScanOperator) {
             newMetaScan = new LogicalIcebergScanOperator(scanOperator.getTable(),
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate(),
-                    scanOperator.getTableVersionRange());
+                    scanOperator.getTvrVersionRange());
         } else if (scanOperator instanceof LogicalFileScanOperator) {
             newMetaScan = new LogicalFileScanOperator(scanOperator.getTable(),
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());

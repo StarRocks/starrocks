@@ -87,7 +87,6 @@ public class MultiListPartitionDescTest {
         partitionDesc.analyze(columnDefLists, null);
 
         Assertions.assertEquals(partitionName, partitionDesc.getPartitionName());
-        Assertions.assertEquals(PartitionType.LIST, partitionDesc.getType());
         Assertions.assertEquals(1, partitionDesc.getReplicationNum());
         Assertions.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionDesc.getTabletType());
         Assertions.assertEquals(true, partitionDesc.isInMemory());

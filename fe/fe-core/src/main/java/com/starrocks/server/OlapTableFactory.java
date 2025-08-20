@@ -26,6 +26,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FlatJsonConfig;
@@ -35,6 +36,7 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionInfoBuilder;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -146,7 +148,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
             }
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            partitionInfo = PartitionInfoBuilder.build(partitionDesc, baseSchema, partitionNameToId, false);
 
             // Automatic partitioning needs to ensure that at least one tablet is opened.
             if (partitionInfo.isAutomaticPartition()) {
@@ -178,7 +180,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
-        DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
+        DistributionInfo distributionInfo = DistributionInfoBuilder.build(distributionDesc, baseSchema);
 
         short shortKeyColumnCount = 0;
         List<Integer> sortKeyIdxes = new ArrayList<>();

@@ -18,9 +18,9 @@
 
 namespace starrocks::connector {
 
-void SinkOperatorMemoryManager::init(std::map<PartitionKey, WriterStreamPair>* writer_stream_pairs,
+void SinkOperatorMemoryManager::init(std::map<PartitionKey, PartitionChunkWriterPtr>* partition_chunk_writers,
                                      AsyncFlushStreamPoller* io_poller, CommitFunc commit_func) {
-    _candidates = writer_stream_pairs;
+    _candidates = partition_chunk_writers;
     _commit_func = std::move(commit_func);
     _io_poller = io_poller;
 }
@@ -30,24 +30,24 @@ bool SinkOperatorMemoryManager::kill_victim() {
         return false;
     }
 
-    // find file writer with the largest file size
-    PartitionKey partition;
-    WriterStreamPair* victim = nullptr;
-    for (auto& [key, writer_and_stream] : *_candidates) {
-        if (victim && victim->first->get_written_bytes() > writer_and_stream.first->get_written_bytes()) {
+    // Find a target file writer to flush.
+    // For buffered partition writer, choose the the writer with the largest file size.
+    // For spillable partition writer, choose the the writer with the largest memory size that can be spilled.
+    PartitionChunkWriterPtr victim = nullptr;
+    for (auto& [key, writer] : *_candidates) {
+        if (victim && victim->get_flushable_bytes() > writer->get_flushable_bytes()) {
             continue;
         }
-        partition = key;
-        victim = &writer_and_stream;
+        victim = writer;
     }
     if (victim == nullptr) {
         return false;
     }
 
-    auto result = victim->first->commit();
-    _commit_func(result);
-    LOG(INFO) << "kill victim: " << victim->second->filename() << " size: " << result.file_statistics.file_size;
-    _candidates->erase(partition);
+    // The flush will decrease the writer flushable memory bytes, so it usually
+    // will not be choosed in a short time.
+    auto result = victim->flush();
+    LOG(INFO) << "kill victim: " << victim->out_stream()->filename() << ", result: " << result;
     return true;
 }
 
@@ -59,8 +59,8 @@ int64_t SinkOperatorMemoryManager::update_releasable_memory() {
 
 int64_t SinkOperatorMemoryManager::update_writer_occupied_memory() {
     int64_t writer_occupied_memory = 0;
-    for (auto& [_, writer_and_stream] : *_candidates) {
-        writer_occupied_memory += writer_and_stream.first->get_written_bytes();
+    for (auto& [_, writer] : *_candidates) {
+        writer_occupied_memory += writer->get_written_bytes();
     }
     _writer_occupied_memory.store(writer_occupied_memory);
     return _writer_occupied_memory;
@@ -113,7 +113,6 @@ bool SinkMemoryManager::_apply_on_mem_tracker(SinkOperatorMemoryManager* child_m
 
     auto available_memory = [&]() { return mem_tracker->limit() - mem_tracker->consumption(); };
     auto low_watermark = static_cast<int64_t>(mem_tracker->limit() * _low_watermark_ratio);
-    auto high_watermark = static_cast<int64_t>(mem_tracker->limit() * _high_watermark_ratio);
     auto exceed_urgent_space = [&]() {
         return _total_writer_occupied_memory() > _query_tracker->limit() * _urgent_space_ratio;
     };
@@ -125,7 +124,7 @@ bool SinkMemoryManager::_apply_on_mem_tracker(SinkOperatorMemoryManager* child_m
                                   << " releasable_memory: " << _total_releasable_memory()
                                   << " writer_allocated_memory: " << _total_writer_occupied_memory();
         // trigger early close
-        while (exceed_urgent_space() && available_memory() + _total_releasable_memory() < high_watermark) {
+        while (exceed_urgent_space() && available_memory() <= low_watermark) {
             bool found = child_manager->kill_victim();
             if (!found) {
                 break;

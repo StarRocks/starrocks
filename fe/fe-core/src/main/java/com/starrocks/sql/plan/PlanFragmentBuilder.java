@@ -67,6 +67,7 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
@@ -825,7 +826,8 @@ public class PlanFragmentBuilder {
                     .collect(Collectors.toSet());
             if (scan.getPredicate() == null) {
                 // remove path which has pruned
-                return scan.getColumnAccessPaths().stream().filter(p -> checkNames.contains(p.getPath()))
+                return scan.getColumnAccessPaths().stream()
+                        .filter(p -> checkNames.contains(p.getPath()) || p.isExtended())
                         .collect(Collectors.toList());
             }
 
@@ -1031,6 +1033,7 @@ public class PlanFragmentBuilder {
                     scan.getSelectPartitionNames(),
                     context.getConnectContext().getCurrentComputeResource());
 
+            scanNode.setColumnAccessPaths(scan.getColumnAccessPaths());
             scanNode.computeRangeLocations(computeResource);
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
@@ -1495,6 +1498,7 @@ public class PlanFragmentBuilder {
             icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             icebergScanNode.computeStatistics(expression.getStatistics());
             currentExecGroup.add(icebergScanNode, true);
+            TvrVersionRange tvrVersionRange = node.getTvrVersionRange();
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1508,7 +1512,7 @@ public class PlanFragmentBuilder {
                 ScalarOperator icebergPredicate = !isEqDeleteScan ? node.getPredicate() :
                         ((PhysicalIcebergEqualityDeleteScanOperator) node).getOriginPredicate();
                 icebergScanNode.preProcessIcebergPredicate(icebergPredicate);
-                icebergScanNode.setSnapshotId(node.getTableVersionRange().end());
+                icebergScanNode.setTvrVersionRange(node.getTvrVersionRange());
                 // setting bucket properties before setting scan range locations
                 if (expression.getOutputProperty().getDistributionProperty().isShuffle()) {
                     DistributionSpec distributionSpec = expression.getOutputProperty().getDistributionProperty().getSpec();
@@ -1577,7 +1581,7 @@ public class PlanFragmentBuilder {
 
             IcebergMetadataScanNode metadataScanNode =
                     new IcebergMetadataScanNode(context.getNextNodeId(), tupleDescriptor,
-                            "IcebergMetadataScanNode", node.getTableVersionRange());
+                            "IcebergMetadataScanNode", node.getTvrVersionRange());
             try {
                 ScalarOperatorToExpr.FormatterContext formatterContext =
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());

@@ -60,6 +60,9 @@ bool ConnectorSinkOperator::need_input() const {
     }
 
     auto [status, _] = _io_poller->poll();
+    if (status.ok()) {
+        status = _connector_chunk_sink->status();
+    }
     if (!status.ok()) {
         LOG(WARNING) << "cancel fragment: " << status;
         _fragment_context->cancel(status);
@@ -74,12 +77,16 @@ bool ConnectorSinkOperator::is_finished() const {
     }
 
     auto [status, finished] = _io_poller->poll();
+    if (status.ok()) {
+        status = _connector_chunk_sink->status();
+    }
     if (!status.ok()) {
         LOG(WARNING) << "cancel fragment: " << status;
         _fragment_context->cancel(status);
     }
 
-    return finished;
+    bool ret = finished && _connector_chunk_sink->is_finished();
+    return ret;
 }
 
 Status ConnectorSinkOperator::set_finishing(RuntimeState* state) {

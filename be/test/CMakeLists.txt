@@ -33,6 +33,7 @@ set(EXEC_FILES
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp
+        ./connector_sink/partition_chunk_writer_test.cpp
         ./connector_sink/async_flush_output_stream_test.cpp
         ./fs/azure/azblob_uri_test.cpp
         ./fs/azure/fs_azblob_test.cpp
@@ -116,6 +117,8 @@ set(EXEC_FILES
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
+        ./exprs/agg/agg_compressed_key_test.cpp
+        ./exprs/agg/agg_state_functions_test.cpp
         ./exprs/arithmetic_expr_test.cpp
         ./exprs/arithmetic_operation_test.cpp
         ./exprs/array_element_expr_test.cpp
@@ -183,6 +186,7 @@ set(EXEC_FILES
         ./exprs/min_max_predicate_test.cpp
         ./exprs/in_const_predicate_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
+        ./exprs/dict_expr_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp

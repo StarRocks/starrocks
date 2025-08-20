@@ -16,7 +16,7 @@
 
 namespace starrocks::connector {
 
-void AsyncFlushStreamPoller::enqueue(std::unique_ptr<Stream> stream) {
+void AsyncFlushStreamPoller::enqueue(std::shared_ptr<Stream> stream) {
     auto async_status = stream->io_status();
     _queue.push_back({
             .stream = std::move(stream),

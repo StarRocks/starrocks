@@ -39,6 +39,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import org.apache.logging.log4j.LogManager;
@@ -212,15 +213,17 @@ public class AuthenticationMgr {
     }
 
     public void createUser(CreateUserStmt stmt) throws DdlException {
-        UserIdentity userIdentity = stmt.getUserIdentity();
+        UserRef user = stmt.getUser();
+        UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+
         UserAuthenticationInfo info = stmt.getAuthenticationInfo();
         writeLock();
         try {
             if (userToAuthenticationInfo.containsKey(userIdentity)) {
                 // Existence verification has been performed in the Analyzer stage. If it exists here,
                 // it may be that other threads have performed the same operation, and return directly here
-                LOG.info("Operation CREATE USER failed for " + stmt.getUserIdentity()
-                        + " : user " + stmt.getUserIdentity() + " already exists");
+                LOG.info("Operation CREATE USER failed for " + stmt.getUser()
+                        + " : user " + stmt.getUser() + " already exists");
                 return;
             }
 
@@ -334,9 +337,10 @@ public class AuthenticationMgr {
     }
 
     public void dropUser(DropUserStmt stmt) throws DdlException {
-        UserIdentity userIdentity = stmt.getUserIdentity();
+        UserRef user = stmt.getUser();
         writeLock();
         try {
+            UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
             dropUserNoLock(userIdentity);
             // drop user privilege as well
             GlobalStateMgr.getCurrentState().getAuthorizationMgr().onDropUser(userIdentity);

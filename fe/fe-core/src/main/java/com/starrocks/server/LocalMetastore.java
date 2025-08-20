@@ -70,6 +70,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -86,6 +87,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionInfoBuilder;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
@@ -223,6 +225,7 @@ import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
@@ -901,7 +904,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         List<Column> baseSchema = olapTable.getBaseSchema();
         DistributionInfo defaultDistributionInfo = olapTable.getDefaultDistributionInfo();
         if (distributionDesc != null) {
-            distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
+            distributionInfo = DistributionInfoBuilder.build(distributionDesc, baseSchema);
             // for now. we only support modify distribution's bucket num
             if (distributionInfo.getType() != defaultDistributionInfo.getType()) {
                 throw new DdlException("Cannot assign different distribution type. default is: "
@@ -2914,7 +2917,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
-        DistributionInfo baseDistribution = distributionDesc.toDistributionInfo(baseSchema);
+        DistributionInfo baseDistribution = DistributionInfoBuilder.build(distributionDesc, baseSchema);
         // create refresh scheme
         MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeClause refreshSchemeDesc = stmt.getRefreshSchemeDesc();
@@ -3185,7 +3188,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
                 Expr partitionByExpr = partitionByExprs.get(0);
                 ExpressionPartitionDesc expressionPartitionDesc = new ExpressionPartitionDesc(partitionByExpr);
-                return expressionPartitionDesc.toPartitionInfo(mvPartitionColumns, Maps.newHashMap(), false);
+                return PartitionInfoBuilder.build(expressionPartitionDesc, mvPartitionColumns, Maps.newHashMap(), false);
             }
         } else {
             if (partitionType != PartitionType.UNPARTITIONED && partitionType != null) {
@@ -3305,13 +3308,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                           EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc,
                                           int priority, boolean mergeRedundant, boolean isManual)
             throws DdlException, MetaNotFoundException {
-        return refreshMaterializedView(dbName, mvName, force, partitionDesc, priority, mergeRedundant, isManual, false);
+        return refreshMaterializedView(dbName, mvName, force, partitionDesc, priority, mergeRedundant, isManual, false,
+                null);
     }
 
     public String refreshMaterializedView(String dbName, String mvName, boolean force,
                                           EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc,
-                                          int priority, boolean mergeRedundant, boolean isManual, boolean isSync)
-            throws DdlException, MetaNotFoundException {
+                                          int priority, boolean mergeRedundant, boolean isManual, boolean isSync,
+                                          StatementBase statement) throws DdlException, MetaNotFoundException {
         MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
         String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
@@ -3335,7 +3339,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         ExecuteOption executeOption = new ExecuteOption(priority, mergeRedundant, taskRunProperties);
         executeOption.setManual(isManual);
         executeOption.setSync(isSync);
-        return executeRefreshMvTask(dbName, materializedView, executeOption);
+        if (statement != null && statement.isExplain()) {
+            return taskManager.getMVRefreshExplain(task, executeOption, statement);
+        } else {
+            return executeRefreshMvTask(dbName, materializedView, executeOption);
+        }
     }
 
     @Override
@@ -3348,7 +3356,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         int priority = refreshMaterializedViewStatement.getPriority() != null ?
                 refreshMaterializedViewStatement.getPriority() : Constants.TaskRunPriority.HIGH.value();
         return refreshMaterializedView(dbName, mvName, force, partitionDesc, priority,
-                Config.enable_mv_refresh_sync_refresh_mergeable, true, refreshMaterializedViewStatement.isSync());
+                Config.enable_mv_refresh_sync_refresh_mergeable, true, refreshMaterializedViewStatement.isSync(),
+                refreshMaterializedViewStatement);
     }
 
     @Override
@@ -5032,7 +5041,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             Partition newPartition = null;
             if (distributionDesc != null) {
-                DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(olapTable.getColumns());
+                DistributionInfo distributionInfo = DistributionInfoBuilder.build(distributionDesc, olapTable.getColumns());
                 if (distributionInfo.getBucketNum() == 0) {
                     Partition sourcePartition = olapTable.getPartition(sourcePartitionId);
                     olapTable.optimizeDistribution(distributionInfo, sourcePartition);
