@@ -49,7 +49,6 @@ import com.starrocks.sql.optimizer.statistics.StatsVersion;
 import com.starrocks.statistic.StatisticUtils;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -236,11 +235,16 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         LogicalOlapScanOperator scanOperator = input.inputAt(0).inputAt(0).getOp().cast();
 
         OlapTable table = (OlapTable) scanOperator.getTable();
-        if (null == StatisticUtils.getTableLastUpdateTime(table)) {
+        LocalDateTime lastUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
+        Long lastUpdateTimestamp = StatisticUtils.getTableLastUpdateTimestamp(table);
+
+        if (lastUpdateTime == null || lastUpdateTimestamp == null) {
+            return Optional.empty();
+        }
+        if (table.inputHasTempPartition(scanOperator.getSelectedPartitionId())) {
             return Optional.empty();
         }
 
-        LocalDateTime lastUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
         Map<ColumnRefOperator, ScalarOperator> constantMap = Maps.newHashMap();
         Map<ColumnRefOperator, CallOperator> newAggCalls = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
@@ -262,7 +266,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                 Column c = scanOperator.getColRefToColumnMetaMap().get(ref);
                 Optional<IMinMaxStatsMgr.ColumnMinMax> minMax = IMinMaxStatsMgr.internalInstance()
                         .getStats(new ColumnIdentifier(table.getId(), c.getColumnId()),
-                                new StatsVersion(-1, lastUpdateTime.toEpochSecond(ZoneOffset.UTC)));
+                                new StatsVersion(-1, lastUpdateTimestamp));
                 if (minMax.isEmpty()) {
                     continue;
                 }
