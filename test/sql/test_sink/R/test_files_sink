@@ -91,4 +91,3 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/test_files_sink/${uuid0} >
 0
 
 -- !result
-
