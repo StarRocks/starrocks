@@ -207,9 +207,6 @@ public:
         return test_hash(code);
     }
 
-    // Alias for test_bytes
-    bool may_contains_bytes(const char* buf, uint32_t size) const { return test_bytes(buf, size); }
-
     char* data() const { return _data; }
 
     uint32_t num_bytes() const { return _num_bytes; }

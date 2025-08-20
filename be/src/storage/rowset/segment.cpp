@@ -531,7 +531,7 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
     if (may_contains && column_reader->get_remain_filter() != nullptr) {
         std::vector<std::string> paths = strings::Split(full_path, ".");
         std::string_view leaf = paths.back();
-        may_contains = column_reader->get_remain_filter()->may_contains_bytes(leaf.data(), leaf.size());
+        may_contains = column_reader->get_remain_filter()->test_bytes(leaf.data(), leaf.size());
     }
     if (!may_contains) {
         // create an iterator always return NULL for fields that don't exist in this segment
