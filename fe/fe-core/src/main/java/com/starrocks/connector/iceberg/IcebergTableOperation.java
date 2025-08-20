@@ -34,9 +34,9 @@ public enum IcebergTableOperation {
     }
     
     public enum RewriteFileOption {
-        REWRITE_ALL,
-        MIN_FILE_SIZE_BYTES,
-        BATCH_SIZE,
+        REWRITE_ALL,  // rewrite all the files under the specified partitions, ignore other param like min_file_size_bytes, default false
+        MIN_FILE_SIZE_BYTES, // to filter data file by size, default 256MB
+        BATCH_SIZE, // the max size of total data files to rewrite at one time, default 10GB
         UNKNOWN;
 
         public static RewriteFileOption fromString(String catStr) {
