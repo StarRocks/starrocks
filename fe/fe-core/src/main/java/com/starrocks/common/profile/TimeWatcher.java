@@ -14,7 +14,6 @@
 
 package com.starrocks.common.profile;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Table;
@@ -46,9 +45,16 @@ public class TimeWatcher {
     }
 
     public Optional<Timer> getTimer(String name) {
+        if (!scopedTimers.containsRow(name)) {
+            return Optional.empty();
+        }
         Map<Integer, ScopedTimer> timers = scopedTimers.row(name);
-        Preconditions.checkState(timers.size() == 1, "Timer %s has %d scopes", name, timers.size());
-        return Optional.of(timers.values().stream().findFirst().get());
+        if (timers.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(
+                timers.entrySet().stream().min(Comparator.comparingInt(Map.Entry::getKey)).map(Map.Entry::getValue)
+                        .orElse(null));
     }
 
     public List<Timer> getAllTimerWithOrder() {
