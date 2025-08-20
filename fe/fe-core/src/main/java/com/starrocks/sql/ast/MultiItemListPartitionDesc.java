@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
@@ -46,7 +45,6 @@ public class MultiItemListPartitionDesc extends SinglePartitionDesc {
     public MultiItemListPartitionDesc(boolean ifNotExists, String partitionName, List<List<String>> multiValues,
                                       Map<String, String> properties, NodePosition pos) {
         super(ifNotExists, partitionName, properties, pos);
-        this.type = PartitionType.LIST;
         this.multiValues = multiValues;
     }
 

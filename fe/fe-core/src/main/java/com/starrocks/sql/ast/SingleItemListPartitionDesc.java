@@ -18,7 +18,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
@@ -52,7 +51,6 @@ public class SingleItemListPartitionDesc extends SinglePartitionDesc {
     public SingleItemListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
                                        Map<String, String> properties, NodePosition pos) {
         super(ifNotExists, partitionName, properties, pos);
-        this.type = PartitionType.LIST;
         this.values = values;
     }
 
