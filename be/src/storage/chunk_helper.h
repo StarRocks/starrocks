@@ -221,4 +221,17 @@ private:
     const size_t _segment_size;
 };
 
+class ExprContext;
+class CommonExprEvalScopeGuard {
+public:
+    CommonExprEvalScopeGuard(const ChunkPtr& chunk, const std::map<SlotId, ExprContext*>& common_expr_ctxs);
+    ~CommonExprEvalScopeGuard();
+
+    Status evaluate();
+
+private:
+    const ChunkPtr& _chunk;
+    const std::map<SlotId, ExprContext*>& _common_expr_ctxs;
+};
+
 } // namespace starrocks
