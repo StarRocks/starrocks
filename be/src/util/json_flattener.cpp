@@ -45,6 +45,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
+#include "gutil/strings/split.h"
 #include "runtime/types.h"
 #include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
