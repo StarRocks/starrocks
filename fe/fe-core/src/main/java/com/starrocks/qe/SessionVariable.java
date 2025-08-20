@@ -914,6 +914,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DATACACHE_SHARING_WORK_PERIOD = "datacache_sharing_work_period";
     public static final String HISTORICAL_NODES_MIN_UPDATE_INTERVAL = "historical_nodes_min_update_interval";
 
+
+    public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1854,6 +1857,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = HISTORICAL_NODES_MIN_UPDATE_INTERVAL)
     private int historicalNodesMinUpdateInterval = 600;
+
+    @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
+    public boolean enableDropTableCheckMvDependency = false;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5032,6 +5038,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setHistoricalNodesMinUpdateInterval(int historicalNodesMinUpdateInterval) {
         this.historicalNodesMinUpdateInterval = historicalNodesMinUpdateInterval;
+    }
+
+    public boolean isEnableDropTableCheckMvDependency() {
+        return enableDropTableCheckMvDependency;
+    }
+
+    public void setEnableDropTableCheckMvDependency(boolean enableDropTableCheckMvDependency) {
+        this.enableDropTableCheckMvDependency = enableDropTableCheckMvDependency;
     }
 
     // Serialize to thrift object
