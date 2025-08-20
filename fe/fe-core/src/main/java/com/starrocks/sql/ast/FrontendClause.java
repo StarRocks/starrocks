@@ -15,19 +15,16 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.sql.parser.NodePosition;
 
 public class FrontendClause extends AlterClause {
     protected String hostPort;
     protected String host;
     protected int port;
-    protected FrontendNodeType role;
 
-    protected FrontendClause(String hostPort, FrontendNodeType role, NodePosition pos) {
+    protected FrontendClause(String hostPort, NodePosition pos) {
         super(pos);
         this.hostPort = hostPort;
-        this.role = role;
     }
 
     public String getHost() {
