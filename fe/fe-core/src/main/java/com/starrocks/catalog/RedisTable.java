@@ -15,7 +15,6 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.common.DdlException;
 import com.starrocks.thrift.TRedisTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -29,22 +28,22 @@ public class RedisTable extends Table {
     private String catalogName = null;
     private String dbName = null;
     private Map<String, String> properties;
+    private String valueDataFormat = null;
     public static final String URI = "redis_uri";
     public static final String USER = "user";
     public static final String PASSWORD = "password";
-    public static final String VALUE_DATA_FORMAT = "value_data_format";
 
     public RedisTable() {
         super(TableType.REDIS);
     }
 
     public RedisTable(long id, String catalogName, String dbName, String name, List<Column> schema,
-                      Map<String, String> properties)
-            throws DdlException {
+                      Map<String, String> properties, String valueDataFormat) {
         super(id, name, TableType.REDIS, schema);
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.properties = properties;
+        this.valueDataFormat = valueDataFormat;
     }
 
     @Override
@@ -67,7 +66,7 @@ public class RedisTable extends Table {
         tRedisTable.setRedis_url(properties.get(URI));
         tRedisTable.setRedis_user(properties.get(USER));
         tRedisTable.setRedis_passwd(properties.get(PASSWORD));
-        tRedisTable.setValue_data_format(properties.get(VALUE_DATA_FORMAT));
+        tRedisTable.setValue_data_format(valueDataFormat);
         
         TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.REDIS_TABLE,
                 fullSchema.size(), 0, getName(), dbName);
