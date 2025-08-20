@@ -772,7 +772,7 @@ TEST_P(FromLogicalTypeTest, test_from_logical_type) {
     if (logical_type == TYPE_DECIMAL || logical_type == TYPE_DECIMALV2 || logical_type == TYPE_DECIMAL32 ||
         logical_type == TYPE_DECIMAL64 || logical_type == TYPE_DECIMAL128) {
         ASSERT_GT(type_desc.precision, 27); // default precision for decimal types
-        ASSERT_GE(type_desc.scale, 9); // default scale for decimal types
+        ASSERT_GE(type_desc.scale, 9);      // default scale for decimal types
     } else {
         ASSERT_EQ(-1, type_desc.precision);
         ASSERT_EQ(-1, type_desc.scale);
@@ -781,8 +781,9 @@ TEST_P(FromLogicalTypeTest, test_from_logical_type) {
     ASSERT_EQ(is_ht, type_desc.is_huge_type());
 }
 
+// clang-format off
 INSTANTIATE_TEST_SUITE_P(
-    AllLogicalTypes,
+    LogicalTypes,
     FromLogicalTypeTest,
     ::testing::Values(
         // Basic types
@@ -814,4 +815,5 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(LogicalType::TYPE_OBJECT, TypeDescriptor::DEFAULT_BITMAP_LENGTH, "OBJECT", false, true)
     )
 );
+// clang-format on
 } // namespace starrocks
