@@ -45,6 +45,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
+#include "runtime/exception.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "types/hll.h"
@@ -65,13 +66,13 @@ namespace starrocks {
 #define THROW_RUNTIME_ERROR_WITH_TYPE(TYPE)              \
     std::stringstream ss;                                \
     ss << "not supported type " << type_to_string(TYPE); \
-    throw std::runtime_error(ss.str())
+    throw RuntimeException(ss.str())
 
 #define THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FROMTYPE, TOTYPE, VALUE) \
     std::stringstream ss;                                                 \
     ss << "cast from " << type_to_string(FROMTYPE) << "(" << VALUE << ")" \
        << " to " << type_to_string(TOTYPE) << " failed";                  \
-    throw std::runtime_error(ss.str())
+    throw RuntimeException(ss.str())
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException = false>
 struct CastFn {

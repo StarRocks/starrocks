@@ -175,6 +175,11 @@ set(EXEC_FILES
         ./exprs/vectorized_literal_test.cpp
         ./exprs/min_max_predicate_test.cpp
         ./exprs/in_const_predicate_test.cpp
+<<<<<<< HEAD
+=======
+        ./exprs/table_function/test_list_rowsets.cpp
+        ./exprs/dict_expr_test.cpp
+>>>>>>> 5a78cb3c75 ([BugFix] Fix throw exception issue in low-cardinality optimization error in ALLOW_THROW_EXCEPTION mode (#62098))
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
