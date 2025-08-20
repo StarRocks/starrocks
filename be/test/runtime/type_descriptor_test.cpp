@@ -763,6 +763,7 @@ TEST_P(FromLogicalTypeTest, test_from_logical_type) {
 
     ASSERT_EQ(expected_lts, logical_type_to_string(logical_type));
     ASSERT_EQ(is_slt, is_scalar_logical_type(logical_type));
+    ASSERT_EQ(logical_type, string_to_logical_type(expected_lts));
 
     auto type_desc = TypeDescriptor::from_logical_type(logical_type);
     ASSERT_EQ(logical_type, type_desc.type);
@@ -807,7 +808,6 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(LogicalType::TYPE_DECIMAL64, -1, "DECIMAL64", true, false),
         std::make_tuple(LogicalType::TYPE_DECIMAL128, -1, "DECIMAL128", true, false),
 
-        // complex types
         std::make_tuple(LogicalType::TYPE_HLL, HLL_COLUMN_DEFAULT_LEN, "HLL", false, true),
         std::make_tuple(LogicalType::TYPE_JSON, kJsonDefaultSize, "JSON", true, false),
         std::make_tuple(LogicalType::TYPE_VARIANT, 128, "VARIANT", true, false),
