@@ -96,10 +96,6 @@ public abstract class DistributionInfo implements Writable {
     public DistributionInfo copy() {
         throw new NotImplementedException();
     }
-
-
-
-
     public String toSql(Map<ColumnId, Column> idToColumn) {
         return "";
     }
