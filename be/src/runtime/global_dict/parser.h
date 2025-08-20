@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <vector>
 
 #include "column/column.h"
@@ -37,13 +38,19 @@ class DictMappingExpr;
 struct DictOptimizeContext {
     bool could_apply_dict_optimize = false;
     SlotId slot_id;
+<<<<<<< HEAD
     // if input was not nullable but output was nullable this flag will set true
     bool result_nullable = false;
     // size: DICT_DECODE_MAX_SIZE + 1
+=======
+    // size: dict codes.size() + 1
+>>>>>>> 5a78cb3c75 ([BugFix] Fix throw exception issue in low-cardinality optimization error in ALLOW_THROW_EXCEPTION mode (#62098))
     std::vector<int16_t> code_convert_map;
-    Filter filter;
     // for no-string column convert map
     ColumnPtr convert_column;
+
+    // error status
+    std::optional<std::vector<Status>> err_status;
 };
 
 class DictOptimizeParser {
