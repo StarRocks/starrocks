@@ -629,9 +629,11 @@ void JoinHashMap<LT, CT, MT>::_search_ht_impl(RuntimeState* state, const Buffer<
 #define XXH_PREFETCH(ptr) __builtin_prefetch((ptr), 0 /* rw==read */, 3 /* locality */)
 #endif
 
-#define PREFETCH_AND_COWAIT(x, y) \
-    XXH_PREFETCH(x);              \
-    XXH_PREFETCH(y);              \
+#define PREFETCH_AND_COWAIT(cur_data, next_index)            \
+    if constexpr (!HashMapMethod::AreKeysInChainIdentical) { \
+        XXH_PREFETCH(cur_data);                              \
+    }                                                        \
+    XXH_PREFETCH(next_index);                                \
     co_await std::suspend_always{};
 
 // When a probe row corresponds to multiple Build rows,
@@ -994,6 +996,19 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join(RuntimeState* st
         }
     }
 
+    if (match_count == probe_row_count) {
+        _probe_state->match_flag = JoinMatchFlag::ALL_MATCH_ONE;
+    } else if (match_count * 2 >= probe_row_count) {
+        _probe_state->match_flag = JoinMatchFlag::MOST_MATCH_ONE;
+        uint8_t* match_filter_data = _probe_state->probe_match_filter.data();
+        memset(match_filter_data, 0, sizeof(uint8_t) * probe_row_count);
+        for (uint32_t i = 0; i < match_count; i++) {
+            match_filter_data[_probe_state->probe_index[i]] = 1;
+        }
+    } else {
+        _probe_state->match_flag = JoinMatchFlag::NORMAL;
+    }
+
     PROBE_OVER()
 }
 
@@ -1001,10 +1016,10 @@ template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_anti_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                 const Buffer<CppType>& probe_data) {
-    size_t match_count = 0;
-
-    size_t probe_row_count = _probe_state->probe_row_count;
     DCHECK_LT(0, _table_items->row_count);
+
+    size_t match_count = 0;
+    const size_t probe_row_count = _probe_state->probe_row_count;
     if (_table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && _probe_state->null_array != nullptr) {
         // process left anti join from not in
         for (size_t i = 0; i < probe_row_count; i++) {
@@ -1020,6 +1035,19 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_anti_join(RuntimeState* st
                 match_count++;
             }
         }
+    }
+
+    if (match_count == probe_row_count) {
+        _probe_state->match_flag = JoinMatchFlag::ALL_MATCH_ONE;
+    } else if (match_count * 2 >= probe_row_count) {
+        _probe_state->match_flag = JoinMatchFlag::MOST_MATCH_ONE;
+        uint8_t* match_filter_data = _probe_state->probe_match_filter.data();
+        memset(match_filter_data, 0, sizeof(uint8_t) * probe_row_count);
+        for (uint32_t i = 0; i < match_count; i++) {
+            match_filter_data[_probe_state->probe_index[i]] = 1;
+        }
+    } else {
+        _probe_state->match_flag = JoinMatchFlag::NORMAL;
     }
 
     PROBE_OVER()
