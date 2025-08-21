@@ -668,6 +668,22 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false
 * 引入版本：v2.5
 
+### enable_bucket_aware_execution_on_lake
+
+* 描述：是否针对数据湖（如 Iceberg 表）查询启用 Bucket-aware 执行。启用后，系统通过利用分桶信息来优化查询执行，减少数据 Shuffle 并提高性能。此优化对分桶表的 Join 和 Aggregation 特别有效。
+* 默认值：true
+* 数据类型：Boolean
+* 引入版本：v4.0
+
+### lake_bucket_assign_mode
+
+* 描述：数据湖表查询的分桶分配模式。此变量控制系统执行查询期间启用 Bucket-aware 执行时如何将分桶分配给工作节点。有效值：
+  * `balance`：在工作节点间均匀分配分桶以实现负载均衡，以获取更好的性能。
+  * `elastic`：使用一致性哈希将分桶分配给工作节点，可以在弹性环境中提供更好的负载分配。
+* 默认值：balance
+* 数据类型：String
+* 引入版本：v4.0
+
 ### enable_pipeline_engine
 
 * 描述：是否启用 Pipeline 执行引擎。`true`：启用（默认），`false`：不启用。
