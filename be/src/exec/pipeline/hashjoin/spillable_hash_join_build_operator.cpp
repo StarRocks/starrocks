@@ -236,6 +236,7 @@ StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_c
     _hash_tables.clear();
     _hash_table_iterate_idx = 0;
 
+    _join_builder->hash_join_builder()->prepare_for_spill_start(runtime_state());
     _join_builder->hash_join_builder()->visitHt([this](JoinHashTable* ht) { _hash_tables.push_back(ht); });
 
     for (auto* ht : _hash_tables) {

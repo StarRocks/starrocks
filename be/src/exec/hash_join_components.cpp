@@ -442,6 +442,7 @@ public:
 
     void clone_readable(HashJoinBuilder* builder) override;
 
+    Status prepare_for_spill_start(RuntimeState* state) override;
     ChunkPtr convert_to_spill_schema(const ChunkPtr& chunk) const override;
 
 private:
@@ -905,6 +906,13 @@ Status AdaptivePartitionHashJoinBuilder::do_append_chunk(RuntimeState* state, co
         RETURN_IF_ERROR(_builders[0]->do_append_chunk(state, chunk));
     }
 
+    return Status::OK();
+}
+
+Status AdaptivePartitionHashJoinBuilder::prepare_for_spill_start(RuntimeState* state) {
+    if (_stage == Stage::BUFFERING) {
+        RETURN_IF_ERROR(_transfer_to_appending_stage(state));
+    }
     return Status::OK();
 }
 
