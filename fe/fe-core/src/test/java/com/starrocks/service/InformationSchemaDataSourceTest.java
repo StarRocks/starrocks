@@ -22,11 +22,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
-<<<<<<< HEAD
-=======
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
->>>>>>> e930f64d41 ([BugFix] Fix FE restart problem when enable query queue v2 (#62161))
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.SlotManager;
