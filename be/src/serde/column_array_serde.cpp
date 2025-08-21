@@ -416,7 +416,14 @@ public:
         for (int i = 0; i < num_objects; ++i) {
             uint64_t serialized_size = 0;
             buff = read_little_endian_64(buff, &serialized_size);
-            pool.emplace_back(Slice(buff, serialized_size));
+            auto variant = VariantValue::create(Slice(buff, serialized_size));
+            if (!variant.ok()) {
+                LOG(WARNING) << "Failed to deserialize variant: " << variant.status().to_string();
+                buff += serialized_size;
+                continue;
+            }
+
+            pool.emplace_back(std::move(variant.value()));
             buff += serialized_size;
         }
 
