@@ -1552,7 +1552,8 @@ std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema)
     return std::make_unique<PrimaryIndex>(pk_schema);
 }
 
-Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex) {
+Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex,
+                                      IOStat* stat) {
     // `_persistent_index` could be reset when call `unload()`, so we need to fetch reference first.
     std::shared_ptr<PersistentIndex> pindex;
     {
@@ -1560,7 +1561,7 @@ Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std:
         pindex = _persistent_index;
     }
     if (pindex != nullptr) {
-        return pindex->major_compaction(data_dir, tablet_id, mutex);
+        return pindex->major_compaction(data_dir, tablet_id, mutex, stat);
     } else {
         return Status::OK();
     }
