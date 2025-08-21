@@ -39,6 +39,7 @@ StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chun
     // do array-expresion first, then string expression
     if (_children.size() == 2) {
         auto target_column = ptr->get_column_by_slot_id(slot_id());
+        DCHECK(!target_column->only_null());
         auto data_column = ColumnHelper::get_data_column(target_column.get());
 
         if (data_column->is_binary()) {
