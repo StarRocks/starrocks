@@ -4773,10 +4773,12 @@ Status TabletUpdates::pk_index_major_compaction() {
         }
     });
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
-    st = index.major_compaction(_tablet.data_dir(), _tablet.tablet_id(), _tablet.updates()->get_index_lock());
+    IOStat stat;
+    st = index.major_compaction(_tablet.data_dir(), _tablet.tablet_id(), _tablet.updates()->get_index_lock(), &stat);
     if (st.ok()) {
         // reset score after major compaction finish
         _pk_index_write_amp_score.store(0.0);
+        _extra_file_size_cache.pindex_size.store(stat.total_file_size);
     }
     return st;
 }
