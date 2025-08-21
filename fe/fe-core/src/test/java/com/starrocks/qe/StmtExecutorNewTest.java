@@ -89,7 +89,7 @@ public class StmtExecutorNewTest extends StarRocksTestBase  {
         
         // Using reflection to test the private method
         java.lang.reflect.Method method = StmtExecutor.class.getDeclaredMethod(
-                "handleExplainStmt", ExecPlan.class);
+                "handleExplainExecPlan", ExecPlan.class);
         method.setAccessible(true);
         
         // Test with null execPlan
