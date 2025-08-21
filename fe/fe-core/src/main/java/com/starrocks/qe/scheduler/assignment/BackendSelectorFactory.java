@@ -69,8 +69,9 @@ public class BackendSelectorFactory {
                 ColocatedBackendSelector.Assignment colocatedAssignment =
                         execFragment.getOrCreateColocatedAssignment(scanNode);
                 boolean isRightOrFullBucketShuffleFragment = execFragment.isRightOrFullBucketShuffle();
+                String mode = connectContext.getSessionVariable().getLakeBucketAssignMode();
                 return new BucketAwareBackendSelector(scanNode, locations, colocatedAssignment,
-                        workerProvider, isRightOrFullBucketShuffleFragment, useIncrementalScanRanges);
+                        workerProvider, isRightOrFullBucketShuffleFragment, useIncrementalScanRanges, mode);
             }
             return new HDFSBackendSelector(scanNode, locations, assignment, workerProvider,
                     sessionVariable.getForceScheduleLocal(),

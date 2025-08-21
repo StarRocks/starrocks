@@ -104,7 +104,7 @@ public class BucketAwareBackendSelectorTest {
 
         // Create and test BucketAwareBackendSelector
         BucketAwareBackendSelector selector = new BucketAwareBackendSelector(
-                scanNode, locations, colocatedAssignment, workerProvider, false, false);
+                scanNode, locations, colocatedAssignment, workerProvider, false, false, SessionVariableConstants.BALANCE);
 
         // Execute the method under test
         selector.computeScanRangeAssignment();
@@ -152,7 +152,7 @@ public class BucketAwareBackendSelectorTest {
 
         // Create and test BucketAwareBackendSelector with incremental scan ranges
         BucketAwareBackendSelector selector = new BucketAwareBackendSelector(
-                scanNode, locations, colocatedAssignment, workerProvider, false, true);
+                scanNode, locations, colocatedAssignment, workerProvider, false, true, SessionVariableConstants.BALANCE);
 
         // Execute the method under test
         selector.computeScanRangeAssignment();
@@ -202,7 +202,7 @@ public class BucketAwareBackendSelectorTest {
 
         // Create and test BucketAwareBackendSelector
         BucketAwareBackendSelector selector = new BucketAwareBackendSelector(
-                scanNode, locations, colocatedAssignment, workerProvider, true, false);
+                scanNode, locations, colocatedAssignment, workerProvider, true, false, SessionVariableConstants.ELASTIC);
 
         // Execute the method under test
         selector.computeScanRangeAssignment();
@@ -232,7 +232,7 @@ public class BucketAwareBackendSelectorTest {
 
         // Create BucketAwareBackendSelector
         BucketAwareBackendSelector selector = new BucketAwareBackendSelector(
-                scanNode, locations, colocatedAssignment, workerProvider, false, false);
+                scanNode, locations, colocatedAssignment, workerProvider, false, false, SessionVariableConstants.BALANCE);
 
         // Execute and expect exception
         Assertions.assertThrows(StarRocksException.class, selector::computeScanRangeAssignment);

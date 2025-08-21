@@ -531,6 +531,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PER_BUCKET_OPTIMIZE = "enable_per_bucket_optimize";
     public static final String ENABLE_PARTITION_BUCKET_OPTIMIZE = "enable_partition_bucket_optimize";
     public static final String ENABLE_BUCKET_AWARE_EXECUTION_ON_LAKE = "enable_bucket_aware_execution_on_lake";
+    public static final String LAKE_BUCKET_ASSIGN_MODE = "lake_bucket_assign_mode";
     public static final String ENABLE_GROUP_EXECUTION = "enable_group_execution";
     public static final String GROUP_EXECUTION_GROUP_SCALE = "group_execution_group_scale";
     public static final String GROUP_EXECUTION_MAX_GROUPS = "group_execution_max_groups";
@@ -1743,6 +1744,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_BUCKET_AWARE_EXECUTION_ON_LAKE)
     private boolean enableBucketAwareExecutionOnLake = true;
 
+    @VarAttr(name = LAKE_BUCKET_ASSIGN_MODE)
+    private String lakeBucketAssignMode = SessionVariableConstants.BALANCE;
+
     @VarAttr(name = ENABLE_GROUP_EXECUTION)
     private boolean enableGroupExecution = true;
 
@@ -2025,6 +2029,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableBucketAwareExecutionOnLake() {
         return enableBucketAwareExecutionOnLake;
+    }
+
+    public String getLakeBucketAssignMode() {
+        return lakeBucketAssignMode;
+    }
+
+    public void setLakeBucketAssignMode(String mode) {
+        if (mode.equalsIgnoreCase(SessionVariableConstants.ELASTIC) ||
+                mode.equalsIgnoreCase(SessionVariableConstants.BALANCE)) {
+            lakeBucketAssignMode = mode.toLowerCase();
+        } else {
+            throw new IllegalArgumentException(
+                    "Legal values of lake_bucket_assign_mode are elastic|balance");
+        }
     }
 
     public void setEnableGroupExecution(boolean enableGroupExecution) {
