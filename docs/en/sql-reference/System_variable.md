@@ -683,6 +683,22 @@ Default value: `true`.
 * **Default**: false
 * **Introduced in**: v2.5
 
+### enable_bucket_aware_execution_on_lake
+
+* **Description**: Whether to enable bucket-aware execution for queries against data lakes (such as Iceberg tables). When this feature is enabled, the system optimizes query execution by leveraging bucketing information to reduce data shuffling and improve performance. This optimization is particularly effective for join operations and aggregations on bucketed tables.
+* **Default**: true
+* **Data type**: Boolean
+* **Introduced in**: v4.0
+
+### lake_bucket_assign_mode
+
+* **Description**: The bucket assignment mode for queries against tables in data lakes. This variable controls how buckets are distributed among worker nodes when bucket-aware execution takes effect during query execution. Valid values:
+  * `balance`: Distributes buckets evenly across worker nodes to achieve balanced workload and better performance.
+  * `elastic`: Uses consistent hashing to assign buckets to worker nodes, which can provide better load distribution in elastic environments.
+* **Default**: balance
+* **Data type**: String
+* **Introduced in**: v4.0
+
 ### enable_pipeline_engine
 
 * **Description**: Specifies whether to enable the pipeline execution engine. `true` indicates enabled and `false` indicates the opposite. Default value: `true`.

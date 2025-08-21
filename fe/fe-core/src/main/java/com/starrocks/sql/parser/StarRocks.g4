@@ -1791,11 +1791,11 @@ grantRevokeClause
 
 grantPrivilegeStatement
     : GRANT IMPERSONATE ON USER user (',' user)* TO grantRevokeClause (WITH GRANT OPTION)?              #grantOnUser
+    | GRANT privilegeTypeList ON SYSTEM TO grantRevokeClause (WITH GRANT OPTION)?                       #grantOnSystem
     | GRANT privilegeTypeList ON privObjectNameList TO grantRevokeClause (WITH GRANT OPTION)?           #grantOnTableBrief
 
     | GRANT privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantOnFunc
-    | GRANT privilegeTypeList ON SYSTEM TO grantRevokeClause (WITH GRANT OPTION)?                       #grantOnSystem
     | GRANT privilegeTypeList ON privObjectType privObjectNameList
         TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantOnPrimaryObj
     | GRANT privilegeTypeList ON ALL privObjectTypePlural
@@ -1805,10 +1805,10 @@ grantPrivilegeStatement
 
 revokePrivilegeStatement
     : REVOKE IMPERSONATE ON USER user (',' user)* FROM grantRevokeClause                                #revokeOnUser
+    | REVOKE privilegeTypeList ON SYSTEM FROM grantRevokeClause                                         #revokeOnSystem
     | REVOKE privilegeTypeList ON privObjectNameList FROM grantRevokeClause                             #revokeOnTableBrief
     | REVOKE privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         FROM grantRevokeClause                                                                          #revokeOnFunc
-    | REVOKE privilegeTypeList ON SYSTEM FROM grantRevokeClause                                         #revokeOnSystem
     | REVOKE privilegeTypeList ON privObjectType privObjectNameList
         FROM grantRevokeClause                                                                          #revokeOnPrimaryObj
     | REVOKE privilegeTypeList ON ALL privObjectTypePlural
@@ -3168,7 +3168,7 @@ nonReserved
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
-    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
+    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES
