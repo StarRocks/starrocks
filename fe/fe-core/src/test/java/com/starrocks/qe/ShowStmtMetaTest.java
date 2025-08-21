@@ -15,7 +15,6 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.common.proc.BaseProcResult;
@@ -25,6 +24,7 @@ import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;

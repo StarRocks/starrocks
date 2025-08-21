@@ -16,7 +16,6 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TaskName;
 import com.starrocks.analysis.TypeDef;
@@ -127,6 +126,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
