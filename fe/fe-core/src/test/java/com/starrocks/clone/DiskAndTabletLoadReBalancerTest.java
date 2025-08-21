@@ -205,7 +205,7 @@ public class DiskAndTabletLoadReBalancerTest {
 
         // check balance stat
         Assertions.assertFalse(materializedIndex.isTabletBalanced());
-        Assertions.assertEquals(BalanceType.CLUSTER_TABLET, materializedIndex.getBalanceType());
+        Assertions.assertEquals(BalanceType.INTER_NODE_TABLET_DISTRIBUTION, materializedIndex.getBalanceType());
 
         // set table state to schema_change, balance should be ignored
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
@@ -578,10 +578,10 @@ public class DiskAndTabletLoadReBalancerTest {
         // check balance stat
         BalanceStat stat0 = clusterLoadStatistic.getBackendDiskBalanceStat(TStorageMedium.HDD, beId1);
         Assertions.assertFalse(stat0.isBalanced());
-        Assertions.assertEquals(BalanceType.BACKEND_DISK, stat0.getBalanceType());
+        Assertions.assertEquals(BalanceType.INTRA_NODE_DISK_USAGE, stat0.getBalanceType());
         BalanceStat stat1 = clusterLoadStatistic.getBackendDiskBalanceStat(TStorageMedium.SSD, beId1);
         Assertions.assertFalse(stat1.isBalanced());
-        Assertions.assertEquals(BalanceType.BACKEND_DISK, stat1.getBalanceType());
+        Assertions.assertEquals(BalanceType.INTRA_NODE_DISK_USAGE, stat1.getBalanceType());
 
         // set Config.balance_load_disk_safe_threshold to 0.9 to trigger backend tablet distribution balance
         Config.tablet_sched_balance_load_disk_safe_threshold = 0.9;
@@ -597,7 +597,7 @@ public class DiskAndTabletLoadReBalancerTest {
         // check balance stat
         BalanceStat stat2 = materializedIndex.getBalanceStat();
         Assertions.assertFalse(stat2.isBalanced());
-        Assertions.assertEquals(BalanceType.BACKEND_TABLET, stat2.getBalanceType());
+        Assertions.assertEquals(BalanceType.INTRA_NODE_TABLET_DISTRIBUTION, stat2.getBalanceType());
 
         // set table state to schema_change, balance should be ignored
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
@@ -783,7 +783,7 @@ public class DiskAndTabletLoadReBalancerTest {
         // check balance stat
         BalanceStat stat = clusterLoadStatistic.getClusterDiskBalanceStat(TStorageMedium.HDD);
         Assertions.assertFalse(stat.isBalanced());
-        Assertions.assertEquals(BalanceType.CLUSTER_DISK, stat.getBalanceType());
+        Assertions.assertEquals(BalanceType.INTER_NODE_DISK_USAGE, stat.getBalanceType());
     }
 
     @Test

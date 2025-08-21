@@ -73,8 +73,8 @@ public class IndicesProcDirTest {
         Assertions.assertEquals("NORMAL", row.get(2));
         Assertions.assertEquals("\\N", row.get(3)); // last consistency check time
         Assertions.assertEquals(
-                "{\"maxTabletNum\":9,\"minTabletNum\":1,\"maxBeId\":1,\"minBeId\":2,\"type\":\"CLUSTER_TABLET\"," +
-                        "\"balanced\":false}",
+                "{\"maxTabletNum\":9,\"minTabletNum\":1,\"maxBeId\":1,\"minBeId\":2," +
+                        "\"type\":\"INTER_NODE_TABLET_DISTRIBUTION\",\"balanced\":false}",
                 row.get(4)); // tablet balance stat
     }
 }
