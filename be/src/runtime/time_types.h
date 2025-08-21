@@ -234,7 +234,7 @@ public:
     static int to_string(Timestamp timestamp, char* s, size_t n);
 
     // Convert timestamp to string with timezone format (e.g., "2025-04-16 12:34:56.78-04:00")
-    template <bool use_iso8601_format = false, bool igonre_microsecond = false>
+    template <bool use_iso8601_format = false, bool ignore_microsecond = false>
     static std::string to_string_with_timezone(Timestamp timestamp, const cctz::time_zone& timezone);
 
     inline static double time_to_literal(double time);
@@ -569,7 +569,7 @@ int timestamp::to_string(Timestamp timestamp, char* to, size_t n) {
     return 19;
 }
 
-template <bool use_iso8601_format, bool igonre_microsecond>
+template <bool use_iso8601_format, bool ignore_microsecond>
 std::string timestamp::to_string_with_timezone(Timestamp timestamp, const cctz::time_zone& timezone) {
     // Convert StarRocks timestamp to unix seconds
     int64_t julian = to_julian(timestamp);
@@ -584,23 +584,12 @@ std::string timestamp::to_string_with_timezone(Timestamp timestamp, const cctz::
     time_point += std::chrono::microseconds(microseconds);
 
     // Format the timestamp with timezone using cctz
-    std::string format_str;
-    if constexpr (use_iso8601_format) {
-        if constexpr (igonre_microsecond) {
-            format_str = "%Y-%m-%dT%H:%M:%S%Ez"; // ISO format without microseconds
-        } else {
-            format_str = "%Y-%m-%dT%H:%M:%E*S%Ez"; // ISO format with microseconds
-        }
-    } else {
-        if constexpr (igonre_microsecond) {
-            format_str = "%Y-%m-%d %H:%M:%S%Ez"; // Standard format without microseconds
-        } else {
-            format_str = "%Y-%m-%d %H:%M:%E*S%Ez"; // Standard format with microseconds
-        }
-    }
+    constexpr const char* base_format = use_iso8601_format ? "%Y-%m-%dT%H:%M:" : "%Y-%m-%d %H:%M:";
+    constexpr const char* time_format = ignore_microsecond ? "%S" : "%E*S";
+    constexpr auto tz_format = "%Ez";
+    const std::string format_str = std::string(base_format) + time_format + tz_format;
 
-    std::string result = cctz::format(format_str, time_point, timezone);
-    return result;
+    return cctz::format(format_str, time_point, timezone);
 }
 
 } // namespace starrocks

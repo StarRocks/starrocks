@@ -816,4 +816,29 @@ INSTANTIATE_TEST_SUITE_P(
     )
 );
 // clang-format on
+
+TEST_F(TypeDescriptorTest, test_create_variant_type) {
+    // Test create_variant_type() static method
+    TypeDescriptor variant_desc = TypeDescriptor::create_variant_type();
+
+    ASSERT_EQ(LogicalType::TYPE_VARIANT, variant_desc.type);
+
+    ASSERT_EQ(128, variant_desc.len);
+
+    // Verify other default fields are properly initialized
+    ASSERT_EQ(-1, variant_desc.precision);
+    ASSERT_EQ(-1, variant_desc.scale);
+    ASSERT_TRUE(variant_desc.children.empty());
+
+    // Verify the type descriptor is valid
+    ASSERT_TRUE(variant_desc.is_huge_type());
+    ASSERT_FALSE(variant_desc.is_complex_type());
+    ASSERT_EQ("VARIANT", variant_desc.debug_string());
+
+    // Test that multiple calls return equivalent objects
+    TypeDescriptor variant_desc2 = TypeDescriptor::create_variant_type();
+    ASSERT_EQ(variant_desc.type, variant_desc2.type);
+    ASSERT_EQ(variant_desc.len, variant_desc2.len);
+}
+
 } // namespace starrocks

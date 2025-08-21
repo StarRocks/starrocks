@@ -24,30 +24,58 @@
 
 namespace starrocks {
 
-VariantValue::VariantValue(const Slice& slice) {
+StatusOr<VariantValue> VariantValue::create(const Slice& slice) {
+    // Validate slice first
+    if (slice.get_data() == nullptr) {
+        return Status::InvalidArgument("Invalid variant slice: null data pointer");
+    }
+
+    if (slice.get_size() < sizeof(uint32_t)) {
+        return Status::InvalidArgument("Invalid variant slice: too small to contain size header");
+    }
+
     const char* variant_raw = slice.get_data();
-    // convert variant_raw to a string_view
-    // The first 4 bytes are the size of the value
+    // The first 4 bytes are the size of the variant
     uint32_t variant_size;
     std::memcpy(&variant_size, variant_raw, sizeof(uint32_t));
     if (variant_size > slice.get_size() - sizeof(uint32_t)) {
-        throw std::runtime_error("Invalid variant size");
+        return Status::InvalidArgument(
+                "Invalid variant size: " + std::to_string(variant_size) +
+                " exceeds available data: " + std::to_string(slice.get_size() - sizeof(uint32_t)));
+    }
+
+    // Check variant size limit (16MB)
+    if (variant_size > kMaxVariantSize) {
+        return Status::InvalidArgument("Variant size exceeds maximum limit: " + std::to_string(variant_size) + " > " +
+                                       std::to_string(kMaxVariantSize));
     }
 
     const auto variant = std::string_view(variant_raw + sizeof(uint32_t), variant_size);
+
     auto metadata_status = load_metadata(variant);
     if (!metadata_status.ok()) {
-        throw std::runtime_error("Failed to load metadata: " + metadata_status.status().to_string());
+        return Status::InvalidArgument("Failed to load metadata: " + metadata_status.status().to_string());
     }
 
-    _metadata = std::string(metadata_status.value());
-    _value = std::string(variant_raw + sizeof(uint32_t) + metadata_status.value().size(),
-                         variant_size - metadata_status.value().size());
+    const auto& metadata_view = metadata_status.value();
+    if (metadata_view.size() > variant_size) {
+        return Status::InvalidArgument("Metadata size exceeds variant size");
+    }
+
+    std::string metadata(metadata_view);
+    std::string value(variant_raw + sizeof(uint32_t) + metadata_view.size(), variant_size - metadata_view.size());
+
+    RETURN_IF_ERROR(validate_metadata(metadata));
+    if (value.empty()) {
+        return Status::InvalidArgument("Value cannot be empty");
+    }
+
+    return VariantValue(std::move(metadata), std::move(value));
 }
 
 Status VariantValue::validate_metadata(const std::string_view metadata) {
     // metadata at least 3 bytes: version, dictionarySize and at least one offset.
-    if (metadata.size() < 3) {
+    if (metadata.size() < kMinMetadataSize) {
         return Status::InternalError("Variant metadata is too short");
     }
 
@@ -66,8 +94,16 @@ VariantValue VariantValue::of_null() {
                         std::string_view{reinterpret_cast<const char*>(null_chars), 1});
 }
 
-StatusOr<std::string_view> VariantValue::load_metadata(std::string_view variant) const {
-    RETURN_IF_ERROR(validate_metadata(variant));
+StatusOr<std::string_view> VariantValue::load_metadata(const std::string_view variant) {
+    if (variant.empty()) {
+        return Status::InvalidArgument("Variant is empty");
+    }
+
+    // Check variant size limit (16MB)
+    if (variant.size() > kMaxVariantSize) {
+        return Status::InvalidArgument("Variant size exceeds maximum limit: " + std::to_string(variant.size()) + " > " +
+                                       std::to_string(kMaxVariantSize));
+    }
 
     const uint8_t header = static_cast<uint8_t>(variant[0]);
     const uint8_t offset_size = 1 + ((header & kOffsetSizeMask) >> kOffsetSizeShift);
@@ -75,12 +111,28 @@ StatusOr<std::string_view> VariantValue::load_metadata(std::string_view variant)
         return Status::InvalidArgument("Invalid offset size in variant metadata: " + std::to_string(offset_size) +
                                        ", expected 1, 2, 3 or 4 bytes");
     }
-    uint8_t dict_size = VariantUtil::readLittleEndianUnsigned(variant.data() + 1, offset_size);
-    uint8_t offset_list_offset = kHeaderSize + offset_size;
-    uint8_t data_offset = offset_list_offset + (1 + dict_size) * offset_size;
-    uint8_t end_offset =
-            data_offset + VariantUtil::readLittleEndianUnsigned(
-                                  variant.data() + offset_list_offset + dict_size * offset_size, offset_size);
+
+    if (variant.size() < kHeaderSize + offset_size) {
+        return Status::InvalidArgument("Variant too short to contain dict_size");
+    }
+
+    uint32_t dict_size = VariantUtil::readLittleEndianUnsigned(variant.data() + 1, offset_size);
+    uint32_t offset_list_offset = kHeaderSize + offset_size;
+
+    // Check for potential overflow in offset list size calculation
+    if (dict_size > (kMaxVariantSize - offset_list_offset) / offset_size - 1) {
+        return Status::InvalidArgument("Dict size too large: " + std::to_string(dict_size));
+    }
+
+    uint32_t required_offset_list_size = (1 + dict_size) * offset_size;
+    uint32_t data_offset = offset_list_offset + required_offset_list_size;
+    uint32_t last_offset_pos = offset_list_offset + dict_size * offset_size;
+    if (last_offset_pos + offset_size > variant.size()) {
+        return Status::InvalidArgument("Variant too short to contain all offsets");
+    }
+
+    uint32_t last_data_size = VariantUtil::readLittleEndianUnsigned(variant.data() + last_offset_pos, offset_size);
+    uint32_t end_offset = data_offset + last_data_size;
 
     if (end_offset > variant.size()) {
         return Status::CapacityLimitExceed("Variant metadata end offset exceeds variant size: " +
