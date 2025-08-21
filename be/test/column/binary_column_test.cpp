@@ -706,7 +706,7 @@ TEST_P(BinaryColumnAppendSelectiveTestFixture, test_append_selective) {
 }
 
 INSTANTIATE_TEST_SUITE_P(BinaryColumnAppendSelectiveTest, BinaryColumnAppendSelectiveTestFixture,
-                         ::testing::Values(std::make_tuple(2048), std::make_tuple(4096), std::make_tuple(40960), ,
-                                           std::make_tuple(32 * 1024 * 1024 + 100))));
+                         ::testing::Values(std::make_tuple(2048), std::make_tuple(4096), std::make_tuple(40960),
+                                           std::make_tuple(32 * 1024 * 1024 + 100)));
 
 } // namespace starrocks
