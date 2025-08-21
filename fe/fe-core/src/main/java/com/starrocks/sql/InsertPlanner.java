@@ -85,10 +85,8 @@ import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
-import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -109,11 +107,7 @@ import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.SortDirection;
-import org.apache.iceberg.SortField;
-import org.apache.iceberg.SortOrder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -852,24 +846,13 @@ public class InsertPlanner {
         Table targetTable = insertStmt.getTargetTable();
         if (targetTable instanceof IcebergTable) {
             IcebergTable icebergTable = (IcebergTable) targetTable;
-            SortOrder sortOrder = icebergTable.getNativeTable().sortOrder();
-
-            if (sortOrder.isUnsorted()) {
-                return new PhysicalPropertySet();
-            } else {
-                List<SortField> sortFields = sortOrder.fields();
-                List<Ordering> orderings = new ArrayList<>();
-                List<Integer> sortKeyIndexes = icebergTable.getSortKeyIndexes();
-                for (int index : sortKeyIndexes) {
-                    ColumnRefOperator columnRef = outputColumns.get(index);
-                    SortField sortField = sortFields.get(sortKeyIndexes.indexOf(index));
-                    boolean isAsc = sortField.direction() == SortDirection.ASC;
-                    boolean isNullFirst = sortField.nullOrder() == NullOrder.NULLS_FIRST;
-                    Ordering ordering = new Ordering(columnRef, isAsc, isNullFirst);
-                    orderings.add(ordering);
-                }
-                SortProperty sortProperty = SortProperty.createProperty(orderings);
-                return new PhysicalPropertySet(sortProperty);
+            if (session.isEnableIcebergSinkGlobalShuffle() && (!icebergTable.getPartitionColumns().isEmpty())) {
+                List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
+                        .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
+                        HashDistributionDesc.SourceType.SHUFFLE_AGG);
+                return new PhysicalPropertySet(DistributionProperty
+                        .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
             }
         }
 
