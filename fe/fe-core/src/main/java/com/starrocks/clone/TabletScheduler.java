@@ -2180,7 +2180,7 @@ public class TabletScheduler extends FrontendDaemon {
     private synchronized long getPendingBalanceTabletNum(TStorageMedium medium, BalanceType balanceType) {
         if (balanceType == BalanceType.COLOCATION_GROUP) {
             return getPendingRepairTabletNum(medium, TabletHealthStatus.COLOCATE_MISMATCH);
-        } else if (balanceType == BalanceType.LABEL_LOCATION) {
+        } else if (balanceType == BalanceType.LABEL_AWARE_LOCATION) {
             return getPendingRepairTabletNum(medium, TabletHealthStatus.LOCATION_MISMATCH);
         }
 
@@ -2198,7 +2198,7 @@ public class TabletScheduler extends FrontendDaemon {
     private synchronized long getRunningBalanceTabletNum(TStorageMedium medium, BalanceType balanceType) {
         if (balanceType == BalanceType.COLOCATION_GROUP) {
             return getRunningRepairTabletNum(medium, TabletHealthStatus.COLOCATE_MISMATCH);
-        } else if (balanceType == BalanceType.LABEL_LOCATION) {
+        } else if (balanceType == BalanceType.LABEL_AWARE_LOCATION) {
             return getRunningRepairTabletNum(medium, TabletHealthStatus.LOCATION_MISMATCH);
         }
 

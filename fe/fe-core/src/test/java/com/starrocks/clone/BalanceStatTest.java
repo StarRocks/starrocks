@@ -39,44 +39,44 @@ public class BalanceStatTest {
         {
             BalanceStat stat = BalanceStat.createClusterDiskBalanceStat(1L, 2L, 0.9, 0.1);
             Assertions.assertFalse(stat.isBalanced());
-            Assertions.assertEquals(BalanceType.CLUSTER_DISK, stat.getBalanceType());
+            Assertions.assertEquals(BalanceType.INTER_NODE_DISK_USAGE, stat.getBalanceType());
             Assertions.assertEquals("inter-node disk usage", stat.getBalanceType().label());
             Assertions.assertEquals(
-                    "{\"maxUsedPercent\":0.9,\"minUsedPercent\":0.1,\"maxBeId\":1,\"minBeId\":2,\"type\":\"CLUSTER_DISK\"," +
-                            "\"balanced\":false}",
+                    "{\"maxUsedPercent\":0.9,\"minUsedPercent\":0.1,\"maxBeId\":1,\"minBeId\":2," +
+                            "\"type\":\"INTER_NODE_DISK_USAGE\",\"balanced\":false}",
                     stat.toString());
         }
 
         {
             BalanceStat stat = BalanceStat.createClusterTabletBalanceStat(1L, 2L, 9L, 1L);
             Assertions.assertFalse(stat.isBalanced());
-            Assertions.assertEquals(BalanceType.CLUSTER_TABLET, stat.getBalanceType());
+            Assertions.assertEquals(BalanceType.INTER_NODE_TABLET_DISTRIBUTION, stat.getBalanceType());
             Assertions.assertEquals("inter-node tablet distribution", stat.getBalanceType().label());
             Assertions.assertEquals(
-                    "{\"maxTabletNum\":9,\"minTabletNum\":1,\"maxBeId\":1,\"minBeId\":2,\"type\":\"CLUSTER_TABLET\"," +
-                            "\"balanced\":false}",
+                    "{\"maxTabletNum\":9,\"minTabletNum\":1,\"maxBeId\":1,\"minBeId\":2," +
+                            "\"type\":\"INTER_NODE_TABLET_DISTRIBUTION\",\"balanced\":false}",
                     stat.toString());
         }
 
         {
             BalanceStat stat = BalanceStat.createBackendDiskBalanceStat(1L, "disk1", "disk2", 0.9, 0.1);
             Assertions.assertFalse(stat.isBalanced());
-            Assertions.assertEquals(BalanceType.BACKEND_DISK, stat.getBalanceType());
+            Assertions.assertEquals(BalanceType.INTRA_NODE_DISK_USAGE, stat.getBalanceType());
             Assertions.assertEquals("intra-node disk usage", stat.getBalanceType().label());
             Assertions.assertEquals(
                     "{\"maxUsedPercent\":0.9,\"minUsedPercent\":0.1,\"beId\":1,\"maxPath\":\"disk1\",\"minPath\":\"disk2\"," +
-                            "\"type\":\"BACKEND_DISK\",\"balanced\":false}",
+                            "\"type\":\"INTRA_NODE_DISK_USAGE\",\"balanced\":false}",
                     stat.toString());
         }
 
         {
             BalanceStat stat = BalanceStat.createBackendTabletBalanceStat(1L, "disk1", "disk2",  9L, 1L);
             Assertions.assertFalse(stat.isBalanced());
-            Assertions.assertEquals(BalanceType.BACKEND_TABLET, stat.getBalanceType());
+            Assertions.assertEquals(BalanceType.INTRA_NODE_TABLET_DISTRIBUTION, stat.getBalanceType());
             Assertions.assertEquals("intra-node tablet distribution", stat.getBalanceType().label());
             Assertions.assertEquals(
                     "{\"maxTabletNum\":9,\"minTabletNum\":1,\"beId\":1,\"maxPath\":\"disk1\",\"minPath\":\"disk2\"," +
-                            "\"type\":\"BACKEND_TABLET\",\"balanced\":false}",
+                            "\"type\":\"INTRA_NODE_TABLET_DISTRIBUTION\",\"balanced\":false}",
                     stat.toString());
         }
 
@@ -99,11 +99,11 @@ public class BalanceStatTest {
             expectedLocations.put("rack", Arrays.asList("rack1", "rack2"));
             BalanceStat stat = BalanceStat.createLabelLocationBalanceStat(1L, currentBes, expectedLocations);
             Assertions.assertFalse(stat.isBalanced());
-            Assertions.assertEquals(BalanceType.LABEL_LOCATION, stat.getBalanceType());
+            Assertions.assertEquals(BalanceType.LABEL_AWARE_LOCATION, stat.getBalanceType());
             Assertions.assertEquals("label-aware location", stat.getBalanceType().label());
             Assertions.assertEquals(
                     "{\"tabletId\":1,\"currentBes\":[1,2],\"expectedLocations\":{\"rack\":[\"rack1\",\"rack2\"]}," +
-                            "\"type\":\"LABEL_LOCATION\",\"balanced\":false}",
+                            "\"type\":\"LABEL_AWARE_LOCATION\",\"balanced\":false}",
                     stat.toString());
         }
     }
