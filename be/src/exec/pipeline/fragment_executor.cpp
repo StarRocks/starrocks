@@ -999,7 +999,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
 
     std::unordered_set<int> notify_ids;
     std::vector<int32_t> closed_scan_nodes;
-    
+
     for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
         if (scan_ranges.size() == 0) continue;
         auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
@@ -1059,7 +1059,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
                 closed_scan_nodes.push_back(node_id);
             }
         }
-        
+
         if (closed_scan_nodes.size() > 0) {
             response->__set_closed_scan_nodes(closed_scan_nodes);
         }
