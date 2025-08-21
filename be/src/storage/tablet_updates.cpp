@@ -2117,9 +2117,6 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, con
 // So we need `_check_conflict_with_partial_update` to detect this conflict and cancel this compaction.
 Status TabletUpdates::_check_conflict_with_partial_update(CompactionInfo* info) {
     TEST_SYNC_POINT_CALLBACK("TabletUpdates::_check_conflict_with_partial_update", &info->start_version);
-    if (info->is_empty_output) {
-        return Status::OK();
-    }
     // check if compaction's start version is too old to decide whether conflict happens
     if (info->start_version < _edit_version_infos[0]->version) {
         std::string msg = strings::Substitute(
@@ -2184,7 +2181,9 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     EditVersionMetaPB edit;
     auto lastv = _edit_version_infos.back().get();
     // handle conflict between column mode partial update
-    RETURN_IF_ERROR(_check_conflict_with_partial_update((*pinfo).get()));
+    if (rowset->num_rows() > 0) {
+        RETURN_IF_ERROR(_check_conflict_with_partial_update((*pinfo).get()));
+    }
     auto edit_version_pb = edit.mutable_version();
     edit_version_pb->set_major_number(lastv->version.major_number());
     edit_version_pb->set_minor_number(lastv->version.minor_number() + 1);
@@ -3037,10 +3036,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         _compaction_running = false;
         return Status::OK();
     }
-    if (total_segments <= 0) {
-        // compaction will generate an empty rowset.
-        info->is_empty_output = true;
-    }
     std::sort(info->inputs.begin(), info->inputs.end());
     VLOG(1) << "update compaction start tablet:" << _tablet.tablet_id()
             << " version:" << info->start_version.to_string() << " score:" << total_score
@@ -3205,11 +3200,6 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
                 compaction_level_candidate.insert(-1);
             }
         }
-    }
-
-    if (total_merged_segments <= 0) {
-        // compaction will generate an empty rowset.
-        info->is_empty_output = true;
     }
 
     size_t version_count = rowsets.size() - info->inputs.size() + _pending_commits.size();

@@ -70,8 +70,6 @@ struct CompactionInfo {
     EditVersion start_version;
     std::vector<uint32_t> inputs;
     uint32_t output = UINT32_MAX;
-    // All rowsets in inputs are empty, and then compaction will generate an empty rowset.
-    bool is_empty_output = false;
 };
 
 struct ExtraFileSize {
