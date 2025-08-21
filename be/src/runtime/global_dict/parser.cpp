@@ -113,7 +113,7 @@ private:
             if (input->only_null()) {
                 RETURN_IF_ERROR((*_dict_opt_ctx->err_status)[_dict_opt_ctx->code_convert_map[0]]);
             } else if (input->is_constant()) {
-                auto data_column = ColumnHelper::get_data_column(input);
+                auto data_column = ColumnHelper::get_data_column(input.get());
                 size_t idx = data_column->get(0).get_int32();
                 RETURN_IF_ERROR((*_dict_opt_ctx->err_status)[_dict_opt_ctx->code_convert_map[idx]]);
             } else {
