@@ -19,7 +19,8 @@
 
 namespace starrocks {
 
-void calc_hash_values_and_bucket_ids(const std::vector<const Column*>& partitions_columns, BucketAwarePartitionCtx ctx) {
+void calc_hash_values_and_bucket_ids(const std::vector<const Column*>& partitions_columns,
+                                     BucketAwarePartitionCtx ctx) {
     size_t num_rows = partitions_columns[0]->size();
     const auto& bucket_properties = ctx.bucket_properties;
     auto& hash_values = ctx.hash_values;
@@ -40,8 +41,7 @@ void calc_hash_values_and_bucket_ids(const std::vector<const Column*>& partition
             round_ids[j] = (round_hashes[j] & std::numeric_limits<int>::max()) % bucket_properties[i].bucket_num;
         }
         if (partitions_columns[i]->has_null()) {
-            const auto& null_data =
-                    down_cast<const NullableColumn*>(partitions_columns[i])->null_column()->get_data();
+            const auto& null_data = down_cast<const NullableColumn*>(partitions_columns[i])->null_column()->get_data();
             for (int j = 0; j < num_rows; j++) {
                 round_ids[j] = null_data[j] ? bucket_properties[i].bucket_num : round_ids[j];
             }
@@ -60,4 +60,4 @@ void calc_hash_values_and_bucket_ids(const std::vector<const Column*>& partition
     }
 }
 
-} //starrocks
+} // namespace starrocks

@@ -25,8 +25,11 @@ struct BucketAwarePartitionCtx {
     BucketAwarePartitionCtx(const std::vector<TBucketProperty>& bucket_properties, std::vector<uint32_t>& hash_values,
                             std::vector<uint32_t>& round_hashes, std::vector<uint32_t>& bucket_ids,
                             std::vector<uint32_t>& round_ids)
-            : bucket_properties(bucket_properties), hash_values(hash_values), round_hashes(round_hashes),
-              bucket_ids(bucket_ids), round_ids(round_ids) {}
+            : bucket_properties(bucket_properties),
+              hash_values(hash_values),
+              round_hashes(round_hashes),
+              bucket_ids(bucket_ids),
+              round_ids(round_ids) {}
     const std::vector<TBucketProperty>& bucket_properties;
     std::vector<uint32_t>& hash_values;
     std::vector<uint32_t>& round_hashes;

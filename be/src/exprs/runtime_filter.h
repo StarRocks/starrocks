@@ -395,8 +395,7 @@ struct FullScanIterator {
 };
 
 struct BucketAwareFullScanIterator {
-    BucketAwareFullScanIterator(BucketAwarePartitionCtx& ctx, size_t num_rows)
-            : ctx(ctx), num_rows(num_rows) {}
+    BucketAwareFullScanIterator(BucketAwarePartitionCtx& ctx, size_t num_rows) : ctx(ctx), num_rows(num_rows) {}
 
     template <HashValueAndBucketIdForEachFunc ForEachFuncType>
     void for_each(ForEachFuncType func) {
@@ -405,9 +404,7 @@ struct BucketAwareFullScanIterator {
         }
     }
 
-    void compute_hash(const std::vector<const Column*>& columns) {
-        calc_hash_values_and_bucket_ids(columns, ctx);
-    }
+    void compute_hash(const std::vector<const Column*>& columns) { calc_hash_values_and_bucket_ids(columns, ctx); }
 
     BucketAwarePartitionCtx& ctx;
     size_t num_rows;
@@ -1346,9 +1343,9 @@ public:
                 BucketAwarePartitionCtx bctx(layout.bucket_properties(), ctx->hash_values, ctx->round_hashes,
                                              ctx->bucket_ids, ctx->round_ids);
                 dispatch_layout<WithModuloArg<ModuloOp, BucketAwareFullScanIterator>::HashValueCompute>(
-                        _global, layout, columns, _hash_partition_bf.size(), BucketAwareFullScanIterator(bctx, num_rows));
+                        _global, layout, columns, _hash_partition_bf.size(),
+                        BucketAwareFullScanIterator(bctx, num_rows));
             }
-
         }
     }
     void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
