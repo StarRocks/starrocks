@@ -133,7 +133,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         actions.add(() -> {
             UpdateSchema updateSchema = this.transaction.updateSchema();
             ColumnPosition pos = clause.getColPos();
-            Column column = clause.getColumnDef().toColumn(null);
+            Column column = Column.fromColumnDef(null, clause.getColumnDef());
 
             // All non-partition columns must use NULL as the default value.
             if (!column.isAllowNull()) {
@@ -167,7 +167,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             List<Column> columns = clause
                     .getColumnDefs()
                     .stream()
-                    .map(columnDef -> columnDef.toColumn(null))
+                    .map(columnDef -> Column.fromColumnDef(null, columnDef))
                     .collect(Collectors.toList());
 
             for (Column column : columns) {
@@ -209,7 +209,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         actions.add(() -> {
             UpdateSchema updateSchema = this.transaction.updateSchema();
             ColumnPosition colPos = clause.getColPos();
-            Column column = clause.getColumnDef().toColumn(null);
+            Column column = Column.fromColumnDef(null, clause.getColumnDef());
             org.apache.iceberg.types.Type colType = toIcebergColumnType(column.getType());
 
             // UPDATE column type

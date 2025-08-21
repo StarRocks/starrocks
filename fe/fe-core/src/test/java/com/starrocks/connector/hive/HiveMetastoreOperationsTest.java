@@ -371,7 +371,7 @@ public class HiveMetastoreOperationsTest {
                 "my table comment");
         List<Column> columns = stmt.getColumnDefs()
                 .stream()
-                .map(columnDef -> columnDef.toColumn(null))
+                .map(columnDef -> Column.fromColumnDef(null, columnDef))
                 .collect(Collectors.toList());
         stmt.setColumns(columns);
 
@@ -420,7 +420,8 @@ public class HiveMetastoreOperationsTest {
                 properties,
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(def -> def.toColumn(null)).collect(Collectors.toList());
+        List<Column> columns =
+                stmt.getColumnDefs().stream().map(def -> Column.fromColumnDef(null, def)).collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assertions.assertTrue(mockedHmsOps.createTable(stmt));
@@ -458,7 +459,8 @@ public class HiveMetastoreOperationsTest {
                 properties,
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(def -> def.toColumn(null)).collect(Collectors.toList());
+        List<Column> columns =
+                stmt.getColumnDefs().stream().map(def -> Column.fromColumnDef(null, def)).collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assertions.assertTrue(mockedHmsOps.createTable(stmt));
@@ -495,7 +497,8 @@ public class HiveMetastoreOperationsTest {
                 properties,
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(def -> def.toColumn(null)).collect(Collectors.toList());
+        List<Column> columns =
+                stmt.getColumnDefs().stream().map(def -> Column.fromColumnDef(null, def)).collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assertions.assertTrue(mockedHmsOps.createTable(stmt));
@@ -534,7 +537,7 @@ public class HiveMetastoreOperationsTest {
                 "my table comment");
         List<Column> columns = stmt.getColumnDefs()
                 .stream()
-                .map(columnDef -> columnDef.toColumn(null))
+                .map(columnDef -> Column.fromColumnDef(null, columnDef))
                 .collect(Collectors.toList());
         stmt.setColumns(columns);
 
