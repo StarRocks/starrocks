@@ -207,6 +207,20 @@ public class IcebergGlueCatalog implements IcebergCatalog {
         }
     }
 
+    @Override
+    public boolean registerTable(ConnectContext context, String dbName, String tableName, 
+                                 String metadataFileLocation) {
+        try {
+            TableIdentifier tableIdentifier = TableIdentifier.of(dbName, tableName);
+            Table table = delegate.registerTable(tableIdentifier, metadataFileLocation);
+            return table != null;
+        } catch (Exception e) {
+            LOG.error("Failed to register table {}.{} with metadata file location {}", 
+                    dbName, tableName, metadataFileLocation, e);
+            throw new StarRocksConnectorException("Failed to register table: " + e.getMessage(), e);
+        }
+    }
+
     public String toString() {
         return delegate.toString();
     }
