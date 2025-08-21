@@ -55,17 +55,10 @@ namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
 
-<<<<<<< HEAD
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
     if (UNLIKELY(col->capacity_limit_reached())) {                                   \
         col->reset_column();                                                         \
-        throw std::runtime_error("binary column exceed 4G in function " #func_name); \
-=======
-#define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                        \
-    if (UNLIKELY(!col->capacity_limit_reached().ok())) {                           \
-        col->reset_column();                                                       \
         throw RuntimeException("binary column exceed 4G in function " #func_name); \
->>>>>>> 5a78cb3c75 ([BugFix] Fix throw exception issue in low-cardinality optimization error in ALLOW_THROW_EXCEPTION mode (#62098))
     }
 
 #define RETURN_COLUMN(stmt, func_name)                                    \
