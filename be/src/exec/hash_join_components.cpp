@@ -460,6 +460,7 @@ private:
     Status _append_chunk_to_partitions(RuntimeState* state, const ChunkPtr& chunk);
     Status _transfer_to_appending_stage(RuntimeState* state);
     Status _convert_to_single_partition(RuntimeState* state);
+    Status _flush_buffer_chunks(RuntimeState* state);
 
     bool _need_partition_join_for_build(size_t ht_num_rows) const;
     bool _need_partition_join_for_append(size_t ht_num_rows) const;
@@ -910,14 +911,25 @@ Status AdaptivePartitionHashJoinBuilder::do_append_chunk(RuntimeState* state, co
 }
 
 Status AdaptivePartitionHashJoinBuilder::prepare_for_spill_start(RuntimeState* state) {
-    if (_stage == Stage::BUFFERING) {
-        RETURN_IF_ERROR(_transfer_to_appending_stage(state));
-    }
-    return Status::OK();
+    return _flush_buffer_chunks(state);
 }
 
 ChunkPtr AdaptivePartitionHashJoinBuilder::convert_to_spill_schema(const ChunkPtr& chunk) const {
     return _builders[0]->convert_to_spill_schema(chunk);
+}
+
+Status AdaptivePartitionHashJoinBuilder::_flush_buffer_chunks(RuntimeState* state) {
+    if (_stage == Stage::BUFFERING) {
+        RETURN_IF_ERROR(_transfer_to_appending_stage(state));
+    }
+    for (size_t i = 0; i < _partition_input_channels.size(); ++i) {
+        auto& channel = _partition_input_channels[i];
+        while (!channel.is_empty()) {
+            RETURN_IF_ERROR(_builders[i]->do_append_chunk(state, channel.pull()));
+        }
+    }
+
+    return Status::OK();
 }
 
 Status AdaptivePartitionHashJoinBuilder::build(RuntimeState* state) {
@@ -927,15 +939,7 @@ Status AdaptivePartitionHashJoinBuilder::build(RuntimeState* state) {
         if (!_need_partition_join_for_build(hash_table_row_count())) {
             RETURN_IF_ERROR(_convert_to_single_partition(state));
         } else {
-            if (_stage == Stage::BUFFERING) {
-                RETURN_IF_ERROR(_transfer_to_appending_stage(state));
-            }
-            for (size_t i = 0; i < _partition_input_channels.size(); ++i) {
-                auto& channel = _partition_input_channels[i];
-                while (!channel.is_empty()) {
-                    RETURN_IF_ERROR(_builders[i]->do_append_chunk(state, channel.pull()));
-                }
-            }
+            RETURN_IF_ERROR(_flush_buffer_chunks(state));
         }
     }
 
