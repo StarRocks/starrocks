@@ -69,6 +69,7 @@ public:
 
     // Variant value has a maximum size limit of 16MB to prevent excessive memory usage.
     static constexpr uint32_t kMaxVariantSize = 16 * 1024 * 1024;
+
 private:
     static constexpr uint8_t kVersionMask = 0b1111;
     static constexpr uint8_t kSortedStrings = 0b10000;
