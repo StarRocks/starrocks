@@ -134,7 +134,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
                 const T str_size = new_offsets[i * 2 + 1] - new_offsets[i * 2];
                 // Only copy 16 bytes extra when src_column is small enough, because the overhead of copying 16 bytes
                 // will be large when src_column is large enough.
-                memcpy_inlined_overflow16(dest_bytes + cur_offset, src_bytes + new_offsets[i * 2], str_size);
+                strings::memcpy_inlined_overflow16(dest_bytes + cur_offset, src_bytes + new_offsets[i * 2], str_size);
                 cur_offset += str_size;
             }
         }
