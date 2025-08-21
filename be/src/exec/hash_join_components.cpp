@@ -911,7 +911,10 @@ Status AdaptivePartitionHashJoinBuilder::do_append_chunk(RuntimeState* state, co
 }
 
 Status AdaptivePartitionHashJoinBuilder::prepare_for_spill_start(RuntimeState* state) {
-    return _flush_buffer_chunks(state);
+    if (_partition_num > 1) {
+        return _flush_buffer_chunks(state);
+    }
+    return Status::OK();
 }
 
 ChunkPtr AdaptivePartitionHashJoinBuilder::convert_to_spill_schema(const ChunkPtr& chunk) const {
