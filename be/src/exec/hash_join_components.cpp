@@ -560,7 +560,7 @@ size_t AdaptivePartitionHashJoinBuilder::_estimate_hash_table_probing_bytes_per_
         }
     }
 
-    return estimated_each_row;
+    return std::max<size_t>(estimated_each_row * _cache_miss_factor, 1);
 }
 
 // We could use a better estimation model.
@@ -575,7 +575,7 @@ size_t AdaptivePartitionHashJoinBuilder::_estimate_probe_row_bytes(const HashTab
         }
     }
 
-    return size;
+    return std::max<size_t>(size, 1);
 }
 
 template <>
