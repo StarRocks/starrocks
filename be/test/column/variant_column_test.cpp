@@ -206,4 +206,18 @@ PARALLEL_TEST(VariantColumnTest, test_create_variant_column) {
     EXPECT_GE(memory_usage, 0);
 }
 
+// NOLINTNEXTLINE
+PARALLEL_TEST(VariantColumnTest, test_variant_value_of_null) {
+    VariantValue null_variant = VariantValue::of_null();
+    EXPECT_EQ(null_variant.get_metadata(), VariantMetadata::kEmptyMetadata);
+    EXPECT_EQ(null_variant.get_value(), std::string_view{});
+    EXPECT_EQ(null_variant.to_string(), "null");
+    EXPECT_EQ(null_variant.to_json().value(), "null");
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(VariantColumnTest, test_append_strings) {
+    auto variant_column = VariantColumn::create();
+}
+
 } // namespace starrocks

@@ -30,8 +30,13 @@ public:
     VariantValue(std::string metadata, std::string value) : _metadata(std::move(metadata)), _value(std::move(value)) {}
     VariantValue() = default;
 
-    // Static factory method to create VariantValue from Slice
-    // Returns StatusOr to handle errors gracefully without exceptions
+    /**
+     * Static factory method to create a VariantValue from a Slice.
+     * @param slice The Slice must contain the full variant binary including size header.
+     * The first 4 bytes of the Slice are expected to be the size of the variant.
+     * The memory layout is: [total size (4 bytes)][metadata][value].
+     * @return The created VariantValue or an error status.
+     */
     static StatusOr<VariantValue> create(const Slice& slice);
 
     VariantValue(const VariantValue& rhs) = default;

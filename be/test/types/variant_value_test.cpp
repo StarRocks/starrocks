@@ -365,4 +365,73 @@ TEST_F(VariantValueTest, ArrayToJson) {
     }
 }
 
+TEST_F(VariantValueTest, InvalidVariant) {
+    // Test invalid variant with empty metadata
+    {
+        Slice empty_slice(""); // Empty slice
+        auto empty_variant = VariantValue::create(empty_slice);
+        ASSERT_FALSE(empty_variant.ok());
+        EXPECT_EQ("Invalid argument: Invalid variant slice: too small to contain size header",
+                  empty_variant.status().to_string());
+    }
+    // Test invalid variant with unsupported version
+    {
+        // Create proper format: 4-byte size header + variant data
+        constexpr char v2_metadata_char[] = {0x2, 0x0, 0x0}; // version 2 metadata
+        constexpr uint32_t data_size = sizeof(v2_metadata_char);
+
+        // Construct proper slice with size header
+        std::string variant_data;
+        variant_data.resize(sizeof(uint32_t) + data_size);
+
+        // Write size header (little endian)
+        std::memcpy(variant_data.data(), &data_size, sizeof(uint32_t));
+        // Write variant data
+        std::memcpy(variant_data.data() + sizeof(uint32_t), v2_metadata_char, data_size);
+
+        Slice variant_slice(variant_data);
+        auto unsupported_variant = VariantValue::create(variant_slice);
+        ASSERT_FALSE(unsupported_variant.ok());
+        EXPECT_EQ("Not supported: Unsupported variant version: 2", unsupported_variant.status().to_string());
+    }
+    // Test exceed maximum variant size
+    {
+        // Create size header that indicates data larger than max size
+        constexpr uint32_t oversized_data_size = VariantValue::kMaxVariantSize + 1;
+        std::string variant_data;
+        variant_data.resize(sizeof(uint32_t));
+
+        // Write oversized size in header
+        std::memcpy(variant_data.data(), &oversized_data_size, sizeof(uint32_t));
+
+        Slice variant_slice(variant_data);
+        auto large_variant = VariantValue::create(variant_slice);
+        ASSERT_FALSE(large_variant.ok());
+        EXPECT_EQ("Invalid argument: Variant size exceeds maximum limit: " +
+                          std::to_string(VariantValue::kMaxVariantSize + 1) + " > " +
+                          std::to_string(VariantValue::kMaxVariantSize),
+                  large_variant.status().to_string());
+    }
+
+    // Test variant with size header but insufficient actual data
+    {
+        constexpr uint32_t claimed_size = 100;    // Claim 100 bytes
+        constexpr uint32_t actual_data_size = 10; // But only provide 10 bytes
+
+        std::string variant_data;
+        variant_data.resize(sizeof(uint32_t) + actual_data_size);
+
+        // Write size header claiming more data than available
+        std::memcpy(variant_data.data(), &claimed_size, sizeof(uint32_t));
+        // Fill with some dummy data
+        std::memset(variant_data.data() + sizeof(uint32_t), 0x42, actual_data_size);
+
+        Slice variant_slice(variant_data);
+        auto insufficient_variant = VariantValue::create(variant_slice);
+        ASSERT_FALSE(insufficient_variant.ok());
+        EXPECT_EQ("Invalid argument: Invalid variant size: 100 exceeds available data: 10",
+                  insufficient_variant.status().to_string());
+    }
+}
+
 } // namespace starrocks

@@ -38,23 +38,23 @@ StatusOr<VariantValue> VariantValue::create(const Slice& slice) {
     // The first 4 bytes are the size of the variant
     uint32_t variant_size;
     std::memcpy(&variant_size, variant_raw, sizeof(uint32_t));
-    if (variant_size > slice.get_size() - sizeof(uint32_t)) {
-        return Status::InvalidArgument(
-                "Invalid variant size: " + std::to_string(variant_size) +
-                " exceeds available data: " + std::to_string(slice.get_size() - sizeof(uint32_t)));
-    }
-
     // Check variant size limit (16MB)
     if (variant_size > kMaxVariantSize) {
         return Status::InvalidArgument("Variant size exceeds maximum limit: " + std::to_string(variant_size) + " > " +
                                        std::to_string(kMaxVariantSize));
     }
 
+    if (variant_size > slice.get_size() - sizeof(uint32_t)) {
+        return Status::InvalidArgument(
+                "Invalid variant size: " + std::to_string(variant_size) +
+                " exceeds available data: " + std::to_string(slice.get_size() - sizeof(uint32_t)));
+    }
+
     const auto variant = std::string_view(variant_raw + sizeof(uint32_t), variant_size);
 
     auto metadata_status = load_metadata(variant);
     if (!metadata_status.ok()) {
-        return Status::InvalidArgument("Failed to load metadata: " + metadata_status.status().to_string());
+        return metadata_status.status();
     }
 
     const auto& metadata_view = metadata_status.value();
@@ -106,6 +106,10 @@ StatusOr<std::string_view> VariantValue::load_metadata(const std::string_view va
     }
 
     const uint8_t header = static_cast<uint8_t>(variant[0]);
+    if (const uint8_t version = header & kVersionMask; version != 1) {
+        return Status::NotSupported("Unsupported variant version: " + std::to_string(version));
+    }
+
     const uint8_t offset_size = 1 + ((header & kOffsetSizeMask) >> kOffsetSizeShift);
     if (offset_size < 1 || offset_size > 4) {
         return Status::InvalidArgument("Invalid offset size in variant metadata: " + std::to_string(offset_size) +
