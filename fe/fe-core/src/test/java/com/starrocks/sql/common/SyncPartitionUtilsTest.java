@@ -978,56 +978,56 @@ public class SyncPartitionUtilsTest {
     public void testNextUpperDateTime_MINUTE_SUB() {
         LocalDateTime input = LocalDateTime.of(2023, 6, 15, 10, 30, 0, 0);
         LocalDateTime expected = LocalDateTime.of(2023, 6, 15, 10, 29, 0, 0);
-        Assertions.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, MINUTE, FunctionSet.DATE_SUB));
+        Assertions.assertEquals(expected, SyncPartitionUtils.nextDateTime(input, MINUTE, FunctionSet.DATE_SUB));
     }
 
     @Test
     public void testNextUpperDateTime_HOUR_SUB() {
         LocalDateTime input = LocalDateTime.of(2023, 6, 15, 10, 0, 0, 0);
         LocalDateTime expected = LocalDateTime.of(2023, 6, 15, 9, 0, 0, 0);
-        Assertions.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, HOUR, FunctionSet.DATE_SUB));
+        Assertions.assertEquals(expected, SyncPartitionUtils.nextDateTime(input, HOUR, FunctionSet.DATE_SUB));
     }
 
     @Test
     public void testNextUpperDateTime_DAY_SUB() {
         LocalDateTime input = LocalDateTime.of(2023, 6, 15, 0, 0, 0, 0);
         LocalDateTime expected = LocalDateTime.of(2023, 6, 14, 0, 0, 0, 0);
-        Assertions.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, DAY, FunctionSet.DATE_SUB));
+        Assertions.assertEquals(expected, SyncPartitionUtils.nextDateTime(input, DAY, FunctionSet.DATE_SUB));
     }
 
     @Test
     public void testNextUpperDateTime_WEEK_SUB() {
         LocalDateTime input = LocalDateTime.of(2023, 6, 15, 0, 0, 0, 0);
         LocalDateTime expected = LocalDateTime.of(2023, 6, 8, 0, 0, 0, 0);
-        Assertions.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, WEEK, FunctionSet.DATE_SUB));
+        Assertions.assertEquals(expected, SyncPartitionUtils.nextDateTime(input, WEEK, FunctionSet.DATE_SUB));
     }
 
     @Test
     public void testNextUpperDateTime_MONTH_SUB() {
         LocalDateTime input = LocalDateTime.of(2023, 6, 15, 0, 0, 0, 0);
         LocalDateTime expected = LocalDateTime.of(2023, 5, 1, 0, 0, 0, 0);
-        Assertions.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, MONTH, FunctionSet.DATE_SUB));
+        Assertions.assertEquals(expected, SyncPartitionUtils.nextDateTime(input, MONTH, FunctionSet.DATE_SUB));
     }
 
     @Test
     public void testNextUpperDateTime_QUARTER_SUB() {
         LocalDateTime input = LocalDateTime.of(2023, 6, 15, 0, 0, 0, 0);
         LocalDateTime expected = LocalDateTime.of(2023, 1, 1, 0, 0, 0, 0);
-        Assertions.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, QUARTER, FunctionSet.DATE_SUB));
+        Assertions.assertEquals(expected, SyncPartitionUtils.nextDateTime(input, QUARTER, FunctionSet.DATE_SUB));
     }
 
     @Test
     public void testNextUpperDateTime_YEAR_SUB() {
         LocalDateTime input = LocalDateTime.of(2023, 6, 15, 0, 0, 0, 0);
         LocalDateTime expected = LocalDateTime.of(2022, 1, 1, 0, 0, 0, 0);
-        Assertions.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, YEAR, FunctionSet.DATE_SUB));
+        Assertions.assertEquals(expected, SyncPartitionUtils.nextDateTime(input, YEAR, FunctionSet.DATE_SUB));
     }
 
     @Test
     public void testNextUpperDateTime_InvalidDateFunc() {
         LocalDateTime input = LocalDateTime.now();
         Assertions.assertThrows(SemanticException.class, () -> {
-            SyncPartitionUtils.nextUpperDateTime(input, MINUTE, "INVALID_FUNC");
+            SyncPartitionUtils.nextDateTime(input, MINUTE, "INVALID_FUNC");
         });
     }
 
@@ -1035,7 +1035,7 @@ public class SyncPartitionUtilsTest {
     public void testNextUpperDateTime_InvalidGranularity() {
         LocalDateTime input = LocalDateTime.now();
         Assertions.assertThrows(SemanticException.class, () -> {
-            SyncPartitionUtils.nextUpperDateTime(input, "INVALID_GRANULARITY", FunctionSet.DATE_SUB);
+            SyncPartitionUtils.nextDateTime(input, "INVALID_GRANULARITY", FunctionSet.DATE_SUB);
         });
     }
 }

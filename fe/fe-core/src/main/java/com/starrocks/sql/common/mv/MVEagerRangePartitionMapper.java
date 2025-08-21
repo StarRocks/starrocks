@@ -167,9 +167,9 @@ public class MVEagerRangePartitionMapper extends MVRangePartitionMapper {
                         originMapping.getLowerDateTime(), originMapping.getUpperDateTime());
 
                 for (int i = 0; i < maxRange; i++) {
-                    LocalDateTime lowerDateTime = SyncPartitionUtils.nextUpperDateTime(tempMapping.getLowerDateTime(),
+                    LocalDateTime lowerDateTime = SyncPartitionUtils.nextDateTime(tempMapping.getLowerDateTime(),
                             granularity, functionName);
-                    LocalDateTime upperDateTime = SyncPartitionUtils.nextUpperDateTime(tempMapping.getUpperDateTime(),
+                    LocalDateTime upperDateTime = SyncPartitionUtils.nextDateTime(tempMapping.getUpperDateTime(),
                             granularity, functionName);
                     PartitionMapping nextMapping = new PartitionMapping(lowerDateTime, upperDateTime);
                     tempMapping = nextMapping;
@@ -274,8 +274,7 @@ public class MVEagerRangePartitionMapper extends MVRangePartitionMapper {
         LocalDateTime curUpperDateTime = curLowerDateTime;
         while (upperDateTime.isAfter(curUpperDateTime)) {
             // compute the next upper bound by current upper bound
-            LocalDateTime nextUpperDateTime = SyncPartitionUtils.nextUpperDateTime(curUpperDateTime, granularity,
-                    FunctionSet.DATE_ADD);
+            LocalDateTime nextUpperDateTime = SyncPartitionUtils.nextUpperDateTime(curUpperDateTime, granularity);
             PartitionMapping nextMapping = new PartitionMapping(curUpperDateTime, nextUpperDateTime);
 
             // update curLowerDateTime
