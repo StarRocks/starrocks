@@ -260,13 +260,13 @@ public class Analyzer {
 
         @Override
         public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext session) {
-            statement.analyze();
+            ResourceGroupAnalyzer.analyzeAlterResourceGroupStmt(statement);
             return null;
         }
 
         @Override
         public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext session) {
-            statement.analyze();
+            ResourceGroupAnalyzer.analyzeDropResourceGroupStmt(statement);
             return null;
         }
 
@@ -398,7 +398,7 @@ public class Analyzer {
 
         @Override
         public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext session) {
-            statement.analyze();
+            ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(statement);
             return null;
         }
 
