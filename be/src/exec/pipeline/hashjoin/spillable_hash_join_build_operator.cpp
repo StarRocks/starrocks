@@ -201,7 +201,7 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
 
     // Estimate the appropriate number of partitions
     if (_is_first_time_spill) {
-        _join_builder->hash_join_builder()->prepare_for_spill_start(runtime_state());
+        RETURN_IF_ERROR(_join_builder->hash_join_builder()->prepare_for_spill_start(runtime_state()));
         RETURN_IF_ERROR(init_spiller_partitions(state, _join_builder->hash_join_builder()));
     }
 

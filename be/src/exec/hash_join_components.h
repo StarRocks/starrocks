@@ -125,7 +125,7 @@ public:
     // clone readable to to builder
     virtual void clone_readable(HashJoinBuilder* builder) = 0;
 
-    virtual Status prepare_for_spill_start(RuntimeState* state) {}
+    virtual Status prepare_for_spill_start(RuntimeState* state) { return Status::OK(); }
     virtual ChunkPtr convert_to_spill_schema(const ChunkPtr& chunk) const = 0;
 
 protected:
