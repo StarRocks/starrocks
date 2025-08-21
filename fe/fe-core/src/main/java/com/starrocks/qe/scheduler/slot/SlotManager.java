@@ -35,7 +35,7 @@ public class SlotManager extends BaseSlotManager {
 
     public SlotManager(ResourceUsageMonitor resourceUsageMonitor) {
         super(resourceUsageMonitor);
-        this.slotTracker = new SlotTracker(resourceUsageMonitor);
+        this.slotTracker = new SlotTracker(this, resourceUsageMonitor);
     }
 
     @Override

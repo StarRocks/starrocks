@@ -26,6 +26,7 @@ import com.starrocks.catalog.system.information.ViewsSystemTable;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.SlotManager;
@@ -615,8 +616,9 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
     @Test
     public void testWarehouseMetricsEvaluation() throws Exception {
         starRocksAssert.withDatabase("d1").useDatabase("d1");
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
         new MockUp<SlotManager>() {
             @Mock
