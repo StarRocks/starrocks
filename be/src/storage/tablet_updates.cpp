@@ -2912,7 +2912,6 @@ struct CompactionEntry {
     size_t num_dels = 0;
     size_t bytes = 0;
     size_t num_segments = 0;
-    bool partial_update_by_column = false;
 
     bool operator<(const CompactionEntry& rhs) const { return score_per_row > rhs.score_per_row; }
 };
@@ -3110,7 +3109,6 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
                 e.num_dels = stat.num_dels;
                 e.bytes = stat.byte_size;
                 e.num_segments = stat.num_segments;
-                e.partial_update_by_column = stat.partial_update_by_column;
                 has_partial_update_by_column |= stat.partial_update_by_column;
             }
         }
