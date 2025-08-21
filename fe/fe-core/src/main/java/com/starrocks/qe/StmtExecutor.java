@@ -525,6 +525,78 @@ public class StmtExecutor {
         return parsedStmt instanceof DmlStmt || parsedStmt instanceof CreateTableAsSelectStmt;
     }
 
+    private ExecPlan generateExecPlan() throws Exception {
+        ExecPlan execPlan = null;
+        try (Timer ignored = Tracers.watchScope("Total")) {
+            redirectStatus = RedirectStatus.getRedirectStatus(parsedStmt);
+            if (!isForwardToLeader()) {
+                if (context.shouldDumpQuery()) {
+                    if (context.getDumpInfo() == null) {
+                        context.setDumpInfo(new QueryDumpInfo(context));
+                    } else {
+                        context.getDumpInfo().reset();
+                    }
+                    context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
+                    context.getDumpInfo().setStatement(parsedStmt);
+                }
+                if (parsedStmt instanceof ShowStmt) {
+                    com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
+                    Authorizer.check(parsedStmt, context);
+
+                    QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
+                    if (selectStmt != null) {
+                        parsedStmt = selectStmt;
+                        execPlan = StatementPlanner.plan(parsedStmt, context);
+                    }
+                } else if (parsedStmt instanceof ExecuteStmt) {
+                    ExecuteStmt executeStmt = (ExecuteStmt) parsedStmt;
+                    com.starrocks.sql.analyzer.Analyzer.analyze(executeStmt, context);
+                    prepareStmtContext = context.getPreparedStmt(executeStmt.getStmtName());
+                    if (null == prepareStmtContext) {
+                        throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
+                                "prepare statement can't be found @ %s, maybe has expired",
+                                executeStmt.getStmtName());
+                    }
+                    PrepareStmt prepareStmt = prepareStmtContext.getStmt();
+                    parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
+                    parsedStmt.setOrigStmt(originStmt);
+
+                    if (prepareStmt.getInnerStmt().isExistQueryScopeHint()) {
+                        processQueryScopeHint();
+                    }
+
+                    try {
+                        execPlan = PrepareStmtPlanner.plan(executeStmt, parsedStmt, context);
+                    } catch (SemanticException e) {
+                        if (e.getMessage().contains("Unknown partition")) {
+                            throw new SemanticException(e.getMessage() +
+                                    " maybe table partition changed after prepared statement creation");
+                        } else {
+                            throw e;
+                        }
+                    }
+                } else {
+                    execPlan = StatementPlanner.plan(parsedStmt, context);
+                    if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
+                        context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));
+                    }
+                }
+            }
+        } catch (SemanticException e) {
+            dumpException(e);
+            throw new AnalysisException(e.getMessage(), e);
+        } catch (StarRocksPlannerException e) {
+            dumpException(e);
+            if (e.getType().equals(ErrorType.USER_ERROR)) {
+                throw e;
+            } else {
+                LOG.warn("Planner error: " + originStmt.originStmt, e);
+                throw e;
+            }
+        }
+        return execPlan;
+    }
+
     // Execute one statement.
     // Exception:
     // IOException: talk with client failed.
@@ -553,6 +625,7 @@ public class StmtExecutor {
         if (shouldMarkIdleCheck) {
             WarehouseIdleChecker.increaseRunningSQL(originWarehouseId);
         }
+
         try {
             context.getState().setIsQuery(parsedStmt instanceof QueryStatement);
             if (parsedStmt.isExistQueryScopeHint()) {
@@ -564,83 +637,28 @@ public class StmtExecutor {
                     .setWarehouse(context.getCurrentWarehouseName())
                     .setCNGroup(context.getCurrentComputeResourceName());
             LOG.debug("set warehouse {} for stmt: {}", context.getCurrentWarehouseName(), parsedStmt);
-
             if (parsedStmt.isExplain()) {
+                // reset the explain level to avoid the previous explain level affect the current query.
                 context.setExplainLevel(parsedStmt.getExplainLevel());
             } else {
-                // reset the explain level to avoid the previous explain level affect the current query.
                 context.setExplainLevel(null);
             }
 
-            // execPlan is the output of planner
-            ExecPlan execPlan = null;
-            try (Timer ignored = Tracers.watchScope("Total")) {
-                redirectStatus = RedirectStatus.getRedirectStatus(parsedStmt);
-                if (!isForwardToLeader()) {
-                    if (context.shouldDumpQuery()) {
-                        if (context.getDumpInfo() == null) {
-                            context.setDumpInfo(new QueryDumpInfo(context));
-                        } else {
-                            context.getDumpInfo().reset();
-                        }
-                        context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
-                        context.getDumpInfo().setStatement(parsedStmt);
-                    }
-                    if (parsedStmt instanceof ShowStmt) {
-                        com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
-                        Authorizer.check(parsedStmt, context);
-
-                        QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
-                        if (selectStmt != null) {
-                            parsedStmt = selectStmt;
-                            execPlan = StatementPlanner.plan(parsedStmt, context);
-                        }
-                    } else if (parsedStmt instanceof ExecuteStmt) {
-                        ExecuteStmt executeStmt = (ExecuteStmt) parsedStmt;
-                        com.starrocks.sql.analyzer.Analyzer.analyze(executeStmt, context);
-                        prepareStmtContext = context.getPreparedStmt(executeStmt.getStmtName());
-                        if (null == prepareStmtContext) {
-                            throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
-                                    "prepare statement can't be found @ %s, maybe has expired",
-                                    executeStmt.getStmtName());
-                        }
-                        PrepareStmt prepareStmt = prepareStmtContext.getStmt();
-                        parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
-                        parsedStmt.setOrigStmt(originStmt);
-
-                        if (prepareStmt.getInnerStmt().isExistQueryScopeHint()) {
-                            processQueryScopeHint();
-                        }
-
-                        try {
-                            execPlan = PrepareStmtPlanner.plan(executeStmt, parsedStmt, context);
-                        } catch (SemanticException e) {
-                            if (e.getMessage().contains("Unknown partition")) {
-                                throw new SemanticException(e.getMessage() +
-                                        " maybe table partition changed after prepared statement creation");
-                            } else {
-                                throw e;
-                            }
-                        }
-                    } else {
-                        execPlan = StatementPlanner.plan(parsedStmt, context);
-                        if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
-                            context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));
-                        }
-                    }
+            // for explain query(not explain analyze), we can trace even if optimizer fails and execPlan is null
+            if (parsedStmt.isExplainTrace()) {
+                ExecPlan execPlan = null;
+                try {
+                    execPlan = generateExecPlan();
+                } catch (Exception e) {
+                    LOG.warn("Generate exec plan failed for explain stmt: {}",
+                            parsedStmt.getOrigStmt().originStmt, e);
                 }
-            } catch (SemanticException e) {
-                dumpException(e);
-                throw new AnalysisException(e.getMessage());
-            } catch (StarRocksPlannerException e) {
-                dumpException(e);
-                if (e.getType().equals(ErrorType.USER_ERROR)) {
-                    throw e;
-                } else {
-                    LOG.warn("Planner error: " + originStmt.originStmt, e);
-                    throw e;
-                }
+                handleExplainExecPlan(execPlan);
+                return;
             }
+
+            // execPlan is the output of planner
+            ExecPlan execPlan = generateExecPlan();
 
             // no need to execute http query dump request in BE
             if (context.isHTTPQueryDump) {
@@ -731,8 +749,7 @@ public class StmtExecutor {
 
                                 if (context.isProfileEnabled()) {
                                     isAsync = tryProcessProfileAsync(execPlan, i);
-                                    if (parsedStmt.isExplain() &&
-                                            StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                    if (parsedStmt.isExplainAnalyze()) {
                                         if (coord != null && coord.isShortCircuit()) {
                                             throw new StarRocksException(
                                                     "short circuit point query doesn't suppot explain analyze stmt, " +
@@ -1299,14 +1316,26 @@ public class StmtExecutor {
         return CostPredictor.getServiceBasedCostPredictor();
     }
 
+    /**
+     * Handle Explain stmt. NOTE: we can record some traces even if execPlan is null.
+     */
+    private void handleExplainExecPlan(ExecPlan execPlan) throws Exception {
+        // Every time set no send flag and clean all data in buffer
+        context.getMysqlChannel().reset();
+        String explainString = buildExplainString(execPlan, parsedStmt, context, ResourceGroupClassifier.QueryType.SELECT,
+                parsedStmt.getExplainLevel());
+        handleExplainStmt(explainString);
+    }
+
     // Process a select statement.
     private void handleQueryStmt(ExecPlan execPlan) throws Exception {
         // Every time set no send flag and clean all data in buffer
         context.getMysqlChannel().reset();
 
-        boolean isExplainAnalyze = parsedStmt.isExplain()
+        boolean isExplainQuery = parsedStmt.isExplain();
+        boolean isExplainAnalyze = isExplainQuery
                 && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
-        boolean isSchedulerExplain = parsedStmt.isExplain()
+        boolean isSchedulerExplain = isExplainQuery
                 && StatementBase.ExplainLevel.SCHEDULER.equals(parsedStmt.getExplainLevel());
 
         boolean isPlanAdvisorAnalyze = StatementBase.ExplainLevel.PLAN_ADVISOR.equals(parsedStmt.getExplainLevel());
@@ -1330,7 +1359,7 @@ public class StmtExecutor {
             context.getSessionVariable().setPipelineProfileLevel(1);
         } else if (isSchedulerExplain) {
             // Do nothing.
-        } else if (parsedStmt.isExplain()) {
+        } else if (isExplainQuery) {
             String explainString = buildExplainString(execPlan, parsedStmt, context, ResourceGroupClassifier.QueryType.SELECT,
                     parsedStmt.getExplainLevel());
             if (executeInFe) {
@@ -2080,6 +2109,10 @@ public class StmtExecutor {
         context.getState().setEof();
     }
 
+    /**
+     * Build explain string for explain statement.
+     * NOTE: execPlan maybe null but we can still trace some broken optimizer messages for better debug.
+     */
     public static String buildExplainString(ExecPlan execPlan, StatementBase parsedStmt, ConnectContext context,
                                             ResourceGroupClassifier.QueryType queryType,
                                             StatementBase.ExplainLevel explainLevel) {
@@ -2092,24 +2125,26 @@ public class StmtExecutor {
         }
         // marked delete will get execPlan null
         if (execPlan == null) {
-            explainString += "NOT AVAILABLE";
+            explainString += "PLAN NOT AVAILABLE\n";
+        }
+
+        if (parsedStmt.getTraceMode() == Tracers.Mode.TIMER) {
+            explainString += Tracers.printScopeTimer();
+        } else if (parsedStmt.getTraceMode() == Tracers.Mode.VARS) {
+            explainString += Tracers.printVars();
+        } else if (parsedStmt.getTraceMode() == Tracers.Mode.TIMING) {
+            explainString += Tracers.printTiming();
+        } else if (parsedStmt.getTraceMode() == Tracers.Mode.LOGS) {
+            explainString += Tracers.printLogs();
+        } else if (parsedStmt.getTraceMode() == Tracers.Mode.REASON) {
+            explainString += Tracers.printReasons();
         } else {
-            if (parsedStmt.getTraceMode() == Tracers.Mode.TIMER) {
-                explainString += Tracers.printScopeTimer();
-            } else if (parsedStmt.getTraceMode() == Tracers.Mode.VARS) {
-                explainString += Tracers.printVars();
-            } else if (parsedStmt.getTraceMode() == Tracers.Mode.TIMING) {
-                explainString += Tracers.printTiming();
-            } else if (parsedStmt.getTraceMode() == Tracers.Mode.LOGS) {
-                explainString += Tracers.printLogs();
-            } else if (parsedStmt.getTraceMode() == Tracers.Mode.REASON) {
-                explainString += Tracers.printReasons();
-            } else {
-                OperatorTuningGuides.OptimizedRecord optimizedRecord = PlanTuningAdvisor.getInstance()
-                        .getOptimizedRecord(context.getQueryId());
-                if (optimizedRecord != null) {
-                    explainString += optimizedRecord.getExplainString();
-                }
+            OperatorTuningGuides.OptimizedRecord optimizedRecord = PlanTuningAdvisor.getInstance()
+                    .getOptimizedRecord(context.getQueryId());
+            if (optimizedRecord != null) {
+                explainString += optimizedRecord.getExplainString();
+            }
+            if (execPlan != null) {
                 explainString += execPlan.getExplainString(explainLevel);
             }
         }

@@ -125,6 +125,14 @@ public abstract class StatementBase implements ParseNode {
         return traceModule;
     }
 
+    public boolean isExplainTrace() {
+        return isExplain && traceMode != null && traceMode != Tracers.Mode.NONE;
+    }
+
+    public boolean isExplainAnalyze() {
+        return isExplain && explainLevel == ExplainLevel.ANALYZE;
+    }
+
     public ExplainLevel getExplainLevel() {
         if (explainLevel == null) {
             return ExplainLevel.defaultValue();
