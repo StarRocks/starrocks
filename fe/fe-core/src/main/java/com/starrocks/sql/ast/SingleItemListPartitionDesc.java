@@ -21,7 +21,6 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -69,13 +68,7 @@ public class SingleItemListPartitionDesc extends SinglePartitionDesc {
         return partitionValues;
     }
 
-    public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
-        FeNameFormat.checkPartitionName(this.getPartitionName());
-        analyzeProperties(tableProperties, null);
-
-        if (columnDefList.size() != 1) {
-            throw new AnalysisException("Partition column size should be one when use single list partition ");
-        }
+    public void setColumnDefList(List<ColumnDef> columnDefList) {
         this.columnDefList = columnDefList;
     }
 
