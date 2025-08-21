@@ -637,9 +637,9 @@ void AdaptivePartitionHashJoinBuilder::_adjust_partition_rows(size_t hash_table_
 
         if (_probe_row_shuffle_cost < l2_benefit) { // Partitioned joins benefit from L2 cache.
             _partition_join_l2_min_rows = _fit_L2_cache_max_rows * l2_benefit / (l2_benefit - _probe_row_shuffle_cost);
+            _partition_join_l2_min_rows *= 2; // Make the restriction more stringent
             _partition_join_l2_max_rows =
                     (_fit_L2_cache_max_rows * _partition_num) * l2_benefit / _probe_row_shuffle_cost;
-            _partition_join_l2_max_rows *= 2;
         }
     } else {
         // Partitioned joins don't have performance gains. Not using partition hash join.
