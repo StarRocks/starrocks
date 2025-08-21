@@ -67,6 +67,8 @@ public:
     std::string get_metadata() const { return _metadata; }
     std::string get_value() const { return _value; }
 
+    // Variant value has a maximum size limit of 16MB to prevent excessive memory usage.
+    static constexpr uint32_t kMaxVariantSize = 16 * 1024 * 1024;
 private:
     static constexpr uint8_t kVersionMask = 0b1111;
     static constexpr uint8_t kSortedStrings = 0b10000;
@@ -74,8 +76,6 @@ private:
     static constexpr uint8_t kOffsetSizeShift = 6;
     static constexpr uint8_t kHeaderSize = 1;
     static constexpr size_t kMinMetadataSize = 3;
-    // Variant value has a maximum size limit of 16MB to prevent excessive memory usage.
-    static constexpr uint32_t kMaxVariantSize = 16 * 1024 * 1024;
 
     // Now directly store strings instead of string_views
     std::string _metadata;

@@ -525,8 +525,8 @@ template <>
 struct RunTimeTypeLimits<TYPE_VARIANT> {
     using value_type = VariantValue;
 
-    static value_type min_value() { return VariantValue{Slice::min_value()}; }
-    static value_type max_value() { return VariantValue{Slice::max_value()}; }
+    static value_type min_value() { return VariantValue::of_null(); }
+    static value_type max_value() { return VariantValue::create(Slice::max_value()).value(); }
 };
 
 } // namespace starrocks
