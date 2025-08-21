@@ -297,11 +297,11 @@ public class TabletSchedCtxTest {
 
         ctx = new TabletSchedCtx(Type.BALANCE, 1, 2, 3, 4, 1001, System.currentTimeMillis());
         ctx.setOrigPriority(Priority.NORMAL);
-        ctx.setBalanceType(BalanceStat.BalanceType.CLUSTER_TABLET);
+        ctx.setBalanceType(BalanceStat.BalanceType.INTER_NODE_TABLET_DISTRIBUTION);
         results = ctx.getBrief();
         Assertions.assertEquals("1001", results.get(0));
         Assertions.assertEquals("BALANCE", results.get(1));
-        Assertions.assertEquals("CLUSTER_TABLET", results.get(3));
+        Assertions.assertEquals("INTER_NODE_TABLET_DISTRIBUTION", results.get(3));
     }
 
     @Test
