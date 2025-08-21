@@ -201,6 +201,7 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
 
     // Estimate the appropriate number of partitions
     if (_is_first_time_spill) {
+        _join_builder->hash_join_builder()->prepare_for_spill_start(runtime_state());
         RETURN_IF_ERROR(init_spiller_partitions(state, _join_builder->hash_join_builder()));
     }
 
@@ -236,7 +237,6 @@ StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_c
     _hash_tables.clear();
     _hash_table_iterate_idx = 0;
 
-    _join_builder->hash_join_builder()->prepare_for_spill_start(runtime_state());
     _join_builder->hash_join_builder()->visitHt([this](JoinHashTable* ht) { _hash_tables.push_back(ht); });
 
     for (auto* ht : _hash_tables) {
