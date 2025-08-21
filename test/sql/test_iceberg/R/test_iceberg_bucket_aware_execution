@@ -113,9 +113,9 @@ function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.icebe
 -- result:
 None
 -- !result
-explain select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_2 b on a.trip_id = b.trip_id;
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_2 b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Type (nested) percentile/hll/bitmap/json not support join.')
+None
 -- !result
 function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
 -- result:
@@ -152,10 +152,6 @@ select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_t
 select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b on a.trip_id = b.trip_id;
 -- result:
 4002	4002	1032700
--- !result
-select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id;
--- result:
-7842	7842	2007666
 -- !result
 select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_2 b on a.trip_id = b.trip_id;
 -- result:
