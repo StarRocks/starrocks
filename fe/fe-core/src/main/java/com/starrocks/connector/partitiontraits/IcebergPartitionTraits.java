@@ -24,9 +24,9 @@ import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.iceberg.PartitionField;
@@ -78,7 +78,7 @@ public class IcebergPartitionTraits extends DefaultTraits {
                 .map(Snapshot::snapshotId);
         ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
         requestContext.setQueryMVRewrite(isQueryMVRewrite());
-        requestContext.setTableVersionRange(TableVersionRange.withEnd(snapshotId));
+        requestContext.setTableVersionRange(TvrTableSnapshot.of(snapshotId));
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                 table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
     }

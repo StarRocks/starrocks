@@ -19,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
@@ -165,7 +166,7 @@ public class CatalogConnectorMetadataTest {
         ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateInnerContext();
         ctx.setThreadLocalInfo();
         GetRemoteFilesParams getRemoteFilesParams =
-                GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.empty()).build();
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TvrTableSnapshot.empty()).build();
 
         new Expectations() {
             {
@@ -199,7 +200,8 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.dropDb((ConnectContext) any, "test_db", false);
                 connectorMetadata.getRemoteFiles(null, getRemoteFilesParams);
                 connectorMetadata.getPartitions(null, null);
-                connectorMetadata.getTableStatistics(null, null, null, null, null, -1, TableVersionRange.empty());
+                connectorMetadata.getTableStatistics(null, null, null, null, null,
+                        -1, TvrTableSnapshot.empty());
             }
         };
 
@@ -235,6 +237,7 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.dropDb(new ConnectContext(), "test_db", false);
         connectorMetadata.getRemoteFiles(null, getRemoteFilesParams);
         catalogConnectorMetadata.getPartitions(null, null);
-        catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1, TableVersionRange.empty());
+        catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1,
+                TvrTableSnapshot.empty());
     }
 }

@@ -149,6 +149,9 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.encryption.EncryptionKeyPBAdapter;
 import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 import com.starrocks.epack.authorization.FailoverGroupPEntryObject;
@@ -482,6 +485,11 @@ public class GsonUtils {
                     .registerSubtype(ClusterSnapshotJob.class, "ClusterSnapshotJob")
                     .registerSubtype(ManualClusterSnapshotJob.class, "ManualClusterSnapshotJob");
 
+    public static final RuntimeTypeAdapterFactory<TvrVersionRange> TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(TvrVersionRange.class, "clazz")
+                    .registerSubtype(TvrTableSnapshot.class, "TvrTableSnapshot")
+                    .registerSubtype(TvrTableDelta.class, "TvrTableDelta");
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -551,6 +559,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(CLUSTER_SNAPSHOT_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(CLUSTER_SNAPSHOT_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

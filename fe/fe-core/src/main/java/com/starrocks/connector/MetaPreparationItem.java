@@ -15,6 +15,7 @@
 package com.starrocks.connector;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.StringJoiner;
@@ -23,9 +24,9 @@ public class MetaPreparationItem {
     private final Table table;
     private final ScalarOperator predicate;
     private final long limit;
-    private final TableVersionRange version;
+    private final TvrVersionRange version;
 
-    public MetaPreparationItem(Table table, ScalarOperator predicate, long limit, TableVersionRange version) {
+    public MetaPreparationItem(Table table, ScalarOperator predicate, long limit, TvrVersionRange version) {
         this.table = table;
         this.predicate = predicate;
         this.limit = limit;
@@ -44,7 +45,7 @@ public class MetaPreparationItem {
         return limit;
     }
 
-    public TableVersionRange getVersion() {
+    public TvrVersionRange getVersion() {
         return version;
     }
 
