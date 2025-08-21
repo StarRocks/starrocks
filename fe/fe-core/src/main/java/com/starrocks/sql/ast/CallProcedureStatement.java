@@ -22,7 +22,7 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 import java.util.Map;
 
-public class CallProcedureStatement extends StatementBase {
+public class CallProcedureStatement extends DdlStmt {
     private QualifiedName qualifiedName;
     private final List<ProcedureArgument> arguments;
     private Procedure procedure;

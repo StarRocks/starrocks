@@ -254,6 +254,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Procedure getProcedure(DatabaseTableName procedureName) {
+        return normal.getProcedure(procedureName);
+    }
+
+    @Override
     public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch) {
         normal.finishSink(dbName, table, commitInfos, branch);
     }
