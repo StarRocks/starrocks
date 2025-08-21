@@ -71,14 +71,10 @@ public class FeConstants {
             "Backend node not found. Check if any backend node is down.";
     public static final String COMPUTE_NODE_NOT_FOUND_ERROR =
             "Compute node not found. Check if any compute node is down.";
-<<<<<<< HEAD
-=======
     public static final String QUERY_FINISHED_ERROR = "QueryFinished";
     public static final String LIMIT_REACH_ERROR = "LimitReach";
     public static final String SCHEDULE_FRAGMENT_ERROR =
             "Schedule Fragment error. caused by:";
-
->>>>>>> 80aacf88f7 ([BugFix] Fixed phased scheduler always waiting for profile collection in sync profile collection (#62140))
 
     public static boolean USE_MOCK_DICT_MANAGER = false;
 
