@@ -55,10 +55,10 @@ dependencies {
     antlr("org.antlr:antlr4:${project.ext["antlr.version"]}")
 
     // Internal project dependencies
-    implementation(project(":fe-common"))
-    implementation(project(":plugin-common"))
-    implementation(project(":hive-udf"))
-    implementation(project(":spark-dpp"))
+    implementation(project(":fe-testing"))
+    implementation(project(":fe-utils"))
+    implementation(project(":plugin:hive-udf"))
+    implementation(project(":plugin:spark-dpp"))
 
     // dependency sync start
     implementation("com.aliyun.datalake:metastore-client-hive3") {

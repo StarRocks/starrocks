@@ -27,8 +27,8 @@ The build system is extremely resource-intensive and time-consuming. Building th
 **Language**: Java
 **Purpose**: SQL parsing, query planning, and metadata management
 - `fe/fe-core/` - Core frontend services (SQL parser, planner, catalog)
-- `fe/fe-common/` - Common frontend utilities
-- `fe/plugin-common/` - Plugin framework common components
+- `fe/fe-testing/` - Common test utilities
+- `fe/fe-utils/` - Common utilities and helpers
 - `fe/spark-dpp/` - Spark data preprocessing integration
 - `fe/hive-udf/` - Hive UDF compatibility layer
 

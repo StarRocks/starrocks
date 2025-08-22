@@ -25,7 +25,7 @@ java {
 }
 
 dependencies {
-    implementation(project(":plugin-common"))
+    implementation(project(":fe-utils"))
     compileOnly("io.trino.hive:hive-apache")
     compileOnly("org.apache.hadoop:hadoop-client")
 }
@@ -39,7 +39,7 @@ tasks.withType<JavaCompile> {
 tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
     // Minimize JAR
     minimize {
-        exclude(dependency("${project.group}:plugin-common:${project.version}"))
+        exclude(dependency("${project.group}:fe-utils:${project.version}"))
     }
 
     // Relocate packages
