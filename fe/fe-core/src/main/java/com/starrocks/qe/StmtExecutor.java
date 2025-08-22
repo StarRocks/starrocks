@@ -519,9 +519,10 @@ public class StmtExecutor {
     }
 
     private ExecPlan generateExecPlan() throws Exception {
+        // execPlan is the output of planner
         ExecPlan execPlan = null;
         try (Timer ignored = Tracers.watchScope("Total")) {
-            redirectStatus = RedirectStatus.getRedirectStatus(parsedStmt);
+            redirectStatus = parsedStmt.getRedirectStatus();
             if (!isForwardToLeader()) {
                 if (context.shouldDumpQuery()) {
                     if (context.getDumpInfo() == null) {
@@ -633,75 +634,6 @@ public class StmtExecutor {
                 context.setExplainLevel(null);
             }
 
-<<<<<<< HEAD
-            // execPlan is the output of planner
-            ExecPlan execPlan = null;
-            try (Timer ignored = Tracers.watchScope("Total")) {
-                redirectStatus = parsedStmt.getRedirectStatus();
-                if (!isForwardToLeader()) {
-                    if (context.shouldDumpQuery()) {
-                        if (context.getDumpInfo() == null) {
-                            context.setDumpInfo(new QueryDumpInfo(context));
-                        } else {
-                            context.getDumpInfo().reset();
-                        }
-                        context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
-                        context.getDumpInfo().setStatement(parsedStmt);
-                    }
-                    if (parsedStmt instanceof ShowStmt) {
-                        com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
-                        Authorizer.check(parsedStmt, context);
-
-                        QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
-                        if (selectStmt != null) {
-                            parsedStmt = selectStmt;
-                            execPlan = StatementPlanner.plan(parsedStmt, context);
-                        }
-                    } else if (parsedStmt instanceof ExecuteStmt) {
-                        ExecuteStmt executeStmt = (ExecuteStmt) parsedStmt;
-                        com.starrocks.sql.analyzer.Analyzer.analyze(executeStmt, context);
-                        prepareStmtContext = context.getPreparedStmt(executeStmt.getStmtName());
-                        if (null == prepareStmtContext) {
-                            throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
-                                    "prepare statement can't be found @ %s, maybe has expired",
-                                    executeStmt.getStmtName());
-                        }
-                        PrepareStmt prepareStmt = prepareStmtContext.getStmt();
-                        parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
-                        parsedStmt.setOrigStmt(originStmt);
-
-                        if (prepareStmt.getInnerStmt().isExistQueryScopeHint()) {
-                            processQueryScopeHint();
-                        }
-
-                        try {
-                            execPlan = PrepareStmtPlanner.plan(executeStmt, parsedStmt, context);
-                        } catch (SemanticException e) {
-                            if (e.getMessage().contains("Unknown partition")) {
-                                throw new SemanticException(e.getMessage() +
-                                        " maybe table partition changed after prepared statement creation");
-                            } else {
-                                throw e;
-                            }
-                        }
-                    } else {
-                        execPlan = StatementPlanner.plan(parsedStmt, context);
-                        if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
-                            context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));
-                        }
-                    }
-                }
-            } catch (SemanticException e) {
-                dumpException(e);
-                throw new AnalysisException(e.getMessage());
-            } catch (StarRocksPlannerException e) {
-                dumpException(e);
-                if (e.getType().equals(ErrorType.USER_ERROR)) {
-                    throw e;
-                } else {
-                    LOG.warn("Planner error: " + originStmt.originStmt, e);
-                    throw e;
-=======
             // for explain query(not explain analyze), we can trace even if optimizer fails and execPlan is null
             if (parsedStmt.isExplainTrace()) {
                 ExecPlan execPlan = null;
@@ -710,7 +642,6 @@ public class StmtExecutor {
                 } catch (Exception e) {
                     LOG.warn("Generate exec plan failed for explain stmt: {}",
                             parsedStmt.getOrigStmt().originStmt, e);
->>>>>>> 743fe0ff78 ([Enhancement] Support trace optimizer logs even if throw exceptions (#62192))
                 }
                 handleExplainExecPlan(execPlan);
                 return;
