@@ -704,6 +704,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_VIEW_BASED_MV_REWRITE = "enable_view_based_mv_rewrite";
 
     public static final String ENABLE_CBO_VIEW_BASED_MV_REWRITE = "enable_cbo_view_based_mv_rewrite";
+    public static final String ENABLE_CBO_BASED_MV_REWRITE = "enable_cbo_based_mv_rewrite";
 
     public static final String ENABLE_SPM_REWRITE = "enable_spm_rewrite";
     public static final String SPM_REWRITE_TIMEOUT_MS = "spm_rewrite_timeout_ms";
@@ -2312,6 +2313,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_CBO_VIEW_BASED_MV_REWRITE)
     private boolean enableCBOViewBasedMvRewrite = false;
+
+    // Whether enable mv rewrite in CBO phase, true by default which means will try best to use mv
+    // to rewrite in RBO and CBO phase.
+    @VarAttr(name = ENABLE_CBO_BASED_MV_REWRITE)
+    private boolean enableCBOBasedMVRewrite = true;
 
     @VarAttr(name = ENABLE_SPM_REWRITE)
     private boolean enableSPMRewrite = false;
@@ -4456,6 +4462,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableCBOViewBasedMvRewrite() {
         return this.enableCBOViewBasedMvRewrite;
+    }
+
+    public boolean isEnableCBOBasedMVRewrite() {
+        return enableCBOBasedMVRewrite;
+    }
+
+    public void setEnableCboBasedMvRewrite(boolean enableCBOBasedMVRewrite) {
+        this.enableCBOBasedMVRewrite = enableCBOBasedMVRewrite;
     }
 
     public int getCboMaterializedViewRewriteRuleOutputLimit() {
