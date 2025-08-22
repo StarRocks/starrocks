@@ -533,7 +533,7 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         std::string_view leaf = paths.back();
         may_contains = column_reader->get_remain_filter()->test_bytes(leaf.data(), leaf.size());
     }
-    if (!may_contains) {
+    if (column_reader->is_flat_json() && !may_contains) {
         // create an iterator always return NULL for fields that don't exist in this segment
         auto default_null_iter = std::make_unique<DefaultValueColumnIterator>(false, "", true, get_type_info(column),
                                                                               column.length(), num_rows());
