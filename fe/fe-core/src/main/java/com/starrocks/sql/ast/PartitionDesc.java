@@ -17,13 +17,11 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang.NotImplementedException;
 
-import java.util.List;
 import java.util.Map;
 
 public class PartitionDesc implements ParseNode {
@@ -37,10 +35,6 @@ public class PartitionDesc implements ParseNode {
 
     protected PartitionDesc(NodePosition pos) {
         this.pos = pos;
-    }
-
-    public void analyze(List<ColumnDef> columnDefs, Map<String, String> otherProperties) throws AnalysisException {
-        throw new NotImplementedException();
     }
 
     public String toSql() {

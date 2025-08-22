@@ -602,7 +602,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             }
 
             try {
-                expressionPartitionDesc.analyze(columnDefs, olapTable.getProperties());
+                PartitionDescAnalyzer.analyze(expressionPartitionDesc, columnDefs, olapTable.getProperties());
             } catch (AnalysisException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
@@ -1362,7 +1362,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             if (partitionDesc instanceof SingleRangePartitionDesc) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 SingleRangePartitionDesc singleRangePartitionDesc = ((SingleRangePartitionDesc) partitionDesc);
-                singleRangePartitionDesc.analyze(rangePartitionInfo.getPartitionColumnsSize(), cloneProperties);
+                PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc,
+                        rangePartitionInfo.getPartitionColumnsSize(), cloneProperties);
                 if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
                     rangePartitionInfo.checkAndCreateRange(table.getIdToColumn(), singleRangePartitionDesc,
                             addPartitionClause.isTempPartition());
@@ -1372,8 +1373,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 List<ColumnDef> columnDefList = partitionInfo.getPartitionColumns(olapTable.getIdToColumn()).stream()
                         .map(item -> new ColumnDef(item.getName(), new TypeDef(item.getType())))
                         .collect(Collectors.toList());
-                PartitionDescAnalyzer.analyze(partitionDesc);
-                partitionDesc.analyze(columnDefList, cloneProperties);
+                PartitionDescAnalyzer.analyze(partitionDesc, columnDefList, cloneProperties);
                 if (!existPartitionNameSet.contains(partitionDesc.getPartitionName())) {
                     CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable, partitionDesc,
                             addPartitionClause.isTempPartition());
