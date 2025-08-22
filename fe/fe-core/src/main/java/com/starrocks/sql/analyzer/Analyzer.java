@@ -966,7 +966,6 @@ public class Analyzer {
 
         @Override
         public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext session) {
-            statement.analyze();
             return null;
         }
 
