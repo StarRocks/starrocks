@@ -103,6 +103,7 @@ Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* r
 
                 return Status::OK();
             }
+            _left_bytes = _doc_stream.truncated_bytes();
             return Status::EndOfFile("all documents of the stream are iterated");
         } catch (simdjson::simdjson_error& e) {
             /*
@@ -143,7 +144,8 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
 
 Status JsonDocumentStreamParser::advance() noexcept {
     _curr_ready = false;
-    if (++_doc_stream_itr != _doc_stream.end() ||
+    ++_doc_stream_itr;
+    if (_doc_stream_itr != _doc_stream.end() ||
         /*
          * When the iterator reach the end, we should always to reset the
          * batch_size until _len - _last_begin_offset to check if the
@@ -156,7 +158,12 @@ Status JsonDocumentStreamParser::advance() noexcept {
         _check_and_new_doc_stream_iterator()) {
         return Status::OK();
     }
+    _left_bytes = _doc_stream.truncated_bytes();
     return Status::EndOfFile("all documents of the stream are iterated");
+}
+
+size_t JsonDocumentStreamParser::left_bytes() noexcept {
+    return _left_bytes;
 }
 
 std::string JsonDocumentStreamParser::left_bytes_string(size_t sz) noexcept {

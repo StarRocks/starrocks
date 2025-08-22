@@ -121,12 +121,6 @@ Status AvroScanner::open() {
         return Status::EndOfFile("EOF of reading protobuf file");
     }
     const TBrokerRangeDesc& range_desc = _scan_range.ranges[0];
-#if BE_TEST
-    if (avro_file_reader(range_desc.path.c_str(), &_dbreader)) {
-        auto err_msg = "Error opening file: " + std::string(avro_strerror());
-        return Status::InternalError(err_msg);
-    }
-#endif
 
     RETURN_IF_ERROR(FileScanner::open());
     RETURN_IF_ERROR(_construct_avro_types());
@@ -152,10 +146,6 @@ Status AvroScanner::open() {
         }
     }
 #endif
-    if (range_desc.__isset.jsonpaths) {
-        std::string jsonpaths = preprocess_jsonpaths(range_desc.jsonpaths);
-        RETURN_IF_ERROR(JsonScanner::parse_json_paths(jsonpaths, &_json_paths));
-    }
     Status st = create_sequential_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params, &_file);
     if (!st.ok()) {
         LOG(WARNING) << "Failed to create sequential files: " << st.to_string();

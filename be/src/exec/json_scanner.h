@@ -45,7 +45,6 @@ public:
 
     // Close this scanner
     void close() override;
-    static Status parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs);
 
 private:
     Status _construct_json_types();
@@ -70,10 +69,6 @@ private:
     std::vector<TypeDescriptor> _json_types;
     std::vector<Expr*> _cast_exprs;
     ObjectPool _pool;
-
-    std::vector<std::vector<SimpleJsonPath>> _json_paths;
-    std::vector<SimpleJsonPath> _root_paths;
-    bool _strip_outer_array = false;
 
     // An empty chunk that can be reused as the container for the result of get_next().
     // It's mainly for optimizing the performance where get_next() returns Status::Timeout
@@ -117,13 +112,10 @@ private:
 
     Status _read_and_parse_json();
     Status _read_file_stream();
-    Status _read_file_broker();
-    Status _parse_payload();
 
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk);
 
     Status _construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk);
-    Status _construct_row_with_jsonpath(simdjson::ondemand::object* row, Chunk* chunk);
 
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                              const std::string& col_name);
@@ -163,10 +155,6 @@ private:
     int _op_col_index;
 
     ByteBufferPtr _file_stream_buffer;
-
-    std::unique_ptr<char[]> _file_broker_buffer = nullptr;
-    size_t _file_broker_buffer_size = 0;
-    size_t _file_broker_buffer_capacity = 0;
 
     char* _payload = nullptr;
     size_t _payload_size = 0;

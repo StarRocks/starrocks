@@ -118,6 +118,48 @@ private:
     int64_t _offset{-1};
 };
 
+class ByteBufferV2 {
+public:
+    ByteBufferV2(size_t capacity) : _capacity(capacity), _ptr(new char[_capacity]) {}
+    ~ByteBufferV2() {
+        delete[] _ptr;
+    }
+
+    size_t remaining() const { return _size - _pos; }
+    bool has_remaining() const { return _size > _pos; }
+    size_t try_read_size() const { return _capacity - _size; }
+    char* const try_read_ptr() const { return _ptr + _size; }
+    char* const ptr() const { return _ptr; }
+    size_t pos() const { return _pos; }
+    size_t size() const { return _size; }
+    size_t capacity() const { return _capacity; }
+    void advance(size_t size) { _size += size; }
+    void sub_pos(size_t left_bytes) { _pos = _size - left_bytes; }
+
+    void move_to_front() {
+        if (_pos > 0) {
+            if (has_remaining()) {
+                size_t size = remaining();
+                std::memmove(_ptr, _ptr + _pos, size);
+                _pos = 0;
+                _size = size;
+            } else {
+                _pos = 0;
+                _size = 0;
+            }
+        } else {
+            _pos = 0;
+            _size = 0;
+        }
+    }
+
+private:
+    size_t _pos = 0;
+    size_t _size = 0;
+    const size_t _capacity = 0;
+    char* const _ptr;
+};
+
 struct ByteBuffer {
     static StatusOr<ByteBufferPtr> allocate_with_tracker(size_t size,
                                                          ByteBufferMetaType meta_type = ByteBufferMetaType::NONE) {
@@ -125,7 +167,6 @@ struct ByteBuffer {
         if (tracker == nullptr) {
             return Status::InternalError("current thread memory tracker Not Found when allocate ByteBuffer");
         }
-#ifndef BE_TEST
         // check limit before allocation
         TRY_CATCH_BAD_ALLOC({
             ASSIGN_OR_RETURN(auto meta, ByteBufferMeta::create(meta_type));
@@ -136,17 +177,6 @@ struct ByteBuffer {
             meta = nullptr;
             return ptr;
         });
-#else
-        ASSIGN_OR_RETURN(auto meta, ByteBufferMeta::create(meta_type));
-        ByteBufferPtr ptr(new ByteBuffer(size, meta), MemTrackerDeleter(tracker));
-        Status ret = Status::OK();
-        TEST_SYNC_POINT_CALLBACK("ByteBuffer::allocate_with_tracker", &ret);
-        if (ret.ok()) {
-            return ptr;
-        } else {
-            return ret;
-        }
-#endif
     }
 
     static StatusOr<ByteBufferPtr> reallocate_with_tracker(const ByteBufferPtr& old_ptr, size_t new_size) {
