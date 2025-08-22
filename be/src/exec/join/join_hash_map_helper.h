@@ -91,6 +91,15 @@ public:
         }
     }
 
+    template <typename CppType>
+    static std::pair<uint32_t, uint8_t> calc_bucket_num_and_fp(const CppType& value, uint32_t bucket_size,
+                                                               uint32_t num_log_buckets) {
+        static constexpr uint64_t FP_BITS = 7;
+        using HashFunc = JoinKeyHash<CppType>;
+        const uint64_t hash = HashFunc()(value, bucket_size << FP_BITS, num_log_buckets + FP_BITS);
+        return {hash >> FP_BITS, (hash & 0x7F) | 0x80};
+    }
+
     static Slice get_hash_key(const Columns& key_columns, size_t row_idx, uint8_t* buffer) {
         size_t byte_size = 0;
         for (const auto& key_column : key_columns) {

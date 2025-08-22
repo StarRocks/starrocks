@@ -57,15 +57,15 @@ struct AsofJoinConditionDesc {
     TExprOpcode::type condition_op = TExprOpcode::INVALID_OPCODE;
 };
 
-template <typename ValueType, TExprOpcode::type OpCode>
+template <typename CppType, TExprOpcode::type OpCode>
 class AsofLookupVector {
 public:
     struct Entry {
-        ValueType asof_value;
+        CppType asof_value;
         uint32_t row_index;
 
         Entry() = default;
-        Entry(ValueType value, uint32_t index) : asof_value(value), row_index(index) {}
+        Entry(CppType value, uint32_t index) : asof_value(value), row_index(index) {}
     };
 
 private:
@@ -77,42 +77,30 @@ private:
     Entries _entries;
 
 public:
-    void add_row(ValueType asof_value, uint32_t row_index) {
-        LOG(INFO) << "AsofLookupVector::add_row: adding asof_value=" << asof_value << ", row_index=" << row_index;
+    void add_row(CppType asof_value, uint32_t row_index) {
         _entries.emplace_back(asof_value, row_index);
-        LOG(INFO) << "AsofLookupVector::add_row: _entries size now=" << _entries.size();
     }
 
     void sort() {
         auto comparator = [](const Entry& lhs, const Entry& rhs) {
             if constexpr (is_descending) {
-                return SorterComparator<ValueType>::compare(lhs.asof_value, rhs.asof_value) > 0;
+                return SorterComparator<CppType>::compare(lhs.asof_value, rhs.asof_value) > 0;
             } else {
-                return SorterComparator<ValueType>::compare(lhs.asof_value, rhs.asof_value) < 0;
+                return SorterComparator<CppType>::compare(lhs.asof_value, rhs.asof_value) < 0;
             }
         };
 
         ::pdqsort(_entries.begin(), _entries.end(), comparator);
     }
 
-    uint32_t find_asof_match(ValueType probe_value) const {
-        LOG(INFO) << "find_asof_match: OpCode=" << OpCode << ", is_descending=" << is_descending
-                  << ", is_strict=" << is_strict << ", _entries.size()=" << _entries.size();
+    uint32_t find_asof_match(CppType probe_value) const {
         if (_entries.empty()) {
-            LOG(INFO) << "find_asof_match: _entries is empty, returning 0";
             return 0;
         }
 
-        // 打印所有entries用于调试
-        LOG(INFO) << "find_asof_match: All entries:";
-        for (size_t i = 0; i < _entries.size(); i++) {
-            LOG(INFO) << "  entry[" << i << "]: asof_value=" << _entries[i].asof_value
-                      << ", row_index=" << _entries[i].row_index;
-        }
 
         size_t size = _entries.size();
         size_t low = 0;
-        LOG(INFO) << "find_asof_match: searching for probe_value=" << probe_value << ", initial size=" << size;
 
         while (size >= 8) {
             _bound_search_iteration(probe_value, low, size);
@@ -125,12 +113,6 @@ public:
         }
 
         uint32_t result = (low < _entries.size()) ? _entries[low].row_index : 0;
-        LOG(INFO) << "find_asof_match: final low=" << low << ", result=" << result;
-
-        if (low < _entries.size()) {
-            LOG(INFO) << "find_asof_match: matched entry[" << low << "] with asof_value=" << _entries[low].asof_value
-                      << ", row_index=" << _entries[low].row_index;
-        }
 
         return result;
     }
@@ -140,41 +122,33 @@ public:
     void clear() { _entries.clear(); }
 
 private:
-    ALWAYS_INLINE void _bound_search_iteration(ValueType probe_value, size_t& low, size_t& size) const {
+    ALWAYS_INLINE void _bound_search_iteration(CppType probe_value, size_t& low, size_t& size) const {
         size_t half = size / 2;
         size_t other_half = size - half;
         size_t probe_pos = low + half;
         size_t other_low = low + other_half;
-        const ValueType& entry_value = _entries[probe_pos].asof_value;
-
-        LOG(INFO) << "_bound_search_iteration: low=" << low << ", size=" << size << ", probe_pos=" << probe_pos
-                  << ", entry_value=" << entry_value << ", probe_value=" << probe_value;
+        const CppType& entry_value = _entries[probe_pos].asof_value;
 
         size = half;
 
         bool condition_result;
         if constexpr (is_descending) {
             if constexpr (is_strict) {
-                condition_result = (SorterComparator<ValueType>::compare(probe_value, entry_value) <= 0);
+                condition_result = (SorterComparator<CppType>::compare(probe_value, entry_value) <= 0);
                 low = condition_result ? other_low : low;
-                LOG(INFO) << "  descending+strict: compare result <= 0: " << condition_result;
             } else {
-                condition_result = (SorterComparator<ValueType>::compare(probe_value, entry_value) < 0);
+                condition_result = (SorterComparator<CppType>::compare(probe_value, entry_value) < 0);
                 low = condition_result ? other_low : low;
-                LOG(INFO) << "  descending+non-strict: compare result < 0: " << condition_result;
             }
         } else {
             if constexpr (is_strict) {
-                condition_result = (SorterComparator<ValueType>::compare(probe_value, entry_value) >= 0);
+                condition_result = (SorterComparator<CppType>::compare(probe_value, entry_value) >= 0);
                 low = condition_result ? other_low : low;
-                LOG(INFO) << "  ascending+strict: compare result >= 0: " << condition_result;
             } else {
-                condition_result = (SorterComparator<ValueType>::compare(probe_value, entry_value) > 0);
+                condition_result = (SorterComparator<CppType>::compare(probe_value, entry_value) > 0);
                 low = condition_result ? other_low : low;
-                LOG(INFO) << "  ascending+non-strict: compare result > 0: " << condition_result;
             }
         }
-        LOG(INFO) << "  new_low=" << low << ", new_size=" << size;
     }
 };
 
@@ -218,26 +192,13 @@ public:
 
 private:
     void _add_row_any(const std::type_info& type_info, const void* asof_value, uint32_t row_index) override {
-        if (type_info == typeid(CppType)) {
-            const CppType& value = *static_cast<const CppType*>(asof_value);
-            LOG(INFO) << "TypedAsofLookupVector::add_row: adding value, row_index=" << row_index;
-            _impl.add_row(value, row_index);
-            LOG(INFO) << "TypedAsofLookupVector::add_row: entries size now=" << _impl.size();
-        } else {
-            LOG(ERROR) << "Type mismatch in add_row: expected " << typeid(CppType).name() << ", got "
-                       << type_info.name();
-        }
+        const CppType& value = *static_cast<const CppType*>(asof_value);
+        _impl.add_row(value, row_index);
     }
 
     uint32_t _find_match_any(const std::type_info& type_info, const void* probe_value) const override {
-        if (type_info == typeid(CppType)) {
-            const CppType& value = *static_cast<const CppType*>(probe_value);
-            return _impl.find_asof_match(value);
-        } else {
-            LOG(ERROR) << "Type mismatch in find_match: expected " << typeid(CppType).name() << ", got "
-                       << type_info.name();
-            return 0;
-        }
+        const CppType& value = *static_cast<const CppType*>(probe_value);
+        return _impl.find_asof_match(value);
     }
 };
 
@@ -296,6 +257,7 @@ struct JoinHashTableItems {
     // about the bucket-chained hash table of this kind.
     Buffer<uint32_t> first;
     Buffer<uint32_t> next;
+    Buffer<uint8_t> fps;
 
     Buffer<uint8_t> key_bitset;
     struct DenseGroup {
@@ -328,48 +290,29 @@ struct JoinHashTableItems {
     float keys_per_bucket = 0;
     AsofJoinConditionDesc asof_join_condition_desc;
 
-    // AsOf Join lookup vectors - unified base class storage
     Buffer<std::unique_ptr<AsofLookupVectorBase>> asof_lookup_vectors;
 
-    // Clean template-based operations - no casting, no switch statements!
     template <typename CppType>
     void add_asof_row(uint32_t lookup_index, CppType asof_value, uint32_t row_index) {
-        LOG(INFO) << "add_asof_row called with lookup_index=" << lookup_index << ", row_index=" << row_index;
-        LOG(INFO) << "asof_lookup_vectors.size()=" << asof_lookup_vectors.size();
         DCHECK(asof_lookup_vectors[lookup_index]);
         asof_lookup_vectors[lookup_index]->add_row(asof_value, row_index);
     }
 
     template <typename CppType>
     uint32_t find_asof_match(uint32_t lookup_index, CppType probe_value) const {
-        LOG(INFO) << "find_asof_match called with lookup_index=" << lookup_index;
-        LOG(INFO) << "asof_lookup_vectors.size()=" << asof_lookup_vectors.size();
-
         if (lookup_index >= asof_lookup_vectors.size() || !asof_lookup_vectors[lookup_index]) {
-            LOG(INFO) << "find_asof_match: invalid lookup_index or null vector, returning 0";
-            return 0; // No match found
+            return 0;
         }
-
-        // Direct template call - automatic type dispatch through virtual function!
         return asof_lookup_vectors[lookup_index]->find_match(probe_value);
     }
 
     void finalize_asof_lookup_vectors() {
-        LOG(INFO) << "finalize_asof_lookup_vectors: starting finalization";
-        LOG(INFO) << "asof_lookup_vectors.size()=" << asof_lookup_vectors.size();
-
         for (size_t i = 0; i < asof_lookup_vectors.size(); i++) {
             auto& vector_ptr = asof_lookup_vectors[i];
             if (vector_ptr) {
-                LOG(INFO) << "finalize_asof_lookup_vectors: finalizing vector[" << i
-                          << "], size=" << vector_ptr->size();
                 vector_ptr->finalize();
-                LOG(INFO) << "finalize_asof_lookup_vectors: finalized vector[" << i << "]";
-            } else {
-                LOG(INFO) << "finalize_asof_lookup_vectors: vector[" << i << "] is null, skipping";
             }
         }
-        LOG(INFO) << "finalize_asof_lookup_vectors: completed finalization";
     }
 
 public:
@@ -394,7 +337,8 @@ public:
         // 1) the ht's size is enough large, for example, larger than (1UL << 27) bytes.
         // 2) smaller ht but most buckets have more than one keys
         cache_miss_serious = row_count > (1UL << 18) &&
-                             ((probe_bytes > (1UL << 25) && keys_per_bucket > 2) ||
+                             ((probe_bytes > (1UL << 24) && keys_per_bucket >= 10) ||
+                              (probe_bytes > (1UL << 25) && keys_per_bucket > 2) ||
                               (probe_bytes > (1UL << 26) && keys_per_bucket > 1.5) || probe_bytes > (1UL << 27));
         VLOG_QUERY << "ht cache miss serious = " << cache_miss_serious << " row# = " << row_count
                    << " , bytes = " << probe_bytes << " , depth = " << keys_per_bucket;
