@@ -199,7 +199,7 @@ ALWAYS_INLINE inline void memcpy_inlined_overflow16(void* __restrict _dst, const
 #elif defined(__ARM_NEON) && defined(__aarch64__)
         vst1q_u8(dst, vld1q_u8(src));
 #else
-        __builtin_memcpy(dst, src, 16);
+        std::memcpy(dst, src, 16);
 #endif
         dst += 16;
         src += 16;
