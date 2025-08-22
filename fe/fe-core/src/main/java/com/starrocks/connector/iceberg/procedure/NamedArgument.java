@@ -12,32 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.connector.iceberg.procedure;
 
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.catalog.Type;
 
-import java.util.Optional;
-
-public class ProcedureArgument {
-    private final String name;
-    private final Expr value;
-
-    public ProcedureArgument(String name, Expr value) {
-        this.name = name;
-        this.value = value;
+public record NamedArgument(String name, Type type, boolean required) {
+    public NamedArgument {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("Argument name cannot be null or empty");
+        }
+        if (type == null) {
+            throw new IllegalArgumentException("Argument type cannot be null");
+        }
     }
 
-    public Optional<String> getName() {
-        return Optional.ofNullable(name);
+    public String getName() {
+        return this.name;
     }
 
-    public Expr getValue() {
-        return value;
+    public Type getType() {
+        return this.type;
     }
 
-    @Override
-    public String toString() {
-        String valueSql = AstToSQLBuilder.toSQL(value);
-        return getName().map(n -> n + " => " + valueSql).orElse(valueSql);
+    public boolean isRequired() {
+        return this.required;
     }
 }
