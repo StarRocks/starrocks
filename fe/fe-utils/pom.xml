@@ -28,7 +28,7 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>plugin-common</artifactId>
+    <artifactId>fe-utils</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 

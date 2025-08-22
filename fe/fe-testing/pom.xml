@@ -30,7 +30,7 @@ under the License.
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>fe-common</artifactId>
+    <artifactId>fe-testing</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 

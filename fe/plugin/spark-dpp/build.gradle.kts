@@ -30,8 +30,8 @@ val feUtParallel = project.findProperty("fe_ut_parallel") ?: "1"
 
 dependencies {
     // StarRocks modules
-    implementation(project(":fe-common"))
-    implementation(project(":plugin-common"))
+    implementation(project(":fe-testing"))
+    implementation(project(":fe-utils"))
 
     // Regular dependencies
     implementation("com.google.guava:guava")

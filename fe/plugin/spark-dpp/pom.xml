@@ -27,7 +27,7 @@ under the License.
         <groupId>com.starrocks</groupId>
         <artifactId>starrocks-fe</artifactId>
         <version>3.4.0</version>
-        <relativePath>../pom.xml</relativePath>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <artifactId>spark-dpp</artifactId>
@@ -42,12 +42,12 @@ under the License.
     <dependencies>
         <dependency>
             <groupId>com.starrocks</groupId>
-            <artifactId>fe-common</artifactId>
+            <artifactId>fe-testing</artifactId>
         </dependency>
 
         <dependency>
             <groupId>com.starrocks</groupId>
-            <artifactId>plugin-common</artifactId>
+            <artifactId>fe-utils</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/commons-codec/commons-codec -->
