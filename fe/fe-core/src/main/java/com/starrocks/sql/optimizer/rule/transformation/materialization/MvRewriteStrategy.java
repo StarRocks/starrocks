@@ -70,6 +70,7 @@ public class MvRewriteStrategy {
     public boolean enableViewBasedRewrite = false;
     public boolean enableSingleTableRewrite = false;
     public boolean enableMultiTableRewrite = false;
+    public boolean enableCBOBasedMvRewrite = false;
 
     static class MvStrategyArbitrator {
         private final OptimizerConfig optimizerConfig;
@@ -130,6 +131,7 @@ public class MvRewriteStrategy {
             return true;
         }
 
+<<<<<<< HEAD
         private boolean isEnableCBOSingleTableRewrite() {
             if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
                     optimizerContext.getCandidateMvs().stream().anyMatch(MaterializationContext::hasMultiTables)) {
@@ -139,6 +141,9 @@ public class MvRewriteStrategy {
         }
 
         private boolean isEnableCBOMultiTableRewrite(OptExpression queryPlan) {
+=======
+        private boolean isEnableMultiTableRewrite(OptExpression queryPlan) {
+>>>>>>> b8bd5362f4 ([BugFix] Fix view based mv rewrite bug (#62198))
             if (!sessionVariable.isEnableMaterializedViewSingleTableViewDeltaRewrite() &&
                     MvUtils.getAllTables(queryPlan).size() <= 1) {
                 return false;
@@ -178,7 +183,8 @@ public class MvRewriteStrategy {
         strategy.enableSingleTableRewrite = arbitrator.isEnableRBOSingleTableRewrite(queryPlan);
 
         // cbo strategies
-        strategy.enableMultiTableRewrite = arbitrator.isEnableCBOMultiTableRewrite(queryPlan);
+        strategy.enableCBOBasedMvRewrite = sessionVariable.isEnableCBOBasedMVRewrite();
+        strategy.enableMultiTableRewrite = arbitrator.isEnableMultiTableRewrite(queryPlan);
         return strategy;
     }
 
