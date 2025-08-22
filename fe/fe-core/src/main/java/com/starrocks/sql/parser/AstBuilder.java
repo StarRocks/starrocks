@@ -90,7 +90,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -2131,8 +2130,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 refreshSchemeDesc = new SyncRefreshSchemeDesc();
             } else {
                 // use new manual refresh
-                refreshSchemeDesc =
-                        new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
+                refreshSchemeDesc = new ManualRefreshSchemeDesc(RefreshSchemeClause.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
             }
         }
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
@@ -8526,13 +8524,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
         NodePosition pos = createPos(context);
-        MaterializedView.RefreshMoment refreshMoment =
+        RefreshSchemeClause.RefreshMoment refreshMoment =
                 Config.default_mv_refresh_immediate ?
-                        MaterializedView.RefreshMoment.IMMEDIATE : MaterializedView.RefreshMoment.DEFERRED;
+                        RefreshSchemeClause.RefreshMoment.IMMEDIATE : RefreshSchemeClause.RefreshMoment.DEFERRED;
         if (context.DEFERRED() != null) {
-            refreshMoment = MaterializedView.RefreshMoment.DEFERRED;
+            refreshMoment = RefreshSchemeClause.RefreshMoment.DEFERRED;
         } else if (context.IMMEDIATE() != null) {
-            refreshMoment = MaterializedView.RefreshMoment.IMMEDIATE;
+            refreshMoment = RefreshSchemeClause.RefreshMoment.IMMEDIATE;
         }
         if (context.ASYNC() != null) {
             boolean defineStartTime = false;

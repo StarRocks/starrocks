@@ -57,6 +57,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -623,7 +624,7 @@ public class PropertyAnalyzer {
     }
 
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {
-        if (mv.getRefreshScheme().getType() == MaterializedView.RefreshType.MANUAL) {
+        if (mv.getRefreshScheme().getType() == MaterializedViewRefreshType.MANUAL) {
             throw new SemanticException(
                     "The auto_refresh_partitions_limit property does not support manual refresh mode.");
         }
@@ -676,7 +677,7 @@ public class PropertyAnalyzer {
     public static List<TableName> analyzeExcludedTables(Map<String, String> properties,
                                                         String propertiesKey,
                                                         MaterializedView mv) {
-        if (mv.getRefreshScheme().getType() != MaterializedView.RefreshType.ASYNC) {
+        if (mv.getRefreshScheme().getType() != MaterializedViewRefreshType.ASYNC) {
             throw new SemanticException("The " + propertiesKey + " property only applies to asynchronous refreshes.");
         }
         List<TableName> tables = Lists.newArrayList();
@@ -1269,7 +1270,7 @@ public class PropertyAnalyzer {
     }
 
     public static double analyzerDoubleProp(Map<String, String> properties, String propKey, double defaultVal)
-        throws AnalysisException {
+            throws AnalysisException {
         double val = defaultVal;
         if (properties != null && properties.containsKey(propKey)) {
             String valStr = properties.get(propKey);
