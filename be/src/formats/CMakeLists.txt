@@ -32,6 +32,7 @@ add_library(Formats STATIC
         csv/nullable_converter.cpp
         csv/default_value_converter.cpp
         csv/string_converter.cpp
+        csv/struct_converter.cpp
         csv/varbinary_converter.cpp
         json/nullable_column.cpp
         json/numeric_column.cpp
