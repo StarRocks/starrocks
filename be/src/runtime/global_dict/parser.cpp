@@ -108,7 +108,28 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new DictFuncExpr(_origin_expr, _dict_opt_ctx)); }
 
 private:
-    ColumnPtr _translate_string(ColumnPtr& input, size_t num_rows) {
+    StatusOr<ColumnPtr> _translate_string(ColumnPtr& input, size_t num_rows) {
+        if (_dict_opt_ctx->err_status.has_value()) {
+            if (input->only_null()) {
+                RETURN_IF_ERROR((*_dict_opt_ctx->err_status)[_dict_opt_ctx->code_convert_map[0]]);
+            } else if (input->is_constant()) {
+                auto data_column = ColumnHelper::get_data_column(input.get());
+                size_t idx = data_column->get(0).get_int32();
+                RETURN_IF_ERROR((*_dict_opt_ctx->err_status)[_dict_opt_ctx->code_convert_map[idx]]);
+            } else {
+                if (input->is_nullable()) {
+                    auto* nullable_column = down_cast<NullableColumn*>(input.get());
+                    nullable_column->fill_null_with_default();
+                }
+                const auto* data_column =
+                        down_cast<const LowCardDictColumn*>(ColumnHelper::get_data_column(input.get()));
+                const auto& dicts_data = data_column->get_data();
+                for (size_t i = 0; i < num_rows; ++i) {
+                    RETURN_IF_ERROR((*_dict_opt_ctx->err_status)[_dict_opt_ctx->code_convert_map[dicts_data[i]]]);
+                }
+            }
+        }
+
         if (_always_null) {
             return ColumnHelper::create_const_null_column(num_rows);
         }
@@ -121,13 +142,12 @@ private:
 
         // is const column
         if (input->only_null() || input->is_constant()) {
-            if (_null_column_ptr && _null_column_ptr.get()->is_null(0)) {
+            if (input->only_null() && _null_column_ptr && _null_column_ptr.get()->is_null(0)) {
                 return ColumnHelper::create_const_null_column(num_rows);
             } else {
-                auto idx = input->get(0);
+                auto idx = input->only_null() ? 0 : input->get(0).get_int32();
                 auto res = _data_column_ptr->clone_empty();
-
-                res->append_datum(_data_column_ptr->get(idx.get_int32()));
+                res->append_datum(_data_column_ptr->get(_dict_opt_ctx->code_convert_map[idx]));
                 return ConstColumn::create(std::move(res));
             }
         } else if (input->is_nullable()) {
@@ -161,7 +181,7 @@ private:
         }
     }
 
-    ColumnPtr _translate_array(ColumnPtr& array, size_t num_rows) {
+    StatusOr<ColumnPtr> _translate_array(ColumnPtr& array, size_t num_rows) {
         if ((array->only_null())) {
             return ColumnHelper::create_const_null_column(num_rows);
         }
@@ -176,7 +196,7 @@ private:
             auto element = array_col->elements_column();
             auto offsets = UInt32Column::create(array_col->offsets());
 
-            ColumnPtr string_col = _translate_string(element, element->size());
+            ASSIGN_OR_RETURN(ColumnPtr string_col, _translate_string(element, element->size()));
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
             return ConstColumn::create(ArrayColumn::create(string_col, offsets), num_rows);
         } else if (array->is_nullable()) {
@@ -187,7 +207,7 @@ private:
             auto element = array_col->elements_column();
             auto offsets = UInt32Column::create(array_col->offsets());
 
-            ColumnPtr string_col = _translate_string(element, element->size());
+            ASSIGN_OR_RETURN(ColumnPtr string_col, _translate_string(element, element->size()));
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
             return NullableColumn::create(ArrayColumn::create(string_col, offsets), array_null);
         } else {
@@ -195,7 +215,7 @@ private:
             auto element = array_col->elements_column();
             auto offsets = UInt32Column::create(array_col->offsets());
 
-            ColumnPtr string_col = _translate_string(element, element->size());
+            ASSIGN_OR_RETURN(ColumnPtr string_col, _translate_string(element, element->size()));
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
             return ArrayColumn::create(string_col, offsets);
         }
@@ -267,9 +287,41 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
     ChunkPtr temp_chunk = std::make_shared<Chunk>();
     temp_chunk->append_column(binary_column, expr_slot_id);
     // call inner expr with input column
-    ASSIGN_OR_RETURN(auto result_column, ctx->evaluate(origin_expr, temp_chunk.get()));
-    // assign convert mapping column
-    dict_opt_ctx->convert_column = result_column;
+    auto result_column = ctx->evaluate(origin_expr, temp_chunk.get());
+    if (UNLIKELY(!result_column.ok())) {
+        // Certain string inputs cause the expression to generate an error status. This branch handles such cases.
+        auto result = ColumnHelper::create_column(origin_expr->type(), true);
+        size_t num_rows = codes.size();
+        // slow path
+        std::vector<Status> err_status;
+        err_status.resize(num_rows);
+        ColumnPtr input_column = binary_column->clone_empty();
+        temp_chunk->update_column(input_column, expr_slot_id);
+        for (size_t i = 0; i < num_rows; ++i) {
+            input_column->reset_column();
+            input_column->append(*binary_column, i, 1);
+            auto row_result = ctx->evaluate(origin_expr, temp_chunk.get());
+            if (row_result.ok()) {
+                if (row_result.value()->only_null()) {
+                    result->append_nulls(1);
+                } else if (row_result.value()->is_constant()) {
+                    result->append(*ColumnHelper::get_data_column(row_result.value().get()), 0, 1);
+                } else {
+                    result->append(*row_result.value(), 0, 1);
+                }
+            } else {
+                result->append_nulls(1);
+                err_status[i] = row_result.status();
+            }
+        }
+        dict_opt_ctx->convert_column = std::move(result);
+        dict_opt_ctx->err_status = std::move(err_status);
+
+    } else {
+        // assign convert mapping column
+        dict_opt_ctx->convert_column = std::move(result_column.value());
+    }
+
     // build code convert map
     dict_opt_ctx->code_convert_map.resize(DICT_DECODE_MAX_SIZE + 1);
     for (int i = 0; i < codes.size(); ++i) {
@@ -285,7 +337,7 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
         (origin_expr->type().is_array_type() && dict_mapping->type().is_array_type() &&
          origin_expr->type().children[0].type != dict_mapping->type().children[0].type)) {
         DCHECK_GE(targetSlotId, 0);
-        ColumnViewer<TYPE_VARCHAR> viewer(result_column);
+        ColumnViewer<TYPE_VARCHAR> viewer(dict_opt_ctx->convert_column);
         int num_rows = codes.size();
 
         GlobalDictMap result_map;
@@ -307,8 +359,6 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
                     ctor(slice, id_allocator);
                     values.emplace_back(slice);
                 });
-            } else {
-                dict_opt_ctx->result_nullable = true;
             }
         }
 
