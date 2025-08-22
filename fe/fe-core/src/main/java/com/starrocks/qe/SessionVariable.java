@@ -2084,20 +2084,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_CBO_VIEW_BASED_MV_REWRITE)
     private boolean enableCBOViewBasedMvRewrite = false;
 
-<<<<<<< HEAD
-=======
     // Whether enable mv rewrite in CBO phase, true by default which means will try best to use mv
     // to rewrite in RBO and CBO phase.
     @VarAttr(name = ENABLE_CBO_BASED_MV_REWRITE)
     private boolean enableCBOBasedMVRewrite = true;
 
-    @VarAttr(name = ENABLE_SPM_REWRITE)
-    private boolean enableSPMRewrite = false;
-
-    @VarAttr(name = SPM_REWRITE_TIMEOUT_MS, flag = VariableMgr.INVISIBLE)
-    private int spmRewriteTimeoutMs = 1000;
-
->>>>>>> b8bd5362f4 ([BugFix] Fix view based mv rewrite bug (#62198))
     /**
      * Materialized view rewrite rule output limit: how many MVs would be chosen in a Rule for an OptExpr ?
      */
