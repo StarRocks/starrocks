@@ -106,7 +106,6 @@ private:
     bool _is_left_semi_join() const;
     bool _is_left_anti_join() const;
     bool _is_null_aware_left_anti_join() const;
-    Status _eval_common_exprs(const ChunkPtr& chunk);
 
 private:
     const TJoinOp::type _join_op;

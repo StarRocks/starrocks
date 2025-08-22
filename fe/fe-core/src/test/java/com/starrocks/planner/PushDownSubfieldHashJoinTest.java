@@ -16,6 +16,8 @@ package com.starrocks.planner;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -111,9 +113,15 @@ public class PushDownSubfieldHashJoinTest {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 3: fk = 1: fk\n" +
                 "  |  other predicates: CAST(array_sum(array_map(<slot 8> -> <slot 8> != 'A', " +
-                "if(array_length(array_filter(['A','B'], CAST([0,CAST((2: col_int = 1) AND " +
-                "(4: id IS NOT NULL) AS TINYINT)] AS ARRAY<BOOLEAN>))) = 0, ['C'], " +
-                "array_filter(['A','B'], CAST([0,CAST((2: col_int = 1) AND (4: id IS NOT NULL) AS TINYINT)] " +
-                "AS ARRAY<BOOLEAN>))))) AS BOOLEAN)"));
+                "if(array_length(26: array_filter) = 0, ['C'], 26: array_filter))) AS BOOLEAN)\n" +
+                "  |    common sub expr:\n" +
+                "  |    <slot 20> : 2: col_int = 1\n" +
+                "  |    <slot 21> : 4: id IS NOT NULL\n" +
+                "  |    <slot 22> : (20: expr) AND (21: expr)\n" +
+                "  |    <slot 23> : CAST(22: expr AS TINYINT)\n" +
+                "  |    <slot 24> : [0,CAST((2: col_int = 1) AND (4: id IS NOT NULL) AS TINYINT)]\n" +
+                "  |    <slot 25> : CAST([0,CAST((2: col_int = 1) AND (4: id IS NOT NULL) AS TINYINT)] AS ARRAY<BOOLEAN>)\n" +
+                "  |    <slot 26> : array_filter(['A','B'], 25: cast)"));
+
     }
 }
