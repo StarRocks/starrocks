@@ -314,6 +314,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", groupBy=" + node.getGroupBys() +
                 ", partitionBy=" + node.getPartitionByColumns() +
                 " ,aggregations=" + node.getAggregations() +
+                ", projection=" + node.getProjection() +
                 "}";
     }
 
