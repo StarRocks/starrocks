@@ -109,7 +109,7 @@ public abstract class Coordinator {
 
     public void execWithQueryDeployExecutor() throws Exception {
         ScheduleOption option = new ScheduleOption();
-        option.useQueryDeployExecutor = true;
+        option.useQueryDeployExecutor = false;
         startScheduling(option);
     }
 

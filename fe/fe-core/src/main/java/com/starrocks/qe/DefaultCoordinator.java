@@ -683,6 +683,7 @@ public class DefaultCoordinator extends Coordinator {
         } finally {
             unlock();
         }
+        this.scheduler.continueSchedule(option);
     }
 
     @Override
