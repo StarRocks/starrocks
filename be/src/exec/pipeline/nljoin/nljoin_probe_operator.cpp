@@ -658,7 +658,7 @@ Status NLJoinProbeOperator::_permute_right_join(size_t chunk_size) {
         match_flag_index += cur_chunk_size;
     }
     auto permute_right_rows_counter = ADD_COUNTER(_unique_metrics, "PermuteRightRows", TUnit::UNIT);
-    permute_right_rows_counter->set(permute_rows);
+    COUNTER_SET(permute_right_rows_counter, permute_rows);
     _output_accumulator.finalize();
 
     return Status::OK();
@@ -770,15 +770,15 @@ Status NLJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chun
 void NLJoinProbeOperator::update_exec_stats(RuntimeState* state) {
     auto ctx = state->query_ctx();
     if (ctx != nullptr) {
-        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        ctx->update_pull_rows_stats(_plan_node_id, COUNTER_VALUE(_pull_row_num_counter));
         if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
-            ctx->update_pred_filter_stats(_plan_node_id,
-                                          _conjuncts_input_counter->value() - _conjuncts_output_counter->value());
+            ctx->update_pred_filter_stats(
+                    _plan_node_id, COUNTER_VALUE(_conjuncts_input_counter) - COUNTER_VALUE(_conjuncts_output_counter));
         }
 
         if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
-            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
-            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
+            int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
             ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
         }
     }

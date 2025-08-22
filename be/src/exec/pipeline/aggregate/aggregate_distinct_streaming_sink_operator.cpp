@@ -39,7 +39,7 @@ Status AggregateDistinctStreamingSinkOperator::prepare(RuntimeState* state) {
 
 void AggregateDistinctStreamingSinkOperator::close(RuntimeState* state) {
     auto* counter = ADD_COUNTER(_unique_metrics, "HashTableMemoryUsage", TUnit::BYTES);
-    counter->set(_aggregator->hash_set_memory_usage());
+    COUNTER_SET(counter, _aggregator->hash_set_memory_usage());
     _aggregator->unref(state);
     Operator::close(state);
 }

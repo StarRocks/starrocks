@@ -207,7 +207,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     int64_t page_stats = _app_stats.has_page_statistics ? 1 : 0;
     COUNTER_UPDATE(has_page_statistics, page_stats);
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
-    group_min_round_cost->set(_app_stats.group_min_round_cost);
+    COUNTER_SET(group_min_round_cost, _app_stats.group_min_round_cost);
     do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
     do_update_deletion_vector_filter_counter(root);
     COUNTER_UPDATE(rows_before_page_index, _app_stats.rows_before_page_index);

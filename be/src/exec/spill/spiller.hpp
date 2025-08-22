@@ -206,7 +206,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
     auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(task), std::move(yield_func));
     RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
-    COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks);
+    COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks.load());
     return Status::OK();
 }
 
@@ -276,7 +276,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
         auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(restore_task), std::move(yield_func));
         RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
         COUNTER_UPDATE(_spiller->metrics().restore_io_task_count, 1);
-        COUNTER_SET(_spiller->metrics().peak_restore_io_task_count, _running_restore_tasks);
+        COUNTER_SET(_spiller->metrics().peak_restore_io_task_count, _running_restore_tasks.load());
     }
     return Status::OK();
 }
@@ -373,7 +373,7 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
     auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(task), std::move(yield_func));
     RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
-    COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks);
+    COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks.load());
 
     return Status::OK();
 }

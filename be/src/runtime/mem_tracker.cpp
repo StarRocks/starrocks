@@ -218,7 +218,7 @@ MemTracker::SimpleItem* MemTracker::_get_snapshot_internal(ObjectPool* pool, Sim
     item->level = _level;
     item->limit = _limit;
     item->cur_consumption = _consumption->current_value();
-    item->peak_consumption = _consumption->value();
+    item->peak_consumption = COUNTER_VALUE(_consumption);
 
     if (_level < upper_level) {
         std::lock_guard<std::mutex> l(_child_trackers_lock);

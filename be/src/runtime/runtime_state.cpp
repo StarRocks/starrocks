@@ -47,6 +47,7 @@
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
+#include "util/runtime_profile.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
@@ -213,9 +214,9 @@ bool RuntimeState::set_timezone(const std::string& tz) {
 void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* parent) {
     bool has_query_mem_tracker = _query_options.__isset.mem_limit && (_query_options.mem_limit > 0);
     int64_t bytes_limit = has_query_mem_tracker ? _query_options.mem_limit : -1;
-    auto* mem_tracker_counter =
+    RuntimeProfile::Counter* mem_tracker_counter =
             ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
-    mem_tracker_counter->set(bytes_limit);
+    COUNTER_SET(mem_tracker_counter, bytes_limit);
 
     if (parent == nullptr) {
         parent = GlobalEnv::GetInstance()->query_pool_mem_tracker();
@@ -231,9 +232,8 @@ void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* pare
 void RuntimeState::init_mem_trackers(const std::shared_ptr<MemTracker>& query_mem_tracker) {
     DCHECK(query_mem_tracker != nullptr);
 
-    auto* mem_tracker_counter =
-            ADD_COUNTER_SKIP_MERGE(_profile.get(), "QueryMemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
-    mem_tracker_counter->set(query_mem_tracker->limit());
+    COUNTER_SET(ADD_COUNTER_SKIP_MERGE(_profile.get(), "QueryMemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL),
+                query_mem_tracker->limit());
 
     // all fragment instances in a BE shared a common query_mem_tracker.
     _query_mem_tracker = query_mem_tracker;

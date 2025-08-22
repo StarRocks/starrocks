@@ -135,7 +135,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
                 ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
-        mem_tracker_counter->set(query_mem_limit);
+        COUNTER_SET(mem_tracker_counter, query_mem_limit);
         size_t lowest_limit = parent->lowest_limit();
         size_t tracker_reserve_limit = -1;
 
