@@ -35,6 +35,8 @@ set(EXEC_FILES
         ./connector_sink/file_chunk_sink_test.cpp
         ./connector_sink/partition_chunk_writer_test.cpp
         ./connector_sink/async_flush_output_stream_test.cpp
+        ./connector_sink/iceberg_table_sink_test.cpp
+        ./connector_sink/sink_memory_manager_test.cpp
         ./fs/azure/azblob_uri_test.cpp
         ./fs/azure/fs_azblob_test.cpp
         ./fs/azure/utils_test.cpp

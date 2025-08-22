@@ -240,6 +240,9 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
         _source_column_names = tdesc.icebergTable.partition_column_names; //to compat with lower fe, set this also
         _partition_column_names = tdesc.icebergTable.partition_column_names;
     }
+    if (tdesc.icebergTable.__isset.sort_order) {
+        _t_sort_order = tdesc.icebergTable.sort_order;
+    }
 }
 
 std::vector<int32_t> IcebergTableDescriptor::partition_source_index_in_schema() {

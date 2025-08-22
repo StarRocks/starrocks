@@ -252,7 +252,7 @@ Status SpillPartitionChunkWriter::_flush_to_file() {
 
 Status SpillPartitionChunkWriter::_flush_chunk(Chunk* chunk, bool split) {
     if (chunk->get_slot_id_to_index_map().empty()) {
-        auto slot_map = _base_chunk->get_slot_id_to_index_map();
+        auto& slot_map = _base_chunk->get_slot_id_to_index_map();
         for (auto& it : slot_map) {
             chunk->set_slot_id_to_index(it.first, it.second);
         }
@@ -317,17 +317,26 @@ SchemaPtr SpillPartitionChunkWriter::_make_schema() {
         auto field = std::make_shared<Field>(slot->id(), slot->col_name(), type_info, slot->is_nullable());
         fields.push_back(field);
     }
-    SchemaPtr schema =
-            std::make_shared<Schema>(std::move(fields), KeysType::DUP_KEYS,
-                                     _sort_ordering ? _sort_ordering->sort_key_idxes : std::vector<uint32_t>());
+
+    SchemaPtr schema;
+    if (_sort_ordering) {
+        schema = std::make_shared<Schema>(std::move(fields), KeysType::DUP_KEYS, _sort_ordering->sort_key_idxes,
+                                          std::make_shared<SortDescs>(_sort_ordering->sort_descs));
+    } else {
+        schema = std::make_shared<Schema>(std::move(fields), KeysType::DUP_KEYS, std::vector<uint32_t>(), nullptr);
+    }
     return schema;
 }
 
 ChunkPtr SpillPartitionChunkWriter::_create_schema_chunk(const ChunkPtr& base_chunk, size_t num_rows) {
     if (!_schema) {
-        auto schema = base_chunk->schema();
+        const SchemaPtr& schema = base_chunk->schema();
         if (schema) {
             _schema = schema;
+            if (_sort_ordering) {
+                _schema->set_sort_key_idxes(_sort_ordering->sort_key_idxes);
+                _schema->set_sort_descs(std::make_shared<SortDescs>(_sort_ordering->sort_descs));
+            }
         } else {
             _schema = _make_schema();
         }

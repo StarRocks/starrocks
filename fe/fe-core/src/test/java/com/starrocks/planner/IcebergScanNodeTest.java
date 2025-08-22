@@ -26,6 +26,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergAlterTableExecutor;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergConnectorScanRangeSource;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergMetadata;
@@ -83,10 +84,12 @@ import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.RewriteFiles;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.Transaction;
@@ -619,10 +622,16 @@ public class IcebergScanNodeTest {
                 .setFullSchema(schemaColumns)
                 .setNativeTable(mockNativeTable)
                 .setIcebergProperties(Collections.singletonMap("iceberg.catalog.type", "hive"))
+
                 .build();
 
         icebergTable.setComment("some normal comment");
 
+        Schema icebergApiSchema = IcebergApiConverter.toIcebergApiSchema(schemaColumns);
+        SortOrder.Builder builder = SortOrder.builderFor(icebergApiSchema);
+        builder.asc("col1", NullOrder.NULLS_FIRST);
+        SortOrder sortOrder = builder.build();
+        Mockito.when(mockNativeTable.sortOrder()).thenReturn(sortOrder);
 
         List<DescriptorTable.ReferencedPartitionInfo> partitions = new ArrayList<>();
         TTableDescriptor tdesc = icebergTable.toThrift(partitions);
@@ -632,6 +641,7 @@ public class IcebergScanNodeTest {
         Assertions.assertEquals("file:///tmp/test", tIcebergTable.getLocation());
         Assertions.assertFalse(tIcebergTable.getPartition_info().isEmpty());
         Assertions.assertEquals("col1_trunc", tIcebergTable.getPartition_info().get(0).getPartition_column_name());
+        Assertions.assertFalse(tIcebergTable.getSort_order().getSort_key_idxes().isEmpty());
     }
 
     private Schema _schema() {
