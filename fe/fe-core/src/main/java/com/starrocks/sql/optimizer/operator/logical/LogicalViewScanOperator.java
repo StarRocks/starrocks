@@ -44,6 +44,8 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
     // Original plan evaluator(inlined view) for the input logical plan tree which has not done rule based rewrite yet,
     // this is only used when the view scan operator cannot be rewritten by view-based rewrite rules.
     private OptPlanEvaluator optPlanEvaluator;
+    // this maps original inlined view's column ref to non-inlined column ref which can be used for
+    // replacing from non-inlined column refs to inlined view's column ref.
     private Map<ColumnRefOperator, ScalarOperator> originalColumnRefToInlinedColumnRefMap;
 
     public LogicalViewScanOperator(
@@ -59,6 +61,7 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
         this.relationId = relationId;
         this.outputColumnSet = outputColumnSet;
         this.expressionToColumns = expressionToColumns;
+        // copy the originalColumnRefToInlinedColumnRefMap to avoid modification by projection
         this.originalColumnRefToInlinedColumnRefMap = Maps.newHashMap(originalColumnRefToInlinedColumnRefMap);
     }
 

@@ -273,4 +273,30 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
             PlanTestBase.assertContains(replayPair.second, "tbl_mock_255", "MaterializedView: true");
         }
     }
+
+    @Test
+    public void testViewBasedRewrite2() throws Exception {
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableQueryTraceLog(true);
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        sessionVariable.setQueryDebugOptions(debugOptions.toString());
+
+        // disable cbo based mv rewrite
+        sessionVariable.setEnableViewBasedMvRewrite(true);
+        {
+            sessionVariable.setEnableCboBasedMvRewrite(false);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/view_based_rewrite2"),
+                            connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(replayPair.second, "tbl_mock_239", "MaterializedView: true");
+        }
+        // enable cbo based mv rewrite
+        {
+            sessionVariable.setEnableCboBasedMvRewrite(true);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/view_based_rewrite2"),
+                            connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(replayPair.second, "tbl_mock_239", "MaterializedView: true");
+        }
+    }
 }
