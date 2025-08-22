@@ -35,7 +35,11 @@ bool SinkOperatorMemoryManager::kill_victim() {
     // For spillable partition writer, choose the the writer with the largest memory size that can be spilled.
     PartitionChunkWriterPtr victim = nullptr;
     for (auto& [key, writer] : *_candidates) {
-        if (victim && victim->get_flushable_bytes() > writer->get_flushable_bytes()) {
+        int64_t flushable_bytes = writer->get_flushable_bytes();
+        if (flushable_bytes == 0) {
+            continue;
+        }
+        if (victim && flushable_bytes < victim->get_flushable_bytes()) {
             continue;
         }
         victim = writer;
@@ -60,7 +64,7 @@ int64_t SinkOperatorMemoryManager::update_releasable_memory() {
 int64_t SinkOperatorMemoryManager::update_writer_occupied_memory() {
     int64_t writer_occupied_memory = 0;
     for (auto& [_, writer] : *_candidates) {
-        writer_occupied_memory += writer->get_written_bytes();
+        writer_occupied_memory += writer->get_flushable_bytes();
     }
     _writer_occupied_memory.store(writer_occupied_memory);
     return _writer_occupied_memory;
@@ -113,33 +117,23 @@ bool SinkMemoryManager::_apply_on_mem_tracker(SinkOperatorMemoryManager* child_m
 
     auto available_memory = [&]() { return mem_tracker->limit() - mem_tracker->consumption(); };
     auto low_watermark = static_cast<int64_t>(mem_tracker->limit() * _low_watermark_ratio);
-    auto exceed_urgent_space = [&]() {
-        return _total_writer_occupied_memory() > _query_tracker->limit() * _urgent_space_ratio;
-    };
-
-    if (available_memory() <= low_watermark) {
-        child_manager->update_releasable_memory();
+    int64_t flush_watermark = _query_tracker->limit() * _urgent_space_ratio;
+    while (available_memory() <= low_watermark) {
         child_manager->update_writer_occupied_memory();
+        int64_t total_occupied_memory = _total_writer_occupied_memory();
         LOG_EVERY_SECOND(WARNING) << "consumption: " << mem_tracker->consumption()
-                                  << " releasable_memory: " << _total_releasable_memory()
-                                  << " writer_allocated_memory: " << _total_writer_occupied_memory();
-        // trigger early close
-        while (exceed_urgent_space() && available_memory() <= low_watermark) {
-            bool found = child_manager->kill_victim();
-            if (!found) {
-                break;
-            }
-            child_manager->update_releasable_memory();
-            child_manager->update_writer_occupied_memory();
+                                  << ", writer_allocated_memory: " << total_occupied_memory
+                                  << ", flush_watermark: " << flush_watermark;
+        if (total_occupied_memory < flush_watermark) {
+            break;
+        }
+        bool found = child_manager->kill_victim();
+        if (!found) {
+            break;
         }
     }
 
-    child_manager->update_releasable_memory();
-    if (available_memory() <= low_watermark && _total_releasable_memory() > 0) {
-        return false;
-    }
-
-    return true;
+    return available_memory() > low_watermark;
 }
 
 } // namespace starrocks::connector
