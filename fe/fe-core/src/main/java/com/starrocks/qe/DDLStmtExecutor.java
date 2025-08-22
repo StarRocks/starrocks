@@ -20,6 +20,7 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AlreadyExistsException;
@@ -547,8 +548,9 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 UserRef user = stmt.getUser();
                 UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-                context.getGlobalStateMgr().getAuthenticationMgr()
-                        .alterUser(userIdentity, stmt.getAuthenticationInfo(), stmt.getProperties());
+                UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo(user, stmt.getAuthOption());
+                GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                        .alterUser(userIdentity, userAuthenticationInfo, stmt.getProperties());
             });
             return null;
         }
@@ -1324,7 +1326,7 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAdminSetAutomatedSnapshotOnStatement(AdminSetAutomatedSnapshotOnStmt stmt,
-                                                                     ConnectContext context) {
+                                                                       ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotOn(stmt);
             });
