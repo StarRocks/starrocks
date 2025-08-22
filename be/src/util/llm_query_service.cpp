@@ -24,7 +24,7 @@
 #include "exprs/ai_functions.h"
 #include "http/http_client.h"
 #include "util/json.h"
-#include "util/llm_cache_manager.h"
+#include "util/llm_cache.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -42,17 +42,27 @@ LLMQueryService::~LLMQueryService() {
     }
 }
 
+Status LLMQueryService::init_llm_cache() {
+    static std::once_flag init_flag;
+    std::call_once(init_flag, [this]() { this->_llm_cache.init(config::llm_cache_size); });
+    return Status::OK();
+}
+
 Status LLMQueryService::init() {
     // Initialize thread pool with configurable number of threads
     int max_concurrent_queries = config::llm_max_concurrent_queries;
     if (max_concurrent_queries <= 0) {
         max_concurrent_queries = std::thread::hardware_concurrency();
     }
+    int max_queue_size = config::llm_max_queue_size;
+
     ThreadPoolBuilder builder("llm_query_pool");
-    builder.set_min_threads(1).set_max_threads(max_concurrent_queries).set_max_queue_size(20);
+    builder.set_min_threads(1).set_max_threads(max_concurrent_queries).set_max_queue_size(max_queue_size);
 
     RETURN_IF_ERROR(builder.build(&_thread_pool));
 
+    // Initialize llm_cache
+    RETURN_IF_ERROR(init_llm_cache());
     return Status::OK();
 }
 
@@ -66,8 +76,7 @@ std::shared_future<StatusOr<std::string>> LLMQueryService::async_query(const std
     std::string cache_key = generate_cache_key(prompt, config);
 
     // First check cache
-    auto* cache = LLMCacheManager::instance();
-    auto* cache_value = cache->lookup(CacheKey(cache_key));
+    auto* cache_value = _llm_cache.lookup(CacheKey(cache_key));
     if (cache_value) {
         std::promise<StatusOr<std::string>> promise;
         promise.set_value(cache_value->response);
@@ -89,8 +98,7 @@ std::shared_future<StatusOr<std::string>> LLMQueryService::async_query(const std
 
         // Cache the result if successful
         if (result.ok()) {
-            auto* cache = LLMCacheManager::instance();
-            cache->insert(cache_key, result.value());
+            _llm_cache.insert(cache_key, result.value());
         }
 
         // Clean up pending query
@@ -120,6 +128,12 @@ std::shared_future<StatusOr<std::string>> LLMQueryService::async_query(const std
     // Submit the task to thread pool
     auto status = _thread_pool->submit_func(
             [task = std::move(task), promise_ptr]() mutable { promise_ptr->set_value(task()); });
+    if (!status.ok()) {
+        std::promise<StatusOr<std::string>> error_promise;
+        error_promise.set_value(
+                Status::InternalError(strings::Substitute("Submit to thread pool failed, $0", status.to_string())));
+        return error_promise.get_future();
+    }
 
     return future;
 }
@@ -156,7 +170,7 @@ StatusOr<std::string> LLMQueryService::execute_query(const std::string& prompt, 
     client.set_method(POST);
     client.set_content_type("application/json");
     client.set_bearer_token(config.api_key);
-    client.set_timeout_ms(60 * 1000);
+    client.set_timeout_ms(config.timeout_ms);
 
     std::string response;
 

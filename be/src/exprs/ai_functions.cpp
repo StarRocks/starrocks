@@ -20,14 +20,13 @@
 
 #include "column/column_viewer.h"
 #include "column/datum.h"
-#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "http/http_client.h"
 #include "util/json.h"
 #include "util/json_converter.h"
 #include "util/json_flattener.h"
-#include "util/llm_cache_manager.h"
+#include "util/llm_cache.h"
 #include "util/llm_query_service.h"
 
 namespace starrocks {
@@ -48,7 +47,17 @@ StatusOr<ModelConfig> AiFunctions::parse_model_config(const JsonValue& json) {
         return Status::InvalidArgument("Missing required field: api_key");
     }
     ASSIGN_OR_RETURN(auto api_key_str, api_key_obj.get_string());
-    config.api_key = api_key_str.to_string();
+    std::string api_key = api_key_str.to_string();
+    if (api_key.substr(0, 4) == "env.") {
+        std::string env_var = api_key.substr(4);
+        const char* env_value = getenv(env_var.c_str());
+        if (env_value == nullptr) {
+            return Status::InvalidArgument(strings::Substitute("Environment variable not found: $0", env_var));
+        }
+        config.api_key = std::string(env_value);
+    } else {
+        config.api_key = api_key;
+    }
 
     // Optional parameters
     auto endpoint_result = json.get_obj("endpoint");
@@ -83,6 +92,14 @@ StatusOr<ModelConfig> AiFunctions::parse_model_config(const JsonValue& json) {
         }
     }
 
+    auto timeout_result = json.get_obj("timeout_ms");
+    if (timeout_result.ok() && !timeout_result->is_null_or_none()) {
+        auto timeout_value = timeout_result->get_int();
+        if (timeout_value.ok()) {
+            config.timeout_ms = timeout_value.value();
+        }
+    }
+
     // Validate parameter value range
     if (config.temperature < 0 || config.temperature > 2) {
         return Status::InvalidArgument("temperature must be between 0 and 2");
@@ -93,22 +110,18 @@ StatusOr<ModelConfig> AiFunctions::parse_model_config(const JsonValue& json) {
     if (config.top_p < 0 || config.top_p > 1) {
         return Status::InvalidArgument("top_p must be between 0 and 1");
     }
+    if (config.timeout_ms <= 0) {
+        return Status::InvalidArgument("timeout_ms must be positive");
+    }
 
     return config;
 }
 
-Status AiFunctions::init_llm_cache() {
-    static std::once_flag init_flag;
-    std::call_once(init_flag, []() { LLMCacheManager::instance()->init(config::llm_cache_size); });
-    return Status::OK();
-}
-
 StatusOr<ColumnPtr> AiFunctions::ai_query(FunctionContext* context, const starrocks::Columns& columns) {
     if (columns.size() != 2) {
-        return Status::InvalidArgument("Ai_query function only call by ai_query(propmt, config)");
+        return Status::InvalidArgument("Ai_query function only call by ai_query(prompt, config)");
     }
 
-    RETURN_IF_ERROR(init_llm_cache());
     auto* query_service = LLMQueryService::instance();
     RETURN_IF_ERROR(query_service->init());
 
@@ -117,9 +130,22 @@ StatusOr<ColumnPtr> AiFunctions::ai_query(FunctionContext* context, const starro
     auto json_viewer = ColumnViewer<TYPE_JSON>(columns[1]);
     ColumnBuilder<TYPE_VARCHAR> result(num_rows);
 
+    bool config_is_const = columns[1]->is_constant();
+    std::unique_ptr<ModelConfig> const_config = nullptr;
+    if (context->is_notnull_constant_column(1)) {
+        JsonValue* json_value = json_viewer.value(0);
+        auto status_or_config = parse_model_config(*json_value);
+        if (!status_or_config.ok()) {
+            return Status::InvalidArgument(
+                    strings::Substitute("Failed to parse constant config: $0", status_or_config.status().to_string()));
+        }
+        const_config = std::make_unique<ModelConfig>(status_or_config.value());
+    }
+
     std::vector<std::shared_future<StatusOr<std::string>>> futures;
     futures.reserve(num_rows);
     std::vector<bool> is_valid_row(num_rows, false);
+    std::vector<int> timeout_ms_row(num_rows, -1);
 
     for (int row = 0; row < num_rows; ++row) {
         if (prompt_viewer.is_null(row) || json_viewer.is_null(row)) {
@@ -127,15 +153,19 @@ StatusOr<ColumnPtr> AiFunctions::ai_query(FunctionContext* context, const starro
             continue;
         }
 
-        JsonValue* json_value = json_viewer.value(row);
-        auto status_or_config = parse_model_config(*json_value);
-        if (!status_or_config.ok()) {
-            LOG(WARNING) << "Failed to parse config at row " << row << ": " << status_or_config.status().to_string();
-            is_valid_row[row] = false;
-            continue;
+        ModelConfig config;
+        if (config_is_const) {
+            config = *const_config;
+        } else {
+            JsonValue* json_value = json_viewer.value(row);
+            auto status_or_config = parse_model_config(*json_value);
+            if (!status_or_config.ok()) {
+                return Status::InvalidArgument(strings::Substitute("Failed to parse config at row $0: $1", row,
+                                                                   status_or_config.status().to_string()));
+            }
+            config = status_or_config.value();
+            timeout_ms_row[row] = config.timeout_ms;
         }
-
-        ModelConfig config = status_or_config.value();
         auto prompt = prompt_viewer.value(row);
         std::string prompt_str = prompt.to_string();
 
@@ -151,13 +181,28 @@ StatusOr<ColumnPtr> AiFunctions::ai_query(FunctionContext* context, const starro
             continue;
         }
 
-        auto llm_result = futures[future_idx++].get();
-        if (llm_result.ok()) {
-            result.append(llm_result.value());
+        auto& future = futures[future_idx++];
+
+        // Wait with timeout (use config timeout or default 60s)
+        std::chrono::milliseconds timeout_duration(60000);
+        if (config_is_const && const_config) {
+            timeout_duration = std::chrono::milliseconds(const_config->timeout_ms);
         } else {
-            LOG(WARNING) << "LLM query failed at row " << row << ": " << llm_result.status().to_string();
-            result.append_null();
+            timeout_duration = timeout_ms_row[row];
         }
+
+        auto status = future.wait_for(timeout_duration);
+        if (status == std::future_status::timeout) {
+            return Status::InternalError(strings::Substitute("LLM query timeout at row $0", row));
+        }
+
+        auto llm_result = future.get();
+        if (!llm_result.ok()) {
+            return Status::InternalError(
+                    strings::Substitute("LLM query failed at row $0: $1", row, llm_result.status().to_string()));
+        }
+
+        result.append(llm_result.value());
     }
 
     return result.build(ColumnHelper::is_all_const(columns));

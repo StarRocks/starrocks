@@ -31,7 +31,7 @@
 #include "http/http_handler.h"
 #include "http/http_request.h"
 #include "util/json.h"
-#include "util/llm_cache_manager.h"
+#include "util/llm_cache.h"
 
 namespace starrocks {
 
