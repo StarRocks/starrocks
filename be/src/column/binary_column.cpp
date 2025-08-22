@@ -141,7 +141,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
     }
 
     // Write offsets.
-    for (size_t i = 0; i < size; i++) {
+    for (int64_t i = 0; i < size; i++) {
         new_offsets[i] = new_offsets[i - 1] + (new_offsets[i * 2 + 1] - new_offsets[i * 2]);
     }
     _offsets.resize(prev_num_offsets + size);
