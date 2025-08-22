@@ -55,9 +55,9 @@ namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
 
-#define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
-    if (UNLIKELY(col->capacity_limit_reached())) {                                   \
-        col->reset_column();                                                         \
+#define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                        \
+    if (UNLIKELY(col->capacity_limit_reached())) {                                 \
+        col->reset_column();                                                       \
         throw RuntimeException("binary column exceed 4G in function " #func_name); \
     }
 
