@@ -303,6 +303,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v2.5.13，v3.0.7，v3.1.4，v3.2.0，v3.3.0
 
+### enable_cbo_based_mv_rewrite
+
+* 描述：是否在 CBO 阶段启用物化视图改写，这可以最大化查询改写成功的可能性（例如，当物化视图和查询之间的连接顺序不同时），但这会增加优化器阶段的执行时间。
+* 默认值：true
+* 引入版本：v3.5.5，v4.0.1
+
 ### follower_query_forward_mode
 
 * 描述：用于指定将查询语句路由到 Leader FE 或 Follower FE 节点。

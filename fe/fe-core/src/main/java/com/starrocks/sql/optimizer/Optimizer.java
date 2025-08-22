@@ -253,10 +253,6 @@ public class Optimizer {
         }
 
         memo.init(logicOperatorTree);
-        if (context.getQueryMaterializationContext() != null) {
-            // LogicalTreeWithView is logically equivalent to logicOperatorTree
-            addViewBasedPlanIntoMemo(context.getQueryMaterializationContext().getQueryOptPlanWithView());
-        }
         OptimizerTraceUtil.log("after logical rewrite, root group:\n%s", memo.getRootGroup());
 
         // Currently, we cache output columns in logic property.
@@ -311,14 +307,6 @@ public class Optimizer {
             MVRewriteValidator.getInstance().auditMv(connectContext, finalPlan, rootTaskContext);
             return finalPlan;
         }
-    }
-
-    private void addViewBasedPlanIntoMemo(OptExpression logicalTreeWithView) {
-        if (logicalTreeWithView == null) {
-            return;
-        }
-        Memo memo = context.getMemo();
-        memo.copyIn(memo.getRootGroup(), logicalTreeWithView);
     }
 
     private void prepare(ConnectContext connectContext,
@@ -448,7 +436,7 @@ public class Optimizer {
         }
         if (mvRewriteStrategy.enableForceRBORewrite) {
             // use rule based mv rewrite strategy to do mv rewrite for multi tables query
-            if (mvRewriteStrategy.enableMultiTableRewrite) {
+            if (mvRewriteStrategy.enableCBOBasedMvRewrite && mvRewriteStrategy.enableMultiTableRewrite) {
                 ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MULTI_TABLE_MV_REWRITE);
             }
             if (mvRewriteStrategy.enableSingleTableRewrite) {
@@ -727,6 +715,7 @@ public class Optimizer {
         try (Timer ignored = Tracers.watchScope("MVViewRewrite")) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "try VIEW_BASED_MV_REWRITE");
             OptExpression treeWithView = queryMaterializationContext.getQueryOptPlanWithView();
+            OptimizerTraceUtil.logOptExpression("before ViewBasedMvRuleRewrite:\n%s", tree);
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
             if (mvRewriteStrategy.enableMultiTableRewrite) {
@@ -751,6 +740,7 @@ public class Optimizer {
             }
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "original view scans size: {}, " +
                             "left view scans size: {}", origQueryViewScanOperators.size(), leftViewScanOperators.size());
+            OptimizerTraceUtil.logOptExpression("after ViewBasedMvRuleRewrite:\n%s", tree);
         } catch (Exception e) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
                     "single table view based mv rule rewrite failed.", e);

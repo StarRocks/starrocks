@@ -299,6 +299,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v2.5.13, v3.0.7, v3.1.4, v3.2.0, v3.3.0
 
+### enable_cbo_based_mv_rewrite
+
+* **Description**: Whether to enable materialized view rewrite in CBO phase which can maximize the likelihood of successful query rewriting (e.g., when the join order differs between materialized views and queries), but it will increase the execution time of the optimizer phase.
+* **Default**: true
+* **Introduced in**: v3.5.5, v4.0.1
+
 ### follower_query_forward_mode
 
 * **Description**: Specifies to which FE nodes the query statements are routed.
