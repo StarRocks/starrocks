@@ -67,7 +67,9 @@ public class IcebergConnector implements Connector {
         this.icebergCatalogProperties = new IcebergCatalogProperties(properties);
         this.connectorProperties = new ConnectorProperties(ConnectorType.ICEBERG, properties);
         this.procedureRegistry = new IcebergProcedureRegistry();
-        registerProcedures();
+        if (!isResourceMappingCatalog(this.catalogName)) {
+            registerProcedures();
+        }
     }
 
     private IcebergCatalog buildIcebergNativeCatalog() {
