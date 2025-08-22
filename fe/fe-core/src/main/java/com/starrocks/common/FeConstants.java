@@ -72,6 +72,11 @@ public class FeConstants {
     public static final String COMPUTE_NODE_NOT_FOUND_ERROR =
             "Compute node not found. Check if any compute node is down.";
 
+    public static final String QUERY_FINISHED_ERROR = "QueryFinished";
+    public static final String LIMIT_REACH_ERROR = "LimitReach";
+    public static final String SCHEDULE_FRAGMENT_ERROR =
+            "Schedule Fragment error. caused by:";
+
     public static boolean USE_MOCK_DICT_MANAGER = false;
 
     public static int checkpoint_interval_second = 60; // 1 minutes
