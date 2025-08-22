@@ -156,6 +156,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSSca
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteToVectorPlanRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxByMonotonicFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
@@ -322,7 +323,8 @@ public class RuleSet {
                     new RewriteDuplicateAggregateFnRule(),
                     new RewriteSimpleAggToMetaScanRule(),
                     new RewriteSumByAssociativeRule(),
-                    new RewriteCountIfFunction()
+                    new RewriteCountIfFunction(),
+                    new RewriteMinMaxByMonotonicFunctionRule()
             ));
 
     public static final Rule PRUNE_PROJECT_RULES = new CombinationRule(RuleType.GP_PRUNE_PROJECT, ImmutableList.of(
