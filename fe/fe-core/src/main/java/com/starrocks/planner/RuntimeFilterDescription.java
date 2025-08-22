@@ -18,8 +18,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SortInfo;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.thrift.TBucketProperty;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRuntimeFilterBuildJoinMode;
 import com.starrocks.thrift.TRuntimeFilterBuildType;
@@ -105,6 +107,7 @@ public class RuntimeFilterDescription {
     private List<Integer> bucketSeqToInstance = Lists.newArrayList();
     private List<Integer> bucketSeqToDriverSeq = Lists.newArrayList();
     private List<Integer> bucketSeqToPartition = Lists.newArrayList();
+    private List<BucketProperty> bucketProperties = Lists.newArrayList();
     // partitionByExprs are used for computing partition ids in probe side when
     // join's equal conjuncts size > 1.
     private final Map<Integer, List<Expr>> nodeIdToParitionByExprs = Maps.newHashMap();
@@ -393,6 +396,10 @@ public class RuntimeFilterDescription {
         this.bucketSeqToPartition = bucketSeqToPartition;
     }
 
+    public void setBucketProperties(List<BucketProperty> bucketProperties) {
+        this.bucketProperties = bucketProperties;
+    }
+
     public List<Integer> getBucketSeqToInstance() {
         return this.bucketSeqToInstance;
     }
@@ -565,6 +572,13 @@ public class RuntimeFilterDescription {
         }
         if (bucketSeqToPartition != null && !bucketSeqToPartition.isEmpty()) {
             layout.setBucketseq_to_partition(bucketSeqToPartition);
+        }
+        if (bucketProperties != null && !bucketProperties.isEmpty()) {
+            List<TBucketProperty> tBucketProperties = new ArrayList<>();
+            for (BucketProperty bucketProperty : bucketProperties) {
+                tBucketProperties.add(bucketProperty.toThrift());
+            }
+            layout.setBucket_properties(tBucketProperties);
         }
         return layout;
     }

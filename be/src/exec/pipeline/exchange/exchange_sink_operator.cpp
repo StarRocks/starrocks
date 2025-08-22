@@ -23,6 +23,7 @@
 #include <utility>
 
 #include "common/config.h"
+#include "exec/partition/bucket_aware_partition.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exprs/expr.h"
@@ -640,38 +641,13 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
 }
 
 void ExchangeSinkOperator::_calc_hash_values_and_bucket_ids() {
-    size_t num_rows = _partitions_columns[0]->size();
-    _hash_values.assign(num_rows, 0);
-    _bucket_ids.assign(num_rows, 0);
-    for (int i = 0; i < _partitions_columns.size(); ++i) {
-        // TODO, enhance it if we try to support more bucket functions.
-        DCHECK(_bucket_properties[i].bucket_func == TBucketFunction::MURMUR3_X86_32);
-        _round_hashes.assign(num_rows, 0);
-        _round_ids.assign(num_rows, 0);
-        _partitions_columns[i]->murmur_hash3_x86_32(&_round_hashes[0], 0, num_rows);
-        for (int j = 0; j < num_rows; j++) {
-            _hash_values[j] ^= _round_hashes[j];
-            _round_ids[j] = (_round_hashes[j] & std::numeric_limits<int>::max()) % _bucket_properties[i].bucket_num;
-        }
-        if (_partitions_columns[i]->has_null()) {
-            const auto& null_data =
-                    down_cast<const NullableColumn*>(_partitions_columns[i].get())->null_column()->get_data();
-            for (int j = 0; j < num_rows; j++) {
-                _round_ids[j] = null_data[j] ? _bucket_properties[i].bucket_num : _round_ids[j];
-            }
-        }
-
-        if (i == _partitions_columns.size() - 1) {
-            for (int j = 0; j < num_rows; j++) {
-                _bucket_ids[j] += _round_ids[j];
-            }
-        } else {
-            for (int j = 0; j < num_rows; j++) {
-                // bucket mapping, same behavior as FE
-                _bucket_ids[j] = (_round_ids[j] + _bucket_ids[j]) * (_bucket_properties[i + 1].bucket_num + 1);
-            }
-        }
+    std::vector<const Column*> partitions_columns;
+    for (size_t i = 0; i < _partitions_columns.size(); i++) {
+        partitions_columns.emplace_back(_partitions_columns[i].get());
     }
+
+    BucketAwarePartitionCtx bctx(_bucket_properties, _hash_values, _round_hashes, _bucket_ids, _round_ids);
+    calc_hash_values_and_bucket_ids(partitions_columns, bctx);
 }
 
 void ExchangeSinkOperator::update_metrics(RuntimeState* state) {
