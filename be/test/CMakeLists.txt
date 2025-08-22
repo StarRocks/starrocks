@@ -90,30 +90,30 @@ set(EXEC_FILES
         ./exec/analytor_test.cpp
         ./exec/analytor_test.cpp
         ./exec/arrow_converter_test.cpp
-        ./exec/cache_select_scanner_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
-        ./exec/csv_scanner_test.cpp
-        ./exec/orc_scanner_test.cpp
-        ./exec/file_scanner_test.cpp
         ./exec/file_scan_node_test.cpp
-        ./exec/hdfs_scanner_test.cpp
         ./exec/hdfs_scan_node_test.cpp
-        ./exec/jni_scanner_test.cpp
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
-        ./exec/json_scanner_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/multi_olap_table_sink_test.cpp
-        ./exec/avro_scanner_test.cpp
-        ./exec/avro_cpp_scanner_test.cpp
-        ./exec/parquet_scanner_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
         ./exec/tablet_sink_index_channel_test.cpp
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
+        ./exec/file_scanner/avro_cpp_scanner_test.cpp
+        ./exec/file_scanner/avro_scanner_test.cpp
+        ./exec/file_scanner/csv_scanner_test.cpp
+        ./exec/file_scanner/file_scanner_test.cpp
+        ./exec/file_scanner/json_scanner_test.cpp
+        ./exec/file_scanner/orc_scanner_test.cpp
+        ./exec/file_scanner/parquet_scanner_test.cpp
+        ./exec/hdfs_scanner/cache_select_scanner_test.cpp
+        ./exec/hdfs_scanner/hdfs_scanner_test.cpp
+        ./exec/hdfs_scanner/jni_scanner_test.cpp
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp

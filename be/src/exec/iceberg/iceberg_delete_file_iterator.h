@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/parquet_scanner.h"
+#include "exec/file_scanner/parquet_scanner.h"
 
 namespace starrocks {
 
