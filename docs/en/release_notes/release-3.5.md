@@ -10,6 +10,52 @@ After upgrading StarRocks to v3.5, DO NOT downgrade it directly to v3.4.0 ～ v3
 
 :::
 
+## 3.5.4
+
+Release Date: August 22, 2025
+
+### Improvements
+
+- Added logs to clarify the reason that tablets cannot be repaired.  [#61959](https://github.com/StarRocks/starrocks/pull/61959)
+- Optimized DROP PARTITION information in logs.  [#61787](https://github.com/StarRocks/starrocks/pull/61787)
+- Assigned a large but configurable row count to tables with unknown stats for statistical estimation.  [#61332](https://github.com/StarRocks/starrocks/pull/61332)
+- Added balance statistic according to label location.  [#61905](https://github.com/StarRocks/starrocks/pull/61905)
+- Added colocate group balance statistics to improve cluster monitoring. [#61736](https://github.com/StarRocks/starrocks/pull/61736)
+- Skipped the Publish waiting phase when the number of healthy replicas exceeds the default replica count. [#61820](https://github.com/StarRocks/starrocks/pull/61820)
+- Included the tablet information collection time in the tablet report. [#61643](https://github.com/StarRocks/starrocks/pull/61643)
+- Supports writing Starlet files with tags. [ #61605](https://github.com/StarRocks/starrocks/pull/61605)
+- Supports viewing cluster balance statistics via SHOW PROC.  [#61578](https://github.com/StarRocks/starrocks/pull/61578)
+- Bumped librdkafka to 2.11.0 to support Kafka 4.0 and removed deprecated configurations.  [#61698](https://github.com/StarRocks/starrocks/pull/61698)
+- Added `prepared_timeout` configuration to Stream Load Transaction Interface.  [#61539](https://github.com/StarRocks/starrocks/pull/61539)
+- Upgraded StarOS to v3.5‑rc3.  [#61685](https://github.com/StarRocks/starrocks/pull/61685)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Incorrect Dict version of random distribution tables. [#61933](https://github.com/StarRocks/starrocks/pull/61933)
+- Incorrect query context in context conditions. [#61929](https://github.com/StarRocks/starrocks/pull/61929)
+- Publish failures caused by synchronous Publish for shadow tablets during ALTER operations. [#61887](https://github.com/StarRocks/starrocks/pull/61887)
+- CVE‑2025‑55163 issue.  [#62041](https://github.com/StarRocks/starrocks/pull/62041)
+- Memory leak in real-time data ingestion from Apache Kafka.  [#61698](https://github.com/StarRocks/starrocks/pull/61698)
+- Incorrect count of rebuild files in the lake persistent index. [#61859](https://github.com/StarRocks/starrocks/pull/61859)
+- Statistics collection on generated expression columns causes cross-database query errors. [#61829](https://github.com/StarRocks/starrocks/pull/61829)
+- Query Cache misaligns in shared-nothing clusters, causing inconsistent results. [#61783](https://github.com/StarRocks/starrocks/pull/61783)
+- High memory usage in CatalogRecycleBin due to retaining deleted partition information.[#61582](https://github.com/StarRocks/starrocks/pull/61582)
+- SQL Server JDBC connections fail when the timeout exceeds 65,535 milliseconds. [#61719](https://github.com/StarRocks/starrocks/pull/61719)
+- Security Integration fails to encrypt passwords, exposing sensitive information. [#60666](https://github.com/StarRocks/starrocks/pull/60666)
+- `MIN()` and `MAX()` functions on Iceberg partition columns return NULL unexpectedly.  [#61858](https://github.com/StarRocks/starrocks/pull/61858)
+- Other predicates of Join containing non‑push‑down subfields were incorrectly rewritten.  [#61868](https://github.com/StarRocks/starrocks/pull/61868)
+- QueryContext cancellation can lead to a use‑after‑free situation.  [#61897](https://github.com/StarRocks/starrocks/pull/61897)
+- CBO’s table pruning overlooks other predicates.  [#61881](https://github.com/StarRocks/starrocks/pull/61881)
+- Partial Updates in `COLUMN_UPSERT_MODE` may overwrite auto-increment columns with zero.  [#61341](https://github.com/StarRocks/starrocks/pull/61341)
+- JDBC TIME type conversion uses an incorrect timezone offset that leads to wrong time values. [#61783](https://github.com/StarRocks/starrocks/pull/61783)
+- `max_filter_ratio` was not being serialized in Routine Load jobs. [#61755](https://github.com/StarRocks/starrocks/pull/61755)
+- Precision loss in the `now(precision)` function in Stream Load. [#61721](https://github.com/StarRocks/starrocks/pull/61721)
+- Cancelling a query may result in a “query id not found” error. [#61667](https://github.com/StarRocks/starrocks/pull/61667)
+- LDAP authentication may miss PartialResultException, causing incomplete query results.[ #60667](https://github.com/StarRocks/starrocks/pull/60667)
+- Paimon Timestamp timezone conversion issue when the query condition contains DATETIME.[ #60473](https://github.com/StarRocks/starrocks/pull/60473)
+
 ## 3.5.3
 
 Release Date: August 11, 2025
