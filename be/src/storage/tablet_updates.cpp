@@ -2181,7 +2181,9 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     EditVersionMetaPB edit;
     auto lastv = _edit_version_infos.back().get();
     // handle conflict between column mode partial update
-    RETURN_IF_ERROR(_check_conflict_with_partial_update((*pinfo).get()));
+    if (rowset->num_rows() > 0) {
+        RETURN_IF_ERROR(_check_conflict_with_partial_update((*pinfo).get()));
+    }
     auto edit_version_pb = edit.mutable_version();
     edit_version_pb->set_major_number(lastv->version.major_number());
     edit_version_pb->set_minor_number(lastv->version.minor_number() + 1);
@@ -3080,6 +3082,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
 
     size_t total_valid_rowsets = 0;
     size_t total_valid_segments = 0;
+    bool has_partial_update_by_column = false;
     // level -1 keep empty rowsets and have no IO overhead, so we can merge them with any level
     std::map<int, vector<CompactionEntry>> candidates_by_level;
     {
@@ -3106,6 +3109,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
                 e.num_dels = stat.num_dels;
                 e.bytes = stat.byte_size;
                 e.num_segments = stat.num_segments;
+                has_partial_update_by_column |= stat.partial_update_by_column;
             }
         }
     }
@@ -3116,7 +3120,21 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
     int64_t max_score = 0;
     for (auto& [level, candidates] : candidates_by_level) {
         if (level == -1) {
-            continue;
+            // When we enable lazy delta column compaction, which means that we don't want to merge
+            // delta column back to main segment file too soon, for save compaction IO cost.
+            // Separate delta column won't affect query performance.
+            // check if there is rowset with column update and more than 1, trigger lazy compaction strategy.
+            if (has_partial_update_by_column && candidates.size() > 1 && config::enable_lazy_delta_column_compaction) {
+                for (auto& e : candidates) {
+                    info->inputs.emplace_back(e.rowsetid);
+                }
+                VLOG(1) << "trigger lazy compaction strategy for tablet:" << _tablet.tablet_id()
+                        << " because of column update rowset count:" << candidates.size();
+                // only merge empty rowsets, so no need to consider other level
+                break;
+            } else {
+                continue;
+            }
         }
         int64_t total_segments = 0;
         int64_t del_rows = 0;
@@ -3135,46 +3153,50 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
     int64_t total_merged_segments = 0;
     RowsetStats stat;
     std::set<int32_t> compaction_level_candidate;
-    max_score = 0;
-    do {
-        auto iter = candidates_by_level.find(compaction_level);
-        if (iter == candidates_by_level.end()) {
-            break;
-        }
-        for (auto& e : iter->second) {
-            size_t new_rows = stat.num_rows + e.num_rows - e.num_dels;
-            size_t new_bytes = stat.byte_size;
-            if (e.num_rows != 0) {
-                new_bytes += e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
-            }
-            if ((stat.byte_size > 0 && new_bytes > config::update_compaction_result_bytes * 2) ||
-                info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
+
+    if (info->inputs.empty()) {
+        // no trigger lazy compaction strategy, try to merge level by level
+        max_score = 0;
+        do {
+            auto iter = candidates_by_level.find(compaction_level);
+            if (iter == candidates_by_level.end()) {
                 break;
             }
-            max_score += e.score_per_row * (e.num_rows - e.num_dels);
-            info->inputs.emplace_back(e.rowsetid);
-            stat.num_rows = new_rows;
-            stat.byte_size = new_bytes;
-            total_rows += e.num_rows;
-            total_bytes += e.bytes;
-            total_merged_segments += e.num_segments;
-        }
-        compaction_level_candidate.insert(compaction_level);
-        compaction_level = _calc_compaction_level(&stat);
-        stat.num_segments = stat.byte_size > 0 ? (stat.byte_size - 1) / config::max_segment_file_size + 1 : 0;
-        _calc_compaction_score(&stat);
-    } while (stat.byte_size <= config::update_compaction_result_bytes * 2 &&
-             info->inputs.size() < config::max_update_compaction_num_singleton_deltas &&
-             compaction_level_candidate.find(compaction_level) == compaction_level_candidate.end() &&
-             candidates_by_level.find(compaction_level) != candidates_by_level.end() && stat.compaction_score > 0);
-
-    if (compaction_level_candidate.find(-1) == compaction_level_candidate.end()) {
-        if (candidates_by_level[-1].size() > 0) {
-            for (auto& e : candidates_by_level[-1]) {
+            for (auto& e : iter->second) {
+                size_t new_rows = stat.num_rows + e.num_rows - e.num_dels;
+                size_t new_bytes = stat.byte_size;
+                if (e.num_rows != 0) {
+                    new_bytes += e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
+                }
+                if ((stat.byte_size > 0 && new_bytes > config::update_compaction_result_bytes * 2) ||
+                    info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
+                    break;
+                }
+                max_score += e.score_per_row * (e.num_rows - e.num_dels);
                 info->inputs.emplace_back(e.rowsetid);
+                stat.num_rows = new_rows;
+                stat.byte_size = new_bytes;
+                total_rows += e.num_rows;
+                total_bytes += e.bytes;
                 total_merged_segments += e.num_segments;
             }
-            compaction_level_candidate.insert(-1);
+            compaction_level_candidate.insert(compaction_level);
+            compaction_level = _calc_compaction_level(&stat);
+            stat.num_segments = stat.byte_size > 0 ? (stat.byte_size - 1) / config::max_segment_file_size + 1 : 0;
+            _calc_compaction_score(&stat);
+        } while (stat.byte_size <= config::update_compaction_result_bytes * 2 &&
+                 info->inputs.size() < config::max_update_compaction_num_singleton_deltas &&
+                 compaction_level_candidate.find(compaction_level) == compaction_level_candidate.end() &&
+                 candidates_by_level.find(compaction_level) != candidates_by_level.end() && stat.compaction_score > 0);
+
+        if (compaction_level_candidate.find(-1) == compaction_level_candidate.end()) {
+            if (candidates_by_level[-1].size() > 0) {
+                for (auto& e : candidates_by_level[-1]) {
+                    info->inputs.emplace_back(e.rowsetid);
+                    total_merged_segments += e.num_segments;
+                }
+                compaction_level_candidate.insert(-1);
+            }
         }
     }
 
