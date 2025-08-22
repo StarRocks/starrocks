@@ -316,8 +316,8 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
         ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
            << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
     }
-    ts_profile->server_rpc_timer->update(total_server_rpc_time_us * 1000);
-    ts_profile->server_wait_flush_timer->update(total_server_wait_memtable_flush_time_us * 1000);
+    COUNTER_UPDATE(ts_profile->server_rpc_timer, total_server_rpc_time_us * 1000);
+    COUNTER_UPDATE(ts_profile->server_wait_flush_timer, total_server_wait_memtable_flush_time_us * 1000);
     LOG(INFO) << ss.str();
 
     Expr::close(_output_expr_ctxs, state);
