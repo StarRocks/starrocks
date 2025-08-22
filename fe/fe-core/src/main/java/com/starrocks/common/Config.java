@@ -3813,7 +3813,7 @@ public class Config extends ConfigBase {
      * Tablets with size larger than this value will be considered to split.
      */
     @ConfField(mutable = true, comment = "Tablets with size larger than this value will be considered to split.")
-    public static long dynamic_tablet_split_size = 4 * 1024 * 1024 * 1024;
+    public static long dynamic_tablet_split_size = 4L * 1024L * 1024L * 1024L;
 
     /**
      * The max number of new tablets that an old tablet can be split into.

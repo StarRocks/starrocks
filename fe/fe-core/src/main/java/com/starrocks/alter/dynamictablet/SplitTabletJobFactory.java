@@ -34,7 +34,6 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.SplitTabletClause;
-import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -47,7 +46,7 @@ import java.util.List;
 import java.util.Map;
 
 /*
- * SplitTabletJobFactory is for creating SplitTabletJob.
+ * SplitTabletJobFactory is for creating DynamicTabletJob for tablet splitting.
  */
 public class SplitTabletJobFactory implements DynamicTabletJobFactory {
     private static final Logger LOG = LogManager.getLogger(SplitTabletJobFactory.class);
@@ -58,8 +57,6 @@ public class SplitTabletJobFactory implements DynamicTabletJobFactory {
 
     private final SplitTabletClause splitTabletClause;
 
-    private final Map<Long, Long> oldIndexIdToNewIndexId = new HashMap<>();
-
     public SplitTabletJobFactory(Database db, OlapTable table, SplitTabletClause splitTabletClause) {
         this.db = db;
         this.table = table;
@@ -68,7 +65,6 @@ public class SplitTabletJobFactory implements DynamicTabletJobFactory {
 
     /*
      * Create a dynamic tablet job and return it.
-     * Dynamic tablets are created for all related materialized indexes.
      * New shareds are created for new tablets.
      */
     @Override
@@ -83,11 +79,6 @@ public class SplitTabletJobFactory implements DynamicTabletJobFactory {
                     + " in table " + db.getFullName() + '.' + table.getName());
         }
 
-        if (!table.getTempPartitions().isEmpty()) {
-            throw new StarRocksException(
-                    "There are temp partitions in table " + db.getFullName() + '.' + table.getName());
-        }
-
         Map<Long, PhysicalPartitionContext> physicalPartitionContexts = createPhysicalPartitionContexts();
         if (physicalPartitionContexts.isEmpty()) {
             throw new StarRocksException("No tablets need to split in table "
@@ -97,11 +88,12 @@ public class SplitTabletJobFactory implements DynamicTabletJobFactory {
         createNewShards(physicalPartitionContexts);
 
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
-        return new SplitTabletJob(jobId, db.getId(), table.getId(), physicalPartitionContexts);
+        return new DynamicTabletJob(jobId, DynamicTabletJob.JobType.SPLIT_TABLET,
+                db.getId(), table.getId(), physicalPartitionContexts);
     }
 
     /*
-     * Create dynamic tablets for all related materialized indexes
+     * Create physical partition contexts for all tablets that need to split
      */
     private Map<Long, PhysicalPartitionContext> createPhysicalPartitionContexts() throws StarRocksException {
         Preconditions.checkState(splitTabletClause.getPartitionNames() == null ||
@@ -112,18 +104,22 @@ public class SplitTabletJobFactory implements DynamicTabletJobFactory {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
+            if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+                throw new StarRocksException("Unexpected table state " + table.getState()
+                        + " in table " + db.getFullName() + '.' + table.getName());
+            }
+
             if (splitTabletClause.getTabletList() != null) {
                 Map<PhysicalPartition, Map<MaterializedIndex, Collection<Tablet>>> tablets = getTabletsByTabletIds(
                         splitTabletClause.getTabletList().getTabletIds());
 
                 for (var physicalPartitionEntry : tablets.entrySet()) {
                     PhysicalPartition physicalPartition = physicalPartitionEntry.getKey();
-
-                    Map<Long, MaterializedIndexContext> indexContexts = new HashMap<>();
+                    Map<Long, DynamicTablets> dynamicTabletses = new HashMap<>();
                     for (var indexEntry : physicalPartitionEntry.getValue().entrySet()) {
-                        MaterializedIndex oldIndex = indexEntry.getKey();
+                        MaterializedIndex index = indexEntry.getKey();
 
-                        Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
+                        List<SplittingTablet> splittingTablets = new ArrayList<>();
                         for (Tablet tablet : indexEntry.getValue()) {
                             int newTabletCount = 0;
                             if (splitTabletClause.getDynamicTabletSplitSize() <= 0) {
@@ -144,24 +140,24 @@ public class SplitTabletJobFactory implements DynamicTabletJobFactory {
                                 continue;
                             }
 
-                            SplittingTablet splittingTablet = createSplittingTablet(tablet.getId(), newTabletCount);
-                            splittingTablets.put(splittingTablet.getOldTabletId(), splittingTablet);
+                            splittingTablets.add(createSplittingTablet(tablet.getId(), newTabletCount));
                         }
 
                         if (splittingTablets.isEmpty()) {
                             continue;
                         }
 
-                        indexContexts.put(oldIndex.getId(),
-                                createIndexContext(physicalPartition, oldIndex, splittingTablets));
+                        dynamicTabletses.put(index.getId(), createDynamicTablets(index, splittingTablets));
                     }
 
-                    if (indexContexts.isEmpty()) {
+                    if (dynamicTabletses.isEmpty()) {
                         continue;
                     }
 
                     physicalPartitionContexts.put(physicalPartition.getId(),
-                            new PhysicalPartitionContext(indexContexts));
+                            new PhysicalPartitionContext(
+                                    createPhysicalPartition(physicalPartition, dynamicTabletses),
+                                    dynamicTabletses));
                 }
             } else {
                 Collection<PhysicalPartition> physicalPartitions = null;
@@ -180,12 +176,11 @@ public class SplitTabletJobFactory implements DynamicTabletJobFactory {
                 }
 
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
+                    Map<Long, DynamicTablets> dynamicTabletses = new HashMap<>();
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
 
-                    Map<Long, MaterializedIndexContext> indexContexts = new HashMap<>();
-                    for (MaterializedIndex oldIndex : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-
-                        Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
-                        for (Tablet tablet : oldIndex.getTablets()) {
+                        List<SplittingTablet> splittingTablets = new ArrayList<>();
+                        for (Tablet tablet : index.getTablets()) {
                             Preconditions.checkState(splitTabletClause.getDynamicTabletSplitSize() > 0,
                                     "Invalid dynamic_tablet_split_size: "
                                             + splitTabletClause.getDynamicTabletSplitSize());
@@ -197,29 +192,25 @@ public class SplitTabletJobFactory implements DynamicTabletJobFactory {
                                 continue;
                             }
 
-                            SplittingTablet splittingTablet = createSplittingTablet(tablet.getId(), newTabletCount);
-                            splittingTablets.put(splittingTablet.getOldTabletId(), splittingTablet);
+                            splittingTablets.add(createSplittingTablet(tablet.getId(), newTabletCount));
                         }
 
                         if (splittingTablets.isEmpty()) {
                             continue;
                         }
 
-                        indexContexts.put(oldIndex.getId(),
-                                createIndexContext(physicalPartition, oldIndex, splittingTablets));
+                        dynamicTabletses.put(index.getId(), createDynamicTablets(index, splittingTablets));
                     }
 
-                    if (indexContexts.isEmpty()) {
+                    if (dynamicTabletses.isEmpty()) {
                         continue;
                     }
 
                     physicalPartitionContexts.put(physicalPartition.getId(),
-                            new PhysicalPartitionContext(indexContexts));
+                            new PhysicalPartitionContext(
+                                    createPhysicalPartition(physicalPartition, dynamicTabletses),
+                                    dynamicTabletses));
                 }
-            }
-
-            if (!physicalPartitionContexts.isEmpty()) {
-                createIdenticalIndexes(physicalPartitionContexts);
             }
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
@@ -279,81 +270,71 @@ public class SplitTabletJobFactory implements DynamicTabletJobFactory {
         return tablets;
     }
 
-    private MaterializedIndexContext createIndexContext(PhysicalPartition physicalPartition, MaterializedIndex oldIndex,
-            Map<Long, SplittingTablet> splittingTablets) {
+    private DynamicTablets createDynamicTablets(MaterializedIndex index, List<SplittingTablet> splittingTablets) {
         List<IdenticalTablet> identicalTablets = new ArrayList<>();
-        for (Tablet tablet : oldIndex.getTablets()) {
-            if (splittingTablets.containsKey(tablet.getId())) {
-                continue;
+        TABLETS_LOOP: for (Tablet tablet : index.getTablets()) {
+            for (SplittingTablet splittingTablet : splittingTablets) {
+                if (splittingTablet.getOldTabletId() == tablet.getId()) {
+                    continue TABLETS_LOOP;
+                }
             }
 
             IdenticalTablet identicalTablet = createIdenticalTablet(tablet.getId());
             identicalTablets.add(identicalTablet);
         }
 
-        DynamicTablets dynamicTablets = new DynamicTablets(splittingTablets, identicalTablets);
+        return new DynamicTablets(splittingTablets, Collections.emptyList(), identicalTablets);
+    }
 
-        long newIndexId = oldIndexIdToNewIndexId.computeIfAbsent(oldIndex.getId(),
-                oldIndexId -> GlobalStateMgr.getCurrentState().getNextId());
-
-        MaterializedIndex newIndex = new MaterializedIndex(newIndexId, IndexState.NORMAL,
+    private MaterializedIndex createMaterializedIndex(MaterializedIndex oldIndex, DynamicTablets dynamicTablets) {
+        MaterializedIndex newIndex = new MaterializedIndex(oldIndex.getId(), IndexState.NORMAL,
                 oldIndex.getShardGroupId());
-
-        TStorageMedium storageMedium = table.getPartitionInfo()
-                .getDataProperty(physicalPartition.getParentId()).getStorageMedium();
-
-        TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), physicalPartition.getId(), newIndexId,
-                storageMedium, table.isCloudNativeTableOrMaterializedView());
 
         for (long tabletId : dynamicTablets.getNewTabletIds()) {
             Tablet tablet = new LakeTablet(tabletId);
-            newIndex.addTablet(tablet, tabletMeta, true);
+            newIndex.addTablet(tablet, null, false);
         }
 
         newIndex.setVirtualBuckets(dynamicTablets.calcNewVirtualBuckets(oldIndex.getVirtualBuckets()));
-
-        return new MaterializedIndexContext(newIndex, dynamicTablets);
+        return newIndex;
     }
 
-    /*
-     * Since materialized indexes of a rollup in all partitions have the same id,
-     * we have to create new objects for materialized indexes not to split.
-     */
-    private void createIdenticalIndexes(Map<Long, PhysicalPartitionContext> physicalPartitionContexts) {
-        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
-            PhysicalPartitionContext physicalPartitionContext = physicalPartitionContexts
-                    .computeIfAbsent(physicalPartition.getId(), id -> new PhysicalPartitionContext(new HashMap<>()));
-            Map<Long, MaterializedIndexContext> indexContexts = physicalPartitionContext.getIndexContexts();
+    private PhysicalPartition createPhysicalPartition(PhysicalPartition oldPhysicalPartition,
+            Map<Long, DynamicTablets> dynamicTabletses) {
+        PhysicalPartition newPhysicalPartition = new PhysicalPartition(
+                GlobalStateMgr.getCurrentState().getNextId(), null, oldPhysicalPartition);
 
-            for (MaterializedIndex oldIndex : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                Long newIndexId = oldIndexIdToNewIndexId.get(oldIndex.getId());
-                if (newIndexId == null) {
-                    continue;
-                }
+        for (MaterializedIndex oldIndex : oldPhysicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+            DynamicTablets dynamicTablets = dynamicTabletses.get(oldIndex.getId());
+            if (dynamicTablets == null) {
+                dynamicTablets = createDynamicTablets(oldIndex, Collections.emptyList());
+            }
 
-                if (indexContexts.containsKey(oldIndex.getId())) {
-                    continue;
-                }
-
-                indexContexts.put(oldIndex.getId(),
-                        createIndexContext(physicalPartition, oldIndex, Collections.emptyMap()));
+            MaterializedIndex newIndex = createMaterializedIndex(oldIndex, dynamicTablets);
+            if (oldIndex == oldPhysicalPartition.getBaseIndex()) {
+                newPhysicalPartition.setBaseIndex(newIndex);
+            } else {
+                newPhysicalPartition.createRollupIndex(newIndex);
             }
         }
+
+        return newPhysicalPartition;
     }
 
     private void createNewShards(Map<Long, PhysicalPartitionContext> physicalPartitionContexts)
             throws StarRocksException {
         for (var physicalPartitionEntry : physicalPartitionContexts.entrySet()) {
-            Long physicalPartitionId = physicalPartitionEntry.getKey();
+            long oldPhysicalPartitionId = physicalPartitionEntry.getKey();
             PhysicalPartitionContext physicalPartitionContext = physicalPartitionEntry.getValue();
+            PhysicalPartition physicalPartition = physicalPartitionContext.getPhysicalPartition();
 
-            for (var indexEntry : physicalPartitionContext.getIndexContexts().entrySet()) {
-                Long indexId = indexEntry.getKey();
-                MaterializedIndexContext indexContext = indexEntry.getValue();
+            for (var indexEntry : physicalPartitionContext.getDynamicTabletses().entrySet()) {
+                long indexId = indexEntry.getKey();
+                MaterializedIndex index = physicalPartition.getIndex(indexId);
+                DynamicTablets dynamicTablets = indexEntry.getValue();
 
                 Map<Long, List<Long>> oldToNewTabletIds = new HashMap<>();
-                DynamicTablets dynamicTablets = indexContext.getDynamicTablets();
-                for (SplittingTablet splittingTablet : dynamicTablets.getSplittingTablets().values()) {
+                for (SplittingTablet splittingTablet : dynamicTablets.getSplittingTablets()) {
                     oldToNewTabletIds.put(splittingTablet.getOldTabletId(), splittingTablet.getNewTabletIds());
                 }
                 for (IdenticalTablet identicalTablet : dynamicTablets.getIdenticalTablets()) {
@@ -363,13 +344,16 @@ public class SplitTabletJobFactory implements DynamicTabletJobFactory {
 
                 Map<String, String> properties = new HashMap<>();
                 properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
-                properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
+                properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartition.getId()));
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(indexId));
 
-                GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(oldToNewTabletIds,
-                        table.getPartitionFilePathInfo(physicalPartitionId), // TODO(TackY): use path id
-                        table.getPartitionFileCacheInfo(physicalPartitionId),
-                        indexContext.getMaterializedIndex().getShardGroupId(),
+                // Create shards with the path id of the old physical partition.
+                // The old and new phsycal partition will share the same storage path.
+                GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
+                        oldToNewTabletIds,
+                        table.getPartitionFilePathInfo(physicalPartition.getPathId()),
+                        table.getPartitionFileCacheInfo(oldPhysicalPartitionId),
+                        index.getShardGroupId(),
                         properties, WarehouseManager.DEFAULT_RESOURCE);
             }
         }
