@@ -1762,6 +1762,33 @@ StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Co
     }
     return result;
 }
+
+StatusOr<ColumnPtr> ArrayFunctions::null_or_empty(FunctionContext* context, const starrocks::Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+    // 增加类型检查
+    auto* array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[0].get()));
+    auto size = columns[0]->size();
+    if (columns[0]->is_constant()) {
+        auto col_result = BooleanColumn ::create();
+        col_result->append(array_column->offsets().get_data().data()[1] <= 0);
+        return ConstColumn::create(std::move(col_result), size);
+    }
+    ColumnBuilder<TYPE_BOOLEAN> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (array_column->is_null(row)) {
+            result.append(true);
+            continue;
+        } else {
+            auto array_value = array_column->get(row).get_array();
+            if (array_value.size() == 0) {
+                result.append(true);
+                continue;
+            }
+            result.append(false);
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
 } // namespace starrocks
 
 #include "gen_cpp/opcode/ArrayFunctions.inc"

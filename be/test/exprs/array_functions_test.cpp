@@ -5991,4 +5991,22 @@ TEST_F(ArrayFunctionsTest, array_flatten_int) {
         EXPECT_EQ("[1,2,3]", result->debug_item(2));
     }
 }
+
+TEST_F(ArrayFunctionsTest, null_or_empty) {
+    // null_or_empty(NULL): 1
+    // null_or_empty([1,2]): 0
+    // null_or_empty([]): 1
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        array->append_nulls(1);
+        array->append_datum(DatumArray{{1,2}});
+        array->append_datum(DatumArray{});
+
+        auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(array)}).value();
+        EXPECT_EQ(3, result->size());
+        EXPECT_TRUE("true", result->debug_item(0));
+        EXPECT_EQ("false", result->debug_item(1));
+        EXPECT_EQ("true", result->debug_item(2));
+    }
+}
 } // namespace starrocks
