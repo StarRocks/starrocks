@@ -52,7 +52,7 @@
 #include "common/config.h"
 #include "common/process_exit.h"
 #include "common/status.h"
-#include "exec/file_scanner.h"
+#include "exec/file_scanner/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
