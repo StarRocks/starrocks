@@ -298,13 +298,6 @@ void NLJoinProbeOperator::iterate_enumerate_chunk(const ChunkPtr& chunk,
         call(false, 0, chunk->num_rows());
     }
 }
-Status NLJoinProbeOperator::_eval_common_exprs(const ChunkPtr& chunk) {
-    for (const auto& [slot_id, ctx] : _common_expr_ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk.get()));
-        chunk->append_column(std::move(column), slot_id);
-    }
-    return Status::OK();
-}
 
 Status NLJoinProbeOperator::_eval_nullaware_anti_conjuncts(const ChunkPtr& chunk, FilterPtr* filter) {
     if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {

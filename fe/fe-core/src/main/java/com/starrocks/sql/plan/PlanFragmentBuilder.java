@@ -3716,8 +3716,11 @@ public class PlanFragmentBuilder {
             List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
-            PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) optExpr.getOp();
-            Map<SlotId, Expr> commonSubExprMap = buildCommonSubExprMap(joinOperator.getPredicateCommonOperators(), context);
+            Map<SlotId, Expr> commonSubExprMap = Maps.newHashMap();
+            if (optExpr.getOp() instanceof PhysicalJoinOperator) {
+                PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) optExpr.getOp();
+                commonSubExprMap = buildCommonSubExprMap(joinOperator.getPredicateCommonOperators(), context);
+            }
 
             List<ScalarOperator> predicates = Utils.extractConjuncts(predicate);
             List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,

@@ -33,6 +33,7 @@
 #include "pipeline/hashjoin/hash_joiner_fwd.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
+#include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -394,12 +395,8 @@ Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filt
     hit_all = false;
     filter.assign((*chunk)->num_rows(), 1);
 
-    if (!_common_expr_ctxs.empty()) {
-        for (auto& [slot_id, ctx] : _common_expr_ctxs) {
-            ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate((*chunk).get()))
-            (*chunk)->append_column(column, slot_id);
-        }
-    }
+    CommonExprEvalScopeGuard guard(*chunk, _other_join_conjunct_ctxs);
+    RETURN_IF_ERROR(guard.evaluate());
 
     for (auto* ctx : _other_join_conjunct_ctxs) {
         ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate((*chunk).get()))
@@ -529,12 +526,8 @@ Status HashJoiner::_process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_
 
 Status HashJoiner::_process_where_conjunct(ChunkPtr* chunk) {
     SCOPED_TIMER(probe_metrics().where_conjunct_evaluate_timer);
-    if (!_common_expr_ctxs.empty()) {
-        for (auto& [slot_id, ctx] : _common_expr_ctxs) {
-            ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate((*chunk).get()))
-            (*chunk)->append_column(column, slot_id);
-        }
-    }
+    CommonExprEvalScopeGuard guard(*chunk, _common_expr_ctxs);
+    RETURN_IF_ERROR(guard.evaluate());
     return ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 }
 
