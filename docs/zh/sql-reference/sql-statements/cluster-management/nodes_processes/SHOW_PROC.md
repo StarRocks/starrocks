@@ -452,8 +452,8 @@ mysql> SHOW PROC '/cluster_balance/balance_stat';
 | StorageMedium  | 存储介质。                      |
 | BalanceType    | 均衡类型。                      |
 | Balanced       | 是否均衡。                      |
-| PendingTablets | 任务 pending 状态的 tablet 数。 |
-| RunningTablets | 任务 running 状态的 tablet 数。 |
+| PendingTablets | 任务状态为 Pending 的 Tablet 数。 |
+| RunningTablets | 任务状态为 Running 的 Tablet 数。 |
 
 示例十二：查看当前集群的 Colocate Join Group 信息。
 
