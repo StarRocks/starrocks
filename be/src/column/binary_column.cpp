@@ -103,7 +103,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
     auto* __restrict new_offsets = _offsets.data() + prev_num_offsets;
 
     // Buffer i-th start offset and end offset in new_offsets[i * 2] and new_offsets[i * 2 + 1].
-    for (uint32_t i = 0; i < size; i++) {
+    for (size_t i = 0; i < size; i++) {
         const uint32_t src_idx = indexes[i];
         new_offsets[i * 2] = src_offsets[src_idx];
         new_offsets[i * 2 + 1] = src_offsets[src_idx + 1];
@@ -120,7 +120,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
         size_t cur_offset = _offsets[prev_num_rows];
 
         if (src_column.get_bytes().size() > 32 * 1024 * 1024ull) {
-            for (uint32_t i = 0; i < size; i++) {
+            for (size_t i = 0; i < size; i++) {
                 if (i + 16 < size) {
                     // If the source column is large enough, use prefetch to speed up copying.
                     __builtin_prefetch(src_bytes + new_offsets[i * 2 + 32]);
@@ -130,7 +130,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
                 cur_offset += str_size;
             }
         } else {
-            for (uint32_t i = 0; i < size; i++) {
+            for (size_t i = 0; i < size; i++) {
                 const T str_size = new_offsets[i * 2 + 1] - new_offsets[i * 2];
                 // Only copy 16 bytes extra when src_column is small enough, because the overhead of copying 16 bytes
                 // will be large when src_column is large enough.
