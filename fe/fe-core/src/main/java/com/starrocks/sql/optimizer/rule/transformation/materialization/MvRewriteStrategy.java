@@ -70,6 +70,7 @@ public class MvRewriteStrategy {
     public boolean enableViewBasedRewrite = false;
     public boolean enableSingleTableRewrite = false;
     public boolean enableMultiTableRewrite = false;
+    public boolean enableCBOBasedMvRewrite = false;
 
     static class MvStrategyArbitrator {
         private final OptimizerConfig optimizerConfig;
@@ -130,7 +131,7 @@ public class MvRewriteStrategy {
             return true;
         }
 
-        private boolean isEnableCBOMultiTableRewrite(OptExpression queryPlan) {
+        private boolean isEnableMultiTableRewrite(OptExpression queryPlan) {
             if (!sessionVariable.isEnableMaterializedViewSingleTableViewDeltaRewrite() &&
                     MvUtils.getAllTables(queryPlan).size() <= 1) {
                 return false;
@@ -170,7 +171,8 @@ public class MvRewriteStrategy {
         strategy.enableSingleTableRewrite = arbitrator.isEnableRBOSingleTableRewrite(queryPlan);
 
         // cbo strategies
-        strategy.enableMultiTableRewrite = arbitrator.isEnableCBOMultiTableRewrite(queryPlan);
+        strategy.enableCBOBasedMvRewrite = sessionVariable.isEnableCBOBasedMVRewrite();
+        strategy.enableMultiTableRewrite = arbitrator.isEnableMultiTableRewrite(queryPlan);
         return strategy;
     }
 
