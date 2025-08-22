@@ -161,34 +161,15 @@ SELECT * FROM ProductDimension;
 CREATE DICTIONARY dimension_obj USING ProductDimension 
     (ProductKey KEY,
      ProductName VALUE,
-<<<<<<< HEAD
-     Category value,
-     SubCategory value,
-     Brand value,
-     Color value,
-     Size value);
-=======
      Category VALUE,
      SubCategory VALUE,
      Brand VALUE,
      Color VALUE,
      Size VALUE);
->>>>>>> 3130c1f8a1 ([Doc] update SQL (#60846))
 ```
 
 后续查询维度值时，无需查询维度表，直接查询字典对象即可获得维度值。例如查询 key  `1` 映射的 value。
 
-<<<<<<< HEAD
-```Plain
-MySQL > SELECT dictionary_get("dimension_obj", "1");
-+--------------------+
-| DICTIONARY_GET     |
-+--------------------+
-| {"order_id_int":1} |
-+--------------------+
-1 row in set (0.01 sec)
-```
-=======
 ```sql
 SELECT dictionary_get("dict_obj", "a1");
 ```
@@ -200,4 +181,3 @@ SELECT dictionary_get("dict_obj", "a1");
 | {"order_id_int":1}                      |
 +-----------------------------------------+
 ```
->>>>>>> 3130c1f8a1 ([Doc] update SQL (#60846))
