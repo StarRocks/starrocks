@@ -131,19 +131,7 @@ public class MvRewriteStrategy {
             return true;
         }
 
-<<<<<<< HEAD
-        private boolean isEnableCBOSingleTableRewrite() {
-            if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
-                    optimizerContext.getCandidateMvs().stream().anyMatch(MaterializationContext::hasMultiTables)) {
-                return true;
-            }
-            return false;
-        }
-
-        private boolean isEnableCBOMultiTableRewrite(OptExpression queryPlan) {
-=======
         private boolean isEnableMultiTableRewrite(OptExpression queryPlan) {
->>>>>>> b8bd5362f4 ([BugFix] Fix view based mv rewrite bug (#62198))
             if (!sessionVariable.isEnableMaterializedViewSingleTableViewDeltaRewrite() &&
                     MvUtils.getAllTables(queryPlan).size() <= 1) {
                 return false;

@@ -72,12 +72,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.OptimizerContext;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.optimizer.OptimizerFactory;
-import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
->>>>>>> b8bd5362f4 ([BugFix] Fix view based mv rewrite bug (#62198))
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
