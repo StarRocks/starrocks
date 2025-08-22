@@ -185,13 +185,13 @@ struct BitmapIndexSliceHash {
 
 template <typename CppType>
 struct BitmapIndexTraits {
-    using UnorderedMemoryIndexType = phmap::flat_hash_map<CppType, BitmapUpdateContextRefOrSingleValue>;
+    using UnorderedMemoryIndexType = phmap::flat_hash_map<CppType, std::pair<rowid_t, BitmapUpdateContextRefOrSingleValue>>;
     using OrderedMemoryIndexType = std::map<CppType, BitmapUpdateContextRefOrSingleValue>;
 };
 
 template <>
 struct BitmapIndexTraits<Slice> {
-    using UnorderedMemoryIndexType = phmap::flat_hash_map<Slice, BitmapUpdateContextRefOrSingleValue, BitmapIndexSliceHash, std::equal_to<Slice>>;
+    using UnorderedMemoryIndexType = phmap::flat_hash_map<Slice, std::pair<rowid_t, BitmapUpdateContextRefOrSingleValue>, BitmapIndexSliceHash, std::equal_to<Slice>>;
     using OrderedMemoryIndexType = std::map<Slice, BitmapUpdateContextRefOrSingleValue, Slice::Comparator>;
 };
 
@@ -231,16 +231,17 @@ public:
     inline void add_value_with_current_rowid(const void* vptr) override {
         const CppType& value = *(reinterpret_cast<const CppType*>(vptr));
         auto it = _mem_index.find(value);
-        if (it != _mem_index.end()) {
-            it->second.add(_rid);
-            if (it->second.update_estimate_size(&_reverted_index_size)) {
-                _late_update_context_vector.push_back(&(it->second));
+        if (it != _mem_index.end() && it->second.first != _rid) {
+            it->second.first = _rid;
+            it->second.second.add(_rid);
+            if (it->second.second.update_estimate_size(&_reverted_index_size)) {
+                _late_update_context_vector.push_back(&(it->second.second));
             }
         } else {
             // new value, copy value and insert new key->bitmap pair
             CppType new_value;
             _typeinfo->deep_copy(&new_value, &value, &_pool);
-            _mem_index.emplace(new_value, _rid);
+            _mem_index.emplace(new_value, std::move(std::make_pair(_rid, std::move(BitmapUpdateContextRefOrSingleValue(_rid)))));
             BitmapUpdateContext::init_estimate_size(&_reverted_index_size);
         }
     }
@@ -275,7 +276,7 @@ public:
 
         OrderedMemoryIndexType ordered_mem_index;
         for (auto& p : _mem_index) {
-            ordered_mem_index.insert(std::move(p));
+            ordered_mem_index.insert(std::move(std::make_pair(p.first, std::move(p.second.second))));
         }
 
         { // write dictionary
