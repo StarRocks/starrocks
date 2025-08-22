@@ -1765,7 +1765,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Co
 
 StatusOr<ColumnPtr> ArrayFunctions::null_or_empty(FunctionContext* context, const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
-   
+
     auto size = columns[0]->size();
     if (columns[0]->only_null()) {
         return ColumnHelper::create_const_column(1, size);
@@ -1780,14 +1780,14 @@ StatusOr<ColumnPtr> ArrayFunctions::null_or_empty(FunctionContext* context, cons
     if (columns[0]->is_nullable()) {
         auto* nullable_column = down_cast<const NullableColumn*>(columns[0].get());
         const auto& null_data = nullable_column->null_column_data();
-        for(size_t i = 0; i < size; ++i) {
+        for (size_t i = 0; i < size; ++i) {
             if (null_data[i] || array_column->get_element_size(i) == 0) {
                 result.append(true);
             } else {
                 result.append(false);
             }
         }
-        return ColumnHelper::create_const_column(1, size);
+        return result.build(ColumnHelper::is_all_const(columns));
     }
 
     for (int i = 0; i < size; ++i) {
