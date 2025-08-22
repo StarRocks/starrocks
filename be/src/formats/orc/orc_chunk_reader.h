@@ -19,7 +19,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/runtime_filter_bank.h"
 #include "formats/orc/column_reader.h"

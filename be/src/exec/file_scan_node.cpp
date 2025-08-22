@@ -18,11 +18,11 @@
 #include <sstream>
 
 #include "column/chunk.h"
-#include "exec/avro_scanner.h"
-#include "exec/csv_scanner.h"
-#include "exec/json_scanner.h"
-#include "exec/orc_scanner.h"
-#include "exec/parquet_scanner.h"
+#include "exec/file_scanner/avro_scanner.h"
+#include "exec/file_scanner/csv_scanner.h"
+#include "exec/file_scanner/json_scanner.h"
+#include "exec/file_scanner/orc_scanner.h"
+#include "exec/file_scanner/parquet_scanner.h"
 #include "exprs/expr.h"
 #include "fs/fs.h"
 #include "runtime/current_thread.h"

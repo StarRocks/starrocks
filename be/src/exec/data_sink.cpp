@@ -46,7 +46,7 @@
 #include "connector/iceberg_chunk_sink.h"
 #include "exec/exec_node.h"
 #include "exec/file_builder.h"
-#include "exec/hdfs_scanner_text.h"
+#include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/multi_olap_table_sink.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"

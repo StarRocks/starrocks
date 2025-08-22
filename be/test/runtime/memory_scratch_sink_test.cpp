@@ -54,7 +54,7 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "exec/csv_scanner.h"
+#include "exec/file_scanner/csv_scanner.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"

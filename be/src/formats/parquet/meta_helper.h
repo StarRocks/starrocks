@@ -22,7 +22,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/Descriptors_types.h"
