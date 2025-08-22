@@ -2,7 +2,6 @@
 
 package com.starrocks.epack.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
@@ -13,7 +12,7 @@ public class ApplyMaskingPolicyClause extends AlterTableClause {
 
     public ApplyMaskingPolicyClause(String maskingColumn, WithColumnMaskingPolicy withColumnMaskingPolicy,
                                     NodePosition nodePosition) {
-        super(AlterOpType.APPLY_COLUMN_MASKING_POLICY, nodePosition);
+        super(nodePosition);
         this.maskingColumn = maskingColumn;
         this.withColumnMaskingPolicy = withColumnMaskingPolicy;
     }

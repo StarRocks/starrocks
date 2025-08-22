@@ -3,7 +3,6 @@
 package com.starrocks.epack.alter;
 
 import com.starrocks.alter.AlterJobExecutor;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.TableName;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
@@ -45,12 +44,12 @@ public class AlterJobExecutorEPack extends AlterJobExecutor implements AstVisito
 
     @Override
     public Void visitRevokeRowAccessPolicyClause(RevokeRowAccessPolicyClause alterClause, ConnectContext context) {
-        if (alterClause.getOpType().equals(AlterOpType.REVOKE_ROW_ACCESS_POLICY)) {
-            GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeRowAccessPolicyContext(
-                    context, this.catalog, db.getFullName(), table.getName(), alterClause.getPolicyName());
-        } else {
+        if (alterClause.isRevokeAll()) {
             GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeALLRowAccessPolicyContext(
                     context, this.catalog, db.getFullName(), table.getName());
+        } else {
+            GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeRowAccessPolicyContext(
+                    context, this.catalog, db.getFullName(), table.getName(), alterClause.getPolicyName());
         }
         return null;
     }

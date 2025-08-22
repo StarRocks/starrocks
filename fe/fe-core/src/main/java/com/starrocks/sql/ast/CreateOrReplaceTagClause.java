@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.connector.TagOptions;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -27,7 +26,7 @@ public class CreateOrReplaceTagClause extends AlterTableClause {
 
     public CreateOrReplaceTagClause(NodePosition pos, String tagName, TagOptions tagOptions,
                                     boolean create, boolean replace, boolean ifNotExists) {
-        super(AlterOpType.ALTER_TAG, pos);
+        super(pos);
         this.tagName = tagName;
         this.tagOptions = tagOptions;
         this.create = create;

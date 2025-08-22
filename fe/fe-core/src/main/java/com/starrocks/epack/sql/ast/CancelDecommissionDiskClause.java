@@ -2,7 +2,6 @@
 
 package com.starrocks.epack.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
@@ -18,7 +17,7 @@ public class CancelDecommissionDiskClause extends AlterClause {
     }
 
     public CancelDecommissionDiskClause(String beHostPort, List<String> diskList, NodePosition pos) {
-        super(AlterOpType.ALTER_OTHER, pos);
+        super(pos);
         this.beHostPort = beHostPort;
         this.diskList = diskList;
     }

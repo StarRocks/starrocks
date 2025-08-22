@@ -2,7 +2,6 @@
 
 package com.starrocks.epack.sql.analyzer;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -86,7 +85,7 @@ public class AlterTableClauseAnalyzerEPack extends AlterTableClauseAnalyzer impl
 
     @Override
     public Void visitRevokeRowAccessPolicyClause(RevokeRowAccessPolicyClause clause, ConnectContext context) {
-        if (clause.getOpType().equals(AlterOpType.REVOKE_ROW_ACCESS_POLICY)) {
+        if (!clause.isRevokeAll()) {
             PolicyName policyName = clause.getPolicyName();
             AnalyzerUtilsEPack.normalizationPolicyName(context, policyName);
         }

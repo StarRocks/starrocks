@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.DdlException;
@@ -114,18 +113,16 @@ public class ConnectorAlterTableExecutor implements AstVisitorEPack<Void, Connec
     @Override
     public Void visitRevokeRowAccessPolicyClause(RevokeRowAccessPolicyClause clause, ConnectContext context) {
         actions.add(() -> {
-            RevokeRowAccessPolicyClause revokeRowAccessPolicyClause = (RevokeRowAccessPolicyClause) clause;
-            AlterOpType opType = revokeRowAccessPolicyClause.getOpType();
-
-            if (opType == AlterOpType.REVOKE_ROW_ACCESS_POLICY) {
-                GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeRowAccessPolicyContext(
-                        context,
-                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl(),
-                        revokeRowAccessPolicyClause.getPolicyName());
-            } else if (opType == AlterOpType.REVOKE_ALL_ROW_ACCESS_POLICY) {
+            if (clause.isRevokeAll()) {
                 GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeALLRowAccessPolicyContext(
                         context,
                         tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+
+            } else {
+                GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeRowAccessPolicyContext(
+                        context,
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl(),
+                        clause.getPolicyName());
             }
         });
         return null;

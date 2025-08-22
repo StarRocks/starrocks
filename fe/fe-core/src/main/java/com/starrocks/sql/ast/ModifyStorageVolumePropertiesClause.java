@@ -31,10 +31,6 @@ public class ModifyStorageVolumePropertiesClause extends AlterStorageVolumeClaus
         this.properties = properties;
     }
 
-    public void setOpType(AlterOpType opType) {
-        this.opType = opType;
-    }
-
     @Override
     @Nonnull
     public Map<String, String> getProperties() {

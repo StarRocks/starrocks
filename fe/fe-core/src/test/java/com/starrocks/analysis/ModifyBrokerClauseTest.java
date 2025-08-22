@@ -45,7 +45,7 @@ public class ModifyBrokerClauseTest {
         ModifyBrokerClause clause = (ModifyBrokerClause)(
                 (AlterSystemStmt)UtFrameUtils.parseStmtWithNewParser(stmt, connectContext)).getAlterClause();
         Assertions.assertEquals(ModifyBrokerClause.ModifyOp.OP_ADD, clause.getOp());
-        Assertions.assertEquals(AlterOpType.ALTER_OTHER, clause.getOpType());
+        Assertions.assertEquals(AlterOpType.ALTER_OTHER, AlterOpType.getOpType(clause));
         Assertions.assertEquals(brokerName, clause.getBrokerName());
         Assertions.assertEquals(ImmutableSet.of(Pair.create("127.0.0.1", 8000)), clause.getHostPortPairs());
     }
@@ -59,7 +59,7 @@ public class ModifyBrokerClauseTest {
         ModifyBrokerClause clause = (ModifyBrokerClause)(
                 (AlterSystemStmt)UtFrameUtils.parseStmtWithNewParser(stmt, connectContext)).getAlterClause();
         Assertions.assertEquals(ModifyBrokerClause.ModifyOp.OP_DROP, clause.getOp());
-        Assertions.assertEquals(AlterOpType.ALTER_OTHER, clause.getOpType());
+        Assertions.assertEquals(AlterOpType.ALTER_OTHER, AlterOpType.getOpType(clause));
         Assertions.assertEquals(brokerName, clause.getBrokerName());
         Assertions.assertEquals(ImmutableSet.of(Pair.create("127.0.0.1", 8000), Pair.create("127.0.0.1", 8001)), clause.getHostPortPairs());
     }
@@ -71,7 +71,7 @@ public class ModifyBrokerClauseTest {
         ModifyBrokerClause clause = (ModifyBrokerClause)(
                 (AlterSystemStmt)UtFrameUtils.parseStmtWithNewParser(stmt, connectContext)).getAlterClause();
         Assertions.assertEquals(ModifyBrokerClause.ModifyOp.OP_DROP_ALL, clause.getOp());
-        Assertions.assertEquals(AlterOpType.ALTER_OTHER, clause.getOpType());
+        Assertions.assertEquals(AlterOpType.ALTER_OTHER, AlterOpType.getOpType(clause));
         Assertions.assertEquals(brokerName, clause.getBrokerName());
         Assertions.assertTrue(clause.getHostPortPairs().isEmpty());
     }

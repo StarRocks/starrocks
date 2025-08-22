@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -32,13 +31,13 @@ public class CompactionClause extends AlterTableClause {
     }
 
     public CompactionClause(List<String> partitionNames, boolean baseCompaction, NodePosition pos) {
-        super(AlterOpType.COMPACT, pos);
+        super(pos);
         this.partitionNames = partitionNames;
         this.baseCompaction = baseCompaction;
     }
 
     public CompactionClause(boolean baseCompaction, NodePosition pos) {
-        super(AlterOpType.COMPACT, pos);
+        super(pos);
         this.partitionNames = Lists.newArrayList();
         this.baseCompaction = baseCompaction;
     }

@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropBranchClause extends AlterTableClause {
@@ -23,7 +22,7 @@ public class DropBranchClause extends AlterTableClause {
     private final boolean ifExists;
 
     public DropBranchClause(NodePosition pos, String branch, boolean ifExists) {
-        super(AlterOpType.ALTER_BRANCH, pos);
+        super(pos);
         this.branch = branch;
         this.ifExists = ifExists;
     }

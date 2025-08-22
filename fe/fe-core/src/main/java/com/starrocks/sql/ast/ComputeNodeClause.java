@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -28,7 +27,7 @@ public class ComputeNodeClause extends AlterClause {
     private final List<Pair<String, Integer>> hostPortPairs;
 
     public ComputeNodeClause(List<String> hostPorts, NodePosition pos) {
-        super(AlterOpType.ALTER_OTHER, pos);
+        super(pos);
         this.hostPorts = hostPorts;
         this.hostPortPairs = new LinkedList<>();
     }

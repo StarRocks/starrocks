@@ -15,12 +15,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 // alter table clause
 public abstract class AlterTableClause extends AlterClause {
-    protected AlterTableClause(AlterOpType opType, NodePosition pos) {
-        super(opType, pos);
+    protected AlterTableClause(NodePosition pos) {
+        super(pos);
     }
 }
