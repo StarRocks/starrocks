@@ -305,38 +305,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v3.5.5, v4.0.1
 
-### enable_plan_advisor
-
-* **Description**: Whether to enable Query Feedback feature for slow queries and manually marked queries.
-* **Default**: true
-* **Introduced in**: v3.4.0
-
-### enable_plan_analyzer
-
-* **Description**: Whether to enable Query Feedback feature for all queries. This variable takes effect only when `enable_plan_advisor` is set to `true`.
-* **Default**: false
-* **Introduced in**: v3.4.0
-
-### enable_parquet_reader_bloom_filter
-
-* **Default**: true
-* **Type**: Boolean
-* **Unit**: -
-* **Description**: Whether to enable Bloom Filter optimization when reading Parquet files.
-  * `true` (Default): Enable Bloom Filter optimization when reading Parquet files.
-  * `false`: Disable Bloom Filter optimization when reading Parquet files.
-* **Introduced in**: v3.5.0
-
-### enable_parquet_reader_page_index
-
-* **Default**: true
-* **Type**: Boolean
-* **Unit**: -
-* **Description**: Whether to enable Page Index optimization when reading Parquet files.
-  * `true` (Default): Enable Page Index optimization when reading Parquet files.
-  * `false`: Disable Page Index optimization when reading Parquet files.
-* **Introduced in**: v3.5.0
-
 ### follower_query_forward_mode
 
 * **Description**: Specifies to which FE nodes the query statements are routed.

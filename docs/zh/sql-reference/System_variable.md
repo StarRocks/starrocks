@@ -309,38 +309,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v3.5.5，v4.0.1
 
-### enable_plan_advisor
-
-* 描述：是否为慢查询或手动标记查询开启 Query Feedback 功能。
-* 默认值：true
-* 引入版本：v3.4.0
-
-### enable_plan_analyzer
-
-* 描述：是否为所有查询开启 Query Feedback 功能。该变量仅在 `enable_plan_advisor` 为 `true` 是生效。
-* 默认值：false
-* 引入版本：v3.4.0
-
-### enable_parquet_reader_bloom_filter
-
-* 默认值：true
-* 类型：Boolean
-* 单位：-
-* 描述：是否在读取 Parquet 文件时启用 Bloom Filter 优化。
-  * `true`（默认）：读取 Parquet 文件时启用 Bloom Filter 优化。
-  * `false`：读取 Parquet 文件时禁用 Bloom Filter 优化。
-* 引入版本：v3.5.0
-
-### enable_parquet_reader_page_index
-
-* 默认值：true
-* 类型：Boolean
-* 单位：-
-* 描述：是否在读取 Parquet 文件时启用 Page Index 优化。
-  * `true`（默认）：读取 Parquet 文件时启用 Page Index 优化。
-  * `false`：读取 Parquet 文件时禁用 Page Index 优化。
-* 引入版本：v3.5.0
-
 ### follower_query_forward_mode
 
 * 描述：用于指定将查询语句路由到 Leader FE 或 Follower FE 节点。
