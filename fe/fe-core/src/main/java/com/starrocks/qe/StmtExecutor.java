@@ -275,6 +275,8 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
@@ -364,7 +366,7 @@ public class StmtExecutor {
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
         }
         summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP, GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getWarehouseComputeResourceName(context.getCurrentComputeResource()));
+                .getWarehouseComputeResourceName(context.getCurrentComputeResource()));
 
         // Add some import variables in profile
         SessionVariable variables = context.getSessionVariable();
@@ -1825,9 +1827,25 @@ public class StmtExecutor {
 
     private void handleAddSqlBlackListStmt() {
         AddSqlBlackListStmt addSqlBlackListStmt = (AddSqlBlackListStmt) parsedStmt;
-        long id = GlobalStateMgr.getCurrentState().getSqlBlackList().put(addSqlBlackListStmt.getSqlPattern());
-        GlobalStateMgr.getCurrentState().getEditLog()
-                .logAddSQLBlackList(new SqlBlackListPersistInfo(id, addSqlBlackListStmt.getSqlPattern().pattern()));
+        Pattern sqlPattern = null;
+        String sql = addSqlBlackListStmt.getSql().trim().toLowerCase().replaceAll(" +", " ")
+                .replace("\r", " ")
+                .replace("\n", " ")
+                .replaceAll("\\s+", " ");
+        if (!sql.isEmpty()) {
+            try {
+                sqlPattern = Pattern.compile(sql);
+            } catch (PatternSyntaxException e) {
+                throw new SemanticException("Sql syntax error: %s", e.getMessage());
+            }
+        }
+
+        if (sqlPattern == null) {
+            throw new SemanticException("Sql pattern cannot be empty");
+        }
+
+        long id = GlobalStateMgr.getCurrentState().getSqlBlackList().put(sqlPattern);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddSQLBlackList(new SqlBlackListPersistInfo(id, sqlPattern.pattern()));
     }
 
     private void handleDelSqlBlackListStmt() {
@@ -2433,8 +2451,9 @@ public class StmtExecutor {
         }
     }
 
-    public IcebergMetadata.IcebergSinkExtra fillRewriteFiles(DmlStmt stmt, ExecPlan execPlan, 
-            List<TSinkCommitInfo> commitInfos, IcebergMetadata.IcebergSinkExtra extra) {
+    public IcebergMetadata.IcebergSinkExtra fillRewriteFiles(DmlStmt stmt, ExecPlan execPlan,
+                                                             List<TSinkCommitInfo> commitInfos,
+                                                             IcebergMetadata.IcebergSinkExtra extra) {
         if (stmt instanceof IcebergRewriteStmt) {
             for (TSinkCommitInfo commitInfo : commitInfos) {
                 commitInfo.setIs_rewrite(true);
@@ -2555,7 +2574,7 @@ public class StmtExecutor {
         String trackingSql = "";
         try {
             coord = getCoordinatorFactory().createInsertScheduler(
-                context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+                    context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
             boolean needQuery = false;

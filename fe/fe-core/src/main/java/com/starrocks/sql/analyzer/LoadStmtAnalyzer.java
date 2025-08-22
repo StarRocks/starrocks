@@ -19,6 +19,7 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -110,8 +111,16 @@ public class LoadStmtAnalyzer {
 
                 EtlJobType etlJobType;
                 if (resourceDesc != null) {
-                    resourceDesc.analyze();
-                    etlJobType = resourceDesc.getEtlJobType();
+                    // check resource exist or not
+                    Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceDesc.getName());
+                    if (resource == null) {
+                        throw new AnalysisException("Resource does not exist. name: " + resourceDesc.getName());
+                    }
+                    if (resource.getType() == Resource.ResourceType.SPARK) {
+                        etlJobType = EtlJobType.SPARK;
+                    } else {
+                        etlJobType = EtlJobType.UNKNOWN;
+                    }
                 } else if (brokerDesc != null) {
                     etlJobType = EtlJobType.BROKER;
                 } else {

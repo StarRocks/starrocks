@@ -51,7 +51,6 @@ import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -204,7 +203,6 @@ public class SparkLoadJobTest {
 
         try {
             Assertions.assertTrue(resource.getSparkConfigs().isEmpty());
-            resourceDesc.analyze();
             BulkLoadJob bulkLoadJob = BulkLoadJob.fromLoadStmt(loadStmt, null);
             SparkLoadJob sparkLoadJob = (SparkLoadJob) bulkLoadJob;
             // check member
@@ -222,7 +220,7 @@ public class SparkLoadJobTest {
             SparkResource sparkResource = Deencapsulation.getField(sparkLoadJob, "sparkResource");
             Assertions.assertTrue(sparkResource.getSparkConfigs().containsKey("spark.executor.memory"));
             Assertions.assertEquals("1g", sparkResource.getSparkConfigs().get("spark.executor.memory"));
-        } catch (DdlException | AnalysisException e) {
+        } catch (DdlException e) {
             Assertions.fail(e.getMessage());
         }
     }
