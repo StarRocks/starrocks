@@ -306,6 +306,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v2.5.13, v3.0.7, v3.1.4, v3.2.0, v3.3.0
 
+### enable_cbo_based_mv_rewrite
+
+* **Description**: Whether to enable materialized view rewrite in CBO phase which can maximize the likelihood of successful query rewriting (e.g., when the join order differs between materialized views and queries), but it will increase the execution time of the optimizer phase.
+* **Default**: true
+* **Introduced in**: v3.5.5, v4.0.1
+
 ### enable_parquet_reader_bloom_filter
 
 * **Description**: Whether to enable the bloom filter of Parquet file to improve performance. `true` indicates enabling the bloom filter, and `false` indicates disabling it. You can also control this behavior on system level using the BE configuration `parquet_reader_bloom_filter_enable`. Bloom filters in Parquet are maintained **at the column level within each row group**. If a Parquet file contains bloom filters for certain columns, queries can use predicates on those columns to efficiently skip row groups.

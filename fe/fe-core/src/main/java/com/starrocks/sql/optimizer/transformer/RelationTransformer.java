@@ -952,7 +952,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
         LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(relationId,
                 node.getView(), columnRefOperatorToColumn, columnMetaToColRefMap,
-                new ColumnRefSet(logicalPlan.getOutputColumn()), newExprMapping);
+                new ColumnRefSet(logicalPlan.getOutputColumn()), newExprMapping, projectionMap);
         if (inlineView) {
             // add a projection to make sure output columns keep the same,
             // because LogicalViewScanOperator should be logically equivalent to logicalPlan
