@@ -395,7 +395,7 @@ Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filt
     hit_all = false;
     filter.assign((*chunk)->num_rows(), 1);
 
-    CommonExprEvalScopeGuard guard(*chunk, _other_join_conjunct_ctxs);
+    CommonExprEvalScopeGuard guard(*chunk, _common_expr_ctxs);
     RETURN_IF_ERROR(guard.evaluate());
 
     for (auto* ctx : _other_join_conjunct_ctxs) {
