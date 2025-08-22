@@ -80,6 +80,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.VectorSearchOptions;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.qe.ConnectContext;
@@ -324,6 +325,11 @@ public class OlapScanNode extends ScanNode {
             }
         }
         return bucketNum;
+    }
+
+    @Override
+    public Optional<List<BucketProperty>> getBucketProperties() throws StarRocksException {
+        return Optional.empty();
     }
 
     public void setBucketExprs(List<Expr> bucketExprs) {

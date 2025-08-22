@@ -57,6 +57,7 @@ set(EXEC_FILES
     aggregate/distinct_blocking_node.cpp
     aggregate/aggregate_streaming_node.cpp
     aggregate/distinct_streaming_node.cpp
+    partition/bucket_aware_partition.cpp
     partition/chunks_partitioner.cpp
     partition/partition_hash_variant.cpp
     analytic_node.cpp

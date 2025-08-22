@@ -70,7 +70,12 @@ select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_t
 
 -- #### bucket shuffle join
 select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b on a.trip_id = b.trip_id;
--- select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id;
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id;
+-- wait for global runtime filter
+set global_runtime_filter_wait_timeout = 500;
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id;
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id;
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id;
 
 -- #### colocate/bucket shuffle join for multi bucket columns
 select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_2 b on a.trip_id = b.trip_id;
