@@ -288,6 +288,7 @@ private:
     int64_t _write_buffer_size = 0;
 
     DeltaWriterStat _stats;
+    bool _is_shadow = false;
 };
 
 } // namespace starrocks

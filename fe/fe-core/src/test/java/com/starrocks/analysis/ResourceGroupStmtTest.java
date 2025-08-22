@@ -4,28 +4,22 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroup;
-import com.starrocks.thrift.TWorkGroupOpType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -1239,89 +1233,6 @@ public class ResourceGroupStmtTest {
 
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg_valid_plan_cost_range");
         }
-    }
-
-    @Test
-    public void testSerializeAndDeserialize() throws Exception {
-        String createSQL1 = "create resource group rg1\n" +
-                "to (\n" +
-                "   user='rg1_user'," +
-                "   plan_cpu_cost_range='[1, 2)'," +
-                "   plan_mem_cost_range='[-100, 1000)'" +
-                ")\n" +
-                "   with (" +
-                "   'mem_limit' = '20%'," +
-                "   'cpu_core_limit' = '17'," +
-                "   'concurrency_limit' = '11'," +
-                "   'type' = 'normal'" +
-                "   );";
-        String createSQL2 = "create resource group rg2\n" +
-                "to (\n" +
-                "   user='rg1_user'," +
-                "   plan_mem_cost_range='[0, 2000)'" +
-                ")\n" +
-                "   with (" +
-                "   'mem_limit' = '30%'," +
-                "   'cpu_core_limit' = '32'," +
-                "   'concurrency_limit' = '31'," +
-                "   'type' = 'normal'" +
-                "   );";
-        String showResult = "default_mv_wg|1|0|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)\n" +
-                "default_wg|32|0|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)\n" +
-                "rg1|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.0, 2.0), plan_mem_cost_range=[-100.0, 1000.0))\n" +
-                "rg2|32|0|30.0%|null|0|0|0|31|100%|NORMAL|(weight=2.0, user=rg1_user, plan_mem_cost_range=[0.0, 2000.0))";
-
-        starRocksAssert.executeResourceGroupDdlSql(createSQL1);
-        starRocksAssert.executeResourceGroupDdlSql(createSQL2);
-        {
-            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
-            String actual = rowsToString(rows);
-            Assertions.assertEquals(showResult, actual);
-        }
-
-        // 1. Test serialize and deserialize ResourceGroupMgr.
-        try (ByteArrayOutputStream bufferOutput = new ByteArrayOutputStream()) {
-            try (DataOutputStream outputStream = new DataOutputStream(bufferOutput)) {
-                GlobalStateMgr.getCurrentState().getResourceGroupMgr().write(outputStream);
-            }
-
-            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
-            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg2");
-            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
-            assertThat(rows.size()).isEqualTo(2);
-
-            try (ByteArrayInputStream bufferInput = new ByteArrayInputStream(bufferOutput.toByteArray());
-                    DataInputStream inputStream = new DataInputStream(bufferInput)) {
-                GlobalStateMgr.getCurrentState().getResourceGroupMgr().readFields(inputStream);
-            }
-        }
-        {
-            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
-            String actual = rowsToString(rows);
-            Assertions.assertEquals(showResult, actual);
-        }
-
-        // 2. Test serialize and deserialize ResourceGroupOpEntry.
-        ResourceGroup rg1 = GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup("rg1");
-        ResourceGroup rg2 = GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup("rg2");
-        List<ResourceGroup> rgs = ImmutableList.of(rg1, rg2);
-        for (ResourceGroup rg : rgs) {
-            ResourceGroupOpEntry opEntryRg = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_ALTER, rg);
-            try (ByteArrayOutputStream bufferOutput = new ByteArrayOutputStream()) {
-                try (DataOutputStream outputStream = new DataOutputStream(bufferOutput)) {
-                    opEntryRg.write(outputStream);
-                }
-
-                try (ByteArrayInputStream bufferInput = new ByteArrayInputStream(bufferOutput.toByteArray());
-                        DataInputStream inputStream = new DataInputStream(bufferInput)) {
-                    ResourceGroupOpEntry opEntryRgRead = ResourceGroupOpEntry.read(inputStream);
-                    assertThat(opEntryRgRead).usingRecursiveComparison().isEqualTo(opEntryRg);
-                }
-            }
-        }
-
-        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
-        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg2");
     }
 
     @Test

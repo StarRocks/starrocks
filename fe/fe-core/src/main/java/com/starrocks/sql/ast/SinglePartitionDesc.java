@@ -14,26 +14,12 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.starrocks.analysis.DateLiteral;
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.util.DateUtils;
-import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
-import org.apache.logging.log4j.util.Strings;
-import org.threeten.extra.PeriodDuration;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 public abstract class SinglePartitionDesc extends PartitionDesc {
@@ -105,68 +91,30 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         return dataCacheInfo;
     }
 
-    protected void analyzeProperties(Map<String, String> tableProperties,
-                                     PartitionKeyDesc partitionKeyDesc) throws AnalysisException {
-        Map<String, String> partitionAndTableProperties = Maps.newHashMap();
-        // The priority of the partition attribute is higher than that of the table
-        if (tableProperties != null) {
-            partitionAndTableProperties.putAll(tableProperties);
-        }
-        if (properties != null) {
-            partitionAndTableProperties.putAll(properties);
-        }
-
-        // analyze data property
-        partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(partitionAndTableProperties,
-                DataProperty.getInferredDefaultDataProperty(), false);
-        Preconditions.checkNotNull(partitionDataProperty);
-
-        if (tableProperties != null && partitionKeyDesc != null
-                && tableProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
-            String storageCoolDownTTL = tableProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
-            if (Strings.isNotBlank(storageCoolDownTTL)) {
-                PeriodDuration periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
-                if (partitionKeyDesc.isMax()) {
-                    partitionDataProperty = new DataProperty(TStorageMedium.SSD, DataProperty.MAX_COOLDOWN_TIME_MS);
-                } else {
-                    String stringUpperValue = partitionKeyDesc.getUpperValues().get(0).getStringValue();
-                    DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
-                    LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
-                    LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
-                    DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
-                    long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
-                    partitionDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
-                }
-            }
-        }
-
-        // analyze replication num
-        replicationNum = PropertyAnalyzer
-                .analyzeReplicationNum(partitionAndTableProperties, RunMode.defaultReplicationNum());
-        if (replicationNum == null) {
-            throw new AnalysisException("Invalid replication number: " + replicationNum);
-        }
-
-        // analyze version info
-        versionInfo = PropertyAnalyzer.analyzeVersionInfo(partitionAndTableProperties);
-
-        // analyze in memory
-        isInMemory = PropertyAnalyzer
-                .analyzeBooleanProp(partitionAndTableProperties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
-
-        tabletType = PropertyAnalyzer.analyzeTabletType(partitionAndTableProperties);
-
-        dataCacheInfo = PropertyAnalyzer.analyzeDataCacheInfo(partitionAndTableProperties);
-
-        if (properties != null) {
-            // check unknown properties
-            Sets.SetView<String> intersection =
-                    Sets.intersection(partitionAndTableProperties.keySet(), properties.keySet());
-            if (!intersection.isEmpty()) {
-                Map<String, String> unknownProperties = Maps.newHashMap();
-                intersection.stream().forEach(x -> unknownProperties.put(x, properties.get(x)));
-                throw new AnalysisException("Unknown properties: " + unknownProperties);
-            }
-        }
+    // Setter methods for PartitionDescAnalyzer
+    public void setPartitionDataProperty(DataProperty partitionDataProperty) {
+        this.partitionDataProperty = partitionDataProperty;
     }
+
+    public void setReplicationNum(Short replicationNum) {
+        this.replicationNum = replicationNum;
+    }
+
+    public void setVersionInfo(Long versionInfo) {
+        this.versionInfo = versionInfo;
+    }
+
+    public void setInMemory(boolean inMemory) {
+        this.isInMemory = inMemory;
+    }
+
+    public void setTabletType(TTabletType tabletType) {
+        this.tabletType = tabletType;
+    }
+
+    public void setDataCacheInfo(DataCacheInfo dataCacheInfo) {
+        this.dataCacheInfo = dataCacheInfo;
+    }
+
+
 }

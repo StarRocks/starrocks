@@ -36,7 +36,6 @@ package com.starrocks.plugin;
 
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.PluginInfo.PluginType;
@@ -44,13 +43,9 @@ import com.starrocks.server.GlobalStateMgr;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PluginInfoTest {
@@ -81,29 +76,5 @@ public class PluginInfoTest {
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-    @Test
-    public void testPluginSerialized() throws IOException {
-        PluginInfo info = new PluginInfo();
-        info.name = "plugin-name";
-        info.type = PluginType.AUDIT;
-        info.description = "plugin description";
-        info.version = DigitalVersion.CURRENT_STARROCKS_VERSION;
-        info.javaVersion = DigitalVersion.JDK_1_8_0;
-        info.className = "hello.jar";
-        info.soName = "hello.so";
-        info.source = "test";
-        info.properties.put("md5sum", "cf0c536b8f2a0a0690b44d783d019e90");
-
-        DataOutputBuffer dob = new DataOutputBuffer();
-        DataOutputStream dos = new DataOutputStream(dob);
-        info.write(dos);
-
-        DataInputStream dis = new DataInputStream(new ByteArrayInputStream(dob.getData()));
-        PluginInfo pi = PluginInfo.read(dis);
-        assertFalse(pi.properties.isEmpty());
-        assertEquals("cf0c536b8f2a0a0690b44d783d019e90", pi.properties.get("md5sum"));
-        assertEquals(info, pi);
     }
 }

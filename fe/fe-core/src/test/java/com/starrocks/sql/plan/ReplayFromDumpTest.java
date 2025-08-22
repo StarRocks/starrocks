@@ -765,17 +765,16 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testNestedViewWithCTE() throws Exception {
-
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/nested_view_with_cte"),
                         null, TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("Project\n" +
-                "  |  <slot 7363> : 7363: count\n" +
-                "  |  limit: 100\n"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("AGGREGATE (merge finalize)\n" +
-                "  |  output: count(7363: count)\n" +
-                "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2133: case\n" +
-                "  |  limit: 100"), replayPair.second);
+        PlanTestBase.assertContains(replayPair.second, "Project\n" +
+                "  |  <slot 7368> : 7368: count\n" +
+                "  |  limit: 100");
+        PlanTestBase.assertContains(replayPair.second, "AGGREGATE (merge finalize)\n" +
+                "  |  output: count(7368: count)\n" +
+                "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2134: case\n" +
+                "  |  limit: 100");
     }
 
     @Test
@@ -1011,6 +1010,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testPushdownSubfield() throws Exception {
         String dumpString = getDumpInfoFromFile("query_dump/pushdown_subfield");
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        queryDumpInfo.getSessionVariable().setEnableJSONV2Rewrite(false);
         Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                 TExplainLevel.NORMAL);
         Assertions.assertTrue(replayPair.second.contains(

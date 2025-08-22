@@ -231,7 +231,7 @@ def generate_cpp(path):
         if "prepare" in fnm:
             modules_contents[target] = modules_contents[
                 target
-            ] + '\tBuiltinFunctions::emplace_builtin_function(static_cast<uint64_t>(%d), "%s", %d, %s, %s, %s, %s, %s);\n' % (
+            ] + '\tBuiltinFunctions::emplace_builtin_function(static_cast<uint64_t>(%d), "%s", %d, %s, %s, %s, %s, %s, "%s", std::vector<const char*>{%s});\n' % (
                 fnm["id"],
                 fnm["name"],
                 fnm["args_nums"],
@@ -240,17 +240,21 @@ def generate_cpp(path):
                 fnm["close"],
                 fnm["exception_safe"],
                 fnm["check_overflow"],
+                fnm['ret'], 
+                ", ".join(['"%s"' % arg for arg in fnm['args']]),
             )
         else:
             modules_contents[target] = modules_contents[
                 target
-            ] + '\tBuiltinFunctions::emplace_builtin_function(static_cast<uint64_t>(%d), "%s", %d, %s, %s, %s);\n' % (
+            ] + '\tBuiltinFunctions::emplace_builtin_function(static_cast<uint64_t>(%d), "%s", %d, %s, %s, %s, "%s", std::vector<const char*>{%s});\n' % (
                 fnm["id"],
                 fnm["name"],
                 fnm["args_nums"],
                 fnm["fn"],
                 fnm["exception_safe"],
                 fnm["check_overflow"],
+                fnm['ret'], 
+                ", ".join(['"%s"' % arg for arg in fnm['args']]),
             )
 
     for module in modules:

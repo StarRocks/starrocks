@@ -18,13 +18,10 @@ import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-import java.util.Set;
 
 /*
  * DynamicTablets saves the old and new tabletIds during tablet splitting or merging for a materialized index
@@ -32,7 +29,7 @@ import java.util.Set;
 public class DynamicTablets {
 
     @SerializedName(value = "splittingTablets")
-    protected final Map<Long, SplittingTablet> splittingTablets;
+    protected final List<SplittingTablet> splittingTablets;
 
     @SerializedName(value = "mergingTablets")
     protected final List<MergingTablet> mergingTablets;
@@ -40,27 +37,8 @@ public class DynamicTablets {
     @SerializedName(value = "identicalTablets")
     protected final List<IdenticalTablet> identicalTablets;
 
-    // For tablet splitting
     public DynamicTablets(
-            Map<Long, SplittingTablet> splittingTablets,
-            List<IdenticalTablet> identicalTablets) {
-        this.splittingTablets = splittingTablets;
-        this.mergingTablets = Collections.emptyList();
-        this.identicalTablets = identicalTablets;
-    }
-
-    // For tablet merging
-    public DynamicTablets(
-            List<MergingTablet> mergingTablets,
-            List<IdenticalTablet> identicalTablets) {
-        this.splittingTablets = Collections.emptyMap();
-        this.mergingTablets = mergingTablets;
-        this.identicalTablets = identicalTablets;
-    }
-
-    // Some tabletIds are splitting and some are merging, not supported now
-    public DynamicTablets(
-            Map<Long, SplittingTablet> splittingTablets,
+            List<SplittingTablet> splittingTablets,
             List<MergingTablet> mergingTablets,
             List<IdenticalTablet> identicalTablets) {
         this.splittingTablets = splittingTablets;
@@ -68,7 +46,7 @@ public class DynamicTablets {
         this.identicalTablets = identicalTablets;
     }
 
-    public Map<Long, SplittingTablet> getSplittingTablets() {
+    public List<SplittingTablet> getSplittingTablets() {
         return splittingTablets;
     }
 
@@ -80,19 +58,17 @@ public class DynamicTablets {
         return identicalTablets;
     }
 
-    public Set<Long> getOldTabletIds() {
-        Set<Long> oldTabletsIds = new HashSet<>(splittingTablets.keySet());
+    public List<Long> getOldTabletIds() {
+        List<Long> oldTabletsIds = new ArrayList<>(
+                splittingTablets.size() + mergingTablets.size() * 2 + identicalTablets.size());
+        for (SplittingTablet splittingTablet : splittingTablets) {
+            oldTabletsIds.add(splittingTablet.getOldTabletId());
+        }
         for (MergingTablet mergingTablet : mergingTablets) {
-            for (Long tabletId : mergingTablet.getOldTabletIds()) {
-                Preconditions.checkState(
-                        oldTabletsIds.add(tabletId),
-                        "Duplicated old tablet: " + tabletId);
-            }
+            oldTabletsIds.addAll(mergingTablet.getOldTabletIds());
         }
         for (IdenticalTablet identicalTablet : identicalTablets) {
-            Preconditions.checkState(
-                    oldTabletsIds.add(identicalTablet.getOldTabletId()),
-                    "Duplicated old tablet: " + identicalTablet.getOldTabletId());
+            oldTabletsIds.add(identicalTablet.getOldTabletId());
         }
         return oldTabletsIds;
     }
@@ -100,7 +76,7 @@ public class DynamicTablets {
     public List<Long> getNewTabletIds() {
         List<Long> newTabletIds = new ArrayList<>(
                 splittingTablets.size() * 2 + mergingTablets.size() + identicalTablets.size());
-        for (SplittingTablet splittingTablet : splittingTablets.values()) {
+        for (SplittingTablet splittingTablet : splittingTablets) {
             newTabletIds.addAll(splittingTablet.getNewTabletIds());
         }
         for (MergingTablet mergingTablet : mergingTablets) {
@@ -114,7 +90,7 @@ public class DynamicTablets {
 
     public long getParallelTablets() {
         long parallelTablets = 0;
-        for (SplittingTablet splittingTablet : splittingTablets.values()) {
+        for (SplittingTablet splittingTablet : splittingTablets) {
             parallelTablets += splittingTablet.getParallelTablets();
         }
         for (MergingTablet mergingTablet : mergingTablets) {
@@ -143,7 +119,7 @@ public class DynamicTablets {
 
         // Prepare splitting tablet context
         Map<Long, Context> tabletIdToContext = new HashMap<>();
-        for (SplittingTablet splittingTablet : splittingTablets.values()) {
+        for (SplittingTablet splittingTablet : splittingTablets) {
             tabletIdToContext.put(splittingTablet.getOldTabletId(), new Context(splittingTablet.getNewTabletIds()));
         }
         for (MergingTablet mergingTablet : mergingTablets) {

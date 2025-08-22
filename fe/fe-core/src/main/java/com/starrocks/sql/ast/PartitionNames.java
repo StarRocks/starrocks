@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
@@ -22,13 +21,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -41,7 +35,7 @@ import java.util.List;
  *      PARTITIONS (p1, p2)
  *      TEMPORARY PARTITIONS (p1, p2)
  */
-public class PartitionNames implements ParseNode, Writable {
+public class PartitionNames implements ParseNode {
 
     @SerializedName(value = "partitionNames")
     private final List<String> partitionNames;
@@ -142,10 +136,4 @@ public class PartitionNames implements ParseNode, Writable {
         return sb.toString();
     }
 
-
-
-    public static PartitionNames read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, PartitionNames.class);
-    }
 }

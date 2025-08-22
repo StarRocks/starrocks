@@ -40,6 +40,7 @@ public:
 
     Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) override;
     Status update_disk_spaces(const std::vector<DirSpace>& spaces) override;
+    Status update_inline_cache_count_limit(int32_t limit) override;
 
     const DataCacheMetrics cache_metrics() const override;
     void record_read_remote(size_t size, int64_t latency_us) override {}

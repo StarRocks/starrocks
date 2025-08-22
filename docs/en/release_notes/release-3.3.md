@@ -6,11 +6,12 @@ displayed_sidebar: docs
 
 :::warning
 
-After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.1, or v3.2.2, otherwise it will cause metadata loss. You must downgrade the cluster to v3.2.3 or later to prevent the issue.
+- After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.1, or v3.2.2, otherwise it will cause metadata loss. You must downgrade the cluster to v3.2.3 or later to prevent the issue.
+- After upgrading StarRocks to v3.3.9, you can only downgrade it to v3.2.11 or later.
 
 :::
 
-## v3.3.17
+## 3.3.17
 
 Release Date: July 30, 2025
 

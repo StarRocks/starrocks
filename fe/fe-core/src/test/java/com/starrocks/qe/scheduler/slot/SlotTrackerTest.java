@@ -30,14 +30,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SlotTrackerTest {
+    private static SlotManager slotManager;
+
     @BeforeAll
     public static void beforeClass() {
         MetricRepo.init();
+        ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
+        slotManager = new SlotManager(resourceUsageMonitor);
     }
 
     @Test
     public void testRequireSlot() {
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of());
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of());
 
         LogicalSlot slot1 = generateSlot(1);
         assertThat(slotTracker.requireSlot(slot1)).isTrue();
@@ -49,7 +53,7 @@ public class SlotTrackerTest {
 
     @Test
     public void tesAllocateSlot() {
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of());
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of());
 
         LogicalSlot slot1 = generateSlot(1);
 
@@ -69,7 +73,7 @@ public class SlotTrackerTest {
 
     @Test
     public void tesReleaseSlot() {
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of());
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of());
 
         LogicalSlot slot1 = generateSlot(1);
 
@@ -109,7 +113,7 @@ public class SlotTrackerTest {
 
     @Test
     public void testSlotTrackerMetrics() {
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of());
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of());
         assertThat(slotTracker.getWarehouseId()).isEqualTo(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         assertThat(slotTracker.getWarehouseName().equals(""));
         assertThat(slotTracker.getQueuePendingLength()).isEqualTo(0);
@@ -185,7 +189,7 @@ public class SlotTrackerTest {
 
     @Test
     public void testGetEarliestQueryWaitTimeSecond() {
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of());
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of());
         LogicalSlot slot1 = generateSlot(1);
         slotTracker.requireSlot(slot1);
         Uninterruptibles.sleepUninterruptibly(1000, java.util.concurrent.TimeUnit.MILLISECONDS);

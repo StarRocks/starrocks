@@ -84,7 +84,7 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
     _root_profile->add_info_string("TxnId", std::to_string(txn_id));
     _profile = _root_profile->create_child(fmt::format("Channel (host={})", BackendOptions::get_localhost()), true);
     _index_num = ADD_COUNTER(_profile, "IndexNum", TUnit::UNIT);
-    ADD_COUNTER(_profile, "LoadMemoryLimit", TUnit::BYTES)->set(_mem_tracker->limit());
+    COUNTER_SET(ADD_COUNTER(_profile, "LoadMemoryLimit", TUnit::BYTES), _mem_tracker->limit());
     _peak_memory_usage = ADD_PEAK_COUNTER(_profile, "PeakMemoryUsage", TUnit::BYTES);
     _deserialize_chunk_count = ADD_COUNTER(_profile, "DeserializeChunkCount", TUnit::UNIT);
     _deserialize_chunk_timer = ADD_TIMER(_profile, "DeserializeChunkTime");

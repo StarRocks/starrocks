@@ -15,12 +15,8 @@
 package com.starrocks.scheduler.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.List;
 
 public class ArchiveTaskRunsLog implements Writable {
@@ -35,10 +31,5 @@ public class ArchiveTaskRunsLog implements Writable {
     public List<String> getTaskRuns() {
         return taskRuns;
     }
-
-    public static ArchiveTaskRunsLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), ArchiveTaskRunsLog.class);
-    }
-
 
 }

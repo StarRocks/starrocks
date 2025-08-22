@@ -17,16 +17,11 @@ package com.starrocks.analysis;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Function;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TFunctionName;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Objects;
 
 /**
@@ -134,31 +129,8 @@ public class FunctionName implements Writable {
         return name;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        if (db_ != null) {
-            out.writeBoolean(true);
-            // compatible with old version
-            Text.writeString(out, ClusterNamespace.getFullName(db_));
-        } else {
-            out.writeBoolean(false);
-        }
-        Text.writeString(out, fn_);
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        if (in.readBoolean()) {
-            // compatible with old version
-            db_ = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        }
-        fn_ = Text.readString(in);
-    }
 
-    public static FunctionName read(DataInput in) throws IOException {
-        FunctionName functionName = new FunctionName();
-        functionName.readFields(in);
-        return functionName;
-    }
 
     @Override
     public int hashCode() {

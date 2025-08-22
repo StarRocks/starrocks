@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -34,10 +33,5 @@ public class DelBackendBlackListStmt extends StatementBase {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDelBackendBlackListStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 }

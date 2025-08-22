@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -30,12 +28,8 @@ public class ModifyTablePropertiesClause extends AlterTableClause {
     }
 
     public ModifyTablePropertiesClause(Map<String, String> properties, NodePosition pos) {
-        super(AlterOpType.MODIFY_TABLE_PROPERTY, pos);
+        super(pos);
         this.properties = properties;
-    }
-
-    public void setOpType(AlterOpType opType) {
-        this.opType = opType;
     }
 
     @Nonnull

@@ -38,7 +38,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.Lists;
-import com.starrocks.mysql.MysqlColType;
 import com.starrocks.thrift.TPrimitiveType;
 
 import java.util.Arrays;
@@ -196,7 +195,6 @@ public enum PrimitiveType {
     private final String description;
     private final int slotSize;  // size of tuple slot for this type
     private final TPrimitiveType thriftType;
-    private boolean isTimeType = false;
 
     PrimitiveType(String description, int slotSize, TPrimitiveType thriftType) {
         this.description = description;
@@ -315,11 +313,11 @@ public enum PrimitiveType {
      *
      * @param t The decimal primitive type to check
      * @return The maximum precision for the given decimal type:
-     *         - DECIMALV2: 27 digits
-     *         - DECIMAL32: 9 digits
-     *         - DECIMAL64: 18 digits
-     *         - DECIMAL128: 38 digits
-     *         - DECIMAL256: 76 digits
+     * - DECIMALV2: 27 digits
+     * - DECIMAL32: 9 digits
+     * - DECIMAL64: 18 digits
+     * - DECIMAL128: 38 digits
+     * - DECIMAL256: 76 digits
      * @throws IllegalStateException if the input type is not a decimal type
      */
     public static int getMaxPrecisionOfDecimal(PrimitiveType t) {
@@ -366,7 +364,7 @@ public enum PrimitiveType {
             return DECIMAL64;
         } else if (precision <= getMaxPrecisionOfDecimal(DECIMAL128)) {
             return DECIMAL128;
-        } else  if (precision <= getMaxPrecisionOfDecimal(DECIMAL256)) {
+        } else if (precision <= getMaxPrecisionOfDecimal(DECIMAL256)) {
             return DECIMAL256;
         }
         Preconditions.checkState(type.isDecimalOfAnyVersion());
@@ -525,49 +523,6 @@ public enum PrimitiveType {
     public boolean isIntegerType() {
         return (this == TINYINT || this == SMALLINT
                 || this == INT || this == BIGINT);
-    }
-
-    // TODO(zhaochun): Add Mysql Type to it's private field
-    public MysqlColType toMysqlType() {
-        switch (this) {
-            // MySQL use Tinyint(1) to represent boolean
-            case BOOLEAN:
-            case TINYINT:
-                return MysqlColType.MYSQL_TYPE_TINY;
-            case SMALLINT:
-                return MysqlColType.MYSQL_TYPE_SHORT;
-            case INT:
-                return MysqlColType.MYSQL_TYPE_LONG;
-            case BIGINT:
-                return MysqlColType.MYSQL_TYPE_LONGLONG;
-            case FLOAT:
-                return MysqlColType.MYSQL_TYPE_FLOAT;
-            case DOUBLE:
-                return MysqlColType.MYSQL_TYPE_DOUBLE;
-            case TIME:
-                return MysqlColType.MYSQL_TYPE_TIME;
-            case DATE:
-                return MysqlColType.MYSQL_TYPE_DATE;
-            case DATETIME: {
-                if (isTimeType) {
-                    return MysqlColType.MYSQL_TYPE_TIME;
-                } else {
-                    return MysqlColType.MYSQL_TYPE_DATETIME;
-                }
-            }
-            case DECIMALV2:
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-            case DECIMAL256:
-                return MysqlColType.MYSQL_TYPE_NEWDECIMAL;
-            case VARCHAR:
-                return MysqlColType.MYSQL_TYPE_VAR_STRING;
-            case VARBINARY:
-                return MysqlColType.MYSQL_TYPE_BLOB;
-            default:
-                return MysqlColType.MYSQL_TYPE_STRING;
-        }
     }
 
     public int getOlapColumnIndexSize() {

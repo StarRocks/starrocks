@@ -18,7 +18,6 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 

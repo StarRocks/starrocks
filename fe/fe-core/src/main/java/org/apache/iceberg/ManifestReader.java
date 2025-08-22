@@ -16,12 +16,12 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.iceberg;
 
 import com.google.common.cache.Cache;
 import com.starrocks.connector.iceberg.DataFileWrapper;
 import com.starrocks.connector.iceberg.DeleteFileWrapper;
-import org.apache.iceberg.avro.Avro;
 import org.apache.iceberg.avro.AvroIterable;
 import org.apache.iceberg.exceptions.RuntimeIOException;
 import org.apache.iceberg.expressions.Evaluator;

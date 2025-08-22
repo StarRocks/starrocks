@@ -116,7 +116,7 @@ public class ClusterLoadStatisticProcDirTest {
             if (beId.equals("10001")) {
                 Assertions.assertEquals(
                         "{\"maxUsedPercent\":0.9,\"minUsedPercent\":0.1,\"beId\":10001,\"maxPath\":\"/path1\"," +
-                                "\"minPath\":\"/path2\",\"type\":\"BACKEND_DISK\",\"balanced\":false}",
+                                "\"minPath\":\"/path2\",\"type\":\"INTRA_NODE_DISK_USAGE\",\"balanced\":false}",
                         row.get(11));
             } else if (beId.equals("10002")) {
                 Assertions.assertEquals("{\"balanced\":true}", row.get(11));

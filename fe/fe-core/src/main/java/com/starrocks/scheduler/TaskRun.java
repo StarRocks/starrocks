@@ -24,6 +24,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -39,7 +40,6 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -261,7 +261,7 @@ public class TaskRun implements Comparable<TaskRun> {
         return context;
     }
 
-    public Constants.TaskRunState executeTaskRun() throws Exception {
+    public TaskRunContext buildTaskRunContext() {
         TaskRunContext taskRunContext = new TaskRunContext();
 
         // Definition will cause a lot of repeats and cost a lot of metadata memory resources, so
@@ -313,6 +313,11 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setStatus(status);
         taskRunContext.setExecuteOption(executeOption);
         taskRunContext.setTaskRun(this);
+        return taskRunContext;
+    }
+
+    public Constants.TaskRunState executeTaskRun() throws Exception {
+        TaskRunContext taskRunContext = buildTaskRunContext();
 
         // prepare to execute task run, move it here so that we can catch the exception and set the status
         processor.prepare(taskRunContext);
@@ -336,7 +341,7 @@ public class TaskRun implements Comparable<TaskRun> {
             return Constants.TaskRunState.FAILED;
         }
 
-        // post prosess task run
+        // post process task run
         try (Timer ignored = Tracers.watchScope("TaskRunPostProcess")) {
             processor.postTaskRun(taskRunContext);
         } catch (Exception e) {

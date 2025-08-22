@@ -89,7 +89,9 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
-import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;;
+import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
+
+
 
 /**
  * used to scan from stream

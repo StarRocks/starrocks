@@ -1161,6 +1161,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：自动化集群快照任务的触发间隔。
 - 引入版本：v3.4.2
 
+##### enable_table_name_case_insensitive
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否启用针对 Catalog 名称、数据库名称、表名称、视图名称以及异步物化视图名称的大小写不敏感处理。目前，表名称默认区分大小写。
+  - 启用此功能后，所有相关名称将以小写形式存储，且所有包含这些名称的 SQL 命令将自动将其转换为小写。
+  - 您只能在创建集群时启用此功能。**集群启动后，此配置项的值无法通过任何方式修改**。任何修改尝试均会导致错误。当 FE 检测到此配置项的值与集群首次启动时不一致时，FE 将无法启动。  
+  - 目前，此功能不支持 JDBC Catalog 和表名。若需对 JDBC 或 ODBC 数据源进行大小写不敏感处理，请勿启用此功能。
+- 引入版本：v4.0
+
 ### 用户，角色及权限
 
 ##### privilege_max_total_roles_per_user
@@ -1937,6 +1949,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：低基数字典阈值。
 - 引入版本：v3.5.0
 
+##### enable_manual_collect_array_ndv
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许手动采集 ARRAY 类型列的 NDV 信息。
+- 引入版本：v4.0
+
+##### enable_auto_collect_array_ndv
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许自动采集 ARRAY 类型列的 NDV 信息。
+- 引入版本：v4.0
+
 ### 导入导出
 
 ##### load_straggler_wait_second
@@ -2057,17 +2087,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 -->
 
-<!--
-##### prepared_transaction_default_timeout_second
-
-- 默认值：86400
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### max_load_timeout_second
 
 - 默认值：259200
@@ -2084,6 +2103,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：Seconds
 - 是否动态：是
 - 描述：导入作业的最小超时时间，适用于所有导入。
+- 引入版本：-
+
+##### prepared_transaction_default_timeout_second
+
+- 默认值：86400
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：预提交事务的默认超时时间。
 - 引入版本：-
 
 ##### spark_dpp_version
@@ -2512,6 +2540,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：事务标签与coordinator节点映射关系在缓存中的存活时间(TTL)。
 - 引入版本：-
+
+##### enable_file_bundling
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为云原生表启用 File Bundling 优化功能。当启用该功能（设置为 `true`）时，系统会自动将导入、Compaction 或 Publish 操作生成的数据文件进行打包，从而减少因频繁访问外部存储系统而产生的 API 成本。您还可以通过 CREATE TABLE 语句的 `file_bundling` 属性在表级别控制此行为。有关详细说明，请参阅 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
+- 引入版本：v4.0
 
 ### 存储
 

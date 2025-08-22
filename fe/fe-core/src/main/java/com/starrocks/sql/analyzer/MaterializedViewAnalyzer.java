@@ -29,6 +29,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -51,6 +52,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
@@ -85,6 +87,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QueryRelation;
@@ -232,6 +235,7 @@ public class MaterializedViewAnalyzer {
     /**
      * We can support some external tables for creating materialized view.
      * For more details see: https://github.com/StarRocks/starrocks/issues/19581
+     *
      * @param table : table to check
      * @return true if the external table is supported for materialized view
      */
@@ -365,6 +369,10 @@ public class MaterializedViewAnalyzer {
             }
             statement.setBaseTableInfos(Lists.newArrayList(baseTableInfos));
 
+            // set the sort keys into createMaterializedViewStatement
+            List<String> sortKeys = genMaterializedViewSortKeys(statement);
+            statement.setSortKeys(sortKeys);
+
             // set the columns into createMaterializedViewStatement
             List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement);
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
@@ -467,7 +475,8 @@ public class MaterializedViewAnalyzer {
             if (!ctx.getSessionVariable().isEnableIncrementalRefreshMV()) {
                 return;
             }
-            if (!createStmt.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
+
+            if (!(createStmt.getRefreshSchemeDesc() instanceof IncrementalRefreshSchemeDesc)) {
                 return;
             }
 
@@ -694,6 +703,27 @@ public class MaterializedViewAnalyzer {
                 }
             }
             return indexes;
+        }
+
+        /**
+         * @param statement : creating materialized view statement
+         * @return : Generate materialized view's `sortKeys` based on the `orderByElements`
+         * from creating materialized view statement.
+         */
+        private List<String> genMaterializedViewSortKeys(CreateMaterializedViewStatement statement) {
+            List<OrderByElement> orderByElements = statement.getOrderByElements();
+            if (orderByElements == null) {
+                return null;
+            }
+            List<String> sortKeys = new ArrayList<>();
+            for (OrderByElement orderByElement : orderByElements) {
+                String column = orderByElement.castAsSlotRef();
+                if (column == null) {
+                    throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                }
+                sortKeys.add(column);
+            }
+            return sortKeys;
         }
 
         private void checkExpInColumn(CreateMaterializedViewStatement statement) {
@@ -1078,6 +1108,7 @@ public class MaterializedViewAnalyzer {
                 }
             }
         }
+
         private boolean shouldMVPartitionByListType(CreateMaterializedViewStatement statement,
                                                     List<Expr> mvPartitionByExprs,
                                                     Expr partitionRefTableExpr,
@@ -1186,7 +1217,7 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private  void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
+        private void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
             if (partitionByExprs.size() > 1) {
                 throw new SemanticException("Materialized view with range partition type " +
                         "only supports single column");
@@ -1239,8 +1270,9 @@ public class MaterializedViewAnalyzer {
 
         /**
          * Check if the partition function of base table is supported.
+         *
          * @param partitionByExpr : base table's partition function
-         * @param table : base table
+         * @param table           : base table
          */
         private void checkBaseTableSupportedPartitionFunc(Expr partitionByExpr,
                                                           OlapTable table) {
@@ -1494,7 +1526,7 @@ public class MaterializedViewAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
                 }
             }
-            distributionDesc.analyze(columnSet);
+            DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
         }
 
         private Short autoInferReplicationNum(Map<TableName, Table> tableNameTableMap) {
@@ -1514,7 +1546,28 @@ public class MaterializedViewAnalyzer {
 
         @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, ConnectContext context) {
-            stmt.getDbMvName().normalization(context);
+            TableName mvName = stmt.getDbMvName();
+            mvName.normalization(context);
+            Table mvTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, mvName.getCatalog(),
+                    mvName.getDb(), mvName.getTbl());
+            // Check mv dependency
+            if (context.getSessionVariable().isEnableDropTableCheckMvDependency() && mvTable != null) {
+                Set<MvId> relatedMvIds = mvTable.getRelatedMaterializedViews();
+                if (!relatedMvIds.isEmpty()) {
+                    Set<String> relatedMvNames = Sets.newHashSet();
+                    for (MvId mvId : relatedMvIds) {
+                        Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getDb(mvId.getDbId());
+                        Table mvTbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(mvId.getDbId(), mvId.getId());
+                        relatedMvNames.add(mvDb.getOriginName() + "." + mvTbl.getName());
+                    }
+                    throw new SemanticException(mvTable.getName() + " exists mv dependencies: " +
+                            relatedMvNames.toString() + ", drop is not allowed. " +
+                            "See more detailed information in `sys.object_dependencies`, " +
+                            "or `set global enable_drop_table_check_mv_dependency=false`");
+                }
+            }
             return null;
         }
 
@@ -1711,7 +1764,7 @@ public class MaterializedViewAnalyzer {
         ColumnDef generatedPartitionColumn = new ColumnDef(
                 columnName, typeDef, null, false, null, null, true,
                 ColumnDef.DefaultValueDef.NOT_SET, null, adjustedPartitionByExpr, "");
-        return generatedPartitionColumn.toColumn(null);
+        return Column.fromColumnDef(null, generatedPartitionColumn);
     }
 
     /**

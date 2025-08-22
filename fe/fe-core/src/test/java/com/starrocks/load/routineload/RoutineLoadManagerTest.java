@@ -36,10 +36,10 @@ package com.starrocks.load.routineload;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -59,10 +59,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
@@ -998,15 +998,6 @@ public class RoutineLoadManagerTest {
                 new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
         Assertions.assertNotNull(leaderLoadManager.getJob(discardJobId));
         Assertions.assertNotNull(leaderLoadManager.getJob(goodJobId));
-
-        // 3. save image & reload
-        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
-        leaderLoadManager.write(pseudoImage.getDataOutputStream());
-        RoutineLoadMgr restartedRoutineLoadManager = new RoutineLoadMgr();
-        restartedRoutineLoadManager.readFields(pseudoImage.getDataInputStream());
-        // discard expired job
-        Assertions.assertNull(restartedRoutineLoadManager.getJob(discardJobId));
-        Assertions.assertNotNull(restartedRoutineLoadManager.getJob(goodJobId));
 
         // 4. clean expire
         leaderLoadManager.cleanOldRoutineLoadJobs();

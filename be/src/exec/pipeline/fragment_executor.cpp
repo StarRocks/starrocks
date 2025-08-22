@@ -273,6 +273,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         _query_ctx->set_is_runtime_filter_coordinator(true);
         exec_env->runtime_filter_worker()->open_query(query_id, query_options, *runtime_filter_params, true);
     }
+    _fragment_ctx->prepare_pass_through_chunk_buffer();
     _fragment_ctx->set_report_when_finish(request.unique().params.__isset.report_when_finish &&
                                           request.unique().params.report_when_finish);
 
@@ -675,7 +676,8 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                             delete ctx;
                         }
                     });
-                    RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+                    RETURN_IF_ERROR(
+                            exec_env->stream_context_mgr()->put_channel_context(label, table_name, channel_id, ctx));
                 }
                 stream_load_contexts.push_back(ctx);
             }
@@ -853,7 +855,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
             auto* profile = fragment_ctx->runtime_state()->runtime_profile();
 
-            auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(profile, "FragmentInstancePrepareTime", 10_ms);
+            auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(profile, "FragmentInstancePrepareTime", 1_ms);
             COUNTER_SET(prepare_timer, profiler.prepare_time);
 
             auto* prepare_query_ctx_timer =
@@ -967,6 +969,7 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
             if (fragment_has_registed) {
                 _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
             }
+            _fragment_ctx->destroy_pass_through_chunk_buffer();
             _fragment_ctx.reset();
         }
         _query_ctx->count_down_fragments();
@@ -982,7 +985,9 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
 
     QueryContextPtr query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (query_ctx == nullptr) {
-        return Status::InternalError(fmt::format("QueryContext not found for query_id: {}", print_id(query_id)));
+        // query can be cancelled because of timeout or short-circuited query like `limit`.
+        // return Status::InternalError(fmt::format("QueryContext not found for query_id: {}", print_id(query_id)));
+        return Status::OK();
     }
     FragmentContextPtr fragment_ctx = query_ctx->fragment_mgr()->get(instance_id);
     if (fragment_ctx == nullptr) {

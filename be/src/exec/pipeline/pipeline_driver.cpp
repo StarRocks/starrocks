@@ -532,9 +532,9 @@ void PipelineDriver::runtime_report_action() {
     _update_driver_level_timer();
 
     for (auto& op : _operators) {
-        COUNTER_SET(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() +
-                                              op->_finishing_timer->value() + op->_finished_timer->value() +
-                                              op->_close_timer->value());
+        COUNTER_SET(op->_total_timer, COUNTER_VALUE(op->_pull_timer) + COUNTER_VALUE(op->_push_timer) +
+                                              COUNTER_VALUE(op->_finishing_timer) + COUNTER_VALUE(op->_finished_timer) +
+                                              COUNTER_VALUE(op->_close_timer));
         op->update_metrics(_fragment_ctx->runtime_state());
     }
 }
@@ -727,10 +727,11 @@ void PipelineDriver::_update_driver_level_timer() {
     COUNTER_SET(_total_timer, static_cast<int64_t>(_total_timer_sw->elapsed_time()));
 
     // Schedule Time
-    COUNTER_SET(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
+    COUNTER_SET(_schedule_timer,
+                COUNTER_VALUE(_total_timer) - COUNTER_VALUE(_active_timer) - COUNTER_VALUE(_pending_timer));
 
     // Overhead Time
-    int64_t overhead_time = _active_timer->value();
+    int64_t overhead_time = COUNTER_VALUE(_active_timer);
     RuntimeProfile* profile = _runtime_profile.get();
     std::vector<RuntimeProfile*> operator_profiles;
     profile->get_children(&operator_profiles);
@@ -738,8 +739,7 @@ void PipelineDriver::_update_driver_level_timer() {
         auto* common_metrics = operator_profile->get_child("CommonMetrics");
         DCHECK(common_metrics != nullptr);
         auto* total_timer = common_metrics->get_counter("OperatorTotalTime");
-        DCHECK(total_timer != nullptr);
-        overhead_time -= total_timer->value();
+        overhead_time -= COUNTER_VALUE(total_timer);
     }
 
     if (overhead_time < 0) {
@@ -891,8 +891,9 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
         QUERY_TRACE_SCOPED(op->get_name(), "close");
         op->close(state);
     }
-    COUNTER_SET(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() + op->_finishing_timer->value() +
-                                          op->_finished_timer->value() + op->_close_timer->value());
+    COUNTER_SET(op->_total_timer, COUNTER_VALUE(op->_pull_timer) + COUNTER_VALUE(op->_push_timer) +
+                                          COUNTER_VALUE(op->_finishing_timer) + COUNTER_VALUE(op->_finished_timer) +
+                                          COUNTER_VALUE(op->_close_timer));
     return Status::OK();
 }
 

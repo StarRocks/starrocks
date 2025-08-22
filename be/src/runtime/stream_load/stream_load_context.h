@@ -261,8 +261,6 @@ public:
     int64_t total_received_data_cost_nanos = 0;
     int64_t received_data_cost_nanos = 0;
     int64_t write_data_cost_nanos = 0;
-    std::atomic<int64_t> begin_txn_ts = 0;
-    std::atomic<int64_t> last_active_ts = 0;
 
     std::string error_url;
     std::string rejected_record_path;
@@ -277,9 +275,6 @@ public:
     std::vector<TTabletFailInfo> fail_infos;
 
     std::mutex lock;
-    // Whether the transaction stream load is detected as timeout. This flag is used to tell
-    // the new request that the transaction is timeout and will be aborted
-    std::atomic<bool> timeout_detected{false};
 
     std::shared_ptr<MessageBodySink> body_sink;
     bool need_rollback = false;
@@ -289,9 +284,6 @@ public:
     std::future<Status> future = promise.get_future();
 
     Status status;
-
-    int32_t idle_timeout_sec = -1;
-    int channel_id = -1;
 
     // buffer for reading data from ev_buffer
     static constexpr size_t kDefaultBufferSize = 64 * 1024;
@@ -303,6 +295,22 @@ public:
 
     int64_t load_deadline_sec = -1;
     std::unique_ptr<ConcurrentLimiterGuard> _http_limiter_guard;
+
+    // =================== transaction stream load ===================
+
+    // Transaction begin timestamp for timeout detection
+    std::atomic<int64_t> begin_txn_ts = 0;
+    // Last active timestamp for idle timeout detection
+    std::atomic<int64_t> last_active_ts = 0;
+    // The timeout in seconds for a prepared transaction timeout
+    int32_t prepared_timeout_second = -1;
+    // Whether the transaction stream load is detected as timeout. This flag is used to tell
+    // the new request that the transaction is timeout and will be aborted
+    std::atomic<bool> timeout_detected{false};
+    // Idle transaction timeout in seconds
+    int32_t idle_timeout_sec = -1;
+    // Channel ID for multi-channel stream load
+    int channel_id = -1;
 
     // =================== merge commit ===================
 

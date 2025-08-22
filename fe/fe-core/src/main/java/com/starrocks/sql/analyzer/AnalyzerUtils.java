@@ -76,6 +76,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.lake.LakeMaterializedView;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -351,6 +353,25 @@ public class AnalyzerUtils {
                 children.add(head);
             }
         }
+    }
+
+    /**
+     * Shallow copy the table object for query purpose
+     */
+    public static OlapTable getShadowCopyTable(OlapTable olapTable) {
+        OlapTable copiedTable;
+        if (olapTable instanceof LakeMaterializedView) {
+            copiedTable = new LakeMaterializedView();
+        } else if (olapTable instanceof MaterializedView) {
+            copiedTable = new MaterializedView();
+        } else if (olapTable instanceof LakeTable) {
+            copiedTable = new LakeTable();
+        } else {
+            copiedTable = new OlapTable();
+        }
+
+        olapTable.copyOnlyForQuery(copiedTable);
+        return copiedTable;
     }
 
     private static class DBCollector implements AstVisitor<Void, Void> {
@@ -914,8 +935,7 @@ public class AnalyzerUtils {
             int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
             boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
                     relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
-            // TODO: not support LakeTable right now
-            if ((table.isOlapTableOrMaterializedView() && useNonLockOptimization)) {
+            if ((table.isNativeTableOrMaterializedView() && useNonLockOptimization)) {
                 // OlapTable can be copied via copyOnlyForQuery
                 return null;
             } else if (IMMUTABLE_EXTERNAL_TABLES.contains(table.getType())) {
@@ -987,7 +1007,6 @@ public class AnalyzerUtils {
             return null;
         }
 
-        // TODO: support cloud native table and mv
         private Table copyTable(Table originalTable) {
             if (!(originalTable instanceof OlapTable)) {
                 return null;
@@ -999,17 +1018,8 @@ public class AnalyzerUtils {
                 return existed;
             }
 
-            OlapTable copied = null;
-            if (originalTable.isOlapTable()) {
-                copied = new OlapTable();
-            } else if (originalTable.isOlapMaterializedView()) {
-                copied = new MaterializedView();
-            } else {
-                return null;
-            }
-
+            OlapTable copied = getShadowCopyTable(table);
             olapTables.add(table);
-            table.copyOnlyForQuery(copied);
             idMap.put(tableIndexId, copied);
             return copied;
         }
@@ -1246,9 +1256,14 @@ public class AnalyzerUtils {
                 int len = ScalarType.getOlapMaxVarcharLength();
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
-                    if (scalarType.getLength() > 0) {
-                        // Catalog's varchar length may larger than olap's max varchar length
-                        len = Integer.min(scalarType.getLength(), ScalarType.getOlapMaxVarcharLength());
+                    if (Config.transform_type_prefer_string_for_varchar) {
+                        // always use max varchar length for varchar type if transform_type_prefer_string_for_varchar is set.
+                        len = ScalarType.getOlapMaxVarcharLength();
+                    } else {
+                        if (scalarType.getLength() > 0) {
+                            // Catalog's varchar length may larger than olap's max varchar length
+                            len = Integer.min(scalarType.getLength(), ScalarType.getOlapMaxVarcharLength());
+                        }
                     }
                 }
                 newType = ScalarType.createVarcharType(len);
@@ -1383,7 +1398,8 @@ public class AnalyzerUtils {
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
                     distributionDesc, (ExpressionRangePartitionInfo) partitionInfo);
         } else {
-            throw new AnalysisException("Unsupported partition type " + partitionDesc.getType());
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            throw new AnalysisException("Unsupported partition type " + partitionInfo.getType());
         }
     }
 

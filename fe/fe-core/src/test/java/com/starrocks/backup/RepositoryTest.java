@@ -35,7 +35,6 @@
 package com.starrocks.backup;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
@@ -52,17 +51,11 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.sql.Timestamp;
 import java.util.List;
-import java.util.Map;
 
 public class RepositoryTest {
 
@@ -323,38 +316,4 @@ public class RepositoryTest {
             Assertions.fail();
         }
     }
-
-    @Test
-    public void testPersist() {
-        Map<String, String> properties = Maps.newHashMap();
-        properties.put("bos_endpoint", "http://gz.bcebos.com");
-        properties.put("bos_accesskey", "a");
-        properties.put("bos_secret_accesskey", "b");
-        BlobStorage storage = new BlobStorage(brokerName, properties);
-        repo = new Repository(10000, "repo", false, location, storage);
-
-        File file = new File("./Repository");
-        try {
-            DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-            repo.write(out);
-            out.flush();
-            out.close();
-
-            DataInputStream in = new DataInputStream(new FileInputStream(file));
-            Repository newRepo = Repository.read(in);
-            in.close();
-
-            Assertions.assertEquals(repo.getName(), newRepo.getName());
-            Assertions.assertEquals(repo.getId(), newRepo.getId());
-            Assertions.assertEquals(repo.getLocation(), newRepo.getLocation());
-
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-            Assertions.fail();
-        } finally {
-            file.delete();
-        }
-    }
-
 }

@@ -27,6 +27,9 @@
 
 namespace starrocks {
 
+// Forward declarations
+struct JsonPath;
+
 extern const re2::RE2 SIMPLE_JSONPATH_PATTERN;
 
 struct SimpleJsonPath {
@@ -108,6 +111,13 @@ public:
     DEFINE_VECTORIZED_FN(json_exists);
 
     /**
+     * @param: [json_object, json_value]
+     * @paramType: [JsonColumn, JsonColumn]
+     * @return: BooleanColumn
+     */
+    DEFINE_VECTORIZED_FN(json_contains);
+
+    /**
      * Build json object from json values
      * @param: [field_name, field_value, ...]
      * @paramType: [JsonColumn, JsonColumn, ...]
@@ -151,6 +161,13 @@ public:
      * 
      */
     DEFINE_VECTORIZED_FN(json_keys);
+
+    /**
+     * Remove data from a JSON document at one or more specified JSON paths
+     * @param JSON, JSONPath, [JSONPath, ...]
+     * @return JSON with specified paths removed
+     */
+    DEFINE_VECTORIZED_FN(json_remove);
 
     /**
      * Return json built from struct/map
@@ -223,6 +240,9 @@ private:
 
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
                                     std::vector<SimpleJsonPath>* parsed_paths);
+
+    // Helper function to check if target JSON contains candidate JSON
+    static bool json_value_contains(JsonValue* target, JsonValue* candidate);
 };
 
 } // namespace starrocks

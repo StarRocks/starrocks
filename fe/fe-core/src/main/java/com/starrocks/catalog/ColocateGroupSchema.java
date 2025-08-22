@@ -43,9 +43,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.common.MetaUtils;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -139,30 +136,6 @@ public class ColocateGroupSchema implements Writable {
         }
     }
 
-    public static ColocateGroupSchema read(DataInput in) throws IOException {
-        ColocateGroupSchema schema = new ColocateGroupSchema();
-        schema.readFields(in);
-        return schema;
-    }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        groupId.write(out);
-        out.writeInt(distributionColTypes.size());
-        for (Type type : distributionColTypes) {
-            ColumnType.write(out, type);
-        }
-        out.writeInt(bucketsNum);
-        out.writeShort(replicationNum);
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        groupId = GroupId.read(in);
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            distributionColTypes.add(ColumnType.read(in));
-        }
-        bucketsNum = in.readInt();
-        replicationNum = in.readShort();
-    }
 }

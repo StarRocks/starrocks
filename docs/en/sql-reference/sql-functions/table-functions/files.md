@@ -217,7 +217,7 @@ From v3.2 onwards, FILES() supports automatic schema detection and unionization 
 
 You can configure the sampling rule using the following parameters:
 
-- `auto_detect_sample_files`: the number of random data files to sample in each batch. Range: [0, + ∞]. Default: `1`.
+- `auto_detect_sample_files`: the number of random data files to sample in each batch. By default, the first and last files are selected. Range: [0, + ∞]. Default: `2`.
 - `auto_detect_sample_rows`: the number of data rows to scan in each sampled data file. Range: [0, + ∞]. Default: `500`.
 
 After the sampling, StarRocks unionizes the columns from all the data files according to these rules:

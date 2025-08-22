@@ -43,17 +43,15 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.TraceManager;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -62,7 +60,6 @@ import org.apache.hadoop.util.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
@@ -386,13 +383,7 @@ public abstract class AlterJobV2 implements Writable {
         }
     }
 
-    public static AlterJobV2 read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, AlterJobV2.class);
-    }
-
     public abstract Optional<Long> getTransactionId();
-
 
     /**
      * Schema change will build a new MaterializedIndexMeta, we need rebuild it(add extra original meta)

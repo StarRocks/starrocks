@@ -1,0 +1,86 @@
+-- name: test_encode_sort_key_json
+CREATE DATABASE test_encode_sort_key_json;
+USE test_encode_sort_key_json;
+
+-- Create a table with JSON data types and a single generated sort key column
+-- The sort key extracts specific fields from JSON and combines them for efficient sorting
+CREATE TABLE `json_test_table` (
+  `id` int(11) NOT NULL COMMENT "",
+  `json_data` json ,
+  `json_array` json ,
+  `json_nested` json,
+  `sort_key` varbinary(1024) AS (
+    encode_sort_key(
+      get_json_int(json_data, '$.age'),
+      get_json_string(json_data, '$.name'),
+      get_json_string(json_data, '$.city'),
+      get_json_string(json_array, '$[0]'),
+      get_json_double(json_nested, '$.user.profile.score')
+    )
+  ) COMMENT "Auto-generated sort key from extracted JSON fields"
+) ENGINE=OLAP 
+DISTRIBUTED BY HASH(sort_key) BUCKETS 2
+ORDER BY (sort_key)
+PROPERTIES ( "replication_num" = "1");
+
+-- Insert test data with various JSON structures
+-- The sort key will be automatically generated from extracted JSON fields
+INSERT INTO json_test_table (id, json_data, json_array, json_nested) VALUES
+(1, parse_json('{"name": "Alice", "age": 25, "city": "New York"}'), 
+     parse_json('["apple", "banana", "cherry"]'),
+     parse_json('{"user": {"id": 101, "profile": {"verified": true, "score": 95.5}}}')),
+(2, parse_json('{"name": "Bob", "age": 30, "city": "Los Angeles"}'), 
+     parse_json('["orange", "grape"]'),
+     parse_json('{"user": {"id": 102, "profile": {"verified": false, "score": 87.2}}}')),
+(3, parse_json('{"name": "Charlie", "age": 28, "city": "Chicago"}'), 
+     parse_json('["mango", "pineapple", "kiwi", "strawberry"]'),
+     parse_json('{"user": {"id": 103, "profile": {"verified": true, "score": 92.8}}}')),
+(4, parse_json('{"name": "Diana", "age": 22, "city": "Miami"}'), 
+     parse_json('["pear"]'),
+     parse_json('{"user": {"id": 104, "profile": {"verified": true, "score": 89.1}}}')),
+(5, parse_json('{"name": "Eve", "age": 35, "city": "Seattle"}'), 
+     parse_json('["blueberry", "raspberry", "blackberry"]'),
+     parse_json('{"user": {"id": 105, "profile": {"verified": false, "score": 78.9}}}'));
+
+-- Test 1: Verify that the generated sort key column is automatically populated
+-- This shows how encode_sort_key extracts and combines JSON fields
+SELECT id, 
+       json_data, 
+       get_json_int(json_data, '$.age') as age,
+       get_json_string(json_data, '$.name') as name,
+       get_json_string(json_data, '$.city') as city,
+       get_json_string(json_array, '$[0]') as first_fruit,
+       get_json_double(json_nested, '$.user.profile.score') as score,
+       sort_key,
+       length(sort_key) as sort_key_length
+FROM json_test_table 
+ORDER BY id;
+
+SELECT id, json_data, json_array
+FROM json_test_table 
+ORDER BY sort_key;
+
+SELECT id, json_data, json_array
+FROM json_test_table 
+ORDER BY sort_key DESC;
+
+SELECT id, json_data, json_array
+FROM json_test_table 
+WHERE sort_key > (SELECT sort_key FROM json_test_table WHERE id = 2)
+ORDER BY id;
+
+INSERT INTO json_test_table (id, json_data, json_array, json_nested) VALUES
+(6, NULL, parse_json('["test"]'), parse_json('{"test": null}')),
+(7, parse_json('{"age": 40}'), parse_json('[]'), parse_json('{"user": {"id": 106}}'));
+
+SELECT id, 
+       get_json_int(json_data, '$.age') as age
+FROM json_test_table 
+ORDER BY id;
+
+SELECT id, json_data, json_array
+FROM json_test_table 
+ORDER BY sort_key;
+
+-- Clean up
+DROP DATABASE test_encode_sort_key_json;

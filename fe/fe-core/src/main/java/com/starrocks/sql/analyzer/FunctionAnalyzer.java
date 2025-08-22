@@ -38,11 +38,11 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.combinator.AggStateCombinator;
 import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
+import com.starrocks.catalog.combinator.StateFunctionCombinator;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -156,7 +156,7 @@ public class FunctionAnalyzer {
         }
         Function fn = functionCallExpr.getFn();
         final String funcName = fnName.getFunction();
-        if (fn instanceof AggStateCombinator) {
+        if (fn instanceof StateFunctionCombinator) {
             // analyze `_state` combinator function by using its arg function
             FunctionName argFuncName = new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
             analyzeBuiltinAggFunction(argFuncName, functionCallExpr.getParams(), functionCallExpr);
@@ -1115,10 +1115,7 @@ public class FunctionAnalyzer {
                 newFn.setisAnalyticFn(((AggregateFunction) fn).isAnalyticFn());
                 fn = newFn;
             }
-        } else if (fnName.endsWith(FunctionSet.AGG_STATE_SUFFIX)
-                || fnName.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX)
-                || fnName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)
-                || fnName.endsWith(FunctionSet.IF)) {
+        } else if (AggStateUtils.isAggStateCombinator(fnName)) {
             Function func = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (func == null) {
                 return null;

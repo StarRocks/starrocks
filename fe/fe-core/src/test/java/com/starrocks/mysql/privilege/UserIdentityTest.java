@@ -17,7 +17,7 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.catalog.UserIdentity;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

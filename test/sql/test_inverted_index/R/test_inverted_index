@@ -45,9 +45,9 @@ CREATE TABLE `t_test_basic_create_index_dup` (
   `id5` string NOT NULL COMMENT "",
   `id6` bigint(20) NOT NULL COMMENT "",
   `id7` string NOT NULL COMMENT ""
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(`id1`)
-DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
 "enable_persistent_index" = "true",
@@ -98,6 +98,12 @@ function: wait_alter_table_finish()
 -- result:
 None
 -- !result
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_test_basic_create_index_replicated` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `id2` bigint(20) NOT NULL COMMENT "",
@@ -117,7 +123,27 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: GIN does not support replicated mode.')
+-- !result
+show create table t_test_basic_create_index_replicated;
+-- result:
+t_test_basic_create_index_replicated	CREATE TABLE `t_test_basic_create_index_replicated` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `id2` bigint(20) NOT NULL COMMENT "",
+  `id3` bigint(20) NOT NULL COMMENT "",
+  `id4` varchar(65533) NOT NULL COMMENT "",
+  `id5` varchar(65533) NOT NULL COMMENT "",
+  `id6` bigint(20) NOT NULL COMMENT "",
+  `id7` varchar(65533) NOT NULL COMMENT "",
+  INDEX gin_id4 (`id4`) USING GIN("imp_lib" = "clucene", "parser" = "none") COMMENT ''
+) ENGINE=OLAP 
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
 -- !result
 DROP TABLE t_test_basic_create_index_pk;
 -- result:
@@ -187,6 +213,26 @@ select count(*) from t_test_gin_index_query where query_english match '%ed vi%';
 0
 -- !result
 select count(*) from t_test_gin_index_query where query_english match '%teria%';
+-- result:
+1
+-- !result
+select count(*) from t_test_gin_index_query where query_english match_any "hello";
+-- result:
+3
+-- !result
+select count(*) from t_test_gin_index_query where query_english match_any "hello view test";
+-- result:
+5
+-- !result
+select count(*) from t_test_gin_index_query where query_chinese match_any "中文 视图 分析";
+-- result:
+3
+-- !result
+select count(*) from t_test_gin_index_query where query_english match_all "hello world";
+-- result:
+1
+-- !result
+select count(*) from t_test_gin_index_query where query_chinese match_all "物化 视图";
 -- result:
 1
 -- !result
@@ -302,6 +348,13 @@ SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match "AB%";
 -- result:
 1	ABC
 3	ABD
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match_any "AB";
+-- result:
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match_any "ABC ABD";
+-- result:
+2	abc
 -- !result
 DROP TABLE t_gin_index_single_predicate_none;
 -- result:
@@ -504,6 +557,47 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "AB%" 
 -- result:
 1	ABC
 -- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match_any "ABC";
+-- result:
+2	abc
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match_all "ABC";
+-- result:
+2	abc
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "ABC";
+-- result:
+1	ABC
+3	ABD
+4	This is Gin Index
+5	None
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match_any "abc ABC";
+-- result:
+2	abc
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "abc ABC";
+-- result:
+1	ABC
+3	ABD
+4	This is Gin Index
+5	None
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_all "abc ABC";
+-- result:
+1	ABC
+3	ABD
+4	This is Gin Index
+5	None
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "This Index";
+-- result:
+1	ABC
+2	abc
+3	ABD
+4	This is Gin Index
+5	None
+-- !result
 DROP TABLE t_gin_index_multiple_predicate_none;
 -- result:
 -- !result
@@ -544,7 +638,18 @@ SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match "th
 -- result:
 [REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_any "this abc";
+-- result:
+1	ABC
+2	abc
+4	This is Gin Index
+-- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column not match "this" AND text_column not match "abc";
+-- result:
+3	ABD
+5	None
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column not match_any "this abc";
 -- result:
 3	ABD
 5	None
@@ -554,6 +659,13 @@ SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "thi
 2	abc
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "%this%" AND text_column LIKE "%is%";
+-- result:
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_all "this Gin";
+-- result:
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_all "abc Gin";
 -- result:
 -- !result
 DROP TABLE t_gin_index_multiple_predicate_english;
@@ -996,6 +1108,68 @@ SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match NULL;
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
 -- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE upper(text_column) match_any "%CBD%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE lower(text_column) match_any "%cbd%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match_any "abc";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match_any "%abc%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_any CONCAT("ab", "c");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_any CONCAT("ab", "%");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_any "";
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_any NULL;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE upper(text_column) match_all "%CBD%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE lower(text_column) match_all "%cbd%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match_all "abc";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match_all "%abc%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_all CONCAT("ab", "c");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_all CONCAT("ab", "%");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_all "";
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_all NULL;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
 INSERT INTO t_complex_predicate_for_gin_english VALUES (1, "abc cbd");
 -- result:
 -- !result
@@ -1052,7 +1226,69 @@ E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must 
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match "";
 -- result:
 -- !result
-SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match NULL;
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match NULL;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE upper(text_column) match_any "%CBD%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE lower(text_column) match_any "%cbd%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match_any "abc";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match_any "%abc%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any CONCAT("ab", "c");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any CONCAT("ab", "%");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any "";
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any NULL;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE upper(text_column) match_all "%CBD%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE lower(text_column) match_all "%cbd%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match_all "abc";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match_all "%abc%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_all CONCAT("ab", "c");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_all CONCAT("ab", "%");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_all "";
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_all NULL;
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
 -- !result
@@ -1126,32 +1362,45 @@ PROPERTIES (
 );
 -- result:
 -- !result
-INSERT INTO t_upper_case_column_name VALUES (1, "b"),(2, "b"),(3, "b");
+INSERT INTO t_delete_and_column_prune VALUES (1, "b"),(2, "b"),(3, "b");
 -- result:
+E: (1064, 'Getting analyzing error. Detail message: Table t_delete_and_column_prune is not found.')
 -- !result
 SELECT id1 FROM t_upper_case_column_name WHERE `TeXt` MATCH "b";
 -- result:
-1
-2
-3
 -- !result
 SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH "b";
 -- result:
-1
-2
-3
 -- !result
 SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH "b";
 -- result:
-1
-2
-3
 -- !result
 SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH "b";
 -- result:
-1
-2
-3
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `TeXt` MATCH_ANY "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH_ANY "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH_ANY "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH_ANY "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `TeXt` MATCH_ALL "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH_ALL "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH_ALL "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH_ALL "b";
+-- result:
 -- !result
 DROP TABLE t_upper_case_column_name;
 -- result:
@@ -1242,7 +1491,15 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 IN ("ab
 -- result:
 1
 -- !result
-SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" AND v1 = "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" AND v1 LIKE "%abc%";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" AND v1 IN ("abc", "ab");
 -- result:
 1
 -- !result
@@ -1251,6 +1508,22 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATC
 1
 -- !result
 SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH_ANY "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH_ANY "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH_ANY "abc";
 -- result:
 1
 -- !result
@@ -1262,11 +1535,35 @@ SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" GROUP BY 
 -- result:
 [REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
+SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" GROUP BY v1;
+-- result:
+1
+-- !result
+SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v2 MATCH_ANY "abc" GROUP BY v2;
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
 SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" ORDER BY v1;
 -- result:
 1
 -- !result
 SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" ORDER BY v2;
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" ORDER BY v1;
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH_ANY "abc" ORDER BY v2;
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ALL "abc" ORDER BY v1;
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH_ALL "abc" ORDER BY v2;
 -- result:
 [REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
@@ -1297,6 +1594,13 @@ INSERT INTO t_create_mv_with_match VALUES (1, "abc", "bcd");
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW mv AS SELECT id, v1, v2 FROM t_create_mv_with_match WHERE v1 MATCH "abc";
+-- result:
+-- !result
+function: wait_materialized_view_cancel()
+-- result:
+None
+-- !result
+CREATE MATERIALIZED VIEW mv1 AS SELECT id, v1, v2 FROM t_create_mv_with_match WHERE v1 MATCH_ANY "abc bdc";
 -- result:
 -- !result
 function: wait_materialized_view_cancel()
@@ -1362,110 +1666,7 @@ SELECT * FROM t_alter_gin_col_into_other_type;
 DROP TABLE t_alter_gin_col_into_other_type;
 -- result:
 -- !result
--- name: test_gin_var @sequential
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
-CREATE TABLE `t_gin_var` (
-  `id` bigint(20) NOT NULL COMMENT "",
-  `v1` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
-) ENGINE=OLAP
-DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 1
-PROPERTIES (
-"replication_num" = "1",
-"enable_persistent_index" = "true",
-"replicated_storage" = "false",
-"compression" = "LZ4"
-);
--- result:
--- !result
-INSERT INTO t_gin_var VALUES (1, "abc bcd");
--- result:
--- !result
-SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
--- result:
-1	abc bcd
--- !result
-SET enable_gin_filter = false;
--- result:
--- !result
-SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
--- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
--- !result
-SET enable_gin_filter = true;
--- result:
--- !result
-SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
--- result:
-1	abc bcd
--- !result
-DROP TABLE t_gin_var;
--- result:
--- !result
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "false");
--- result:
--- !result
-CREATE TABLE `t_gin_var` (
-  `id` bigint(20) NOT NULL COMMENT "",
-  `v1` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
-) ENGINE=OLAP
-DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 1
-PROPERTIES (
-"replication_num" = "1",
-"enable_persistent_index" = "true",
-"replicated_storage" = "false",
-"compression" = "LZ4"
-);
--- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true.')
--- !result
-CREATE TABLE `t_gin_var` (
-  `id` bigint(20) NOT NULL COMMENT "",
-  `v1` varchar(255) NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 1
-PROPERTIES (
-"replication_num" = "1",
-"enable_persistent_index" = "true",
-"replicated_storage" = "false",
-"compression" = "LZ4"
-);
--- result:
--- !result
-ALTER TABLE t_gin_var add index idx (v1) USING GIN('parser' = 'standard');
--- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true.')
--- !result
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
-DROP TABLE t_gin_var;
--- result:
--- !result
-CREATE TABLE `t_gin_var` (
-  `id` bigint(20) NOT NULL COMMENT "",
-  `v1` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
-) ENGINE=OLAP
-DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 1
-PROPERTIES (
-"replication_num" = "1",
-"enable_persistent_index" = "true",
-"replicated_storage" = "false",
-"compression" = "LZ4"
-);
--- result:
--- !result
-DROP TABLE t_gin_var;
--- result:
--- !result
+
 -- name: test_gin_match_empty
 CREATE TABLE `t_gin_match_empty` (
   `k` BIGINT NOT NULL COMMENT "",
@@ -1475,7 +1676,7 @@ CREATE TABLE `t_gin_match_empty` (
    INDEX idx1 (v1) USING GIN ('parser' = 'english'),
    INDEX idx2 (v2) USING GIN ('parser' = 'chinese'),
    INDEX idx3 (v3) USING GIN ('parser' = 'standard')
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1
 PROPERTIES (
@@ -1498,6 +1699,30 @@ SELECT count(*) FROM t_gin_match_empty WHERE v2 MATCH "";
 0
 -- !result
 SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH "";
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v1 MATCH_ANY "";
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v2 MATCH_ANY "";
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH_ANY "";
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v1 MATCH_ALL "";
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v2 MATCH_ALL "";
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH_ALL "";
 -- result:
 0
 -- !result

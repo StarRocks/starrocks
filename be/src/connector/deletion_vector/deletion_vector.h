@@ -15,7 +15,7 @@
 #pragma once
 
 #include "common/status.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "fs/fs.h"
 
 namespace starrocks {

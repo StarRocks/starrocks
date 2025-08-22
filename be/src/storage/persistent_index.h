@@ -100,14 +100,16 @@ struct IOStat {
     uint64_t flush_or_wal_cost = 0;
     uint64_t compaction_cost = 0;
     uint64_t reload_meta_cost = 0;
+    uint64_t total_file_size = 0;
 
     std::string print_str() {
         return fmt::format(
                 "IOStat read_iops: {} filtered_kv_cnt: {} get_in_shard_cost: {} read_io_bytes: {} "
                 "l0_write_cost: {} "
-                "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {}",
+                "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {} total_file_size: "
+                "{}",
                 read_iops, filtered_kv_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost,
-                flush_or_wal_cost, compaction_cost, reload_meta_cost);
+                flush_or_wal_cost, compaction_cost, reload_meta_cost, total_file_size);
     }
 };
 
@@ -781,7 +783,8 @@ public:
     // just for unit test
     bool has_bf() { return _l1_vec.empty() ? false : _l1_vec[0]->has_bf(); }
 
-    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex,
+                            IOStat* stat = nullptr);
 
     Status TEST_major_compaction(PersistentIndexMetaPB& index_meta);
 

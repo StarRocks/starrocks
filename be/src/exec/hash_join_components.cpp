@@ -329,7 +329,9 @@ StatusOr<ChunkPtr> PartitionedHashJoinProberImpl::probe_remain(RuntimeState* sta
 }
 
 void PartitionedHashJoinProberImpl::reset(RuntimeState* runtime_state) {
-    _probers.clear();
+    for (auto& prober : _probers) {
+        prober->reset(runtime_state);
+    }
     _partition_input_channels.clear();
     _all_input_finished = false;
     _remain_partition_idx = 0;

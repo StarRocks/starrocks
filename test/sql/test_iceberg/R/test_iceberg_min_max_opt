@@ -324,6 +324,26 @@ None	None	None	None
 drop table ice_tbl_${uuid1} force;
 -- result:
 -- !result
+create external table ice_tbl_${uuid2}(
+    c_int int,
+    dt datetime
+) partition by (dt);
+-- result:
+-- !result
+INSERT INTO ice_tbl_${uuid2} (    
+       c_int, dt
+) VALUES
+(10, '2021-01-01 13:00:00'),
+(20, '2022-01-01 14:00:00');
+-- result:
+-- !result
+select min(dt), max(dt) from ice_tbl_${uuid2};
+-- result:
+2021-01-01 13:00:00	2022-01-01 14:00:00
+-- !result
+drop table ice_tbl_${uuid2} force;
+-- result:
+-- !result
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 -- result:
 -- !result

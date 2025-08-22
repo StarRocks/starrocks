@@ -213,7 +213,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### cbo_eq_base_type
 
-* **Description**: Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value. **This variable takes effect only for `=` and `!=` comparison.**
+* **Description**: Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `DECIMAL`, and VARCHAR is also a valid value. **This variable takes effect only for `=` and `!=` comparison.**
 * **Data type**: String
 * **Introduced in**: v2.5.14
 
@@ -536,6 +536,11 @@ Default value: `true`.
 * **Default**: false
 * **Introduced in**: v3.2.3
 
+### enable_spm_rewrite
+
+* **Description**: Whether to enable SQL Plan Manager (SPM) query rewrite. When enabled, StarRocks automatically rewrites queries to use bound query plans, improving query performance and stability.
+* **Default**: false
+
 ### enable_spill
 
 * **Description**: Whether to enable intermediate result spilling. Default: `false`. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries.
@@ -634,6 +639,12 @@ Default value: `true`.
 * **Default**: true
 * **Introduced in**: v3.3.0
 
+### enable_file_pagecache
+
+* **Description**: Whether to enable Page Cache for files in remote storage. Setting this to `true` enables the feature. Page Cache stores decompressed Parquet page data in memory. When the same page is accessed in subsequent queries, the data can be obtained directly from the cache, avoiding repetitive I/O operations and decompression. This feature works together with the Data Cache and uses the same memory module. When enabled, Page Caache can significantly improve query performance for workloads with repetitive page access patterns.
+* **Default**: true
+* **Introduced in**: v4.0
+
 ### enable_datacache_sharing
 
 * **Description**: Whether to enable Cache Sharing. Setting this to `true` enables the feature. Cache Sharing is used to support accessing cache data from other nodes through the network, which can help to reduce performance jitter caused by cache invalidation during cluster scaling. This variable takes effect only when the FE parameter `enable_trace_historical_node` is set to `true`.
@@ -671,6 +682,22 @@ Default value: `true`.
 * **Description**: Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. For a newly deployed v2.5 StarRocks cluster, the value is `true` by default. For a v2.5 cluster upgraded from v2.4, the value is `false`.
 * **Default**: false
 * **Introduced in**: v2.5
+
+### enable_bucket_aware_execution_on_lake
+
+* **Description**: Whether to enable bucket-aware execution for queries against data lakes (such as Iceberg tables). When this feature is enabled, the system optimizes query execution by leveraging bucketing information to reduce data shuffling and improve performance. This optimization is particularly effective for join operations and aggregations on bucketed tables.
+* **Default**: true
+* **Data type**: Boolean
+* **Introduced in**: v4.0
+
+### lake_bucket_assign_mode
+
+* **Description**: The bucket assignment mode for queries against tables in data lakes. This variable controls how buckets are distributed among worker nodes when bucket-aware execution takes effect during query execution. Valid values:
+  * `balance`: Distributes buckets evenly across worker nodes to achieve balanced workload and better performance.
+  * `elastic`: Uses consistent hashing to assign buckets to worker nodes, which can provide better load distribution in elastic environments.
+* **Default**: balance
+* **Data type**: String
+* **Introduced in**: v4.0
 
 ### enable_pipeline_engine
 

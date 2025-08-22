@@ -1,0 +1,1031 @@
+-- name: test_agg_compressed_key
+create table all_t0 (
+    c1 tinyint,
+    c2 smallint,
+    c3 int,
+    c4 bigint,
+    c5 largeint,
+    c6 date,
+    c7 datetime,
+    c8 string,
+    c9 string,
+    c10 char(100),
+    c11 float,
+    c12 double,
+    c13 tinyint NOT NULL,
+    c14 smallint NOT NULL,
+    c15 int NOT NULL,
+    c16 bigint NOT NULL,
+    c17 largeint NOT NULL,
+    c18 date NOT NULL,
+    c19 datetime NOT NULL,
+    c20 string NOT NULL,
+    c21 string NOT NULL,
+    c22 char(100) NOT NULL,
+    c23 float NOT NULL,
+    c24 double NOT NULL
+) DUPLICATE KEY(c1) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into all_t0 SELECT x%200, x%200, x%200, x%200, x%200, x, x, x%200, x, x, x, x, x % 8, x % 8, x % 16, x %200, x%200, '2020-02-02', '2020-02-02', x%200, x, x, x, x FROM TABLE(generate_series(1,  30000)) as g(x);
+-- result:
+-- !result
+insert into all_t0 values (null, null, null, null, null, null, null, null, null, null, null, null, -1,-2,-3,-4,-5, '2000-01-28', '2000-01-28', 'literal', 'literal', 'literal', -1, -1);
+-- result:
+-- !result
+insert into all_t0 values (-1, -2, -3, null, null, null, null, null, null, null, null, null, -1,-2,-3,-4,-5, '2000-01-28', '2000-01-28', 'literal', 'literal', 'literal', -1, -1);
+-- result:
+-- !result
+set pipeline_dop=2;
+-- result:
+-- !result
+select distinct c1,c2,c3,c4,c5,c6,c7,c8 from all_t0 order by 1,2,3,4,5,6,7,8 limit 100,3;
+-- result:
+None	161	161	161	161	None	None	161
+None	162	162	162	162	None	None	162
+None	163	163	163	163	None	None	163
+-- !result
+function: wait_global_dict_ready('c8', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c1', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c2', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c3', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c4', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c5', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c6', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c8', 'all_t0')
+-- result:
+
+-- !result
+select distinct c9,c10,c11,c12,c13,c14,c15,c16 from all_t0 order by 1,2,3,4,5,6,7,8 limit 100,3;
+-- result:
+10087	10087	10087.0	10087.0	7	7	7	87
+10088	10088	10088.0	10088.0	0	0	8	88
+10089	10089	10089.0	10089.0	1	1	9	89
+-- !result
+function: wait_min_max_stat_ready('c11', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c12', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c13', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c14', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c15', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c16', 'all_t0')
+-- result:
+
+-- !result
+select distinct c17,c18,c19,c20,c21,c22,c23,c24 from all_t0 order by 1,2,3,4,5,6,7,8 limit 100,3;
+-- result:
+0	2020-02-02	2020-02-02 00:00:00	0	27800	27800	27800.0	27800.0
+0	2020-02-02	2020-02-02 00:00:00	0	2800	2800	2800.0	2800.0
+0	2020-02-02	2020-02-02 00:00:00	0	28000	28000	28000.0	28000.0
+-- !result
+function: wait_global_dict_ready('c20', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c17', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c18', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c20', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c14', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c23', 'all_t0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c24', 'all_t0')
+-- result:
+
+-- !result
+select c1, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3;
+-- result:
+None	None
+-1	-1
+0	0
+-- !result
+select c1, c2, sum(c1) from all_t0 group by 1,2 order by 1,2,3 limit 3;
+-- result:
+None	None	None
+None	128	None
+None	129	None
+-- !result
+select c2, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+1	150
+-- !result
+select c3, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+1	150
+-- !result
+select c4, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+2	300
+-- !result
+select c5, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+2	300
+-- !result
+select c6, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+2000-01-03	103
+-- !result
+select c7, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+2000-01-03 00:00:00	103
+-- !result
+select c8, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+10	1500
+-- !result
+select c9, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+100	100
+-- !result
+select c13, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+2	148800
+-- !result
+select c14, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+2	148800
+-- !result
+select c14, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+2	148800
+-- !result
+select c16, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+2	300
+-- !result
+select c17, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+2	300
+-- !result
+select c18, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+-- !result
+select c19, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+-- result:
+-- !result
+select c2, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+199	None
+-- !result
+select c3, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+199	None
+-- !result
+select c4, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+199	None
+-- !result
+select c5, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+199	None
+-- !result
+select c6, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+2002-12-31	31
+-- !result
+select c7, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+2002-12-31 00:00:00	31
+-- !result
+select c8, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+99	14850
+-- !result
+select c9, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+9999	None
+-- !result
+select c13, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+7	160800
+-- !result
+select c14, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+7	160800
+-- !result
+select c14, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+7	160800
+-- !result
+select c16, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+199	None
+-- !result
+select c17, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+199	None
+-- !result
+select c18, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+2020-02-02	1219200
+-- !result
+select c19, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+-- result:
+2020-02-02 00:00:00	1219200
+-- !result
+select c3, c4, sum(c1) from all_t0 group by 1,2 order by 1, 2, 3 limit 30,1;
+-- result:
+28	28	4200
+-- !result
+select c3, c5, sum(c1) from all_t0 group by 1,2 order by 1, 2, 3 limit 30,1;
+-- result:
+28	28	4200
+-- !result
+select c3, c7, sum(c1) from all_t0 group by 1,2 order by 1, 2, 3 limit 30,1;
+-- result:
+2	2001-04-02 00:00:00	2
+-- !result
+select c1,c2,c3,c4,c5,c6,c8,sum(c1) from all_t0 group by 1,2,3,4,5,6,7 order by 1,2,3,4,5,6,7,8 limit 30, 1;
+-- result:
+None	129	129	129	129	2001-07-29	129	None
+-- !result
+select c1,c2,c3,c4,c5,c6,c8,c13,c14,c15,c16, sum(c1) from all_t0 group by 1,2,3,4,5,6,7,8,9,10,11 order by 1,2,3,4,5,6,7,8,9,10,11 limit 30, 1;
+-- result:
+None	129	129	129	129	2001-03-29	129	1	1	9	129	None
+-- !result
+select c1,c2,c3,c4,c5,c6,c8,c11,c12,c13,c14,c15,c16, sum(c1) from all_t0 group by 1,2,3,4,5,6,7,8,9,10,11,12,13 order by 1,2,3,4,5,6,7,8,9,10,11,12,13 limit 30,1;
+-- result:
+None	128	128	128	128	None	128	7128.0	7128.0	0	0	8	128	None
+-- !result
+select c1,c2,c3,c4,c5,c6,c8, sum(c1) from all_t0 where c10 > 0 group by 1,2,3,4,5,6,7 order by 1,2,3,4,5,6,7,8 limit 1;
+-- result:
+None	128	128	128	128	None	128	None
+-- !result
+create table all_decimal (
+    c1 decimal(4,2),
+    c2 decimal(10,2),
+    c3 decimal(27,9),
+    c4 decimal(38,5)
+) DUPLICATE KEY(c1) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into all_decimal SELECT x%100, x%200, x%200, x%200 FROM TABLE(generate_series(1,  30000)) as g(x);
+-- result:
+-- !result
+select distinct c1,c2,c3,c4 from all_decimal order by 1,2,3,4 limit 100,3;
+-- result:
+50.00	50.00	50.000000000	50.00000
+50.00	150.00	150.000000000	150.00000
+51.00	51.00	51.000000000	51.00000
+-- !result
+function: wait_min_max_stat_ready('c1', 'all_decimal')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c2', 'all_decimal')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c3', 'all_decimal')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c4', 'all_decimal')
+-- result:
+
+-- !result
+select c1, sum(c1) from all_decimal group by 1 order by 1, 2 limit 1;
+-- result:
+0.00	0.00
+-- !result
+select c2, sum(c1) from all_decimal group by 1 order by 1, 2 limit 1;
+-- result:
+0.00	0.00
+-- !result
+select c3, sum(c1) from all_decimal group by 1 order by 1, 2 limit 1;
+-- result:
+0E-9	0.00
+-- !result
+select c4, sum(c1) from all_decimal group by 1 order by 1, 2 limit 1;
+-- result:
+0.00000	0.00
+-- !result
+select c1, c2, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+-- result:
+0.00	0.00	0.00
+-- !result
+select c1, c3, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+-- result:
+0.00	0E-9	0.00
+-- !result
+select c1, c4, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+-- result:
+0.00	0.00000	0.00
+-- !result
+select c2, c3, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+-- result:
+0.00	0E-9	0.00
+-- !result
+select c2, c4, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+-- result:
+0.00	0.00000	0.00
+-- !result
+select c3, c4, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+-- result:
+0E-9	0.00000	0.00
+-- !result
+select c1, c2, c3, sum(c1) from all_decimal group by 1,2,3 order by 1,2,3,4 limit 1;
+-- result:
+0.00	0.00	0E-9	0.00
+-- !result
+select c1, c2, c4, sum(c1) from all_decimal group by 1,2,3 order by 1,2,3,4 limit 1;
+-- result:
+0.00	0.00	0.00000	0.00
+-- !result
+select c2, c3, c4, sum(c1) from all_decimal group by 1,2,3 order by 1,2,3,4 limit 1;
+-- result:
+0.00	0E-9	0.00000	0.00
+-- !result
+select c1, c2, c3, c4, sum(c1) from all_decimal group by 1,2,3,4 order by 1,2,3,4,5 limit 1;
+-- result:
+0.00	0.00	0E-9	0.00000	0.00
+-- !result
+create table all_numbers_t0 (
+    c1 tinyint,
+    c2 smallint,
+    c3 int,
+    c4 bigint,
+    c5 largeint,
+    c13 tinyint NOT NULL,
+    c14 smallint NOT NULL,
+    c15 int NOT NULL,
+    c16 bigint NOT NULL,
+    c17 largeint NOT NULL
+) DUPLICATE KEY(c1) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into all_numbers_t0 (c1, c2, c3, c4, c5, c13, c14, c15, c16, c17) values (-128, -32768, -2147483648, -9223372036854775808, -170141183460469231731687303715884105728, -128, -32768, -2147483648, -9223372036854775808, -170141183460469231731687303715884105728);
+-- result:
+-- !result
+insert into all_numbers_t0 (c1, c2, c3, c4, c5, c13, c14, c15, c16, c17) values (0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+-- result:
+-- !result
+insert into all_numbers_t0 (c1, c2, c3, c4, c5, c13, c14, c15, c16, c17) values (null, null, null, null, null, 0, 0, 0, 0, 0);
+-- result:
+-- !result
+insert into all_numbers_t0 SELECT x%128, x%200, x%200, x%200, x%200, x%128, x%200, x%200, x%200, x%200 FROM TABLE(generate_series(1,  30000)) as g(x);
+-- result:
+-- !result
+select distinct c17,c16,c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8,9,10 limit 30,1;
+-- result:
+1	1	1	1	97	1	1	1	1	97
+-- !result
+function: wait_min_max_stat_ready('c1', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c2', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c3', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c4', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c5', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c13', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c14', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c15', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c16', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c17', 'all_numbers_t0')
+-- result:
+
+-- !result
+select distinct c1 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+28
+-- !result
+select distinct c2 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+28
+-- !result
+select distinct c3 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+28
+-- !result
+select distinct c4 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+28
+-- !result
+select distinct c5 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+28
+-- !result
+select distinct c13 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+29
+-- !result
+select distinct c14 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+29
+-- !result
+select distinct c15 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+29
+-- !result
+select distinct c16 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+29
+-- !result
+select distinct c17 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+29
+-- !result
+select distinct c1 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+28
+-- !result
+select distinct c2,c1 from all_numbers_t0 order by 1,2 limit 30,1;
+-- result:
+1	97
+-- !result
+select distinct c3,c2,c1 from all_numbers_t0 order by 1,2,3 limit 30,1;
+-- result:
+1	1	97
+-- !result
+select distinct c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4 limit 30,1;
+-- result:
+1	1	1	97
+-- !result
+select distinct c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5 limit 30,1;
+-- result:
+1	1	1	1	97
+-- !result
+select distinct c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6 limit 30,1;
+-- result:
+1	25	25	25	25	1
+-- !result
+select distinct c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7 limit 30,1;
+-- result:
+1	97	1	1	1	1	97
+-- !result
+select distinct c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8 limit 30,1;
+-- result:
+1	1	97	1	1	1	1	97
+-- !result
+select distinct c16,c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8,9 limit 30,1;
+-- result:
+1	1	1	97	1	1	1	1	97
+-- !result
+select distinct c17,c16,c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8,9,10 limit 30,1;
+-- result:
+1	1	1	1	97	1	1	1	1	97
+-- !result
+insert into all_numbers_t0 (c1, c2, c3, c4, c5, c13, c14, c15, c16, c17) values (127, 32767, 2147483647, 9223372036854775807, 170141183460469231731687303715884105727, 127, 32767, 2147483647, 9223372036854775807, 170141183460469231731687303715884105727);
+-- result:
+-- !result
+select distinct c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5 limit 30,1;
+-- result:
+1	1	1	1	97
+-- !result
+function: wait_min_max_stat_ready('c1', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c2', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c3', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c4', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c5', 'all_numbers_t0')
+-- result:
+
+-- !result
+select distinct c17,c16,c15,c14,c13 from all_numbers_t0 order by 1,2,3,4,5 limit 30,1;
+-- result:
+1	1	1	1	105
+-- !result
+function: wait_min_max_stat_ready('c13', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c14', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c15', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c16', 'all_numbers_t0') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c17', 'all_numbers_t0')
+-- result:
+
+-- !result
+select distinct c1 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+28
+-- !result
+select distinct c2 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+28
+-- !result
+select distinct c3 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+28
+-- !result
+select distinct c4 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+28
+-- !result
+select distinct c5 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+28
+-- !result
+select distinct c13 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+29
+-- !result
+select distinct c14 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+29
+-- !result
+select distinct c15 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+29
+-- !result
+select distinct c16 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+29
+-- !result
+select distinct c17 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+29
+-- !result
+select distinct c1 from all_numbers_t0 order by 1 limit 30,1;
+-- result:
+28
+-- !result
+select distinct c2,c1 from all_numbers_t0 order by 1,2 limit 30,1;
+-- result:
+1	97
+-- !result
+select distinct c3,c2,c1 from all_numbers_t0 order by 1,2,3 limit 30,1;
+-- result:
+1	1	97
+-- !result
+select distinct c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4 limit 30,1;
+-- result:
+1	1	1	97
+-- !result
+select distinct c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5 limit 30,1;
+-- result:
+1	1	1	1	97
+-- !result
+select distinct c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6 limit 30,1;
+-- result:
+1	25	25	25	25	1
+-- !result
+select distinct c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7 limit 30,1;
+-- result:
+1	97	1	1	1	1	97
+-- !result
+select distinct c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8 limit 30,1;
+-- result:
+1	1	97	1	1	1	1	97
+-- !result
+select distinct c16,c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8,9 limit 30,1;
+-- result:
+1	1	1	97	1	1	1	1	97
+-- !result
+select distinct c17,c16,c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8,9,10 limit 30,1;
+-- result:
+1	1	1	1	97	1	1	1	1	97
+-- !result
+select distinct c2,c1 from all_numbers_t0 where c2 = 7 order by 1,2 limit 1;
+-- result:
+7	7
+-- !result
+CREATE TABLE agged_table (
+    k1 int,
+    k2 int sum 
+) 
+AGGREGATE KEY(k1)
+DISTRIBUTED BY HASH(k1)
+properties (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into agged_table values(1,1);
+-- result:
+-- !result
+insert into agged_table values(1,2);
+-- result:
+-- !result
+insert into agged_table values(1,3);
+-- result:
+-- !result
+insert into agged_table values(1,4);
+-- result:
+-- !result
+select distinct k2 from agged_table;
+-- result:
+10
+-- !result
+CREATE TABLE trand (
+    k1 int,
+    k2 int
+) DUPLICATE KEY(k1)
+properties (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into trand values(1,1);
+-- result:
+-- !result
+function: wait_min_max_stat_ready('k1', 'trand') 
+-- result:
+
+-- !result
+select k1 from trand group by k1;
+-- result:
+1
+-- !result
+insert into trand values(2,2);
+-- result:
+-- !result
+function: wait_min_max_stat_ready('k1', 'trand') 
+-- result:
+
+-- !result
+select k1 from trand group by k1;
+-- result:
+1
+2
+-- !result
+create table all_t1 (
+    c1 tinyint,
+    c2 tinyint,
+    c3 tinyint,
+    c4 tinyint,
+    c5 smallint,
+    c6 smallint,
+    c7 smallint,
+    c8 smallint,
+    c9 int,
+    c10 int,
+    c11 int,
+    c12 int,
+    c13 bigint,
+    c14 bigint,
+    c15 bigint,
+    c16 bigint,
+    c17 largeint,
+    c18 largeint,
+    c19 largeint,
+    c20 largeint,
+    c21 date,
+    c22 date,
+    c23 date,
+    c24 date
+) DUPLICATE KEY(c1) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into all_t1 SELECT x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x FROM TABLE(generate_series(1,  300000)) as g(x);
+-- result:
+-- !result
+select distinct c1, c2, c3, c4, c5, c6, c7, c8 from all_t1 order by 1,2,3,4,5,6,7,8 desc limit 1;
+-- result:
+None	None	None	None	None	None	None	None
+-- !result
+function: wait_min_max_stat_ready('c1','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c2','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c3','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c4','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c5','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c6','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c7','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c8','all_t1')
+-- result:
+
+-- !result
+select distinct c9, c10, c11, c12, c13, c14, c15, c16 from all_t1 order by 1,2,3,4,5,6,7,8 desc limit 1;
+-- result:
+1	1	1	1	1	1	1	1
+-- !result
+function: wait_min_max_stat_ready('c9','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c10','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c11','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c12','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c13','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c14','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c15','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c16','all_t1')
+-- result:
+
+-- !result
+select distinct c17, c18, c19, c20, c21, c22, c23, c24 from all_t1 order by 1,2,3,4,5,6,7,8 desc limit 1;
+-- result:
+1	1	1	1	None	None	None	None
+-- !result
+function: wait_min_max_stat_ready('c17','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c18','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c19','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c20','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c21','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c22','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c23','all_t1')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c24','all_t1')
+-- result:
+
+-- !result
+set group_concat_max_len=65535;
+-- result:
+-- !result
+WITH result AS (
+    SELECT c1, COUNT(*) AS cnt FROM all_t0 GROUP BY c1 ORDER BY c1 LIMIT 100
+) SELECT 'Test Case 1' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 1	92fea2997ab6f5848123aad560a2372d
+-- !result
+WITH result AS (
+    SELECT c2, COUNT(*) AS cnt FROM all_t0 GROUP BY c2 ORDER BY c2 LIMIT 100
+) SELECT 'Test Case 2' AS test_name, MD5(GROUP_CONCAT(CAST(c2 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 2	5e0364b0e8c29d819b0ddc37f5788777
+-- !result
+WITH result AS (
+    SELECT c1, COUNT(*) AS cnt FROM all_decimal GROUP BY c1 ORDER BY c1 LIMIT 100
+) SELECT 'Test Case 25' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 25	99fb9efb02cccfe487712d215c971085
+-- !result
+WITH result AS (
+    SELECT c1, COUNT(*) AS cnt FROM all_numbers_t0 GROUP BY c1 ORDER BY c1 LIMIT 100
+) SELECT 'Test Case 29' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 29	13318347ed379e157b0c9e9f4a46287a
+-- !result
+WITH result AS (
+    SELECT c1, c2, c3, COUNT(*) AS cnt FROM all_t0 GROUP BY c1, c2, c3 ORDER BY c1, c2, c3 LIMIT 100
+) SELECT 'Test Case 39' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(c2 AS STRING) || ':' || CAST(c3 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 39	7b5bec280b15d5daad3afb7639384c55
+-- !result
+WITH result AS (
+    SELECT c6, c7, c8, COUNT(*) AS cnt FROM all_t0 GROUP BY c6, c7, c8 ORDER BY c6, c7, c8 LIMIT 100
+) SELECT 'Test Case 40' AS test_name, MD5(GROUP_CONCAT(CAST(c6 AS STRING) || ':' || CAST(c7 AS STRING) || ':' || c8 || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 40	None
+-- !result
+WITH result AS (
+    SELECT c13, c14, c15, COUNT(*) AS cnt FROM all_t0 GROUP BY c13, c14, c15 ORDER BY c13, c14, c15 LIMIT 100
+) SELECT 'Test Case 42' AS test_name, MD5(GROUP_CONCAT(CAST(c13 AS STRING) || ':' || CAST(c14 AS STRING) || ':' || CAST(c15 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 42	58c87d5724326e8aa1e11ef3146af468
+-- !result
+WITH result AS (
+    SELECT c9, COUNT(*) AS cnt FROM all_t0 GROUP BY c9 ORDER BY c9 LIMIT 100
+) SELECT 'Test Case 51' AS test_name, MD5(GROUP_CONCAT(c9 || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 51	3fa440f2926d77a0ae8c62b069c8901b
+-- !result
+WITH result AS (
+    SELECT c9, COUNT(*) AS cnt FROM all_t1 GROUP BY c9 ORDER BY c9 LIMIT 1000
+) SELECT 'Test Case 52' AS test_name, MD5(GROUP_CONCAT(CAST(c9 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 52	7c155d4a239a8364a02031c69ff0b650
+-- !result
+WITH result AS (
+    SELECT c18, COUNT(*) AS cnt FROM all_t0 GROUP BY c18 ORDER BY c18 LIMIT 100
+) SELECT 'Test Case 53' AS test_name, MD5(GROUP_CONCAT(CAST(c18 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 53	5907f2825cc824723339da10e632159e
+-- !result
+WITH result AS (
+    SELECT c13, COUNT(*) AS cnt FROM all_t0 GROUP BY c13 ORDER BY c13 LIMIT 100
+) SELECT 'Test Case 54' AS test_name, MD5(GROUP_CONCAT(CAST(c13 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 54	c0ac02a2a0a37d496a0385a1ed1ad64a
+-- !result
+WITH result AS (
+    SELECT c1, COUNT(*) AS cnt FROM all_t0 GROUP BY c1 ORDER BY c1 NULLS FIRST LIMIT 100
+) SELECT 'Test Case 55' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 55	92fea2997ab6f5848123aad560a2372d
+-- !result
+WITH result AS (
+    SELECT c5, COUNT(*) AS cnt FROM all_t0 GROUP BY c5 ORDER BY c5 NULLS FIRST LIMIT 100
+) SELECT 'Test Case 56' AS test_name, MD5(GROUP_CONCAT(CAST(c5 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 56	2a2b8e9f52cf423ebd681b20084756e2
+-- !result
+WITH result AS (
+    SELECT c1, c5, COUNT(*) AS cnt FROM all_numbers_t0 GROUP BY c1, c5 ORDER BY c1, c5 NULLS FIRST LIMIT 100
+) SELECT 'Test Case 57' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(c5 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 57	107788565111f8e9685f3cf7591d4002
+-- !result
+WITH result AS (
+    SELECT c1, c13, COUNT(*) AS cnt FROM all_t0 GROUP BY c1, c13 ORDER BY c1, c13 NULLS FIRST LIMIT 100
+) SELECT 'Test Case 58' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(c13 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 58	2acc50a5bae0f273bc364c528a16a9cd
+-- !result
+WITH result AS (
+    SELECT c1, c2, COUNT(*) AS cnt FROM all_t0 GROUP BY ROLLUP (c1, c2) ORDER BY 1,2,3 LIMIT 100
+) SELECT 'Test Case 59' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(c2 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 59	fd49e7e8a32b37b74fc432872b18c863
+-- !result
+WITH result AS (
+    SELECT c3, c6, COUNT(*) AS cnt FROM all_t0 GROUP BY CUBE(c3, c6) ORDER BY 1,2,3 LIMIT 100
+) SELECT 'Test Case 60' AS test_name, MD5(GROUP_CONCAT(CAST(c3 AS STRING) || ':' || CAST(c6 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 60	None
+-- !result
+WITH result AS (
+    SELECT c13, c14, COUNT(*) AS cnt FROM all_numbers_t0 GROUP BY ROLLUP (c13, c14) ORDER BY 1,2,3 LIMIT 100
+) SELECT 'Test Case 61' AS test_name, MD5(GROUP_CONCAT(CAST(c13 AS STRING) || ':' || CAST(c14 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 61	a61b6bb35fcff5a0a66fe16f21141db6
+-- !result
+WITH result AS (
+    SELECT c1, COUNT(*) AS cnt FROM all_t0 GROUP BY c1 ORDER BY c1 LIMIT 100
+) SELECT 'Test Case 62' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 62	92fea2997ab6f5848123aad560a2372d
+-- !result
+WITH result AS (
+    SELECT c1, COUNT(*) AS cnt FROM all_t0 WHERE c1 > 200 GROUP BY c1 ORDER BY c1 LIMIT 100
+) SELECT 'Test Case 89' AS test_name, MD5('empty') AS result_hash FROM result LIMIT 1;
+-- result:
+-- !result
+WITH result AS (
+    SELECT k1, COUNT(*) AS cnt FROM trand GROUP BY k1 ORDER BY k1
+) SELECT 'Test Case 90' AS test_name, MD5(GROUP_CONCAT(CAST(k1 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 90	dd11f593a8cf98c3ef244e5ed6ffcce9
+-- !result
+WITH result AS (
+    SELECT c8, COUNT(*) AS cnt FROM all_t0 GROUP BY c8 ORDER BY c8 LIMIT 100
+) SELECT 'Test Case 93' AS test_name, MD5(GROUP_CONCAT(c8 || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 93	d45117aabb68f78a61f7346316ed59a9
+-- !result
+WITH result AS (
+    SELECT c20, COUNT(*) AS cnt FROM all_t0 GROUP BY c20 ORDER BY c20 LIMIT 100
+) SELECT 'Test Case 94' AS test_name, MD5(GROUP_CONCAT(c20 || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 94	7d955eb3810b33ae70204a7dd2a3947c
+-- !result
+WITH result AS (
+    SELECT c1, c5, c9, c13, c17, COUNT(*) AS cnt FROM all_t1 GROUP BY c1, c5, c9, c13, c17 ORDER BY c1, c5, c9, c13, c17 LIMIT 1000
+) SELECT 'Test Case 95' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(c5 AS STRING) || ':' || CAST(c9 AS STRING) || ':' || CAST(c13 AS STRING) || ':' || CAST(c17 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 95	None
+-- !result
+WITH result AS (
+    SELECT c1, c2, c3, c4, c5, COUNT(*) AS cnt FROM all_numbers_t0 GROUP BY c1, c2, c3, c4, c5 ORDER BY c1, c2, c3, c4, c5 LIMIT 100
+) SELECT 'Test Case 96' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(c2 AS STRING) || ':' || CAST(c3 AS STRING) || ':' || CAST(c4 AS STRING) || ':' || CAST(c5 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 96	e52c7896a7ad99c5f0267de784fbeb0f
+-- !result
+WITH result AS (
+    SELECT c13, c14, c15, c16, c17, COUNT(*) AS cnt FROM all_numbers_t0 GROUP BY c13, c14, c15, c16, c17 ORDER BY c13, c14, c15, c16, c17 LIMIT 100
+) SELECT 'Test Case 97' AS test_name, MD5(GROUP_CONCAT(CAST(c13 AS STRING) || ':' || CAST(c14 AS STRING) || ':' || CAST(c15 AS STRING) || ':' || CAST(c16 AS STRING) || ':' || CAST(c17 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+-- result:
+Test Case 97	4f9b50e5e27ed050425b72f98998db5c
+-- !result

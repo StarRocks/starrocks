@@ -39,7 +39,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.EsTable;

@@ -236,14 +236,14 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
         ASSERT_TRUE(st.ok()) << st.to_string();
     }
 
-    std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
+    std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_related_rs;
     StorageEngine::instance()->txn_manager()->get_txn_related_tablets(2222, 10, &tablet_related_rs);
     ASSERT_EQ(1, tablet_related_rs.size());
     TVersion version = 3;
     // publish version for txn
     auto tablet = tablet_manager->get_tablet(12345);
     for (auto& tablet_rs : tablet_related_rs) {
-        const RowsetSharedPtr& rowset = tablet_rs.second;
+        const RowsetSharedPtr& rowset = tablet_rs.second.first;
         auto st = StorageEngine::instance()->txn_manager()->publish_txn(10, tablet, 2222, version, rowset);
         // success because the related transaction is GCed
         ASSERT_TRUE(st.ok()) << st.to_string();

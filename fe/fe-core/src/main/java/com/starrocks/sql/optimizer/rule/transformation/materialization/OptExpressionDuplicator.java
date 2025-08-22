@@ -25,8 +25,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.UnionFind;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.MaterializationContext;
@@ -260,7 +261,7 @@ public class OptExpressionDuplicator {
                         return null;
                     }
                     scanBuilder.setTable(currentTable);
-                    TableVersionRange versionRange = TableVersionRange.withEnd(
+                    TvrVersionRange versionRange = TvrTableSnapshot.of(
                             Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
                                     .map(Snapshot::snapshotId));
                     scanBuilder.setTableVersionRange(versionRange);

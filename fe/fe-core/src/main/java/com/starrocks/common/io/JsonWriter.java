@@ -14,14 +14,6 @@
 
 package com.starrocks.common.io;
 
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataOutput;
-import java.io.IOException;
-
 public class JsonWriter implements Writable {
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 }

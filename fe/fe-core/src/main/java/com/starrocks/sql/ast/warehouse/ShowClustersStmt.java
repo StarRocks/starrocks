@@ -14,9 +14,6 @@
 
 package com.starrocks.sql.ast.warehouse;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
@@ -24,17 +21,6 @@ import com.starrocks.sql.parser.NodePosition;
 // show clusters of a warehouse
 public class ShowClustersStmt extends ShowStmt {
     private String warehouseName;
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("CNGroupId", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("CNGroupName", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("WorkerGroupId", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("ComputeNodeIds", ScalarType.createVarchar(4096)))
-                    .addColumn(new Column("Pending", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Running", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Enabled", ScalarType.createVarchar(10)))
-                    .addColumn(new Column("Properties", ScalarType.createVarchar(1024)))
-                    .build();
 
     public ShowClustersStmt(String warehouseName) {
         this(warehouseName, NodePosition.ZERO);
@@ -47,11 +33,6 @@ public class ShowClustersStmt extends ShowStmt {
 
     public String getWarehouseName() {
         return warehouseName;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
     }
 
     @Override

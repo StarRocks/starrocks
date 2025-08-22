@@ -72,10 +72,8 @@ import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.alter.dynamictablet.DynamicTablet;
-import com.starrocks.alter.dynamictablet.DynamicTabletJob;
 import com.starrocks.alter.dynamictablet.IdenticalTablet;
 import com.starrocks.alter.dynamictablet.MergingTablet;
-import com.starrocks.alter.dynamictablet.SplitTabletJob;
 import com.starrocks.alter.dynamictablet.SplittingTablet;
 import com.starrocks.authentication.FileGroupProvider;
 import com.starrocks.authentication.GroupProvider;
@@ -150,6 +148,9 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.encryption.EncryptionKeyPBAdapter;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
@@ -435,15 +436,16 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(ComputeResource.class, "clazz")
                     .registerSubtype(WarehouseComputeResource.class, "WarehouseComputeResource", true);
 
-    public static final RuntimeTypeAdapterFactory<DynamicTabletJob> DYNAMIC_TABLET_JOB_RUNTIME_TYPE_ADAPTER_FACTORY = 
-            RuntimeTypeAdapterFactory.of(DynamicTabletJob.class, "clazz")
-                    .registerSubtype(SplitTabletJob.class, "SplitTabletJob");
-
     public static final RuntimeTypeAdapterFactory<DynamicTablet> DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY = 
             RuntimeTypeAdapterFactory.of(DynamicTablet.class, "clazz")
                     .registerSubtype(SplittingTablet.class, "SplittingTablet")
                     .registerSubtype(MergingTablet.class, "MergingTablet")
                     .registerSubtype(IdenticalTablet.class, "IdenticalTablet");
+
+    public static final RuntimeTypeAdapterFactory<TvrVersionRange> TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(TvrVersionRange.class, "clazz")
+                    .registerSubtype(TvrTableSnapshot.class, "TvrTableSnapshot")
+                    .registerSubtype(TvrTableDelta.class, "TvrTableDelta");
 
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
@@ -507,8 +509,8 @@ public class GsonUtils {
             .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(DYNAMIC_TABLET_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

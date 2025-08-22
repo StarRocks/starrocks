@@ -16,7 +16,7 @@
 
 #include <vector>
 
-#include "exec/file_scanner.h"
+#include "exec/file_scanner/file_scanner.h"
 #include "runtime/descriptors.h"
 #include "storage/olap_common.h"
 #include "storage/push_utils.h"

@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
 import com.starrocks.sql.ast.PartitionValue;
@@ -61,7 +62,7 @@ public class RangePartitionInfoTest {
 
             partitionInfo = new RangePartitionInfo(partitionColumns);
             for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-                singleRangePartitionDesc.analyze(1, null);
+                PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc, 1, null);
                 partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns),
                         singleRangePartitionDesc, 20000L, false);
             }
@@ -80,7 +81,7 @@ public class RangePartitionInfoTest {
 
             partitionInfo = new RangePartitionInfo(partitionColumns);
             for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-                singleRangePartitionDesc.analyze(1, null);
+                PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc, 1, null);
                 partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns),
                         singleRangePartitionDesc, 20000L, false);
             }
@@ -99,7 +100,7 @@ public class RangePartitionInfoTest {
 
             partitionInfo = new RangePartitionInfo(partitionColumns);
             for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-                singleRangePartitionDesc.analyze(1, null);
+                PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc, 1, null);
                 partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns),
                         singleRangePartitionDesc, 20000L, false);
             }
@@ -124,7 +125,7 @@ public class RangePartitionInfoTest {
             partitionInfo = new RangePartitionInfo(partitionColumns);
 
             for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-                singleRangePartitionDesc.analyze(1, null);
+                PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc, 1, null);
                 partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns),
                         singleRangePartitionDesc, 20000L, false);
             }
@@ -148,7 +149,7 @@ public class RangePartitionInfoTest {
         partitionInfo = new RangePartitionInfo(partitionColumns);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-            singleRangePartitionDesc.analyze(1, null);
+            PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc, 1, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns),
                     singleRangePartitionDesc, 20000L, false);
         }
@@ -193,7 +194,7 @@ public class RangePartitionInfoTest {
         partitionInfo = new RangePartitionInfo(partitionColumns);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-            singleRangePartitionDesc.analyze(columns, null);
+            PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc, columns, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns),
                     singleRangePartitionDesc, 20000L, false);
         }
@@ -241,7 +242,7 @@ public class RangePartitionInfoTest {
                 } else if (partitionType != singleRangePartitionDesc.getPartitionKeyDesc().getPartitionType()) {
                     throw new AnalysisException("You can only use one of these methods to create partitions");
                 }
-                singleRangePartitionDesc.analyze(partitionColumns.size(), null);
+                PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc, partitionColumns.size(), null);
                 partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns),
                         singleRangePartitionDesc, 20000L, false);
             }
@@ -271,7 +272,7 @@ public class RangePartitionInfoTest {
         partitionInfo = new RangePartitionInfo(partitionColumns);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-            singleRangePartitionDesc.analyze(columns, null);
+            PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc, columns, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns),
                     singleRangePartitionDesc, 20000L, false);
         }
@@ -303,7 +304,7 @@ public class RangePartitionInfoTest {
             partitionInfo = new RangePartitionInfo(partitionColumns);
 
             for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-                singleRangePartitionDesc.analyze(columns, null);
+                PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc, columns, null);
                 partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns),
                         singleRangePartitionDesc, 20000L, false);
             }
@@ -334,7 +335,7 @@ public class RangePartitionInfoTest {
         partitionInfo = new RangePartitionInfo(partitionColumns);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-            singleRangePartitionDesc.analyze(columns, null);
+            PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc, columns, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns),
                     singleRangePartitionDesc, 20000L, false);
         }
@@ -366,7 +367,7 @@ public class RangePartitionInfoTest {
             partitionInfo = new RangePartitionInfo(partitionColumns);
 
             for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-                singleRangePartitionDesc.analyze(columns, null);
+                PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc, columns, null);
                 partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns),
                         singleRangePartitionDesc, 20000L, false);
             }

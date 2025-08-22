@@ -40,6 +40,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -274,7 +275,7 @@ public class ColocatedBackendSelectorTest {
         FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
         ColocatedBackendSelector.Assignment colocatedAssignemnt =
                 new ColocatedBackendSelector.Assignment(scanNodes.get(0).getBucketNums(), scanNodes.size(),
-                        ColocatedBackendSelector.Assignment.ScanRangeType.NATIVE);
+                        Optional.empty());
 
         for (OlapScanNode scanNode : scanNodes) {
             ColocatedBackendSelector backendSelector =

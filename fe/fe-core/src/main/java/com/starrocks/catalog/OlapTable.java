@@ -200,7 +200,8 @@ public class OlapTable extends Table {
          * during the creation of the logical plan and the physical plan might be inconsistent.
         */
         UPDATING_META,
-        OPTIMIZE
+        OPTIMIZE,
+        DYNAMIC_TABLET
     }
 
     @SerializedName(value = "state")
@@ -446,6 +447,7 @@ public class OlapTable extends Table {
             olapTable.curBinlogConfig = new BinlogConfig(this.curBinlogConfig);
         }
         olapTable.dbName = this.dbName;
+        olapTable.maxColUniqueId = new AtomicInteger(this.maxColUniqueId.get());
     }
 
     public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {
@@ -1519,6 +1521,9 @@ public class OlapTable extends Table {
 
     // check input partition has temporary partition
     public boolean inputHasTempPartition(List<Long> partitionIds) {
+        if (partitionIds == null) {
+            return false;
+        }
         for (Long pid : partitionIds) {
             if (tempPartitions.getPartition(pid) != null) {
                 return true;
@@ -3075,6 +3080,52 @@ public class OlapTable extends Table {
         return !tempPartitions.isEmpty();
     }
 
+    public PhysicalPartition replacePhysicalPartition(long oldPhysicalPartitionId,
+            PhysicalPartition newPhysicalPartition, boolean moveOldToTemp) {
+        Partition partition = getPartition(newPhysicalPartition.getParentId());
+        if (partition == null || partition.getId() != newPhysicalPartition.getParentId()) {
+            return null;
+        }
+
+        PhysicalPartition oldPhysicalPartition = partition.replacePhysicalPartition(oldPhysicalPartitionId,
+                newPhysicalPartition, moveOldToTemp);
+        if (oldPhysicalPartition == null) {
+            return null;
+        }
+
+        physicalPartitionIdToPartitionId.put(newPhysicalPartition.getId(), newPhysicalPartition.getParentId());
+        physicalPartitionNameToPartitionId.put(newPhysicalPartition.getName(), newPhysicalPartition.getParentId());
+
+        if (!moveOldToTemp) {
+            physicalPartitionIdToPartitionId.remove(oldPhysicalPartition.getId());
+            physicalPartitionNameToPartitionId.remove(oldPhysicalPartition.getName());
+        }
+
+        return oldPhysicalPartition;
+    }
+
+    public PhysicalPartition removePhysicalPartition(long physicalPartitionId) {
+        Long partitionId = physicalPartitionIdToPartitionId.get(physicalPartitionId);
+        if (partitionId == null) {
+            return null;
+        }
+
+        Partition partition = getPartition(partitionId);
+        if (partition == null) {
+            return null;
+        }
+
+        PhysicalPartition physicalPartition = partition.removeSubPartition(physicalPartitionId);
+        if (physicalPartition == null) {
+            return null;
+        }
+
+        physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+        physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
+
+        return physicalPartition;
+    }
+
     public void setCompressionType(TCompressionType compressionType) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -3621,24 +3672,28 @@ public class OlapTable extends Table {
         String flatJsonEnable = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE);
         if (!Strings.isNullOrEmpty(flatJsonEnable)) {
             properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, flatJsonEnable);
-        }
 
-        // flat json null factor
-        String flatJsonNullFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR);
-        if (!Strings.isNullOrEmpty(flatJsonNullFactor)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, flatJsonNullFactor);
-        }
+            // Only include other flat JSON properties if flat_json.enable is true
+            if (Boolean.parseBoolean(flatJsonEnable)) {
+                // flat json null factor
+                String flatJsonNullFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR);
+                if (!Strings.isNullOrEmpty(flatJsonNullFactor)) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, flatJsonNullFactor);
+                }
 
-        // flat json sparsity factor
-        String flatJsonSparsityFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR);
-        if (!Strings.isNullOrEmpty(flatJsonSparsityFactor)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, flatJsonSparsityFactor);
-        }
+                // flat json sparsity factor
+                String flatJsonSparsityFactor =
+                        tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR);
+                if (!Strings.isNullOrEmpty(flatJsonSparsityFactor)) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, flatJsonSparsityFactor);
+                }
 
-        // flat json column max
-        String flatJsonColumnMax = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
-        if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
+                // flat json column max
+                String flatJsonColumnMax = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
+                if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
+                }
+            }
         }
 
         return properties;
@@ -3666,10 +3721,10 @@ public class OlapTable extends Table {
     }
 
     @Nullable
-    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionId) {
+    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionPathId) {
         FilePathInfo pathInfo = getDefaultFilePathInfo();
         if (pathInfo != null) {
-            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionId);
+            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionPathId);
         }
         return null;
     }

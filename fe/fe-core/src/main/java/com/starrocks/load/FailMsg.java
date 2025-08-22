@@ -18,14 +18,8 @@
 package com.starrocks.load;
 
 import com.google.common.base.Objects;
-import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class FailMsg implements Writable {
     public enum CancelType {
@@ -78,19 +72,8 @@ public class FailMsg implements Writable {
         return "FailMsg [cancelType=" + cancelType + ", msg=" + msg + "]";
     }
 
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, cancelType.name());
-        if (Strings.isNullOrEmpty(msg)) {
-            Text.writeString(out, "");
-        } else {
-            Text.writeString(out, msg);
-        }
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        cancelType = CancelType.valueOf(Text.readString(in));
-        msg = Text.readString(in);
-    }
+
 
     @Override
     public int hashCode() {

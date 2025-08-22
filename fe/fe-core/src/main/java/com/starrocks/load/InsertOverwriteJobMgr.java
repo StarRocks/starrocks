@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load;
 
 import com.google.common.collect.ImmutableMap;
@@ -20,14 +19,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -40,7 +37,6 @@ import io.netty.util.concurrent.DefaultThreadFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -228,14 +224,6 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
         } finally {
             lock.readLock().unlock();
         }
-    }
-
-
-
-    public static InsertOverwriteJobMgr read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        InsertOverwriteJobMgr jobManager = GsonUtils.GSON.fromJson(json, InsertOverwriteJobMgr.class);
-        return jobManager;
     }
 
     @Override

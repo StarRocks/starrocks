@@ -15,22 +15,11 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
 
 public class ShowFunctionsStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Signature", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("Return Type", ScalarType.createVarchar(32)))
-                    .addColumn(new Column("Function Type", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("Intermediate Type", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("Properties", ScalarType.createVarchar(16)))
-                    .build();
 
     private String dbName;
     private final boolean isBuiltin;
@@ -86,11 +75,6 @@ public class ShowFunctionsStmt extends ShowStmt {
 
     public void setDbName(String db) {
         this.dbName = normalizeName(db);
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
     }
 
     @Override

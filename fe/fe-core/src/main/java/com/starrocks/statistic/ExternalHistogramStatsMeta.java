@@ -15,12 +15,8 @@
 package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -86,8 +82,4 @@ public class ExternalHistogramStatsMeta implements Writable {
         return properties;
     }
 
-    public static ExternalHistogramStatsMeta read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        return GsonUtils.GSON.fromJson(s, ExternalHistogramStatsMeta.class);
-    }
 }

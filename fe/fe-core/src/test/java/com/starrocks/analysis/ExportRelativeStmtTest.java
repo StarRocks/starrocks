@@ -2,6 +2,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -42,7 +43,6 @@ public class ExportRelativeStmtTest {
         String originStmt = "EXPORT TABLE tall TO \"hdfs://hdfs_host:port/a/b/c/\" " +
                 "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         ExportStmt stmt = (ExportStmt) analyzeSuccess(originStmt);
-        Assertions.assertNotNull(stmt.getRedirectStatus());
         Assertions.assertTrue(AuditEncryptionChecker.needEncrypt(stmt));
         Assertions.assertNotNull(stmt.getRowDelimiter());
         Assertions.assertNotNull(stmt.getTblName());
@@ -174,8 +174,7 @@ public class ExportRelativeStmtTest {
     public void testShowExport() {
         String originStmt = "Show Export limit 10";
         ShowExportStmt stmt = (ShowExportStmt) analyzeSuccess(originStmt);
-        Assertions.assertNotNull(stmt.getMetaData());
-        Assertions.assertNotNull(stmt.getRedirectStatus());
+        Assertions.assertNotNull(new ShowResultMetaFactory().getMetadata(stmt));
         Assertions.assertNull(stmt.getJobState());
         Assertions.assertEquals(0, stmt.getJobId());
         Assertions.assertNull(stmt.getQueryId());

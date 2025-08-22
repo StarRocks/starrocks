@@ -95,6 +95,7 @@ import com.starrocks.sql.optimizer.rule.transformation.pruner.RboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.UniquenessBasedTablePruneRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.AddIndexOnlyPredicateRule;
+import com.starrocks.sql.optimizer.rule.tree.ApplyMinMaxStatisticRule;
 import com.starrocks.sql.optimizer.rule.tree.ApplyTuningGuideRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.DataCachePopulateRewriteRule;
@@ -103,6 +104,7 @@ import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
 import com.starrocks.sql.optimizer.rule.tree.InlineCteProjectPruneRule;
 import com.starrocks.sql.optimizer.rule.tree.JoinLocalShuffleRule;
+import com.starrocks.sql.optimizer.rule.tree.JsonPathRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.MarkParentRequiredDistributionRule;
 import com.starrocks.sql.optimizer.rule.tree.PhysicalDistributionAggOptRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
@@ -112,6 +114,7 @@ import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
+import com.starrocks.sql.optimizer.rule.tree.RemoveUselessScanOutputPropertyRule;
 import com.starrocks.sql.optimizer.rule.tree.SemiJoinDeduplicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SkewShuffleJoinEliminationRule;
@@ -680,6 +683,9 @@ public class QueryOptimizer extends Optimizer {
             CTEUtils.collectCteOperators(tree, context);
         }
 
+        // Rewrite the jsonpath in META-SCAN
+        scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForMetaScan());
+
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.META_SCAN_REWRITE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
@@ -689,6 +695,8 @@ public class QueryOptimizer extends Optimizer {
 
         // After this rule, we shouldn't generate logical project operator
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+
+        scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForOlapScan());
 
         scheduler.rewriteOnce(tree, rootTaskContext, new EliminateSortColumnWithEqualityPredicateRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
@@ -973,6 +981,7 @@ public class QueryOptimizer extends Optimizer {
         result = new PhysicalDistributionAggOptRule().rewrite(result, rootTaskContext);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         result = new LowCardinalityRewriteRule().rewrite(result, rootTaskContext);
+        result = new ApplyMinMaxStatisticRule().rewrite(result, rootTaskContext);
         // Put before ScalarOperatorsReuseRule
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
         result = new InlineCteProjectPruneRule().rewrite(result, rootTaskContext);
@@ -996,6 +1005,7 @@ public class QueryOptimizer extends Optimizer {
         result = new AddIndexOnlyPredicateRule().rewrite(result, rootTaskContext);
         result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
         result = new EliminateOveruseColumnAccessPathRule().rewrite(result, rootTaskContext);
+        result = new RemoveUselessScanOutputPropertyRule().rewrite(result, rootTaskContext);
         result.setPlanCount(planCount);
         return result;
     }

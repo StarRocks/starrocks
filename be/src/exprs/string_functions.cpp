@@ -50,6 +50,7 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exception.h"
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
 #include "types/large_int_value.h"
@@ -62,10 +63,10 @@ namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
 
-#define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
-    if (UNLIKELY(!col->capacity_limit_reached().ok())) {                             \
-        col->reset_column();                                                         \
-        throw std::runtime_error("binary column exceed 4G in function " #func_name); \
+#define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                        \
+    if (UNLIKELY(!col->capacity_limit_reached().ok())) {                           \
+        col->reset_column();                                                       \
+        throw RuntimeException("binary column exceed 4G in function " #func_name); \
     }
 
 #define RETURN_COLUMN(stmt, func_name)                                    \

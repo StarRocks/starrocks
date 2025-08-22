@@ -73,9 +73,6 @@ import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunction;
 import org.roaringbitmap.RoaringBitmap;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -1135,14 +1132,8 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return pos;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        throw new IOException("Not implemented serializable ");
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        throw new IOException("Not implemented serializable ");
-    }
+
 
     enum ExprSerCode {
         SLOT_REF(1),
@@ -1178,76 +1169,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
         public static ExprSerCode fromCode(int code) {
             return codeMap.get(code);
-        }
-    }
-
-    public static void writeTo(Expr expr, DataOutput output) throws IOException {
-        if (expr instanceof SlotRef) {
-            output.writeInt(ExprSerCode.SLOT_REF.getCode());
-        } else if (expr instanceof NullLiteral) {
-            output.writeInt(ExprSerCode.NULL_LITERAL.getCode());
-        } else if (expr instanceof BoolLiteral) {
-            output.writeInt(ExprSerCode.BOOL_LITERAL.getCode());
-        } else if (expr instanceof IntLiteral) {
-            output.writeInt(ExprSerCode.INT_LITERAL.getCode());
-        } else if (expr instanceof LargeIntLiteral) {
-            output.writeInt(ExprSerCode.LARGE_INT_LITERAL.getCode());
-        } else if (expr instanceof FloatLiteral) {
-            output.writeInt(ExprSerCode.FLOAT_LITERAL.getCode());
-        } else if (expr instanceof DecimalLiteral) {
-            output.writeInt(ExprSerCode.DECIMAL_LITERAL.getCode());
-        } else if (expr instanceof StringLiteral) {
-            output.writeInt(ExprSerCode.STRING_LITERAL.getCode());
-        } else if (expr instanceof MaxLiteral) {
-            output.writeInt(ExprSerCode.MAX_LITERAL.getCode());
-        } else if (expr instanceof BinaryPredicate) {
-            output.writeInt(ExprSerCode.BINARY_PREDICATE.getCode());
-        } else if (expr instanceof FunctionCallExpr) {
-            output.writeInt(ExprSerCode.FUNCTION_CALL.getCode());
-        } else {
-            throw new IOException("Unknown class " + expr.getClass().getName());
-        }
-        expr.write(output);
-    }
-
-    /**
-     * The expr result may be null
-     *
-     * @param in
-     * @return
-     * @throws IOException
-     */
-    public static Expr readIn(DataInput in) throws IOException {
-        int code = in.readInt();
-        ExprSerCode exprSerCode = ExprSerCode.fromCode(code);
-        if (exprSerCode == null) {
-            throw new IOException("Unknown code: " + code);
-        }
-        switch (exprSerCode) {
-            case SLOT_REF:
-                return SlotRef.read(in);
-            case NULL_LITERAL:
-                return NullLiteral.read(in);
-            case BOOL_LITERAL:
-                return BoolLiteral.read(in);
-            case INT_LITERAL:
-                return IntLiteral.read(in);
-            case LARGE_INT_LITERAL:
-                return LargeIntLiteral.read(in);
-            case FLOAT_LITERAL:
-                return FloatLiteral.read(in);
-            case DECIMAL_LITERAL:
-                return DecimalLiteral.read(in);
-            case STRING_LITERAL:
-                return StringLiteral.read(in);
-            case MAX_LITERAL:
-                return MaxLiteral.read(in);
-            case BINARY_PREDICATE:
-                return BinaryPredicate.read(in);
-            case FUNCTION_CALL:
-                return FunctionCallExpr.read(in);
-            default:
-                throw new IOException("Unknown code: " + code);
         }
     }
 

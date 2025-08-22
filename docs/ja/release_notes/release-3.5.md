@@ -10,7 +10,93 @@ StarRocks を v3.5 にアップグレードした後、直接 v3.4.0 ~ v3.4.4 �
 
 :::
 
-## v3.5.2
+## 3.5.4
+
+リリース日: 2025年8月22日
+
+### 改善点
+
+- タブレットを修復できない理由を明確にするログを追加。 [#61959](https://github.com/StarRocks/starrocks/pull/61959)
+- ログ内の DROP PARTITION 情報を最適化。 [#61787](https://github.com/StarRocks/starrocks/pull/61787)
+- 統計情報が不明なテーブルに対して、大きな（ただし設定可能な）行数を割り当て。 [#61332](https://github.com/StarRocks/starrocks/pull/61332)
+- ラベル位置に基づくバランス統計を追加。 [#61905](https://github.com/StarRocks/starrocks/pull/61905)
+- クラスター監視を改善するためにコロケーショングループのバランス統計を追加。 [#61736](https://github.com/StarRocks/starrocks/pull/61736)
+- 正常なレプリカ数がデフォルトのレプリカ数を超える場合、Publish の待機フェーズをスキップ。 [#61820](https://github.com/StarRocks/starrocks/pull/61820)
+- タブレットレポートにタブレット情報収集時間を追加。 [#61643](https://github.com/StarRocks/starrocks/pull/61643)
+- タグ付き Starlet ファイルの書き込みをサポート。 [#61605](https://github.com/StarRocks/starrocks/pull/61605)
+- クラスターのバランス統計の表示をサポート。 [#61578](https://github.com/StarRocks/starrocks/pull/61578)
+- librdkafka を 2.11.0 にアップグレードし、Kafka 4.0 をサポート。非推奨設定を削除。 [#61698](https://github.com/StarRocks/starrocks/pull/61698)
+- Stream Load トランザクションインターフェイスに `prepared_timeout` 設定を追加。 [#61539](https://github.com/StarRocks/starrocks/pull/61539)
+- StarOS を v3.5-rc3 にアップグレード。 [#61685](https://github.com/StarRocks/starrocks/pull/61685)
+
+### バグ修正
+
+次の問題が修正されました：
+
+- ランダム分布テーブルにおける Dict バージョンの誤り。 [#61933](https://github.com/StarRocks/starrocks/pull/61933)
+- コンテキスト条件でのクエリコンテキスト誤り。 [#61929](https://github.com/StarRocks/starrocks/pull/61929)
+- ALTER 操作中、シャドウタブレットに対する同期 Publish による Publish 失敗。 [#61887](https://github.com/StarRocks/starrocks/pull/61887)
+- CVE-2025-55163 問題を修正。 [#62041](https://github.com/StarRocks/starrocks/pull/62041)
+- Apache Kafka からのリアルタイムデータ取り込み時のメモリリーク。 [#61698](https://github.com/StarRocks/starrocks/pull/61698)
+- レイク永続インデックスにおけるリビルドファイル数の誤り。 [#61859](https://github.com/StarRocks/starrocks/pull/61859)
+- 生成式カラムの統計収集によりクロスデータベースクエリが失敗。 [#61829](https://github.com/StarRocks/starrocks/pull/61829)
+- Query Cache が共有ナッシング型クラスターで不整合を引き起こす。 [#61783](https://github.com/StarRocks/starrocks/pull/61783)
+- CatalogRecycleBin に削除済みパーティション情報が保持され、高メモリ使用を引き起こす。 [#61582](https://github.com/StarRocks/starrocks/pull/61582)
+- SQL Server JDBC 接続が 65,535 ミリ秒を超えるタイムアウトで失敗。 [#61719](https://github.com/StarRocks/starrocks/pull/61719)
+- セキュリティ統合がパスワードを暗号化できず、機密情報が漏洩。 [#60666](https://github.com/StarRocks/starrocks/pull/60666)
+- Iceberg パーティション列の `MIN()` および `MAX()` が NULL を返す問題。 [#61858](https://github.com/StarRocks/starrocks/pull/61858)
+- 非プッシュダウンサブフィールドを含む Join の述語が誤って書き換えられる。 [#61868](https://github.com/StarRocks/starrocks/pull/61868)
+- QueryContext のキャンセルにより use-after-free が発生する可能性。 [#61897](https://github.com/StarRocks/starrocks/pull/61897)
+- CBO のテーブルプルーニングが他の述語を見落とす。 [#61881](https://github.com/StarRocks/starrocks/pull/61881)
+- `COLUMN_UPSERT_MODE` における部分更新が、自動増分列をゼロで上書きする可能性。 [#61341](https://github.com/StarRocks/starrocks/pull/61341)
+- JDBC TIME 型変換で誤ったタイムゾーンオフセットを使用し、不正な時刻値となる問題。 [#61783](https://github.com/StarRocks/starrocks/pull/61783)
+- Routine Load ジョブで `max_filter_ratio` がシリアライズされない。 [#61755](https://github.com/StarRocks/starrocks/pull/61755)
+- Stream Load の `now(precision)` 関数における精度損失。 [#61721](https://github.com/StarRocks/starrocks/pull/61721)
+- クエリキャンセル時に「query id not found」エラーが発生する可能性。 [#61667](https://github.com/StarRocks/starrocks/pull/61667)
+- LDAP 認証が検索中に PartialResultException を見逃す可能性。 [#60667](https://github.com/StarRocks/starrocks/pull/60667)
+- Paimon Timestamp のタイムゾーン変換が DATETIME 条件を含む場合に誤る。 [#60473](https://github.com/StarRocks/starrocks/pull/60473)
+
+## 3.5.3
+
+リリース日: 2025年8月11日
+
+### 改善点
+
+- Lake Compaction にセグメント書き込み時間統計情報を追加。 [#60891](https://github.com/StarRocks/starrocks/pull/60891)
+- パフォーマンス低下を避けるため、Data Cache 書き込みの Inline モードを無効化。 [#60530](https://github.com/StarRocks/starrocks/pull/60530)
+- Iceberg メタデータスキャンで共有ファイル I/O をサポート。 [#61012](https://github.com/StarRocks/starrocks/pull/61012)
+- すべての PENDING 状態の ANALYZE タスクの終了をサポート。 [#61118](https://github.com/StarRocks/starrocks/pull/61118)
+- CTE ノードが多すぎる場合、最適化時間が長くならないように強制的に再利用。 [#60983](https://github.com/StarRocks/starrocks/pull/60983)
+- クラスターバランス結果に `BALANCE` タイプを追加。 [#61081](https://github.com/StarRocks/starrocks/pull/61081)
+- 外部テーブルを含む物化ビューの書き換えを最適化。 [#61037](https://github.com/StarRocks/starrocks/pull/61037)
+- システム変数 `enable_materialized_view_agg_pushdown_rewrite` のデフォルト値を `true` に変更し、マテリアライズドビューに対する集計関数のプッシュダウンをデフォルトで有効化。 [#60976](https://github.com/StarRocks/starrocks/pull/60976)
+- パーティション統計のロック競合を最適化。 [#61041](https://github.com/StarRocks/starrocks/pull/61041)
+
+### バグ修正
+
+次の問題が修正されました：
+
+- 列の切り取り後、チャンク列のサイズが不一致。 [#61271](https://github.com/StarRocks/starrocks/pull/61271)
+- 非同期実行のパーティション統計ロードでデッドロックが発生する可能性。 [#61300](https://github.com/StarRocks/starrocks/pull/61300)
+- `array_map` が定数配列列を処理する際にクラッシュ。 [#61309](https://github.com/StarRocks/starrocks/pull/61309)
+- 自動増分列を NULL に設定すると、システムエラーが発生し、同一チャンク内の有効データが拒否される。 [#61255](https://github.com/StarRocks/starrocks/pull/61255)
+- 実際の JDBC 接続数が `jdbc_connection_pool_size` 制限を超える可能性。 [#61038](https://github.com/StarRocks/starrocks/pull/61038)
+- FQDN モードで IP アドレスがキャッシュキーとして使用されない。 [#61203](https://github.com/StarRocks/starrocks/pull/61203)
+- 配列比較中に配列列のクローンエラー。 [#61036](https://github.com/StarRocks/starrocks/pull/61036)
+- シリアライズされたスレッドプールをデプロイする際にブロックが発生し、クエリのパフォーマンスが低下しています。 [#61150](https://github.com/StarRocks/starrocks/pull/61150)
+- heartbeatRetryTimes カウンターのリセット後、OK hbResponse が同期されない。 [#61249](https://github.com/StarRocks/starrocks/pull/61249)
+- `hour_from_unixtime` 関数の結果が誤っている。 [#61206](https://github.com/StarRocks/starrocks/pull/61206)
+- ALTER TABLE タスクとパーティション作成の競合。 [#60890](https://github.com/StarRocks/starrocks/pull/60890)
+- v3.3 から v3.4 以降にアップグレード後、キャッシュが効かない。 [#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- ベクトルインデックス指標 `hit_count` が設定されていない。 [#61102](https://github.com/StarRocks/starrocks/pull/61102)
+- Stream Load トランザクションがコーディネータノードを見つけられない。 [#60154](https://github.com/StarRocks/starrocks/pull/60154)
+- OOM パーティションを読み込む際にBEがクラッシュ。 [#60778](https://github.com/StarRocks/starrocks/pull/60778)
+- 手動作成したパーティションで INSERT OVERWRITE 実行時に失敗。 [#60858](https://github.com/StarRocks/starrocks/pull/60858)
+- パーティション値が異なっても名前が大文字小文字を区別しない場合にパーティション作成が失敗。 [#60909](https://github.com/StarRocks/starrocks/pull/60909)
+- PostgreSQL UUID 型がサポートされていない。 [#61021](https://github.com/StarRocks/starrocks/pull/61021)
+- `FILES()` 経由で Parquet データをインポート時、列名の大文字小文字の問題。 [#61059](https://github.com/StarRocks/starrocks/pull/61059)
+
+## 3.5.2
 
 リリース日: 2025年7月18日
 
@@ -42,7 +128,7 @@ StarRocks を v3.5 にアップグレードした後、直接 v3.4.0 ~ v3.4.4 �
 
 - `lake_compaction_allow_partial_success` のデフォルト値を `true` に変更。Compaction タスクが一部のみ成功しても成功とみなされ、後続のタスクがブロックされるのを回避可能に。[#60643](https://github.com/StarRocks/starrocks/pull/60643)
 
-## v3.5.1
+## 3.5.1
 
 リリース日：2025年7月1日
 
@@ -83,7 +169,7 @@ StarRocks を v3.5 にアップグレードした後、直接 v3.4.0 ~ v3.4.4 �
 
 - 一部の FE メトリクスに `is_leader` ラベルを追加。 [#59883](https://github.com/StarRocks/starrocks/pull/59883)
 
-## v3.5.0
+## 3.5.0
 
 リリース日： 2025 年 6 月 13 日
 

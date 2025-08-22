@@ -54,7 +54,6 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
-import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
@@ -111,6 +110,7 @@ import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
@@ -140,7 +140,7 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -212,7 +212,7 @@ public class AstToStringBuilder {
         @Override
         public String visitCreateUserStatement(CreateUserStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append("CREATE USER ").append(stmt.getUserIdentity());
+            sb.append("CREATE USER ").append(stmt.getUser());
             sb.append(buildAuthOptionSql(stmt.getAuthOption()));
 
             if (!stmt.getDefaultRoles().isEmpty()) {
@@ -227,7 +227,7 @@ public class AstToStringBuilder {
         @Override
         public String visitAlterUserStatement(AlterUserStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append("ALTER USER ").append(stmt.getUserIdentity());
+            sb.append("ALTER USER ").append(stmt.getUser());
             sb.append(buildAuthOptionSql(stmt.getAuthOption()));
 
             return sb.toString();
@@ -297,8 +297,8 @@ public class AstToStringBuilder {
             } else {
                 sb.append(" FROM ");
             }
-            if (stmt.getUserIdentity() != null) {
-                sb.append("USER ").append(stmt.getUserIdentity());
+            if (stmt.getUser() != null) {
+                sb.append("USER ").append(stmt.getUser());
             } else {
                 sb.append("ROLE '").append(stmt.getRole()).append("'");
             }
@@ -330,7 +330,7 @@ public class AstToStringBuilder {
             if (statement.getGrantType().equals(GrantType.ROLE)) {
                 sqlBuilder.append("ROLE ").append(statement.getRoleOrGroup());
             } else {
-                sqlBuilder.append(statement.getUserIdentity());
+                sqlBuilder.append(statement.getUser());
             }
 
             return sqlBuilder.toString();
@@ -368,7 +368,7 @@ public class AstToStringBuilder {
                     setVarList.add(setVarSql);
                 } else if (setVar instanceof SetPassVar) {
                     SetPassVar setPassVar = (SetPassVar) setVar;
-                    UserIdentity userIdentity = setPassVar.getUserIdent();
+                    UserRef userIdentity = setPassVar.getUser();
                     String setPassSql = "";
                     if (userIdentity == null) {
                         setPassSql += "PASSWORD";

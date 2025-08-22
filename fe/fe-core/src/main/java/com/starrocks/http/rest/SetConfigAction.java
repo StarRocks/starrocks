@@ -36,6 +36,7 @@ package com.starrocks.http.rest;
 
 import com.google.common.collect.Maps;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
@@ -43,7 +44,6 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

@@ -22,6 +22,7 @@ set(RUNTIME_FILES
     buffer_control_block.cpp
     buffer_control_result_writer.cpp
     client_cache.cpp
+    local_pass_through_buffer.cpp
     data_stream_mgr.cpp
     sender_queue.cpp
     data_stream_sender.cpp

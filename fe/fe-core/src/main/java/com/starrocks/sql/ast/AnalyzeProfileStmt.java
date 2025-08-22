@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -27,11 +26,6 @@ public class AnalyzeProfileStmt extends StatementBase {
         super(pos);
         this.queryId = queryId;
         this.planNodeIds = planNodeIds;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 
     @Override

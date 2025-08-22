@@ -29,7 +29,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/arrow_type_traits.h"
-#include "exec/parquet_scanner.h"
+#include "exec/file_scanner/parquet_scanner.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"

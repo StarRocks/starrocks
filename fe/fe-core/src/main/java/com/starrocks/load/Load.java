@@ -66,6 +66,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
@@ -85,7 +86,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.LambdaArgument;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
@@ -1105,7 +1105,7 @@ public class Load {
                 return funcExpr.getChild(0);
             } else if (funcName.equalsIgnoreCase(FunctionSet.NOW)) {
                 FunctionName nowFunctionName = new FunctionName(FunctionSet.NOW);
-                FunctionCallExpr newFunc = new FunctionCallExpr(nowFunctionName, new FunctionParams(null));
+                FunctionCallExpr newFunc = new FunctionCallExpr(nowFunctionName, funcExpr.getParams());
                 return newFunc;
             } else if (funcName.equalsIgnoreCase(FunctionSet.SUBSTITUTE)) {
                 return funcExpr.getChild(0);

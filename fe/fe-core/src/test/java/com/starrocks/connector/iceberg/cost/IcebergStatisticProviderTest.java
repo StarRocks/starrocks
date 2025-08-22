@@ -20,7 +20,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.connector.TableVersionRange;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -68,7 +69,7 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
 
-        TableVersionRange version = TableVersionRange.withEnd(Optional.of(
+        TvrVersionRange version = TvrTableSnapshot.of(Optional.of(
                 mockedNativeTableA.currentSnapshot().snapshotId()));
         Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, null, version);
         Assertions.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
@@ -110,7 +111,7 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
         Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap,
-                null, null, TableVersionRange.empty());
+                null, null, TvrTableSnapshot.empty());
         Assertions.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
     }
 

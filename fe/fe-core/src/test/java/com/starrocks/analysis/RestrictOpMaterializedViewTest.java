@@ -24,6 +24,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;

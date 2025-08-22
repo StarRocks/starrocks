@@ -14,11 +14,13 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
@@ -47,11 +49,13 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.Metrics;
+import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotSummary;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.catalog.Namespace;
@@ -140,6 +144,32 @@ public class IcebergApiConverter {
         AtomicInteger nextFieldId = new AtomicInteger(1);
         icebergSchema = TypeUtil.assignFreshIds(icebergSchema, nextFieldId::getAndIncrement);
         return new Schema(icebergSchema.asStructType().fields());
+    }
+
+    public static SortOrder toIcebergSortOrder(Schema schema, List<OrderByElement> orderByElements) {
+        if (orderByElements == null) {
+            return null;
+        }
+
+        SortOrder.Builder builder = SortOrder.builderFor(schema);
+        for (OrderByElement orderByElement : orderByElements) {
+            String columnName = orderByElement.castAsSlotRef();
+            Preconditions.checkNotNull(columnName);
+            NullOrder nullOrder = orderByElement.getNullsFirstParam() ? NullOrder.NULLS_FIRST : NullOrder.NULLS_LAST;
+            if (orderByElement.getIsAsc()) {
+                builder.asc(columnName, nullOrder);
+            } else {
+                builder.desc(columnName, nullOrder);
+            }
+        }
+
+        SortOrder sortOrder = null;
+        try {
+            sortOrder = builder.build();
+        } catch (Exception e) {
+            throw new StarRocksConnectorException("Fail to build Iceberg sortOrder, msg: %s", e.getMessage());
+        }
+        return sortOrder;
     }
 
     // TODO(stephen): support iceberg transform partition like `partition by day(dt)`

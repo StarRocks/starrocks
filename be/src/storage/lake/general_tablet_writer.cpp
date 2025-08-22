@@ -115,7 +115,15 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     auto name = gen_segment_filename(_txn_id);
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
+
+    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
+        metadata && metadata->has_flat_json_config()) {
+        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+        opts.flat_json_config->update(metadata->flat_json_config());
+    }
+
     opts.global_dicts = _global_dicts;
+
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
@@ -342,6 +350,13 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     auto name = gen_segment_filename(_txn_id);
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
+
+    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
+        metadata && metadata->has_flat_json_config()) {
+        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+        opts.flat_json_config->update(metadata->flat_json_config());
+    }
+
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());

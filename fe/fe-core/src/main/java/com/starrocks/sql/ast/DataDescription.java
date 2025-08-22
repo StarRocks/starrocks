@@ -43,6 +43,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TNetworkAddress;
@@ -580,7 +581,7 @@ public class DataDescription implements ParseNode {
         }
 
         if (args.get(0) != null) {
-            ColumnDef.validateDefaultValue(column.getType(), new StringLiteral(args.get(0)));
+            ColumnDefAnalyzer.validateDefaultValue(column.getType(), new StringLiteral(args.get(0)));
         }
     }
 
@@ -620,7 +621,7 @@ public class DataDescription implements ParseNode {
         }
 
         if (replaceValue != null) {
-            ColumnDef.validateDefaultValue(column.getType(), new StringLiteral(replaceValue));
+            ColumnDefAnalyzer.validateDefaultValue(column.getType(), new StringLiteral(replaceValue));
         }
     }
 

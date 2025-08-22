@@ -36,7 +36,6 @@ package com.starrocks.http.action;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -48,6 +47,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.LeaderOpExecutor;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.RedirectStatus;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;

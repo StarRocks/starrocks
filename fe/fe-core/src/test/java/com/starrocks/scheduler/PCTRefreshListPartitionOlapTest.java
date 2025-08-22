@@ -22,6 +22,7 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
@@ -172,7 +173,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
     private ExecPlan getExecPlan(TaskRun taskRun) {
         try {
-            PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
+            MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             return execPlan;
@@ -183,10 +184,10 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         }
     }
 
-    private PartitionBasedMvRefreshProcessor getProcessor(TaskRun taskRun) {
+    private MVPCTBasedRefreshProcessor getProcessor(TaskRun taskRun) {
         try {
             initAndExecuteTaskRun(taskRun);
-            return (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+            return getPartitionBasedRefreshProcessor(taskRun);
         } catch (Exception e) {
             e.printStackTrace();
             Assertions.fail();
@@ -1078,12 +1079,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
-                        PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
+                        MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                         Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
                         Assertions.assertEquals("p2", message.getMvPartitionsToRefreshString());
-                        Assertions.assertEquals("{s2=[p2]}", message.getBasePartitionsToRefreshMapString());
                         ExecPlan execPlan = mvTaskRunContext.getExecPlan();
                         Assertions.assertNotEquals(null, execPlan);
                         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -1125,12 +1125,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
-                        PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
+                        MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                         Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
                         Assertions.assertEquals("p1", message.getMvPartitionsToRefreshString());
-                        Assertions.assertEquals("{t1=[p1]}", message.getBasePartitionsToRefreshMapString());
                         ExecPlan execPlan = mvTaskRunContext.getExecPlan();
                         Assertions.assertNotEquals(null, execPlan);
                         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -1171,12 +1170,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
-                        PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
+                        MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                         Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
                         Assertions.assertEquals("p1", message.getMvPartitionsToRefreshString());
-                        Assertions.assertEquals("{t3=[p1, p3]}", message.getBasePartitionsToRefreshMapString());
                         ExecPlan execPlan = mvTaskRunContext.getExecPlan();
                         Assertions.assertNotEquals(null, execPlan);
                         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -1247,12 +1245,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             executeInsertSql("INSERT INTO t1 VALUES \n" +
                     "    (\"2020-07-01\", \"beijing\",  1), (\"2020-07-01\", \"chengdu\",  2),\n" +
                     "    (\"2020-07-02\", \"beijing\",  3), (\"2020-07-02\", \"hangzhou\", 4);\n");
-            PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
+            MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
             MvTaskRunContext mvTaskRunContext = processor.getMvContext();
             Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
             MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
             Assertions.assertEquals("p1,p2,p3", message.getMvPartitionsToRefreshString());
-            Assertions.assertEquals("{t1=[p1, p2, p3]}", message.getBasePartitionsToRefreshMapString());
 
             // update new partitions of base table
             addListPartition("t1", "p4", "2020-07-02", "shenzhen");
@@ -1264,7 +1261,6 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
             message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
             Assertions.assertEquals("p1,p2,p3,p5", message.getMvPartitionsToRefreshString());
-            Assertions.assertEquals("{t1=[p1, p2, p3, p4, p5]}", message.getBasePartitionsToRefreshMapString());
             starRocksAssert.dropTable("t1");
             starRocksAssert.dropMaterializedView("mv1");
         } catch (Exception e) {
@@ -1341,7 +1337,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     String query = String.format("select * from %s ", tableName);
                     {
                         // all partitions are expired, no need to create partitions for mv
-                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
                         Assertions.assertEquals(0, mv.getVisiblePartitions().size());
                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -1443,7 +1439,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     String query = String.format("select * from %s ", tableName);
                     {
                         // all partitions are expired, no need to create partitions for mv
-                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
                         Assertions.assertEquals(2, mv.getVisiblePartitions().size());
                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                         String plan = getFragmentPlan(query);

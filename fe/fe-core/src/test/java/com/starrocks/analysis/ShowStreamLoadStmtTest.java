@@ -16,6 +16,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -46,8 +48,8 @@ public class ShowStreamLoadStmtTest {
         Assertions.assertEquals("label", stmt.getName());
         Assertions.assertEquals("testDb", stmt.getDbFullName());
         Assertions.assertFalse(stmt.isIncludeHistory());
-        Assertions.assertEquals(25, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Label", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals(25, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Label", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
     }
 
     @Test

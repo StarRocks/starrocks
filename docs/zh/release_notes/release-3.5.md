@@ -10,7 +10,93 @@ displayed_sidebar: docs
 
 :::
 
-## v3.5.2
+## 3.5.4
+
+发布日期: 2025年8月22日
+
+### 功能增强
+
+- 增加日志以明确 Tablet 无法修复的原因。 [#61959](https://github.com/StarRocks/starrocks/pull/61959)
+- 优化日志中的 DROP PARTITION 信息。 [#61787](https://github.com/StarRocks/starrocks/pull/61787)
+- 为统计信息未知的表分配一个较大但可配置的行数，用于统计估算。 [#61332](https://github.com/StarRocks/starrocks/pull/61332)
+- 增加基于标签位置的均衡统计。 [#61905](https://github.com/StarRocks/starrocks/pull/61905)
+- 增加 Colocate Group 均衡统计以提升集群监控能力。 [#61736](https://github.com/StarRocks/starrocks/pull/61736)
+- 当健康副本数超过默认副本数时，跳过 Publish 等待阶段。 [#61820](https://github.com/StarRocks/starrocks/pull/61820)
+- 在 Tablet 报告中加入 Tablet 信息的收集时间。 [#61643](https://github.com/StarRocks/starrocks/pull/61643)
+- 支持写入带标签的 Starlet 文件。 [#61605](https://github.com/StarRocks/starrocks/pull/61605)
+- 支持通过 SHOW PROC 查看集群均衡统计。 [#61578](https://github.com/StarRocks/starrocks/pull/61578)
+- 升级 librdkafka 至 2.11.0 以支持 Kafka 4.0，并移除废弃配置。 [#61698](https://github.com/StarRocks/starrocks/pull/61698)
+- 在 Stream Load 事务接口中新增 `prepared_timeout` 配置。 [#61539](https://github.com/StarRocks/starrocks/pull/61539)
+- 升级 StarOS 至 v3.5-rc3。 [#61685](https://github.com/StarRocks/starrocks/pull/61685)
+
+### 问题修复
+
+修复了以下问题：
+
+- 随机分布表的 Dict 版本错误。 [#61933](https://github.com/StarRocks/starrocks/pull/61933)
+- 在 Context Condition 中的 Query Context 错误。 [#61929](https://github.com/StarRocks/starrocks/pull/61929)
+- ALTER 操作中因 Shadow Tablet 的同步 Publish 导致 Publish 失败。 [#61887](https://github.com/StarRocks/starrocks/pull/61887)
+- 修复 CVE-2025-55163 漏洞。 [#62041](https://github.com/StarRocks/starrocks/pull/62041)
+- 从 Apache Kafka 实时导入数据时发生内存泄漏。 [#61698](https://github.com/StarRocks/starrocks/pull/61698)
+- Lake Persistent Index 中 Rebuild 文件数量统计错误。 [#61859](https://github.com/StarRocks/starrocks/pull/61859)
+- 在生成表达式列上收集统计信息导致跨库查询失败。 [#61829](https://github.com/StarRocks/starrocks/pull/61829)
+- Query Cache 在存算一体集群中不一致，导致结果不一致。 [#61783](https://github.com/StarRocks/starrocks/pull/61783)
+- CatalogRecycleBin 保留已删除分区信息导致内存占用过高。 [#61582](https://github.com/StarRocks/starrocks/pull/61582)
+- SQL Server JDBC 连接在超时超过 65,535 毫秒时失败。 [#61719](https://github.com/StarRocks/starrocks/pull/61719)
+- 安全集成未能加密密码，导致敏感信息泄露。 [#60666](https://github.com/StarRocks/starrocks/pull/60666)
+- Iceberg 分区列上的 `MIN()` 和 `MAX()` 异常返回 NULL。 [#61858](https://github.com/StarRocks/starrocks/pull/61858)
+- 含不可下推子字段的 Join 谓词被错误改写。 [#61868](https://github.com/StarRocks/starrocks/pull/61868)
+- 取消 QueryContext 可能导致 use-after-free。 [#61897](https://github.com/StarRocks/starrocks/pull/61897)
+- CBO 表裁剪逻辑错误忽略其他谓词。 [#61881](https://github.com/StarRocks/starrocks/pull/61881)
+- `COLUMN_UPSERT_MODE` 部分更新将自增列覆盖为 0。 [#61341](https://github.com/StarRocks/starrocks/pull/61341)
+- JDBC TIME 类型转换使用错误的时区偏移，导致时间值错误。 [#61783](https://github.com/StarRocks/starrocks/pull/61783)
+- Routine Load 作业未序列化 `max_filter_ratio`。 [#61755](https://github.com/StarRocks/starrocks/pull/61755)
+- Stream Load 的 `now(precision)` 函数存在精度参数丢失。 [#61721](https://github.com/StarRocks/starrocks/pull/61721)
+- 取消查询可能导致“query id not found”错误。 [#61667](https://github.com/StarRocks/starrocks/pull/61667)
+- LDAP 认证在查询过程中可能漏报 PartialResultException 导致查询结果不完整。 [#60667](https://github.com/StarRocks/starrocks/pull/60667)
+- 查询条件包含 DATETIME 时，Paimon Timestamp 的时区转换错误。 [#60473](https://github.com/StarRocks/starrocks/pull/60473)
+
+## 3.5.3
+
+发布日期： 2025 年 8 月 11 日
+
+### 功能增强
+
+- Lake Compaction 增加 Segment 写入耗时统计信息。[#60891](https://github.com/StarRocks/starrocks/pull/60891)
+- 禁用 Data Cache 写入的 inline 模式以避免性能下降。[#60530](https://github.com/StarRocks/starrocks/pull/60530)
+- Iceberg 元数据扫描支持共享文件 I/O。[#61012](https://github.com/StarRocks/starrocks/pull/61012)
+- 支持终止所有 PENDING 状态的 ANALYZE 任务。[#61118](https://github.com/StarRocks/starrocks/pull/61118)
+- CTE 节点过多时强制复用以避免优化耗时过长。[#60983](https://github.com/StarRocks/starrocks/pull/60983)
+- 集群均衡结果中新增 `BALANCE` 类型。[#61081](https://github.com/StarRocks/starrocks/pull/61081)
+- 优化含外部表的物化视图改写。[#61037](https://github.com/StarRocks/starrocks/pull/61037)
+- 系统变量 `enable_materialized_view_agg_pushdown_rewrite` 默认值修改为 `true`，即默认为物化视图查询改写启用聚合函数下推。 [#60976](https://github.com/StarRocks/starrocks/pull/60976)
+- 优化分区统计锁竞争。[#61041](https://github.com/StarRocks/starrocks/pull/61041)
+
+### 问题修复
+
+修复了以下问题：
+
+- 列裁剪后 Chunk 列大小不一致。[#61271](https://github.com/StarRocks/starrocks/pull/61271)
+- 非异步执行分区统计加载可能造成死锁。[#61300](https://github.com/StarRocks/starrocks/pull/61300)
+-  `array_map` 处理常量数组列时崩溃。[#61309](https://github.com/StarRocks/starrocks/pull/61309)
+- 将自增列设为 NULL 时，系统错误拒绝同一 Chunk 内的有效数据。[#61255](https://github.com/StarRocks/starrocks/pull/61255)
+- JDBC 实际连接数可能超过 `jdbc_connection_pool_size` 限制。[#61038](https://github.com/StarRocks/starrocks/pull/61038)
+- FQDN 模式下未使用 IP 地址作为缓存键。[#61203](https://github.com/StarRocks/starrocks/pull/61203)
+- 数组比较过程中数组列克隆错误。[#61036](https://github.com/StarRocks/starrocks/pull/61036)
+- 部署序列化线程池阻塞导致查询性能下降。[#61150](https://github.com/StarRocks/starrocks/pull/61150)
+- 心跳重试计数器重置后 OK 响应未同步。[#61249](https://github.com/StarRocks/starrocks/pull/61249)
+- `hour_from_unixtime` 函数结果错误。[#61206](https://github.com/StarRocks/starrocks/pull/61206)
+- ALTER TABLE 任务与分区创建冲突。[#60890](https://github.com/StarRocks/starrocks/pull/60890)
+- 从 v3.3 升级至 v3.4 或更新版本后缓存不生效。[#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- 向量索引指标 `hit_count` 未设置。[#61102](https://github.com/StarRocks/starrocks/pull/61102)
+- Stream Load 事务导入无法找到协调节点。[#60154](https://github.com/StarRocks/starrocks/pull/60154)
+- BE 在加载 OOM 分区时崩溃。[#60778](https://github.com/StarRocks/starrocks/pull/60778)
+- 手动创建的分区在执行 INSERT OVERWRITE 时失败。[#60858](https://github.com/StarRocks/starrocks/pull/60858)
+- 当分区的值不同但名称在不区分大小写的情况下相同时，分区创建失败。 [#60909](https://github.com/StarRocks/starrocks/pull/60909)
+- 不支持 PostgreSQL UUID 类型。[#61021](https://github.com/StarRocks/starrocks/pull/61021)
+- 通过 `FILES()` 导入 Parquet 数据时列名大小写敏感的问题。[#61059](https://github.com/StarRocks/starrocks/pull/61059)
+
+## 3.5.2
 
 发布日期： 2025 年 7 月 18 日
 
@@ -42,7 +128,7 @@ displayed_sidebar: docs
 
 - `lake_compaction_allow_partial_success`  默认值变更为 `true`。Compaction 操作在部分成功后可以标记为成功，避免阻塞后续的 Compaction 任务。 [#60643](https://github.com/StarRocks/starrocks/pull/60643)
 
-## v3.5.1
+## 3.5.1
 
 发布日期：2025 年 7 月 1 日
 
@@ -83,7 +169,7 @@ displayed_sidebar: docs
 
 - 部分 FE 指标新增 `is_leader` 标签。[#59883](https://github.com/StarRocks/starrocks/pull/59883)
 
-## v3.5.0
+## 3.5.0
 
 发布日期：2025 年 6 月 13 日
 

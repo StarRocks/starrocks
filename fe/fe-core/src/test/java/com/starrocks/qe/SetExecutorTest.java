@@ -30,6 +30,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -40,7 +41,7 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExplainLevel;
@@ -70,7 +71,8 @@ public class SetExecutorTest {
         AuthenticationMgr authenticationManager =
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
-        testUser = createUserStmt.getUserIdentity();
+        UserRef user = createUserStmt.getUser();
+        testUser = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
     }
 
     private static void ctxToTestUser() {
@@ -87,7 +89,7 @@ public class SetExecutorTest {
     public void testNormal() throws StarRocksException {
         List<SetListItem> vars = Lists.newArrayList();
 
-        new SetPassVar(new UserIdentity("testUser", "%"),
+        new SetPassVar(new UserRef("testUser", "%"),
                 new UserAuthOption(null, "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", false, NodePosition.ZERO),
                 NodePosition.ZERO);
         vars.add(new SetNamesVar("utf8"));

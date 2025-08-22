@@ -67,6 +67,8 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
@@ -144,6 +146,7 @@ import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionDescBP;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -823,7 +826,8 @@ public class PlanFragmentBuilder {
                     .collect(Collectors.toSet());
             if (scan.getPredicate() == null) {
                 // remove path which has pruned
-                return scan.getColumnAccessPaths().stream().filter(p -> checkNames.contains(p.getPath()))
+                return scan.getColumnAccessPaths().stream()
+                        .filter(p -> checkNames.contains(p.getPath()) || p.isExtended())
                         .collect(Collectors.toList());
             }
 
@@ -1029,6 +1033,7 @@ public class PlanFragmentBuilder {
                     scan.getSelectPartitionNames(),
                     context.getConnectContext().getCurrentComputeResource());
 
+            scanNode.setColumnAccessPaths(scan.getColumnAccessPaths());
             scanNode.computeRangeLocations(computeResource);
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
@@ -1493,6 +1498,7 @@ public class PlanFragmentBuilder {
             icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             icebergScanNode.computeStatistics(expression.getStatistics());
             currentExecGroup.add(icebergScanNode, true);
+            TvrVersionRange tvrVersionRange = node.getTvrVersionRange();
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1506,7 +1512,18 @@ public class PlanFragmentBuilder {
                 ScalarOperator icebergPredicate = !isEqDeleteScan ? node.getPredicate() :
                         ((PhysicalIcebergEqualityDeleteScanOperator) node).getOriginPredicate();
                 icebergScanNode.preProcessIcebergPredicate(icebergPredicate);
-                icebergScanNode.setSnapshotId(node.getTableVersionRange().end());
+                icebergScanNode.setTvrVersionRange(node.getTvrVersionRange());
+                // setting bucket properties before setting scan range locations
+                if (expression.getOutputProperty().getDistributionProperty().isShuffle()) {
+                    DistributionSpec distributionSpec = expression.getOutputProperty().getDistributionProperty().getSpec();
+                    if (distributionSpec instanceof HashDistributionSpec spec) {
+                        HashDistributionDesc desc = spec.getHashDistributionDesc();
+                        LOG.debug("Iceberg scan node distribution spec: " + spec.toString() + ", desc: " + desc.toString());
+                        if (desc instanceof HashDistributionDescBP descBP) {
+                            icebergScanNode.setBucketProperties(descBP.getBucketProperties());
+                        }
+                    }
+                }
                 icebergScanNode.setupScanRangeLocations(
                         context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
                 if (!isEqDeleteScan) {
@@ -1564,7 +1581,7 @@ public class PlanFragmentBuilder {
 
             IcebergMetadataScanNode metadataScanNode =
                     new IcebergMetadataScanNode(context.getNextNodeId(), tupleDescriptor,
-                            "IcebergMetadataScanNode", node.getTableVersionRange());
+                            "IcebergMetadataScanNode", node.getTvrVersionRange());
             try {
                 ScalarOperatorToExpr.FormatterContext formatterContext =
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
@@ -2249,7 +2266,7 @@ public class PlanFragmentBuilder {
 
                 // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
                 if (!withLocalShuffle && node.isMergedLocalAgg() &&
-                        hasColocateOlapScanChildInFragment(aggregationNode)) {
+                        hasColocateScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(!node.isWithoutColocateRequirement());
                 }
                 aggregationNode.setLimit(node.getLimit());
@@ -2300,7 +2317,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.setLimit(node.getLimit());
 
                 // Check colocate for one-phase local agg.
-                if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && hasColocateScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(!node.isWithoutColocateRequirement());
                 }
             } else if (node.getType().isDistinctGlobal()) {
@@ -2315,7 +2332,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.unsetNeedsFinalize();
                 aggregationNode.setIntermediateTuple();
 
-                if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && hasColocateScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(!node.isWithoutColocateRequirement());
                 }
             } else if (node.getType().isDistinctLocal()) {
@@ -2343,6 +2360,7 @@ public class PlanFragmentBuilder {
             aggregationNode.setStreamingPreaggregationMode(node.getNeededPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
+            aggregationNode.setGroupByMinMaxStats(node.getGroupByMinMaxStatistic());
 
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
@@ -2374,22 +2392,26 @@ public class PlanFragmentBuilder {
         }
 
         // Check whether colocate Table exists in the same Fragment
-        public boolean hasColocateOlapScanChildInFragment(PlanNode node) {
-            if (node instanceof OlapScanNode) {
+        public boolean hasColocateScanChildInFragment(PlanNode node) {
+            if (node instanceof OlapScanNode scanNode) {
                 ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-                OlapScanNode scanNode = (OlapScanNode) node;
                 if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
+                    return true;
+                }
+            }
+            if (node instanceof IcebergScanNode icebergScanNode) {
+                if (icebergScanNode.getBucketProperties().isPresent()) {
                     return true;
                 }
             }
             if (node instanceof ExchangeNode) {
                 return false;
             }
-            boolean hasOlapScanChild = false;
+            boolean hasColocateChild = false;
             for (PlanNode child : node.getChildren()) {
-                hasOlapScanChild |= hasColocateOlapScanChildInFragment(child);
+                hasColocateChild |= hasColocateScanChildInFragment(child);
             }
-            return hasOlapScanChild;
+            return hasColocateChild;
         }
 
         public void rewriteAggDistinctFirstStageFunction(List<FunctionCallExpr> aggregateExprList) {
@@ -2977,9 +2999,11 @@ public class PlanFragmentBuilder {
                                                              PlanFragment removeFragment, JoinNode hashJoinNode) {
             hashJoinNode.setLocalHashBucket(true);
             hashJoinNode.setPartitionExprs(removeFragment.getDataPartition().getPartitionExprs());
+
+            Optional<List<BucketProperty>> extractBucketProperties = stayFragment.extractBucketProperties();
             removeFragment.getChild(0)
                     .setOutputPartition(new DataPartition(TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED,
-                            removeFragment.getDataPartition().getPartitionExprs()));
+                            removeFragment.getDataPartition().getPartitionExprs(), extractBucketProperties));
 
             // Currently, we always generate new fragment for PhysicalDistribution.
             // So we need to remove exchange node only fragment for Join.
@@ -3091,7 +3115,7 @@ public class PlanFragmentBuilder {
             analyticEvalNode.setHasNullableGenerateChild();
             analyticEvalNode.computeStatistics(optExpr.getStatistics());
             currentExecGroup.add(analyticEvalNode);
-            if (hasColocateOlapScanChildInFragment(analyticEvalNode)) {
+            if (hasColocateScanChildInFragment(analyticEvalNode)) {
                 analyticEvalNode.setColocate(true);
             }
 
@@ -3150,6 +3174,16 @@ public class PlanFragmentBuilder {
                 // If the data is skewed, we prefer to perform the standard sort-merge process to enhance performance.
                 sortNode.setAnalyticPartitionSkewed(isSkewed);
             }
+        }
+
+        private Optional<List<BucketProperty>> extractBucketProperties(List<PlanFragment> inputFragments) {
+            List<List<BucketProperty>> bucketProperties = inputFragments.stream()
+                    .filter(inputFragment -> !(inputFragment.getPlanRoot() instanceof ExchangeNode))
+                    .map(PlanFragment::extractBucketProperties)
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
+                    .toList();
+            return BucketProperty.checkAndGetBucketProperties(bucketProperties);
         }
 
         private PlanFragment buildSetOperation(OptExpression optExpr, ExecPlan context, OperatorType operatorType) {
@@ -3279,6 +3313,7 @@ public class PlanFragmentBuilder {
             //  if colocate set operator has bucket-shuffle branch, BE need tackle this situation to avoid
             //  query hanging forever.
             boolean canExecGroup = true;
+            Optional<List<BucketProperty>> extractedBP = extractBucketProperties(inputFragments);
             for (int i = 0; i < optExpr.arity(); ++i) {
                 PlanFragment inputFragment = inputFragments.get(i);
                 context.getFragments().remove(inputFragment);
@@ -3293,7 +3328,7 @@ public class PlanFragmentBuilder {
                         inputFragment.getChildren().forEach(fragment -> {
                             fragment.setOutputPartition(
                                     new DataPartition(TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED,
-                                            fragment.getOutputPartition().getPartitionExprs()));
+                                            fragment.getOutputPartition().getPartitionExprs(), extractedBP));
                         });
                     }
                 } else {

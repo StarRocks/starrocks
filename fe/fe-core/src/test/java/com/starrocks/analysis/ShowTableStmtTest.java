@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -74,21 +75,21 @@ public class ShowTableStmtTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertEquals("testDb", stmt.getDb());
         Assertions.assertFalse(stmt.isVerbose());
-        Assertions.assertEquals(1, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Tables_in_testDb", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals(1, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Tables_in_testDb", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
 
         stmt = new ShowTableStmt("abc", true, null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals(2, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Tables_in_abc", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
+        Assertions.assertEquals("Table_type", new ShowResultMetaFactory().getMetadata(stmt).getColumn(1).getName());
 
         stmt = new ShowTableStmt("abc", true, "bcd");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertEquals("bcd", stmt.getPattern());
-        Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals(2, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Tables_in_abc", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
+        Assertions.assertEquals("Table_type", new ShowResultMetaFactory().getMetadata(stmt).getColumn(1).getName());
         Assertions.assertEquals("bcd", stmt.getPattern());
 
         String sql = "show full tables where table_type !='VIEW'";

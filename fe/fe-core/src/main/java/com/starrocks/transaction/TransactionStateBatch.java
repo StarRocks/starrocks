@@ -16,17 +16,13 @@ package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -164,11 +160,6 @@ public class TransactionStateBatch implements Writable {
         for (TransactionState transactionState : transactionStates) {
             transactionState.replaySetTransactionStatus();
         }
-    }
-
-
-    public static TransactionStateBatch read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), TransactionStateBatch.class);
     }
 
     @Override

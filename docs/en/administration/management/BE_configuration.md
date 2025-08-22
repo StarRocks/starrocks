@@ -3619,6 +3619,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The cache expiration time of starlet filesystem instances.
 - Introduced in: v3.3.15, 3.4.5
 
+##### starlet_write_file_with_tag
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: In a shared-data cluster, whether to tag files written to object storage with object storage tags for convenient custom file management.
+- Introduced in: v3.5.3
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -3984,7 +3993,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Default: 0
 - Type: String
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`).
 - Introduced in: -
 
@@ -3993,7 +4002,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Default: 0
 - Type: String
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you use two disks and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data.
 - Introduced in: -
 

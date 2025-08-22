@@ -14,8 +14,8 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
 
 public interface AuthenticationProvider {
 

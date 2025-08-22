@@ -211,7 +211,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### cbo_eq_base_type
 
-* 描述：用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。**该变量仅在进行 `=` 和 `!=` 比较时生效。**
+* 描述：用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `DECIMAL` 类型进行比较，可选 `VARCHAR`（按数值进行比较）。**该变量仅在进行 `=` 和 `!=` 比较时生效。**
 * 类型：String
 * 引入版本：v2.5.14
 
@@ -525,6 +525,11 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false
 * 引入版本：v3.2.3
 
+### enable_spm_rewrite
+
+* 描述：是否启用 SQL Plan Manager (SPM) 查询改写功能。启用此功能后，StarRocks 将自动将相应的查询改写为绑定的查询计划，以提升查询性能和稳定性。
+* 默认值：false
+
 ### enable_spill
 
 * 描述：是否启用中间结果落盘。默认值：`false`。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。
@@ -619,6 +624,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v3.3.0
 
+### enable_file_pagecache
+
+* 描述：是否启用远端文件页面缓存。`true` 表示开启。页面缓存将解压缩后的 Parquet 页面数据存储在内存中。在后续查询中访问相同页面时，可以直接从缓存中获取数据，避免重复的 I/O 操作和解压缩。此功能与数据缓存协同工作并使用相同的内存模块。启用后，对于具有重复页面访问模式的工作负载，可以显著提高查询性能。
+* 默认值：true
+* 引入版本：v4.0
+
 ### enable_datacache_sharing
 
 - 描述：是否启用 Cache Sharing。设置为 `true` 可启用该功能。Cache Sharing 能够在本地缓存未命中时通过网络访问其他节点上的缓存数据，这有助于减少集群扩展过程中缓存失效造成的性能抖动。只有当 FE 参数 `enable_trace_historical_node` 设置为 `true` 时，此变量才会生效。
@@ -656,6 +667,22 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。新部署的 2.5 版本默认值为 `true`，从 2.4 版本升级上来为 `false`。
 * 默认值：false
 * 引入版本：v2.5
+
+### enable_bucket_aware_execution_on_lake
+
+* 描述：是否针对数据湖（如 Iceberg 表）查询启用 Bucket-aware 执行。启用后，系统通过利用分桶信息来优化查询执行，减少数据 Shuffle 并提高性能。此优化对分桶表的 Join 和 Aggregation 特别有效。
+* 默认值：true
+* 数据类型：Boolean
+* 引入版本：v4.0
+
+### lake_bucket_assign_mode
+
+* 描述：数据湖表查询的分桶分配模式。此变量控制系统执行查询期间启用 Bucket-aware 执行时如何将分桶分配给工作节点。有效值：
+  * `balance`：在工作节点间均匀分配分桶以实现负载均衡，以获取更好的性能。
+  * `elastic`：使用一致性哈希将分桶分配给工作节点，可以在弹性环境中提供更好的负载分配。
+* 默认值：balance
+* 数据类型：String
+* 引入版本：v4.0
 
 ### enable_pipeline_engine
 

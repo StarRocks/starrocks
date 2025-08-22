@@ -84,7 +84,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -115,8 +114,6 @@ import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -1915,64 +1912,8 @@ public class RestoreJob extends AbstractJob {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
 
-        Text.writeString(out, backupTimestamp);
-        jobInfo.write(out);
-        out.writeBoolean(allowLoad);
 
-        Text.writeString(out, state.name());
-
-        if (backupMeta != null) {
-            out.writeBoolean(true);
-            backupMeta.write(out);
-        } else {
-            out.writeBoolean(false);
-        }
-
-        fileMapping.write(out);
-
-        out.writeLong(metaPreparedTime);
-        out.writeLong(snapshotFinishedTime);
-        out.writeLong(downloadFinishedTime);
-
-        out.writeInt(restoreReplicationNum);
-
-        out.writeInt(restoredPartitions.size());
-        for (Pair<String, Partition> entry : restoredPartitions) {
-            Text.writeString(out, entry.first);
-            entry.second.write(out);
-        }
-
-        out.writeInt(restoredTbls.size());
-        for (Table tbl : restoredTbls) {
-            tbl.write(out);
-        }
-
-        out.writeInt(restoredVersionInfo.rowKeySet().size());
-        for (long tblId : restoredVersionInfo.rowKeySet()) {
-            out.writeLong(tblId);
-            out.writeInt(restoredVersionInfo.row(tblId).size());
-            for (Map.Entry<Long, Long> entry : restoredVersionInfo.row(tblId).entrySet()) {
-                out.writeLong(entry.getKey());
-                out.writeLong(entry.getValue());
-                out.writeLong(0); // write a version_hash for compatibility
-            }
-        }
-
-        out.writeInt(snapshotInfos.rowKeySet().size());
-        for (long tabletId : snapshotInfos.rowKeySet()) {
-            out.writeLong(tabletId);
-            Map<Long, SnapshotInfo> map = snapshotInfos.row(tabletId);
-            out.writeInt(map.size());
-            for (Map.Entry<Long, SnapshotInfo> entry : map.entrySet()) {
-                out.writeLong(entry.getKey());
-                entry.getValue().write(out);
-            }
-        }
-    }
 
     @Override
     public String toString() {

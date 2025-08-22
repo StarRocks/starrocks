@@ -27,7 +27,6 @@ import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.thrift.TCloudType;
