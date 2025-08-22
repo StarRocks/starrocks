@@ -15,6 +15,7 @@
 rootProject.name = "starrocks-fe"
 
 include(
+    "fe-grammar",
     "fe-utils",
     "fe-testing",
     "plugin:spark-dpp",
