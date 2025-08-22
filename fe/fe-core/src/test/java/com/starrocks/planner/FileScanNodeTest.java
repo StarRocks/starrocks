@@ -39,6 +39,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
@@ -610,4 +611,69 @@ public class FileScanNodeTest {
                 "The valid bytes length for 'row delimiter' is [1, 50]",
                 () -> scanNode.init(descTable));
     }
+
+    @Test
+    public void testInferCompressionByName() {
+        // Test GZIP compression
+        Assertions.assertEquals(TCompressionType.GZIP,
+                FileScanNode.inferCompressionByName("file.json.gz"));
+        Assertions.assertEquals(TCompressionType.GZIP,
+                FileScanNode.inferCompressionByName("file.json.gzip"));
+        Assertions.assertEquals(TCompressionType.GZIP,
+                FileScanNode.inferCompressionByName("FILE.JSON.GZ"));
+        Assertions.assertEquals(TCompressionType.GZIP,
+                FileScanNode.inferCompressionByName("FILE.JSON.GZIP"));
+
+        // Test BZIP2 compression
+        Assertions.assertEquals(TCompressionType.BZIP2,
+                FileScanNode.inferCompressionByName("file.json.bz2"));
+        Assertions.assertEquals(TCompressionType.BZIP2,
+                FileScanNode.inferCompressionByName("FILE.JSON.BZ2"));
+
+        // Test ZSTD compression
+        Assertions.assertEquals(TCompressionType.ZSTD,
+                FileScanNode.inferCompressionByName("file.json.zst"));
+        Assertions.assertEquals(TCompressionType.ZSTD,
+                FileScanNode.inferCompressionByName("file.json.zstd"));
+        Assertions.assertEquals(TCompressionType.ZSTD,
+                FileScanNode.inferCompressionByName("FILE.JSON.ZST"));
+        Assertions.assertEquals(TCompressionType.ZSTD,
+                FileScanNode.inferCompressionByName("FILE.JSON.ZSTD"));
+
+        // Test LZ4 compression
+        Assertions.assertEquals(TCompressionType.LZ4_FRAME,
+                FileScanNode.inferCompressionByName("file.json.lz4"));
+        Assertions.assertEquals(TCompressionType.LZ4_FRAME,
+                FileScanNode.inferCompressionByName("FILE.JSON.LZ4"));
+
+        // Test DEFLATE compression
+        Assertions.assertEquals(TCompressionType.DEFLATE,
+                FileScanNode.inferCompressionByName("file.json.deflate"));
+        Assertions.assertEquals(TCompressionType.DEFLATE,
+                FileScanNode.inferCompressionByName("FILE.JSON.DEFLATE"));
+
+        // Test SNAPPY compression
+        Assertions.assertEquals(TCompressionType.SNAPPY,
+                FileScanNode.inferCompressionByName("file.json.snappy"));
+        Assertions.assertEquals(TCompressionType.SNAPPY,
+                FileScanNode.inferCompressionByName("FILE.JSON.SNAPPY"));
+
+        // Test files with no compression (should return null)
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.json"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.txt"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.parquet"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName(""));
+        Assertions.assertNull(FileScanNode.inferCompressionByName(null));
+
+        // Test files with unsupported compression extensions
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.json.xz"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.json.lzo"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.json.brotli"));
+
+        // Test edge cases
+        Assertions.assertNull(FileScanNode.inferCompressionByName("gz"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.gz.txt"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.gz.json"));
+    }
+
 }
