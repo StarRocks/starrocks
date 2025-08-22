@@ -493,6 +493,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "hive_partition_stats_sample_size";
 
     public static final String ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE = "enable_connector_sink_global_shuffle";
+    // Ideally, we should use the variable `enable_connector_sink_global_shuffle` to control the global shuffle
+    // behavior of all connectors. However, this session variable is currently default true, and we do not want
+    // to default to enabling Iceberg's global shuffle for now, as it can cause significant performance degradation
+    // when writing to fewer partitions. Therefore, we introduce a new invisible session variable with a default
+    // false value temporarily. Once we can handle the shuffle behavior automatically to avoid some bad cases,
+    // We will make it be controlled by the common connector session.
+    public static final String ENABLE_ICEBERG_SINK_GLOBAL_SHUFFLE = "enable_iceberg_sink_global_shuffle";
 
     public static final String ENABLE_CONNECTOR_SINK_SPILL = "enable_connector_sink_spill";
     public static final String CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD = "connector_sink_spill_mem_limit_threshold";
@@ -1275,6 +1282,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkGlobalShuffle = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_ICEBERG_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
+    private boolean enableIcebergSinkGlobalShuffle = false;
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_SPILL, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkSpill = true;
 
@@ -3843,6 +3852,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableConnectorSinkGlobalShuffle() {
         return enableConnectorSinkGlobalShuffle;
+    }
+
+    public boolean isEnableIcebergSinkGlobalShuffle() {
+        return enableIcebergSinkGlobalShuffle;
     }
 
     public boolean isEnableConnectorSinkSpill() {
