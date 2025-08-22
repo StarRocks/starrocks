@@ -14,8 +14,15 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+<<<<<<< HEAD
 import org.junit.Test;
+=======
+import org.apache.commons.lang3.StringUtils;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+>>>>>>> a11f8519bc ([BugFix] Fix trace times merge bug (#62126))
 
 public class TracerTest extends PlanTestBase {
     @Test
@@ -126,5 +133,25 @@ public class TracerTest extends PlanTestBase {
         String pr = Tracers.printLogs();
         Tracers.close();
         assertContains(pr, "QueryStatement");
+    }
+
+    @Test
+    public void testTracerMulti() throws Exception {
+        Tracers.register(connectContext);
+        String sql = "select l_returnflag, sum(l_quantity) as sum_qty,\n" +
+                "    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge\n" +
+                "from lineitem\n" +
+                "where l_shipdate <= date '1998-12-01'\n" +
+                "group by l_returnflag \n" +
+                "order by l_returnflag;";
+        Tracers.init(Tracers.Mode.TIMER, Tracers.Module.BASE, false, false);
+        getFragmentPlan(sql);
+        try (Timer t = Tracers.watchScope(Tracers.Module.BASE, "thisIsPrivilegeCheckCall")) {
+            getFragmentPlan(sql);
+        }
+        String ss = Tracers.printScopeTimer();
+        System.out.println(ss);
+        Assertions.assertEquals(2, StringUtils.countMatches(ss, "Parser"));
+        Assertions.assertEquals(2, StringUtils.countMatches(ss, "Planner"));
     }
 }
