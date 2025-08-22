@@ -1765,25 +1765,35 @@ StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Co
 
 StatusOr<ColumnPtr> ArrayFunctions::null_or_empty(FunctionContext* context, const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
-    // 增加类型检查
-    auto* array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[0].get()));
+   
     auto size = columns[0]->size();
-    if (columns[0]->is_constant()) {
-        auto col_result = BooleanColumn ::create();
-        col_result->append(array_column->offsets().get_data().data()[1] <= 0);
-        return ConstColumn::create(std::move(col_result), size);
+    if (columns[0]->only_null()) {
+        return ColumnHelper::create_const_column(1, size);
     }
+    if (columns[0]->is_constant()) {
+        auto* array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(columns[0].get()));
+        return ColumnHelper::create_const_column(array_column->get_element_size(0) == 0, size);
+    }
+    auto* array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(columns[0].get()));
+
     ColumnBuilder<TYPE_BOOLEAN> result(size);
-    for (int row = 0; row < size; ++row) {
-        if (array_column->is_null(row)) {
-            result.append(true);
-            continue;
-        } else {
-            auto array_value = array_column->get(row).get_array();
-            if (array_value.size() == 0) {
+    if (columns[0]->is_nullable()) {
+        auto* nullable_column = down_cast<const NullableColumn*>(columns[0].get());
+        const auto& null_data = nullable_column->null_column_data();
+        for(size_t i = 0; i < size; ++i) {
+            if (null_data[i] || array_column->get_element_size(i) == 0) {
                 result.append(true);
-                continue;
+            } else {
+                result.append(false);
             }
+        }
+        return ColumnHelper::create_const_column(1, size);
+    }
+
+    for (int i = 0; i < size; ++i) {
+        if (array_column->get_element_size(i) == 0) {
+            result.append(true);
+        } else {
             result.append(false);
         }
     }
