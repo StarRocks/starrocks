@@ -28,6 +28,7 @@ struct SIMDGather {
     // https://johnysswlab.com/when-vectorization-hits-the-memory-wall-investigating-the-avx2-memory-gather-instruction
     // 512K
     static constexpr const int max_process_size = 512 * 1024;
+
     // b[i] = a[c[i]];
     // T was int32_t or uint32_t
     template <class TB, class TC>
@@ -38,7 +39,24 @@ struct SIMDGather {
         static_assert(std::is_integral_v<TC>);
         int i = 0;
 #ifdef __AVX2__
-        if (buckets < max_process_size) {
+        if (buckets <= 128) {
+            uint32_t a32[128];
+            // Pre-convert the int16_t array 'a' to uint32_t values in 'a32' to avoid repeated type conversion inside the main loop.
+            // This optimization reduces overhead by performing the conversion once before the loop.
+            for (size_t j = 0; j < buckets; ++j) {
+                a32[j] = static_cast<uint32_t>(static_cast<uint16_t>(a[j]));
+            }
+
+            // Out-of-order scalar load is faster than gather instruction
+            for (; i + 8 <= num_rows; i += 8) {
+                __m256i v = _mm256_setr_epi32(a32[c[0]], a32[c[1]], a32[c[2]], a32[c[3]], a32[c[4]], a32[c[5]],
+                                              a32[c[6]], a32[c[7]]);
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(b), v);
+                c += 8;
+                b += 8;
+            }
+            _mm256_zeroupper();
+        } else if (buckets < max_process_size) {
             // gather will collect data of size sizeof(int32)
             // we only need the lower 16 bits
             // eg:
