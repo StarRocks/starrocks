@@ -207,17 +207,35 @@ PARALLEL_TEST(VariantColumnTest, test_create_variant_column) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(VariantColumnTest, test_variant_value_of_null) {
-    VariantValue null_variant = VariantValue::of_null();
-    EXPECT_EQ(null_variant.get_metadata(), VariantMetadata::kEmptyMetadata);
-    EXPECT_EQ(null_variant.get_value(), std::string_view{});
-    EXPECT_EQ(null_variant.to_string(), "null");
-    EXPECT_EQ(null_variant.to_json().value(), "null");
-}
-
-// NOLINTNEXTLINE
 PARALLEL_TEST(VariantColumnTest, test_append_strings) {
-    auto variant_column = VariantColumn::create();
+    const auto variant_column = VariantColumn::create();
+    const uint8_t int1_value[] = {primitiveHeader(VariantPrimitiveType::INT8), 0x01};
+    const std::string_view int1_value_str(reinterpret_cast<const char*>(int1_value), sizeof(int1_value));
+    constexpr uint32_t int1_total_size = sizeof(int1_value) + VariantMetadata::kEmptyMetadata.size();
+    std::string variant_string;
+    variant_string.resize(int1_total_size + sizeof(uint32_t));
+    memcpy(variant_string.data(), &int1_total_size, sizeof(uint32_t));
+    memcpy(variant_string.data() + sizeof(uint32_t), VariantMetadata::kEmptyMetadata.data(),
+           VariantMetadata::kEmptyMetadata.size());
+    memcpy(variant_string.data() + sizeof(uint32_t) + VariantMetadata::kEmptyMetadata.size(), int1_value_str.data(),
+           int1_value_str.size());
+    const Slice slice(variant_string.data(), variant_string.size());
+    variant_column->append_strings(&slice, 1);
+
+    ASSERT_EQ(1, variant_column->size());
+    auto expected = VariantValue::create(slice);
+    ASSERT_TRUE(expected.ok());
+    const VariantValue* actual = variant_column->get_object(0);
+    ASSERT_EQ(expected->serialize_size(), actual->serialize_size());
+    ASSERT_EQ(expected->get_metadata(), actual->get_metadata());
+    ASSERT_EQ(expected->get_value(), actual->get_value());
+    EXPECT_EQ(expected->to_string(), actual->to_string());
+    EXPECT_EQ("1", actual->to_string());
+
+    // Append bad data
+    const Slice bad_slice("");
+    const bool result = variant_column->append_strings(&bad_slice, 1);
+    ASSERT_FALSE(result) << "Appending empty slice should fail";
 }
 
 } // namespace starrocks

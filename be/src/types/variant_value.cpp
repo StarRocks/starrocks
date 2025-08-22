@@ -63,12 +63,8 @@ StatusOr<VariantValue> VariantValue::create(const Slice& slice) {
     }
 
     std::string metadata(metadata_view);
-    std::string value(variant_raw + sizeof(uint32_t) + metadata_view.size(), variant_size - metadata_view.size());
-
     RETURN_IF_ERROR(validate_metadata(metadata));
-    if (value.empty()) {
-        return Status::InvalidArgument("Value cannot be empty");
-    }
+    std::string value(variant_raw + sizeof(uint32_t) + metadata_view.size(), variant_size - metadata_view.size());
 
     return VariantValue(std::move(metadata), std::move(value));
 }
