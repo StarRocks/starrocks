@@ -47,7 +47,13 @@ private:
     template <LogicalType LT>
     static std::pair<bool, JoinHashMapMethodUnaryType> _try_use_range_direct_mapping(RuntimeState* state,
                                                                                      JoinHashTableItems* table_items);
+    // @return: <can_use, JoinHashMapMethodUnaryType>, where `JoinHashMapMethodUnaryType` is effective only when `can_use` is true.
+    template <LogicalType LT>
+    static std::pair<bool, JoinHashMapMethodUnaryType> _try_use_linear_chained(RuntimeState* state,
+                                                                               JoinHashTableItems* table_items);
 };
+
+
 
 std::tuple<JoinKeyConstructorUnaryType, JoinHashMapMethodUnaryType>
 JoinHashMapSelector::construct_key_and_determine_hash_map(RuntimeState* state, JoinHashTableItems* table_items) {
@@ -152,6 +158,10 @@ JoinHashMapMethodUnaryType JoinHashMapSelector::_determine_hash_map_method(
                 }
             }
 
+            if (const auto [can_use, hash_map_type] = JoinHashMapSelector::_try_use_linear_chained<LT>(state, table_items); can_use) {
+                return hash_map_type;
+            }
+
             return JoinHashMapMethodTypeTraits<JoinHashMapMethodType::BUCKET_CHAINED, LT>::unary_type;
         }
     });
@@ -183,7 +193,7 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_
     table_items->min_value = min_value;
     table_items->max_value = max_value;
 
-    const uint64_t row_count = table_items->row_count;
+    const uint64_t row_count __attribute__((unused)) = table_items->row_count;
     const uint64_t bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
     static const size_t HALF_L3_CACHE_SIZE = [] {
         static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;
@@ -191,7 +201,7 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_
         const auto l3_cache = cache_sizes[CpuInfo::L3_CACHE] ? cache_sizes[CpuInfo::L3_CACHE] : DEFAULT_L3_CACHE_SIZE;
         return l3_cache / 2;
     }();
-    static const size_t L2_CACHE_SIZE = CpuInfo::get_l2_cache_size();
+    // static const size_t L2_CACHE_SIZE = CpuInfo::get_l2_cache_size();
 
     if ((table_items->join_type == TJoinOp::LEFT_ANTI_JOIN || table_items->join_type == TJoinOp::LEFT_SEMI_JOIN) &&
         !table_items->with_other_conjunct) {
@@ -201,9 +211,9 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_
             return {true, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::RANGE_DIRECT_MAPPING_SET, LT>::unary_type};
         }
     } else {
-        if (value_interval <= bucket_size || value_interval <= L2_CACHE_SIZE) {
-            return {true, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::RANGE_DIRECT_MAPPING, LT>::unary_type};
-        }
+        // if (value_interval <= bucket_size || value_interval <= L2_CACHE_SIZE) {
+        //     return {true, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::RANGE_DIRECT_MAPPING, LT>::unary_type};
+        // }
 
         // BUCKET_CHAINE:
         // - The size of `table_items.first` is `bucket_size`.
@@ -211,13 +221,35 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_
         // DENSE_RANGE_DIRECT_MAPPING`:
         // - Each value index uses 2 bits, so totally uses `value_interval / 4` bytes.
         // - The size of `table_items.first` only needs `row_count`.
-        if (value_interval / 4 + row_count * 4 <= (bucket_size + bucket_size / 10) * 4) {
+        // if (value_interval / 4 + row_count * 4 <= (bucket_size + bucket_size / 10) * 4) {
             return {true,
                     JoinHashMapMethodTypeTraits<JoinHashMapMethodType::DENSE_RANGE_DIRECT_MAPPING, LT>::unary_type};
-        }
+        // }
     }
 
     return {false, JoinHashMapMethodUnaryType::BUCKET_CHAINED_INT};
+}
+
+template <LogicalType LT>
+std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_linear_chained(
+        RuntimeState* state, JoinHashTableItems* table_items) {
+    if (!state->enable_hash_join_linear_chained_opt()) {
+        return {false, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::BUCKET_CHAINED, LT>::unary_type};
+    }
+
+    const uint64_t bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
+    if (bucket_size > LinearChainedJoinHashMap<LT>::max_supported_bucket_size()) {
+        return {false, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::BUCKET_CHAINED, LT>::unary_type};
+    }
+
+    const bool is_left_anti_join_without_other_conjunct =
+            (table_items->join_type == TJoinOp::LEFT_ANTI_JOIN || table_items->join_type == TJoinOp::LEFT_SEMI_JOIN) &&
+            !table_items->with_other_conjunct;
+    if (is_left_anti_join_without_other_conjunct) {
+        return {true, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::LINEAR_CHAINED_SET, LT>::unary_type};
+    } else {
+        return {true, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::LINEAR_CHAINED, LT>::unary_type};
+    }
 }
 
 // ------------------------------------------------------------------------------------

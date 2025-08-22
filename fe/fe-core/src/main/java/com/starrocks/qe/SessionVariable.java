@@ -448,6 +448,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE = "global_runtime_filter_rpc_http_min_size";
     public static final String ENABLE_JOIN_RUNTIME_FILTER_PUSH_DOWN = "enable_join_runtime_filter_push_down";
     public static final String ENABLE_JOIN_RUNTIME_BITSET_FILTER = "enable_join_runtime_bitset_filter";
+    public static final String ENABLE_HASH_JOIN_LINEAR_CHAINED_OPT = "enable_hash_join_linear_chained_opt";
 
     public static final String ENABLE_HASH_JOIN_RANGE_DIRECT_MAPPING_OPT = "enable_hash_join_range_direct_mapping_opt";
 
@@ -1613,6 +1614,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF)
     private boolean enablePipelineLevelMultiPartitionedRf = false;
+
+    @VarAttr(name = ENABLE_HASH_JOIN_LINEAR_CHAINED_OPT)
+    private boolean enableHashJoinLinearChainedOpt = true;
 
     //In order to be compatible with the logic of the old planner,
     //When the column name is the same as the alias name,
@@ -5287,7 +5291,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
         tResult.setEnable_pipeline_query_statistic(true);
         tResult.setRuntime_filter_early_return_selectivity(runtimeFilterEarlyReturnSelectivity);
-
+        tResult.setEnable_hash_join_linear_chained_opt(enableHashJoinLinearChainedOpt);
         tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
 
         tResult.setEnable_scan_datacache(enableScanDataCache);
