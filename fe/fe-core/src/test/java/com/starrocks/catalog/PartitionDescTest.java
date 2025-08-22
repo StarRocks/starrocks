@@ -54,11 +54,6 @@ public class PartitionDescTest {
     }
 
     @Test
-    public void testAnalyzeByColumnDefs() {
-        assertThrows(NotImplementedException.class, () -> this.partitionDesc.analyze(columnDefs, otherProperties));
-    }
-
-    @Test
     public void testToSql() {
         assertThrows(NotImplementedException.class, () -> this.partitionDesc.toSql());
     }
