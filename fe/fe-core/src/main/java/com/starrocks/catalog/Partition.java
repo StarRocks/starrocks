@@ -81,6 +81,10 @@ public class Partition extends MetaObject implements GsonPostProcessable {
     private Map<Long, PhysicalPartition> idToSubPartition = Maps.newHashMap();
     private Map<String, PhysicalPartition> nameToSubPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
+    @SerializedName(value = "idToTempSubPartition")
+    private Map<Long, PhysicalPartition> idToTempSubPartition = Maps.newHashMap();
+    private Map<String, PhysicalPartition> nameToTempSubPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+
     @SerializedName(value = "distributionInfo")
     private DistributionInfo distributionInfo;
 
@@ -145,6 +149,8 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         partition.defaultPhysicalPartitionId = this.defaultPhysicalPartitionId;
         partition.idToSubPartition = Maps.newHashMap(this.idToSubPartition);
         partition.nameToSubPartition = Maps.newHashMap(this.nameToSubPartition);
+        partition.idToTempSubPartition = Maps.newHashMap(this.idToTempSubPartition);
+        partition.nameToTempSubPartition = Maps.newHashMap(this.nameToTempSubPartition);
         return partition;
     }
 
@@ -192,11 +198,18 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         nameToSubPartition.put(subPartition.getName(), subPartition);
     }
 
-    public void removeSubPartition(long id) {
+    public PhysicalPartition removeSubPartition(long id) {
         PhysicalPartition subPartition = idToSubPartition.remove(id);
         if (subPartition != null) {
             nameToSubPartition.remove(subPartition.getName());
+            return subPartition;
         }
+
+        subPartition = idToTempSubPartition.remove(id);
+        if (subPartition != null) {
+            nameToTempSubPartition.remove(subPartition.getName());
+        }
+        return subPartition;
     }
 
     public Collection<PhysicalPartition> getSubPartitions() {
@@ -204,15 +217,44 @@ public class Partition extends MetaObject implements GsonPostProcessable {
     }
 
     public PhysicalPartition getSubPartition(long id) {
-        return idToSubPartition.get(id);
+        PhysicalPartition physicalPartition = idToSubPartition.get(id);
+        if (physicalPartition != null) {
+            return physicalPartition;
+        }
+        return idToTempSubPartition.get(id);
     }
 
     public PhysicalPartition getSubPartition(String name) {
-        return nameToSubPartition.get(name);
+        PhysicalPartition physicalPartition = nameToSubPartition.get(name);
+        if (physicalPartition != null) {
+            return physicalPartition;
+        }
+        return nameToTempSubPartition.get(name);
     }
 
     public PhysicalPartition getDefaultPhysicalPartition() {
         return idToSubPartition.get(defaultPhysicalPartitionId);
+    }
+
+    public PhysicalPartition replacePhysicalPartition(long oldPhysicalPartitionId,
+            PhysicalPartition newPhysicalPartition, boolean moveOldToTemp) {
+        PhysicalPartition oldPhysicalPartition = removeSubPartition(oldPhysicalPartitionId);
+        if (oldPhysicalPartition == null) {
+            return null;
+        }
+
+        addSubPartition(newPhysicalPartition);
+
+        if (defaultPhysicalPartitionId == oldPhysicalPartitionId) {
+            defaultPhysicalPartitionId = newPhysicalPartition.getId();
+        }
+
+        if (moveOldToTemp) {
+            idToTempSubPartition.put(oldPhysicalPartition.getId(), oldPhysicalPartition);
+            nameToTempSubPartition.put(oldPhysicalPartition.getName(), oldPhysicalPartition);
+        }
+
+        return oldPhysicalPartition;
     }
 
     public boolean hasData() {
@@ -317,6 +359,13 @@ public class Partition extends MetaObject implements GsonPostProcessable {
             }
 
             nameToSubPartition.put(subPartition.getName(), subPartition);
+        }
+
+        for (PhysicalPartition subPartition : idToTempSubPartition.values()) {
+            if (subPartition.getName() == null) {
+                subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
+            }
+            nameToTempSubPartition.put(subPartition.getName(), subPartition);
         }
     }
 

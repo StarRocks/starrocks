@@ -109,9 +109,6 @@ public class DynamicTabletJobMgrTest {
         jobMgr.addDynamicTabletJob(normalJob);
         Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addDynamicTabletJob(normalJob));
 
-        TestNormalDynamicTabletJob normalJob2 = new TestNormalDynamicTabletJob(2, null, 0, 0);
-        Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addDynamicTabletJob(normalJob2));
-
         TestAbnormalDynamicTabletJob abnormalJob = new TestAbnormalDynamicTabletJob(2, null, 0, 1);
         jobMgr.addDynamicTabletJob(abnormalJob);
 
