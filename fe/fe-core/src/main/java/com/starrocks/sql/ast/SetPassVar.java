@@ -14,13 +14,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.sql.parser.NodePosition;
 
 public class SetPassVar extends SetListItem {
     private UserRef user;
     private final UserAuthOption authOption;
-    private UserAuthenticationInfo userAuthenticationInfo;
 
     public SetPassVar(UserRef user, UserAuthOption authOption, NodePosition pos) {
         super(pos);
@@ -38,13 +36,5 @@ public class SetPassVar extends SetListItem {
 
     public UserAuthOption getAuthOption() {
         return authOption;
-    }
-
-    public void setUserAuthenticationInfo(UserAuthenticationInfo userAuthenticationInfo) {
-        this.userAuthenticationInfo = userAuthenticationInfo;
-    }
-
-    public UserAuthenticationInfo getUserAuthenticationInfo() {
-        return userAuthenticationInfo;
     }
 }

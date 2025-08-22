@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.CaseSensibility;
@@ -102,9 +101,7 @@ public class AuthenticationAnalyzer {
                 stmt.getDefaultRoles().forEach(r -> validRoleName(r, "Valid role name fail", true));
             }
 
-            UserAuthenticationInfo userAuthenticationInfo =
-                    UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption());
-            stmt.setAuthenticationInfo(userAuthenticationInfo);
+            UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption());
             return null;
         }
 
@@ -113,9 +110,7 @@ public class AuthenticationAnalyzer {
             analyzeUser(stmt.getUser());
             checkUserExist(stmt.getUser(), !stmt.isIfExists());
 
-            UserAuthenticationInfo userAuthenticationInfo =
-                    UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption());
-            stmt.setAuthenticationInfo(userAuthenticationInfo);
+            UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption());
             return null;
         }
 
