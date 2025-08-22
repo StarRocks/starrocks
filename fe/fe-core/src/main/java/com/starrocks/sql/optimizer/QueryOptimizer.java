@@ -753,6 +753,7 @@ public class QueryOptimizer extends Optimizer {
         try (Timer ignored = Tracers.watchScope("MVViewRewrite")) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "try VIEW_BASED_MV_REWRITE");
             OptExpression treeWithView = queryMaterializationContext.getQueryOptPlanWithView();
+            OptimizerTraceUtil.logOptExpression("before ViewBasedMvRuleRewrite:\n%s", tree);
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
             if (mvRewriteStrategy.enableMultiTableRewrite) {
@@ -779,6 +780,7 @@ public class QueryOptimizer extends Optimizer {
             }
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "original view scans size: {}, " +
                     "left view scans size: {}", origQueryViewScanOperators.size(), leftViewScanOperators.size());
+            OptimizerTraceUtil.logOptExpression("after ViewBasedMvRuleRewrite:\n%s", tree);
         } catch (Exception e) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
                     "single table view based mv rule rewrite failed.", e);
