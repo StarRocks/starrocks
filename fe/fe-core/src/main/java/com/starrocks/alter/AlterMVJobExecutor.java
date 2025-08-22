@@ -26,6 +26,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
@@ -443,8 +444,8 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             MaterializedView materializedView = (MaterializedView) table;
             String dbName = db.getFullName();
 
-            MaterializedView.RefreshType newRefreshType = refreshSchemeDesc.getType();
-            MaterializedView.RefreshType oldRefreshType = materializedView.getRefreshScheme().getType();
+            MaterializedViewRefreshType newRefreshType = MaterializedViewRefreshType.getType(refreshSchemeDesc);
+            MaterializedViewRefreshType oldRefreshType = materializedView.getRefreshScheme().getType();
 
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
@@ -530,7 +531,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().
                         alterMaterializedViewStatus(materializedView, status, "", false);
                 // for manual refresh type, do not refresh
-                if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.MANUAL) {
+                if (materializedView.getRefreshScheme().getType() != MaterializedViewRefreshType.MANUAL) {
                     GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .refreshMaterializedView(dbName, materializedView.getName(), false, null,
                                     Constants.TaskRunPriority.NORMAL.value(), true, false);
@@ -567,7 +568,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
     /**
      * Inactive the materialized view and its related materialized views.
-     *
+     * <p>
      * NOTE:
      * 1. This method will clear all visible version map of the MV since for all schema changes, the MV should be
      * refreshed.

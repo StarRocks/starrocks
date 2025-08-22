@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.parser.NodePosition;
 
 public class SyncRefreshSchemeDesc extends RefreshSchemeClause {
@@ -25,6 +23,6 @@ public class SyncRefreshSchemeDesc extends RefreshSchemeClause {
     }
 
     public SyncRefreshSchemeDesc(NodePosition pos) {
-        super(MaterializedView.RefreshType.SYNC, pos, MaterializedView.RefreshMoment.IMMEDIATE);
+        super(pos, RefreshMoment.IMMEDIATE);
     }
 }

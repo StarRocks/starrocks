@@ -87,6 +87,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QueryRelation;
@@ -474,7 +475,8 @@ public class MaterializedViewAnalyzer {
             if (!ctx.getSessionVariable().isEnableIncrementalRefreshMV()) {
                 return;
             }
-            if (!createStmt.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
+
+            if (!(createStmt.getRefreshSchemeDesc() instanceof IncrementalRefreshSchemeDesc)) {
                 return;
             }
 

@@ -83,6 +83,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -212,7 +213,9 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
+import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
@@ -226,6 +229,7 @@ import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
@@ -583,8 +587,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             List<MaterializedView> materializedViews = db.getMaterializedViews();
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             for (MaterializedView materializedView : materializedViews) {
-                MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
-                if (refreshType != MaterializedView.RefreshType.SYNC) {
+                MaterializedViewRefreshType refreshType = materializedView.getRefreshScheme().getType();
+                if (refreshType != MaterializedViewRefreshType.SYNC) {
                     Task task = TaskBuilder.buildMvTask(materializedView, db.getFullName());
                     TaskBuilder.updateTaskInfo(task, materializedView);
                     taskManager.createTask(task, false);
@@ -1256,7 +1260,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // build partitions
             List<Partition> partitionList = newPartitions.stream().map(x -> x.first).collect(Collectors.toList());
             buildPartitions(db, copiedTable, partitionList.stream().map(Partition::getSubPartitions)
-                            .flatMap(p -> p.stream()).collect(Collectors.toList()), ctx.getCurrentComputeResource());
+                    .flatMap(p -> p.stream()).collect(Collectors.toList()), ctx.getCurrentComputeResource());
 
             // check again
             if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
@@ -2104,7 +2108,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         //     of the colocate group, and balancer will create a lot of COLOCATE_MISMATCH tasks which shouldn't exist.
         if (isColocateTable) {
             try {
-                // Optimization: wait first time, before global lock
+                // Optimization: wait first, before global lock
                 colocateTableCreateSyncer.awaitZero();
                 // Since we have supported colocate tables in different databases,
                 // we should use global lock, not db lock.
@@ -2921,7 +2925,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // create refresh scheme
         MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeClause refreshSchemeDesc = stmt.getRefreshSchemeDesc();
-        if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.ASYNC) {
+        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             MaterializedView.AsyncRefreshContext asyncRefreshContext = mvRefreshScheme.getAsyncRefreshContext();
@@ -2941,7 +2945,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             long random = getRandomStart(asyncRefreshSchemeDesc.getIntervalLiteral(), randomizeStart);
             if (asyncRefreshSchemeDesc.isDefineStartTime() || randomizeStart == -1) {
                 long definedStartTime = Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime());
-                // Add random set only if mv_random_start > 0 when user has already set the start time
+                // Add random set only if mv_randomize_start > 0 when user has already set the start time
                 if (randomizeStart > 0) {
                     definedStartTime += random;
                 }
@@ -2982,22 +2986,30 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                     "external table");
                 }
             }
-        } else if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
+        } else if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-            mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
-        } else if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.MANUAL)) {
+            mvRefreshScheme.setType(MaterializedViewRefreshType.SYNC);
+        } else if (refreshSchemeDesc instanceof ManualRefreshSchemeDesc) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-            mvRefreshScheme.setType(MaterializedView.RefreshType.MANUAL);
+            mvRefreshScheme.setType(MaterializedViewRefreshType.MANUAL);
         } else {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-            mvRefreshScheme.setType(MaterializedView.RefreshType.INCREMENTAL);
+            mvRefreshScheme.setType(MaterializedViewRefreshType.INCREMENTAL);
         }
-        mvRefreshScheme.setMoment(refreshSchemeDesc.getMoment());
+
+        if (refreshSchemeDesc.getMoment() == RefreshSchemeClause.RefreshMoment.IMMEDIATE) {
+            mvRefreshScheme.setMoment(MaterializedView.RefreshMoment.IMMEDIATE);
+        } else if (refreshSchemeDesc.getMoment() == RefreshSchemeClause.RefreshMoment.DEFERRED) {
+            mvRefreshScheme.setMoment(MaterializedView.RefreshMoment.DEFERRED);
+        } else {
+            throw new DdlException("Unknown refresh moment " + refreshSchemeDesc.getMoment() + " for materialized view");
+        }
+
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         MaterializedView materializedView;
         if (RunMode.isSharedNothingMode()) {
-            if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
+            if (refreshSchemeDesc instanceof IncrementalRefreshSchemeDesc) {
                 materializedView = GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
                         .createSinkTable(stmt, partitionInfo, mvId, db.getId());
                 materializedView.setMaintenancePlan(stmt.getMaintenancePlan());
@@ -3008,7 +3020,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
         } else {
             Preconditions.checkState(RunMode.isSharedDataMode());
-            if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
+            if (refreshSchemeDesc instanceof IncrementalRefreshSchemeDesc) {
                 throw new DdlException("Incremental materialized view in shared_data mode is not supported");
             }
 
@@ -3200,15 +3212,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,
                                                Map<String, String> optHints) throws DdlException {
-        MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
+        MaterializedViewRefreshType refreshType = materializedView.getRefreshScheme().getType();
         MaterializedView.RefreshMoment refreshMoment = materializedView.getRefreshScheme().getMoment();
 
-        if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
+        if (refreshType.equals(MaterializedViewRefreshType.INCREMENTAL)) {
             GlobalStateMgr.getCurrentState().getMaterializedViewMgr().startMaintainMV(materializedView);
             return;
         }
 
-        if (refreshType != MaterializedView.RefreshType.SYNC) {
+        if (refreshType != MaterializedViewRefreshType.SYNC) {
 
             Task task = TaskBuilder.buildMvTask(materializedView, dbName);
             TaskBuilder.updateTaskInfo(task, materializedView);
@@ -3268,13 +3280,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     private String executeRefreshMvTask(String dbName, MaterializedView materializedView,
                                         ExecuteOption executeOption)
             throws DdlException {
-        MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
+        MaterializedViewRefreshType refreshType = materializedView.getRefreshScheme().getType();
         LOG.info("Start to execute refresh materialized view task, mv: {}, refreshType: {}, executionOption:{}",
                 materializedView.getName(), refreshType, executeOption);
 
-        if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
+        if (refreshType.equals(MaterializedViewRefreshType.INCREMENTAL)) {
             GlobalStateMgr.getCurrentState().getMaterializedViewMgr().onTxnPublish(materializedView);
-        } else if (refreshType != MaterializedView.RefreshType.SYNC) {
+        } else if (refreshType != MaterializedViewRefreshType.SYNC) {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
             if (!taskManager.containTask(mvTaskName)) {
@@ -3413,7 +3425,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (getTable(db.getFullName(), newTableName) != null) {
             throw new DdlException("Table name[" + newTableName + "] is already used");
         }
-
         olapTable.checkAndSetName(newTableName, false);
 
         db.dropTable(oldTableName);
@@ -4678,7 +4689,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             //
             // So we can only discard this information, in this case, it is equivalent to losing the record of these operations.
             // But it doesn't matter, these records are currently only used to record whether a replica is in a bad state.
-            // This state has little effect on the system, and it can be restored after the system has processed the bad state replica.
+            // This state has little effect on the system, and it can be restored after the system has processed the bad state
+            // replica.
             for (Pair<Long, Integer> tabletInfo : tabletsWithSchemaHash) {
                 LOG.warn("find an old backendTabletsInfo for tablet {}, ignore it", tabletInfo.first);
             }
@@ -5035,6 +5047,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(sourcePartitionId));
             partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(sourcePartitionId));
             partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(sourcePartitionId));
+
             if (copiedTbl.isCloudNativeTableOrMaterializedView()) {
                 partitionInfo.setDataCacheInfo(newPartitionId, partitionInfo.getDataCacheInfo(sourcePartitionId));
             }

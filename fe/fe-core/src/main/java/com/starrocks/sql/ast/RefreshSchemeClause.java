@@ -12,27 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.parser.NodePosition;
 
 public class RefreshSchemeClause extends AlterTableClause {
-
-    protected MaterializedView.RefreshType type;
-    protected MaterializedView.RefreshMoment moment;
-    protected final NodePosition pos;
-
-    public RefreshSchemeClause(MaterializedView.RefreshType type, NodePosition pos, MaterializedView.RefreshMoment moment) {
-        super(pos);
-        this.type = type;
-        this.moment = moment;
-        this.pos = pos;
+    public enum RefreshMoment {
+        IMMEDIATE,
+        DEFERRED
     }
 
-    public MaterializedView.RefreshType getType() {
-        return type;
+    protected RefreshMoment moment;
+    protected final NodePosition pos;
+
+    public RefreshSchemeClause(NodePosition pos, RefreshMoment moment) {
+        super(pos);
+        this.moment = moment;
+        this.pos = pos;
     }
 
     @Override
@@ -40,7 +36,7 @@ public class RefreshSchemeClause extends AlterTableClause {
         return pos;
     }
 
-    public MaterializedView.RefreshMoment getMoment() {
+    public RefreshMoment getMoment() {
         return moment;
     }
 
