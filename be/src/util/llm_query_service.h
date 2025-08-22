@@ -21,6 +21,7 @@
 
 #include "common/statusor.h"
 #include "exprs/ai_functions.h"
+#include "util/llm_cache.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -37,11 +38,14 @@ private:
     LLMQueryService();
     ~LLMQueryService();
 
+    Status init_llm_cache();
     StatusOr<std::string> execute_query(const std::string& prompt, const ModelConfig& config);
 
     std::unique_ptr<ThreadPool> _thread_pool;
     std::mutex _mutex; // lock for _pending_queries
     std::unordered_map<std::string, std::shared_future<StatusOr<std::string>>> _pending_queries;
+
+    LLMCache _llm_cache;
 };
 
 } // namespace starrocks

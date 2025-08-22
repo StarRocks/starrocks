@@ -565,7 +565,7 @@ set(EXEC_FILES
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./util/table_metrics_mgr_test.cpp
-        ./util/llm_cache_manager_test.cpp
+        ./util/llm_cache_test.cpp
         ./util/llm_query_service_test.cpp
         )
 

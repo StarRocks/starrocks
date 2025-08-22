@@ -24,6 +24,7 @@ constexpr double kDefaultTemperature = 0.7;
 constexpr int kDefaultMaxTokens = 1024;
 constexpr double kDefaultTopP = 1.0;
 const std::string kDefaultEndpoint = "https://api.openai.com/v1/completions";
+constexpr int kDefaultTimeout = 60000;
 
 struct ModelConfig {
     std::string endpoint;
@@ -32,19 +33,20 @@ struct ModelConfig {
     double temperature;
     int max_tokens;
     double top_p;
+    int timeout_ms;
 
     ModelConfig()
             : endpoint(kDefaultEndpoint),
               temperature(kDefaultTemperature),
               max_tokens(kDefaultMaxTokens),
-              top_p(kDefaultTopP) {}
+              top_p(kDefaultTopP),
+              timeout_ms(kDefaultTimeout) {}
 };
 
 class AiFunctions {
 public:
     DEFINE_VECTORIZED_FN(ai_query);
     static StatusOr<ModelConfig> parse_model_config(const JsonValue& json);
-    static Status init_llm_cache();
 };
 
 } // namespace starrocks

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/llm_cache_manager.h"
+#include "util/llm_cache.h"
 
 #include <gtest/gtest.h>
 
@@ -28,68 +28,26 @@ using namespace std;
 
 namespace starrocks {
 
-class LLMCacheManagerTest : public testing::Test {
+class LLMCacheTest : public testing::Test {
 public:
     void SetUp() override {
-        // Reset cache manager for each test
-        manager = LLMCacheManager::instance();
+        // Reset llm cache for each test
+        llm_cache = new LLMCache();
         // Clean up any existing cache
-        manager->release_cache();
+        llm_cache->release_cache();
     }
 
     void TearDown() override {
         // Clean up after each test
-        manager->release_cache();
+        llm_cache->release_cache();
+        delete llm_cache;
     }
 
 protected:
-    LLMCacheManager* manager;
+    LLMCache* llm_cache;
 };
 
-// Test cache key generation
-TEST_F(LLMCacheManagerTest, GenerateCacheKey) {
-    ModelConfig config;
-    config.model = "gpt-3.5-turbo";
-    config.temperature = 0.7;
-    config.max_tokens = 100;
-    config.top_p = 0.9;
-
-    std::string prompt = "Hello, world!";
-    std::string cache_key = generate_cache_key(prompt, config);
-
-    // Direct string comparison - more precise and reliable
-    std::string expected_key = "LLM_RESP:gpt-3.5-turbo:0.7:100:0.9|Hello, world!";
-    EXPECT_EQ(cache_key, expected_key);
-}
-
-// Test cache key generation with edge values
-TEST_F(LLMCacheManagerTest, GenerateCacheKeyEdgeCases) {
-    // Test with edge case values
-    ModelConfig config;
-    config.model = "";
-    config.temperature = 0.0;
-    config.max_tokens = 1;
-    config.top_p = 1.0;
-
-    std::string prompt = "";
-    std::string cache_key = generate_cache_key(prompt, config);
-    std::string expected_key = "LLM_RESP::0:1:1|";
-    EXPECT_EQ(cache_key, expected_key);
-
-    // Test with decimal precision
-    ModelConfig config2;
-    config2.model = "test";
-    config2.temperature = 1.23456;
-    config2.max_tokens = 2048;
-    config2.top_p = 0.95;
-
-    std::string prompt2 = "Test prompt";
-    std::string cache_key2 = generate_cache_key(prompt2, config2);
-    std::string expected_key2 = "LLM_RESP:test:1.23456:2048:0.95|Test prompt";
-    EXPECT_EQ(cache_key2, expected_key2);
-}
-
-TEST_F(LLMCacheManagerTest, CacheKeyUniqueness) {
+TEST_F(LLMCacheTest, CacheKeyUniqueness) {
     ModelConfig config1;
     config1.model = "gpt-3.5-turbo";
     config1.temperature = 0.7;
@@ -110,7 +68,7 @@ TEST_F(LLMCacheManagerTest, CacheKeyUniqueness) {
 }
 
 // Test cache key uniqueness for different prompts
-TEST_F(LLMCacheManagerTest, CacheKeyUniquenessDifferentPrompts) {
+TEST_F(LLMCacheTest, CacheKeyUniquenessDifferentPrompts) {
     ModelConfig config;
     config.model = "gpt-3.5-turbo";
     config.temperature = 0.7;
@@ -123,26 +81,17 @@ TEST_F(LLMCacheManagerTest, CacheKeyUniquenessDifferentPrompts) {
     EXPECT_NE(key1, key2);
 }
 
-// Test singleton pattern
-TEST_F(LLMCacheManagerTest, SingletonInstance) {
-    LLMCacheManager* instance1 = LLMCacheManager::instance();
-    LLMCacheManager* instance2 = LLMCacheManager::instance();
-
-    EXPECT_EQ(instance1, instance2);
-    EXPECT_NE(instance1, nullptr);
-}
-
 // Test cache initialization
-TEST_F(LLMCacheManagerTest, CacheInitialization) {
-    manager->init(10000);
+TEST_F(LLMCacheTest, CacheInitialization) {
+    llm_cache->init(10000);
 
     // Test by trying to insert and lookup
     std::string cache_key = "test_key";
     std::string response = "test_response";
 
-    manager->insert(cache_key, response);
+    llm_cache->insert(cache_key, response);
 
-    LLMCacheValue* result = manager->lookup(CacheKey(cache_key));
+    LLMCacheValue* result = llm_cache->lookup(CacheKey(cache_key));
     EXPECT_NE(result, nullptr);
     if (result) {
         EXPECT_EQ(result->response, response);
@@ -151,87 +100,87 @@ TEST_F(LLMCacheManagerTest, CacheInitialization) {
 }
 
 // Test multiple initialization calls
-TEST_F(LLMCacheManagerTest, MultipleInitialization) {
-    manager->init(10000);
+TEST_F(LLMCacheTest, MultipleInitialization) {
+    llm_cache->init(10000);
 
     // Insert a value
     std::string cache_key = "test_key";
     std::string response = "test_response";
-    manager->insert(cache_key, response);
+    llm_cache->insert(cache_key, response);
 
     // Second init should affect existing data
-    manager->init(20000);
+    llm_cache->init(20000);
 
     // Can not find the original data
-    LLMCacheValue* result = manager->lookup(CacheKey(cache_key));
+    LLMCacheValue* result = llm_cache->lookup(CacheKey(cache_key));
     EXPECT_EQ(result, nullptr);
 }
 
 // Test setting capacity before initialization
-TEST_F(LLMCacheManagerTest, SetCapacityBeforeInit) {
+TEST_F(LLMCacheTest, SetCapacityBeforeInit) {
     // Should not crash when cache is not initialized
-    manager->set_capacity(1000);
+    llm_cache->set_capacity(1000);
 
     // Initialize after
-    manager->init(50000);
+    llm_cache->init(50000);
 
     // Should work normally
-    manager->insert("test_key", "test_response");
-    LLMCacheValue* result = manager->lookup(CacheKey("test_key"));
+    llm_cache->insert("test_key", "test_response");
+    LLMCacheValue* result = llm_cache->lookup(CacheKey("test_key"));
     EXPECT_NE(result, nullptr);
 }
 
 // Test basic insert and lookup operations
-TEST_F(LLMCacheManagerTest, BasicInsertAndLookup) {
-    manager->init(10000);
+TEST_F(LLMCacheTest, BasicInsertAndLookup) {
+    llm_cache->init(10000);
 
     std::string cache_key = "test_key";
     std::string response = "This is a test response";
 
     // Insert
-    manager->insert(cache_key, response);
+    llm_cache->insert(cache_key, response);
 
     // Lookup
-    LLMCacheValue* result = manager->lookup(CacheKey(cache_key));
+    LLMCacheValue* result = llm_cache->lookup(CacheKey(cache_key));
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(result->response, response);
     EXPECT_EQ(result->cache_key_str, cache_key);
 
     // Lookup for non-existent key
-    result = manager->lookup(CacheKey("non_existent_key"));
+    result = llm_cache->lookup(CacheKey("non_existent_key"));
     EXPECT_EQ(result, nullptr);
 }
 
 // Test cache operations with different data types
-TEST_F(LLMCacheManagerTest, DifferentDataTypes) {
-    manager->init(1000 * 1024);
+TEST_F(LLMCacheTest, DifferentDataTypes) {
+    llm_cache->init(1000 * 1024);
 
     // Test with empty strings
-    manager->insert("", "");
-    LLMCacheValue* result1 = manager->lookup(CacheKey(""));
+    llm_cache->insert("", "");
+    LLMCacheValue* result1 = llm_cache->lookup(CacheKey(""));
     EXPECT_NE(result1, nullptr);
     EXPECT_EQ(result1->response, "");
 
     // Test with special characters
     std::string special_key = "key_with_特殊字符_!@#$%";
     std::string special_response = "Response with 特殊字符 and symbols: !@#$%^&*()";
-    manager->insert(special_key, special_response);
-    LLMCacheValue* result2 = manager->lookup(CacheKey(special_key));
+    llm_cache->insert(special_key, special_response);
+    LLMCacheValue* result2 = llm_cache->lookup(CacheKey(special_key));
     EXPECT_NE(result2, nullptr);
     EXPECT_EQ(result2->response, special_response);
 
     // Test with very long strings
     std::string long_key(1000, 'k');
     std::string long_response(5000, 'r');
-    manager->insert(long_key, long_response);
-    LLMCacheValue* result3 = manager->lookup(CacheKey(long_key));
+    llm_cache->insert(long_key, long_response);
+    LLMCacheValue* result3 = llm_cache->lookup(CacheKey(long_key));
     EXPECT_NE(result3, nullptr);
     EXPECT_EQ(result3->response, long_response);
 }
 
 // Test thread safety
-TEST_F(LLMCacheManagerTest, ThreadSafety) {
-    manager->init(1000 * 1024);
+TEST_F(LLMCacheTest, ThreadSafety) {
+    llm_cache->init(1000 * 1024);
 
     const int num_threads = 10;
     const int operations_per_thread = 100;
@@ -246,9 +195,9 @@ TEST_F(LLMCacheManagerTest, ThreadSafety) {
                 std::string key = "thread_" + std::to_string(i) + "_key_" + std::to_string(j);
                 std::string response = "Thread " + std::to_string(i) + " response " + std::to_string(j);
 
-                manager->insert(key, response);
+                llm_cache->insert(key, response);
 
-                LLMCacheValue* result = manager->lookup(CacheKey(key));
+                LLMCacheValue* result = llm_cache->lookup(CacheKey(key));
                 if (result && result->response == response) {
                     success_count++;
                 }
@@ -266,28 +215,28 @@ TEST_F(LLMCacheManagerTest, ThreadSafety) {
 }
 
 // Test release_cache functionality
-TEST_F(LLMCacheManagerTest, ReleaseCacheFunction) {
-    manager->init(10000);
+TEST_F(LLMCacheTest, ReleaseCacheFunction) {
+    llm_cache->init(10000);
 
     // Insert some data
-    manager->insert("test_key", "test_response");
-    LLMCacheValue* result1 = manager->lookup(CacheKey("test_key"));
+    llm_cache->insert("test_key", "test_response");
+    LLMCacheValue* result1 = llm_cache->lookup(CacheKey("test_key"));
     EXPECT_NE(result1, nullptr);
 
     // Release cache
-    manager->release_cache();
+    llm_cache->release_cache();
 
     // Initialize again
-    manager->init(10000);
+    llm_cache->init(10000);
 
     // Previous data should be gone
-    LLMCacheValue* result2 = manager->lookup(CacheKey("test_key"));
+    LLMCacheValue* result2 = llm_cache->lookup(CacheKey("test_key"));
     EXPECT_EQ(result2, nullptr);
 }
 
 // Test cache with model config integration
-TEST_F(LLMCacheManagerTest, ModelConfigIntegration) {
-    manager->init(1000 * 1024);
+TEST_F(LLMCacheTest, ModelConfigIntegration) {
+    llm_cache->init(1000 * 1024);
 
     ModelConfig config;
     config.model = "test-model";
@@ -300,10 +249,10 @@ TEST_F(LLMCacheManagerTest, ModelConfigIntegration) {
     std::string response = "Model response to the prompt";
 
     // Insert using generated cache key
-    manager->insert(cache_key, response);
+    llm_cache->insert(cache_key, response);
 
     // Lookup using the same cache key
-    LLMCacheValue* result = manager->lookup(CacheKey(cache_key));
+    LLMCacheValue* result = llm_cache->lookup(CacheKey(cache_key));
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(result->response, response);
     EXPECT_EQ(result->cache_key_str, cache_key);
@@ -314,19 +263,19 @@ TEST_F(LLMCacheManagerTest, ModelConfigIntegration) {
     std::string cache_key2 = generate_cache_key(prompt, config2);
     EXPECT_NE(cache_key, cache_key2);
 
-    LLMCacheValue* result2 = manager->lookup(CacheKey(cache_key2));
+    LLMCacheValue* result2 = llm_cache->lookup(CacheKey(cache_key2));
     EXPECT_EQ(result2, nullptr); // Should not find entry with different key
 }
 
 // Test memory management and deleter function
-TEST_F(LLMCacheManagerTest, MemoryManagement) {
-    manager->init(5000); // Very small capacity to force eviction
+TEST_F(LLMCacheTest, MemoryManagement) {
+    llm_cache->init(5000); // Very small capacity to force eviction
 
     // Insert many entries to trigger deletions
     for (int i = 0; i < 20; ++i) {
         std::string key = "memory_test_key_" + std::to_string(i);
         std::string response = "Memory test response " + std::to_string(i) + " with some content";
-        manager->insert(key, response);
+        llm_cache->insert(key, response);
     }
 
     // Test should complete without memory leaks
@@ -335,18 +284,18 @@ TEST_F(LLMCacheManagerTest, MemoryManagement) {
 }
 
 // Test concurrent initialization
-TEST_F(LLMCacheManagerTest, ConcurrentInitialization) {
+TEST_F(LLMCacheTest, ConcurrentInitialization) {
     const int num_threads = 10;
     std::vector<std::thread> threads;
 
     // Multiple threads trying to initialize concurrently
     for (int i = 0; i < num_threads; ++i) {
         threads.emplace_back([this, i]() {
-            manager->init(10000 + i * 1000); // Different capacities
+            llm_cache->init(10000 + i * 1000); // Different capacities
 
             // Try to insert something
             std::string key = "concurrent_key_" + std::to_string(i);
-            manager->insert(key, "concurrent_response");
+            llm_cache->insert(key, "concurrent_response");
         });
     }
 
@@ -356,9 +305,67 @@ TEST_F(LLMCacheManagerTest, ConcurrentInitialization) {
     }
 
     // Cache should be properly initialized and working
-    manager->insert("final_test", "final_response");
-    LLMCacheValue* result = manager->lookup(CacheKey("final_test"));
+    llm_cache->insert("final_test", "final_response");
+    LLMCacheValue* result = llm_cache->lookup(CacheKey("final_test"));
     EXPECT_NE(result, nullptr);
 }
 
+// Test cache metrics functionality
+TEST_F(LLMCacheTest, CacheMetricsTest) {
+    // Initialize cache with small capacity
+    llm_cache->init(10000);
+
+    // Get initial metrics
+    CacheMetrics initial_metrics = llm_cache->get_metrics();
+    EXPECT_EQ(initial_metrics.cache_hits, 0);
+    EXPECT_EQ(initial_metrics.cache_misses, 0);
+    EXPECT_EQ(initial_metrics.total_requests, 0);
+    EXPECT_DOUBLE_EQ(initial_metrics.hit_rate, 0.0);
+    EXPECT_EQ(initial_metrics.cache_size, 0);
+    EXPECT_EQ(initial_metrics.cache_capacity, 10000);
+
+    // Insert some test data
+    llm_cache->insert("key1", "response1");
+    llm_cache->insert("key2", "response2");
+    llm_cache->insert("key3", "response3");
+
+    // Test cache hits
+    LLMCacheValue* result1 = llm_cache->lookup(CacheKey("key1")); // Hit
+    LLMCacheValue* result2 = llm_cache->lookup(CacheKey("key2")); // Hit
+
+    EXPECT_NE(result1, nullptr);
+    EXPECT_NE(result2, nullptr);
+
+    // Test cache miss
+    LLMCacheValue* result3 = llm_cache->lookup(CacheKey("non_existent_key")); // Miss
+    EXPECT_EQ(result3, nullptr);
+
+    // Get metrics after operations
+    CacheMetrics metrics = llm_cache->get_metrics();
+
+    EXPECT_EQ(metrics.cache_hits, 2);
+    EXPECT_EQ(metrics.cache_misses, 1);
+    EXPECT_EQ(metrics.total_requests, 3);
+
+    // Calculate expected hit rate: 2 hits / 3 requests = 0.666...
+    double expected_hit_rate = 2.0 / 3.0;
+    EXPECT_NEAR(metrics.hit_rate, expected_hit_rate, 0.001);
+
+    // Cache should have some size (exact value depends on implementation)
+    EXPECT_GT(metrics.cache_size, 0);
+    EXPECT_LE(metrics.cache_size, metrics.cache_capacity);
+
+    // Test more operations to verify metrics update correctly
+    llm_cache->lookup(CacheKey("key3"));                // Hit
+    llm_cache->lookup(CacheKey("another_missing_key")); // Miss
+
+    CacheMetrics updated_metrics = llm_cache->get_metrics();
+
+    EXPECT_EQ(updated_metrics.cache_hits, 3);
+    EXPECT_EQ(updated_metrics.cache_misses, 2);
+    EXPECT_EQ(updated_metrics.total_requests, 5);
+
+    double updated_expected_hit_rate = 3.0 / 5.0;
+    EXPECT_NEAR(updated_metrics.hit_rate, updated_expected_hit_rate, 0.001);
+}
 } // namespace starrocks
