@@ -200,7 +200,8 @@ public class OlapTable extends Table {
          * during the creation of the logical plan and the physical plan might be inconsistent.
         */
         UPDATING_META,
-        OPTIMIZE
+        OPTIMIZE,
+        DYNAMIC_TABLET
     }
 
     @SerializedName(value = "state")
@@ -3077,6 +3078,52 @@ public class OlapTable extends Table {
 
     public boolean existTempPartitions() {
         return !tempPartitions.isEmpty();
+    }
+
+    public PhysicalPartition replacePhysicalPartition(long oldPhysicalPartitionId,
+            PhysicalPartition newPhysicalPartition, boolean moveOldToTemp) {
+        Partition partition = getPartition(newPhysicalPartition.getParentId());
+        if (partition == null || partition.getId() != newPhysicalPartition.getParentId()) {
+            return null;
+        }
+
+        PhysicalPartition oldPhysicalPartition = partition.replacePhysicalPartition(oldPhysicalPartitionId,
+                newPhysicalPartition, moveOldToTemp);
+        if (oldPhysicalPartition == null) {
+            return null;
+        }
+
+        physicalPartitionIdToPartitionId.put(newPhysicalPartition.getId(), newPhysicalPartition.getParentId());
+        physicalPartitionNameToPartitionId.put(newPhysicalPartition.getName(), newPhysicalPartition.getParentId());
+
+        if (!moveOldToTemp) {
+            physicalPartitionIdToPartitionId.remove(oldPhysicalPartition.getId());
+            physicalPartitionNameToPartitionId.remove(oldPhysicalPartition.getName());
+        }
+
+        return oldPhysicalPartition;
+    }
+
+    public PhysicalPartition removePhysicalPartition(long physicalPartitionId) {
+        Long partitionId = physicalPartitionIdToPartitionId.get(physicalPartitionId);
+        if (partitionId == null) {
+            return null;
+        }
+
+        Partition partition = getPartition(partitionId);
+        if (partition == null) {
+            return null;
+        }
+
+        PhysicalPartition physicalPartition = partition.removeSubPartition(physicalPartitionId);
+        if (physicalPartition == null) {
+            return null;
+        }
+
+        physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+        physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
+
+        return physicalPartition;
     }
 
     public void setCompressionType(TCompressionType compressionType) {
