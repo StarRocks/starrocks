@@ -39,6 +39,10 @@ public class Timer implements AutoCloseable {
         return 0;
     }
 
+    public int getOrderId() {
+        return 0;
+    }
+
     public List<Long> getAllTimePoint() {
         return Collections.emptyList();
     }

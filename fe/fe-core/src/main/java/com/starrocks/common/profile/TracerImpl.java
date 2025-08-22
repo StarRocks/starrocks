@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 class TracerImpl extends Tracer {
@@ -32,6 +33,7 @@ class TracerImpl extends Tracer {
     private final VarTracer varTracer;
     private final LogTracer logTracer;
     private final LogTracer reasonTracer;
+    private final AtomicInteger orderIdGen = new AtomicInteger(0);
 
     public TracerImpl(Stopwatch timing, TimeWatcher watcher, VarTracer vars, LogTracer logTracer,
                       LogTracer reasonTracer) {
@@ -48,7 +50,7 @@ class TracerImpl extends Tracer {
 
     public Timer watchScope(String name) {
         tracerCost.start();
-        Timer t = watcher.scope(timePoint(), name);
+        Timer t = watcher.scope(timePoint(), orderIdGen.incrementAndGet(), name);
         tracerCost.stop();
         return t;
     }
