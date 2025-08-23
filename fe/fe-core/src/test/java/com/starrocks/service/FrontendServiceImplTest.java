@@ -1442,7 +1442,7 @@ public class FrontendServiceImplTest {
     public void testlistRecycleBinCatalogs() throws Exception {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
 
-        starRocksAssert.withDatabase("test").useDatabase("test")
+        starRocksAssert.withDatabase("test_rbc").useDatabase("test_rbc")
                     .withTable("CREATE TABLE tblRecycleBinCatalogs (\n" +
                                 "    event_day DATETIME NOT NULL,\n" +
                                 "    site_id INT DEFAULT '10',\n" +
