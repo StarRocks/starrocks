@@ -185,7 +185,7 @@ TEST_F(AiFunctionsTest, AiQueryWrongArgumentCount) {
 
     auto result = AiFunctions::ai_query(ctx.get(), columns);
     ASSERT_FALSE(result.ok());
-    ASSERT_TRUE(result.status().message().find("Ai_query function only call by ai_query(propmt, config)") !=
+    ASSERT_TRUE(result.status().message().find("Ai_query function only call by ai_query(prompt, config)") !=
                 std::string::npos);
 }
 
