@@ -188,7 +188,7 @@ StatusOr<ColumnPtr> AiFunctions::ai_query(FunctionContext* context, const starro
         if (config_is_const && const_config) {
             timeout_duration = std::chrono::milliseconds(const_config->timeout_ms);
         } else {
-            timeout_duration = timeout_ms_row[row];
+            timeout_duration = std::chrono::milliseconds(timeout_ms_row[row]);
         }
 
         auto status = future.wait_for(timeout_duration);
