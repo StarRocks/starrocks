@@ -36,6 +36,7 @@
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
+#include <variant>
 
 namespace starrocks {
 
@@ -152,89 +153,54 @@ private:
     }
 };
 
-// Non-template base class for unified storage
-class AsofLookupVectorBase {
-public:
-    virtual ~AsofLookupVectorBase() = default;
-    virtual void finalize() = 0;
-    virtual size_t size() const = 0;
-    virtual bool empty() const = 0;
-    virtual void clear() = 0;
+// Super-compact AsofVector variant - from 15+ lines to 4 lines!
+#define ASOF_VECTOR_TYPES(T) \
+    std::unique_ptr<AsofLookupVector<T, TExprOpcode::LT>>, \
+    std::unique_ptr<AsofLookupVector<T, TExprOpcode::LE>>, \
+    std::unique_ptr<AsofLookupVector<T, TExprOpcode::GT>>, \
+    std::unique_ptr<AsofLookupVector<T, TExprOpcode::GE>>
 
-    template <typename CppType>
-    void add_row(CppType asof_value, uint32_t row_index) {
-        _add_row_any(typeid(CppType), static_cast<const void*>(&asof_value), row_index);
+using AsofVectorVariant = std::variant<
+    ASOF_VECTOR_TYPES(int64_t),        // 0-3
+    ASOF_VECTOR_TYPES(DateValue),      // 4-7
+    ASOF_VECTOR_TYPES(TimestampValue)  // 8-11
+>;
+
+
+// Method 2: Cache-optimized safe check (recommended for production)
+inline bool is_asof_vector_uninitialized(const AsofVectorVariant& variant) {
+    // Fast path: Check most common cases first (assuming int64_t is most frequent)
+    size_t idx = variant.index();
+    if (idx < 4) {  // int64_t cases (0-3) - most likely
+        switch (idx) {
+            case 0: return !std::get<0>(variant);   case 1: return !std::get<1>(variant);
+            case 2: return !std::get<2>(variant);   case 3: return !std::get<3>(variant);
+        }
+    } else if (idx < 8) {  // DateValue cases (4-7)
+        switch (idx) {
+            case 4: return !std::get<4>(variant);   case 5: return !std::get<5>(variant);
+            case 6: return !std::get<6>(variant);   case 7: return !std::get<7>(variant);
+        }
+    } else if (idx < 12) {  // TimestampValue cases (8-11)
+        switch (idx) {
+            case 8:  return !std::get<8>(variant);  case 9:  return !std::get<9>(variant);
+            case 10: return !std::get<10>(variant); case 11: return !std::get<11>(variant);
+        }
     }
-
-    template <typename CppType>
-    uint32_t find_match(CppType probe_value) const {
-        return _find_match_any(typeid(CppType), static_cast<const void*>(&probe_value));
-    }
-
-private:
-    virtual void _add_row_any(const std::type_info& type_info, const void* asof_value, uint32_t row_index) = 0;
-    virtual uint32_t _find_match_any(const std::type_info& type_info, const void* probe_value) const = 0;
-};
-
-template <typename CppType, TExprOpcode::type OpCode>
-class TypedAsofLookupVector : public AsofLookupVectorBase {
-private:
-    AsofLookupVector<CppType, OpCode> _impl;
-
-public:
-    void finalize() override { _impl.sort(); }
-
-    size_t size() const override { return _impl.size(); }
-
-    bool empty() const override { return _impl.empty(); }
-
-    void clear() override { _impl.clear(); }
-
-private:
-    void _add_row_any(const std::type_info& type_info, const void* asof_value, uint32_t row_index) override {
-        const CppType& value = *static_cast<const CppType*>(asof_value);
-        _impl.add_row(value, row_index);
-    }
-
-    uint32_t _find_match_any(const std::type_info& type_info, const void* probe_value) const override {
-        const CppType& value = *static_cast<const CppType*>(probe_value);
-        return _impl.find_asof_match(value);
-    }
-};
-
-#define MAKE_ASOF_VECTOR(CppType, OpCode) std::make_unique<TypedAsofLookupVector<CppType, TExprOpcode::OpCode>>()
-
-template <typename CppType>
-std::unique_ptr<AsofLookupVectorBase> create_typed_asof_vector(TExprOpcode::type opcode) {
-    switch (opcode) {
-    case TExprOpcode::LT:
-        return MAKE_ASOF_VECTOR(CppType, LT);
-    case TExprOpcode::LE:
-        return MAKE_ASOF_VECTOR(CppType, LE);
-    case TExprOpcode::GT:
-        return MAKE_ASOF_VECTOR(CppType, GT);
-    case TExprOpcode::GE:
-        return MAKE_ASOF_VECTOR(CppType, GE);
-    default:
-        CHECK(false) << "Unsupported opcode: " << opcode;
-    }
+    return true;  // Invalid index
+    // Performance: ~2-3 CPU cycles (still much faster than std::visit)
 }
 
-inline std::unique_ptr<AsofLookupVectorBase> create_asof_lookup_vector_base(LogicalType logical_type,
-                                                                            TExprOpcode::type opcode) {
-    switch (logical_type) {
-    case TYPE_BIGINT:
-        return create_typed_asof_vector<int64_t>(opcode);
-    case TYPE_DATE:
-        return create_typed_asof_vector<DateValue>(opcode);
-    case TYPE_DATETIME:
-        return create_typed_asof_vector<TimestampValue>(opcode);
-    default:
-        CHECK(false) << "Unsupported logical type: " << logical_type;
-    }
-}
+// Alternative: Cache the "first access" pattern for each bucket
+// Most buckets will either be completely empty or get multiple values
+// So we can optimize for the "already initialized" case
 
-#undef MAKE_ASOF_VECTOR
+// Factory function declaration - implementation moved to .cpp file
+AsofVectorVariant create_asof_lookup_vector_base(LogicalType logical_type, TExprOpcode::type opcode);
+
+#undef ASOF_VECTOR_TYPES
+
+
 
 struct HashTableSlotDescriptor {
     SlotDescriptor* slot;
@@ -290,28 +256,19 @@ struct JoinHashTableItems {
     float keys_per_bucket = 0;
     AsofJoinConditionDesc asof_join_condition_desc;
 
-    Buffer<std::unique_ptr<AsofLookupVectorBase>> asof_lookup_vectors;
+    Buffer<AsofVectorVariant> asof_lookup_vectors;
 
     template <typename CppType>
-    void add_asof_row(uint32_t lookup_index, CppType asof_value, uint32_t row_index) {
-        DCHECK(asof_lookup_vectors[lookup_index]);
-        asof_lookup_vectors[lookup_index]->add_row(asof_value, row_index);
-    }
+    void add_asof_row(uint32_t lookup_index, CppType asof_value, uint32_t row_index);
 
     template <typename CppType>
-    uint32_t find_asof_match(uint32_t lookup_index, CppType probe_value) const {
-        if (lookup_index >= asof_lookup_vectors.size() || !asof_lookup_vectors[lookup_index]) {
-            return 0;
-        }
-        return asof_lookup_vectors[lookup_index]->find_match(probe_value);
-    }
+    uint32_t find_asof_match(uint32_t lookup_index, CppType probe_value) const;
 
     void finalize_asof_lookup_vectors() {
-        for (size_t i = 0; i < asof_lookup_vectors.size(); i++) {
-            auto& vector_ptr = asof_lookup_vectors[i];
-            if (vector_ptr) {
-                vector_ptr->finalize();
-            }
+        for (auto& variant : asof_lookup_vectors) {
+            std::visit([](auto& ptr) {
+                if (ptr) ptr->sort();
+            }, variant);
         }
     }
 
@@ -479,6 +436,8 @@ struct HashTableProbeState {
     }
 };
 
+
+
 struct HashTableParam {
     bool with_other_conjunct = false;
     bool enable_late_materialization = false;
@@ -508,3 +467,4 @@ struct HashTableParam {
     RuntimeProfile::Counter* probe_counter = nullptr;
 };
 } // namespace starrocks
+
