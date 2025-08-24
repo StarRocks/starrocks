@@ -31,9 +31,11 @@ import java.util.Optional;
 public class WarehouseSlotTracker extends BaseSlotTracker {
     private static final Logger LOG = LogManager.getLogger(WarehouseSlotTracker.class);
 
-    public WarehouseSlotTracker(ResourceUsageMonitor resourceUsageMonitor, long warehouseId) {
+    public WarehouseSlotTracker(BaseSlotManager baseSlotManager,
+                                ResourceUsageMonitor resourceUsageMonitor,
+                                long warehouseId) {
         super(resourceUsageMonitor, warehouseId);
-        this.slotSelectionStrategy = new SlotSelectionStrategyV2(this.warehouseId);
+        this.slotSelectionStrategy = new SlotSelectionStrategyV2(baseSlotManager, this.warehouseId);
         this.listeners = ImmutableList.of(slotSelectionStrategy,
                 new SlotListenerForPipelineDriverAllocator());
     }

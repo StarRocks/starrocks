@@ -98,7 +98,7 @@ public class WarehouseSlotManager extends BaseSlotManager {
 
     public void registerWarehouse(long warehouseId) {
         BaseSlotTracker slotTracker = warehouseIdToSlotTracker.computeIfAbsent(warehouseId,
-                ignored -> new WarehouseSlotTracker(resourceUsageMonitor, warehouseId));
+                ignored -> new WarehouseSlotTracker(this, resourceUsageMonitor, warehouseId));
         warehouseMetrics.computeIfAbsent(warehouseId, ignored -> new WarehouseMetricEntity(slotTracker));
     }
 
@@ -141,7 +141,7 @@ public class WarehouseSlotManager extends BaseSlotManager {
     @Override
     public BaseSlotTracker getSlotTracker(long warehouseId) {
         return warehouseIdToSlotTracker.computeIfAbsent(warehouseId,
-                k -> new WarehouseSlotTracker(resourceUsageMonitor, warehouseId));
+                k -> new WarehouseSlotTracker(this, resourceUsageMonitor, warehouseId));
     }
 
     @Override
