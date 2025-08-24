@@ -1168,50 +1168,32 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join(RuntimeSta
             return;
         }
 
-        LOG(INFO) << "=== ASOF LEFT OUTER JOIN START ===";
-        LOG(INFO) << "probe_row_count: " << probe_row_count;
-        LOG(INFO) << "asof_join_probe_type: " << asof_join_probe_type;
-
         for (; i < probe_row_count; i++) {
             uint32_t build_index = probe_buckets[i];
-            LOG(INFO) << "--- ASOF LEFT OUTER Probing row " << i << " ---";
-            LOG(INFO) << "build_index: " << build_index;
-
             if (build_index == 0 || (nullable_asof_column && nullable_asof_column->get_data()[i] != 0)) {
-                LOG(INFO) << "No build match or NULL probe value, outputting with NULL build side";
                 _probe_state->probe_index[match_count] = i;
                 _probe_state->build_index[match_count] = 0;
                 match_count++;
-                LOG(INFO) << "ASOF LEFT OUTER: output probe row with NULL build side, match_count=" << match_count;
                 RETURN_IF_CHUNK_FULL2()
                 continue;
             }
 
             AsofColumnCppType probe_asof_value = asof_probe_temporal_values[i];
-            LOG(INFO) << "probe_asof_value[" << i << "]: " << probe_asof_value;
-            LOG(INFO) << "Calling find_asof_match with build_index=" << build_index;
 
             uint32_t optimal_build_row_index =
                     _table_items->find_asof_match<AsofColumnCppType>(build_index, probe_asof_value);
 
-            LOG(INFO) << "find_asof_match returned: " << optimal_build_row_index;
 
             if (optimal_build_row_index != 0) {
-                LOG(INFO) << "ASOF match found! Adding to result set";
                 _probe_state->probe_index[match_count] = i;
                 _probe_state->build_index[match_count] = optimal_build_row_index;
                 match_count++;
                 cur_row_match_count++;
-                LOG(INFO) << "ASOF match added: probe_index=" << i << ", build_index=" << optimal_build_row_index
-                          << ", match_count=" << match_count;
                 RETURN_IF_CHUNK_FULL2()
             } else {
-                LOG(INFO) << "No ASOF match found, outputting probe row with NULL build side";
                 _probe_state->probe_index[match_count] = i;
                 _probe_state->build_index[match_count] = 0;
                 match_count++;
-                LOG(INFO) << "ASOF LEFT OUTER: no ASOF match, output probe row with NULL build side, match_count="
-                          << match_count;
 
                 RETURN_IF_CHUNK_FULL2()
             }
@@ -1220,10 +1202,6 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join(RuntimeSta
         }
 
         _probe_state->cur_row_match_count = cur_row_match_count;
-
-        LOG(INFO) << "=== ASOF LEFT OUTER JOIN END ===";
-        LOG(INFO) << "Total matches found: " << match_count;
-        LOG(INFO) << "cur_row_match_count: " << cur_row_match_count;
 
         if constexpr (first_probe) {
             CHECK_MATCH()

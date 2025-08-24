@@ -53,8 +53,6 @@ private:
                                                                                JoinHashTableItems* table_items);
 };
 
-
-
 std::tuple<JoinKeyConstructorUnaryType, JoinHashMapMethodUnaryType>
 JoinHashMapSelector::construct_key_and_determine_hash_map(RuntimeState* state, JoinHashTableItems* table_items) {
     DCHECK_GT(table_items->row_count, 0);
@@ -158,7 +156,9 @@ JoinHashMapMethodUnaryType JoinHashMapSelector::_determine_hash_map_method(
                 }
             }
 
-            if (const auto [can_use, hash_map_type] = JoinHashMapSelector::_try_use_linear_chained<LT>(state, table_items); can_use) {
+            if (const auto [can_use, hash_map_type] =
+                        JoinHashMapSelector::_try_use_linear_chained<LT>(state, table_items);
+                can_use) {
                 return hash_map_type;
             }
 
@@ -170,10 +170,6 @@ JoinHashMapMethodUnaryType JoinHashMapSelector::_determine_hash_map_method(
 template <LogicalType LT>
 std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_direct_mapping(
         RuntimeState* state, JoinHashTableItems* table_items) {
-    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        return {true, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::LINEAR_CHAINED2, LT>::unary_type};
-    }
-
     if (!state->enable_hash_join_range_direct_mapping_opt()) {
         return {false, JoinHashMapMethodUnaryType::BUCKET_CHAINED_INT};
     }
@@ -242,6 +238,13 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_linear
     }
 
     const uint64_t bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
+
+    if ((table_items->join_type == TJoinOp::ASOF_INNER_JOIN ||
+         table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) &&
+        bucket_size > LinearChainedJoinHashMap<LT>::max_supported_bucket_size()) {
+        return {true, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::LINEAR_CHAINED2, LT>::unary_type};
+    }
+
     if (bucket_size > LinearChainedJoinHashMap<LT>::max_supported_bucket_size()) {
         return {false, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::BUCKET_CHAINED, LT>::unary_type};
     }

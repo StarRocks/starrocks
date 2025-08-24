@@ -161,14 +161,16 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(JoinHa
                 if constexpr (!std::is_same_v<CppType, Slice>) {
                     return true;
                 } else {
-                    return is_nulls_data[index] == 0;
+                    return is_nulls_data != nullptr && is_nulls_data[index] == 0;
                 }
             };
-            auto is_null = [&](const uint32_t index) { return is_nulls_data[index] != 0; };
+            auto is_null = [&](const uint32_t index) {
+                return is_nulls_data != nullptr && is_nulls_data[index] != 0;
+            };
 
             // Phase 1: Calculate hash values and store temporarily in next array
             for (uint32_t i = 1; i < num_rows; i++) {
-                if (is_nulls != nullptr && is_nulls_data[i] != 0) {
+                if (is_nulls_data != nullptr && is_nulls_data[i] != 0) {
                     continue;
                 }
 
@@ -186,7 +188,7 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(JoinHa
 
             // Phase 2: Process ASOF entries using linear probing
             for (uint32_t i = 1; i < num_rows; i++) {
-                if (is_nulls != nullptr && is_nulls_data[i] != 0) {
+                if (is_nulls_data != nullptr && is_nulls_data[i] != 0) {
                     continue;
                 }
 
@@ -219,7 +221,7 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(JoinHa
 
                 uint32_t asof_lookup_index = _extract_data(first[bucket_num]);
 
-                if (!table_items->asof_lookup_vectors[asof_lookup_index]) {
+                if (is_asof_vector_uninitialized(table_items->asof_lookup_vectors[asof_lookup_index])) {
                     table_items->asof_lookup_vectors[asof_lookup_index] = create_asof_lookup_vector_base(
                             asof_join_build_type, table_items->asof_join_condition_desc.condition_op);
                 }
@@ -444,15 +446,15 @@ void LinearChainedJoinHashMap2<LT>::construct_hash_table(JoinHashTableItems* tab
 
             const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
                     table_items->asof_join_condition_desc.build_slot_id);
-            
+
             if (!asof_temporal_column) {
-                CHECK(false) << "ASOF JOIN: asof_temporal_column is null for slot_id: " 
-                            << table_items->asof_join_condition_desc.build_slot_id;
+                CHECK(false) << "ASOF JOIN: asof_temporal_column is null for slot_id: "
+                             << table_items->asof_join_condition_desc.build_slot_id;
                 return;
             }
 
             const auto* typed_column = ColumnHelper::get_data_column_by_type<ASOF_LT>(asof_temporal_column.get());
-            
+
             if (!typed_column) {
                 CHECK(false) << "ASOF JOIN: typed_column is null for type: " << ASOF_LT;
                 return;
@@ -460,7 +462,7 @@ void LinearChainedJoinHashMap2<LT>::construct_hash_table(JoinHashTableItems* tab
 
             const NullColumn* nullable_asof_column = ColumnHelper::get_null_column(asof_temporal_column);
             const ASOF_CppType* probe_temporal_values = typed_column->get_data().data();
-            
+
             if (!probe_temporal_values) {
                 CHECK(false) << "ASOF JOIN: probe_temporal_values is null";
                 return;
@@ -475,26 +477,28 @@ void LinearChainedJoinHashMap2<LT>::construct_hash_table(JoinHashTableItems* tab
             const uint32_t bucket_size_mask = table_items->bucket_size - 1;
             auto is_null = [&](const uint32_t index) { return is_nulls_data[index] != 0; };
 
-
+            auto need_calc_bucket_num = [&](const uint32_t index) {
+                // Only check `is_nulls_data[i]` for the nullable slice type. The hash calculation overhead for
+                // fixed-size types is small, and thus we do not check it to allow vectorization of the hash calculation.
+                if constexpr (!std::is_same_v<CppType, Slice>) {
+                    return true;
+                } else {
+                    return is_nulls_data[index] == 0;
+                }
+            };
 
             static constexpr uint32_t BATCH_SIZE = 4096;
             uint8_t buffer_fps[BATCH_SIZE];
             for (uint64_t i = 1; i < num_rows; i += BATCH_SIZE) {
                 const uint32_t count = std::min<uint32_t>(BATCH_SIZE, num_rows - i);
 
-                // 检查数组边界
-                if (i + count > keys.size()) {
-                    CHECK(false) << "ASOF JOIN: keys array bounds check failed. i=" << i 
-                                << ", count=" << count << ", keys.size()=" << keys.size();
-                    return;
-                }
-
                 auto* buffer_bucket_nums = next + i;
                 for (uint32_t j = 0; j < count; j++) {
-                    // Use `next` stores `bucket_num` temporarily.
-                    std::tie(buffer_bucket_nums[j], buffer_fps[j]) =
-                            JoinHashMapHelper::calc_bucket_num_and_fp<CppType>(
-                                    keys[i + j], table_items->bucket_size, table_items->log_bucket_size);
+                    if (need_calc_bucket_num(i + j)) {
+                        std::tie(buffer_bucket_nums[j], buffer_fps[j]) =
+                                JoinHashMapHelper::calc_bucket_num_and_fp<CppType>(
+                                        keys[i + j], table_items->bucket_size, table_items->log_bucket_size);
+                    }
                 }
 
                 for (uint32_t j = 0; j < count; j++) {
@@ -508,7 +512,6 @@ void LinearChainedJoinHashMap2<LT>::construct_hash_table(JoinHashTableItems* tab
                     // if (j + 16 < count && !is_null(i + j + 16)) {
                     //     __builtin_prefetch(first + buffer_bucket_nums[j + 16]);
                     // }
-
 
                     uint32_t bucket_num = buffer_bucket_nums[j];
                     const uint8_t fp = buffer_fps[j];
@@ -531,14 +534,13 @@ void LinearChainedJoinHashMap2<LT>::construct_hash_table(JoinHashTableItems* tab
 
                     uint32_t asof_lookup_index = first[bucket_num];
 
-                    // 检查 asof_lookup_index 边界
                     if (asof_lookup_index >= table_items->asof_lookup_vectors.size()) {
-                        CHECK(false) << "ASOF JOIN: asof_lookup_index out of bounds. index=" << asof_lookup_index 
-                                    << ", size=" << table_items->asof_lookup_vectors.size();
+                        CHECK(false) << "ASOF JOIN: asof_lookup_index out of bounds. index=" << asof_lookup_index
+                                     << ", size=" << table_items->asof_lookup_vectors.size();
                         return;
                     }
 
-                    if (!table_items->asof_lookup_vectors[asof_lookup_index]) {
+                    if (is_asof_vector_uninitialized(table_items->asof_lookup_vectors[asof_lookup_index])) {
                         table_items->asof_lookup_vectors[asof_lookup_index] = create_asof_lookup_vector_base(
                                 asof_join_build_type, table_items->asof_join_condition_desc.condition_op);
                     }
@@ -696,7 +698,7 @@ void DirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems* tabl
 
                 uint32_t asof_lookup_index = table_items->first[bucket_num];
 
-                if (!table_items->asof_lookup_vectors[asof_lookup_index]) {
+                if (is_asof_vector_uninitialized(table_items->asof_lookup_vectors[asof_lookup_index])) {
                     table_items->asof_lookup_vectors[asof_lookup_index] = create_asof_lookup_vector_base(
                             asof_join_build_type, table_items->asof_join_condition_desc.condition_op);
                 }
@@ -815,7 +817,7 @@ void RangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems*
 
                 uint32_t asof_lookup_index = table_items->first[bucket_num];
 
-                if (!table_items->asof_lookup_vectors[asof_lookup_index]) {
+                if (is_asof_vector_uninitialized(table_items->asof_lookup_vectors[asof_lookup_index])) {
                     table_items->asof_lookup_vectors[asof_lookup_index] = create_asof_lookup_vector_base(
                             asof_join_build_type, table_items->asof_join_condition_desc.condition_op);
                 }
@@ -1044,7 +1046,7 @@ void DenseRangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableI
 
                 uint32_t asof_lookup_index = table_items->first[index];
 
-                if (!table_items->asof_lookup_vectors[asof_lookup_index]) {
+                if (is_asof_vector_uninitialized(table_items->asof_lookup_vectors[asof_lookup_index])) {
                     table_items->asof_lookup_vectors[asof_lookup_index] = create_asof_lookup_vector_base(
                             asof_join_build_type, table_items->asof_join_condition_desc.condition_op);
                 }
