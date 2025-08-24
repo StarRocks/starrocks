@@ -45,6 +45,7 @@ import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
 import com.starrocks.sql.optimizer.rule.transformation.ArrayDistinctAfterAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.CTEProduceAddProjectionRule;
 import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
+import com.starrocks.sql.optimizer.rule.transformation.CountStarOptOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
@@ -77,7 +78,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEPr
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
-import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteUnnestBitmapRule;
 import com.starrocks.sql.optimizer.rule.transformation.SchemaTableEvaluateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
@@ -142,6 +142,7 @@ import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_TRANSPARENT_R
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_UNION_REWRITE;
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
+
 /**
  * QueryOptimizer's entrance class
  */
@@ -700,7 +701,7 @@ public class QueryOptimizer extends Optimizer {
         ruleBasedMaterializedViewRewriteStage2(tree, rootTaskContext, requiredColumns);
 
         // this rewrite rule should be after mv.
-        scheduler.rewriteOnce(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT);
+        scheduler.rewriteOnce(tree, rootTaskContext, CountStarOptOnScanRule.SCAN_NO_PROJECT);
 
         // NOTE: This rule should be after MV Rewrite because MV Rewrite cannot handle
         // select count(distinct c) from t group by a, b
@@ -836,7 +837,8 @@ public class QueryOptimizer extends Optimizer {
             if (pushAggFlag || pushDistinctBelowWindowFlag) {
                 deriveLogicalProperty(tree);
             }
-            // if join reorder is not done, we need to do it here, because we need the join's shape to better decide where to push down distinct.
+            // if join reorder is not done, we need to do it here, because we need the join's shape to better decide where to
+            // push down distinct.
             if (!joinReorder && context.getSessionVariable().isEnableJoinReorderBeforeDeduplicate()) {
                 logicalJoinReorder(tree, rootTaskContext);
             }
@@ -1012,7 +1014,6 @@ public class QueryOptimizer extends Optimizer {
                 !rootTaskContext.getOptimizerContext().getSessionVariable().isEnableOptimizerSkewJoinByQueryRewrite()) {
             result = new SkewShuffleJoinEliminationRule().rewrite(result, rootTaskContext);
         }
-
 
         result = new ApplyTuningGuideRule(connectContext).rewrite(result, rootTaskContext);
 

@@ -83,8 +83,8 @@ public class HiveScanTest extends ConnectorPlanTestBase {
     }
 
     @Test
-    public void testHiveRewriteSimpleAggToHdfsScan() throws Exception {
-        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(true);
+    public void testHiveUseCountStartOptTest() throws Exception {
+        connectContext.getSessionVariable().setEnableCountStarOptimization(true);
         // positive cases.
         {
             String[] sqlString = {
@@ -131,12 +131,11 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 assertNotContains(plan, "___count___");
             }
         }
-        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
     }
 
     @Test
-    public void testIcebergRewriteSimpleAggToHdfsScan() throws Exception {
-        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(true);
+    public void testIcebergUseCountStarOptTest() throws Exception {
+        connectContext.getSessionVariable().setEnableCountStarOptimization(true);
         // positive cases.
         {
             String[] sqlString = {
@@ -174,7 +173,6 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 assertNotContains(plan, "___count___");
             }
         }
-        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
     }
 
     private static File newFolder(File root, String... subDirs) throws IOException {

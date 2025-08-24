@@ -61,6 +61,7 @@ import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.CombinationRule;
+import com.starrocks.sql.optimizer.rule.transformation.CountStarOptOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.DeferProjectAfterTopNRule;
 import com.starrocks.sql.optimizer.rule.transformation.DistributionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateGroupByConstantRule;
@@ -152,7 +153,6 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinc
 import com.starrocks.sql.optimizer.rule.transformation.RewriteCountIfFunction;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
-import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteToVectorPlanRule;
@@ -415,7 +415,7 @@ public class RuleSet {
                     new PushDownAggToMetaScanRule(),
                     new PushDownFlatJsonMetaToMetaScanRule(),
                     new RewriteSimpleAggToMetaScanRule(),
-                    RewriteSimpleAggToHDFSScanRule.SCAN_AND_PROJECT,
+                    CountStarOptOnScanRule.SCAN_AND_PROJECT,
                     new MinMaxOptOnScanRule()
             ));
 

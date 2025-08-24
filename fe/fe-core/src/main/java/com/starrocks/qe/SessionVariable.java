@@ -1262,7 +1262,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_JSON_V2_DICT_OPT)
     private boolean cboJSONV2DictOpt = true;
 
-
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature
@@ -1792,7 +1791,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_REWRITE_PARTITION_COLUMN_MINMAX)
     private boolean enableRewritePartitionColumnMinMax = true;
 
-    @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN)
+    @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN, flag = VariableMgr.INVISIBLE)
     private boolean enableRewriteSimpleAggToHdfsScan = true;
 
     @VarAttr(name = ENABLE_EVALUATE_SCHEMA_SCAN_RULE)
@@ -2451,7 +2450,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_SIMPLIFY_CASE_WHEN, flag = VariableMgr.INVISIBLE)
     private boolean enableSimplifyCaseWhen = true;
 
-    @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
+    @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION)
     private boolean enableCountStarOptimization = true;
 
     @VarAttr(name = ENABLE_MIN_MAX_OPTIMIZATION)
@@ -5238,7 +5237,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableJSONV2Rewrite(boolean enableJSONV2Rewrite) {
         this.cboJSONV2Rewrite = enableJSONV2Rewrite;
     }
-  
+
     public boolean isEnableDropTableCheckMvDependency() {
         return enableDropTableCheckMvDependency;
     }
@@ -5446,9 +5445,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
         return root.toString();
     }
-
-
-
 
     private void readFromJson(DataInput in) throws IOException {
         String json = Text.readString(in);

@@ -62,7 +62,7 @@ public class FeNameFormat {
         FORBIDDEN_COLUMN_NAMES = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         FORBIDDEN_COLUMN_NAMES.add("__op");
         FORBIDDEN_COLUMN_NAMES.add("__row");
-        // see RewriteSimpleAggToHDFSScanRule
+        // see CountStarOptOnScanRule
         FORBIDDEN_COLUMN_NAMES.add("___count___");
         String allowedSpecialCharacters = "";
         for (Character c : SPECIAL_CHARACTERS_IN_DB_NAME) {

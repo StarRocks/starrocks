@@ -51,29 +51,29 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
-    private static final Logger LOG = LogManager.getLogger(RewriteSimpleAggToHDFSScanRule.class);
+public class CountStarOptOnScanRule extends TransformationRule {
+    private static final Logger LOG = LogManager.getLogger(CountStarOptOnScanRule.class);
 
     private static final Set<OperatorType> SUPPORTED = Set.of(OperatorType.LOGICAL_HIVE_SCAN,
             OperatorType.LOGICAL_ICEBERG_SCAN,
             OperatorType.LOGICAL_FILE_SCAN
     );
 
-    public static final RewriteSimpleAggToHDFSScanRule SCAN_NO_PROJECT =
-            new RewriteSimpleAggToHDFSScanRule(false);
+    public static final CountStarOptOnScanRule SCAN_NO_PROJECT =
+            new CountStarOptOnScanRule(false);
 
-    public static final RewriteSimpleAggToHDFSScanRule SCAN_AND_PROJECT =
-            new RewriteSimpleAggToHDFSScanRule();
+    public static final CountStarOptOnScanRule SCAN_AND_PROJECT =
+            new CountStarOptOnScanRule();
 
     private final boolean hasProjectOperator;
 
-    private RewriteSimpleAggToHDFSScanRule(boolean /* unused */ noProject) {
+    private CountStarOptOnScanRule(boolean /* unused */ noProject) {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(MultiOpPattern.of(SUPPORTED)));
         hasProjectOperator = false;
     }
 
-    private RewriteSimpleAggToHDFSScanRule() {
+    private CountStarOptOnScanRule() {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT).addChildren(MultiOpPattern.of(SUPPORTED))));
         hasProjectOperator = true;
@@ -200,7 +200,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
-        if (!context.getSessionVariable().isEnableRewriteSimpleAggToHdfsScan()) {
+        if (!context.getSessionVariable().isEnableCountStarOptimization()) {
             return false;
         }
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
