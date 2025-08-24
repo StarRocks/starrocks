@@ -2,6 +2,12 @@
 update information_schema.be_configs set value = 'true' where name = 'enable_json_flat';
 -- result:
 -- !result
+CREATE DATABASE flat_json_test;
+-- result:
+-- !result
+USE flat_json_test;
+-- result:
+-- !result
 CREATE TABLE js2 (
     v1 BIGINT NULL,
     j1 JSON NULL
@@ -63,6 +69,14 @@ select
     json_object('f1', generate_series)
 from (table(generate_series(1, 1000)));
 -- result:
+-- !result
+function: manual_compact('flat_json_test', 'js2')
+-- result:
+None
+-- !result
+function: wait_compaction_finish('js2', 1)
+-- result:
+None
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') = -1;
 -- result:
@@ -161,12 +175,21 @@ select
 from (table(generate_series(1, 1000)));
 -- result:
 -- !result
+function: manual_compact('flat_json_test', 'js2')
+-- result:
+None
+-- !result
+function: wait_compaction_finish('js2', 1)
+-- result:
+None
+-- !result
 select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = 1;
 -- result:
 1
 -- !result
 select * from profile_access_path;
 -- result:
+- AccessPathExtract: 1
 - PushdownAccessPaths: 0
 -- !result
 select get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f1') = 1;
@@ -175,6 +198,7 @@ None
 -- !result
 select * from profile_access_path;
 -- result:
+- AccessPathExtract: 2
 - PushdownAccessPaths: 0
 -- !result
 select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f2') = 1;
@@ -183,6 +207,7 @@ None
 -- !result
 select * from profile_access_path;
 -- result:
+- AccessPathExtract: 2
 - PushdownAccessPaths: 0
 -- !result
 select get_json_int(j1, '$.f2'), j1 from js2 where get_json_int(j1, '$.f1') = 1;
@@ -191,7 +216,7 @@ None	{"f1": 1}
 -- !result
 select * from profile_access_path;
 -- result:
-- AccessPathHits: 2
+- AccessPathExtract: 2
 - PushdownAccessPaths: 2
 -- !result
 select get_json_int(j1, '$.f2'), j1 from js2 where get_json_int(j1, '$.f3') = 1;
@@ -199,7 +224,7 @@ select get_json_int(j1, '$.f2'), j1 from js2 where get_json_int(j1, '$.f3') = 1;
 -- !result
 select * from profile_access_path;
 -- result:
-- AccessPathHits: 2
+- AccessPathExtract: 2
 - PushdownAccessPaths: 2
 -- !result
 select get_json_int(j1, '$.f2'), get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f1') = 1;
@@ -208,6 +233,7 @@ None	None
 -- !result
 select * from profile_access_path;
 -- result:
+- AccessPathExtract: 2
 - PushdownAccessPaths: 0
 -- !result
 select count(get_json_int(j1, '$.f2')) from js2 ;
@@ -216,6 +242,7 @@ select count(get_json_int(j1, '$.f2')) from js2 ;
 -- !result
 select * from profile_access_path;
 -- result:
+- AccessPathExtract: 1
 - PushdownAccessPaths: 0
 -- !result
 select count(get_json_int(j1, '$.f3')) from js2 ;
@@ -224,6 +251,7 @@ select count(get_json_int(j1, '$.f3')) from js2 ;
 -- !result
 select * from profile_access_path;
 -- result:
+- AccessPathExtract: 1
 - PushdownAccessPaths: 0
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') = -1;
@@ -238,9 +266,9 @@ select * from profile_filter_rows;
 - SegmentZoneMapFilterRows: 0
 - ShortKeyFilterRows: 0
 - VectorIndexFilterRows: 0
-- ZoneMapIndexFilterRows: 1.000K (1000)
+- ZoneMapIndexFilterRows: 0
 - DelVecFilterRows: 0
-- PredFilterRows: 1.000K (1000)
+- PredFilterRows: 2.000K (2000)
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') = 1;
 -- result:
@@ -309,9 +337,9 @@ select * from profile_filter_rows;
 - SegmentZoneMapFilterRows: 0
 - ShortKeyFilterRows: 0
 - VectorIndexFilterRows: 0
-- ZoneMapIndexFilterRows: 1.000K (1000)
+- ZoneMapIndexFilterRows: 0
 - DelVecFilterRows: 0
-- PredFilterRows: 1.000K (1000)
+- PredFilterRows: 2.000K (2000)
 -- !result
 select * from js2 where get_json_int(j1, '$.f2') = 1;
 -- result:
@@ -399,6 +427,14 @@ select
 from (table(generate_series(1, 1000)));
 -- result:
 -- !result
+function: manual_compact('flat_json_test', 'js3')
+-- result:
+None
+-- !result
+function: wait_compaction_finish('js3', 1)
+-- result:
+None
+-- !result
 select count(v1) from js3 where get_json_string(j1, 'f1') = 'a0';
 -- result:
 100
@@ -436,6 +472,14 @@ select
 from (table(generate_series(1, 1000)));
 -- result:
 -- !result
+function: manual_compact('flat_json_test', 'js2')
+-- result:
+None
+-- !result
+function: wait_compaction_finish('js2', 1)
+-- result:
+None
+-- !result
 select count(get_json_int(j1, '$.f2')) from js2 where get_json_int(j1, '$.f1') < 100;
 -- result:
 99
@@ -462,6 +506,14 @@ select generate_series, json_object(
         )
 from (table(generate_series(1, 1000)));
 -- result:
+-- !result
+function: manual_compact('flat_json_test', 'js3')
+-- result:
+None
+-- !result
+function: wait_compaction_finish('js3', 1)
+-- result:
+None
 -- !result
 select count(*) from js3 where get_json_bool(j1, 'f_bool') = true;
 -- result:
@@ -493,6 +545,7 @@ select count(*) from js3 where get_json_double(j1, 'f_bool') = 1.0;
 -- !result
 select * from profile_access_path;
 -- result:
+- AccessPathExtract: 1
 - PushdownAccessPaths: 0
 -- !result
 select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
@@ -513,6 +566,7 @@ select count(*) from js3 where get_json_double(j1, 'f_int') < 500;
 -- !result
 select * from profile_access_path;
 -- result:
+- AccessPathExtract: 1
 - PushdownAccessPaths: 0
 -- !result
 select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
@@ -533,6 +587,7 @@ select count(*) from js3 where get_json_string(j1, 'f_double') < '500';
 -- !result
 select * from profile_access_path;
 -- result:
+- AccessPathExtract: 1
 - PushdownAccessPaths: 0
 -- !result
 select count(*) from js3 where get_json_int(j1, 'f_none') IS NULL;
@@ -561,5 +616,6 @@ select count(*) from js3 where get_json_double(j1, 'f_none') < 500;
 -- !result
 select * from profile_access_path;
 -- result:
+- AccessPathExtract: 1
 - PushdownAccessPaths: 0
 -- !result
