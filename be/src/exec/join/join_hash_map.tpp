@@ -388,6 +388,13 @@ void JoinHashMap<LT, CT, MT>::_search_ht(RuntimeState* state, ChunkPtr* probe_ch
         _probe_state->probe_index.resize(state->chunk_size() + 8);
         _probe_state->build_index.resize(state->chunk_size() + 8);
     }
+
+    if (_table_items->join_type == TJoinOp::ASOF_INNER_JOIN ||
+        _table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
+        _probe_state->asof_temporal_condition_column =
+                (*probe_chunk)->get_column_by_slot_id(_table_items->asof_join_condition_desc.probe_slot_id);
+    }
+
     if (!_probe_state->has_remain) {
         _probe_state->probe_row_count = (*probe_chunk)->num_rows();
         _probe_state->active_coroutines = state->query_options().interleaving_group_size;
@@ -400,7 +407,7 @@ void JoinHashMap<LT, CT, MT>::_search_ht(RuntimeState* state, ChunkPtr* probe_ch
 
         auto& build_data = BuildKeyConstructor().get_key_data(*_table_items);
         auto& probe_data = ProbeKeyConstructor().get_key_data(*_probe_state);
-        HashMapMethod().lookup_init(*_table_items, _probe_state, probe_data, _probe_state->null_array);
+        HashMapMethod().lookup_init(*_table_items, _probe_state, build_data, probe_data, _probe_state->null_array);
         _probe_state->consider_probe_time_locality();
 
         if (_table_items->is_collision_free_and_unique) {
@@ -492,7 +499,6 @@ void JoinHashMap<LT, CT, MT>::_search_ht_impl(RuntimeState* state, const Buffer<
         case TJoinOp::LEFT_SEMI_JOIN:
             DO_PROBE(_probe_from_ht_for_left_semi_join);
             break;
-        case TJoinOp::LEFT_ANTI_JOIN:
         case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
             DO_PROBE(_probe_from_ht_for_left_anti_join);
             break;
@@ -507,6 +513,12 @@ void JoinHashMap<LT, CT, MT>::_search_ht_impl(RuntimeState* state, const Buffer<
             break;
         case TJoinOp::FULL_OUTER_JOIN:
             DO_PROBE(_probe_from_ht_for_full_outer_join);
+            break;
+        case TJoinOp::ASOF_INNER_JOIN:
+            DO_PROBE(_probe_from_ht_for_asof_inner_join);
+            break;
+        case TJoinOp::ASOF_LEFT_OUTER_JOIN:
+            DO_PROBE(_probe_from_ht_for_asof_left_outer_join);
             break;
         default:
             DO_PROBE(_probe_from_ht);
@@ -629,9 +641,11 @@ void JoinHashMap<LT, CT, MT>::_search_ht_impl(RuntimeState* state, const Buffer<
 #define XXH_PREFETCH(ptr) __builtin_prefetch((ptr), 0 /* rw==read */, 3 /* locality */)
 #endif
 
-#define PREFETCH_AND_COWAIT(x, y) \
-    XXH_PREFETCH(x);              \
-    XXH_PREFETCH(y);              \
+#define PREFETCH_AND_COWAIT(cur_data, next_index)            \
+    if constexpr (!HashMapMethod::AreKeysInChainIdentical) { \
+        XXH_PREFETCH(cur_data);                              \
+    }                                                        \
+    XXH_PREFETCH(next_index);                                \
     co_await std::suspend_always{};
 
 // When a probe row corresponds to multiple Build rows,
@@ -648,12 +662,13 @@ void JoinHashMap<LT, CT, MT>::_search_ht_impl(RuntimeState* state, const Buffer<
         }                                                             \
     }
 
-#define PROBE_OVER()                   \
-    _probe_state->has_remain = false;  \
-    _probe_state->cur_probe_index = 0; \
-    _probe_state->cur_build_index = 0; \
-    _probe_state->count = match_count; \
-    _probe_state->cur_row_match_count = 0;
+#define PROBE_OVER()                       \
+    _probe_state->has_remain = false;      \
+    _probe_state->cur_probe_index = 0;     \
+    _probe_state->cur_build_index = 0;     \
+    _probe_state->count = match_count;     \
+    _probe_state->cur_row_match_count = 0; \
+    _probe_state->asof_temporal_condition_column = nullptr
 
 #define MATCH_RIGHT_TABLE_ROWS()                \
     _probe_state->probe_index[match_count] = i; \
@@ -771,7 +786,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht(RuntimeState* state, const Buffer<C
     if constexpr (first_probe) {
         CHECK_MATCH()
     }
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -813,7 +828,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht(Runt
         CHECK_MATCH()
         REORDER_PROBE_INDEX()
     }
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -856,7 +871,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
         CHECK_ALL_MATCH()
         REORDER_PROBE_INDEX()
     }
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -880,6 +895,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_join(RuntimeState* s
 
     uint32_t cur_row_match_count = _probe_state->cur_row_match_count;
     const size_t probe_row_count = _probe_state->probe_row_count;
+
     for (; i < probe_row_count; i++) {
         size_t build_index = _probe_state->next[i];
 
@@ -932,7 +948,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_join(RuntimeState* s
     if constexpr (first_probe) {
         CHECK_ALL_MATCH()
     }
-    PROBE_OVER()
+    PROBE_OVER();
 }
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join(
@@ -960,7 +976,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
     }
     // only the last coroutine does
     auto match_count = _probe_state->match_count;
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -994,17 +1010,447 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join(RuntimeState* st
         }
     }
 
-    PROBE_OVER()
+    if (match_count == probe_row_count) {
+        _probe_state->match_flag = JoinMatchFlag::ALL_MATCH_ONE;
+    } else if (match_count * 2 >= probe_row_count) {
+        _probe_state->match_flag = JoinMatchFlag::MOST_MATCH_ONE;
+        uint8_t* match_filter_data = _probe_state->probe_match_filter.data();
+        memset(match_filter_data, 0, sizeof(uint8_t) * probe_row_count);
+        for (uint32_t i = 0; i < match_count; i++) {
+            match_filter_data[_probe_state->probe_index[i]] = 1;
+        }
+    } else {
+        _probe_state->match_flag = JoinMatchFlag::NORMAL;
+    }
+
+    PROBE_OVER();
+}
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_inner_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                 const Buffer<CppType>& probe_data) {
+    _probe_state->match_flag = JoinMatchFlag::NORMAL;
+    size_t match_count = 0;
+    constexpr bool one_to_many = false;
+    size_t i = _probe_state->cur_probe_index;
+
+    if constexpr (!first_probe) {
+        _probe_state->probe_index[0] = _probe_state->cur_probe_index;
+        _probe_state->build_index[0] = _probe_state->cur_build_index;
+        match_count = 1;
+        if (_probe_state->next[i] == 0) {
+            i++;
+        }
+    }
+
+    [[maybe_unused]] size_t probe_cont = 0;
+
+    if constexpr (first_probe) {
+        memset(_probe_state->probe_match_filter.data(), 0, _probe_state->probe_row_count * sizeof(uint8_t));
+    }
+
+    const size_t probe_row_count = _probe_state->probe_row_count;
+    const auto* probe_buckets = _probe_state->next.data();
+
+    LogicalType asof_join_probe_type = _table_items->asof_join_condition_desc.probe_logical_type;
+
+    auto process_probe_rows = [&]<LogicalType ASOF_LT>() {
+        using AsofColumnCppType = RunTimeCppType<ASOF_LT>;
+
+        const auto* typed_column =
+                ColumnHelper::get_data_column_by_type<ASOF_LT>(_probe_state->asof_temporal_condition_column.get());
+        const NullColumn* nullable_asof_column =
+                ColumnHelper::get_null_column(_probe_state->asof_temporal_condition_column);
+        const AsofColumnCppType* asof_probe_temporal_values = typed_column->get_data().data();
+
+        if (!_probe_state->asof_temporal_condition_column || _probe_state->asof_temporal_condition_column->empty()) {
+            PROBE_OVER();
+            return;
+        }
+
+        for (; i < probe_row_count; i++) {
+            uint32_t build_index = probe_buckets[i];
+
+            if (build_index == 0) {
+                continue;
+            }
+
+            if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
+                continue;
+            }
+
+            AsofColumnCppType probe_asof_value = asof_probe_temporal_values[i];
+            uint32_t optimal_build_row_index =
+                    _table_items->find_asof_match<AsofColumnCppType>(build_index, probe_asof_value);
+
+            if (optimal_build_row_index != 0) {
+                _probe_state->probe_index[match_count] = i;
+                _probe_state->build_index[match_count] = optimal_build_row_index;
+                match_count++;
+
+                if constexpr (first_probe) {
+                    _probe_state->probe_match_filter[i] = 1;
+                }
+
+                probe_cont++;
+            }
+        }
+
+        if constexpr (first_probe) {
+            CHECK_MATCH()
+        }
+
+        PROBE_OVER();
+    };
+
+    switch (asof_join_probe_type) {
+    case TYPE_BIGINT:
+        process_probe_rows.template operator()<TYPE_BIGINT>();
+        break;
+    case TYPE_DATE:
+        process_probe_rows.template operator()<TYPE_DATE>();
+        break;
+    case TYPE_DATETIME:
+        process_probe_rows.template operator()<TYPE_DATETIME>();
+        break;
+    default:
+        CHECK(false) << "ASOF JOIN: Unsupported probe_type: " << asof_join_probe_type
+                     << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
+        __builtin_unreachable();
+    }
+}
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join(RuntimeState* state,
+                                                                      const Buffer<CppType>& build_data,
+                                                                      const Buffer<CppType>& probe_data) {
+    _probe_state->match_flag = JoinMatchFlag::NORMAL;
+    size_t match_count = 0;
+    constexpr bool one_to_many = false;
+    size_t i = _probe_state->cur_probe_index;
+
+    if constexpr (!first_probe) {
+        _probe_state->probe_index[0] = _probe_state->cur_probe_index;
+        _probe_state->build_index[0] = _probe_state->cur_build_index;
+        match_count = 1;
+        if (_probe_state->next[i] == 0) {
+            i++;
+            _probe_state->cur_row_match_count = 0;
+        }
+    }
+
+    [[maybe_unused]] size_t probe_cont = 0;
+
+    if constexpr (first_probe) {
+        memset(_probe_state->probe_match_filter.data(), 0, _probe_state->probe_row_count * sizeof(uint8_t));
+    }
+
+    uint32_t cur_row_match_count = _probe_state->cur_row_match_count;
+    const size_t probe_row_count = _probe_state->probe_row_count;
+    const auto* probe_buckets = _probe_state->next.data();
+
+    LogicalType asof_join_probe_type = _table_items->asof_join_condition_desc.probe_logical_type;
+
+    auto process_probe_rows = [&]<LogicalType ASOF_LT>() {
+        using AsofColumnCppType = RunTimeCppType<ASOF_LT>;
+
+        const auto* typed_column =
+                ColumnHelper::get_data_column_by_type<ASOF_LT>(_probe_state->asof_temporal_condition_column.get());
+        const NullColumn* nullable_asof_column =
+                ColumnHelper::get_null_column(_probe_state->asof_temporal_condition_column);
+        const AsofColumnCppType* asof_probe_temporal_values = typed_column->get_data().data();
+
+        if (!_probe_state->asof_temporal_condition_column || _probe_state->asof_temporal_condition_column->empty()) {
+            LOG(WARNING) << "ASOF LEFT OUTER: No valid asof column";
+            PROBE_OVER();
+            return;
+        }
+
+        LOG(INFO) << "=== ASOF LEFT OUTER JOIN START ===";
+        LOG(INFO) << "probe_row_count: " << probe_row_count;
+        LOG(INFO) << "asof_join_probe_type: " << asof_join_probe_type;
+
+        for (; i < probe_row_count; i++) {
+            uint32_t build_index = probe_buckets[i];
+            LOG(INFO) << "--- ASOF LEFT OUTER Probing row " << i << " ---";
+            LOG(INFO) << "build_index: " << build_index;
+
+            if (build_index == 0 || (nullable_asof_column && nullable_asof_column->get_data()[i] != 0)) {
+                LOG(INFO) << "No build match or NULL probe value, outputting with NULL build side";
+                _probe_state->probe_index[match_count] = i;
+                _probe_state->build_index[match_count] = 0;
+                match_count++;
+                LOG(INFO) << "ASOF LEFT OUTER: output probe row with NULL build side, match_count=" << match_count;
+                RETURN_IF_CHUNK_FULL2()
+                continue;
+            }
+
+            AsofColumnCppType probe_asof_value = asof_probe_temporal_values[i];
+            LOG(INFO) << "probe_asof_value[" << i << "]: " << probe_asof_value;
+            LOG(INFO) << "Calling find_asof_match with build_index=" << build_index;
+
+            uint32_t optimal_build_row_index =
+                    _table_items->find_asof_match<AsofColumnCppType>(build_index, probe_asof_value);
+
+            LOG(INFO) << "find_asof_match returned: " << optimal_build_row_index;
+
+            if (optimal_build_row_index != 0) {
+                LOG(INFO) << "ASOF match found! Adding to result set";
+                _probe_state->probe_index[match_count] = i;
+                _probe_state->build_index[match_count] = optimal_build_row_index;
+                match_count++;
+                cur_row_match_count++;
+                LOG(INFO) << "ASOF match added: probe_index=" << i << ", build_index=" << optimal_build_row_index
+                          << ", match_count=" << match_count;
+                RETURN_IF_CHUNK_FULL2()
+            } else {
+                LOG(INFO) << "No ASOF match found, outputting probe row with NULL build side";
+                _probe_state->probe_index[match_count] = i;
+                _probe_state->build_index[match_count] = 0;
+                match_count++;
+                LOG(INFO) << "ASOF LEFT OUTER: no ASOF match, output probe row with NULL build side, match_count="
+                          << match_count;
+
+                RETURN_IF_CHUNK_FULL2()
+            }
+
+            cur_row_match_count = 0;
+        }
+
+        _probe_state->cur_row_match_count = cur_row_match_count;
+
+        LOG(INFO) << "=== ASOF LEFT OUTER JOIN END ===";
+        LOG(INFO) << "Total matches found: " << match_count;
+        LOG(INFO) << "cur_row_match_count: " << cur_row_match_count;
+
+        if constexpr (first_probe) {
+            CHECK_MATCH()
+        }
+
+        PROBE_OVER();
+    };
+
+    switch (asof_join_probe_type) {
+    case TYPE_BIGINT:
+        process_probe_rows.template operator()<TYPE_BIGINT>();
+        break;
+    case TYPE_DATE:
+        process_probe_rows.template operator()<TYPE_DATE>();
+        break;
+    case TYPE_DATETIME:
+        process_probe_rows.template operator()<TYPE_DATETIME>();
+        break;
+    default:
+        CHECK(false) << "ASOF JOIN: Unsupported probe_type: " << asof_join_probe_type
+                     << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
+        __builtin_unreachable();
+    }
+}
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_inner_join(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    if (!_probe_state->asof_temporal_condition_column || _probe_state->asof_temporal_condition_column->empty()) {
+        co_return;
+    }
+
+    LogicalType asof_join_probe_type = _table_items->asof_join_condition_desc.probe_logical_type;
+
+    // Macro to generate the type-specific coroutine logic
+#define ASOF_COROUTINE_PROBE_IMPL(LOGICAL_TYPE, CPP_TYPE)                                                     \
+    {                                                                                                         \
+        using AsofColumnCppType = CPP_TYPE;                                                                   \
+        const auto* typed_column = ColumnHelper::get_data_column_by_type<LOGICAL_TYPE>(                       \
+                _probe_state->asof_temporal_condition_column.get());                                          \
+        const NullColumn* nullable_asof_column =                                                              \
+                ColumnHelper::get_null_column(_probe_state->asof_temporal_condition_column);                  \
+        const AsofColumnCppType* asof_probe_temporal_values = typed_column->get_data().data();                \
+                                                                                                              \
+        for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;                   \
+             i = _probe_state->cur_probe_index++) {                                                           \
+            _probe_state->probe_match_filter[i] = 0;                                                          \
+            uint32_t cur_row_match_count = 0;                                                                 \
+            size_t build_index = _probe_state->next[i];                                                       \
+            if (build_index == 0) {                                                                           \
+                continue;                                                                                     \
+            }                                                                                                 \
+                                                                                                              \
+            if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {                           \
+                continue;                                                                                     \
+            }                                                                                                 \
+                                                                                                              \
+            PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index)) \
+                                                                                                              \
+            AsofColumnCppType probe_asof_value = asof_probe_temporal_values[i];                               \
+            uint32_t optimal_build_row_index =                                                                \
+                    _table_items->find_asof_match<AsofColumnCppType>(build_index, probe_asof_value);          \
+                                                                                                              \
+            if (optimal_build_row_index != 0) {                                                               \
+                COWAIT_IF_CHUNK_FULL()                                                                        \
+                _probe_state->probe_index[_probe_state->match_count] = i;                                     \
+                _probe_state->build_index[_probe_state->match_count] = optimal_build_row_index;               \
+                _probe_state->match_count++;                                                                  \
+                cur_row_match_count++;                                                                        \
+                _probe_state->probe_match_filter[i] = 1;                                                      \
+            }                                                                                                 \
+                                                                                                              \
+            if (cur_row_match_count > 1) {                                                                    \
+                _probe_state->cur_row_match_count = cur_row_match_count;                                      \
+            }                                                                                                 \
+        }                                                                                                     \
+    }
+
+    // Type dispatch using the macro
+    switch (asof_join_probe_type) {
+    case TYPE_BIGINT:
+        ASOF_COROUTINE_PROBE_IMPL(TYPE_BIGINT, int64_t)
+        break;
+    case TYPE_DATE:
+        ASOF_COROUTINE_PROBE_IMPL(TYPE_DATE, DateValue)
+        break;
+    case TYPE_DATETIME:
+        ASOF_COROUTINE_PROBE_IMPL(TYPE_DATETIME, TimestampValue)
+        break;
+    default:
+        CHECK(false) << "ASOF JOIN: Unsupported probe_type: " << asof_join_probe_type
+                     << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
+        __builtin_unreachable();
+    }
+
+#undef ASOF_COROUTINE_PROBE_IMPL
+
+    if (--_probe_state->active_coroutines > 0) {
+        co_return;
+    }
+
+    auto match_count = _probe_state->match_count;
+    bool one_to_many = false;
+    if (!_probe_state->has_remain) {
+        CHECK_MATCH()
+        REORDER_PROBE_INDEX()
+    }
+    PROBE_OVER();
+}
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    if (!_probe_state->asof_temporal_condition_column || _probe_state->asof_temporal_condition_column->empty()) {
+        co_return;
+    }
+
+    LogicalType asof_join_probe_type = _table_items->asof_join_condition_desc.probe_logical_type;
+
+    // Macro to generate the type-specific coroutine logic for LEFT OUTER JOIN
+#define ASOF_LEFT_OUTER_COROUTINE_PROBE_IMPL(LOGICAL_TYPE, CPP_TYPE)                                          \
+    {                                                                                                         \
+        using AsofColumnCppType = CPP_TYPE;                                                                   \
+        const auto* typed_column = ColumnHelper::get_data_column_by_type<LOGICAL_TYPE>(                       \
+                _probe_state->asof_temporal_condition_column.get());                                          \
+        const NullColumn* nullable_asof_column =                                                              \
+                ColumnHelper::get_null_column(_probe_state->asof_temporal_condition_column);                  \
+        const AsofColumnCppType* asof_probe_temporal_values = typed_column->get_data().data();                \
+                                                                                                              \
+        for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;                   \
+             i = _probe_state->cur_probe_index++) {                                                           \
+            _probe_state->probe_match_filter[i] = 0;                                                          \
+            uint32_t cur_row_match_count = 0;                                                                 \
+            size_t build_index = _probe_state->next[i];                                                       \
+                                                                                                              \
+            if (build_index == 0) {                                                                           \
+                /* LEFT OUTER: No build match, output probe row with NULL build side */                       \
+                COWAIT_IF_CHUNK_FULL()                                                                        \
+                _probe_state->probe_index[_probe_state->match_count] = i;                                     \
+                _probe_state->build_index[_probe_state->match_count] = 0; /* NULL build side */               \
+                _probe_state->match_count++;                                                                  \
+                cur_row_match_count++;                                                                        \
+                _probe_state->probe_match_filter[i] = 1;                                                      \
+                continue;                                                                                     \
+            }                                                                                                 \
+                                                                                                              \
+            if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {                           \
+                /* LEFT OUTER: NULL probe value, output with NULL build side */                               \
+                COWAIT_IF_CHUNK_FULL()                                                                        \
+                _probe_state->probe_index[_probe_state->match_count] = i;                                     \
+                _probe_state->build_index[_probe_state->match_count] = 0; /* NULL build side */               \
+                _probe_state->match_count++;                                                                  \
+                cur_row_match_count++;                                                                        \
+                _probe_state->probe_match_filter[i] = 1;                                                      \
+                continue;                                                                                     \
+            }                                                                                                 \
+                                                                                                              \
+            PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index)) \
+                                                                                                              \
+            AsofColumnCppType probe_asof_value = asof_probe_temporal_values[i];                               \
+            uint32_t optimal_build_row_index =                                                                \
+                    _table_items->find_asof_match<AsofColumnCppType>(build_index, probe_asof_value);          \
+                                                                                                              \
+            if (optimal_build_row_index != 0) {                                                               \
+                /* Found ASOF match */                                                                        \
+                COWAIT_IF_CHUNK_FULL()                                                                        \
+                _probe_state->probe_index[_probe_state->match_count] = i;                                     \
+                _probe_state->build_index[_probe_state->match_count] = optimal_build_row_index;               \
+                _probe_state->match_count++;                                                                  \
+                cur_row_match_count++;                                                                        \
+                _probe_state->probe_match_filter[i] = 1;                                                      \
+            } else {                                                                                          \
+                /* LEFT OUTER: No ASOF match found, output probe row with NULL build side */                  \
+                COWAIT_IF_CHUNK_FULL()                                                                        \
+                _probe_state->probe_index[_probe_state->match_count] = i;                                     \
+                _probe_state->build_index[_probe_state->match_count] = 0; /* NULL build side */               \
+                _probe_state->match_count++;                                                                  \
+                cur_row_match_count++;                                                                        \
+                _probe_state->probe_match_filter[i] = 1;                                                      \
+            }                                                                                                 \
+                                                                                                              \
+            if (cur_row_match_count > 1) {                                                                    \
+                _probe_state->cur_row_match_count = cur_row_match_count;                                      \
+            }                                                                                                 \
+        }                                                                                                     \
+    }
+
+    // Type dispatch using the macro
+    switch (asof_join_probe_type) {
+    case TYPE_BIGINT:
+        ASOF_LEFT_OUTER_COROUTINE_PROBE_IMPL(TYPE_BIGINT, int64_t)
+        break;
+    case TYPE_DATE:
+        ASOF_LEFT_OUTER_COROUTINE_PROBE_IMPL(TYPE_DATE, DateValue)
+        break;
+    case TYPE_DATETIME:
+        ASOF_LEFT_OUTER_COROUTINE_PROBE_IMPL(TYPE_DATETIME, TimestampValue)
+        break;
+    default:
+        CHECK(false) << "ASOF JOIN: Unsupported probe_type: " << asof_join_probe_type
+                     << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
+        __builtin_unreachable();
+    }
+
+#undef ASOF_LEFT_OUTER_COROUTINE_PROBE_IMPL
+
+    if (--_probe_state->active_coroutines > 0) {
+        co_return;
+    }
+
+    auto match_count = _probe_state->match_count;
+    bool one_to_many = false;
+    if (!_probe_state->has_remain) {
+        CHECK_MATCH()
+        REORDER_PROBE_INDEX()
+    }
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_anti_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                 const Buffer<CppType>& probe_data) {
+    DCHECK_LT(0, _table_items->row_count);
     size_t match_count = 0;
 
     size_t probe_row_count = _probe_state->probe_row_count;
-    DCHECK_LT(0, _table_items->row_count);
     if (_table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && _probe_state->null_array != nullptr) {
         // process left anti join from not in
         for (size_t i = 0; i < probe_row_count; i++) {
@@ -1022,7 +1468,20 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_anti_join(RuntimeState* st
         }
     }
 
-    PROBE_OVER()
+    if (match_count == probe_row_count) {
+        _probe_state->match_flag = JoinMatchFlag::ALL_MATCH_ONE;
+    } else if (match_count * 2 >= probe_row_count) {
+        _probe_state->match_flag = JoinMatchFlag::MOST_MATCH_ONE;
+        uint8_t* match_filter_data = _probe_state->probe_match_filter.data();
+        memset(match_filter_data, 0, sizeof(uint8_t) * probe_row_count);
+        for (uint32_t i = 0; i < match_count; i++) {
+            match_filter_data[_probe_state->probe_index[i]] = 1;
+        }
+    } else {
+        _probe_state->match_flag = JoinMatchFlag::NORMAL;
+    }
+
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -1088,7 +1547,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
     }
     // only the last coroutine does
     auto match_count = _probe_state->match_count;
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -1122,14 +1581,19 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_outer_join(RuntimeState* 
                 _probe_state->build_match_index[build_index] = 1;
                 match_count++;
 
-                RETURN_IF_CHUNK_FULL()
+                if constexpr (!is_collision_free_and_unique) {
+                    RETURN_IF_CHUNK_FULL()
+                }
+            }
+            if constexpr (is_collision_free_and_unique) {
+                break;
             }
             build_index = _table_items->next[build_index];
         }
     }
 
     // TODO: all match optimized
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -1161,7 +1625,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
     // only the last coroutine does
     auto match_count = _probe_state->match_count;
     // TODO: all match optimized
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -1190,14 +1654,21 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_semi_join(RuntimeState* s
                     _probe_state->build_match_index[build_index] = 1;
                     match_count++;
 
+                    if constexpr (!is_collision_free_and_unique) {
+                        RETURN_IF_CHUNK_FULL()
+                    }
+
                     RETURN_IF_CHUNK_FULL()
                 }
+            }
+            if constexpr (is_collision_free_and_unique) {
+                break;
             }
             build_index = _table_items->next[build_index];
         }
     }
 
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -1229,7 +1700,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
     }
     // only the last coroutine does
     auto match_count = _probe_state->match_count;
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -1246,6 +1717,9 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_anti_join(RuntimeState* s
         while (index != 0) {
             if (HashMapMethod().equal(build_data[index], probe_data[i])) {
                 _probe_state->build_match_index[index] = 1;
+            }
+            if constexpr (is_collision_free_and_unique) {
+                break;
             }
             index = _table_items->next[index];
         }
@@ -1326,7 +1800,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_full_outer_join(RuntimeState* s
         _probe_state->cur_row_match_count = 0;
     }
 
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -1361,7 +1835,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
     }
     // only the last coroutine does
     auto match_count = _probe_state->match_count;
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -1405,7 +1879,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join_with_other_conju
         }
     }
 
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -1478,7 +1952,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_null_aware_anti_join_with_other
         _probe_state->cur_row_match_count = 0;
         _probe_state->cur_nullaware_build_index = 1;
     }
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -1509,7 +1983,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_outer_right_semi_right_an
         }
     }
 
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
@@ -1567,7 +2041,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_left_anti_full_outer
         _probe_state->cur_row_match_count = 0;
     }
 
-    PROBE_OVER()
+    PROBE_OVER();
 }
 
 // ------------------------------------------------------------------------------------

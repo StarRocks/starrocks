@@ -87,7 +87,7 @@ public class JoinHelper {
         leftOnCols = Lists.newArrayList();
         rightOnCols = Lists.newArrayList();
 
-        boolean leftTableAggStrict = type.isLeftOuterJoin() || type.isFullOuterJoin();
+        boolean leftTableAggStrict = type.isLeftOuterOrAsofJoin() || type.isFullOuterJoin();
         boolean rightTableAggStrict = type.isRightOuterJoin() || type.isFullOuterJoin();
 
         for (BinaryPredicateOperator binaryPredicate : equalsPredicate) {
@@ -181,6 +181,46 @@ public class JoinHelper {
         return Pair.create(lhsEqRhsOnPredicates, onPredicates);
     }
 
+    /**
+     * Apply commutative transformation to binary predicates in the given list
+     * For comparison operators (>, <, >=, <=), swap operands and transform operators
+     * For AsOf join scenarios where we need: left_table.column OP right_table.column
+     * 
+     * @param predicates List of predicates to transform
+     * @param leftColumns Columns from left table
+     * @param rightColumns Columns from right table
+     * @return List of transformed predicates with proper left-right operand order
+     */
+    public static List<ScalarOperator> applyCommutativeToPredicates(List<ScalarOperator> predicates,
+                                                                   ColumnRefSet leftColumns,
+                                                                   ColumnRefSet rightColumns) {
+        List<ScalarOperator> result = Lists.newArrayList();
+        
+        for (ScalarOperator predicate : predicates) {
+            if (predicate instanceof BinaryPredicateOperator binaryPred) {
+
+                // Only apply to comparison operators (>, <, >=, <=)
+                if (binaryPred.getBinaryType().isRange()) {
+                    // Check if left operand comes from right table (needs swap)
+                    if (!leftColumns.containsAll(binaryPred.getChild(0).getUsedColumns()) &&
+                        rightColumns.containsAll(binaryPred.getChild(0).getUsedColumns())) {
+                        // Create a new commutative predicate instead of modifying in place
+                        result.add(binaryPred.commutative());
+                    } else {
+                        result.add(predicate);
+                    }
+                } else {
+                    // For non-comparison operators (=, !=), keep as is
+                    result.add(predicate);
+                }
+            } else {
+                // For non-binary predicates, keep as is
+                result.add(predicate);
+            }
+        }
+        
+        return result;
+    }
 
     /**
      * Conditions should contain:

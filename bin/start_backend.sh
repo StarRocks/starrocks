@@ -102,7 +102,8 @@ if [[ -z "$JEMALLOC_CONF" ]]; then
 fi
 
 # enable coredump when BE build with ASAN
-export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
+# Optimized ASAN options for faster startup
+export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=0:fast_unwind_on_malloc=0:symbolize=0:check_initialization_order=0:strict_init_order=0:mmap_limit_mb=2048"
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
 
 

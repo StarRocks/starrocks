@@ -72,7 +72,8 @@ struct HashJoinerParam {
                     bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
                     std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
                     const TJoinDistributionMode::type distribution_mode, bool enable_late_materialization,
-                    bool enable_partition_hash_join, bool is_skew_join)
+                    bool enable_partition_hash_join, bool is_skew_join, TExprOpcode::type asof_join_condition_op,
+                    ExprContext* asof_join_build_expr_ctx, ExprContext* asof_join_probe_expr_ctx)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _is_null_safes(std::move(is_null_safes)),
@@ -91,7 +92,10 @@ struct HashJoinerParam {
               _distribution_mode(distribution_mode),
               _enable_late_materialization(enable_late_materialization),
               _enable_partition_hash_join(enable_partition_hash_join),
-              _is_skew_join(is_skew_join) {}
+              _is_skew_join(is_skew_join),
+              _asof_join_condition_op(asof_join_condition_op),
+              _asof_join_build_expr_ctx(asof_join_build_expr_ctx),
+              _asof_join_probe_expr_ctx(asof_join_probe_expr_ctx) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -117,6 +121,9 @@ struct HashJoinerParam {
     const bool _enable_late_materialization;
     const bool _enable_partition_hash_join;
     const bool _is_skew_join;
+    TExprOpcode::type _asof_join_condition_op;
+    ExprContext* _asof_join_build_expr_ctx;
+    ExprContext* _asof_join_probe_expr_ctx;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -484,6 +491,9 @@ private:
     pipeline::Observable _probe_observable;
 
     bool _is_skew_join = false;
+    TExprOpcode::type _asof_join_condition_op = TExprOpcode::INVALID_OPCODE;
+    ExprContext* _asof_join_build_expr_ctx = nullptr;
+    ExprContext* _asof_join_probe_expr_ctx = nullptr;
 };
 
 } // namespace starrocks

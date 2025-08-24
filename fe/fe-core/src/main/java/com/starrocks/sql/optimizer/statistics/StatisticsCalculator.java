@@ -1214,6 +1214,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 joinStatsBuilder = Statistics.buildFrom(crossJoinStats);
                 break;
             case INNER_JOIN:
+            case ASOF_INNER_JOIN:
                 if (eqOnPredicates.isEmpty()) {
                     joinStatsBuilder = Statistics.buildFrom(crossJoinStats);
                     break;
@@ -1221,6 +1222,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 break;
             case LEFT_OUTER_JOIN:
+            case ASOF_LEFT_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(max(innerRowCount, leftRowCount));
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, rightStatistics, joinStatsBuilder);
