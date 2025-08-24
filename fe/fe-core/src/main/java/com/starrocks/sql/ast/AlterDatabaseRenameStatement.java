@@ -17,6 +17,8 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class AlterDatabaseRenameStatement extends DdlStmt {
     private String catalog;
     private String dbName;
@@ -28,8 +30,8 @@ public class AlterDatabaseRenameStatement extends DdlStmt {
 
     public AlterDatabaseRenameStatement(String dbName, String newDbName, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
-        this.newDbName = newDbName;
+        this.dbName = normalizeName(dbName);
+        this.newDbName = normalizeName(newDbName);
     }
 
     public String getCatalogName() {
@@ -37,7 +39,7 @@ public class AlterDatabaseRenameStatement extends DdlStmt {
     }
 
     public void setCatalogName(String catalogName) {
-        this.catalog = catalogName;
+        this.catalog = normalizeName(catalogName);
     }
 
     public String getDbName() {
@@ -49,7 +51,7 @@ public class AlterDatabaseRenameStatement extends DdlStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     @Override

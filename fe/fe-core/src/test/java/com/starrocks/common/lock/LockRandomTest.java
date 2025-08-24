@@ -19,9 +19,9 @@ import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,7 +29,7 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class LockRandomTest {
-    @Before
+    @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
         counter = 0;
@@ -55,7 +55,7 @@ public class LockRandomTest {
                             locker.release(1L, LockType.WRITE);
                         }
                     } catch (LockException ie) {
-                        Assert.fail();
+                        Assertions.fail();
                     }
                 }
             });
@@ -71,7 +71,7 @@ public class LockRandomTest {
             threadList.get(i).join();
         }
 
-        Assert.assertEquals(threadNums * runTimes, counter);
+        Assertions.assertEquals(threadNums * runTimes, counter);
     }
 
     @Test
@@ -98,13 +98,13 @@ public class LockRandomTest {
                         } else {
                             try {
                                 locker.lock(1L, LockType.READ);
-                                Assert.assertEquals(counter, atomicInteger.get());
+                                Assertions.assertEquals(counter, atomicInteger.get());
                             } finally {
                                 locker.release(1L, LockType.READ);
                             }
                         }
                     } catch (LockException ie) {
-                        Assert.fail();
+                        Assertions.fail();
                     }
                 }
             });
@@ -120,7 +120,7 @@ public class LockRandomTest {
             threadList.get(i).join();
         }
 
-        Assert.assertEquals(counter, atomicInteger.get());
+        Assertions.assertEquals(counter, atomicInteger.get());
     }
 
     @Test
@@ -147,13 +147,13 @@ public class LockRandomTest {
                         } else {
                             try {
                                 locker.lock(1L, LockType.INTENTION_SHARED);
-                                Assert.assertEquals(counter, atomicInteger.get());
+                                Assertions.assertEquals(counter, atomicInteger.get());
                             } finally {
                                 locker.release(1L, LockType.INTENTION_SHARED);
                             }
                         }
                     } catch (LockException ie) {
-                        Assert.fail();
+                        Assertions.fail();
                     }
                 }
             });
@@ -169,7 +169,7 @@ public class LockRandomTest {
             threadList.get(i).join();
         }
 
-        Assert.assertEquals(counter, atomicInteger.get());
+        Assertions.assertEquals(counter, atomicInteger.get());
     }
 
     @Test
@@ -196,13 +196,13 @@ public class LockRandomTest {
                         } else {
                             try {
                                 locker.lock(1L, LockType.INTENTION_EXCLUSIVE);
-                                Assert.assertEquals(counter, atomicInteger.get());
+                                Assertions.assertEquals(counter, atomicInteger.get());
                             } finally {
                                 locker.release(1L, LockType.INTENTION_EXCLUSIVE);
                             }
                         }
                     } catch (LockException ie) {
-                        Assert.fail();
+                        Assertions.fail();
                     }
                 }
             });
@@ -218,6 +218,6 @@ public class LockRandomTest {
             threadList.get(i).join();
         }
 
-        Assert.assertEquals(counter, atomicInteger.get());
+        Assertions.assertEquals(counter, atomicInteger.get());
     }
 }

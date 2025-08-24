@@ -38,14 +38,14 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class VectorIndexTest extends PlanTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         Config.enable_experimental_vector = true;

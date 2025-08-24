@@ -21,21 +21,21 @@ import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertNotContains;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
@@ -44,12 +44,12 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
     }
 
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         super.before();
     }
 
-    @After
+    @AfterEach
     public void after() {
     }
 
@@ -227,7 +227,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/view_delta"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_yyf_trade_water3"));
+        Assertions.assertTrue(replayPair.second.contains("mv_yyf_trade_water3"), replayPair.second);
     }
 
     @Test
@@ -247,5 +247,56 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 "\n" +
                 "  3:Project\n" +
                 "  |  <slot 59> : coalesce(80: count, 0)");
+    }
+
+    @Test
+    public void testViewBasedRewrite1() throws Exception {
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableQueryTraceLog(true);
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        sessionVariable.setQueryDebugOptions(debugOptions.toString());
+
+        // disable cbo based mv rewrite
+        {
+            sessionVariable.setEnableCboBasedMvRewrite(false);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/view_based_rewrite1"),
+                            connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(replayPair.second, "tbl_mock_255", "MaterializedView: true");
+        }
+        // enable cbo based mv rewrite
+        {
+            sessionVariable.setEnableCboBasedMvRewrite(true);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/view_based_rewrite1"),
+                            connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(replayPair.second, "tbl_mock_255", "MaterializedView: true");
+        }
+    }
+
+    @Test
+    public void testViewBasedRewrite2() throws Exception {
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableQueryTraceLog(true);
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        sessionVariable.setQueryDebugOptions(debugOptions.toString());
+
+        // disable cbo based mv rewrite
+        sessionVariable.setEnableViewBasedMvRewrite(true);
+        {
+            sessionVariable.setEnableCboBasedMvRewrite(false);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/view_based_rewrite2"),
+                            connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(replayPair.second, "tbl_mock_239", "MaterializedView: true");
+        }
+        // enable cbo based mv rewrite
+        {
+            sessionVariable.setEnableCboBasedMvRewrite(true);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/view_based_rewrite2"),
+                            connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(replayPair.second, "tbl_mock_239", "MaterializedView: true");
+        }
     }
 }

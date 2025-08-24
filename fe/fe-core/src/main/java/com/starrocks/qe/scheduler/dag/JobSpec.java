@@ -498,6 +498,10 @@ public class JobSpec {
         return queryOptions.getLoad_job_type() == TLoadJobType.BROKER;
     }
 
+    public boolean isQueryType() {
+        return queryOptions.getQuery_type() == TQueryType.SELECT;
+    }
+
     public String getPlanProtocol() {
         return planProtocol;
     }

@@ -42,13 +42,13 @@ import com.starrocks.proto.PUpdateTransactionStateResponse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Tested;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public class PBackendServiceWithMetricsTest {
     @Tested
@@ -57,7 +57,7 @@ public class PBackendServiceWithMetricsTest {
     @Injectable
     PBackendService pBackendService;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() {
         MetricRepo.init();
     }

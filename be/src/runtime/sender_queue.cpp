@@ -559,7 +559,14 @@ void DataStreamRecvr::PipelineSenderQueue::close() {
     clean_buffer_queues();
 }
 
+struct ClosureDeleter {
+    void operator()(google::protobuf::Closure* p) const { p->Run(); };
+};
+
 void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
+    // avoid run closure in lock scope
+    std::vector<std::unique_ptr<google::protobuf::Closure, ClosureDeleter>> closures;
+
     std::lock_guard<Mutex> l(_lock);
     tls_thread_status.set_mem_tracker(nullptr);
     auto& metrics = _recvr->_metrics[0];
@@ -571,7 +578,7 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
             if (chunk_queue.try_dequeue(item)) {
                 if (item.closure != nullptr) {
                     COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
-                    item.closure->Run();
+                    closures.emplace_back(item.closure);
                     chunk_queue_state.blocked_closure_num--;
                 }
                 --_total_chunks;
@@ -585,7 +592,7 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
             for (auto& item : chunk_queue) {
                 if (item.closure != nullptr) {
                     COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
-                    item.closure->Run();
+                    closures.emplace_back(item.closure);
                 }
             }
             chunk_queue.clear();

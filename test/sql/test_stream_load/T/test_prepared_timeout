@@ -1,0 +1,66 @@
+-- name: test_prepared_timeout @slow
+
+-- Scenario 1: Normal prepared_timeout setting
+create database db_prepared_timeout_normal_${uuid0};
+use db_prepared_timeout_normal_${uuid0};
+
+CREATE TABLE `test_normal` (
+  `id` int
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+[UC]shell: curl --location-trusted -u root: -H "label:test_normal" -H "db:db_prepared_timeout_normal_${uuid0}" -H "table:test_normal" -XPOST ${url}/api/transaction/begin
+[UC]shell: curl --location-trusted -u root: -H "label:test_normal" -H "Expect:100-continue" -H "db:db_prepared_timeout_normal_${uuid0}" -H "table:test_normal" -d '1' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:test_normal" -H "db:db_prepared_timeout_normal_${uuid0}" -H "prepared_timeout:300" -XPOST ${url}/api/transaction/prepare
+[UC]shell: curl --location-trusted -u root: -H "label:test_normal" -H "db:db_prepared_timeout_normal_${uuid0}" -XPOST ${url}/api/transaction/commit
+
+select * from test_normal order by id;
+
+function: get_transaction_meta("db_prepared_timeout_normal_${uuid0}", "test_normal", "|", "TransactionStatus", "PreparedTimeoutMs")
+
+-- Scenario 2: Default prepared_timeout (not set)
+create database db_prepared_timeout_default_${uuid0};
+use db_prepared_timeout_default_${uuid0};
+
+CREATE TABLE `test_default` (
+  `id` int
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+[UC]shell: curl --location-trusted -u root: -H "label:test_default" -H "db:db_prepared_timeout_default_${uuid0}" -H "table:test_default" -XPOST ${url}/api/transaction/begin
+[UC]shell: curl --location-trusted -u root: -H "label:test_default" -H "Expect:100-continue" -H "db:db_prepared_timeout_default_${uuid0}" -H "table:test_default" -d '2' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:test_default" -H "db:db_prepared_timeout_default_${uuid0}" -XPOST ${url}/api/transaction/prepare
+[UC]shell: curl --location-trusted -u root: -H "label:test_default" -H "db:db_prepared_timeout_default_${uuid0}" -XPOST ${url}/api/transaction/commit
+
+select * from test_default order by id;
+
+function: get_transaction_meta("db_prepared_timeout_default_${uuid0}", "test_default", "|", "TransactionStatus", "PreparedTimeoutMs")
+
+-- Scenario 3: Timeout mechanism verification
+create database db_prepared_timeout_timeout_${uuid0};
+use db_prepared_timeout_timeout_${uuid0};
+
+CREATE TABLE `test_timeout` (
+  `id` int
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+[UC]shell: curl --location-trusted -u root: -H "label:test_timeout" -H "db:db_prepared_timeout_timeout_${uuid0}" -H "table:test_timeout" -XPOST ${url}/api/transaction/begin
+[UC]shell: curl --location-trusted -u root: -H "label:test_timeout" -H "Expect:100-continue" -H "db:db_prepared_timeout_timeout_${uuid0}" -H "table:test_timeout" -d '3' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:test_timeout" -H "db:db_prepared_timeout_timeout_${uuid0}" -H "prepared_timeout:1" -XPOST ${url}/api/transaction/prepare
+
+function: wait_db_transaction_finish("db_prepared_timeout_timeout_${uuid0}", 300)
+
+function: get_transaction_meta("db_prepared_timeout_timeout_${uuid0}", "test_timeout", "|", "TransactionStatus", "PreparedTimeoutMs", "Reason")

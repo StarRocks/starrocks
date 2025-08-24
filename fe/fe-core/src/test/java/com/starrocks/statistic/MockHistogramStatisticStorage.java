@@ -32,7 +32,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -322,7 +322,7 @@ public class MockHistogramStatisticStorage implements StatisticStorage {
                     0, 0, fileName, StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.MIN, Maps.newHashMap()));
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
     }
 

@@ -19,6 +19,8 @@ import com.baidu.jprotobuf.pbrpc.client.ProtobufRpcProxy;
 import com.baidu.jprotobuf.pbrpc.transport.RpcClient;
 import com.baidu.jprotobuf.pbrpc.transport.RpcClientOptions;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.DnsCache;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TNetworkAddress;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,6 +66,14 @@ public class BrpcProxy {
         BrpcProxy.SingletonHolder.INSTANCE = proxy;
     }
 
+    public static TNetworkAddress convertToIpAddress(TNetworkAddress address) {
+        if (!FrontendOptions.isUseFqdn()) {
+            return address;
+        }
+        String ip = DnsCache.tryLookup(address.getHostname());
+        return new TNetworkAddress(ip, address.getPort());
+    }
+
     public static PBackendService getBackendService(TNetworkAddress address) {
         return getInstance().getBackendServiceImpl(address);
     }
@@ -77,12 +87,14 @@ public class BrpcProxy {
     }
 
     protected PBackendService getBackendServiceImpl(TNetworkAddress address) {
-        return backendServiceMap.computeIfAbsent(address, this::createBackendService);
+        TNetworkAddress cacheAddress = convertToIpAddress(address);
+        return backendServiceMap.computeIfAbsent(cacheAddress, this::createBackendService);
     }
 
     protected LakeService getLakeServiceImpl(TNetworkAddress address) throws RpcException {
         try {
-            return lakeServiceMap.computeIfAbsent(address, this::createLakeService);
+            TNetworkAddress cacheAddress = convertToIpAddress(address);
+            return lakeServiceMap.computeIfAbsent(cacheAddress, this::createLakeService);
         } catch (Exception e) {
             throw new RpcException("fail to initialize the LakeService on node " + address.getHostname(), e);
         }

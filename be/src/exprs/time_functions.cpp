@@ -14,6 +14,10 @@
 
 #include "exprs/time_functions.h"
 
+#include <cctz/time_zone.h>
+#include <column/column_view/column_view.h>
+#include <libdivide.h>
+
 #include <algorithm>
 #include <string_view>
 #include <unordered_map>
@@ -22,7 +26,6 @@
 #include "column/column_viewer.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
-#include "gen_cpp/InternalService_types.h"
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
@@ -516,6 +519,13 @@ DEFINE_UNARY_FN_WITH_IMPL(day_of_week_isoImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(day_of_week_iso, TYPE_DATETIME, TYPE_INT);
 
+// week_day
+DEFINE_UNARY_FN_WITH_IMPL(week_dayImpl, v) {
+    int day = ((DateValue)v).weekday();
+    return (day + 6) % 7;
+}
+DEFINE_TIME_UNARY_FN(week_day, TYPE_DATETIME, TYPE_INT);
+
 DEFINE_UNARY_FN_WITH_IMPL(time_to_secImpl, v) {
     return static_cast<int64_t>(v);
 }
@@ -898,6 +908,7 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
     }
 
     ColumnPtr column_format = context->get_constant_column(2);
+    RETURN_IF(column_format == nullptr, Status::InvalidArgument("time_slice requires constant parameter"));
     Slice format_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_format);
     auto period_unit = format_slice.to_string();
 
@@ -1462,7 +1473,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format_32(Function
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_64(FunctionContext* context, const Columns& columns) {
-    DCHECK_EQ(columns.size(), 0);
+    RETURN_IF(0 != columns.size(), Status::InvalidArgument("to_unix_for_now requires 0 arguments"));
     int64_t value = context->state()->timestamp_ms() / 1000;
     auto result = Int64Column::create();
     result->append(value);
@@ -1470,7 +1481,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_64(FunctionContext* context, 
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, const Columns& columns) {
-    DCHECK_EQ(columns.size(), 0);
+    RETURN_IF(0 != columns.size(), Status::InvalidArgument("to_unix_for_now requires 0 arguments"));
     int64_t value = context->state()->timestamp_ms() / 1000;
     auto result = Int32Column::create();
     result->append(value);
@@ -1489,7 +1500,6 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
     DCHECK_EQ(columns.size(), 1);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-
     ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
 
     auto size = columns[0]->size();
@@ -1564,6 +1574,56 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_32(FunctionContext* con
 
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_ms_64(FunctionContext* context, const Columns& columns) {
     return _t_from_unix_to_datetime_ms<TYPE_BIGINT>(context, columns);
+}
+
+static inline int64_t impl_hour_from_unixtime(int64_t unixtime) {
+    // return (unixtime % 86400) / 3600;
+    static const libdivide::divider<int64_t> fast_div_3600(3600);
+    static const libdivide::divider<int64_t> fast_div_86400(86400);
+
+    // Handle negative unixtime correctly by ensuring positive remainder
+    int64_t remainder;
+    if (LIKELY(unixtime >= 0)) {
+        remainder = unixtime - unixtime / fast_div_86400 * 86400;
+    } else {
+        remainder = unixtime % 86400;
+        if (remainder < 0) {
+            remainder += 86400;
+        }
+    }
+    int64_t hour = remainder / fast_div_3600;
+    return hour;
+}
+
+StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    static const auto epoch =
+            std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
+
+    auto ctz = context->state()->timezone_obj();
+    auto size = columns[0]->size();
+    ColumnViewer<TYPE_BIGINT> data_column(columns[0]);
+    ColumnBuilder<TYPE_INT> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto date = data_column.value(row);
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
+            result.append_null();
+            continue;
+        }
+
+        cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(date);
+        int offset = ctz.lookup_offset(t).offset;
+        int hour = impl_hour_from_unixtime(date + offset);
+        result.append(hour);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
 }
 
 std::string TimeFunctions::convert_format(const Slice& format) {
@@ -1886,6 +1946,280 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_32(Function
 /*
  * end definition for from_unix operators
  */
+constexpr int64_t MICROSECONDS_PER_SECOND = 1000000LL;
+constexpr int64_t MICROSECONDS_PER_MILLISECOND = 1000LL;
+
+constexpr bool is_valid_scale(int scale) {
+    return scale == 0 || scale == 3 || scale == 6;
+}
+
+constexpr int64_t get_scale_factor(int scale) {
+    switch (scale) {
+    case 0:
+        return 1;
+    case 3:
+        return 1000;
+    case 6:
+        return 1000000;
+    default:
+        return -1;
+    }
+}
+
+inline std::pair<int64_t, int64_t> safe_divmod(int64_t dividend, int64_t divisor) {
+    int64_t quotient = dividend / divisor;
+    int64_t remainder = dividend % divisor;
+    if (remainder < 0) {
+        quotient -= 1;
+        remainder += divisor;
+    }
+    return {quotient, remainder};
+}
+
+inline void normalize_microseconds(int64_t& seconds, int64_t& microseconds) {
+    if (microseconds >= MICROSECONDS_PER_SECOND) {
+        int64_t overflow_seconds = microseconds / MICROSECONDS_PER_SECOND;
+        seconds += overflow_seconds;
+        microseconds %= MICROSECONDS_PER_SECOND;
+    } else if (microseconds < 0) {
+        int64_t borrow_seconds = (-microseconds + MICROSECONDS_PER_SECOND - 1) / MICROSECONDS_PER_SECOND;
+        seconds -= borrow_seconds;
+        microseconds += borrow_seconds * MICROSECONDS_PER_SECOND;
+    }
+}
+
+struct UnixTimeConversionContext {
+    bool has_scale_column = false;
+    bool scale_is_const = false;
+    int const_scale = 0;
+    bool result_is_null = false;
+    bool timezone_aware = false;
+    cctz::time_zone session_timezone;
+
+    using ConversionFuncPtr = std::pair<int64_t, int64_t> (*)(int64_t);
+    static ConversionFuncPtr scale_conversion_funcs[3];
+    int scale_index = 0;
+
+    ConversionFuncPtr active_conversion_func = nullptr;
+};
+
+inline std::pair<int64_t, int64_t> convert_timestamp_scale_0(int64_t timestamp_value) {
+    return {timestamp_value, 0};
+}
+
+inline std::pair<int64_t, int64_t> convert_timestamp_scale_3(int64_t timestamp_value) {
+    auto [seconds, remainder] = safe_divmod(timestamp_value, MICROSECONDS_PER_MILLISECOND);
+    int64_t microseconds = remainder * MICROSECONDS_PER_MILLISECOND;
+    normalize_microseconds(seconds, microseconds);
+    return {seconds, microseconds};
+}
+
+inline std::pair<int64_t, int64_t> convert_timestamp_scale_6(int64_t timestamp_value) {
+    auto [seconds, remainder] = safe_divmod(timestamp_value, MICROSECONDS_PER_SECOND);
+    normalize_microseconds(seconds, remainder);
+    return {seconds, remainder};
+}
+
+UnixTimeConversionContext::ConversionFuncPtr UnixTimeConversionContext::scale_conversion_funcs[3] = {
+        convert_timestamp_scale_0, convert_timestamp_scale_3, convert_timestamp_scale_6};
+
+Status TimeFunctions::_unixtime_to_datetime_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope,
+                                                    bool timezone_aware) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* conv_ctx = new UnixTimeConversionContext();
+    conv_ctx->timezone_aware = timezone_aware;
+    if (timezone_aware) {
+        conv_ctx->session_timezone = context->state()->timezone_obj();
+    }
+
+    context->set_function_state(scope, conv_ctx);
+
+    int num_args = context->get_num_args();
+    if (num_args < 1 || num_args > 2) {
+        return Status::InvalidArgument("unixtime_to_datetime expects 1 or 2 arguments");
+    }
+
+    conv_ctx->has_scale_column = context->get_num_args() == 2;
+
+    if (conv_ctx->has_scale_column) {
+        if (context->is_constant_column(1)) {
+            conv_ctx->scale_is_const = true;
+
+            if (!context->is_notnull_constant_column(1)) {
+                conv_ctx->result_is_null = true;
+                return Status::OK();
+            }
+
+            conv_ctx->const_scale = ColumnHelper::get_const_value<TYPE_INT>(context->get_constant_column(1));
+
+            if (!is_valid_scale(conv_ctx->const_scale)) {
+                conv_ctx->result_is_null = true;
+                return Status::OK();
+            }
+
+            int scale_index = -1;
+            switch (conv_ctx->const_scale) {
+            case 0:
+                scale_index = 0;
+                break;
+            case 3:
+                scale_index = 1;
+                break;
+            case 6:
+                scale_index = 2;
+                break;
+            default:
+                conv_ctx->result_is_null = true;
+                return Status::OK();
+            }
+            conv_ctx->scale_index = scale_index;
+        }
+    } else {
+        conv_ctx->scale_is_const = true;
+        conv_ctx->const_scale = 0;
+        conv_ctx->scale_index = 0;
+    }
+
+    if (conv_ctx->scale_is_const) {
+        conv_ctx->active_conversion_func = UnixTimeConversionContext::scale_conversion_funcs[conv_ctx->scale_index];
+    }
+
+    return Status::OK();
+}
+
+Status TimeFunctions::_unixtime_to_datetime_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* conv_ctx = reinterpret_cast<UnixTimeConversionContext*>(context->get_function_state(scope));
+        if (conv_ctx) {
+            delete conv_ctx;
+            context->set_function_state(scope, nullptr);
+        }
+    }
+    return Status::OK();
+}
+
+template <LogicalType TIMESTAMP_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* context, const Columns& columns) {
+    DCHECK_GE(columns.size(), 1);
+    DCHECK_LE(columns.size(), 2);
+
+    auto* conv_ctx =
+            reinterpret_cast<UnixTimeConversionContext*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
+    if (!conv_ctx) {
+        return Status::InternalError("Function context not properly initialized");
+    }
+
+    auto size = columns[0]->size();
+    if (conv_ctx->result_is_null) {
+        return ColumnHelper::create_const_null_column(size);
+    }
+
+    ColumnViewer<TIMESTAMP_TYPE> timestamp_viewer(columns[0]);
+    ColumnBuilder<TYPE_DATETIME> result(size);
+
+    if (conv_ctx->scale_is_const) {
+        auto conversion_func = conv_ctx->active_conversion_func;
+
+        for (int row = 0; row < size; ++row) {
+            if (timestamp_viewer.is_null(row)) {
+                result.append_null();
+                continue;
+            }
+
+            auto [seconds, microseconds] = conversion_func(timestamp_viewer.value(row));
+
+            TimestampValue result_timestamp;
+            if (conv_ctx->timezone_aware) {
+                result_timestamp.from_unixtime(seconds, microseconds, conv_ctx->session_timezone);
+            } else {
+                result_timestamp.from_unix_second(seconds, microseconds);
+            }
+
+            if (result_timestamp.is_valid()) {
+                result.append(result_timestamp);
+            } else {
+                result.append_null();
+            }
+        }
+    } else {
+        ColumnViewer<TYPE_INT> scale_viewer(columns[1]);
+
+        for (int row = 0; row < size; ++row) {
+            if (timestamp_viewer.is_null(row) || scale_viewer.is_null(row)) {
+                result.append_null();
+                continue;
+            }
+
+            int current_scale = scale_viewer.value(row);
+
+            int scale_idx = -1;
+            switch (current_scale) {
+            case 0:
+                scale_idx = 0;
+                break;
+            case 3:
+                scale_idx = 1;
+                break;
+            case 6:
+                scale_idx = 2;
+                break;
+            default:
+                result.append_null();
+                continue;
+            }
+
+            auto [seconds, microseconds] =
+                    UnixTimeConversionContext::scale_conversion_funcs[scale_idx](timestamp_viewer.value(row));
+
+            TimestampValue result_timestamp;
+            if (conv_ctx->timezone_aware) {
+                result_timestamp.from_unixtime(seconds, microseconds, conv_ctx->session_timezone);
+            } else {
+                result_timestamp.from_unix_second(seconds, microseconds);
+            }
+
+            if (result_timestamp.is_valid()) {
+                result.append(result_timestamp);
+            } else {
+                result.append_null();
+            }
+        }
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+Status TimeFunctions::unixtime_to_datetime_prepare(FunctionContext* context,
+                                                   FunctionContext::FunctionStateScope scope) {
+    return _unixtime_to_datetime_prepare(context, scope, true);
+}
+Status TimeFunctions::unixtime_to_datetime_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    return _unixtime_to_datetime_close(context, scope);
+}
+StatusOr<ColumnPtr> TimeFunctions::unixtime_to_datetime(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    return _unixtime_to_datetime<TYPE_BIGINT>(context, columns);
+}
+
+Status TimeFunctions::unixtime_to_datetime_ntz_prepare(FunctionContext* context,
+                                                       FunctionContext::FunctionStateScope scope) {
+    return _unixtime_to_datetime_prepare(context, scope, false);
+}
+Status TimeFunctions::unixtime_to_datetime_ntz_close(FunctionContext* context,
+                                                     FunctionContext::FunctionStateScope scope) {
+    return _unixtime_to_datetime_close(context, scope);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::unixtime_to_datetime_ntz(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    return _unixtime_to_datetime<TYPE_BIGINT>(context, columns);
+}
 
 // from_days
 DEFINE_UNARY_FN_WITH_IMPL(from_daysImpl, v) {
@@ -3564,3 +3898,5 @@ StatusOr<ColumnPtr> TimeFunctions::time_format(FunctionContext* context, const s
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/TimeFunctions.inc"

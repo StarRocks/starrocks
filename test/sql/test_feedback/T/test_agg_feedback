@@ -51,6 +51,7 @@ insert into pre_agg_case select generate_series, generate_series, generate_serie
 analyze full table pre_agg_case with sync mode;
 set enable_plan_advisor=true;
 set enable_plan_analyzer=true;
+set enable_plan_advisor_blacklist=false;
 set enable_global_runtime_filter = false;
 function: assert_explain_not_contains("select count(*) from pre_agg_case group by c3", "StreamingAggTuningGuide")
 alter plan advisor add select count(*) from pre_agg_case group by c3;
@@ -110,3 +111,14 @@ select count(1) as cnt from t1 group by c1 order by cnt limit 10;
 alter plan advisor add select count(1) as cnt from t1 group by c1 order by cnt limit 10;
 function: assert_explain_contains("select count(1) as cnt from t1 group by c1 order by cnt limit 10", "StreamingAggTuningGuide")
 select count(1) as cnt from t1 group by c1 order by cnt limit 10;
+
+set enable_plan_advisor_blacklist = true;
+truncate plan advisor;
+alter plan advisor add select count(1) as cnt from t1 group by c1 order by cnt limit 10;
+function: assert_explain_contains("select count(1) as cnt from t1 group by c1 order by cnt limit 10", "StreamingAggTuningGuide")
+select count(1) as cnt from t1 group by c1 order by cnt limit 10;
+function: assert_explain_not_contains("select count(1) as cnt from t1 group by c1 order by cnt limit 10", "StreamingAggTuningGuide")
+select count(1) as cnt from t1 group by c1 order by cnt limit 10;
+function: assert_explain_not_contains("select count(1) as cnt from t1 group by c1 order by cnt limit 10", "StreamingAggTuningGuide")
+truncate plan advisor;
+

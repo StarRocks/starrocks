@@ -24,6 +24,8 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
+import static com.starrocks.common.util.Util.normalizeNames;
+
 public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected GrantRevokeClause clause;
     protected GrantRevokePrivilegeObjects objectsUnResolved;
@@ -55,14 +57,14 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         this.privilegeTypeUnResolved = privilegeTypeUnResolved;
         this.objectTypeUnResolved = objectTypeUnResolved;
         this.clause = clause;
-        this.objectsUnResolved = objectsUnResolved;
+        this.objectsUnResolved = normalizeNames(objectTypeUnResolved, objectsUnResolved);
         this.role = clause.getRoleName();
     }
 
     /**
      * old privilege framework only support grant/revoke on one single object
      */
-    public UserIdentity getUserPrivilegeObject() {
+    public UserRef getUserPrivilegeObject() {
         return objectsUnResolved.getUserPrivilegeObjectList().get(0);
     }
 
@@ -70,7 +72,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return objectsUnResolved.getPrivilegeObjectNameTokensList();
     }
 
-    public List<UserIdentity> getUserPrivilegeObjectList() {
+    public List<UserRef> getUserPrivilegeObjectList() {
         return objectsUnResolved.getUserPrivilegeObjectList();
     }
 
@@ -94,8 +96,8 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return role;
     }
 
-    public UserIdentity getUserIdentity() {
-        return clause.getUserIdentity();
+    public UserRef getUser() {
+        return clause.getUser();
     }
 
     public String getObjectTypeUnResolved() {

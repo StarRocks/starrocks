@@ -35,7 +35,6 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
@@ -69,10 +68,6 @@ public class CollectionElementExpr extends Expr {
     public CollectionElementExpr(CollectionElementExpr other) {
         super(other);
         this.checkIsOutOfBounds = other.checkIsOutOfBounds;
-    }
-
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
     @Override

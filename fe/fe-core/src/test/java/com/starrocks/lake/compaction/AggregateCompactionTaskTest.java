@@ -15,7 +15,6 @@
 package com.starrocks.lake.compaction;
 
 import com.google.common.collect.Lists;
-import com.starrocks.lake.compaction.CompactionTask;
 import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
@@ -30,8 +29,8 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
@@ -113,9 +112,9 @@ public class AggregateCompactionTaskTest {
         aggregateRequest.computeNodes.add(nodePB);
 
         CompactionTask task = new AggregateCompactionTask(10043, lakeService, aggregateRequest);
-        Assert.assertEquals(1, task.tabletCount());
+        Assertions.assertEquals(1, task.tabletCount());
         List<TabletCommitInfo> tabletCommitInfo = task.buildTabletCommitInfo();
-        Assert.assertEquals(1, tabletCommitInfo.size());
+        Assertions.assertEquals(1, tabletCommitInfo.size());
 
         CompactResponse mockResponse = new CompactResponse();
         mockResponse.successCompactionInputFileSize = 100L;
@@ -132,7 +131,7 @@ public class AggregateCompactionTaskTest {
             }
         };
 
-        Assert.assertEquals(100L, task.getSuccessCompactInputFileSize());
+        Assertions.assertEquals(100L, task.getSuccessCompactInputFileSize());
     }
 
     @Test
@@ -168,7 +167,7 @@ public class AggregateCompactionTaskTest {
                 result = true;
             }
         };
-        Assert.assertEquals(CompactionTask.TaskResult.ALL_SUCCESS, task.getResult());
+        Assertions.assertEquals(CompactionTask.TaskResult.ALL_SUCCESS, task.getResult());
 
         mockResponse.status = new StatusPB();
         mockResponse.status.statusCode = TStatusCode.CANCELLED.getValue();
@@ -180,7 +179,7 @@ public class AggregateCompactionTaskTest {
                 result = true;
             }
         };
-        Assert.assertEquals(CompactionTask.TaskResult.NONE_SUCCESS, task.getResult());
+        Assertions.assertEquals(CompactionTask.TaskResult.NONE_SUCCESS, task.getResult());
     }
 
     @Test

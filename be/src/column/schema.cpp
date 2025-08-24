@@ -17,6 +17,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "exec/sorting/sorting.h"
+
 namespace starrocks {
 
 #ifdef BE_TEST
@@ -28,8 +30,13 @@ Schema::Schema(Fields fields) : Schema(fields, KeysType::DUP_KEYS, {}) {
 #endif
 
 Schema::Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes)
+        : Schema(std::move(fields), keys_type, std::move(sort_key_idxes), nullptr) {}
+
+Schema::Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes,
+               std::shared_ptr<SortDescs> sort_descs)
         : _fields(std::move(fields)),
           _sort_key_idxes(std::move(sort_key_idxes)),
+          _sort_descs(std::move(sort_descs)),
           _name_to_index_append_buffer(nullptr),
 
           _keys_type(static_cast<uint8_t>(keys_type)) {
@@ -52,9 +59,16 @@ Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
         _fields[i] = schema->_fields[cids[i]];
         cids_to_field_id[cids[i]] = i;
     }
-    for (auto idx : ori_sort_idxes) {
+    if (schema->sort_descs()) {
+        _sort_descs = std::make_shared<SortDescs>();
+    }
+    for (size_t pos = 0; pos < ori_sort_idxes.size(); ++pos) {
+        auto idx = ori_sort_idxes[pos];
         if (cids_to_field_id.count(idx) > 0) {
             _sort_key_idxes.emplace_back(cids_to_field_id[idx]);
+            if (_sort_descs && pos < schema->sort_descs()->descs.size()) {
+                _sort_descs->descs.emplace_back(schema->sort_descs()->descs[pos]);
+            }
         }
     }
     auto is_key = [](const FieldPtr& f) { return f->is_key(); };
@@ -88,6 +102,7 @@ Schema::Schema(Schema* schema)
         _fields[i] = schema->_fields[i];
     }
     _sort_key_idxes = schema->sort_key_idxes();
+    _sort_descs = schema->sort_descs();
     if (schema->_name_to_index_append_buffer == nullptr) {
         // share the name_to_index with schema, later append fields will be added to _name_to_index_append_buffer
         schema->_share_name_to_index = true;
@@ -109,6 +124,7 @@ Schema::Schema(const Schema& schema)
         _fields[i] = schema._fields[i];
     }
     _sort_key_idxes = schema.sort_key_idxes();
+    _sort_descs = schema.sort_descs();
     if (schema._name_to_index_append_buffer == nullptr) {
         // share the name_to_index with schema&, later append fields will be added to _name_to_index_append_buffer
         schema._share_name_to_index = true;
@@ -132,6 +148,7 @@ Schema& Schema::operator=(const Schema& other) {
         this->_fields[i] = other._fields[i];
     }
     this->_sort_key_idxes = other.sort_key_idxes();
+    this->_sort_descs = other.sort_descs();
     if (other._name_to_index_append_buffer == nullptr) {
         // share the name_to_index with schema&, later append fields will be added to _name_to_index_append_buffer
         other._share_name_to_index = true;

@@ -24,8 +24,8 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUserIdentity;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ForwardTest {
 
@@ -53,7 +53,7 @@ public class ForwardTest {
             }
         };
         final TMasterOpResult result = service.forward(request);
-        Assert.assertEquals(result.errorMsg, "");
+        Assertions.assertEquals(result.errorMsg, "");
     }
 
     @Test
@@ -68,7 +68,7 @@ public class ForwardTest {
             }
         };
         final TMasterOpResult result = service.forward(request);
-        Assert.assertEquals(result.errorMsg, "Unknown thread id: 1");
+        Assertions.assertEquals(result.errorMsg, "Unknown thread id: 1");
     }
 
     @Test
@@ -99,6 +99,6 @@ public class ForwardTest {
         };
 
         final TMasterOpResult result = service.forward(request);
-        Assert.assertEquals(result.errorMsg, "unknown exception");
+        Assertions.assertEquals(result.errorMsg, "unknown exception");
     }
 }

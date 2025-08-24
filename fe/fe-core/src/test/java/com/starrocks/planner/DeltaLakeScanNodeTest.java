@@ -24,8 +24,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 
@@ -79,7 +79,7 @@ public class DeltaLakeScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node");
-        Assert.assertFalse(scanNode.getNodeExplainString("", TExplainLevel.NORMAL).contains("partitions"));
-        Assert.assertTrue(scanNode.getNodeExplainString("", TExplainLevel.VERBOSE).contains("partitions"));
+        Assertions.assertFalse(scanNode.getNodeExplainString("", TExplainLevel.NORMAL).contains("partitions"));
+        Assertions.assertTrue(scanNode.getNodeExplainString("", TExplainLevel.VERBOSE).contains("partitions"));
     }
 }

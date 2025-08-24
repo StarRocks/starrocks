@@ -42,10 +42,10 @@ import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.system.Backend;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -58,7 +58,7 @@ import java.util.Set;
  * the replica is placed on the right backends with matching location label.
  */
 public class CreateTableWithLocationTest {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         PseudoCluster.getOrCreateWithRandomPort(true, 7);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
@@ -66,7 +66,7 @@ public class CreateTableWithLocationTest {
         cluster.runSql(null, "create database test");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(true);
     }
@@ -112,7 +112,7 @@ public class CreateTableWithLocationTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "test_table_backend_no_loc");
-        Assert.assertNull(table.getLocation());
+        Assertions.assertNull(table.getLocation());
     }
 
     private Set<Long> getBackendIdsWithLocProp() {
@@ -191,7 +191,7 @@ public class CreateTableWithLocationTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "test_table_no_loc_backend_with_loc");
-        Assert.assertTrue(table.getLocation().keySet().contains("*"));
+        Assertions.assertTrue(table.getLocation().keySet().contains("*"));
 
         List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
         List<Tablet> tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
@@ -206,9 +206,9 @@ public class CreateTableWithLocationTest {
                 replicaBackendIds.add(replica.getBackendId());
             }
             System.out.println(replicaBackendIds);
-            Assert.assertEquals(3, replicaBackendIds.size());
-            Assert.assertEquals(3, Sets.intersection(replicaBackendIds, backendIdsWithLocProp).size());
-            Assert.assertEquals(0, Sets.intersection(replicaBackendIds, backendIdsWithoutLocProp).size());
+            Assertions.assertEquals(3, replicaBackendIds.size());
+            Assertions.assertEquals(3, Sets.intersection(replicaBackendIds, backendIdsWithLocProp).size());
+            Assertions.assertEquals(0, Sets.intersection(replicaBackendIds, backendIdsWithoutLocProp).size());
         }
     }
 
@@ -238,7 +238,7 @@ public class CreateTableWithLocationTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc1");
-        Assert.assertTrue(table.getLocation().keySet().contains("rack"));
+        Assertions.assertTrue(table.getLocation().keySet().contains("rack"));
         List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
         List<Tablet> tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
         Set<Long> backendIdsWithLocProp = getBackendIdsWithLocProp("rack");
@@ -254,9 +254,9 @@ public class CreateTableWithLocationTest {
                 replicaBackendIds.add(replica.getBackendId());
             }
             System.out.println(replicaBackendIds);
-            Assert.assertEquals(3, replicaBackendIds.size());
-            Assert.assertEquals(3, Sets.intersection(replicaBackendIds, backendIdsWithLocProp).size());
-            Assert.assertEquals(0, Sets.intersection(replicaBackendIds, backendIdsWithoutLocProp).size());
+            Assertions.assertEquals(3, replicaBackendIds.size());
+            Assertions.assertEquals(3, Sets.intersection(replicaBackendIds, backendIdsWithLocProp).size());
+            Assertions.assertEquals(0, Sets.intersection(replicaBackendIds, backendIdsWithoutLocProp).size());
         }
 
         // Test: rack:*, region:*
@@ -277,8 +277,8 @@ public class CreateTableWithLocationTest {
         boolean hasReplicaOnRackBackend = false;
         table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc2");
-        Assert.assertTrue(table.getLocation().keySet().contains("rack"));
-        Assert.assertTrue(table.getLocation().keySet().contains("region"));
+        Assertions.assertTrue(table.getLocation().keySet().contains("rack"));
+        Assertions.assertTrue(table.getLocation().keySet().contains("region"));
         partitions = new ArrayList<>(table.getAllPartitions());
         tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
         for (Tablet tablet : tablets) {
@@ -289,7 +289,7 @@ public class CreateTableWithLocationTest {
                 replicaBackendIds.add(replica.getBackendId());
             }
             System.out.println(replicaBackendIds);
-            Assert.assertEquals(3, replicaBackendIds.size());
+            Assertions.assertEquals(3, replicaBackendIds.size());
             if (!Sets.intersection(replicaBackendIds, getBackendIdsWithLocProp("rack")).isEmpty()) {
                 hasReplicaOnRackBackend = true;
             }
@@ -297,8 +297,8 @@ public class CreateTableWithLocationTest {
                 hasReplicaOnRegionBackend = true;
             }
         }
-        Assert.assertTrue(hasReplicaOnRackBackend);
-        Assert.assertTrue(hasReplicaOnRegionBackend);
+        Assertions.assertTrue(hasReplicaOnRackBackend);
+        Assertions.assertTrue(hasReplicaOnRegionBackend);
 
         // Test: rack:r1, rack:rack2, rack:rack3
         sql = "CREATE TABLE test.`test_table_explicit_loc_backend_with_loc3` (\n" +
@@ -316,8 +316,8 @@ public class CreateTableWithLocationTest {
         cluster.runSql("test", sql);
         table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc3");
-        Assert.assertTrue(table.getLocation().keySet().contains("rack"));
-        Assert.assertEquals(1, table.getLocation().keySet().size());
+        Assertions.assertTrue(table.getLocation().keySet().contains("rack"));
+        Assertions.assertEquals(1, table.getLocation().keySet().size());
         partitions = new ArrayList<>(table.getAllPartitions());
         tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
         backendIdsWithLocProp = getBackendIdsWithLocProp("rack", "r1");
@@ -331,8 +331,8 @@ public class CreateTableWithLocationTest {
                 replicaBackendIds.add(replica.getBackendId());
             }
             System.out.println(replicaBackendIds);
-            Assert.assertEquals(3, replicaBackendIds.size());
-            Assert.assertEquals(3, Sets.intersection(replicaBackendIds, backendIdsWithLocProp).size());
+            Assertions.assertEquals(3, replicaBackendIds.size());
+            Assertions.assertEquals(3, Sets.intersection(replicaBackendIds, backendIdsWithLocProp).size());
         }
 
         // Test: rack:r1, region:*
@@ -351,8 +351,8 @@ public class CreateTableWithLocationTest {
         cluster.runSql("test", sql);
         table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc4");
-        Assert.assertTrue(table.getLocation().keySet().contains("rack"));
-        Assert.assertTrue(table.getLocation().keySet().contains("region"));
+        Assertions.assertTrue(table.getLocation().keySet().contains("rack"));
+        Assertions.assertTrue(table.getLocation().keySet().contains("region"));
         partitions = new ArrayList<>(table.getAllPartitions());
         tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
         Set<Long> allReplicasBackendIds = Sets.newHashSet();
@@ -364,7 +364,7 @@ public class CreateTableWithLocationTest {
                 replicaBackendIds.add(replica.getBackendId());
             }
             System.out.println(replicaBackendIds);
-            Assert.assertEquals(3, replicaBackendIds.size());
+            Assertions.assertEquals(3, replicaBackendIds.size());
             allReplicasBackendIds.addAll(replicaBackendIds);
         }
         backendIdsWithLocProp = getBackendIdsWithLocProp("rack", "r1");
@@ -372,8 +372,8 @@ public class CreateTableWithLocationTest {
         System.out.println(backendIdsWithLocProp);
         System.out.println(allReplicasBackendIds);
         int size = Sets.intersection(allReplicasBackendIds, backendIdsWithLocProp).size();
-        Assert.assertTrue(size >= 3);
-        Assert.assertTrue(size <= 4);
+        Assertions.assertTrue(size >= 3);
+        Assertions.assertTrue(size <= 4);
 
         // Test: rack:r1, rack:rack2, not enough hosts, fallback to ignore location prop
         sql = "CREATE TABLE test.`test_table_explicit_loc_backend_with_loc5` (\n" +
@@ -391,7 +391,7 @@ public class CreateTableWithLocationTest {
         cluster.runSql("test", sql);
         table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc5");
-        Assert.assertTrue(table.getLocation().keySet().contains("rack"));
+        Assertions.assertTrue(table.getLocation().keySet().contains("rack"));
         partitions = new ArrayList<>(table.getAllPartitions());
         tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
         allReplicasBackendIds = Sets.newHashSet();
@@ -403,12 +403,12 @@ public class CreateTableWithLocationTest {
                 replicaBackendIds.add(replica.getBackendId());
             }
             System.out.println(replicaBackendIds);
-            Assert.assertEquals(3, replicaBackendIds.size());
+            Assertions.assertEquals(3, replicaBackendIds.size());
             allReplicasBackendIds.addAll(replicaBackendIds);
         }
         backendIdsWithLocProp = getBackendIdsWithLocProp();
         backendIdsWithLocProp.addAll(getBackendIdsWithoutLocProp());
-        Assert.assertEquals(backendIdsWithLocProp.size(),
+        Assertions.assertEquals(backendIdsWithLocProp.size(),
                     Sets.intersection(allReplicasBackendIds, backendIdsWithLocProp).size());
 
         // Test: rack:r1, rack:rack2, not enough hosts, fallback to ignore location prop
@@ -428,7 +428,7 @@ public class CreateTableWithLocationTest {
         try {
             cluster.runSql("test", sql);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains(
+            Assertions.assertTrue(e.getMessage().contains(
                         "Table replication num should be less than of equal to the number of available BE nodes"));
         }
 
@@ -462,7 +462,7 @@ public class CreateTableWithLocationTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc_best_effort");
-        Assert.assertTrue(table.getLocation().keySet().contains("rack"));
+        Assertions.assertTrue(table.getLocation().keySet().contains("rack"));
         List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
         List<Tablet> tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
         Set<Long> backendIdsWithLocProp = getBackendIdsWithLocProp("rack", "r1");
@@ -474,7 +474,7 @@ public class CreateTableWithLocationTest {
                 replicaBackendIds.add(replica.getBackendId());
             }
             System.out.println(replicaBackendIds);
-            Assert.assertEquals(3, replicaBackendIds.size());
+            Assertions.assertEquals(3, replicaBackendIds.size());
         }
 
         // clean up

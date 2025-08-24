@@ -30,9 +30,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,7 +43,7 @@ public class MetaUtilTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.alter_scheduler_interval_millisecond = 1;
         UtFrameUtils.createMinStarRocksCluster();
@@ -76,13 +76,13 @@ public class MetaUtilTest {
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0");
         List<Partition> partitionList = new ArrayList<>(table.getPartitions());
-        Assert.assertFalse(MetaUtils.isPartitionExist(GlobalStateMgr.getCurrentState(),
+        Assertions.assertFalse(MetaUtils.isPartitionExist(GlobalStateMgr.getCurrentState(),
                 -1, -1, -1));
-        Assert.assertFalse(MetaUtils.isPartitionExist(GlobalStateMgr.getCurrentState(),
+        Assertions.assertFalse(MetaUtils.isPartitionExist(GlobalStateMgr.getCurrentState(),
                 database.getId(), -1, -1));
-        Assert.assertFalse(MetaUtils.isPartitionExist(GlobalStateMgr.getCurrentState(),
+        Assertions.assertFalse(MetaUtils.isPartitionExist(GlobalStateMgr.getCurrentState(),
                 database.getId(), table.getId(), -1));
-        Assert.assertTrue(MetaUtils.isPartitionExist(GlobalStateMgr.getCurrentState(),
+        Assertions.assertTrue(MetaUtils.isPartitionExist(GlobalStateMgr.getCurrentState(),
                 database.getId(), table.getId(), partitionList.get(0).getId()));
     }
 
@@ -91,13 +91,13 @@ public class MetaUtilTest {
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0");
         List<PhysicalPartition> partitionList = new ArrayList<>(table.getPhysicalPartitions());
-        Assert.assertFalse(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
+        Assertions.assertFalse(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
                 -1, -1, -1));
-        Assert.assertFalse(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
+        Assertions.assertFalse(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
                 database.getId(), -1, -1));
-        Assert.assertFalse(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
+        Assertions.assertFalse(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
                 database.getId(), table.getId(), -1));
-        Assert.assertTrue(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
+        Assertions.assertTrue(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
                 database.getId(), table.getId(), partitionList.get(0).getId()));
     }
 
@@ -108,11 +108,11 @@ public class MetaUtilTest {
         Column columnC = new Column("c", new StructType(Lists.newArrayList(new StructField("f1", Type.INT))));
         Map<ColumnId, Column> schema = MetaUtils.buildIdToColumn(Lists.newArrayList(columnA, columnB, columnC));
 
-        Assert.assertEquals(columnA,
+        Assertions.assertEquals(columnA,
                 MetaUtils.getColumnsByColumnIds(schema, Lists.newArrayList(ColumnId.create("a"))).get(0));
-        Assert.assertEquals(columnB,
+        Assertions.assertEquals(columnB,
                 MetaUtils.getColumnsByColumnIds(schema, Lists.newArrayList(ColumnId.create("b"))).get(0));
-        Assert.assertEquals(columnC,
+        Assertions.assertEquals(columnC,
                 MetaUtils.getColumnsByColumnIds(schema, Lists.newArrayList(ColumnId.create("c"))).get(0));
     }
 
@@ -123,11 +123,11 @@ public class MetaUtilTest {
         Column columnC = new Column("c", new StructType(Lists.newArrayList(new StructField("f1", Type.INT))));
         Map<ColumnId, Column> schema = MetaUtils.buildIdToColumn(Lists.newArrayList(columnA, columnB, columnC));
 
-        Assert.assertEquals("a",
+        Assertions.assertEquals("a",
                 MetaUtils.getColumnNamesByColumnIds(schema, Lists.newArrayList(ColumnId.create("a"))).get(0));
-        Assert.assertEquals("b",
+        Assertions.assertEquals("b",
                 MetaUtils.getColumnNamesByColumnIds(schema, Lists.newArrayList(ColumnId.create("b"))).get(0));
-        Assert.assertEquals("c",
+        Assertions.assertEquals("c",
                 MetaUtils.getColumnNamesByColumnIds(schema, Lists.newArrayList(ColumnId.create("c"))).get(0));
     }
 
@@ -140,11 +140,11 @@ public class MetaUtilTest {
         OlapTable olapTable = new OlapTable(1111L, "t1", Lists.newArrayList(columnA, columnB, columnC),
                 KeysType.AGG_KEYS, null, null);
 
-        Assert.assertEquals(ColumnId.create("a"),
+        Assertions.assertEquals(ColumnId.create("a"),
                 MetaUtils.getColumnIdsByColumnNames(olapTable, Lists.newArrayList("a")).get(0));
-        Assert.assertEquals(ColumnId.create("b"),
+        Assertions.assertEquals(ColumnId.create("b"),
                 MetaUtils.getColumnIdsByColumnNames(olapTable, Lists.newArrayList("b")).get(0));
-        Assert.assertEquals(ColumnId.create("c"),
+        Assertions.assertEquals(ColumnId.create("c"),
                 MetaUtils.getColumnIdsByColumnNames(olapTable, Lists.newArrayList("c")).get(0));
     }
 }

@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
@@ -33,9 +34,9 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -55,7 +56,7 @@ public class HDFSBackendSelectorTest {
     final int computeNodePort = 9030;
     final String hostFormat = "192.168.1.%02d";
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         warehouseManager.initDefaultWarehouse();
@@ -152,7 +153,7 @@ public class HDFSBackendSelectorTest {
         Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
         for (Map.Entry<Long, Long> entry : stats.entrySet()) {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
-            Assert.assertTrue(entry.getValue() - avg < variance);
+            Assertions.assertTrue(entry.getValue() - avg < variance);
         }
 
         // test empty compute nodes
@@ -169,9 +170,9 @@ public class HDFSBackendSelectorTest {
                         false, false, false, context);
         try {
             selector.computeScanRangeAssignment();
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Failed to find backend to execute", e.getMessage());
+            Assertions.assertEquals("Failed to find backend to execute", e.getMessage());
         }
     }
 
@@ -219,7 +220,7 @@ public class HDFSBackendSelectorTest {
         Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
         for (Map.Entry<Long, Long> entry : stats.entrySet()) {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
-            Assert.assertTrue((entry.getValue() - avg) < variance);
+            Assertions.assertTrue((entry.getValue() - avg) < variance);
         }
 
         variance = 0.4 / 100 * scanRangeNumber * scanRangeSize;
@@ -228,7 +229,7 @@ public class HDFSBackendSelectorTest {
             System.out.printf("%s -> %d bytes re-balance\n", entry.getKey(), entry.getValue());
             actual = actual + entry.getValue();
         }
-        Assert.assertTrue(actual < variance);
+        Assertions.assertTrue(actual < variance);
     }
 
     @Test
@@ -261,21 +262,21 @@ public class HDFSBackendSelectorTest {
 
 
         HashRing hashRing = selector.makeHashRing(computeNodes.values());
-        Assert.assertTrue(hashRing.policy().equals("ConsistentHash"));
+        Assertions.assertTrue(hashRing.policy().equals("ConsistentHash"));
         ConsistentHashRing consistentHashRing = (ConsistentHashRing) hashRing;
-        Assert.assertTrue(consistentHashRing.getVirtualNumber() ==
+        Assertions.assertTrue(consistentHashRing.getVirtualNumber() ==
                 HDFSBackendSelector.CONSISTENT_HASH_RING_VIRTUAL_NUMBER);
 
         sessionVariable.setHdfsBackendSelectorHashAlgorithm("rendezvous");
         hashRing = selector.makeHashRing(computeNodes.values());
-        Assert.assertTrue(hashRing.policy().equals("RendezvousHash"));
+        Assertions.assertTrue(hashRing.policy().equals("RendezvousHash"));
 
         sessionVariable.setHdfsBackendSelectorHashAlgorithm("consistent");
         sessionVariable.setConsistentHashVirtualNodeNum(64);
         hashRing = selector.makeHashRing(computeNodes.values());
-        Assert.assertTrue(hashRing.policy().equals("ConsistentHash"));
+        Assertions.assertTrue(hashRing.policy().equals("ConsistentHash"));
         consistentHashRing = (ConsistentHashRing) hashRing;
-        Assert.assertTrue(consistentHashRing.getVirtualNumber() == 64);
+        Assertions.assertTrue(consistentHashRing.getVirtualNumber() == 64);
     }
 
     @Test
@@ -324,7 +325,7 @@ public class HDFSBackendSelectorTest {
         selector.computeScanRangeAssignment();
 
         Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
-        Assert.assertEquals(stats.size(), localHostNumber);
+        Assertions.assertEquals(stats.size(), localHostNumber);
         for (Map.Entry<Long, Long> entry : stats.entrySet()) {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
         }
@@ -367,24 +368,24 @@ public class HDFSBackendSelectorTest {
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
                         false, false, true, context);
         selector.computeScanRangeAssignment();
-        Assert.assertEquals(assignment.size(), 3);
+        Assertions.assertEquals(assignment.size(), 3);
         int scanRanges = 0;
         for (Map<Integer, List<TScanRangeParams>> scanNodes : assignment.values()) {
-            Assert.assertEquals(scanNodes.size(), 1);
+            Assertions.assertEquals(scanNodes.size(), 1);
             List<TScanRangeParams> scanRangeParams = scanNodes.get(scanNodeId);
-            Assert.assertTrue(scanRangeParams.size() >= 1);
+            Assertions.assertTrue(scanRangeParams.size() >= 1);
             TScanRangeParams last = scanRangeParams.get(scanRangeParams.size() - 1);
-            Assert.assertTrue(last.isSetEmpty());
-            Assert.assertTrue(last.isSetHas_more());
-            Assert.assertTrue(last.isEmpty());
-            Assert.assertTrue(last.has_more == false);
+            Assertions.assertTrue(last.isSetEmpty());
+            Assertions.assertTrue(last.isSetHas_more());
+            Assertions.assertTrue(last.isEmpty());
+            Assertions.assertTrue(last.has_more == false);
             for (TScanRangeParams p : scanRangeParams) {
                 if (!p.isEmpty()) {
                     scanRanges += 1;
                 }
             }
         }
-        Assert.assertEquals(scanRanges, scanRangeNumber);
+        Assertions.assertEquals(scanRanges, scanRangeNumber);
     }
 
     @Test
@@ -425,8 +426,8 @@ public class HDFSBackendSelectorTest {
         ImmutableMap.Entry<Long, ComputeNode> candidateNode = computeNodes.entrySet().asList().get(0);
         List<Long> candidateNodeIds = Collections.singletonList(candidateNode.getKey());
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
-        historicalNodeMgr.updateHistoricalComputeNodeIds(candidateNodeIds, System.currentTimeMillis(),
-                WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        historicalNodeMgr.updateHistoricalComputeNodeIds(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                StarOSAgent.DEFAULT_WORKER_GROUP_ID, candidateNodeIds, System.currentTimeMillis());
 
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         systemInfoService.addComputeNode(candidateNode.getValue());
@@ -435,20 +436,20 @@ public class HDFSBackendSelectorTest {
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
                         false, false, true, context);
         selector.computeScanRangeAssignment();
-        Assert.assertEquals(assignment.size(), 3);
+        Assertions.assertEquals(assignment.size(), 3);
         int scanRanges = 0;
         for (Map<Integer, List<TScanRangeParams>> scanNodes : assignment.values()) {
-            Assert.assertEquals(scanNodes.size(), 1);
+            Assertions.assertEquals(scanNodes.size(), 1);
             List<TScanRangeParams> scanRangeParams = scanNodes.get(scanNodeId);
-            Assert.assertTrue(scanRangeParams.size() >= 1);
+            Assertions.assertTrue(scanRangeParams.size() >= 1);
 
             for (TScanRangeParams p : scanRangeParams) {
                 if (!p.isEmpty()) {
-                    Assert.assertTrue(p.scan_range.hdfs_scan_range.isSetCandidate_node());
+                    Assertions.assertTrue(p.scan_range.hdfs_scan_range.isSetCandidate_node());
                     scanRanges += 1;
                 }
             }
         }
-        Assert.assertEquals(scanRanges, scanRangeNumber);
+        Assertions.assertEquals(scanRanges, scanRangeNumber);
     }
 }

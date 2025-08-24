@@ -38,7 +38,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.zip.Adler32;
 
@@ -68,11 +67,8 @@ public class MetaObject implements Writable {
         this.lastCheckTime = lastCheckTime;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(signature);
-        out.writeLong(lastCheckTime);
-    }
+
+
 
     public void readFields(DataInput in) throws IOException {
         this.signature = in.readLong();

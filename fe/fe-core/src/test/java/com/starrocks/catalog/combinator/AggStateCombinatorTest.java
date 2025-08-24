@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Streams;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AnyArrayType;
@@ -46,12 +47,11 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.kudu.shaded.com.google.common.collect.Streams;
 import org.assertj.core.util.Sets;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,7 +71,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                     "ds_hll_count_distinct", "percentile_approx", "variance", "bitmap_union_int", "variance_pop",
                     "covar_pop");
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
@@ -104,13 +104,12 @@ public class AggStateCombinatorTest extends MVTestBase {
             if (!(func instanceof AggregateFunction)) {
                 continue;
             }
-            if ((func instanceof AggStateMergeCombinator) || (func instanceof AggStateUnionCombinator) ||
-                    (func instanceof AggStateIf)) {
+            if (AggStateUtils.isAggStateCombinator(func)) {
                 continue;
             }
             builtInAggregateFunctions.add((AggregateFunction) func);
         }
-        Assert.assertTrue(builtInAggregateFunctions.size() > 0);
+        Assertions.assertTrue(builtInAggregateFunctions.size() > 0);
         return builtInAggregateFunctions;
     }
 
@@ -334,7 +333,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                     "PROPERTIES (  \"replication_num\" = \"1\");";
             starRocksAssert.withTable(sql);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -346,11 +345,11 @@ public class AggStateCombinatorTest extends MVTestBase {
                 continue;
             }
             var mergeCombinator = AggStateMergeCombinator.of(aggFunc);
-            Assert.assertTrue(mergeCombinator.isPresent());
+            Assertions.assertTrue(mergeCombinator.isPresent());
             var unionCombinator = AggStateUnionCombinator.of(aggFunc);
-            Assert.assertTrue(unionCombinator.isPresent());
+            Assertions.assertTrue(unionCombinator.isPresent());
             var ifCombinator = AggStateIf.of(aggFunc);
-            Assert.assertTrue(ifCombinator.isPresent());
+            Assertions.assertTrue(ifCombinator.isPresent());
         }
     }
 
@@ -366,12 +365,12 @@ public class AggStateCombinatorTest extends MVTestBase {
             }
             supportedAggFunctions.add(aggFunc.functionName());
             Function result = getAggStateFunc(aggFunc);
-            Assert.assertNotNull(result);
-            Assert.assertTrue(result instanceof AggStateCombinator);
-            Assert.assertFalse(result.getReturnType().isWildcardDecimal());
-            Assert.assertFalse(result.getReturnType().isPseudoType());
+            Assertions.assertNotNull(result);
+            Assertions.assertTrue(result instanceof StateFunctionCombinator);
+            Assertions.assertFalse(result.getReturnType().isWildcardDecimal());
+            Assertions.assertFalse(result.getReturnType().isPseudoType());
         }
-        Assert.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
+        Assertions.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
     }
 
     @Test
@@ -384,7 +383,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             }
             supportedAggFunctions.add(aggFunc.functionName());
             Function aggStateFunc = getAggStateFunc(aggFunc);
-            Assert.assertNotNull(aggStateFunc);
+            Assertions.assertNotNull(aggStateFunc);
             String aggStateFuncName = FunctionSet.getAggStateUnionName(aggFunc.functionName());
             FunctionParams params = new FunctionParams(false, Lists.newArrayList());
 
@@ -398,12 +397,12 @@ public class AggStateCombinatorTest extends MVTestBase {
 
             Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
                     aggStateFuncName, params, argumentTypes, argArgumentConstants, NodePosition.ZERO);
-            Assert.assertNotNull(result);
-            Assert.assertTrue(result instanceof AggStateUnionCombinator);
-            Assert.assertFalse(result.getReturnType().isWildcardDecimal());
-            Assert.assertFalse(result.getReturnType().isPseudoType());
+            Assertions.assertNotNull(result);
+            Assertions.assertTrue(result instanceof AggStateUnionCombinator);
+            Assertions.assertFalse(result.getReturnType().isWildcardDecimal());
+            Assertions.assertFalse(result.getReturnType().isPseudoType());
         }
-        Assert.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
+        Assertions.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
     }
 
     @Test
@@ -417,7 +416,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             supportedAggFunctions.add(aggFunc.functionName());
 
             Function aggStateFunc = getAggStateFunc(aggFunc);
-            Assert.assertNotNull(aggStateFunc);
+            Assertions.assertNotNull(aggStateFunc);
 
             Type intermediateType = aggStateFunc.getReturnType();
             // set agg_state_desc
@@ -431,12 +430,12 @@ public class AggStateCombinatorTest extends MVTestBase {
             FunctionParams params = new FunctionParams(false, Lists.newArrayList());
             Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
                     aggStateFuncName, params, argumentTypes, argArgumentConstants, NodePosition.ZERO);
-            Assert.assertNotNull(result);
-            Assert.assertTrue(result instanceof AggStateMergeCombinator);
-            Assert.assertFalse(result.getReturnType().isWildcardDecimal());
-            Assert.assertFalse(result.getReturnType().isPseudoType());
+            Assertions.assertNotNull(result);
+            Assertions.assertTrue(result instanceof AggStateMergeCombinator);
+            Assertions.assertFalse(result.getReturnType().isWildcardDecimal());
+            Assertions.assertFalse(result.getReturnType().isPseudoType());
         }
-        Assert.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
+        Assertions.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
     }
 
     @Test
@@ -451,12 +450,12 @@ public class AggStateCombinatorTest extends MVTestBase {
 
             Function aggStateFunc = getAggStateIfFunc(aggFunc);
 
-            Assert.assertNotNull(aggStateFunc);
-            Assert.assertTrue(aggStateFunc instanceof AggStateIf);
-            Assert.assertFalse(aggStateFunc.getReturnType().isWildcardDecimal());
-            Assert.assertFalse(aggStateFunc.getReturnType().isPseudoType());
+            Assertions.assertNotNull(aggStateFunc);
+            Assertions.assertTrue(aggStateFunc instanceof AggStateIf);
+            Assertions.assertFalse(aggStateFunc.getReturnType().isWildcardDecimal());
+            Assertions.assertFalse(aggStateFunc.getReturnType().isPseudoType());
         }
-        Assert.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
+        Assertions.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
     }
 
     @Test
@@ -495,7 +494,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                     Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
                             .getDb(connectContext.getDatabase()).getTable("test_agg_state_table");
                     List<Column> tableColumns = table.getColumns();
-                    Assert.assertEquals(columns.size() + 1, tableColumns.size());
+                    Assertions.assertEquals(columns.size() + 1, tableColumns.size());
                     // test _union/_merge for per agg function
                     for (int i = 0; i < colNames.size(); i++) {
                         // test _union
@@ -546,7 +545,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                     Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
                             .getDb(connectContext.getDatabase()).getTable("test_agg_state_table");
                     List<Column> tableColumns = table.getColumns();
-                    Assert.assertEquals(columns.size() + 1, tableColumns.size());
+                    Assertions.assertEquals(columns.size() + 1, tableColumns.size());
                     // test _union/_merge for per agg function
                     for (int i = 0; i < colNames.size(); i++) {
                         // test _merge
@@ -597,7 +596,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                     Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
                             .getDb(connectContext.getDatabase()).getTable("test_agg_state_table");
                     List<Column> tableColumns = table.getColumns();
-                    Assert.assertEquals(columns.size() + 1, tableColumns.size());
+                    Assertions.assertEquals(columns.size() + 1, tableColumns.size());
                     // test _union
                     {
                         List<String> unionColumns =
@@ -955,7 +954,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                     Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
                             .getDb(connectContext.getDatabase()).getTable("test_agg_state_table");
                     List<Column> tableColumns = table.getColumns();
-                    Assert.assertEquals(columns.size() + 1, tableColumns.size());
+                    Assertions.assertEquals(columns.size() + 1, tableColumns.size());
 
                     // test _state
                     {
@@ -1125,7 +1124,7 @@ public class AggStateCombinatorTest extends MVTestBase {
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void testCreateSyncMVWithArrayAggDistinct() throws Exception {
         testCreateSyncMVWithSpecificAggFunc(FunctionSet.ARRAY_AGG_DISTINCT);
     }
@@ -1223,8 +1222,8 @@ public class AggStateCombinatorTest extends MVTestBase {
         // count agg function's output should be always not nullable.
         for (Column col : mvCols) {
             if (col.getName().startsWith("agg")) {
-                Assert.assertTrue(col.getType().isBigint());
-                Assert.assertFalse(col.isAllowNull());
+                Assertions.assertTrue(col.getType().isBigint());
+                Assertions.assertFalse(col.isAllowNull());
             }
         }
         starRocksAssert.dropTable("t1");

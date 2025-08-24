@@ -23,14 +23,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.Triple;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class ConnectorAnalyzeTaskQueueTest {
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
@@ -47,11 +47,11 @@ public class ConnectorAnalyzeTaskQueueTest {
 
         ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue();
         queue.addPendingTask(tableUUID, task1);
-        Assert.assertEquals(1, queue.getPendingTaskSize());
+        Assertions.assertEquals(1, queue.getPendingTaskSize());
         // merge task
         ConnectorAnalyzeTask task2 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderstatus"));
         queue.addPendingTask(tableUUID, task2);
-        Assert.assertEquals(1, queue.getPendingTaskSize());
+        Assertions.assertEquals(1, queue.getPendingTaskSize());
     }
 
     @Test
@@ -65,10 +65,10 @@ public class ConnectorAnalyzeTaskQueueTest {
         Config.connector_table_query_trigger_analyze_max_pending_task_num = 1;
         ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue();
         queue.addPendingTask(tableUUID, task1);
-        Assert.assertEquals(1, queue.getPendingTaskSize());
+        Assertions.assertEquals(1, queue.getPendingTaskSize());
         // add task exceed limit
         ConnectorAnalyzeTask task2 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderstatus"));
-        Assert.assertFalse(queue.addPendingTask(tableUUID, task2));
+        Assertions.assertFalse(queue.addPendingTask(tableUUID, task2));
         Config.connector_table_query_trigger_analyze_max_pending_task_num = 100;
     }
 
@@ -82,19 +82,19 @@ public class ConnectorAnalyzeTaskQueueTest {
 
         ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue();
         queue.addPendingTask(tableUUID, task1);
-        Assert.assertEquals(1, queue.getPendingTaskSize());
+        Assertions.assertEquals(1, queue.getPendingTaskSize());
 
         queue.schedulePendingTask();
-        Assert.assertEquals(0, queue.getPendingTaskSize());
+        Assertions.assertEquals(0, queue.getPendingTaskSize());
 
         ConnectorAnalyzeTask task2 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_custkey", "o_orderstatus"));
         queue.addPendingTask(tableUUID, task2);
 
         Config.connector_table_query_trigger_analyze_max_running_task_num = 0;
         queue.schedulePendingTask();
-        Assert.assertEquals(1, queue.getPendingTaskSize());
+        Assertions.assertEquals(1, queue.getPendingTaskSize());
         Config.connector_table_query_trigger_analyze_max_running_task_num = 2;
         queue.schedulePendingTask();
-        Assert.assertEquals(0, queue.getPendingTaskSize());
+        Assertions.assertEquals(0, queue.getPendingTaskSize());
     }
 }

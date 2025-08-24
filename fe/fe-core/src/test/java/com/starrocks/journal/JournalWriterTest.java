@@ -22,11 +22,11 @@ import com.starrocks.journal.bdbje.BDBJEJournal;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -47,13 +47,13 @@ public class JournalWriterTest {
         }
     };
 
-    @Before
+    @BeforeEach
     public void setup() throws Exception {
         writer.nextVisibleJournalId = 1;
         abortedWriter.nextVisibleJournalId = 1;
     }
 
-    @After
+    @AfterEach
     public void cleanup() throws Exception {
         // reset all configs
         Config.edit_log_roll_num = 50000;
@@ -64,12 +64,11 @@ public class JournalWriterTest {
     private DataOutputBuffer makeBuffer(int size) throws IOException {
         DataOutputBuffer buffer = new DataOutputBuffer();
         Text.writeString(buffer, StringUtils.repeat("x", size - 4));
-        Assert.assertEquals(size, buffer.getLength());
+        Assertions.assertEquals(size, buffer.getLength());
         return buffer;
     }
 
-
-    @Ignore
+    @Disabled
     @Test
     public void testWriteOneLog() throws Exception {
         new Expectations(journal) {
@@ -84,18 +83,18 @@ public class JournalWriterTest {
                 times = 1;
             }
         };
-        Assert.assertEquals(1, writer.nextVisibleJournalId);
+        Assertions.assertEquals(1, writer.nextVisibleJournalId);
         JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
         journalQueue.add(task);
         writer.writeOneBatch();
-        Assert.assertEquals(1, writer.rollJournalCounter);
-        Assert.assertEquals(2, writer.nextVisibleJournalId);
-        Assert.assertEquals(1, writer.currentBatchTasks.size());
-        Assert.assertEquals(1, writer.currentBatchTasks.size());
-        Assert.assertEquals(0, task.latch.getCount());
+        Assertions.assertEquals(1, writer.rollJournalCounter);
+        Assertions.assertEquals(2, writer.nextVisibleJournalId);
+        Assertions.assertEquals(1, writer.currentBatchTasks.size());
+        Assertions.assertEquals(1, writer.currentBatchTasks.size());
+        Assertions.assertEquals(0, task.latch.getCount());
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testMustCommitBefore() throws Exception {
         new Expectations(journal) {
@@ -122,20 +121,20 @@ public class JournalWriterTest {
         JournalTask expectNotConsumedEntity = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
         journalQueue.add(expectNotConsumedEntity);
 
-        Assert.assertEquals(1, writer.nextVisibleJournalId);
+        Assertions.assertEquals(1, writer.nextVisibleJournalId);
         writer.writeOneBatch();
-        Assert.assertEquals(3, writer.nextVisibleJournalId);
-        Assert.assertEquals(2, writer.rollJournalCounter);
-        Assert.assertEquals(2, writer.currentBatchTasks.size());
-        Assert.assertEquals(0, expectConsumedEntity.latch.getCount());
-        Assert.assertEquals(0, emergency.latch.getCount());
+        Assertions.assertEquals(3, writer.nextVisibleJournalId);
+        Assertions.assertEquals(2, writer.rollJournalCounter);
+        Assertions.assertEquals(2, writer.currentBatchTasks.size());
+        Assertions.assertEquals(0, expectConsumedEntity.latch.getCount());
+        Assertions.assertEquals(0, emergency.latch.getCount());
         // one log left
-        Assert.assertEquals(1, expectNotConsumedEntity.latch.getCount());
-        Assert.assertEquals(1, journalQueue.size());
+        Assertions.assertEquals(1, expectNotConsumedEntity.latch.getCount());
+        Assertions.assertEquals(1, journalQueue.size());
     }
 
     // TODO: this ut wastes too much memory
-    @Ignore
+    @Disabled
     @Test
     public void testTooManyLogs() throws Exception {
         Config.metadata_journal_max_batch_cnt = 2;
@@ -162,37 +161,37 @@ public class JournalWriterTest {
         journalQueue.add(expectConsumedEntity2);
         // round 2: 1 big log
         JournalTask bigLog = new JournalTask(System.nanoTime(), makeBuffer(2 * 1024 * 1024 - 8), -1);
-        Assert.assertEquals(2 * 1024 * 1024, bigLog.estimatedSizeByte());
+        Assertions.assertEquals(2 * 1024 * 1024, bigLog.estimatedSizeByte());
         journalQueue.add(bigLog);
         // this one should be left in queue
         JournalTask expectNotConsumedEntity = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
         journalQueue.add(expectNotConsumedEntity);
 
         // round 1
-        Assert.assertEquals(1, writer.nextVisibleJournalId);
+        Assertions.assertEquals(1, writer.nextVisibleJournalId);
         writer.writeOneBatch();
-        Assert.assertEquals(3, writer.nextVisibleJournalId);
-        Assert.assertEquals(2, writer.rollJournalCounter);
-        Assert.assertEquals(2, writer.currentBatchTasks.size());
-        Assert.assertEquals(0, expectConsumedEntity.latch.getCount());
-        Assert.assertEquals(0, expectConsumedEntity2.latch.getCount());
+        Assertions.assertEquals(3, writer.nextVisibleJournalId);
+        Assertions.assertEquals(2, writer.rollJournalCounter);
+        Assertions.assertEquals(2, writer.currentBatchTasks.size());
+        Assertions.assertEquals(0, expectConsumedEntity.latch.getCount());
+        Assertions.assertEquals(0, expectConsumedEntity2.latch.getCount());
         // two log left
-        Assert.assertEquals(1, bigLog.latch.getCount());
-        Assert.assertEquals(1, expectNotConsumedEntity.latch.getCount());
-        Assert.assertEquals(2, journalQueue.size());
+        Assertions.assertEquals(1, bigLog.latch.getCount());
+        Assertions.assertEquals(1, expectNotConsumedEntity.latch.getCount());
+        Assertions.assertEquals(2, journalQueue.size());
 
         // round 2
         writer.writeOneBatch();
-        Assert.assertEquals(4, writer.nextVisibleJournalId);
-        Assert.assertEquals(3, writer.rollJournalCounter);
-        Assert.assertEquals(1, writer.currentBatchTasks.size());
-        Assert.assertEquals(0, bigLog.latch.getCount());
+        Assertions.assertEquals(4, writer.nextVisibleJournalId);
+        Assertions.assertEquals(3, writer.rollJournalCounter);
+        Assertions.assertEquals(1, writer.currentBatchTasks.size());
+        Assertions.assertEquals(0, bigLog.latch.getCount());
         // 1 log left
-        Assert.assertEquals(1, expectNotConsumedEntity.latch.getCount());
-        Assert.assertEquals(1, journalQueue.size());
+        Assertions.assertEquals(1, expectNotConsumedEntity.latch.getCount());
+        Assertions.assertEquals(1, journalQueue.size());
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testRollLog() throws Exception {
         Config.edit_log_roll_num = 4;
@@ -217,19 +216,18 @@ public class JournalWriterTest {
             }
         };
 
-        Assert.assertEquals(1, writer.nextVisibleJournalId);
+        Assertions.assertEquals(1, writer.nextVisibleJournalId);
         for (int i = 0; i != 4; i++) {
             for (int j = 0; j != 3; j++) {
                 journalQueue.add(new JournalTask(System.nanoTime(), makeBuffer(10), -1));
             }
             writer.writeOneBatch();
-            Assert.assertEquals(0, journalQueue.size());
+            Assertions.assertEquals(0, journalQueue.size());
         }
-        Assert.assertEquals(13, writer.nextVisibleJournalId);
+        Assertions.assertEquals(13, writer.nextVisibleJournalId);
     }
 
-
-    @Ignore
+    @Disabled
     @Test
     public void testBatchWriteBeginException() throws Exception {
         JournalTask task1 = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
@@ -246,17 +244,17 @@ public class JournalWriterTest {
                 times = 1;
             }
         };
-        Assert.assertEquals(1, abortedWriter.nextVisibleJournalId);
+        Assertions.assertEquals(1, abortedWriter.nextVisibleJournalId);
 
         abortedWriter.writeOneBatch();
 
-        Assert.assertEquals(1, abortedWriter.nextVisibleJournalId);
-        Assert.assertFalse(task1.get());
-        Assert.assertEquals(1, journalQueue.size());
-        Assert.assertEquals(task2, journalQueue.take());
+        Assertions.assertEquals(1, abortedWriter.nextVisibleJournalId);
+        Assertions.assertFalse(task1.get());
+        Assertions.assertEquals(1, journalQueue.size());
+        Assertions.assertEquals(task2, journalQueue.take());
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testBatchWriteAppendException() throws Exception {
         JournalTask task1 = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
@@ -280,20 +278,20 @@ public class JournalWriterTest {
                 times = 2;
             }
         };
-        Assert.assertEquals(1, abortedWriter.nextVisibleJournalId);
+        Assertions.assertEquals(1, abortedWriter.nextVisibleJournalId);
         abortedWriter.writeOneBatch();
-        Assert.assertEquals(1, abortedWriter.nextVisibleJournalId);
-        Assert.assertFalse(task1.get());
-        Assert.assertEquals(2, journalQueue.size());
+        Assertions.assertEquals(1, abortedWriter.nextVisibleJournalId);
+        Assertions.assertFalse(task1.get());
+        Assertions.assertEquals(2, journalQueue.size());
 
         abortedWriter.writeOneBatch();
-        Assert.assertEquals(2, abortedWriter.nextVisibleJournalId);  // only task 2 succeed
-        Assert.assertTrue(task2.get());
-        Assert.assertFalse(task3.get());
-        Assert.assertEquals(0, journalQueue.size());
+        Assertions.assertEquals(2, abortedWriter.nextVisibleJournalId);  // only task 2 succeed
+        Assertions.assertTrue(task2.get());
+        Assertions.assertFalse(task3.get());
+        Assertions.assertEquals(0, journalQueue.size());
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testBatchWriteCommitAbortException() throws Exception {
         JournalTask task1 = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
@@ -320,20 +318,20 @@ public class JournalWriterTest {
         };
 
         // commit failed but abort succeed
-        Assert.assertEquals(1, abortedWriter.nextVisibleJournalId);
+        Assertions.assertEquals(1, abortedWriter.nextVisibleJournalId);
         abortedWriter.writeOneBatch();
-        Assert.assertEquals(1, abortedWriter.nextVisibleJournalId);
-        Assert.assertFalse(task1.get());
-        Assert.assertEquals(0, journalQueue.size());
+        Assertions.assertEquals(1, abortedWriter.nextVisibleJournalId);
+        Assertions.assertFalse(task1.get());
+        Assertions.assertEquals(0, journalQueue.size());
 
         // both commit & abort failed
         JournalTask task2 = new JournalTask(System.nanoTime(), makeBuffer(11), -1);
         journalQueue.add(task1);
         journalQueue.add(task2);
         abortedWriter.writeOneBatch();
-        Assert.assertEquals(1, abortedWriter.nextVisibleJournalId);
-        Assert.assertFalse(task1.get());
-        Assert.assertFalse(task2.get());
-        Assert.assertEquals(0, journalQueue.size());
+        Assertions.assertEquals(1, abortedWriter.nextVisibleJournalId);
+        Assertions.assertFalse(task1.get());
+        Assertions.assertFalse(task2.get());
+        Assertions.assertEquals(0, journalQueue.size());
     }
 }

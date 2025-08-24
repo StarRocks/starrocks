@@ -23,10 +23,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
@@ -40,7 +40,7 @@ public class ConcurrentDDLTest {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.sys_log_level = "FATAL";
         Log4jConfig.initLogging();
@@ -64,7 +64,7 @@ public class ConcurrentDDLTest {
         Config.task_runs_queue_length = 50000;
     }
 
-    @AfterClass
+    @AfterAll
     public static void teardown() throws Exception {
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -126,7 +126,7 @@ public class ConcurrentDDLTest {
                         .map(id -> GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(id))
                         .map(replicaList -> replicaList.get(0).getBackendId())
                         .collect(Collectors.toList());
-            Assert.assertEquals(bucketSeq, backendIdList.stream().map(Arrays::asList).collect(Collectors.toList()));
+            Assertions.assertEquals(bucketSeq, backendIdList.stream().map(Arrays::asList).collect(Collectors.toList()));
         }
     }
 
@@ -171,7 +171,7 @@ public class ConcurrentDDLTest {
                         System.out.println("concurrent_test_db dropped");
                     } catch (Exception e) {
                         System.out.println("failed, error: " + e.getMessage());
-                        Assert.fail();
+                        Assertions.fail();
                     } finally {
                         times++;
                     }
@@ -275,6 +275,6 @@ public class ConcurrentDDLTest {
             thread.join();
         }
 
-        Assert.assertEquals(4, errorCount.get());
+        Assertions.assertEquals(4, errorCount.get());
     }
 }

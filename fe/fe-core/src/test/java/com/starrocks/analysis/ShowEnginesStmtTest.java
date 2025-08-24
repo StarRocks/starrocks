@@ -36,25 +36,26 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowEnginesStmt;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ShowEnginesStmtTest {
     @Test
     public void testNormal() throws StarRocksException {
         ShowEnginesStmt stmt = new ShowEnginesStmt();
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
-        ShowResultSetMetaData metaData = stmt.getMetaData();
-        Assert.assertNotNull(metaData);
-        Assert.assertEquals(6, metaData.getColumnCount());
-        Assert.assertEquals("Engine", metaData.getColumn(0).getName());
-        Assert.assertEquals("Support", metaData.getColumn(1).getName());
-        Assert.assertEquals("Comment", metaData.getColumn(2).getName());
-        Assert.assertEquals("Transactions", metaData.getColumn(3).getName());
-        Assert.assertEquals("XA", metaData.getColumn(4).getName());
-        Assert.assertEquals("Savepoints", metaData.getColumn(5).getName());
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+        Assertions.assertNotNull(metaData);
+        Assertions.assertEquals(6, metaData.getColumnCount());
+        Assertions.assertEquals("Engine", metaData.getColumn(0).getName());
+        Assertions.assertEquals("Support", metaData.getColumn(1).getName());
+        Assertions.assertEquals("Comment", metaData.getColumn(2).getName());
+        Assertions.assertEquals("Transactions", metaData.getColumn(3).getName());
+        Assertions.assertEquals("XA", metaData.getColumn(4).getName());
+        Assertions.assertEquals("Savepoints", metaData.getColumn(5).getName());
     }
 
 }

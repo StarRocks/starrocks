@@ -30,13 +30,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.tree.DefaultPredicateSelectivityEstimator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class DefaultPredicateSelectivityEstimatorTest {
 
@@ -54,7 +54,7 @@ public class DefaultPredicateSelectivityEstimatorTest {
     private static ColumnRefOperator v8;
     private static ColumnRefOperator v9;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         columnRefFactory = new ColumnRefFactory();
         v1 = columnRefFactory.create("v1", Type.INT, true);

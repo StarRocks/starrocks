@@ -17,8 +17,8 @@
 
 package com.starrocks.common.util;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
@@ -275,6 +275,6 @@ public class CompressionUtilsTest {
         System.out.println("Length of the string after compression is: " + compressedStr.length);
         String decompressedStr = CompressionUtils.gzipDecompressString(compressedStr);
         System.out.println("Length of the string after decompression is: " + decompressedStr.length());
-        Assert.assertEquals(origStr, decompressedStr);
+        Assertions.assertEquals(origStr, decompressedStr);
     }
 }

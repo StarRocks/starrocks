@@ -26,6 +26,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.CaseSensibility;
@@ -37,7 +38,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -84,10 +84,8 @@ public class MaterializedViewsSystemTable extends SystemTable {
                         .column("TASK_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("TASK_NAME", ScalarType.createVarchar(50))
                         .column("LAST_REFRESH_START_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("LAST_REFRESH_PROCESS_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("LAST_REFRESH_FINISHED_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("LAST_REFRESH_DURATION", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("LAST_REFRESH_JOB_ID", ScalarType.createVarchar(64))
                         .column("LAST_REFRESH_STATE", ScalarType.createVarchar(20))
                         .column("LAST_REFRESH_FORCE_REFRESH", ScalarType.createVarchar(8))
                         .column("LAST_REFRESH_START_PARTITION", ScalarType.createVarchar(1024))
@@ -102,6 +100,8 @@ public class MaterializedViewsSystemTable extends SystemTable {
                         .column("EXTRA_MESSAGE", ScalarType.createVarchar(1024))
                         .column("QUERY_REWRITE_STATUS", ScalarType.createVarcharType(64))
                         .column("CREATOR", ScalarType.createVarchar(64))
+                        .column("LAST_REFRESH_PROCESS_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                        .column("LAST_REFRESH_JOB_ID", ScalarType.createVarchar(64))
                         .build(), TSchemaTableType.SCH_MATERIALIZED_VIEWS);
     }
 

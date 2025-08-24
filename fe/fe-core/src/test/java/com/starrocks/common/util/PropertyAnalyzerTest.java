@@ -15,8 +15,8 @@
 package com.starrocks.common.util;
 
 import com.starrocks.common.AnalysisException;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -31,9 +31,9 @@ public class PropertyAnalyzerTest {
 
         try {
             PropertyAnalyzer.analyzeDataCacheInfo(properties);
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         } catch (AnalysisException e) {
-            Assert.assertEquals("enable_async_write_back is disabled since version 3.1.4", e.getMessage());
+            Assertions.assertEquals("enable_async_write_back is disabled since version 3.1.4", e.getMessage());
         }
     }
 
@@ -45,16 +45,16 @@ public class PropertyAnalyzerTest {
         try {
             PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
         } catch (AnalysisException e) {
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         }
 
-        Assert.assertTrue(properties.size() == 0);
+        Assertions.assertTrue(properties.size() == 0);
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "abcd");
         try {
             PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         } catch (AnalysisException e) {
-            Assert.assertEquals("Cannot parse text to Duration", e.getMessage());
+            Assertions.assertEquals("Cannot parse text to Duration", e.getMessage());
         }
     }
 }

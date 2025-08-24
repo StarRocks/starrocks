@@ -42,14 +42,14 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import mockit.Expectations;
 import mockit.Injectable;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public class PartitionPhaseTest extends EsTestCase {
 

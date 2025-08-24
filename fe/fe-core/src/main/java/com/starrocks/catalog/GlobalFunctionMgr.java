@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * global function manager
@@ -97,6 +98,7 @@ public class GlobalFunctionMgr {
             }
             assignIdToUserDefinedFunction(function);
         }
+
         name2Function.put(functionName, addOrReplaceFunction(function, existFuncs));
     }
 
@@ -109,12 +111,27 @@ public class GlobalFunctionMgr {
      * @return a new list of functions with the given function added or replaced.
      */
     public static ImmutableList<Function> addOrReplaceFunction(Function function, List<Function> existFuncs) {
-        return ImmutableList.<Function>builder()
-                .addAll(existFuncs.stream()
-                        .filter(f -> !function.compare(f, Function.CompareMode.IS_IDENTICAL))
-                        .collect(ImmutableList.toImmutableList()))
-                .add(function)
-                .build();
+        List<Function> filteredFuncs = existFuncs.stream()
+                .filter(f -> !function.compare(f, Function.CompareMode.IS_IDENTICAL))
+                .collect(Collectors.toList());
+
+        filteredFuncs.add(function);
+
+        filteredFuncs.sort((f1, f2) -> {
+            if (f1.getArgs().length == 1 && f2.getArgs().length == 1) {
+                boolean f1IsNumeric = f1.getArgs()[0].isNumericType();
+                boolean f2IsNumeric = f2.getArgs()[0].isNumericType();
+
+                if (f1IsNumeric && !f2IsNumeric) {
+                    return -1;
+                } else if (!f1IsNumeric && f2IsNumeric) {
+                    return 1;
+                }
+            }
+            return 0;
+        });
+
+        return ImmutableList.copyOf(filteredFuncs);
     }
 
     /**

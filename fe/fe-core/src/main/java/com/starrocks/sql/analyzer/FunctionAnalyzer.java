@@ -38,11 +38,11 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.combinator.AggStateCombinator;
 import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
+import com.starrocks.catalog.combinator.StateFunctionCombinator;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -155,7 +155,8 @@ public class FunctionAnalyzer {
             }
         }
         Function fn = functionCallExpr.getFn();
-        if (fn instanceof AggStateCombinator) {
+        final String funcName = fnName.getFunction();
+        if (fn instanceof StateFunctionCombinator) {
             // analyze `_state` combinator function by using its arg function
             FunctionName argFuncName = new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
             analyzeBuiltinAggFunction(argFuncName, functionCallExpr.getParams(), functionCallExpr);
@@ -169,6 +170,13 @@ public class FunctionAnalyzer {
                 throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
                         fn.functionName()), functionCallExpr.getPos());
             }
+            if (FunctionSet.DS_HLL_COUNT_DISTINCT.equalsIgnoreCase(AggStateUtils.getAggFuncNameOfCombinator(funcName))) {
+                // ds_hll_count_distinct_union's param type should be varbinary type.
+                if (!functionCallExpr.getChild(0).getType().isBinaryType()) {
+                    throw new SemanticException(String.format("Resolved function %s has no binary as argument type",
+                            fn.functionName()), functionCallExpr.getPos());
+                }
+            }
         } else if (fn instanceof AggStateMergeCombinator) {
             AggStateMergeCombinator mergeCombinator = (AggStateMergeCombinator) fn;
             if (Arrays.stream(fn.getArgs()).anyMatch(Type::isWildcardDecimal)) {
@@ -178,6 +186,13 @@ public class FunctionAnalyzer {
             if (mergeCombinator.getReturnType().isWildcardDecimal()) {
                 throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
                         fn.functionName()), functionCallExpr.getPos());
+            }
+            if (FunctionSet.DS_HLL_COUNT_DISTINCT.equalsIgnoreCase(AggStateUtils.getAggFuncNameOfCombinator(funcName))) {
+                // ds_hll_count_distinct_union's param type should be varbinary type.
+                if (!functionCallExpr.getChild(0).getType().isBinaryType()) {
+                    throw new SemanticException(String.format("Resolved function %s has no binary as argument type",
+                            fn.functionName()), functionCallExpr.getPos());
+                }
             }
         } else if (fn instanceof AggStateIf) {
             FunctionName argFuncNameWithoutIf =
@@ -958,34 +973,43 @@ public class FunctionAnalyzer {
     private static Function getArrayGenerateFunction(FunctionCallExpr node) {
         // add the default parameters for array_generate
         if (node.getChildren().size() == 1) {
-            LiteralExpr secondParam = (LiteralExpr) node.getChild(0);
+            Expr secondParam = node.getChild(0);
             node.clearChildren();
             node.addChild(new IntLiteral(1));
             node.addChild(secondParam);
         }
         if (node.getChildren().size() == 2) {
-            int idx = 0;
-            BigInteger[] childValues = new BigInteger[2];
-            Boolean hasNUll = false;
-            for (Expr expr : node.getChildren()) {
-                if (expr instanceof NullLiteral) {
-                    hasNUll = true;
-                } else if (expr instanceof IntLiteral) {
-                    childValues[idx++] = BigInteger.valueOf(((IntLiteral) expr).getValue());
-                } else {
-                    childValues[idx++] = ((LargeIntLiteral) expr).getValue();
-                }
-            }
+            Expr startExpr = node.getChild(0);
+            Expr endExpr = node.getChild(1);
 
-            if (hasNUll || childValues[0].compareTo(childValues[1]) < 0) {
-                node.addChild(new IntLiteral(1));
+            if (!(startExpr instanceof NullLiteral || endExpr instanceof NullLiteral)) {
+                BigInteger start = toBigInteger(startExpr);
+                BigInteger end = toBigInteger(endExpr);
+                if (start != null && end != null) {
+                    node.addChild(new IntLiteral(start.compareTo(end) <= 0 ? 1 : -1));
+                } else {
+                    node.addChild(new IntLiteral(1));
+                }
             } else {
-                node.addChild(new IntLiteral(-1));
+                node.addChild(new IntLiteral(1));
             }
         }
-        Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
-        return Expr.getBuiltinFunction(FunctionSet.ARRAY_GENERATE, argumentTypes,
-                Function.CompareMode.IS_SUPERTYPE_OF);
+
+        Type[] argTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+        return Expr.getBuiltinFunction(
+            FunctionSet.ARRAY_GENERATE,
+            argTypes,
+            Function.CompareMode.IS_SUPERTYPE_OF);
+    }
+
+    private static BigInteger toBigInteger(Expr expr) {
+        if (expr instanceof IntLiteral) {
+            return BigInteger.valueOf(((IntLiteral) expr).getValue());
+        }
+        if (expr instanceof LargeIntLiteral) {
+            return ((LargeIntLiteral) expr).getValue();
+        }
+        return null;
     }
 
     public static Pair<Type[], Type> getArrayAggGroupConcatIntermediateType(String fnName,
@@ -1091,10 +1115,7 @@ public class FunctionAnalyzer {
                 newFn.setisAnalyticFn(((AggregateFunction) fn).isAnalyticFn());
                 fn = newFn;
             }
-        } else if (fnName.endsWith(FunctionSet.AGG_STATE_SUFFIX)
-                || fnName.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX)
-                || fnName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)
-                || fnName.endsWith(FunctionSet.IF)) {
+        } else if (AggStateUtils.isAggStateCombinator(fnName)) {
             Function func = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (func == null) {
                 return null;

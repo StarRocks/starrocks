@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -36,7 +35,7 @@ public class DropPartitionClause extends AlterTableClause {
     private List<String> resolvedPartitionNames;
 
     public DropPartitionClause(boolean isTempPartition, boolean forceDrop, boolean isDropAll, NodePosition pos) {
-        super(AlterOpType.DROP_PARTITION, pos);
+        super(pos);
         this.ifExists = false;
         this.isDropAll = isDropAll;
         this.partitionName = null;
@@ -53,7 +52,7 @@ public class DropPartitionClause extends AlterTableClause {
 
     public DropPartitionClause(boolean ifExists, String partitionName, boolean isTempPartition,
                                boolean forceDrop, NodePosition pos) {
-        super(AlterOpType.DROP_PARTITION, pos);
+        super(pos);
         this.ifExists = ifExists;
         this.partitionName = partitionName;
         this.isTempPartition = isTempPartition;
@@ -66,7 +65,7 @@ public class DropPartitionClause extends AlterTableClause {
 
     public DropPartitionClause(boolean ifExists, List<String> partitionNames, boolean isTempPartition,
                                boolean forceDrop, NodePosition pos) {
-        super(AlterOpType.DROP_PARTITION, pos);
+        super(pos);
         this.ifExists = ifExists;
         this.partitionName = null;
         this.isTempPartition = isTempPartition;
@@ -79,7 +78,7 @@ public class DropPartitionClause extends AlterTableClause {
 
     public DropPartitionClause(boolean ifExists, MultiRangePartitionDesc multiRangePartitionDesc, boolean isTempPartition,
                                boolean forceDrop, NodePosition pos) {
-        super(AlterOpType.DROP_PARTITION, pos);
+        super(pos);
         this.ifExists = ifExists;
         this.partitionName = null;
         this.isTempPartition = isTempPartition;
@@ -92,7 +91,7 @@ public class DropPartitionClause extends AlterTableClause {
 
     public DropPartitionClause(boolean ifExists, Expr whereExpr, boolean isTempPartition,
                                boolean forceDrop, NodePosition pos) {
-        super(AlterOpType.DROP_PARTITION, pos);
+        super(pos);
         this.ifExists = ifExists;
         this.partitionName = null;
         this.isTempPartition = isTempPartition;

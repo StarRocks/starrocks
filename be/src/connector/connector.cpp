@@ -104,7 +104,7 @@ Status DataSource::parse_runtime_filters(RuntimeState* state) {
 
 void DataSource::update_profile(const Profile& profile) {
     RuntimeProfile::Counter* mem_alloc_failed_counter = ADD_COUNTER(_runtime_profile, "MemAllocFailed", TUnit::UNIT);
-    mem_alloc_failed_counter->update(profile.mem_alloc_failed_count);
+    COUNTER_UPDATE(mem_alloc_failed_counter, profile.mem_alloc_failed_count);
 }
 
 StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_morsel_queue(

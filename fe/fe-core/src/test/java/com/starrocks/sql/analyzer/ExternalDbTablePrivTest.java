@@ -22,29 +22,31 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 
 public class ExternalDbTablePrivTest {
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
+    private static UserRef user;
 
     private void mockHiveMeta() {
         new MockUp<MetadataMgr>() {
@@ -63,8 +65,7 @@ public class ExternalDbTablePrivTest {
         };
     }
 
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
@@ -106,10 +107,10 @@ public class ExternalDbTablePrivTest {
         ctxToTestUser();
         try {
             Authorizer.check(statement, ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
-            Assert.assertTrue(e.getMessage().contains(expectError));
+            Assertions.assertTrue(e.getMessage().contains(expectError));
         }
 
         ctxToRoot();
@@ -124,10 +125,10 @@ public class ExternalDbTablePrivTest {
         ctxToTestUser();
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
-            Assert.assertTrue(e.getMessage().contains(expectError));
+            Assertions.assertTrue(e.getMessage().contains(expectError));
         }
     }
 
@@ -139,10 +140,12 @@ public class ExternalDbTablePrivTest {
         AuthenticationMgr authenticationManager =
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
-        testUser = createUserStmt.getUserIdentity();
+
+        user = createUserStmt.getUser();
+        testUser = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
     }
 
-    @Before
+    @BeforeEach
     public void setup() throws DdlException {
         mockHiveMeta();
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -150,7 +153,7 @@ public class ExternalDbTablePrivTest {
         ctx.setDatabase("tpch");
     }
 
-    @After
+    @AfterEach
     public void teardown() {
         // restore some current infos in context
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -166,9 +169,9 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.SELECT);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AccessDeniedException);
+            Assertions.assertTrue(e instanceof AccessDeniedException);
         }
 
         ctxToRoot();
@@ -185,9 +188,9 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.SELECT);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AccessDeniedException);
+            Assertions.assertTrue(e instanceof AccessDeniedException);
         }
     }
 
@@ -199,9 +202,9 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.DROP);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AccessDeniedException);
+            Assertions.assertTrue(e instanceof AccessDeniedException);
         }
 
         ctxToRoot();
@@ -218,9 +221,9 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.DROP);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AccessDeniedException);
+            Assertions.assertTrue(e instanceof AccessDeniedException);
         }
     }
 

@@ -15,51 +15,55 @@
 package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.HistoricalNodeMgr;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
 public class HistoricalNodeProcNodeTest {
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         warehouseManager.initDefaultWarehouse();
 
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
 
-        String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
         List<Long> computeNodeIds = Arrays.asList(201L, 202L);
         long updateTime = System.currentTimeMillis();
-        historicalNodeMgr.updateHistoricalComputeNodeIds(computeNodeIds, updateTime, warehouse);
+        historicalNodeMgr.updateHistoricalComputeNodeIds(warehouseId, workerGroupId, computeNodeIds, updateTime);
 
-        Assert.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), computeNodeIds.size());
-        Assert.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), updateTime);
-        Assert.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouseId, workerGroupId).size(),
+                computeNodeIds.size());
+        Assertions.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouseId, workerGroupId), updateTime);
+        Assertions.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
     }
-
     @Test
     public void testFetchResult() throws AnalysisException {
         HistoricalNodeProcNode node = new HistoricalNodeProcNode(GlobalStateMgr.getCurrentState());
         BaseProcResult result = (BaseProcResult) node.fetchResult();
-        Assert.assertNotNull(result);
+        Assertions.assertNotNull(result);
 
         List<List<String>> rows = result.getRows();
         List<String> list1 = rows.get(0);
-        Assert.assertEquals(list1.size(), 4);
+        Assertions.assertEquals(list1.size(), 5);
         // Warehouse
-        Assert.assertEquals(list1.get(0), WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        Assertions.assertEquals(list1.get(0), WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        // WorkerGroupId
+        Assertions.assertEquals(list1.get(1), String.valueOf(StarOSAgent.DEFAULT_WORKER_GROUP_ID));
         // BackendIds
-        Assert.assertEquals(list1.get(1), "[]");
+        Assertions.assertEquals(list1.get(2), "[]");
         // ComputeNodeIds
-        Assert.assertEquals(list1.get(2), "[201, 202]");
+        Assertions.assertEquals(list1.get(3), "[201, 202]");
         // UpdateTime
-        Assert.assertNotEquals(list1.get(3), "0");
+        Assertions.assertNotEquals(list1.get(4), "0");
     }
 }

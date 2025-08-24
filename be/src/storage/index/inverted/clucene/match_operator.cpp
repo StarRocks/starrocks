@@ -21,6 +21,14 @@
 
 namespace starrocks {
 
+TermPtr makeTerm(const std::wstring& field, const std::wstring& token) {
+    return TermPtr(_CLNEW lucene::index::Term(field.c_str(), token.c_str()), clDelete<lucene::index::Term>);
+}
+
+TermQueryPtr makeTermQuery(lucene::index::Term* term) {
+    return TermQueryPtr(_CLNEW lucene::search::TermQuery(term), clDelete<lucene::search::TermQuery>);
+}
+
 Status MatchOperator::match(roaring::Roaring* result) {
     RoaringHitCollector result_collector(result);
     return _match_internal(&result_collector);
@@ -31,6 +39,56 @@ Status MatchTermOperator::_match_internal(lucene::search::HitCollector* hit_coll
     lucene::index::Term term(_field_name.c_str(), search_word.c_str());
     lucene::search::TermQuery term_query(&term);
     _searcher->_search(&term_query, nullptr, hit_collector);
+    return Status::OK();
+}
+
+Status MatchAnyOperator::_match_internal(lucene::search::HitCollector* hit_collector) {
+    try {
+        std::vector<TermPtr> terms;
+        std::vector<TermQueryPtr> queries;
+
+        terms.reserve(_tokens.size());
+        queries.reserve(_tokens.size());
+
+        for (const auto& token : _tokens) {
+            terms.push_back(makeTerm(_field_name, token));
+            queries.push_back(makeTermQuery(terms.back().get()));
+        }
+
+        lucene::search::BooleanQuery boolean_query;
+        for (auto& query : queries) {
+            boolean_query.add(query.get(), lucene::search::BooleanClause::SHOULD);
+        }
+
+        _searcher->_search(&boolean_query, nullptr, hit_collector);
+    } catch (...) {
+        return Status::InternalError("Unexpected exception caught in MatchAnyOperator::_match_internal()");
+    }
+    return Status::OK();
+}
+
+Status MatchAllOperator::_match_internal(lucene::search::HitCollector* hit_collector) {
+    try {
+        std::vector<TermPtr> terms;
+        std::vector<TermQueryPtr> queries;
+
+        terms.reserve(_tokens.size());
+        queries.reserve(_tokens.size());
+
+        for (const auto& token : _tokens) {
+            terms.push_back(makeTerm(_field_name, token));
+            queries.push_back(makeTermQuery(terms.back().get()));
+        }
+
+        lucene::search::BooleanQuery boolean_query;
+        for (auto& query : queries) {
+            boolean_query.add(query.get(), lucene::search::BooleanClause::MUST);
+        }
+
+        _searcher->_search(&boolean_query, nullptr, hit_collector);
+    } catch (...) {
+        return Status::InternalError("Unexpected exception caught in MatchAllOperator::_match_internal()");
+    }
     return Status::OK();
 }
 

@@ -20,16 +20,11 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
 import com.starrocks.thrift.TPulsarRLTaskProgress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -137,22 +132,8 @@ public class PulsarProgress extends RoutineLoadProgress {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeInt(partitionToBacklogNum.size());
-        for (Map.Entry<String, Long> entry : partitionToBacklogNum.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            out.writeLong((Long) entry.getValue());
-        }
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        int size = in.readInt();
-        partitionToBacklogNum = new HashMap<>();
-        for (int i = 0; i < size; i++) {
-            partitionToBacklogNum.put(Text.readString(in), in.readLong());
-        }
-    }
+
+
+
 }

@@ -43,7 +43,6 @@ if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
     target_link_libraries(starrocks_be
         ${STARROCKS_LINK_LIBS}
         )
-
     install(DIRECTORY DESTINATION ${OUTPUT_DIR}/lib/)
 
     install(TARGETS starrocks_be

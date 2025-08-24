@@ -39,16 +39,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
@@ -67,6 +64,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     public List<Integer> sortKeyUniqueIds;
     @SerializedName(value = "schemaVersion")
     private int schemaVersion = 0;
+    /**
+     * Historically, after a schema change, a new schemaHash would be added under the tablet directory
+     * instead of creating a new tablet. Currently, schema change creates a new set of tablets,
+     * and only one schema hash may exist under the tablet directory.
+     * For compatibility with historical data, schemaHash is now only used to construct the path
+     * of data files on disk. It is only meaningful in the storage-compute integrated mode,
+     * and has no significance in the shared-nothing mode.
+     */
     @SerializedName(value = "schemaHash")
     private int schemaHash;
     @SerializedName(value = "schemaId")
@@ -336,13 +341,6 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
             return false;
         }
         return true;
-    }
-
-
-
-    public static MaterializedIndexMeta read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, MaterializedIndexMeta.class);
     }
 
     @Override

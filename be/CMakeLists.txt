@@ -59,8 +59,8 @@ message(STATUS "Build target arch is ${CMAKE_BUILD_TARGET_ARCH}")
 
 # Set dirs
 set(BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-set(RELATIVE_BASE_DIR "be")
-set(FILE_PREFIX_MAP_FLAG "-ffile-prefix-map=${BASE_DIR}=${RELATIVE_BASE_DIR}")
+# CMAKE_BINARY_DIR is set to be $BASE_DIR/be/build_${buildType}
+set(FILE_PREFIX_MAP_FLAG "-ffile-prefix-map=${CMAKE_BINARY_DIR}=. -ffile-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=be")
 set(BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 set(THIRDPARTY_DIR "$ENV{STARROCKS_THIRDPARTY}/installed/")
 set(STARROCKS_THIRDPARTY "$ENV{STARROCKS_THIRDPARTY}")
@@ -700,7 +700,7 @@ endif()
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     if (${USE_SSE4_2})
         # the compiler will define __SSE4_2__
-        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -msse4.2")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -msse4.2 -mpclmul")
     endif()
     if (${USE_AVX2})
         # the compiler will define __AVX2__
@@ -854,7 +854,7 @@ set(STARROCKS_LINK_LIBS
     Column
     Connector
     Exec
-    Exprs
+    -Wl,--whole-archive Exprs -Wl,--no-whole-archive
     FileSystem
     Formats
     Gutil
@@ -874,6 +874,7 @@ set(STARROCKS_LINK_LIBS
     TestUtil
     Tools
     Geo
+    Simd
     Cache
     ${WL_END_GROUP}
 )
@@ -1167,6 +1168,7 @@ add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
+add_subdirectory(${SRC_DIR}/simd)
 add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)

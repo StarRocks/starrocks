@@ -4,6 +4,52 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.6
+
+发布日期：2025 年 8 月 7 日
+
+### 功能优化
+
+- INSERT INTO FILES 导出数据到 Parquet 文件时，可以使用 [`parquet.version`](https://docs.starrocks.io/docs/zh/sql-reference/sql-functions/table-functions/files.md#parquetversion) 来指定导出 Parquet 文件的版本，以能让其他工具读取导出的 Parquet 文件更好地兼容。[#60843](https://github.com/StarRocks/starrocks/pull/60843)
+
+### 问题修复
+
+修复了如下问题：
+
+- TableMetricsManager 中使用的锁粒度过大导致导入作业失败。[#58911](https://github.com/StarRocks/starrocks/pull/58911)
+- 通过 `FILES()` 导入 Parquet 数据时列名大小写敏感的问题。[#61059](https://github.com/StarRocks/starrocks/pull/61059)
+- 存算分离集群从 v3.3 升级至 v3.4 或更新版本后缓存不生效。[#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- 分区 ID 为空时，业务触发除零错误导致 BE Crash。[#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- BE 扩容过程中 Broker Load 作业报错。[#60224](https://github.com/StarRocks/starrocks/pull/60224)
+
+### 行为变更
+
+- `information_schema.keywords` 视图中的 `keyword` 列改名为 `word` ，以兼容 MySQL 中的定义。[#60863](https://github.com/StarRocks/starrocks/pull/60863)
+
+## 3.4.5
+
+发布日期：2025 年 7 月 10 日
+
+### 功能优化
+
+- 优化导入作业运行情况的可观测性信息：将导入任务的运行信息统一至 `information_schema.loads` 视图中。用户可以在此视图中查看所有 INSERT、Broker Load、Stream Load 以及 Routine Load 的子任务的运行信息。同时为视图增加了更多字段，让用户能更清晰地查看导入任务的运行情况，以及父作业（PIPES、Routint Load Job）的关联信息。
+- 支持通过 ALTER ROUTINE LOAD 语句修改 `kafka_broker_list`。
+
+### 问题修复
+
+修复了如下问题：
+
+- 高频导入下 Compaction 可能延迟。[#59998](https://github.com/StarRocks/starrocks/pull/59998)
+- 通过 Unified Catalog 查询 Iceberg 外表报错: `not support getting unified metadata table factory`。[#59412](https://github.com/StarRocks/starrocks/pull/59412)
+- 通过 DESC FILES() 查看远端存储中的 CSV 文件，返回结果错误（原因为系统错误将 `xinf` 推断为 FLOAT 类型）。[#59574](https://github.com/StarRocks/starrocks/pull/59574)
+- INSERT INTO 遇到空分区导致 BE Crash。[#59553](https://github.com/StarRocks/starrocks/pull/59553)
+- StarRocks 读取 Iceberg 中 Equality Delete 文件时，如果 Iceberg 表中数据已经删除，StarRocks 中依然可以读取到已删除数据。[#59709](https://github.com/StarRocks/starrocks/pull/59709)
+- 给列重命名后导致的查询失败。[#59178](https://github.com/StarRocks/starrocks/pull/59178)
+
+### 行为变更
+
+- BE 配置项 `skip_pk_preload` 的默认值由 `false` 改为 `true`，导致系统会跳过主键表的 Primary Key Index 预读，以减少报错 `Reached Timeout` 的可能性。该变更可能会导致部分需要加载 Primary Key Index 的查询耗时增加。
+
 ## 3.4.4
 
 发布日期：2025 年 6 月 10 日
@@ -132,7 +178,6 @@ displayed_sidebar: docs
 
 - [Experimental] 初步支持 Query Feedback 功能，用于慢查询的自动优化。系统将收集慢查询的执行详情，自动分析查询计划中是否存在需要调优的地方，并生成专属的 Tuning Guide。当后续相同查询生成相同的 Bad Plan 时，系统会基于先前生成的 Tuning Guide 局部调优该 Query Plan。更多内容，参考 [Query Feedback](https://docs.starrocks.io/zh/docs/using_starrocks/query_feedback/)。
 - [Experimental] 支持 Python UDF，相较于 Java UDF 提供了更便捷的函数自定义能力。更多内容，参考 [Python UDF](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/Python_UDF/)。
-- [Experimental] 支持 Arrow Flight 接口，可更高效读取大数据量的查询结果，并使 BE 替代 FE 直接处理返回结果，显著降低 FE 压力，特别适用于大数据分析、处理和机器学习等场景。
 - 支持多列 OR 谓词的下推，允许带有多列 OR 条件（如 `a = xxx OR b = yyy`）的查询利用对应列索引，从而减少数据读取量并提升查询性能。
 - 优化了 TPC-DS 查询性能。在 TPC-DS 1TB Iceberg 数据集下，查询性能提升20%。优化手段包括利用主外键做表裁剪和聚合列裁剪，以及聚合下推位置改进等。
 

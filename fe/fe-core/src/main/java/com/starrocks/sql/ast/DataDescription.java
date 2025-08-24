@@ -43,6 +43,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TNetworkAddress;
@@ -55,6 +56,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+
+import static com.starrocks.common.util.Util.normalizeName;
 // used to describe data info which is needed to import.
 //
 //      data_desc:
@@ -180,7 +183,7 @@ public class DataDescription implements ParseNode {
                            Expr whereExpr,
                            CsvFormat csvFormat, NodePosition pos) {
         this.pos = pos;
-        this.tableName = tableName;
+        this.tableName = normalizeName(tableName);
         this.partitionNames = partitionNames;
         this.filePaths = filePaths;
         this.fileFieldNames = columns;
@@ -212,7 +215,7 @@ public class DataDescription implements ParseNode {
                            List<Expr> columnMappingList,
                            Expr whereExpr, NodePosition pos) {
         this.pos = pos;
-        this.tableName = tableName;
+        this.tableName = normalizeName(tableName);
         this.partitionNames = partitionNames;
         this.filePaths = null;
         this.fileFieldNames = null;
@@ -223,7 +226,7 @@ public class DataDescription implements ParseNode {
         this.isNegative = isNegative;
         this.columnMappingList = columnMappingList;
         this.whereExpr = whereExpr;
-        this.srcTableName = srcTableName;
+        this.srcTableName = normalizeName(srcTableName);
     }
 
     public String getTableName() {
@@ -578,7 +581,7 @@ public class DataDescription implements ParseNode {
         }
 
         if (args.get(0) != null) {
-            ColumnDef.validateDefaultValue(column.getType(), new StringLiteral(args.get(0)));
+            ColumnDefAnalyzer.validateDefaultValue(column.getType(), new StringLiteral(args.get(0)));
         }
     }
 
@@ -618,7 +621,7 @@ public class DataDescription implements ParseNode {
         }
 
         if (replaceValue != null) {
-            ColumnDef.validateDefaultValue(column.getType(), new StringLiteral(replaceValue));
+            ColumnDefAnalyzer.validateDefaultValue(column.getType(), new StringLiteral(replaceValue));
         }
     }
 
@@ -695,7 +698,7 @@ public class DataDescription implements ParseNode {
         }
 
         if (partitionNames != null) {
-            partitionNames.analyze(null);
+            partitionNames.analyze();
         }
 
         analyzeColumns();

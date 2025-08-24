@@ -258,6 +258,11 @@ statement
     | delBackendBlackListStatement
     | showBackendBlackListStatement
 
+    // Compute Node BlackList
+    | addComputeNodeBlackListStatement
+    | delComputeNodeBlackListStatement
+    | showComputeNodeBlackListStatement
+
     // Data Cache management statement
     | createDataCacheRuleStatement
     | showDataCacheRulesStatement
@@ -355,6 +360,9 @@ statement
     | showBaselinePlanStatement
     | disableBaselinePlanStatement
     | enableBaselinePlanStatement
+
+    // Procedure Statement
+    | callProcedureStatement
 
     // Unsupported Statement
     | unsupportedStatement
@@ -472,7 +480,7 @@ keyDesc
     ;
 
 orderByDesc
-    : ORDER BY identifierList
+    : ORDER BY '(' sortItem (',' sortItem)* ')'
     ;
 
 columnNullable
@@ -674,7 +682,7 @@ taskClause
     ;
 
 dropTaskStatement
-    : DROP TASK qualifiedName FORCE?
+    : DROP TASK (IF EXISTS)? qualifiedName FORCE?
     ;
 
 taskScheduleDesc
@@ -722,7 +730,7 @@ alterMaterializedViewStatement
     ;
 
 refreshMaterializedViewStatement
-    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)? (WITH PRIORITY priority=INTEGER_VALUE)?
+    : (explainDesc | optimizerTrace) ? REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)? (WITH PRIORITY priority=INTEGER_VALUE)?
     ;
 
 cancelRefreshMaterializedViewStatement
@@ -956,6 +964,7 @@ alterClause
     | dropTagClause
     | tableOperationClause
     | dropPersistentIndexClause
+    | splitTabletClause
 
     //Alter partition clause
     | addPartitionClause
@@ -1150,7 +1159,11 @@ dropTagClause
     ;
 
 tableOperationClause
-    : EXECUTE functionCall
+    : EXECUTE tableOperationArg
+    ;
+
+tableOperationArg
+    : functionCall (WHERE expression)?
     ;
 
 tagOptions
@@ -1195,6 +1208,12 @@ integer_list
 
 dropPersistentIndexClause
     : DROP PERSISTENT INDEX ON TABLETS integer_list
+    ;
+
+splitTabletClause
+    : SPLIT
+      (((TABLET | TABLETS) partitionNames?) | tabletList)
+      properties?
     ;
 
 // ---------Alter partition clause---------
@@ -1380,7 +1399,7 @@ dropHistogramStatement
 createAnalyzeStatement
     : CREATE ANALYZE (FULL | SAMPLE)? ALL properties?
     | CREATE ANALYZE (FULL | SAMPLE)? DATABASE db=identifier properties?
-    | CREATE ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName (',' qualifiedName)* ')')? properties?
+    | CREATE ANALYZE (FULL | SAMPLE)? (IF NOT EXISTS)? TABLE qualifiedName ('(' qualifiedName (',' qualifiedName)* ')')? properties?
     | CREATE histogramStatement
     ;
 
@@ -1403,6 +1422,7 @@ showHistogramMetaStatement
 
 killAnalyzeStatement
     : KILL ANALYZE INTEGER_VALUE
+    | KILL ALL PENDING ANALYZE
     ;
 
 // ----------------------------------------- Analyze Profile Statement -------------------------------------------------
@@ -1771,11 +1791,11 @@ grantRevokeClause
 
 grantPrivilegeStatement
     : GRANT IMPERSONATE ON USER user (',' user)* TO grantRevokeClause (WITH GRANT OPTION)?              #grantOnUser
+    | GRANT privilegeTypeList ON SYSTEM TO grantRevokeClause (WITH GRANT OPTION)?                       #grantOnSystem
     | GRANT privilegeTypeList ON privObjectNameList TO grantRevokeClause (WITH GRANT OPTION)?           #grantOnTableBrief
 
     | GRANT privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantOnFunc
-    | GRANT privilegeTypeList ON SYSTEM TO grantRevokeClause (WITH GRANT OPTION)?                       #grantOnSystem
     | GRANT privilegeTypeList ON privObjectType privObjectNameList
         TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantOnPrimaryObj
     | GRANT privilegeTypeList ON ALL privObjectTypePlural
@@ -1785,10 +1805,10 @@ grantPrivilegeStatement
 
 revokePrivilegeStatement
     : REVOKE IMPERSONATE ON USER user (',' user)* FROM grantRevokeClause                                #revokeOnUser
+    | REVOKE privilegeTypeList ON SYSTEM FROM grantRevokeClause                                         #revokeOnSystem
     | REVOKE privilegeTypeList ON privObjectNameList FROM grantRevokeClause                             #revokeOnTableBrief
     | REVOKE privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         FROM grantRevokeClause                                                                          #revokeOnFunc
-    | REVOKE privilegeTypeList ON SYSTEM FROM grantRevokeClause                                         #revokeOnSystem
     | REVOKE privilegeTypeList ON privObjectType privObjectNameList
         FROM grantRevokeClause                                                                          #revokeOnPrimaryObj
     | REVOKE privilegeTypeList ON ALL privObjectTypePlural
@@ -1962,6 +1982,20 @@ delBackendBlackListStatement
 
 showBackendBlackListStatement
     : SHOW BACKEND BLACKLIST
+    ;
+
+// ------------------------------------ Compute Node BlackList Statement ---------------------------------------------------
+
+addComputeNodeBlackListStatement
+    : ADD COMPUTE NODE BLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+delComputeNodeBlackListStatement
+    : DELETE COMPUTE NODE BLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+showComputeNodeBlackListStatement
+    : SHOW COMPUTE NODE BLACKLIST
     ;
 
 // -------------------------------------- DataCache Management Statement --------------------------------------------
@@ -2241,6 +2275,11 @@ translateSQL
     : .+
     ;
 
+// ------------------------------------------- Call Procedure Statement ------------------------------------------------
+callProcedureStatement
+    : CALL qualifiedName '(' (argumentList)? ')'
+    ;
+
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
@@ -2387,8 +2426,8 @@ sampleClause
     ;
 
 argumentList
-    : expressionList
-    | namedArgumentList
+    : namedArgumentList
+    | expressionList
     ;
 
 namedArgumentList
@@ -2397,6 +2436,7 @@ namedArgumentList
 
 namedArgument
     : identifier '=>' expression                                                        #namedArguments
+    | identifier '=' expression                                                         #namedArguments
     ;
 
 joinRelation
@@ -2441,7 +2481,7 @@ columnAliases
 // partitionNames should not support string, it should be identifier here only for compatibility with historical bugs
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifierOrString (',' identifierOrString)* ')'
-    | TEMPORARY? (PARTITION | PARTITIONS) identifierOrString
+    | TEMPORARY? (PARTITION | PARTITIONS) identifierOrString (',' identifierOrString)*
     | keyPartitions
     ;
 
@@ -2450,7 +2490,8 @@ keyPartitions
     ;
 
 tabletList
-    : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    : (TABLET | TABLETS) '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    | (TABLET | TABLETS) INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 prepareStatement
@@ -2596,7 +2637,7 @@ primaryExpression
     | primaryExpression ARROW string                                                      #arrowExpression
     | (identifier | identifierList) '->' expression                                       #lambdaFunctionExpr
     | identifierList '->' '('(expressionList)?')'                                         #lambdaFunctionExpr
-    | left = primaryExpression NOT? MATCH right = primaryExpression                       #matchExpr
+    | left = primaryExpression NOT? matchOperator right = primaryExpression               #matchExpr
     ;
 
 literalExpression
@@ -2936,6 +2977,12 @@ comparisonOperator
     : EQ | NEQ | LT | LTE | GT | GTE | EQ_FOR_NULL
     ;
 
+matchOperator
+    : MATCH
+    | MATCH_ANY
+    | MATCH_ALL
+    ;
+
 booleanValue
     : TRUE | FALSE
     ;
@@ -3097,7 +3144,7 @@ nonReserved
     | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE | BASELINE
-    | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
+    | CACHE | CALL | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
     | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DIALECT | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
@@ -3110,7 +3157,7 @@ nonReserved
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
-    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES
@@ -3119,9 +3166,9 @@ nonReserved
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
-    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SQLBLACKLIST | START | STARROCKS
+    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
-    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
+    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES

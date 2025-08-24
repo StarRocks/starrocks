@@ -20,10 +20,10 @@ import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Before;
+import org.junit.jupiter.api.BeforeEach;
 
 public abstract class WarehouseTestBase extends StarRocksTestBase {
-    @Before
+    @BeforeEach
     public void before() {
         new MockUp<RunMode>() {
             @Mock

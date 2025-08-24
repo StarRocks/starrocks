@@ -14,6 +14,8 @@
 
 #include "types/type_checker_manager.h"
 
+#include "checker/type_checker.h"
+
 namespace starrocks {
 
 TypeCheckerManager::TypeCheckerManager() {
@@ -36,6 +38,7 @@ TypeCheckerManager::TypeCheckerManager() {
     registerChecker("java.sql.Date", std::make_unique<DateTypeChecker>());
     registerChecker("java.sql.Time", std::make_unique<TimeTypeChecker>());
     registerChecker("java.time.LocalDateTime", std::make_unique<LocalDateTimeTypeChecker>());
+    registerChecker("java.time.LocalDate", std::make_unique<LocalDateTypeChecker>());
     registerChecker("java.math.BigDecimal", std::make_unique<BigDecimalTypeChecker>());
     registerChecker("oracle.sql.TIMESTAMP", std::make_unique<OracleTimestampClassTypeChecker>());
     registerChecker("oracle.sql.TIMESTAMPLTZ", std::make_unique<OracleTimestampClassTypeChecker>());
@@ -44,6 +47,7 @@ TypeCheckerManager::TypeCheckerManager() {
     registerChecker("byte[]", std::make_unique<ByteArrayTypeChecker>());
     registerChecker("oracle.jdbc.OracleBlob", std::make_unique<ByteArrayTypeChecker>());
     registerChecker("[B", std::make_unique<ByteArrayTypeChecker>());
+    registerChecker("java.util.UUID", std::make_unique<ByteArrayTypeChecker>());
 }
 
 TypeCheckerManager& TypeCheckerManager::getInstance() {

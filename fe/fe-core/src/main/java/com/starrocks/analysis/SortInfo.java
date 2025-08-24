@@ -156,10 +156,6 @@ public class SortInfo {
         return nullsFirst;
     }
 
-    public void substituteOrderingExprs(ExprSubstitutionMap smap, Analyzer analyzer) {
-        orderingExprs_ = Expr.substituteList(orderingExprs_, smap, analyzer, false);
-    }
-
     public void setPreAggTupleDesc_(TupleDescriptor preAggTupleDesc_) {
         this.preAggTupleDesc_ = preAggTupleDesc_;
     }

@@ -14,8 +14,10 @@
 
 package com.starrocks.persist;
 
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -37,9 +39,10 @@ public class WarehouseInternalOpLogTest {
         log.write(dataOutStream);
 
         DataInputStream dataInputStream = new DataInputStream(new ByteArrayInputStream(os.toByteArray()));
-        WarehouseInternalOpLog readLog = WarehouseInternalOpLog.read(dataInputStream);
+        String json = Text.readString(dataInputStream);
+        WarehouseInternalOpLog readLog = GsonUtils.GSON.fromJson(json, WarehouseInternalOpLog.class);
 
-        Assert.assertEquals(warehouseName, readLog.getWarehouseName());
-        Assert.assertEquals(payload, readLog.getPayload());
+        Assertions.assertEquals(warehouseName, readLog.getWarehouseName());
+        Assertions.assertEquals(payload, readLog.getPayload());
     }
 }

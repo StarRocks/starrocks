@@ -16,8 +16,8 @@ package com.starrocks.lake.compaction;
 
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -29,16 +29,16 @@ public class CompactionTxnCommitAttachmentTest {
     @Test
     public void testBasic() throws IOException {
         CompactionTxnCommitAttachment attachment = new CompactionTxnCommitAttachment();
-        Assert.assertFalse(attachment.getForceCommit());
+        Assertions.assertFalse(attachment.getForceCommit());
 
         CompactionTxnCommitAttachment attachment2 = new CompactionTxnCommitAttachment(true /* forceCommit */);
-        Assert.assertTrue(attachment2.getForceCommit());
+        Assertions.assertTrue(attachment2.getForceCommit());
 
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(bout);
         Text.writeString(out, GsonUtils.GSON.toJson(attachment2));
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(bout.toByteArray()));
         attachment = GsonUtils.GSON.fromJson(Text.readString(in), CompactionTxnCommitAttachment.class);
-        Assert.assertTrue(attachment.getForceCommit());
+        Assertions.assertTrue(attachment.getForceCommit());
     }
 }

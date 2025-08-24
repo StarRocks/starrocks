@@ -47,6 +47,7 @@ import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.CallProcedureStatement;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelCompactionStmt;
@@ -259,13 +260,13 @@ public class Analyzer {
 
         @Override
         public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext session) {
-            statement.analyze();
+            ResourceGroupAnalyzer.analyzeAlterResourceGroupStmt(statement);
             return null;
         }
 
         @Override
         public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext session) {
-            statement.analyze();
+            ResourceGroupAnalyzer.analyzeDropResourceGroupStmt(statement);
             return null;
         }
 
@@ -397,7 +398,7 @@ public class Analyzer {
 
         @Override
         public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext session) {
-            statement.analyze();
+            ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(statement);
             return null;
         }
 
@@ -965,7 +966,6 @@ public class Analyzer {
 
         @Override
         public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext session) {
-            statement.analyze();
             return null;
         }
 
@@ -1237,6 +1237,13 @@ public class Analyzer {
         @Override
         public Void visitShowBaselinePlanStatement(ShowBaselinePlanStmt statement, ConnectContext context) {
             ShowStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ---------------------------------------- Procedure Statement -------------------------------------------------
+        @Override
+        public Void visitCallProcedureStatement(CallProcedureStatement statement, ConnectContext context) {
+            CallProcedureAnalyzer.analyze(statement, context);
             return null;
         }
     }

@@ -27,13 +27,12 @@
 #include "common/daemon.h"
 #include "common/process_exit.h"
 #include "common/status.h"
-#include "exec/pipeline/query_context.h"
 #include "fs/s3/poco_common.h"
-#include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/global_variables.h"
 #include "runtime/jdbc_driver_manager.h"
+#include "service/backend_options.h"
 #include "service/brpc.h"
 #include "service/service.h"
 #include "service/service_be/arrow_flight_sql_service.h"
@@ -174,6 +173,12 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     if (config::brpc_num_threads != -1) {
         options.num_threads = config::brpc_num_threads;
     }
+    if (config::enable_https) {
+        auto sslOptions = options.mutable_ssl_options();
+        sslOptions->default_cert.certificate = config::ssl_certificate_path;
+        sslOptions->default_cert.private_key = config::ssl_private_key_path;
+    }
+
     const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
     const auto service_name = "starrocks.LakeService";
     const auto methods = {"abort_txn",

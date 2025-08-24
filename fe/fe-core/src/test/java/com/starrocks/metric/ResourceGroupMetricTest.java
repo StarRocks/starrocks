@@ -19,9 +19,9 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class ResourceGroupMetricTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() {
         FeConstants.runningUnitTest = true;
         MetricRepo.init();
@@ -70,9 +70,9 @@ public class ResourceGroupMetricTest {
         List<Metric> metricPending = MetricRepo.getMetricsByName("resource_group_query_queue_pending");
         List<Metric> metricTimeout = MetricRepo.getMetricsByName("resource_group_query_queue_timeout");
 
-        Assert.assertEquals(4, metricTotal.size());
-        Assert.assertEquals(4, metricPending.size());
-        Assert.assertEquals(4, metricTimeout.size());
+        Assertions.assertEquals(4, metricTotal.size());
+        Assertions.assertEquals(4, metricPending.size());
+        Assertions.assertEquals(4, metricTimeout.size());
 
         // Check.
         Map<String, Long> groupToTotal = metricTotal.stream().map(m -> (LongCounterMetric) m).collect(Collectors.toMap(
@@ -184,37 +184,37 @@ public class ResourceGroupMetricTest {
         List<Metric> metricsResourceGroupErr = MetricRepo.getMetricsByName("query_resource_group_err");
         List<Metric> metricsResourceGroupLatency = MetricRepo.getMetricsByName("query_resource_group_latency");
 
-        Assert.assertEquals(4, metricsResourceGroup.size());
-        Assert.assertEquals(4, metricsResourceGroupErr.size());
-        Assert.assertEquals(4 * 6, metricsResourceGroupLatency.size());
+        Assertions.assertEquals(4, metricsResourceGroup.size());
+        Assertions.assertEquals(4, metricsResourceGroupErr.size());
+        Assertions.assertEquals(4 * 6, metricsResourceGroupLatency.size());
 
         for (Metric resourceGroupMetric : metricsResourceGroup) {
             LongCounterMetric metric = (LongCounterMetric) resourceGroupMetric;
             if (wg1.getName().equals(metric.getLabels().get(0).getValue())) {
-                Assert.assertEquals(Long.valueOf(1L), metric.getValue());
+                Assertions.assertEquals(Long.valueOf(1L), metric.getValue());
             } else if (wg2.getName().equals(metric.getLabels().get(0).getValue())) {
-                Assert.assertEquals(Long.valueOf(1L), metric.getValue());
+                Assertions.assertEquals(Long.valueOf(1L), metric.getValue());
             } else if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(metric.getLabels().get(0).getValue())) {
-                Assert.assertEquals(Long.valueOf(2L), metric.getValue());
+                Assertions.assertEquals(Long.valueOf(2L), metric.getValue());
             } else if (ResourceGroup.DISABLE_RESOURCE_GROUP_NAME.equals(metric.getLabels().get(0).getValue())) {
-                Assert.assertEquals(Long.valueOf(3L), metric.getValue());
+                Assertions.assertEquals(Long.valueOf(3L), metric.getValue());
             } else {
-                Assert.fail();
+                Assertions.fail();
             }
         }
 
         for (Metric resourceGroupMetric : metricsResourceGroupErr) {
             LongCounterMetric metric = (LongCounterMetric) resourceGroupMetric;
             if (wg1.getName().equals(metric.getLabels().get(0).getValue())) {
-                Assert.assertEquals(Long.valueOf(1L), metric.getValue());
+                Assertions.assertEquals(Long.valueOf(1L), metric.getValue());
             } else if (wg2.getName().equals(metric.getLabels().get(0).getValue())) {
-                Assert.assertEquals(Long.valueOf(1L), metric.getValue());
+                Assertions.assertEquals(Long.valueOf(1L), metric.getValue());
             } else if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(metric.getLabels().get(0).getValue())) {
-                Assert.assertEquals(Long.valueOf(2L), metric.getValue());
+                Assertions.assertEquals(Long.valueOf(2L), metric.getValue());
             } else if (ResourceGroup.DISABLE_RESOURCE_GROUP_NAME.equals(metric.getLabels().get(0).getValue())) {
-                Assert.assertEquals(Long.valueOf(3L), metric.getValue());
+                Assertions.assertEquals(Long.valueOf(3L), metric.getValue());
             } else {
-                Assert.fail();
+                Assertions.fail();
             }
         }
 
@@ -223,15 +223,15 @@ public class ResourceGroupMetricTest {
         for (Metric resourceGroupMetric : metricsResourceGroupLatency) {
             GaugeMetricImpl<Double> metric = (GaugeMetricImpl<Double>) resourceGroupMetric;
             if (wg1.getName().equals(metric.getLabels().get(1).getValue())) {
-                Assert.assertEquals(Double.valueOf(10d), Double.valueOf(String.valueOf(metric.getValue())));
+                Assertions.assertEquals(Double.valueOf(10d), Double.valueOf(String.valueOf(metric.getValue())));
             } else if (wg2.getName().equals(metric.getLabels().get(1).getValue())) {
-                Assert.assertEquals(Double.valueOf(10d), Double.valueOf(String.valueOf(metric.getValue())));
+                Assertions.assertEquals(Double.valueOf(10d), Double.valueOf(String.valueOf(metric.getValue())));
             } else if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(metric.getLabels().get(1).getValue())) {
-                Assert.assertEquals(Double.valueOf(20d), Double.valueOf(String.valueOf(metric.getValue())));
+                Assertions.assertEquals(Double.valueOf(20d), Double.valueOf(String.valueOf(metric.getValue())));
             } else if (ResourceGroup.DISABLE_RESOURCE_GROUP_NAME.equals(metric.getLabels().get(1).getValue())) {
-                Assert.assertEquals(Double.valueOf(30d), Double.valueOf(String.valueOf(metric.getValue())));
+                Assertions.assertEquals(Double.valueOf(30d), Double.valueOf(String.valueOf(metric.getValue())));
             } else {
-                Assert.fail();
+                Assertions.fail();
             }
         }
     }

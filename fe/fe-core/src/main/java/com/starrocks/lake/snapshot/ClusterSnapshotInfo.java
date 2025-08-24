@@ -68,6 +68,34 @@ public class ClusterSnapshotInfo {
         return false;
     }
 
+    public boolean containsShardGroupId(long dbId, long tableId, long partId, long physicalPartId, long shardGroupId) {
+        PhysicalPartitionSnapshotInfo physicalPartInfo = getPhysicalPartitionInfo(dbId, tableId, partId, physicalPartId);
+        if (physicalPartInfo == null) {
+            return false;
+        }
+
+        for (MaterializedIndexSnapshotInfo indexInfo : physicalPartInfo.indexInfos.values()) {
+            if (indexInfo.shardGroupId == shardGroupId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean containsShardGroupId(long dbId, long tableId, long partId, long shardGroupId) {
+        PartitionSnapshotInfo partInfo = getPartitionInfo(dbId, tableId, partId);
+        if (partInfo == null) {
+            return false;
+        }
+
+        for (PhysicalPartitionSnapshotInfo physicalPartInfo : partInfo.physicalPartInfos.values()) {
+            if (containsShardGroupId(dbId, tableId, partId, physicalPartInfo.physicalPartitionId, shardGroupId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private DatabaseSnapshotInfo getDbInfo(long dbId) {
         return dbInfos.get(dbId);
     }

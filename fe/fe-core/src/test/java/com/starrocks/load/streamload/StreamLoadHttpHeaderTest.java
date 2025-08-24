@@ -14,7 +14,7 @@
 
 package com.starrocks.load.streamload;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.wildfly.common.Assert;
 
 import java.lang.reflect.Field;

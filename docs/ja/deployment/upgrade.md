@@ -6,6 +6,17 @@ displayed_sidebar: docs
 
 このトピックでは、StarRocks クラスタをアップグレードする方法について説明します。
 
+## 重要な情報
+
+:::important
+StarRocks をアップグレードする前に以下を行ってください:
+
+- アップグレードする StarRocks バージョンと、現在のバージョンからターゲットバージョンまでのすべてのバージョンの [リリースノート](https://docs.starrocks.io/releasenotes/release-3.5/) を読み、以下を確認してください:
+  - StarRocks 内の動作変更をメモする
+  - StarRocks と外部システム（インポート、エクスポート、可視化などに使用される）との統合に関する変更をメモする
+- ターゲットバージョンの [デプロイ前提条件](./deployment_prerequisites.md) を確認してください。例えば、StarRocks 3.5.x は JDK 17 を必要とし、Ubuntu 上の StarRocks 3.4.x は JDK 11 を必要とします。
+:::
+
 ## 概要
 
 アップグレードする前にこのセクションの情報を確認し、推奨されるアクションを実行してください。

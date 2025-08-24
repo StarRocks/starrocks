@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast.translate;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;
@@ -27,11 +26,6 @@ public class TranslateStmt extends StatementBase {
         super(pos);
         this.translateSQL = translateSQL;
         this.dialect = dialect;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 
     @Override

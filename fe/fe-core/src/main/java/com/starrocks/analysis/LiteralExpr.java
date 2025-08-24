@@ -93,6 +93,7 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 literalExpr = new DecimalLiteral(value);
                 break;
             case CHAR:
@@ -133,11 +134,6 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
             default:
                 throw new AnalysisException("Invalid data type for creating infinity: " + type);
         }
-    }
-
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        // Literals require no analysis.
     }
 
     /*

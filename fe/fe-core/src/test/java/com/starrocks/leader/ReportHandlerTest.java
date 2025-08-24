@@ -60,9 +60,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.thrift.TException;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -72,7 +72,7 @@ import java.util.Map;
 public class ReportHandlerTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.alter_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
@@ -104,7 +104,7 @@ public class ReportHandlerTest {
         long dbId = db.getId();
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
-        Assert.assertFalse(tabletIds.isEmpty());
+        Assertions.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
         List<TTabletInfo> tabletInfos = Lists.newArrayList();
@@ -130,7 +130,7 @@ public class ReportHandlerTest {
                     .getTable(db.getFullName(), "primary_index_cache_expire_sec_test");
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
-        Assert.assertFalse(tabletIds.isEmpty());
+        Assertions.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
         List<TTabletInfo> tabletInfos = Lists.newArrayList();
@@ -161,12 +161,12 @@ public class ReportHandlerTest {
                     (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
-        Assert.assertEquals(OlapTableState.NORMAL, olapTable.getState());
+        Assertions.assertEquals(OlapTableState.NORMAL, olapTable.getState());
 
         long backendId = 10001L;
         List<Long> tabletIds =
                     GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
-        Assert.assertFalse(tabletIds.isEmpty());
+        Assertions.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
         List<TTabletInfo> tabletInfos = Lists.newArrayList();
@@ -192,7 +192,7 @@ public class ReportHandlerTest {
                     .getTable(db.getFullName(), "binlog_report_handler_test");
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
-        Assert.assertFalse(tabletIds.isEmpty());
+        Assertions.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
         List<TTabletInfo> tabletInfos = Lists.newArrayList();
@@ -219,7 +219,7 @@ public class ReportHandlerTest {
         backendTablets.put(backendId, tablet);
 
         handler.testHandleSetTabletBinlogConfig(backendId, backendTablets);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getBinlogManager().isBinlogAvailable(dbId, olapTable.getId()));
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getBinlogManager().isBinlogAvailable(dbId, olapTable.getId()));
 
     }
 
@@ -268,10 +268,10 @@ public class ReportHandlerTest {
 
         // For backend, sync to FE followers and notify pending queries.
         ReportHandler.testHandleResourceUsageReport(backend.getId(), resourceUsage);
-        Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
+        Assertions.assertEquals(numRunningQueries, backend.getNumRunningQueries());
         //        Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
-        Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
-        Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
+        Assertions.assertEquals(memUsedBytes, backend.getMemUsedBytes());
+        Assertions.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
 
         // For compute node, sync to FE followers and notify pending queries.
         numRunningQueries = 10;
@@ -280,10 +280,10 @@ public class ReportHandlerTest {
         cpuUsedPermille = 310;
         resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
         ReportHandler.testHandleResourceUsageReport(computeNode.getId(), resourceUsage);
-        Assert.assertEquals(numRunningQueries, computeNode.getNumRunningQueries());
+        Assertions.assertEquals(numRunningQueries, computeNode.getNumRunningQueries());
         //        Assert.assertEquals(memLimitBytes, computeNode.getMemLimitBytes());
-        Assert.assertEquals(memUsedBytes, computeNode.getMemUsedBytes());
-        Assert.assertEquals(cpuUsedPermille, computeNode.getCpuUsedPermille());
+        Assertions.assertEquals(memUsedBytes, computeNode.getMemUsedBytes());
+        Assertions.assertEquals(cpuUsedPermille, computeNode.getCpuUsedPermille());
 
         // Don't sync and notify, because this BE doesn't exist.
         ReportHandler.testHandleResourceUsageReport(/* Not Exist */ 1, resourceUsage);
@@ -326,7 +326,7 @@ public class ReportHandlerTest {
             req.setBackend(tcn);
 
             TMasterResult res = handler.handleReport(req);
-            Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
+            Assertions.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
         }
 
         {
@@ -340,7 +340,7 @@ public class ReportHandlerTest {
             req.setBackend(tbe);
 
             TMasterResult res = handler.handleReport(req);
-            Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
+            Assertions.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
         }
 
         {
@@ -353,7 +353,7 @@ public class ReportHandlerTest {
             req.setBackend(tcn);
 
             TMasterResult res = handler.handleReport(req);
-            Assert.assertEquals(TStatusCode.INTERNAL_ERROR, res.getStatus().getStatus_code());
+            Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, res.getStatus().getStatus_code());
         }
     }
 
@@ -428,11 +428,11 @@ public class ReportHandlerTest {
             }
         }
 
-        Assert.assertEquals(50, tabletMetaMigrationMap.size());
+        Assertions.assertEquals(50, tabletMetaMigrationMap.size());
 
         ReportHandler.handleMigration(tabletMetaMigrationMap, backendId);
 
-        Assert.assertEquals(50, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
+        Assertions.assertEquals(50, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
 
         // finish 30 tablets migration
         for (int i = 0; i < 30; i++) {
@@ -441,7 +441,7 @@ public class ReportHandlerTest {
         // limit the batch size to 30
         Config.tablet_sched_max_migration_task_sent_once = 30;
         ReportHandler.handleMigration(tabletMetaMigrationMap, backendId);
-        Assert.assertEquals(30, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
+        Assertions.assertEquals(30, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
     }
 
     @Test
@@ -451,34 +451,34 @@ public class ReportHandlerTest {
         Config.tablet_report_drop_tablet_delay_sec = 3;
 
         boolean ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
-        Assert.assertFalse(ready);
+        Assertions.assertFalse(ready);
 
         Thread.sleep(1000);
         ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
-        Assert.assertFalse(ready);
+        Assertions.assertFalse(ready);
 
         Thread.sleep(3000);
         ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
-        Assert.assertTrue(ready);
+        Assertions.assertTrue(ready);
 
         // check map is cleaned
         ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
-        Assert.assertFalse(ready);
+        Assertions.assertFalse(ready);
 
         Thread.sleep(4000);
         ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
-        Assert.assertTrue(ready);
+        Assertions.assertTrue(ready);
     }
 
     @Test
     public void testGetPendingTabletReportTaskCnt() throws Exception {
         ReportHandler reportHandler = new ReportHandler();
-        Assert.assertEquals(0, reportHandler.getPendingTabletReportTaskCnt());
+        Assertions.assertEquals(0, reportHandler.getPendingTabletReportTaskCnt());
         reportHandler.putTabletReportTask(1L, 1L, new HashMap<>());
-        Assert.assertEquals(1, reportHandler.getPendingTabletReportTaskCnt());
+        Assertions.assertEquals(1, reportHandler.getPendingTabletReportTaskCnt());
         reportHandler.putTabletReportTask(1L, 1L, new HashMap<>());
-        Assert.assertEquals(1, reportHandler.getPendingTabletReportTaskCnt());
+        Assertions.assertEquals(1, reportHandler.getPendingTabletReportTaskCnt());
         reportHandler.putTabletReportTask(2L, 1L, new HashMap<>());
-        Assert.assertEquals(2, reportHandler.getPendingTabletReportTaskCnt());
+        Assertions.assertEquals(2, reportHandler.getPendingTabletReportTaskCnt());
     }
 }

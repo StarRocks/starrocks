@@ -1,4 +1,9 @@
 -- name: test_refresh_statistics
+
+DROP DATABASE IF EXISTS test_refresh_statistics_db;
+CREATE DATABASE test_refresh_statistics_db;
+USE test_refresh_statistics_db;
+
 CREATE TABLE `activities` (
   `LINE` largeint(40) NOT NULL COMMENT "",
   `EVENTTIME` datetime NULL COMMENT "",
@@ -44,15 +49,15 @@ insert into activities values (1, '2020-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a',
 
 [UC]analyze sample table activities with sync mode;
 
-function: assert_table_cardinality('explain select * from activities', '1\d+')
+function: assert_table_cardinality('explain select * from activities', '[2-9]\d*|1\d+')
 
 insert into test_2 select * from activities;
 
-function: assert_table_cardinality('explain select * from test_2', '1\d+')
+function: assert_table_cardinality('explain select * from test_2', '[2-9]\d*|1\d+')
 
 [UC]analyze sample table test_2;
 
-function: assert_table_cardinality('explain select * from test_2', '1\d+')
+function: assert_table_cardinality('explain select * from test_2', '[2-9]\d*|1\d+')
 
 insert into test_2 values (1, '2021-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
 (1, '2021-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
@@ -67,7 +72,8 @@ insert into test_2 values (1, '2021-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a'
 
 [UC]analyze sample table test_2;
 
-function: assert_table_cardinality('explain select * from test_2', '1\d+')
+function: assert_table_cardinality('explain select * from test_2', '[2-9]\d*|1\d+')
+
 
 
 

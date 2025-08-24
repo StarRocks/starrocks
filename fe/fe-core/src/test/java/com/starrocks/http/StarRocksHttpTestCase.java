@@ -85,7 +85,6 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
-import junit.framework.AssertionFailedError;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -95,10 +94,11 @@ import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.opentest4j.AssertionFailedError;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -110,7 +110,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public abstract class StarRocksHttpTestCase {
 
@@ -124,6 +124,7 @@ public abstract class StarRocksHttpTestCase {
 
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
+    public static final String TABLE_NAME2 = "testTbl2";
 
     protected static final String ES_TABLE_NAME = "es_table";
 
@@ -230,7 +231,7 @@ public abstract class StarRocksHttpTestCase {
         // index
         MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta =
-                new TabletMeta(testDbId, testTableId, testPartitionId, testIndexId, testSchemaHash, TStorageMedium.HDD);
+                new TabletMeta(testDbId, testTableId, testPartitionId, testIndexId, TStorageMedium.HDD);
         baseIndex.addTablet(tablet, tabletMeta);
 
         tablet.addReplica(replica1);
@@ -425,7 +426,7 @@ public abstract class StarRocksHttpTestCase {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend3);
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void initHttpServer() throws IllegalArgException, InterruptedException {
         ServerSocket socket = null;
         try {
@@ -445,7 +446,13 @@ public abstract class StarRocksHttpTestCase {
             }
         }
 
-        httpServer = new HttpServer(HTTP_PORT);
+        try {
+            httpServer = new HttpServer(HTTP_PORT);
+        } catch (Exception e) {
+            System.err.println("Failed to initialize HttpServer: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("HttpServer initialization failed", e);
+        }
         httpServer.setup();
         httpServer.start();
         // must ensure the http server started before any unit test
@@ -454,7 +461,7 @@ public abstract class StarRocksHttpTestCase {
         }
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
         setUpWithGlobalStateMgr(globalStateMgr);
@@ -557,11 +564,11 @@ public abstract class StarRocksHttpTestCase {
         doSetUp();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
     }
 
-    @AfterClass
+    @AfterAll
     public static void closeHttpServer() {
         httpServer.shutDown();
     }

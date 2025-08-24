@@ -24,9 +24,9 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -34,7 +34,7 @@ import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJo
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
 public class MVRewriteWithSchemaChangeTest extends MVTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         // For mv rewrite with schema change or rollup, need to set it false, otherwise unit tests will be failed.
@@ -128,12 +128,12 @@ public class MVRewriteWithSchemaChangeTest extends MVTestBase {
             Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
             MaterializedView mv1 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(testDb.getFullName(), "test_cache_mv1"));
-            Assert.assertFalse(mv1.isActive());
+            Assertions.assertFalse(mv1.isActive());
             try {
                 cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
-                Assert.fail("could not active the mv");
+                Assertions.fail("could not active the mv");
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage(), e.getMessage().contains("column schema not compatible"));
+                Assertions.assertTrue(e.getMessage().contains("column schema not compatible"), e.getMessage());
             }
 
             plan = getFragmentPlan(sql);
@@ -191,12 +191,12 @@ public class MVRewriteWithSchemaChangeTest extends MVTestBase {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         MaterializedView mv1 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "test_mv1"));
-        Assert.assertFalse(mv1.isActive());
+        Assertions.assertFalse(mv1.isActive());
         try {
             cluster.runSql("test", "alter materialized view test_mv1 active;");
-            Assert.fail("could not active the mv");
+            Assertions.fail("could not active the mv");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("column schema not compatible"));
+            Assertions.assertTrue(e.getMessage().contains("column schema not compatible"), e.getMessage());
         }
 
         plan = getFragmentPlan(sql);
@@ -257,12 +257,12 @@ public class MVRewriteWithSchemaChangeTest extends MVTestBase {
             Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
             MaterializedView mv1 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(testDb.getFullName(), "test_mv1"));
-            Assert.assertFalse(mv1.isActive());
+            Assertions.assertFalse(mv1.isActive());
             try {
                 cluster.runSql("test", "alter materialized view test_mv1 active;");
-                Assert.fail("could not active the mv");
+                Assertions.fail("could not active the mv");
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage(), e.getMessage().contains("column schema not compatible"));
+                Assertions.assertTrue(e.getMessage().contains("column schema not compatible"), e.getMessage());
             }
 
             plan = getFragmentPlan(sql);

@@ -32,6 +32,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.proto.TabletInfoPB;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
@@ -41,7 +42,6 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.logging.log4j.LogManager;
@@ -69,8 +69,6 @@ public class AutovacuumDaemon extends FrontendDaemon {
     private final Set<Long> vacuumingPartitions = Sets.newConcurrentHashSet();
     private final BlockingThreadPoolExecutorService executorService = BlockingThreadPoolExecutorService.newInstance(
             Config.lake_autovacuum_parallel_partitions, 0, 1, TimeUnit.HOURS, "autovacuum");
-
-    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     public AutovacuumDaemon() {
         super("autovacuum", 2000);
@@ -116,6 +114,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (partition.getVisibleVersion() <= 1) {
             return false;
         }
+        if (vacuumImmediatelyPartition(partition)) {
+            return true;
+        }
         // prevent vacuum too frequent
         if (current < partition.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000) {
             return false;
@@ -125,6 +126,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
             long minRetainVersion = partition.getMinRetainVersion();
             if (minRetainVersion <= 0) {
                 minRetainVersion = Math.max(1, partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
+            } else {
+                minRetainVersion = Math.min(minRetainVersion, 
+                                        partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
             }
             // the file before minRetainVersion vacuum success
             if (partition.getLastSuccVacuumVersion() >= minRetainVersion) {
@@ -185,7 +189,10 @@ public class AutovacuumDaemon extends FrontendDaemon {
             minRetainVersion = partition.getMinRetainVersion();
             if (minRetainVersion <= 0) {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
+            } else {
+                minRetainVersion = Math.min(minRetainVersion, visibleVersion - Config.lake_autovacuum_max_previous_versions);
             }
+
             preExtraFileSize = partition.getExtraFileSize();
             if (partition.getMetadataSwitchVersion() != 0) {
                 // If metadataSwitchVersion is not 0, it means that for versions prior to this, the value of 
@@ -198,7 +205,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         }
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+        ComputeResource computeResource = warehouseManager.getBackgroundComputeResource(table.getId());
         ComputeNode pickNode = null;
         for (Tablet tablet : tablets) {
             LakeTablet lakeTablet = (LakeTablet) tablet;
@@ -209,7 +216,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                     pickNode = LakeAggregator.chooseAggregatorNode(computeResource);
                 }
             } else {
-                pickNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, lakeTablet);
+                pickNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, lakeTablet.getId());
             }
 
             if (pickNode == null) {
@@ -221,6 +228,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             nodeToTablets.computeIfAbsent(pickNode, k -> Lists.newArrayList()).add(tabletInfo);
         }
 
+        ClusterSnapshotMgr clusterSnapshotMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
         boolean hasError = false;
         long vacuumedFiles = 0;
         long vacuumedFileSize = 0;
@@ -235,9 +243,16 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.minRetainVersion = minRetainVersion;
             vacuumRequest.graceTimestamp =
                     startTime / MILLISECONDS_PER_SECOND - Config.lake_autovacuum_grace_period_minutes * 60;
+            if (vacuumImmediatelyPartition(partition)) {
+                // If the partition is in the ignore list, we set graceTimestamp to startTime.
+                // This means that the vacuum operation will not be delayed by graceTimestamp.
+                // So version will be vacuumed immediately.
+                vacuumRequest.graceTimestamp = startTime / MILLISECONDS_PER_SECOND;
+            }
             vacuumRequest.graceTimestamp = Math.min(vacuumRequest.graceTimestamp,
-                    Math.max(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
-                            .getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
+                    Math.max(clusterSnapshotMgr.getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
+            vacuumRequest.retainVersions = clusterSnapshotMgr.getVacuumRetainVersions(
+                                           db.getId(), table.getId(), partition.getParentId(), partition.getId());
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
@@ -326,6 +341,19 @@ public class AutovacuumDaemon extends FrontendDaemon {
         Optional<Long> b =
                 GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getActiveTxnIdOfTable(table.getId());
         return Math.min(a, b.orElse(Long.MAX_VALUE));
+    }
+
+    private boolean vacuumImmediatelyPartition(PhysicalPartition partition) {
+        if (Config.lake_vacuum_immediately_partition_ids.isEmpty()) {
+            return false;
+        }
+        String[] ids = Config.lake_vacuum_immediately_partition_ids.split(";");
+        for (String id : ids) {
+            if (id.equals(String.valueOf(partition.getId()))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void testVacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {

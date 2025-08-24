@@ -35,7 +35,6 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
@@ -60,9 +59,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -87,7 +86,7 @@ public class StreamLoadPlannerTest {
     @Mocked
     Partition partition;
 
-    @Before
+    @BeforeEach
     public void before() {
         UtFrameUtils.mockInitWarehouseEnv();
     }
@@ -107,8 +106,6 @@ public class StreamLoadPlannerTest {
                 destTable.getPartitions();
                 minTimes = 0;
                 result = Arrays.asList(partition);
-                scanNode.init((Analyzer) any);
-                minTimes = 0;
                 scanNode.getChildren();
                 minTimes = 0;
                 result = Lists.newArrayList();
@@ -130,7 +127,7 @@ public class StreamLoadPlannerTest {
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
         StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
         planner.plan(streamLoadInfo.getId());
-        Assert.assertEquals(TCompressionType.LZ4_FRAME, streamLoadInfo.getPayloadCompressionType());
+        Assertions.assertEquals(TCompressionType.LZ4_FRAME, streamLoadInfo.getPayloadCompressionType());
     }
 
     @Test
@@ -151,8 +148,6 @@ public class StreamLoadPlannerTest {
                 destTable.getPartitions();
                 minTimes = 0;
                 result = Arrays.asList(partition);
-                scanNode.init((Analyzer) any);
-                minTimes = 0;
                 scanNode.getChildren();
                 minTimes = 0;
                 result = Lists.newArrayList();
@@ -190,10 +185,10 @@ public class StreamLoadPlannerTest {
     public void testParseStmt() {
         String sql = "COLUMNS (k1, k2, k3=abc(), k4=default_value())";
         ImportColumnsStmt columnsStmt = com.starrocks.sql.parser.SqlParser.parseImportColumns(sql, 0);
-        Assert.assertEquals(4, columnsStmt.getColumns().size());
+        Assertions.assertEquals(4, columnsStmt.getColumns().size());
 
         sql = "k1 > 2 and k3 < 4";
         Expr where = com.starrocks.sql.parser.SqlParser.parseSqlToExpr(sql, 0);
-        Assert.assertTrue(where instanceof CompoundPredicate);
+        Assertions.assertTrue(where instanceof CompoundPredicate);
     }
 }

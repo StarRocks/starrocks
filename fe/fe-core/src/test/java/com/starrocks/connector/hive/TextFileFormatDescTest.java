@@ -15,32 +15,32 @@
 package com.starrocks.connector.hive;
 
 import com.starrocks.thrift.TTextFileDesc;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TextFileFormatDescTest {
     @Test
     public void testToThrift() {
         TextFileFormatDesc desc = new TextFileFormatDesc(null, null, null, null);
         TTextFileDesc tTextFileDesc = desc.toThrift();
-        Assert.assertFalse(tTextFileDesc.isSetField_delim());
-        Assert.assertFalse(tTextFileDesc.isSetLine_delim());
-        Assert.assertFalse(tTextFileDesc.isSetCollection_delim());
-        Assert.assertFalse(tTextFileDesc.isSetMapkey_delim());
-        Assert.assertTrue(tTextFileDesc.isSetSkip_header_line_count());
-        Assert.assertEquals(0, tTextFileDesc.getSkip_header_line_count());
+        Assertions.assertFalse(tTextFileDesc.isSetField_delim());
+        Assertions.assertFalse(tTextFileDesc.isSetLine_delim());
+        Assertions.assertFalse(tTextFileDesc.isSetCollection_delim());
+        Assertions.assertFalse(tTextFileDesc.isSetMapkey_delim());
+        Assertions.assertTrue(tTextFileDesc.isSetSkip_header_line_count());
+        Assertions.assertEquals(0, tTextFileDesc.getSkip_header_line_count());
 
         desc = new TextFileFormatDesc("a", "b", "c", "d", 10);
         tTextFileDesc = desc.toThrift();
-        Assert.assertTrue(tTextFileDesc.isSetField_delim());
-        Assert.assertTrue(tTextFileDesc.isSetLine_delim());
-        Assert.assertTrue(tTextFileDesc.isSetCollection_delim());
-        Assert.assertTrue(tTextFileDesc.isSetMapkey_delim());
-        Assert.assertEquals("a", tTextFileDesc.getField_delim());
-        Assert.assertEquals("b", tTextFileDesc.getLine_delim());
-        Assert.assertEquals("c", tTextFileDesc.getCollection_delim());
-        Assert.assertEquals("d", tTextFileDesc.getMapkey_delim());
-        Assert.assertEquals(10, tTextFileDesc.getSkip_header_line_count());
+        Assertions.assertTrue(tTextFileDesc.isSetField_delim());
+        Assertions.assertTrue(tTextFileDesc.isSetLine_delim());
+        Assertions.assertTrue(tTextFileDesc.isSetCollection_delim());
+        Assertions.assertTrue(tTextFileDesc.isSetMapkey_delim());
+        Assertions.assertEquals("a", tTextFileDesc.getField_delim());
+        Assertions.assertEquals("b", tTextFileDesc.getLine_delim());
+        Assertions.assertEquals("c", tTextFileDesc.getCollection_delim());
+        Assertions.assertEquals("d", tTextFileDesc.getMapkey_delim());
+        Assertions.assertEquals(10, tTextFileDesc.getSkip_header_line_count());
     }
 
 

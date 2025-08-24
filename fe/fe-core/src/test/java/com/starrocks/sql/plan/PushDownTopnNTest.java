@@ -15,11 +15,11 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.qe.ConnectContext;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class PushDownTopnNTest extends PlanTestBase {
-    @Before
+    @BeforeEach
     public void before() {
         connectContext.getSessionVariable().setCboPushDownTopNLimit(1000);
     }

@@ -17,13 +17,8 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authorization.UserPrivilegeCollectionV2;
-import com.starrocks.common.io.Text;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.sql.ast.UserIdentity;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class UserPrivilegeCollectionInfo implements Writable {
 
@@ -64,10 +59,4 @@ public class UserPrivilegeCollectionInfo implements Writable {
         return pluginVersion;
     }
 
-
-
-    public static UserPrivilegeCollectionInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, UserPrivilegeCollectionInfo.class);
-    }
 }

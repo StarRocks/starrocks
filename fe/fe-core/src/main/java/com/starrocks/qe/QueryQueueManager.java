@@ -19,6 +19,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.qe.scheduler.RecoverableException;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
@@ -53,12 +54,18 @@ public class QueryQueueManager {
     }
 
     public void maybeWait(ConnectContext context, DefaultCoordinator coord) throws StarRocksException, InterruptedException {
-        SlotProvider slotProvider = coord.getJobSpec().getSlotProvider();
+        final JobSpec jobSpec = coord.getJobSpec();
+        final SlotProvider slotProvider = jobSpec.getSlotProvider();
         long startMs = System.currentTimeMillis();
         boolean isPending = false;
         try {
             LogicalSlot slotRequirement = createSlot(context, coord);
             coord.setSlot(slotRequirement);
+
+            // register listeners
+            if (jobSpec.isQueryType())  {
+                context.registerListener(new LogicalSlot.ConnectContextListener(slotRequirement));
+            }
 
             // LocalSlotProvider does not need to queue, just return directly. Currently, it is only used to adjust DOP
             // through requireSlot->PipelineDriverAllocator.

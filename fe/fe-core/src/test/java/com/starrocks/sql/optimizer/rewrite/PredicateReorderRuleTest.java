@@ -46,11 +46,11 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class PredicateReorderRuleTest {
 
@@ -69,7 +69,7 @@ public class PredicateReorderRuleTest {
     private static StarRocksAssert starRocksAssert;
     private static SessionVariable sessionVariable;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
 
         Config.alter_scheduler_interval_millisecond = 1;

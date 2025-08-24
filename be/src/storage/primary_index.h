@@ -127,11 +127,12 @@ public:
 
     Status prepare(const EditVersion& version, size_t n);
 
-    Status commit(PersistentIndexMetaPB* index_meta);
+    Status commit(PersistentIndexMetaPB* index_meta, IOStat* stat = nullptr);
 
     Status on_commited();
 
-    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex,
+                            IOStat* stat = nullptr);
 
     Status abort();
 

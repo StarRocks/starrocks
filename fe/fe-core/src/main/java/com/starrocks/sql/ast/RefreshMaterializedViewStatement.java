@@ -15,9 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.util.EitherOr;
@@ -31,11 +28,6 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
     private final boolean forceRefresh;
     private final boolean isSync;
     private final Integer priority;
-
-    public static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("QUERY_ID", ScalarType.createVarchar(60)))
-                    .build();
 
     public RefreshMaterializedViewStatement(TableName mvName,
                                             EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc,

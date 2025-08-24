@@ -13,8 +13,11 @@ concurrency:
   group: ${{ github.event.number }}
   cancel-in-progress: true
 
-jobs:
+permissions:
+  issues: write
+  checks: write
 
+jobs:
   basic-checker:
     runs-on: [self-hosted, normal]
     name: RUN CHECKER
@@ -25,6 +28,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     outputs:
       PASS: ${{ steps.check.outputs.pass }}
+      TEST_PR: ${{ steps.check_test_case.outputs.TEST_PR }}
     steps:
       - name: Sync Check
         id: check
@@ -37,8 +41,11 @@ jobs:
           echo "pass=true" >> $GITHUB_OUTPUT
 
       - name: Upload info
+        id: upload_info
         run: |
           echo $PR_NUMBER > pr_num.txt
+          SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
+          echo "SHA=${SHA}" >> $GITHUB_OUTPUT
 
       - name: Upload the PR number
         uses: actions/upload-artifact@v4
@@ -47,6 +54,30 @@ jobs:
           path: ./pr_num.txt
           retention-days: 3
           overwrite: true
+
+      - name: Check Basic Workflow Status
+        id: check_basic
+        if: steps.check.outputs.pass == 'true'
+        env:
+          SHA: ${{ steps.upload_info.outputs.SHA }}
+        run: |
+          round_limit=12
+          while [[ $round_limit -gt 0 ]]
+          do
+            pr_check_run_info=$(gh run list -R ${{ github.repository }} -c ${SHA} --json status,name,startedAt,conclusion | jq '[.[] | select(.name == "PR CHECKER")] | sort_by(.startedAt)| last')
+            if [[ $pr_check_run_info == 'null' ]] || [[ $(echo $pr_check_run_info | jq -r .status) != 'completed' ]] || [[ $(echo $pr_check_run_info | jq -r .conclusion) != 'success' ]]
+            then
+              break
+            fi
+            round_limit=$((round_limit-1))
+            sleep 10
+          done
+
+          if [[ $round_limit -le 0 ]]
+          then
+            echo "::error::PR CHECKER is failed, please check and then you can re-execute by commenting on `rerun`!"
+            exit 1
+          fi
 
       - name: Check Blacklist
         id: check_blacklist
@@ -57,12 +88,23 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-blacklist.sh
 
+      - name: Check Test Case
+        id: check_test_case
+        if: steps.check.outputs.pass == 'true'
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          SHA: ${{ steps.upload_info.outputs.SHA }}
+        run: |
+          cd ci-tool
+          # TODO: check fork repo
+          ./scripts/check-testcase.sh
+
       - name: Check Feature Issue
         id: check_issue
         run: |
           cd ci-tool
           python3 scripts/get_pr_issue.py check_issue ${GITHUB_REPOSITORY} ${PR_NUMBER}
-      
+
       - name: Get Title
         id: get_title
         run: |
@@ -85,7 +127,7 @@ jobs:
               exit 1
               ;;
           esac
-      
+
       - name: Checkout code
         id: checkout_code
         if: github.base_ref != 'main'
@@ -116,7 +158,7 @@ jobs:
           elif [[ "${status}" == "bugfix-only" ]] && [[ "${PR_TITLE}" == *"[Feature]"* || "${PR_TITLE}" == *"[Enhancement]"* ]]; then
             comment="⚠️ Branch in bugfix-only state, [Feature] or [Enhancement] PRs are not allowed!"
           elif [[ "${status}" == "code-freeze" ]] && [[ "${PR_TITLE}" != *"[Bugfix]"* || "${PR_TITLE}" != *"CVE"* ]]; then
-            comment="⚠️ Branch in code-freeze state, only PRs that fix CVE CVE are allowed!"
+            comment="⚠️ Branch in code-freeze state, only PRs that fix CVE are allowed!"
           else
             exit 0
           fi
@@ -159,14 +201,14 @@ jobs:
             thirdparty:
               - 'thirdparty/**'
               - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
-      
+
       - name: Prepare info
         run: |
           mkdir be-path-filter && cd be-path-filter
           echo ${{ steps.path-filter.outputs.be }} > src_filter.txt
           echo ${{ steps.path-filter.outputs.ut }} > test_filter.txt
           echo ${{ steps.path-filter.outputs.thirdparty }} > thirdparty_filter.txt
-      
+
       - name: Upload the BE Filter Info
         uses: actions/upload-artifact@v4
         with:
@@ -174,7 +216,7 @@ jobs:
           path: ./be-path-filter/
           retention-days: 3
           overwrite: true
-  
+
   clang-format:
     runs-on: [self-hosted, light]
     needs: be-checker
@@ -224,13 +266,13 @@ jobs:
 
   thirdparty-update:
     runs-on: [self-hosted, normal]
-    needs: [ clang-format ]
+    needs: [clang-format]
     name: Thirdparty Update
     continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
-        linux: [ centos7, ubuntu ]
+        linux: [centos7, ubuntu]
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
@@ -240,7 +282,7 @@ jobs:
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
-      
+
       - name: Download BE Path Filter Artifact
         uses: dawidd6/action-download-artifact@v6
         with:
@@ -357,7 +399,7 @@ jobs:
 
   clang-tidy:
     runs-on: [self-hosted, normal]
-    needs: [ be-checker, thirdparty-info ]
+    needs: [be-checker, thirdparty-info]
     if: success() && needs.be-checker.outputs.src_filter == 'true'
     timeout-minutes: 90
     name: Clang-Tidy
@@ -433,7 +475,7 @@ jobs:
               - 'java-extensions/**'
             pom:
               - '**/pom.xml'
-      
+
       - name: Prepare info
         run: |
           mkdir fe-path-filter && cd fe-path-filter
@@ -442,7 +484,7 @@ jobs:
           echo ${{ steps.path-filter.outputs.java }} > java_filter.txt
           echo ${{ steps.path-filter.outputs.extension }} > extension_filter.txt
           echo ${{ steps.path-filter.outputs.pom }} > pom_filter.txt
-            
+
       - name: Upload the FE Filter Info
         uses: actions/upload-artifact@v4
         with:
@@ -500,7 +542,7 @@ jobs:
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
-          reporter: 'github-pr-check'
+          reporter: "github-pr-check"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
@@ -544,7 +586,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: 17
-          distribution: 'adopt'
+          distribution: "adopt"
 
       - name: Cache SonarCloud packages
         uses: actions/cache@v4
@@ -573,7 +615,7 @@ jobs:
 
       - name: Analyze FE
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Needed to get PR information, if any
           SONAR_TOKEN: f0fb4d25c03bae90c2e994c45c29c49dc86fc169 # ${{ secrets.SONAR_TOKEN }}
         run: |
           thrift --version
@@ -666,7 +708,7 @@ jobs:
 
   build:
     runs-on: [self-hosted, normal]
-    needs: [test-checker, be-ut, fe-ut, thirdparty-info]
+    needs: [basic-checker, test-checker, be-ut, fe-ut, thirdparty-info]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -679,6 +721,7 @@ jobs:
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
       is_self_build: ${{ steps.run_build.outputs.is_self_build }}
       build_nece: ${{ steps.check-necessity.outputs.BUILD_NECE }}
+      test_pr: ${{ needs.basic-checker.outputs.TEST_PR }}
     if: >
       always() && needs.be-ut.result != 'failure' && needs.fe-ut.result != 'failure' && (needs.be-ut.result == 'success' || needs.fe-ut.result == 'success' || needs.test-checker.result == 'success')
     steps:
@@ -703,7 +746,7 @@ jobs:
           path: be-path-filter
           if_no_artifact_found: fail
           run_id: ${{ github.run_id }}
-      
+
       - name: Download FE Path Filter Artifact
         uses: dawidd6/action-download-artifact@v6
         if: steps.check-sync.outputs.IS_SYNC != 'true'
@@ -723,7 +766,7 @@ jobs:
             echo "test_filter.txt=`cat test_filter.txt`" >> $GITHUB_OUTPUT
             echo "thirdparty_filter=`cat thirdparty_filter.txt`" >> $GITHUB_OUTPUT
           fi
-  
+
       - name: Parsing FE path-filter file
         id: parsing-fe-path-filter
         if: steps.check-sync.outputs.IS_SYNC != 'true'
@@ -746,7 +789,7 @@ jobs:
           (steps.parsing-be-path-filter.outputs.src_filter != 'true' && steps.parsing-fe-path-filter.outputs.src_filter != 'true' && needs.test-checker.outputs.output1 == 'true')
         run: |
           echo "BUILD_NECE=true" >> $GITHUB_OUTPUT
-        
+
       - name: BRANCH INFO
         id: branch
         if: steps.check-necessity.outcome == 'success'
@@ -784,7 +827,7 @@ jobs:
             export image_cache_id=${IMAGE_CACHE_ID}
             export image_tag=$BRANCH-$PR_NUMBER
           fi
-          
+
           if [[ ${package} == "" ]]; then
             ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy
             echo "is_self_build=true" >> $GITHUB_OUTPUT
@@ -811,12 +854,6 @@ jobs:
           retention-days: 3
           overwrite: true
 
-      - name: clean ECI
-        if: always() && steps.run_build.outputs.ECI_ID != ''
-        run: |
-          echo ${{ steps.run_build.outputs.ECI_ID }}
-          eci rm ${{ steps.run_build.outputs.ECI_ID }}
-
       - name: Clean ENV
         if: always()
         run: |
@@ -840,6 +877,7 @@ jobs:
       be_list: ${{steps.deploy_sr.outputs.be_list}}
       shared_data: ${{steps.choose-mode.outputs.cloud}}
       is_self_build: ${{ needs.build.outputs.is_self_build }}
+      test_pr: ${{ needs.build.outputs.test_pr }}
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
@@ -870,14 +908,14 @@ jobs:
           repo: ${{ github.repository }}
         run: |
           cd ci-tool && source lib/init.sh
-          
+
           if [[ "${{ needs.build.outputs.is_self_build }}" == 'true' ]]; then 
             bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
             tar_path="oss://${bucket_prefix}-ci-release/${{github.base_ref}}/Release/pr/${LINUX_DISTRO}/${{needs.build.outputs.build_output_tar}}"
           else
             tar_path="${{ needs.build.outputs.build_output_tar }}"
           fi
-          
+
           echo "##### Package: ${tar_path}" >> $GITHUB_STEP_SUMMARY
           echo "cluster_name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
           ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage
@@ -886,12 +924,12 @@ jobs:
         if: always()
         run: |
           echo "FE: ${{steps.deploy_sr.outputs.fe}}, BE: ${{steps.deploy_sr.outputs.be}}"
-          rm -rf ${{ github.workspace }}/* 
+          rm -rf ${{ github.workspace }}/*
 
   SQL-Tester:
     runs-on: [self-hosted, normal]
     name: SQL-Tester
-    needs: [ build, deploy ]
+    needs: [build, deploy]
     if: always() && needs.deploy.result == 'success'
     timeout-minutes: 60
     env:
@@ -902,6 +940,7 @@ jobs:
       BASE_VERSION: ${{ needs.build.outputs.base_version }}
     outputs:
       MYSQL_ECI_ID: ${{ steps.run_case.outputs.MYSQL_ECI_ID }}
+      MYSQL_ECI_IP: ${{ steps.run_case.outputs.MYSQL_ECI_IP }}
     steps:
       - name: CLEAN
         run: |
@@ -968,9 +1007,9 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   restart-fe:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     name: Restart FE
-    needs: [ deploy, SQL-Tester ]
+    needs: [deploy, SQL-Tester]
     if: always() && needs.SQL-Tester.result == 'success'
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -992,9 +1031,9 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   restart-be:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     name: Restart BE
-    needs: [ deploy, SQL-Tester ]
+    needs: [deploy, SQL-Tester]
     if: always() && needs.SQL-Tester.result == 'success'
     timeout-minutes: 20
     env:
@@ -1011,8 +1050,13 @@ jobs:
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          [[ "${{ needs.deploy.outputs.is_self_build }}" != "true" ]] && skip_gcov="--skip-gcov"
-          ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${{ github.base_ref }} --build Release --repository ${{ github.repository }} ${skip_gcov}
+          [[ "${{ needs.deploy.outputs.is_self_build }}" != "true" ]] && gcov_cmd="--skip-gcov"
+          ./bin/system-cov-be.sh \
+            --pr ${PR_NUMBER} \
+            --branch ${{ github.base_ref }} \
+            --build Release \
+            --repository ${{ github.repository }} \
+            --gcov_next_suffix admit ${gcov_cmd}
 
       - name: Clean ENV
         if: always()
@@ -1020,9 +1064,9 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   admit:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     name: ADMIT TEST
-    needs: [ deploy, restart-fe, restart-be ]
+    needs: [deploy, SQL-Tester, restart-fe, restart-be]
     if: always() && needs.restart-fe.result == 'success' && needs.restart-be.result == 'success' && needs.deploy.outputs.is_self_build == 'true'
     timeout-minutes: 40
     env:
@@ -1030,6 +1074,8 @@ jobs:
       CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
+      TEST_PR: ${{ needs.deploy.outputs.test_pr }}
+      MYSQL_ECI_IP: ${{ needs.SQL-Tester.outputs.MYSQL_ECI_IP }}
     steps:
       - name: CLEAN
         run: |
@@ -1044,11 +1090,23 @@ jobs:
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
       - name: Run Case
+        env:
+          BRANCH: ${{ steps.branch.outputs.branch }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
 
-          cd ${{ github.workspace }}
+          cd ${{ github.workspace }}/..
           rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull >/dev/null
+
+          if [[ "${TEST_PR}" != "" ]]; then
+            echo "Test pr: ${TEST_PR}..."
+            BRANCH_NAME="${BRANCH}-${PR_NUMBER}"
+            git fetch origin pull/${TEST_PR}/head:${BRANCH_NAME}
+            git checkout $BRANCH_NAME
+            git checkout -b merge_pr
+            git merge --squash --no-edit master || (echo "::error::Merge conflict, please check." && exit -1);
+          fi
+          mv ${{ github.workspace }}/../StarRocksTest ${{ github.workspace }}/StarRocksTest
 
           cd ${{ github.workspace }}/ci-tool
           if [[ "${{ needs.deploy.outputs.shared_data }}" == "true" ]]; then
@@ -1065,7 +1123,74 @@ jobs:
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
           xml_oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/
           ossutil64 --config-file ~/.ossutilconfig rm ${xml_oss_path} -rf
-          ossutil64 --config-file ~/.ossutilconfig cp StarRocksTest/result ${xml_oss_path} --include "*.xml" --recursive --force --tagging="type=ci"
+          ossutil64 --config-file ~/.ossutilconfig cp StarRocksTest/nosetests.xml ${xml_oss_path} -f
+          ossutil64 --config-file ~/.ossutilconfig cp StarRocksTest/result ${xml_oss_path} --include "*.xml" -rf
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  restart-fe-after-admit:
+    runs-on: [self-hosted, normal]
+    name: Restart FE(Admit)
+    needs: [deploy, admit]
+    if: always() && needs.admit.result == 'success'
+    timeout-minutes: 20
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+      BE_LIST: ${{ needs.deploy.outputs.be_list }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Restart FE (${{needs.deploy.outputs.be_list}})
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/restart-fe.sh \
+            --pr ${PR_NUMBER} \
+            --branch ${{ github.base_ref }} \
+            --build Release \
+            --exec-module admit \
+            --repository ${{ github.repository }} \
+            --exec-module admit
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  restart-be-after-admit:
+    runs-on: [self-hosted, normal]
+    name: Restart BE(Admit)
+    needs: [deploy, admit]
+    if: always() && needs.admit.result == 'success'
+    timeout-minutes: 20
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+      BE_LIST: ${{ needs.deploy.outputs.be_list }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Restart BE (${{needs.deploy.outputs.be_list}})
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          [[ "${{ needs.deploy.outputs.is_self_build }}" != "true" ]] && gcov_cmd="--skip-gcov"
+          ./bin/system-cov-be.sh \
+            --pr ${PR_NUMBER} \
+            --branch ${{ github.base_ref }} \
+            --build Release \
+            --repository ${{ github.repository }} \
+            --gcov_pre_suffix admit --restart-without-gcov ${gcov_cmd}
 
       - name: Clean ENV
         if: always()
@@ -1073,9 +1198,13 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   Teardown:
-    runs-on: [ self-hosted, quick ]
+    runs-on: [self-hosted, quick]
     name: Teardown
-    needs: [ deploy, SQL-Tester, admit ]
+    needs:
+      - deploy
+      - SQL-Tester
+      - restart-fe-after-admit
+      - restart-be-after-admit
     if: always()
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1100,7 +1229,13 @@ jobs:
         id: backup
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/backup_log_cores.sh --branch $BRANCH --pr $PR_NUMBER --build Release --conf $CONF_FILE --repository ${{ github.repository }}
+          ./bin/backup_log_cores.sh \
+            --branch $BRANCH \
+            --pr $PR_NUMBER \
+            --build Release \
+            --linuxdistro "${{ env.linuxdistro }}" \
+            --conf $CONF_FILE \
+            --repository ${{ github.repository }}
 
       - name: Clean ECS
         if: steps.backup.outcome == 'success'

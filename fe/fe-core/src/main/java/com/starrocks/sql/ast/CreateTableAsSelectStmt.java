@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -62,11 +61,6 @@ public class CreateTableAsSelectStmt extends StatementBase {
 
     public InsertStmt getInsertStmt() {
         return insertStmt;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     @Override

@@ -19,19 +19,16 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.proc.LoadProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.loadv2.JobState;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW LOAD STATUS statement used to get status of load job.
 //
@@ -58,7 +55,7 @@ public class ShowLoadStmt extends ShowStmt {
     public ShowLoadStmt(String db, Expr labelExpr, List<OrderByElement> orderByElements,
                         LimitElement limitElement, NodePosition pos) {
         super(pos);
-        this.dbName = db;
+        this.dbName = normalizeName(db);
         this.whereClause = labelExpr;
         this.orderByElements = orderByElements;
         this.limitElement = limitElement;
@@ -69,7 +66,7 @@ public class ShowLoadStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public Expr getWhereClause() {
@@ -149,19 +146,5 @@ public class ShowLoadStmt extends ShowStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowLoadStatement(this, context);
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : LoadProcDir.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 }

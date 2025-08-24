@@ -35,13 +35,8 @@
 package com.starrocks.system;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 /**
  * Frontend heartbeat response contains Frontend's query port, rpc port and current replayed journal id.
@@ -61,6 +56,10 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
     private long feStartTime;
     @SerializedName(value = "feVersion")
     private String feVersion;
+    @SerializedName("cpuCores")
+    private int cpuCores;
+    @SerializedName("macAddress")
+    private String macAddress;
 
     private float heapUsedPercent;
 
@@ -70,7 +69,7 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
 
     public FrontendHbResponse(String name, int queryPort, int rpcPort,
                               long replayedJournalId, long hbTime, long feStartTime,
-                              String feVersion, float heapUsedPercent) {
+                              String feVersion, float heapUsedPercent, int cpuCores, String macAddress) {
         super(HeartbeatResponse.Type.FRONTEND);
         this.status = HbStatus.OK;
         this.name = name;
@@ -81,6 +80,8 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         this.feStartTime = feStartTime;
         this.feVersion = feVersion;
         this.heapUsedPercent = heapUsedPercent;
+        this.cpuCores = cpuCores;
+        this.macAddress = macAddress;
     }
 
     public FrontendHbResponse(String name, String errMsg) {
@@ -122,29 +123,16 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         this.heapUsedPercent = heapUsedPercent;
     }
 
-    public static FrontendHbResponse read(DataInput in) throws IOException {
-        FrontendHbResponse result = new FrontendHbResponse();
-        result.readFields(in);
-        return result;
+    public int getCpuCores() {
+        return cpuCores;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, name);
-        out.writeInt(queryPort);
-        out.writeInt(rpcPort);
-        out.writeLong(replayedJournalId);
+    public String getMacAddress() {
+        return macAddress;
     }
 
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        name = Text.readString(in);
-        queryPort = in.readInt();
-        rpcPort = in.readInt();
-        replayedJournalId = in.readLong();
-    }
+
+
 
     @Override
     public String toString() {

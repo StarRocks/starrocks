@@ -51,9 +51,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -68,7 +68,7 @@ public class SimpleSchedulerTest {
     @Mocked
     private EditLog editLog;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         new Expectations() {
             {
@@ -120,30 +120,30 @@ public class SimpleSchedulerTest {
                         .put(backendC.getId(), backendC).build();
 
         // null Backends
-        Assert.assertNull(SimpleScheduler.getHost(0L, nullLocations, nullBackends, ref));
+        Assertions.assertNull(SimpleScheduler.getHost(0L, nullLocations, nullBackends, ref));
 
         // empty Backends
-        Assert.assertNull(SimpleScheduler.getHost(0L, emptyLocations, emptyBackends, ref));
+        Assertions.assertNull(SimpleScheduler.getHost(0L, emptyLocations, emptyBackends, ref));
 
         { // normal Backends
             TNetworkAddress address;
             // BackendId exists
             address = SimpleScheduler.getHost(0, emptyLocations, immutableThreeBackends, ref);
-            Assert.assertNotNull(address);
-            Assert.assertEquals(address.hostname, "addressA");
+            Assertions.assertNotNull(address);
+            Assertions.assertEquals(address.hostname, "addressA");
 
             address = SimpleScheduler.getHost(2, emptyLocations, immutableThreeBackends, ref);
-            Assert.assertNotNull(address);
-            Assert.assertEquals(address.hostname, "addressC");
+            Assertions.assertNotNull(address);
+            Assertions.assertEquals(address.hostname, "addressC");
 
             // BackendId not exists and location exists, choose the locations' first
             address = SimpleScheduler.getHost(3, twoLocations, immutableThreeBackends, ref);
-            Assert.assertNotNull(address);
-            Assert.assertEquals(address.hostname, "addressA");
+            Assertions.assertNotNull(address);
+            Assertions.assertEquals(address.hostname, "addressA");
         }
 
         // abnormal: BackendId not exists and location not exists
-        Assert.assertNull(SimpleScheduler.getHost(3, emptyLocations, immutableThreeBackends, ref));
+        Assertions.assertNull(SimpleScheduler.getHost(3, emptyLocations, immutableThreeBackends, ref));
     }
 
     @Test
@@ -183,8 +183,8 @@ public class SimpleSchedulerTest {
             immutableBackends = ImmutableMap.copyOf(backends);
 
             TNetworkAddress address = SimpleScheduler.getHost(0, locations, immutableBackends, ref);
-            Assert.assertNotNull(address);
-            Assert.assertEquals(address.hostname, "addressA");
+            Assertions.assertNotNull(address);
+            Assertions.assertEquals(address.hostname, "addressA");
         }
 
         { // backendA in locations is not alive
@@ -194,8 +194,8 @@ public class SimpleSchedulerTest {
             immutableBackends = ImmutableMap.copyOf(backends);
 
             TNetworkAddress address = SimpleScheduler.getHost(0, locations, immutableBackends, ref);
-            Assert.assertNotNull(address);
-            Assert.assertEquals(address.hostname, "addressC");
+            Assertions.assertNotNull(address);
+            Assertions.assertEquals(address.hostname, "addressC");
         }
     }
 
@@ -218,36 +218,36 @@ public class SimpleSchedulerTest {
                         .put(backendC.getId(), backendC).build();
 
         { // abnormal
-            Assert.assertNull(SimpleScheduler.getBackendHost(nullBackends, ref));
-            Assert.assertNull(SimpleScheduler.getBackendHost(emptyBackends, ref));
+            Assertions.assertNull(SimpleScheduler.getBackendHost(nullBackends, ref));
+            Assertions.assertNull(SimpleScheduler.getBackendHost(emptyBackends, ref));
         }
         { // normal
             TNetworkAddress addressA = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
-            Assert.assertNotNull(addressA);
+            Assertions.assertNotNull(addressA);
             String a = addressA.hostname;
 
             TNetworkAddress addressB = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
-            Assert.assertNotNull(addressB);
+            Assertions.assertNotNull(addressB);
             String b = addressB.hostname;
 
             TNetworkAddress addressC = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
-            Assert.assertNotNull(addressC);
+            Assertions.assertNotNull(addressC);
             String c = addressC.hostname;
 
-            Assert.assertTrue(!a.equals(b) && !a.equals(c) && !b.equals(c));
+            Assertions.assertTrue(!a.equals(b) && !a.equals(c) && !b.equals(c));
 
             addressA = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
-            Assert.assertNotNull(addressA);
+            Assertions.assertNotNull(addressA);
             a = addressA.hostname;
 
             addressB = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
-            Assert.assertNotNull(addressB);
+            Assertions.assertNotNull(addressB);
             b = addressB.hostname;
 
             addressC = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
-            Assert.assertNotNull(addressC);
+            Assertions.assertNotNull(addressC);
             c = addressC.hostname;
-            Assert.assertTrue(!a.equals(b) && !a.equals(c) && !b.equals(c));
+            Assertions.assertTrue(!a.equals(b) && !a.equals(c) && !b.equals(c));
         }
     }
 
@@ -272,14 +272,14 @@ public class SimpleSchedulerTest {
         SimpleScheduler.addToBlocklist(backendB.getId());
 
         address = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
-        Assert.assertNotNull(address);
+        Assertions.assertNotNull(address);
         // only backendC can work
-        Assert.assertEquals(address.hostname, "addressC");
+        Assertions.assertEquals(address.hostname, "addressC");
 
         SimpleScheduler.addToBlocklist(backendC.getId());
         // no backend can work
         address = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
-        Assert.assertNull(address);
+        Assertions.assertNull(address);
     }
 
     @Test
@@ -297,40 +297,40 @@ public class SimpleSchedulerTest {
 
         SimpleScheduler.addToBlocklist(100L);
         address = SimpleScheduler.getBackendHost(immutableBackends, ref);
-        Assert.assertNull(address);
+        Assertions.assertNull(address);
 
         String host = backendA.getHost();
         List<Integer> ports = new ArrayList<>();
         Collections.addAll(ports, backendA.getBePort(), backendA.getBrpcPort(), backendA.getHttpPort());
         boolean accessible = NetUtils.checkAccessibleForAllPorts(host, ports);
-        Assert.assertFalse(accessible);
+        Assertions.assertFalse(accessible);
 
         SimpleScheduler.removeFromBlocklist(100L);
         address = SimpleScheduler.getBackendHost(immutableBackends, ref);
-        Assert.assertNotNull(address);
-        Assert.assertEquals(address.hostname, "addressA");
+        Assertions.assertNotNull(address);
+        Assertions.assertEquals(address.hostname, "addressA");
     }
 
     @Test
     public void testEmptyBackendList() {
         Reference<Long> idRef = new Reference<>();
         TNetworkAddress address = SimpleScheduler.getBackendHost(null, idRef);
-        Assert.assertNull(address);
+        Assertions.assertNull(address);
 
         ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
         address = SimpleScheduler.getBackendHost(builder.build(), idRef);
-        Assert.assertNull(address);
+        Assertions.assertNull(address);
     }
 
     @Test
     public void testEmptyComputeNodeList() {
         Reference<Long> idRef = new Reference<>();
         TNetworkAddress address = SimpleScheduler.getComputeNodeHost(null, idRef);
-        Assert.assertNull(address);
+        Assertions.assertNull(address);
 
         ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
         address = SimpleScheduler.getComputeNodeHost(builder.build(), idRef);
-        Assert.assertNull(address);
+        Assertions.assertNull(address);
     }
 
     @Test
@@ -389,13 +389,13 @@ public class SimpleSchedulerTest {
 
         SimpleScheduler.getHostBlacklist().refresh();
 
-        Assert.assertFalse(SimpleScheduler.isInBlocklist(10001L));
-        Assert.assertFalse(SimpleScheduler.isInBlocklist(10002L));
-        Assert.assertTrue(SimpleScheduler.isInBlocklist(10003L));
+        Assertions.assertFalse(SimpleScheduler.isInBlocklist(10001L));
+        Assertions.assertFalse(SimpleScheduler.isInBlocklist(10002L));
+        Assertions.assertTrue(SimpleScheduler.isInBlocklist(10003L));
 
         //Having retried for Config.heartbeat_timeout_second + 1 times, backend 10003 will be removed.
         SimpleScheduler.getHostBlacklist().refresh();
-        Assert.assertTrue(SimpleScheduler.isInBlocklist(10003L));
+        Assertions.assertTrue(SimpleScheduler.isInBlocklist(10003L));
 
         Config.black_host_penalty_min_ms = defaultBlockPenaltyTime;
     }
@@ -411,7 +411,7 @@ public class SimpleSchedulerTest {
         ImmutableMap<Long, ComputeNode> backends = builder.build();
         Reference<Long> idRef = new Reference<>();
         TNetworkAddress address = SimpleScheduler.getBackendHost(backends, idRef);
-        Assert.assertNull(address);
+        Assertions.assertNull(address);
     }
 
     @Test
@@ -425,7 +425,7 @@ public class SimpleSchedulerTest {
         ImmutableMap<Long, ComputeNode> nodes = builder.build();
         Reference<Long> idRef = new Reference<>();
         TNetworkAddress address = SimpleScheduler.getComputeNodeHost(nodes, idRef);
-        Assert.assertNull(address);
+        Assertions.assertNull(address);
     }
 
     @Test
@@ -443,8 +443,8 @@ public class SimpleSchedulerTest {
                 for (int i1 = 0; i1 < 50; i1++) {
                     Reference<Long> idRef = new Reference<>();
                     TNetworkAddress address = SimpleScheduler.getBackendHost(backends, idRef);
-                    Assert.assertNotNull(address);
-                    Assert.assertEquals("address0", address.hostname);
+                    Assertions.assertNotNull(address);
+                    Assertions.assertEquals("address0", address.hostname);
                 }
             });
             threads.add(t);
@@ -474,8 +474,8 @@ public class SimpleSchedulerTest {
                 for (int i1 = 0; i1 < 50; i1++) {
                     Reference<Long> idRef = new Reference<>();
                     TNetworkAddress address = SimpleScheduler.getComputeNodeHost(nodes, idRef);
-                    Assert.assertNotNull(address);
-                    Assert.assertEquals("address0", address.hostname);
+                    Assertions.assertNotNull(address);
+                    Assertions.assertEquals("address0", address.hostname);
                 }
             });
             threads.add(t);
@@ -540,12 +540,12 @@ public class SimpleSchedulerTest {
         for (int i = 0; i < 7; i++) {
             blacklist.add(10003L);
             Thread.sleep(1000);
-            Assert.assertTrue(blacklist.contains(10003L));
+            Assertions.assertTrue(blacklist.contains(10003L));
         }
 
         Thread.sleep(2000);
         blacklist.refresh();
-        Assert.assertFalse(blacklist.contains(10003L));
+        Assertions.assertFalse(blacklist.contains(10003L));
     }
 
     @Test
@@ -574,11 +574,11 @@ public class SimpleSchedulerTest {
 
         blacklist.addByManual(10003L);
         Thread.sleep(7000);
-        Assert.assertTrue(blacklist.contains(10003L));
+        Assertions.assertTrue(blacklist.contains(10003L));
 
         Thread.sleep(2000);
         blacklist.refresh();
-        Assert.assertTrue(blacklist.contains(10003L));
+        Assertions.assertTrue(blacklist.contains(10003L));
     }
 
     @Test
@@ -621,25 +621,25 @@ public class SimpleSchedulerTest {
 
         long checkedCount = 0;
         while (ts1 + Config.black_host_penalty_min_ms > System.currentTimeMillis()) {
-            Assert.assertNotNull(systemInfoService.getBackendOrComputeNode(nodeId));
-            Assert.assertTrue(systemInfoService.checkNodeAvailable(node));
-            Assert.assertTrue(NetUtils.checkAccessibleForAllPorts(node.getHost(), ports));
+            Assertions.assertNotNull(systemInfoService.getBackendOrComputeNode(nodeId));
+            Assertions.assertTrue(systemInfoService.checkNodeAvailable(node));
+            Assertions.assertTrue(NetUtils.checkAccessibleForAllPorts(node.getHost(), ports));
             blacklist.refresh();
             // still in the blocklist
-            Assert.assertTrue(blacklist.contains(node.getId()));
+            Assertions.assertTrue(blacklist.contains(node.getId()));
             ++checkedCount;
             // check every 200ms
             Thread.sleep(200);
         }
-        Assert.assertTrue(checkedCount > 0);
+        Assertions.assertTrue(checkedCount > 0);
         long remainMs = System.currentTimeMillis() - ts2 - Config.black_host_penalty_min_ms;
         if (remainMs > 0) {
             Thread.sleep(remainMs);
         }
         // must be expired in the blocklist
-        Assert.assertTrue(ts2 + Config.black_host_penalty_min_ms <= System.currentTimeMillis());
+        Assertions.assertTrue(ts2 + Config.black_host_penalty_min_ms <= System.currentTimeMillis());
         blacklist.refresh();
-        Assert.assertFalse(blacklist.contains(node.getId()));
+        Assertions.assertFalse(blacklist.contains(node.getId()));
 
         Config.black_host_penalty_min_ms = originPenaltyTime;
     }

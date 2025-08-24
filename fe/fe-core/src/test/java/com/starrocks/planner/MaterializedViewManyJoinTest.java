@@ -95,6 +95,7 @@ public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
         connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
         connectContext.getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(3);
         connectContext.getSessionVariable().setCboMaterializedViewRewriteRuleOutputLimit(3);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         List<Arguments> arguments = generateManyJoinArguments();
         for (Arguments argument : arguments) {
             String name = (String) argument.get()[0];
@@ -138,7 +139,7 @@ public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
     public void testManyJoins(String name, String query, boolean expectHitMv) throws Exception {
         Stopwatch watch = Stopwatch.createStarted();
         // Make sure it's not empty
-        String plan = getFragmentPlan(query);
+        String plan = getFragmentPlan(query, "MV");
         PlanTestBase.assertContains(plan, "OlapScanNode");
         if (expectHitMv) {
             PlanTestBase.assertContains(plan, "MaterializedView: true");

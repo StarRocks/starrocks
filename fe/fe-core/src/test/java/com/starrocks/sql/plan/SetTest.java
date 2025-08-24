@@ -21,15 +21,15 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class SetTest extends PlanTestBase {
     @Test
     public void testValuesNodePredicate() throws Exception {
         String queryStr = "SELECT 1 AS z, MIN(a.x) FROM (select 1 as x) a WHERE abs(1) = 2";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("4:Project\n" +
+        Assertions.assertTrue(explainString.contains("4:Project\n" +
                 "  |  <slot 4> : 4: min\n" +
                 "  |  <slot 5> : 1\n" +
                 "  |  \n" +
@@ -73,7 +73,7 @@ public class SetTest extends PlanTestBase {
                 "SELECT DISTINCT RPAD('kZcD', 1300605171, '') FROM t0 UNION ALL SELECT DISTINCT RPAD"
                         + "('kZcD', 1300605171, '') FROM t0 WHERE false IS NOT NULL;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("0:UNION"));
+        Assertions.assertTrue(plan.contains("0:UNION"), plan);
     }
 
     @Test
@@ -208,13 +208,13 @@ public class SetTest extends PlanTestBase {
 
         String sql10 = "select 499 union select 670 except select 499";
         String plan = getFragmentPlan(sql10);
-        Assert.assertTrue(plan.contains("  5:Project\n" +
+        Assertions.assertTrue(plan.contains("  5:Project\n" +
                 "  |  <slot 7> : 499\n" +
                 "  |  \n" +
                 "  4:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL"));
-        Assert.assertTrue(plan.contains("0:EXCEPT"));
+        Assertions.assertTrue(plan.contains("0:EXCEPT"));
     }
 
     @Test
@@ -227,7 +227,7 @@ public class SetTest extends PlanTestBase {
                 "  |  child exprs:\n" +
                 "  |      [1: v1, BIGINT, true] | [4: cast, VARCHAR(20), true] | [5: cast, DOUBLE, true]\n" +
                 "  |      [23: v4, BIGINT, true] | [24: cast, VARCHAR(20), true] | [25: cast, DOUBLE, true]");
-        Assert.assertTrue(plan.contains(
+        Assertions.assertTrue(plan.contains(
                 "  |  19 <-> [19: k7, VARCHAR, true]\n" +
                         "  |  20 <-> [20: k8, DOUBLE, true]\n" +
                         "  |  22 <-> cast([11: k1, TINYINT, true] as BIGINT)"));
@@ -332,7 +332,7 @@ public class SetTest extends PlanTestBase {
         String sql = "select * from (values (1,2,3), (4,5,6)) x";
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
+        Assertions.assertTrue(plan.contains("  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         1 | 2 | 3\n" +
                 "         4 | 5 | 6\n" +
@@ -345,7 +345,7 @@ public class SetTest extends PlanTestBase {
         String plan;
         sql = "select * from (select * from t0 except select * from t1 except select * from t2) as xx";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  0:EXCEPT\n" +
+        Assertions.assertTrue(plan.contains("  0:EXCEPT\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
@@ -356,7 +356,7 @@ public class SetTest extends PlanTestBase {
         sql = "select * from (select * from (select * from t0 limit 0) t except " +
                 "select * from t1 except select * from t2) as xx";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+        Assertions.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
@@ -367,7 +367,7 @@ public class SetTest extends PlanTestBase {
         sql = "select * from ( select * from t2 except (select * from t0 limit 0) except " +
                 "select * from t1) as xx";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  0:EXCEPT\n" +
+        Assertions.assertTrue(plan.contains("  0:EXCEPT\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
@@ -380,7 +380,7 @@ public class SetTest extends PlanTestBase {
         String plan;
         sql = "select * from (select * from t0 union all select * from t1 union all select * from t2) as xx";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
+        Assertions.assertTrue(plan.contains("  0:UNION\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
@@ -391,7 +391,7 @@ public class SetTest extends PlanTestBase {
         sql = "select * from (select * from (select * from t0 limit 0) t union all " +
                 "select * from t1 union all select * from t2) as xx";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
+        Assertions.assertTrue(plan.contains("  0:UNION\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
@@ -400,7 +400,7 @@ public class SetTest extends PlanTestBase {
         sql = "select * from (select * from (select * from t0 limit 0) t union all select * from t1 where false" +
                 " union all select * from t2) as xx";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+        Assertions.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
@@ -420,7 +420,7 @@ public class SetTest extends PlanTestBase {
         String plan;
         sql = "select * from (select * from t0 intersect select * from t1 intersect select * from t2) as xx";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  0:INTERSECT\n" +
+        Assertions.assertTrue(plan.contains("  0:INTERSECT\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
@@ -431,7 +431,7 @@ public class SetTest extends PlanTestBase {
         sql = "select * from (select * from (select * from t0 limit 0) t intersect " +
                 "select * from t1 intersect select * from t2) as xx";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+        Assertions.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
@@ -442,7 +442,7 @@ public class SetTest extends PlanTestBase {
         sql = "select * from (select * from (select * from t0 limit 0) t intersect select * from t1 where false " +
                 "intersect select * from t2) as xx";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+        Assertions.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
@@ -456,12 +456,12 @@ public class SetTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String sql = "select * from t1 union all select * from t2;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("    EXCHANGE ID: 04\n" +
+        Assertions.assertTrue(plan.contains("    EXCHANGE ID: 04\n" +
                 "    RANDOM\n" +
                 "\n" +
                 "  3:OlapScanNode\n" +
                 "     TABLE: t2"));
-        Assert.assertTrue(plan.contains("    EXCHANGE ID: 02\n" +
+        Assertions.assertTrue(plan.contains("    EXCHANGE ID: 02\n" +
                 "    RANDOM\n" +
                 "\n" +
                 "  1:OlapScanNode\n" +
@@ -501,7 +501,7 @@ public class SetTest extends PlanTestBase {
         String sql =
                 "select * from t0 union all select * from t0 union all select * from t0 where v1 > 1 order by v3 limit 2";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  7:TOP-N\n" +
+        Assertions.assertTrue(plan.contains("  7:TOP-N\n" +
                 "  |  order by: <slot 12> 12: v3 ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 2\n" +
@@ -516,7 +516,7 @@ public class SetTest extends PlanTestBase {
 
         sql = "select * from (select * from t0 order by v1 limit 1) t union select * from t1";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:TOP-N\n" +
+        Assertions.assertTrue(plan.contains("  2:TOP-N\n" +
                 "  |  order by: <slot 1> 1: v1 ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 1\n" +
@@ -526,9 +526,9 @@ public class SetTest extends PlanTestBase {
 
         sql = "select v1+v2 from t0 union all select v4 from t1 order by 1";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  6:SORT\n" +
+        Assertions.assertTrue(plan.contains("  6:SORT\n" +
                 "  |  order by: <slot 8> 8: expr ASC"));
-        Assert.assertTrue(plan.contains("  2:Project\n" +
+        Assertions.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 4> : 1: v1 + 2: v2"));
 
         sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by upper(x)";
@@ -579,13 +579,14 @@ public class SetTest extends PlanTestBase {
         String sql = "set @var = (select v1,v2 from test.t0)";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         SetExecutor setExecutor = new SetExecutor(connectContext, (SetStmt) statementBase);
-        Assert.assertThrows("Scalar subquery should output one column", SemanticException.class,
-                () -> setExecutor.execute());
+        Assertions.assertThrows(SemanticException.class,
+                () -> setExecutor.execute(),
+                "Scalar subquery should output one column");
         try {
             setExecutor.execute();
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Scalar subquery should output one column.",
+            Assertions.assertEquals("Getting analyzing error. Detail message: Scalar subquery should output one column.",
                     e.getMessage());
         }
     }

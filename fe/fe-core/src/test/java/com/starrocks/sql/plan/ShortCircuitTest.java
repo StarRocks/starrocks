@@ -30,9 +30,9 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import org.jetbrains.annotations.NotNull;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
@@ -52,12 +52,12 @@ public class ShortCircuitTest extends PlanTestBase {
         // project support short circuit
         String sql = "select pk1 || v3 from tprimary1 where pk1=20";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+        Assertions.assertTrue(planFragment.contains("Short Circuit Scan: true"));
 
         // boolean filter
         sql = "select pk1 || v3 from tprimary_bool where pk1=20 and pk2=false";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+        Assertions.assertTrue(planFragment.contains("Short Circuit Scan: true"));
 
         // boolean filter
         sql = "select pk1 || v3 from tprimary_bool where pk1=33 and pk2=true";
@@ -71,23 +71,23 @@ public class ShortCircuitTest extends PlanTestBase {
         //  support short circuit
         sql = "select * from tprimary1 where pk1 in (20)";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+        Assertions.assertTrue(planFragment.contains("Short Circuit Scan: true"));
 
         //  support limit short circuit
         sql = "select * from tprimary1 where pk1 in (20) limit 10";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+        Assertions.assertTrue(planFragment.contains("Short Circuit Scan: true"));
 
         //  support limit short circuit
         sql = "select * from tprimary1 where pk1 in (20, 30) limit 10";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+        Assertions.assertTrue(planFragment.contains("Short Circuit Scan: true"));
 
         // complex convert for short circuit
         sql = "select * from tprimary_bool where pk1 = 1 and pk2 = true " +
                 "and pk1 =(select pk1 from tprimary_bool where pk1 = 2 and pk2 = true) ";
         planFragment = getFragmentPlan(sql);
-        Assert.assertFalse(planFragment.contains("Short Circuit Scan: true"));
+        Assertions.assertFalse(planFragment.contains("Short Circuit Scan: true"));
     }
 
     @Test
@@ -113,7 +113,7 @@ public class ShortCircuitTest extends PlanTestBase {
         coord.exec();
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
-        Assert.assertEquals(true, execFragment.getPlanFragment().isShortCircuit());
+        Assertions.assertEquals(true, execFragment.getPlanFragment().isShortCircuit());
     }
 
     @NotNull
@@ -151,10 +151,10 @@ public class ShortCircuitTest extends PlanTestBase {
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
                 execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
         coord.exec();
-        Assert.assertTrue(coord.getNext().isEos());
+        Assertions.assertTrue(coord.getNext().isEos());
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         FeConstants.runningUnitTest = OLD_VALUE;
     }

@@ -28,11 +28,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import org.jetbrains.annotations.NotNull;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -41,10 +41,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockCatalog(connectContext, MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
@@ -106,17 +106,17 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
     public void testJDBCProtocolType() {
         JDBCTable table = new JDBCTable();
         table.getConnectInfo().put(JDBCResource.URI, "jdbc:postgres:aaa");
-        Assert.assertEquals(JDBCTable.ProtocolType.POSTGRES, table.getProtocolType());
+        Assertions.assertEquals(JDBCTable.ProtocolType.POSTGRES, table.getProtocolType());
         table.getConnectInfo().put(JDBCResource.URI, "jdbc:mysql:aaa");
-        Assert.assertEquals(JDBCTable.ProtocolType.MYSQL, table.getProtocolType());
+        Assertions.assertEquals(JDBCTable.ProtocolType.MYSQL, table.getProtocolType());
         table.getConnectInfo().put(JDBCResource.URI, "jdbc:h2:aaa");
-        Assert.assertEquals(JDBCTable.ProtocolType.UNKNOWN, table.getProtocolType());
+        Assertions.assertEquals(JDBCTable.ProtocolType.UNKNOWN, table.getProtocolType());
     }
 
     @Test
     public void testPartitionJDBCSupported() throws Exception {
         // not supported
-        Assert.assertThrows(AnalysisException.class, () ->
+        Assertions.assertThrows(AnalysisException.class, () ->
                 starRocksAssert.withMaterializedView("create materialized view mv_jdbc_postgres " +
                         "partition by d " +
                         "refresh deferred manual " +
@@ -139,12 +139,12 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
 
         MaterializedView materializedView = refreshMaterializedView("jdbc_parttbl_mv0", "20230801", "20230805");
         Collection<Partition> partitions = materializedView.getPartitions();
-        Assert.assertEquals(3, partitions.size());
+        Assertions.assertEquals(3, partitions.size());
 
         mockedJDBCMetadata.addPartitions();
         refreshMVRange(materializedView.getName(), "20230801", "20230805", false);
         Collection<Partition> incrementalPartitions = materializedView.getPartitions();
-        Assert.assertEquals(4, incrementalPartitions.size());
+        Assertions.assertEquals(4, incrementalPartitions.size());
     }
 
     @NotNull
@@ -166,7 +166,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
         MaterializedView materializedView = refreshMaterializedView("jdbc_parttbl_mv1", "20230731", "20230805");
         List<String> partitions = materializedView.getPartitions().stream()
                 .map(Partition::getName).sorted().collect(Collectors.toList());
-        Assert.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802",
+        Assertions.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802",
                         "p20230802_20230803", "p20230803_99991231"),
                 partitions);
     }
@@ -176,7 +176,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
         try {
             refreshMaterializedView("jdbc_parttbl_mv2", "20230731", "20230805");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Text '1234567' could not be parsed"));
+            Assertions.assertTrue(e.getMessage().contains("Text '1234567' could not be parsed"));
         }
     }
 
@@ -190,7 +190,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
         MaterializedView materializedView = refreshMaterializedView("jdbc_parttbl_mv3", "20230731", "20230805");
         List<String> partitions = materializedView.getPartitions().stream()
                 .map(Partition::getName).sorted().collect(Collectors.toList());
-        Assert.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802",
+        Assertions.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802",
                         "p20230802_20230803", "p20230803_99991231"),
                 partitions);
     }
@@ -222,7 +222,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
             List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                             .collect(Collectors.toList());
-            Assert.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
+            Assertions.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
         }
 
         // partial range refresh 1
@@ -237,9 +237,9 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
             List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                             .collect(Collectors.toList());
-            Assert.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
+            Assertions.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
             // mv partition p202308_202309 is force refreshed and visible version is increased
-            Assert.assertEquals(partitionVersionMap.get("p202308_202309") + 1,
+            Assertions.assertEquals(partitionVersionMap.get("p202308_202309") + 1,
                     materializedView.getPartition("p202308_202309")
                             .getDefaultPhysicalPartition().getVisibleVersion());
         }
@@ -256,8 +256,8 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
             List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                             .collect(Collectors.toList());
-            Assert.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
-            Assert.assertEquals(partitionVersionMap.get("p202308_202309").longValue(),
+            Assertions.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
+            Assertions.assertEquals(partitionVersionMap.get("p202308_202309").longValue(),
                     materializedView.getPartition("p202308_202309").getDefaultPhysicalPartition()
                             .getVisibleVersion());
         }
@@ -292,7 +292,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
         List<String> partitions =
                 materializedView.getPartitions().stream().map(Partition::getName).sorted()
                         .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230802_20230803", "p20230803_99991231"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230802_20230803", "p20230803_99991231"), partitions);
 
         // modify TTL
         {
@@ -304,7 +304,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
             partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                             .collect(Collectors.toList());
-            Assert.assertEquals(Arrays.asList("p20230803_99991231"), partitions);
+            Assertions.assertEquals(Arrays.asList("p20230803_99991231"), partitions);
         }
         starRocksAssert.dropMaterializedView(mvName);
     }
@@ -319,7 +319,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
         MaterializedView materializedView = refreshMaterializedView("jdbc_parttbl_mv5", "20230731", "20230805");
         List<String> partitions = materializedView.getPartitions().stream()
                 .map(Partition::getName).sorted().collect(Collectors.toList());
-        Assert.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802",
+        Assertions.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802",
                         "p20230802_20230803", "p20230803_20230804"),
                 partitions);
     }
@@ -334,7 +334,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
         // get base table partitions
         List<String> baseParNames =
                 mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
-        Assert.assertEquals(4, baseParNames.size());
+        Assertions.assertEquals(4, baseParNames.size());
 
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -345,7 +345,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
         refreshMVRange(materializedView.getName(), "20230801", "20230802", false);
         List<String> partitions = materializedView.getPartitions().stream()
                 .map(Partition::getName).sorted().collect(Collectors.toList());
-        Assert.assertEquals(ImmutableList.of("p20230801_20230802"), partitions);
+        Assertions.assertEquals(ImmutableList.of("p20230801_20230802"), partitions);
     }
 
     @Test
@@ -376,7 +376,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
         List<String> partitions =
                 materializedView.getPartitions().stream().map(Partition::getName).sorted()
                         .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p00010101_20230801", "p20230801_20230802", "p20230802_20230803",
+        Assertions.assertEquals(Arrays.asList("p00010101_20230801", "p20230801_20230802", "p20230802_20230803",
                 "p20230803_99991231"), partitions);
 
         starRocksAssert.dropMaterializedView(mvName);

@@ -83,6 +83,8 @@ public:
 
     int64_t get_allocated_bytes() override;
 
+    int64_t get_flush_batch_size() override;
+
     Status write(Chunk* chunk) override;
 
     CommitResult commit() override;

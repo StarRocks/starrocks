@@ -233,35 +233,34 @@ public class AdminStmtAnalyzer {
 
         private boolean analyzeWhere(AdminShowReplicaStatusStmt adminShowReplicaStatusStmt) {
             Expr where = adminShowReplicaStatusStmt.getWhere();
-            Replica.ReplicaStatus statusFilter = null;
 
             // analyze where clause if not null
             if (where == null) {
                 return true;
             }
 
-            if (!(where instanceof BinaryPredicate)) {
+            if (!(where instanceof BinaryPredicate binaryPredicate)) {
                 return false;
             }
 
-            BinaryPredicate binaryPredicate = (BinaryPredicate) where;
             BinaryType op = binaryPredicate.getOp();
             if (op != BinaryType.EQ && op != BinaryType.NE) {
                 return false;
             }
-            adminShowReplicaStatusStmt.setOp(op);
 
             Expr leftChild = binaryPredicate.getChild(0);
             Expr rightChild = binaryPredicate.getChild(1);
-            String leftKey = ((SlotRef) leftChild).getColumnName();
-            if (!(rightChild instanceof StringLiteral) || !leftKey.equalsIgnoreCase("status")) {
+
+            if (!(leftChild instanceof SlotRef) || !(rightChild instanceof StringLiteral)) {
                 return false;
             }
-            statusFilter = Enums.getIfPresent(Replica.ReplicaStatus.class,
-                            ((StringLiteral) rightChild).getStringValue().toUpperCase())
-                    .orNull();
 
-            adminShowReplicaStatusStmt.setStatusFilter(statusFilter);
+            String leftKey = ((SlotRef) leftChild).getColumnName();
+            if (!leftKey.equalsIgnoreCase("status")) {
+                return false;
+            }
+            Replica.ReplicaStatus statusFilter = Enums.getIfPresent(Replica.ReplicaStatus.class,
+                    ((StringLiteral) rightChild).getStringValue().toUpperCase()).orNull();
             return statusFilter != null;
         }
     }

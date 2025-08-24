@@ -19,10 +19,10 @@ import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.apache.commons.lang3.reflect.MethodUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -30,12 +30,12 @@ import java.util.concurrent.ThreadPoolExecutor;
 public class PublishVersionDaemonTest {
     public int oldValue;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         oldValue = Config.lake_publish_version_max_threads;
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         Config.lake_publish_version_max_threads = oldValue;
     }
@@ -46,52 +46,52 @@ public class PublishVersionDaemonTest {
         PublishVersionDaemon daemon = new PublishVersionDaemon();
 
         ThreadPoolExecutor executor = (ThreadPoolExecutor) MethodUtils.invokeMethod(daemon, true, "getLakeTaskExecutor");
-        Assert.assertNotNull(executor);
-        Assert.assertEquals(Config.lake_publish_version_max_threads, executor.getMaximumPoolSize());
-        Assert.assertEquals(Config.lake_publish_version_max_threads, executor.getCorePoolSize());
+        Assertions.assertNotNull(executor);
+        Assertions.assertEquals(Config.lake_publish_version_max_threads, executor.getMaximumPoolSize());
+        Assertions.assertEquals(Config.lake_publish_version_max_threads, executor.getCorePoolSize());
 
         ConfigRefreshDaemon configDaemon = GlobalStateMgr.getCurrentState().getConfigRefreshDaemon();
 
         // scale out
         Config.lake_publish_version_max_threads += 10;
         MethodUtils.invokeMethod(configDaemon, true, "runAfterCatalogReady");
-        Assert.assertEquals(Config.lake_publish_version_max_threads, executor.getMaximumPoolSize());
-        Assert.assertEquals(Config.lake_publish_version_max_threads, executor.getCorePoolSize());
+        Assertions.assertEquals(Config.lake_publish_version_max_threads, executor.getMaximumPoolSize());
+        Assertions.assertEquals(Config.lake_publish_version_max_threads, executor.getCorePoolSize());
 
 
         // scale in
         Config.lake_publish_version_max_threads -= 5;
         MethodUtils.invokeMethod(configDaemon, true, "runAfterCatalogReady");
-        Assert.assertEquals(Config.lake_publish_version_max_threads, executor.getMaximumPoolSize());
-        Assert.assertEquals(Config.lake_publish_version_max_threads, executor.getCorePoolSize());
+        Assertions.assertEquals(Config.lake_publish_version_max_threads, executor.getMaximumPoolSize());
+        Assertions.assertEquals(Config.lake_publish_version_max_threads, executor.getCorePoolSize());
 
         int oldNumber = executor.getMaximumPoolSize();
 
         // config set to < 0
         Config.lake_publish_version_max_threads = -1;
         MethodUtils.invokeMethod(configDaemon, true, "runAfterCatalogReady");
-        Assert.assertEquals(oldNumber, executor.getMaximumPoolSize());
-        Assert.assertEquals(oldNumber, executor.getCorePoolSize());
+        Assertions.assertEquals(oldNumber, executor.getMaximumPoolSize());
+        Assertions.assertEquals(oldNumber, executor.getCorePoolSize());
 
 
         // config set to > LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE
         Config.lake_publish_version_max_threads = PublishVersionDaemon.LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE + 1;
         MethodUtils.invokeMethod(configDaemon, true, "runAfterCatalogReady");
-        Assert.assertEquals(oldNumber, executor.getMaximumPoolSize());
-        Assert.assertEquals(oldNumber, executor.getCorePoolSize());
+        Assertions.assertEquals(oldNumber, executor.getMaximumPoolSize());
+        Assertions.assertEquals(oldNumber, executor.getCorePoolSize());
 
 
         // config set to LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE
         Config.lake_publish_version_max_threads = PublishVersionDaemon.LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE;
         MethodUtils.invokeMethod(configDaemon, true, "runAfterCatalogReady");
-        Assert.assertEquals(Config.lake_publish_version_max_threads, executor.getMaximumPoolSize());
-        Assert.assertEquals(Config.lake_publish_version_max_threads, executor.getCorePoolSize());
+        Assertions.assertEquals(Config.lake_publish_version_max_threads, executor.getMaximumPoolSize());
+        Assertions.assertEquals(Config.lake_publish_version_max_threads, executor.getCorePoolSize());
 
         // config set to 1
         Config.lake_publish_version_max_threads = 1;
         MethodUtils.invokeMethod(configDaemon, true, "runAfterCatalogReady");
-        Assert.assertEquals(Config.lake_publish_version_max_threads, executor.getMaximumPoolSize());
-        Assert.assertEquals(Config.lake_publish_version_max_threads, executor.getCorePoolSize());
+        Assertions.assertEquals(Config.lake_publish_version_max_threads, executor.getMaximumPoolSize());
+        Assertions.assertEquals(Config.lake_publish_version_max_threads, executor.getCorePoolSize());
     }
 
     @Test
@@ -108,12 +108,12 @@ public class PublishVersionDaemonTest {
             ThreadPoolExecutor executor =
                     (ThreadPoolExecutor) MethodUtils.invokeMethod(daemon, true, "getLakeTaskExecutor");
 
-            Assert.assertNotNull(executor);
-            Assert.assertNotEquals(initValue, executor.getMaximumPoolSize());
-            Assert.assertEquals(hardCodeDefaultMaxThreads, executor.getMaximumPoolSize());
-            Assert.assertEquals(hardCodeDefaultMaxThreads, executor.getCorePoolSize());
+            Assertions.assertNotNull(executor);
+            Assertions.assertNotEquals(initValue, executor.getMaximumPoolSize());
+            Assertions.assertEquals(hardCodeDefaultMaxThreads, executor.getMaximumPoolSize());
+            Assertions.assertEquals(hardCodeDefaultMaxThreads, executor.getCorePoolSize());
             // configVar set to default value.
-            Assert.assertEquals(hardCodeDefaultMaxThreads, Config.lake_publish_version_max_threads);
+            Assertions.assertEquals(hardCodeDefaultMaxThreads, Config.lake_publish_version_max_threads);
         }
 
         // > LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE
@@ -123,12 +123,12 @@ public class PublishVersionDaemonTest {
             PublishVersionDaemon daemon = new PublishVersionDaemon();
             ThreadPoolExecutor executor =
                     (ThreadPoolExecutor) MethodUtils.invokeMethod(daemon, true, "getLakeTaskExecutor");
-            Assert.assertNotNull(executor);
-            Assert.assertNotEquals(initValue, executor.getMaximumPoolSize());
-            Assert.assertEquals(hardCodeDefaultMaxThreads, executor.getMaximumPoolSize());
-            Assert.assertEquals(hardCodeDefaultMaxThreads, executor.getCorePoolSize());
+            Assertions.assertNotNull(executor);
+            Assertions.assertNotEquals(initValue, executor.getMaximumPoolSize());
+            Assertions.assertEquals(hardCodeDefaultMaxThreads, executor.getMaximumPoolSize());
+            Assertions.assertEquals(hardCodeDefaultMaxThreads, executor.getCorePoolSize());
             // configVar set to default value.
-            Assert.assertEquals(hardCodeDefaultMaxThreads, Config.lake_publish_version_max_threads);
+            Assertions.assertEquals(hardCodeDefaultMaxThreads, Config.lake_publish_version_max_threads);
         }
     }
 
@@ -138,17 +138,17 @@ public class PublishVersionDaemonTest {
         PublishVersionDaemon daemon = new PublishVersionDaemon();
 
         ThreadPoolExecutor executor = (ThreadPoolExecutor) MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
-        Assert.assertNotNull(executor);
+        Assertions.assertNotNull(executor);
         ConfigRefreshDaemon configDaemon = GlobalStateMgr.getCurrentState().getConfigRefreshDaemon();
 
         // scale out
         Config.lake_publish_delete_txnlog_max_threads += 10;
         MethodUtils.invokeMethod(configDaemon, true, "runAfterCatalogReady");
-        Assert.assertEquals(Config.lake_publish_delete_txnlog_max_threads, executor.getMaximumPoolSize());
+        Assertions.assertEquals(Config.lake_publish_delete_txnlog_max_threads, executor.getMaximumPoolSize());
 
         // scale in
         Config.lake_publish_delete_txnlog_max_threads -= 5;
         MethodUtils.invokeMethod(configDaemon, true, "runAfterCatalogReady");
-        Assert.assertEquals(Config.lake_publish_delete_txnlog_max_threads, executor.getMaximumPoolSize());
+        Assertions.assertEquals(Config.lake_publish_delete_txnlog_max_threads, executor.getMaximumPoolSize());
     }
 }

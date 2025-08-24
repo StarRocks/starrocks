@@ -138,10 +138,13 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
         DCHECK(st.ok());
         return new Predicate<TYPE_DECIMAL128>(type_info, id, value);
     }
-    // TODO(stephen): implement it later
-    case TYPE_DECIMAL256:
     case TYPE_INT256:
-        return nullptr;
+    case TYPE_DECIMAL256: {
+        int256_t value;
+        auto st = type_info->from_string(&value, operand.to_string());
+        DCHECK(st.ok());
+        return new Predicate<TYPE_DECIMAL256>(type_info, id, value);
+    }
     case TYPE_DATE_V1: {
         uint24_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());
@@ -527,7 +530,15 @@ public:
     ColumnNePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kNE, type_info, id, value) {}
 
-    bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
+    bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        const auto& min = detail.min_or_null_value();
+        const auto& max = detail.max_value();
+        const auto type_info = this->type_info();
+        if (min == max) {
+            return type_info->cmp(Datum(this->_value), min) != 0;
+        }
+        return true;
+    }
 
     bool support_bitmap_filter() const override { return false; }
 

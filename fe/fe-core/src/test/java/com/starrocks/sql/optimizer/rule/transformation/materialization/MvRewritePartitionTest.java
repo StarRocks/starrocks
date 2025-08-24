@@ -19,18 +19,18 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.List;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class MvRewritePartitionTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "table_with_day_partition");
@@ -39,7 +39,7 @@ public class MvRewritePartitionTest extends MVTestBase {
         prepareDatas();
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws Exception {
         try {
             starRocksAssert.dropTable("test_partition_tbl1");

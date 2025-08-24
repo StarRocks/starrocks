@@ -24,7 +24,7 @@ namespace starrocks {
 struct StdDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_numeric<lt>) {
+        if constexpr (lt_is_numeric<lt> && lt != TYPE_DECIMAL256) {
             using VarState = DevFromAveAggregateState<RunTimeCppType<DevFromAveResultLT<lt>>>;
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
                     "variance", true, AggregateFactory::MakeVarianceAggregateFunction<lt, false>());
@@ -56,7 +56,7 @@ struct StdDispatcher {
 struct CorVarDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_numeric<lt>) {
+        if constexpr (lt_is_numeric<lt> && lt != TYPE_DECIMAL256) {
             using VarState = CovarianceCorelationAggregateState<false>;
             resolver->add_aggregate_mapping_variadic<lt, TYPE_DOUBLE, VarState>(
                     "covar_pop", true, AggregateFactory::MakeCovarianceAggregateFunction<lt, false>());

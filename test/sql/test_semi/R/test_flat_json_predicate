@@ -1,0 +1,565 @@
+-- name: test_normal_flat_json_predicate @sequential
+update information_schema.be_configs set value = 'true' where name = 'enable_json_flat';
+-- result:
+-- !result
+CREATE TABLE js2 (
+    v1 BIGINT NULL,
+    j1 JSON NULL
+)
+DUPLICATE KEY (v1)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES ( "replication_num" = "1" );
+-- result:
+-- !result
+CREATE TABLE js3 (
+    v1 BIGINT NULL,
+    j1 JSON NULL
+)
+DUPLICATE KEY (v1)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES ( "replication_num" = "1" );
+-- result:
+-- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+create view profile_late_materialize as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%LateMaterializeRows%' 
+order by unnest;
+-- result:
+-- !result
+create view profile_filter_rows as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%FilterRows%'
+order by unnest;
+-- result:
+-- !result
+create view profile_dict as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%DictDecodeCount%'
+order by unnest;
+-- result:
+-- !result
+create view profile_access_path as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%AccessPath%'
+order by unnest;
+-- result:
+-- !result
+insert into js2 
+select 
+    generate_series, 
+    json_object('f1', generate_series)
+from (table(generate_series(1, 1000)));
+-- result:
+-- !result
+select * from js2 where get_json_int(j1, '$.f1') = -1;
+-- result:
+-- !result
+select * from profile_filter_rows;
+-- result:
+- BitmapIndexFilterRows: 0
+- BloomFilterFilterRows: 0
+- GinFilterRows: 0
+- SegmentRuntimeZoneMapFilterRows: 0
+- SegmentZoneMapFilterRows: 0
+- ShortKeyFilterRows: 0
+- VectorIndexFilterRows: 0
+- ZoneMapIndexFilterRows: 1.000K (1000)
+- DelVecFilterRows: 0
+- PredFilterRows: 0
+-- !result
+select * from js2 where get_json_int(j1, '$.f1') = 1;
+-- result:
+1	{"f1": 1}
+-- !result
+select * from profile_filter_rows;
+-- result:
+- BitmapIndexFilterRows: 0
+- BloomFilterFilterRows: 0
+- GinFilterRows: 0
+- SegmentRuntimeZoneMapFilterRows: 0
+- SegmentZoneMapFilterRows: 0
+- ShortKeyFilterRows: 0
+- VectorIndexFilterRows: 0
+- ZoneMapIndexFilterRows: 0
+- DelVecFilterRows: 0
+- PredFilterRows: 999
+-- !result
+select * from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1') = 2;
+-- result:
+1	{"f1": 1}
+2	{"f1": 2}
+-- !result
+select * from profile_filter_rows;
+-- result:
+- BitmapIndexFilterRows: 0
+- BloomFilterFilterRows: 0
+- GinFilterRows: 0
+- SegmentRuntimeZoneMapFilterRows: 0
+- SegmentZoneMapFilterRows: 0
+- ShortKeyFilterRows: 0
+- VectorIndexFilterRows: 0
+- ZoneMapIndexFilterRows: 0
+- DelVecFilterRows: 0
+- PredFilterRows: 998
+-- !result
+select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
+-- result:
+1	{"f1": 1}
+2	{"f1": 2}
+3	{"f1": 3}
+4	{"f1": 4}
+-- !result
+select * from profile_filter_rows;
+-- result:
+- BitmapIndexFilterRows: 0
+- BloomFilterFilterRows: 0
+- GinFilterRows: 0
+- SegmentRuntimeZoneMapFilterRows: 0
+- SegmentZoneMapFilterRows: 0
+- ShortKeyFilterRows: 0
+- VectorIndexFilterRows: 0
+- ZoneMapIndexFilterRows: 0
+- DelVecFilterRows: 0
+- PredFilterRows: 996
+-- !result
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = -1;
+-- result:
+-- !result
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = 1;
+-- result:
+1
+-- !result
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1') = 2;
+-- result:
+1
+2
+-- !result
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
+-- result:
+1
+2
+3
+4
+-- !result
+insert into js2 
+select 
+    generate_series, 
+    json_object('f2', generate_series)
+from (table(generate_series(1, 1000)));
+-- result:
+-- !result
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = 1;
+-- result:
+1
+-- !result
+select * from profile_access_path;
+-- result:
+- PushdownAccessPaths: 0
+-- !result
+select get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f1') = 1;
+-- result:
+None
+-- !result
+select * from profile_access_path;
+-- result:
+- PushdownAccessPaths: 0
+-- !result
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f2') = 1;
+-- result:
+None
+-- !result
+select * from profile_access_path;
+-- result:
+- PushdownAccessPaths: 0
+-- !result
+select get_json_int(j1, '$.f2'), j1 from js2 where get_json_int(j1, '$.f1') = 1;
+-- result:
+None	{"f1": 1}
+-- !result
+select * from profile_access_path;
+-- result:
+- AccessPathHits: 2
+- PushdownAccessPaths: 2
+-- !result
+select get_json_int(j1, '$.f2'), j1 from js2 where get_json_int(j1, '$.f3') = 1;
+-- result:
+-- !result
+select * from profile_access_path;
+-- result:
+- AccessPathHits: 2
+- PushdownAccessPaths: 2
+-- !result
+select get_json_int(j1, '$.f2'), get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f1') = 1;
+-- result:
+None	None
+-- !result
+select * from profile_access_path;
+-- result:
+- PushdownAccessPaths: 0
+-- !result
+select count(get_json_int(j1, '$.f2')) from js2 ;
+-- result:
+1000
+-- !result
+select * from profile_access_path;
+-- result:
+- PushdownAccessPaths: 0
+-- !result
+select count(get_json_int(j1, '$.f3')) from js2 ;
+-- result:
+0
+-- !result
+select * from profile_access_path;
+-- result:
+- PushdownAccessPaths: 0
+-- !result
+select * from js2 where get_json_int(j1, '$.f1') = -1;
+-- result:
+-- !result
+select * from profile_filter_rows;
+-- result:
+- BitmapIndexFilterRows: 0
+- BloomFilterFilterRows: 0
+- GinFilterRows: 0
+- SegmentRuntimeZoneMapFilterRows: 0
+- SegmentZoneMapFilterRows: 0
+- ShortKeyFilterRows: 0
+- VectorIndexFilterRows: 0
+- ZoneMapIndexFilterRows: 1.000K (1000)
+- DelVecFilterRows: 0
+- PredFilterRows: 1.000K (1000)
+-- !result
+select * from js2 where get_json_int(j1, '$.f1') = 1;
+-- result:
+1	{"f1": 1}
+-- !result
+select * from profile_filter_rows;
+-- result:
+- BitmapIndexFilterRows: 0
+- BloomFilterFilterRows: 0
+- GinFilterRows: 0
+- SegmentRuntimeZoneMapFilterRows: 0
+- SegmentZoneMapFilterRows: 0
+- ShortKeyFilterRows: 0
+- VectorIndexFilterRows: 0
+- ZoneMapIndexFilterRows: 0
+- DelVecFilterRows: 0
+- PredFilterRows: 1.999K (1999)
+-- !result
+select * from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1') = 2;
+-- result:
+1	{"f1": 1}
+2	{"f1": 2}
+-- !result
+select * from profile_filter_rows;
+-- result:
+- BitmapIndexFilterRows: 0
+- BloomFilterFilterRows: 0
+- GinFilterRows: 0
+- SegmentRuntimeZoneMapFilterRows: 0
+- SegmentZoneMapFilterRows: 0
+- ShortKeyFilterRows: 0
+- VectorIndexFilterRows: 0
+- ZoneMapIndexFilterRows: 0
+- DelVecFilterRows: 0
+- PredFilterRows: 1.998K (1998)
+-- !result
+select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
+-- result:
+1	{"f1": 1}
+2	{"f1": 2}
+3	{"f1": 3}
+4	{"f1": 4}
+-- !result
+select * from profile_filter_rows;
+-- result:
+- BitmapIndexFilterRows: 0
+- BloomFilterFilterRows: 0
+- GinFilterRows: 0
+- SegmentRuntimeZoneMapFilterRows: 0
+- SegmentZoneMapFilterRows: 0
+- ShortKeyFilterRows: 0
+- VectorIndexFilterRows: 0
+- ZoneMapIndexFilterRows: 0
+- DelVecFilterRows: 0
+- PredFilterRows: 1.996K (1996)
+-- !result
+select * from js2 where get_json_int(j1, '$.f2') = -1;
+-- result:
+-- !result
+select * from profile_filter_rows;
+-- result:
+- BitmapIndexFilterRows: 0
+- BloomFilterFilterRows: 0
+- GinFilterRows: 0
+- SegmentRuntimeZoneMapFilterRows: 0
+- SegmentZoneMapFilterRows: 0
+- ShortKeyFilterRows: 0
+- VectorIndexFilterRows: 0
+- ZoneMapIndexFilterRows: 1.000K (1000)
+- DelVecFilterRows: 0
+- PredFilterRows: 1.000K (1000)
+-- !result
+select * from js2 where get_json_int(j1, '$.f2') = 1;
+-- result:
+1	{"f2": 1}
+-- !result
+select * from profile_filter_rows;
+-- result:
+- BitmapIndexFilterRows: 0
+- BloomFilterFilterRows: 0
+- GinFilterRows: 0
+- SegmentRuntimeZoneMapFilterRows: 0
+- SegmentZoneMapFilterRows: 0
+- ShortKeyFilterRows: 0
+- VectorIndexFilterRows: 0
+- ZoneMapIndexFilterRows: 0
+- DelVecFilterRows: 0
+- PredFilterRows: 1.999K (1999)
+-- !result
+select * from js2 where get_json_int(j1, '$.f2') = 1 or get_json_int(j1, '$.f2') = 2;
+-- result:
+1	{"f2": 1}
+2	{"f2": 2}
+-- !result
+select * from profile_filter_rows;
+-- result:
+- BitmapIndexFilterRows: 0
+- BloomFilterFilterRows: 0
+- GinFilterRows: 0
+- SegmentRuntimeZoneMapFilterRows: 0
+- SegmentZoneMapFilterRows: 0
+- ShortKeyFilterRows: 0
+- VectorIndexFilterRows: 0
+- ZoneMapIndexFilterRows: 0
+- DelVecFilterRows: 0
+- PredFilterRows: 1.998K (1998)
+-- !result
+select * from js2 where get_json_int(j1, '$.f2') in (1, 2, 3, 4);
+-- result:
+1	{"f2": 1}
+2	{"f2": 2}
+3	{"f2": 3}
+4	{"f2": 4}
+-- !result
+select * from profile_filter_rows;
+-- result:
+- BitmapIndexFilterRows: 0
+- BloomFilterFilterRows: 0
+- GinFilterRows: 0
+- SegmentRuntimeZoneMapFilterRows: 0
+- SegmentZoneMapFilterRows: 0
+- ShortKeyFilterRows: 0
+- VectorIndexFilterRows: 0
+- ZoneMapIndexFilterRows: 0
+- DelVecFilterRows: 0
+- PredFilterRows: 1.996K (1996)
+-- !result
+select get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f2') = 1;
+-- result:
+1
+-- !result
+select get_json_int(j1, '$.f1'), get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f2') = 1;
+-- result:
+None	1
+-- !result
+select get_json_int(j1, '$.f1'), get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f2') = 1;
+-- result:
+None	None
+-- !result
+select get_json_int(j1, '$.f1'), get_json_int(j1, '$.f2'), get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f2') = 1;
+-- result:
+None	1	None
+-- !result
+select j1, get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f2') = 1;
+-- result:
+{"f2": 1}	1
+-- !result
+select j1 from js2 where get_json_int(j1, '$.f2') = 1;
+-- result:
+{"f2": 1}
+-- !result
+insert into js3
+select 
+    generate_series, 
+    json_object('f1', concat('a', generate_series%10))
+from (table(generate_series(1, 1000)));
+-- result:
+-- !result
+select count(v1) from js3 where get_json_string(j1, 'f1') = 'a0';
+-- result:
+100
+-- !result
+select * from profile_dict;
+-- result:
+- DictDecodeCount: 0
+-- !result
+select count(v1) from js3 where get_json_string(j1, 'f1') = 'a10';
+-- result:
+0
+-- !result
+select * from profile_dict;
+-- result:
+-- !result
+select count(get_json_string(j1, 'f1')) from js3 where get_json_string(j1, 'f1') = 'a0';
+-- result:
+100
+-- !result
+select * from profile_dict;
+-- result:
+- DictDecodeCount: 100
+-- !result
+select count(get_Json_string(j1, 'f1')) from js3 where get_json_string(j1, 'f1') = 'a10';
+-- result:
+0
+-- !result
+select * from profile_dict;
+-- result:
+-- !result
+insert into js2 
+select 
+    generate_series, 
+    json_object('f1', generate_series, 'f2', generate_series)
+from (table(generate_series(1, 1000)));
+-- result:
+-- !result
+select count(get_json_int(j1, '$.f2')) from js2 where get_json_int(j1, '$.f1') < 100;
+-- result:
+99
+-- !result
+select * from profile_late_materialize;
+-- result:
+- LateMaterializeRows: 198
+-- !result
+select count(get_json_int(j1, '$.f2')) from js2 where get_json_int(j1, '$.f1') < 200;
+-- result:
+199
+-- !result
+select * from profile_late_materialize;
+-- result:
+- LateMaterializeRows: 398
+-- !result
+insert into js3
+select generate_series, json_object(
+        'f_bool', cast(generate_series % 2 = 0 as boolean),
+        'f_int', generate_series,
+        'f_int1', generate_series,
+        'f_int2', generate_series,
+        'f_double', cast(generate_series as double) * 1.0
+        )
+from (table(generate_series(1, 1000)));
+-- result:
+-- !result
+select count(*) from js3 where get_json_bool(j1, 'f_bool') = true;
+-- result:
+500
+-- !result
+select count(*) from js3 where get_json_int(j1, 'f_bool') = 1;
+-- result:
+500
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_bool') = '1';
+-- result:
+0
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_bool') = 'true';
+-- result:
+500
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_bool') = 'false';
+-- result:
+500
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_bool') = 'none';
+-- result:
+0
+-- !result
+select count(*) from js3 where get_json_double(j1, 'f_bool') = 1.0;
+-- result:
+500
+-- !result
+select * from profile_access_path;
+-- result:
+- PushdownAccessPaths: 0
+-- !result
+select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
+-- result:
+499
+-- !result
+select count(*) from js3 where get_json_bool(j1, 'f_int') = true;
+-- result:
+1000
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_int') < 500;
+-- result:
+499
+-- !result
+select count(*) from js3 where get_json_double(j1, 'f_int') < 500;
+-- result:
+499
+-- !result
+select * from profile_access_path;
+-- result:
+- PushdownAccessPaths: 0
+-- !result
+select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
+-- result:
+499
+-- !result
+select count(*) from js3 where get_json_bool(j1, 'f_double') = true;
+-- result:
+1000
+-- !result
+select count(*) from js3 where get_json_int(j1, 'f_double') < 500;
+-- result:
+499
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_double') < '500';
+-- result:
+447
+-- !result
+select * from profile_access_path;
+-- result:
+- PushdownAccessPaths: 0
+-- !result
+select count(*) from js3 where get_json_int(j1, 'f_none') IS NULL;
+-- result:
+2000
+-- !result
+select count(*) from js3 where get_json_int(j1, 'f_none') IS NOT NULL;
+-- result:
+0
+-- !result
+select count(*) from js3 where get_json_int(j1, 'f_none') < 500;
+-- result:
+0
+-- !result
+select count(*) from js3 where get_json_bool(j1, 'f_none') = true;
+-- result:
+0
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_none') < 500;
+-- result:
+0
+-- !result
+select count(*) from js3 where get_json_double(j1, 'f_none') < 500;
+-- result:
+0
+-- !result
+select * from profile_access_path;
+-- result:
+- PushdownAccessPaths: 0
+-- !result

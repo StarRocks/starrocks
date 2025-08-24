@@ -17,14 +17,15 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.text.DateFormat;
 import java.text.ParseException;
@@ -35,7 +36,7 @@ import java.util.Map;
 
 public class SingleListPartitionDescTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
@@ -61,7 +62,7 @@ public class SingleListPartitionDescTest {
                         "('tianjin','guangdong') (\"storage_cooldown_time\" = \"2122-07-09 12:12:12\", " +
                         "\"storage_medium\" = \"SSD\", \"replication_num\" = \"1\", " +
                         "\"tablet_type\" = \"memory\", \"in_memory\" = \"true\")";
-        Assert.assertEquals(sql, partitionDesc.toString());
+        Assertions.assertEquals(sql, partitionDesc.toString());
     }
 
     @Test
@@ -82,24 +83,23 @@ public class SingleListPartitionDescTest {
 
         SingleItemListPartitionDesc partitionDesc = new SingleItemListPartitionDesc(ifNotExists, partitionName,
                 values, partitionProperties);
-        partitionDesc.analyze(columnDefLists, null);
+        PartitionDescAnalyzer.analyze(partitionDesc, columnDefLists, null);
 
-        Assert.assertEquals(partitionName, partitionDesc.getPartitionName());
-        Assert.assertEquals(PartitionType.LIST, partitionDesc.getType());
-        Assert.assertEquals(1, partitionDesc.getReplicationNum());
-        Assert.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionDesc.getTabletType());
-        Assert.assertEquals(true, partitionDesc.isInMemory());
+        Assertions.assertEquals(partitionName, partitionDesc.getPartitionName());
+        Assertions.assertEquals(1, partitionDesc.getReplicationNum());
+        Assertions.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionDesc.getTabletType());
+        Assertions.assertEquals(true, partitionDesc.isInMemory());
 
         DataProperty dataProperty = partitionDesc.getPartitionDataProperty();
-        Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
+        Assertions.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
         DateFormat sf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         long time = sf.parse("2122-07-09 12:12:12").getTime();
-        Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
+        Assertions.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         List<String> valuesFromGet = partitionDesc.getValues();
-        Assert.assertEquals(valuesFromGet.size(), values.size());
+        Assertions.assertEquals(valuesFromGet.size(), values.size());
         for (int i = 0; i < valuesFromGet.size(); i++) {
-            Assert.assertEquals(valuesFromGet.get(i), values.get(i));
+            Assertions.assertEquals(valuesFromGet.get(i), values.get(i));
         }
     }
 

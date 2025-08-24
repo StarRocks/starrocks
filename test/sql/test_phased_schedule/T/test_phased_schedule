@@ -119,3 +119,9 @@ select count(*) from small_table1 s1 join small_table2 s2 on s1.c0 = s2.c0 join 
 -- union all with cte
 with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ count(*), sum(c0),sum(c1) from (select * from agged_table union all select l.c1, l.c0 from agged_table l join t0 r on l.c0=r.c2) tb;
 with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ count(*), sum(c0),sum(c1) from (select l.c1, l.c0 from agged_table l join t0 r on l.c0=r.c2 union all select * from agged_table) tb;
+
+-- test with sync collect profile
+set enable_profile=true;
+set enable_async_profile=true;
+set profile_timeout=300;
+select count(*) from small_table1 s1 join small_table2 s2 on s1.c0 = s2.c0 join small_table3 s3 on s1.c0 = s3.c0 where s3.c3 = 0;

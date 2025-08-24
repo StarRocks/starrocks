@@ -1568,6 +1568,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：生效版本的最大线程数。当该参数被设置为小于或等于 `0` 时，系统默认使用当前节点的 CPU 核数，以避免因使用固定值而导致在导入并行较高时线程资源不足。自 2.5 版本起，默认值由 `8` 变更为 `0`。
 - 引入版本：-
 
+##### transaction_publish_version_thread_pool_idle_time_ms
+
+- 默认值：60000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：否
+- 描述：线程被 Publish Version 线程池回收前的 Idle 时间。
+- 引入版本：-
+
 <!--
 ##### transaction_apply_worker_count
 
@@ -3255,7 +3264,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - 默认值：0
 - 类型：Int
-- 单位：GB
+- 单位：Bytes
 - 是否动态：是
 - 描述：JIT 编译的 LRU 缓存大小。如果设置为大于 0，则表示实际的缓存大小。如果设置为小于或等于 0，系统将自适应设置缓存大小，使用的公式为 `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` （节点的 `mem_limit` 必须大于或等于 16 GB）。
 - 引入版本：-
@@ -3548,7 +3557,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
-- 配置项描述: `object_storage_request_timeout_ms` 的别名。详细信息请参考配置项 [object_storage_request_timeout_ms](#object_storage_request_timeout_ms)。
+- 描述: `object_storage_request_timeout_ms` 的别名。详细信息请参考配置项 [object_storage_request_timeout_ms](#object_storage_request_timeout_ms)。
 - 引入版本: v3.3.9
 
 ##### starlet_filesystem_instance_cache_capacity
@@ -3557,7 +3566,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 配置项描述: starlet filesystem 实例的缓存容量。
+- 描述: starlet filesystem 实例的缓存容量。
 - 引入版本: v3.2.16, v3.3.11, v3.4.1
 
 ##### starlet_filesystem_instance_cache_ttl_sec
@@ -3566,8 +3575,17 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：秒
 - 是否动态：是
-- 配置项描述: starlet filesystem 实例缓存的过期时间。
+- 描述: starlet filesystem 实例缓存的过期时间。
 - 引入版本: v3.3.15, 3.4.5
+
+##### starlet_write_file_with_tag
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述: 存算分离集群下，是否将写入到对象存储的文件打上对象存储 Tag，方便自定义管理文件。
+- 引入版本: v3.5.3
 
 ##### lake_compaction_stream_buffer_size_bytes
 
@@ -3934,7 +3952,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值：0
 - 类型：String
 - 单位：-
-- 是否动态：否
+- 是否动态：是
 - 描述：内存缓存数据量的上限，可设为比例上限（如 `10%`）或物理上限（如 `10G`, `21474836480` 等）。
 - 引入版本：-
 
@@ -3943,7 +3961,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值：0
 - 类型：String
 - 单位：-
-- 是否动态：否
+- 是否动态：是
 - 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。假设系统使用了两块磁盘进行缓存，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
 - 引入版本：-
 
@@ -5304,3 +5322,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：用于向 FE 汇报执行状态的 RPC 请求的重试次数。默认值为 10，意味着如果该 RPC 请求失败（仅限于 fragment instance 的 finish RPC），将最多重试 10 次。该请求对于导入任务（load job）非常重要，如果某个 fragment instance 的完成状态报告失败，整个导入任务将会一直挂起，直到超时。
 -引入版本：-
+
+##### enable_table_metrics
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否动态: 否
+- 描述: 用来控制是否开启表级别的metrics收集,默认值为false。若开启，metrics/接口会返回每个表scan/load的行数和字节数。
+
+##### enable_collect_table_metrics
+
+- 默认值: true
+- 类型: Boolean
+- 是否动态: 是
+- 描述: 用来控制metrics/接口是否返回表级别的metrics，默认值为true。只有当enable_table_metrics同时为true时才生效。
+
+##### max_table_metrics_num
+- 默认值: 100
+- 类型: -
+- 是否动态: 否
+- 描述: table metrics中表的最大数量, metrics/接口最多返回max_table_metrics_num个表的metrics。

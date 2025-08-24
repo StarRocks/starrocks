@@ -39,7 +39,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.EsTable;
@@ -91,13 +90,6 @@ public class EsScanNode extends ScanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-        super.init(analyzer);
-
-        assignNodes();
-    }
-
-    @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
         return shardScanRanges;
     }
@@ -107,7 +99,7 @@ public class EsScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+    public void finalizeStats() throws StarRocksException {
     }
 
     /**

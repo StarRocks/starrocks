@@ -57,6 +57,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -93,7 +94,7 @@ public class MetaHelper {
         String destFilename = Storage.IMAGE + "." + journalId;
         File partFile = new File(destDir, destFilename + MetaHelper.PART_SUFFIX);
         // 1. download to a tmp file image.xxx.part
-        try (OutputStream out = new FileOutputStream(partFile)) {
+        try (FileOutputStream out = new FileOutputStream(partFile)) {
             URL url = new URL(urlStr);
             conn = (HttpURLConnection) url.openConnection();
             conn.setConnectTimeout(timeout);
@@ -109,11 +110,13 @@ public class MetaHelper {
             BufferedInputStream bin = new BufferedInputStream(conn.getInputStream());
 
             // Do not limit speed in client side.
-            long bytes = IOUtils.copyBytes(bin, out, BUFFER_BYTES, CHECKPOINT_LIMIT_BYTES, true);
-
+            long bytes = IOUtils.copyBytes(bin, out, BUFFER_BYTES, CHECKPOINT_LIMIT_BYTES, false);
             if ((imageSize > 0) && (bytes != imageSize)) {
                 throw new IOException("Unexpected image size, expected: " + imageSize + ", actual: " + bytes);
             }
+
+            out.getChannel().force(true);
+
             checksum = conn.getHeaderField(X_IMAGE_CHECKSUM);
         } finally {
             if (conn != null) {
@@ -123,7 +126,11 @@ public class MetaHelper {
 
         // 2. write checksum if exists
         if (!Strings.isNullOrEmpty(checksum)) {
-            Files.writeString(Path.of(destDir.getAbsolutePath(), Storage.CHECKSUM + "." + journalId), checksum);
+            File checksumFile = Path.of(destDir.getAbsolutePath(), Storage.CHECKSUM + "." + journalId).toFile();
+            try (FileOutputStream fos = new FileOutputStream(checksumFile)) {
+                fos.write(checksum.getBytes(StandardCharsets.UTF_8));
+                fos.getChannel().force(true);
+            }
         }
 
         // 3. rename to image.xxx
@@ -201,42 +208,11 @@ public class MetaHelper {
 
     public static void checkMetaDir() throws InvalidMetaDirException,
                                              IOException {
-        // check meta dir
-        //   if metaDir is the default config: StarRocksFE.STARROCKS_HOME_DIR + "/meta",
-        //   we should check whether both the new default dir (STARROCKS_HOME_DIR + "/meta")
-        //   and the old default dir (DORIS_HOME_DIR + "/doris-meta") are present. If both are present,
-        //   we need to let users keep only one to avoid starting from outdated metadata.
-        Path oldDefaultMetaDir = Paths.get(System.getenv("DORIS_HOME") + "/doris-meta");
-        Path newDefaultMetaDir = Paths.get(System.getenv("STARROCKS_HOME") + "/meta");
         Path metaDir = Paths.get(Config.meta_dir);
-        if (metaDir.equals(newDefaultMetaDir)) {
-            File oldMeta = new File(oldDefaultMetaDir.toUri());
-            File newMeta = new File(newDefaultMetaDir.toUri());
-            if (oldMeta.exists() && newMeta.exists()) {
-                LOG.error("New default meta dir: {} and Old default meta dir: {} are both present. " +
-                                "Please make sure {} has the latest data, and remove the another one.",
-                        newDefaultMetaDir, oldDefaultMetaDir, newDefaultMetaDir);
-                throw new InvalidMetaDirException();
-            }
-        }
-
         File meta = new File(metaDir.toUri());
         if (!meta.exists()) {
-            // If metaDir is not the default config, it means the user has specified the other directory
-            // We should not use the oldDefaultMetaDir.
-            // Just exit in this case
-            if (!metaDir.equals(newDefaultMetaDir)) {
-                LOG.error("meta dir {} dose not exist", metaDir);
-                throw new InvalidMetaDirException();
-            }
-            File oldMeta = new File(oldDefaultMetaDir.toUri());
-            if (oldMeta.exists()) {
-                // For backward compatible
-                Config.meta_dir = oldDefaultMetaDir.toString();
-            } else {
-                LOG.error("meta dir {} does not exist", meta.getAbsolutePath());
-                throw new InvalidMetaDirException();
-            }
+            LOG.error("meta dir {} does not exist", metaDir);
+            throw new InvalidMetaDirException();
         }
 
         long lowerFreeDiskSize = Long.parseLong(EnvironmentParams.FREE_DISK.getDefault());

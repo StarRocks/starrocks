@@ -21,8 +21,10 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class CreateFunctionStmtTest {
     @Mocked
@@ -40,29 +42,31 @@ public class CreateFunctionStmtTest {
         CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 createFunctionSql, 32).get(0);
 
-        Assert.assertEquals("ABC", stmt.getFunctionName().getDb());
-        Assert.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
-        Assert.assertFalse(stmt.shouldReplaceIfExists());
+        Assertions.assertEquals("ABC", stmt.getFunctionName().getDb());
+        Assertions.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
+        Assertions.assertFalse(stmt.shouldReplaceIfExists());
     }
 
-    @Test(expected = Throwable.class)
-    public void testDisableUDF() throws Exception {
-        boolean val = Config.enable_udf;
-        try {
-            Config.enable_udf = false;
-            String createFunctionSql = "CREATE FUNCTION ABC.MY_UDF_JSON_GET(string, string) \n"
-                    + "RETURNS string \n"
-                    + "properties (\n"
-                    + "    \"symbol\" = \"com.starrocks.udf.sample.UDFJsonGet\",\n"
-                    + "    \"type\" = \"StarrocksJar\",\n"
-                    + "    \"file\" = \"http://http_host:http_port/udf-1.0-SNAPSHOT-jar-with-dependencies.jar\"\n"
-                    + ");";
-            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
-                    createFunctionSql, 32).get(0);
-            new CreateFunctionAnalyzer().analyze(stmt, ctx);
-        } finally {
-            Config.enable_udf = val;
-        }
+    @Test
+    public void testDisableUDF() {
+        assertThrows(Throwable.class, () -> {
+            boolean val = Config.enable_udf;
+            try {
+                Config.enable_udf = false;
+                String createFunctionSql = "CREATE FUNCTION ABC.MY_UDF_JSON_GET(string, string) \n"
+                        + "RETURNS string \n"
+                        + "properties (\n"
+                        + "    \"symbol\" = \"com.starrocks.udf.sample.UDFJsonGet\",\n"
+                        + "    \"type\" = \"StarrocksJar\",\n"
+                        + "    \"file\" = \"http://http_host:http_port/udf-1.0-SNAPSHOT-jar-with-dependencies.jar\"\n"
+                        + ");";
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                        createFunctionSql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, ctx);
+            } finally {
+                Config.enable_udf = val;
+            }
+        });
     }
 
     @Test
@@ -78,8 +82,8 @@ public class CreateFunctionStmtTest {
                 "$$;";
         CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 createFunctionSql, 32).get(0);
-        Assert.assertEquals("Python", stmt.getProperties().get("type"));
-        Assert.assertEquals("echo", stmt.getProperties().get("symbol"));
+        Assertions.assertEquals("Python", stmt.getProperties().get("type"));
+        Assertions.assertEquals("echo", stmt.getProperties().get("symbol"));
 
         createFunctionSql = "CREATE FUNCTION get_type(INT) RETURNS\n" +
                 "STRING\n" +
@@ -88,7 +92,7 @@ public class CreateFunctionStmtTest {
                 " file = 'http://localhost:8000/echo.py.zip';";
         stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 createFunctionSql, 32).get(0);
-        Assert.assertEquals(stmt.getProperties().get("file"), "http://localhost:8000/echo.py.zip");
+        Assertions.assertEquals(stmt.getProperties().get("file"), "http://localhost:8000/echo.py.zip");
 
     }
 
@@ -105,26 +109,28 @@ public class CreateFunctionStmtTest {
                 "$$;";
         CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 createFunctionSql, 32).get(0);
-        Assert.assertTrue(stmt.getContent().contains("\n"));
-        Assert.assertTrue(stmt.getContent().contains("def a(b):"));
+        Assertions.assertTrue(stmt.getContent().contains("\n"));
+        Assertions.assertTrue(stmt.getContent().contains("def a(b):"));
     }
 
-    @Test(expected = Throwable.class)
-    public void testGetIfDisableUDF() throws Exception {
-        boolean val = Config.enable_udf;
-        try {
-            Config.enable_udf = false;
-            FunctionName mock = FunctionName.createFnName("mock");
-            new Expectations(AnalyzerUtils.class) {
-                {
-                    AnalyzerUtils.getDBUdfFunction(ctx, mock, new Type[0]);
-                }
-            };
-            AnalyzerUtils.getUdfFunction(ctx, mock, new Type[0]);
+    @Test
+    public void testGetIfDisableUDF() {
+        assertThrows(Throwable.class, () -> {
+            boolean val = Config.enable_udf;
+            try {
+                Config.enable_udf = false;
+                FunctionName mock = FunctionName.createFnName("mock");
+                new Expectations(AnalyzerUtils.class) {
+                    {
+                        AnalyzerUtils.getDBUdfFunction(ctx, mock, new Type[0]);
+                    }
+                };
+                AnalyzerUtils.getUdfFunction(ctx, mock, new Type[0]);
 
-        } finally {
-            Config.enable_udf = val;
-        }
+            } finally {
+                Config.enable_udf = val;
+            }
+        });
     }
 
     @Test
@@ -139,9 +145,9 @@ public class CreateFunctionStmtTest {
         CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 createFunctionSql, 32).get(0);
 
-        Assert.assertEquals("ABC", stmt.getFunctionName().getDb());
-        Assert.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
-        Assert.assertTrue(stmt.shouldReplaceIfExists());
+        Assertions.assertEquals("ABC", stmt.getFunctionName().getDb());
+        Assertions.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
+        Assertions.assertTrue(stmt.shouldReplaceIfExists());
     }
 
     @Test
@@ -156,10 +162,10 @@ public class CreateFunctionStmtTest {
         CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 createFunctionSql, 32).get(0);
 
-        Assert.assertEquals("ABC", stmt.getFunctionName().getDb());
-        Assert.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
-        Assert.assertFalse(stmt.shouldReplaceIfExists());
-        Assert.assertTrue(stmt.createIfNotExists());
+        Assertions.assertEquals("ABC", stmt.getFunctionName().getDb());
+        Assertions.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
+        Assertions.assertFalse(stmt.shouldReplaceIfExists());
+        Assertions.assertTrue(stmt.createIfNotExists());
 
         createFunctionSql = "CREATE OR REPLACE FUNCTION IF NOT EXISTS ABC.MY_UDF_JSON_GET(string, string) \n"
                 + "RETURNS string \n"
@@ -172,7 +178,7 @@ public class CreateFunctionStmtTest {
             stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                     createFunctionSql, 32).get(0);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("\"IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together"));
+            Assertions.assertTrue(e.getMessage().contains("\"IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together"));
         }
     }
 }

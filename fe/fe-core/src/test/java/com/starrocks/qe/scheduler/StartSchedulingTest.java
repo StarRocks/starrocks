@@ -39,10 +39,10 @@ import org.apache.thrift.TException;
 import org.assertj.core.util.Sets;
 import org.awaitility.Awaitility;
 import org.jetbrains.annotations.NotNull;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -77,12 +77,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class StartSchedulingTest extends SchedulerTestBase {
     private boolean originalEnableProfile;
 
-    @Before
+    @BeforeEach
     public void before() {
         originalEnableProfile = connectContext.getSessionVariable().isEnableProfile();
     }
 
-    @After
+    @AfterEach
     public void after() {
         connectContext.getSessionVariable().setEnableProfile(originalEnableProfile);
     }
@@ -109,12 +109,12 @@ public class StartSchedulingTest extends SchedulerTestBase {
                 // Check cache desc table.
                 backendToNumInstances.compute(address, (k, v) -> {
                     if (v == null) {
-                        Assert.assertFalse(tRequest.desc_tbl.isIs_cached());
-                        Assert.assertFalse(tRequest.desc_tbl.getTupleDescriptors().isEmpty());
+                        Assertions.assertFalse(tRequest.desc_tbl.isIs_cached());
+                        Assertions.assertFalse(tRequest.desc_tbl.getTupleDescriptors().isEmpty());
                         return 1;
                     } else {
-                        Assert.assertTrue(tRequest.desc_tbl.isIs_cached());
-                        Assert.assertTrue(tRequest.desc_tbl.getTupleDescriptors().isEmpty());
+                        Assertions.assertTrue(tRequest.desc_tbl.isIs_cached());
+                        Assertions.assertTrue(tRequest.desc_tbl.getTupleDescriptors().isEmpty());
                         return v + 1;
                     }
                 });
@@ -126,11 +126,11 @@ public class StartSchedulingTest extends SchedulerTestBase {
         String sql = "select count(1) from lineitem UNION ALL select count(1) from lineitem";
         DefaultCoordinator scheduler = startScheduling(sql);
 
-        Assert.assertTrue(scheduler.getExecStatus().ok());
+        Assertions.assertTrue(scheduler.getExecStatus().ok());
 
         // Check instance number.
         backendToRequests.forEach((address, requests) -> requests.forEach(req ->
-                Assert.assertEquals(backendToNumInstances.get(address).intValue(), req.getParams().getInstances_number())));
+                Assertions.assertEquals(backendToNumInstances.get(address).intValue(), req.getParams().getInstances_number())));
 
         // Check backend number.
         fragmentToRequest.values().forEach(requestsOfFragment -> {
@@ -158,7 +158,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
 
         String sql = "select count(1) from lineitem";
 
-        Assert.assertThrows("test runtime exception", RpcException.class, () -> startScheduling(sql));
+        Assertions.assertThrows(RpcException.class, () -> startScheduling(sql), "test runtime exception");
         SimpleScheduler.removeFromBlocklist(backend3.getId());
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> !SimpleScheduler.isInBlocklist(backend3.getId()));
     }
@@ -186,21 +186,21 @@ public class StartSchedulingTest extends SchedulerTestBase {
 
         deployFuture.setRef(
                 mockFutureWithException(new ExecutionException("test execution exception", new Exception())));
-        Assert.assertThrows("test execution exception", RpcException.class, () -> startScheduling(sql));
+        Assertions.assertThrows(RpcException.class, () -> startScheduling(sql), "test execution exception");
         SimpleScheduler.removeFromBlocklist(backend3.getId());
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> !SimpleScheduler.isInBlocklist(backend3.getId()));
 
         isFirstFragmentToDeploy.set(true);
         deployFuture.setRef(mockFutureWithException(new InterruptedException("test interrupted exception")));
         DefaultCoordinator scheduler = getScheduler(sql);
-        Assert.assertThrows("test interrupted exception", StarRocksException.class, () -> scheduler.exec());
+        Assertions.assertThrows(StarRocksException.class, () -> scheduler.exec(), "test interrupted exception");
 
         // The deployed executions haven't reported.
-        Assert.assertFalse(scheduler.isDone());
+        Assertions.assertFalse(scheduler.isDone());
 
         // Shouldn't deploy the rest instances, when the previous instance deployment failed.
         ExecutionDAG executionDAG = scheduler.getExecutionDAG();
-        Assert.assertTrue(executionDAG.getExecutions().size() < executionDAG.getInstances().size());
+        Assertions.assertTrue(executionDAG.getExecutions().size() < executionDAG.getInstances().size());
         // Receive execution reports.
         executionDAG.getExecutions().forEach(execution -> {
             TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
@@ -211,7 +211,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
 
             scheduler.updateFragmentExecStatus(request);
         });
-        Assert.assertTrue(scheduler.isDone());
+        Assertions.assertTrue(scheduler.isDone());
     }
 
     @Test
@@ -262,7 +262,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
         String sql =
                 "select count(1) from lineitem UNION ALL select count(1) from lineitem UNION ALL select count(1) from lineitem";
         DefaultCoordinator scheduler = getScheduler(sql);
-        Assert.assertThrows(GlobalDictNotMatchException.class, scheduler::exec);
+        Assertions.assertThrows(GlobalDictNotMatchException.class, scheduler::exec);
     }
 
     @Test
@@ -306,10 +306,10 @@ public class StartSchedulingTest extends SchedulerTestBase {
         String sql =
                 "select count(1) from lineitem UNION ALL select count(1) from lineitem UNION ALL select count(1) from lineitem";
         DefaultCoordinator scheduler = getScheduler(sql);
-        Assert.assertThrows("test error message", StarRocksException.class, scheduler::exec);
+        Assertions.assertThrows(StarRocksException.class, scheduler::exec, "test error message");
 
         // All the deployed fragment instances should be cancelled.
-        Assert.assertEquals(successDeployedFragmentCount, cancelledInstanceIds.size());
+        Assertions.assertEquals(successDeployedFragmentCount, cancelledInstanceIds.size());
         assertThat(cancelledInstanceIds).containsExactlyElementsOf(deployedInstanceIds);
     }
 
@@ -341,7 +341,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
 
             String sql = "select count(1) from lineitem t1 JOIN [shuffle] lineitem t2 using(l_orderkey)";
             DefaultCoordinator scheduler = getScheduler(sql);
-            Assert.assertThrows("deploy query timeout", StarRocksException.class, () -> scheduler.exec());
+            Assertions.assertThrows(StarRocksException.class, () -> scheduler.exec(), "deploy query timeout");
         } finally {
             connectContext.getSessionVariable().setQueryDeliveryTimeoutS(prevQueryDeliveryTimeoutSecond);
         }
@@ -366,14 +366,14 @@ public class StartSchedulingTest extends SchedulerTestBase {
 
         String sql = "select count(1) from lineitem UNION ALL select count(1) from lineitem";
         DefaultCoordinator scheduler = startScheduling(sql);
-        Assert.assertTrue(scheduler.getExecStatus().ok());
+        Assertions.assertTrue(scheduler.getExecStatus().ok());
         ExecutionDAG executionDAG = scheduler.getExecutionDAG();
 
         // All the instances should be deployed.
-        Assert.assertEquals(executionDAG.getInstances().size(), executionDAG.getExecutions().size());
+        Assertions.assertEquals(executionDAG.getInstances().size(), executionDAG.getExecutions().size());
 
         scheduler.cancel("Cancel by test");
-        Assert.assertEquals(numSuccessCancelledInstances, successCancelledInstanceIds.size());
+        Assertions.assertEquals(numSuccessCancelledInstances, successCancelledInstanceIds.size());
         // Receive execution reports from the successfully cancelled instances.
         executionDAG.getExecutions().forEach(execution -> {
             if (successCancelledInstanceIds.contains(execution.getInstanceId())) {
@@ -387,7 +387,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
             }
         });
         // Shouldn't block by the failed cancelled instance.
-        Assert.assertTrue(scheduler.isDone());
+        Assertions.assertTrue(scheduler.isDone());
 
         SimpleScheduler.removeFromBlocklist(BACKEND1_ID);
         SimpleScheduler.removeFromBlocklist(backend2.getId());

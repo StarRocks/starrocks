@@ -15,9 +15,11 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
@@ -25,16 +27,15 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.ShowProcesslistStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TConnectionInfo;
 import com.starrocks.thrift.TListConnectionResponse;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -43,7 +44,7 @@ import java.util.List;
 public class ShowProcesslistStmtTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
     }
@@ -56,21 +57,21 @@ public class ShowProcesslistStmtTest {
 
     private void testSuccess(String originStmt) throws Exception {
         ShowProcesslistStmt stmt = (ShowProcesslistStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
-        Assert.assertNotNull(metaData);
-        Assert.assertEquals(12, metaData.getColumnCount());
-        Assert.assertEquals("ServerName", metaData.getColumn(0).getName());
-        Assert.assertEquals("Id", metaData.getColumn(1).getName());
-        Assert.assertEquals("User", metaData.getColumn(2).getName());
-        Assert.assertEquals("Host", metaData.getColumn(3).getName());
-        Assert.assertEquals("Db", metaData.getColumn(4).getName());
-        Assert.assertEquals("Command", metaData.getColumn(5).getName());
-        Assert.assertEquals("ConnectionStartTime", metaData.getColumn(6).getName());
-        Assert.assertEquals("Time", metaData.getColumn(7).getName());
-        Assert.assertEquals("State", metaData.getColumn(8).getName());
-        Assert.assertEquals("Info", metaData.getColumn(9).getName());
-        Assert.assertEquals("IsPending", metaData.getColumn(10).getName());
-        Assert.assertEquals("Warehouse", metaData.getColumn(11).getName());
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+        Assertions.assertNotNull(metaData);
+        Assertions.assertEquals(13, metaData.getColumnCount());
+        Assertions.assertEquals("ServerName", metaData.getColumn(0).getName());
+        Assertions.assertEquals("Id", metaData.getColumn(1).getName());
+        Assertions.assertEquals("User", metaData.getColumn(2).getName());
+        Assertions.assertEquals("Host", metaData.getColumn(3).getName());
+        Assertions.assertEquals("Db", metaData.getColumn(4).getName());
+        Assertions.assertEquals("Command", metaData.getColumn(5).getName());
+        Assertions.assertEquals("ConnectionStartTime", metaData.getColumn(6).getName());
+        Assertions.assertEquals("Time", metaData.getColumn(7).getName());
+        Assertions.assertEquals("State", metaData.getColumn(8).getName());
+        Assertions.assertEquals("Info", metaData.getColumn(9).getName());
+        Assertions.assertEquals("IsPending", metaData.getColumn(10).getName());
+        Assertions.assertEquals("Warehouse", metaData.getColumn(11).getName());
     }
 
     @Test
@@ -89,6 +90,13 @@ public class ShowProcesslistStmtTest {
             @Mock
             public List<Frontend> getFrontends(FrontendNodeType nodeType) {
                 return Lists.newArrayList(frontend1, frontend2);
+            }
+        };
+        String cnGroupName = "cngroup_0";
+        new MockUp<ConnectContext>() {
+            @Mock
+            public String getCurrentComputeResourceName() {
+                return cnGroupName;
             }
         };
 
@@ -125,6 +133,7 @@ public class ShowProcesslistStmtTest {
         tConnectionInfo.setInfo("info");
         tConnectionInfo.setIsPending("false");
         tConnectionInfo.setWarehouse("default_warehouse");
+        tConnectionInfo.setCngroup(cnGroupName);
         tListConnectionResponse.addToConnections(tConnectionInfo);
 
         try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
@@ -133,10 +142,11 @@ public class ShowProcesslistStmtTest {
                             -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenReturn(tListConnectionResponse);
             ShowResultSet showResultSet = ShowExecutor.execute(showProcesslistStmt, context);
-            Assert.assertEquals(3, showResultSet.getResultRows().size());
+            Assertions.assertEquals(3, showResultSet.getResultRows().size());
 
             List<List<String>> resultRows = showResultSet.getResultRows();
-            Assert.assertEquals("default_warehouse", resultRows.get(0).get(11));
+            Assertions.assertEquals("default_warehouse", resultRows.get(0).get(11));
+            Assertions.assertEquals(cnGroupName, resultRows.get(0).get(12));
         }
     }
 }

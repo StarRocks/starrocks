@@ -30,7 +30,7 @@
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/arrow_to_starrocks_converter.h"
-#include "exec/parquet_scanner.h"
+#include "exec/file_scanner/parquet_scanner.h"
 #include "runtime/datetime_value.h"
 #include "util/arrow/row_batch.h"
 

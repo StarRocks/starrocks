@@ -22,7 +22,6 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -63,15 +62,18 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
     public static final RewriteSimpleAggToHDFSScanRule SCAN_NO_PROJECT =
             new RewriteSimpleAggToHDFSScanRule(false);
 
+    public static final RewriteSimpleAggToHDFSScanRule SCAN_AND_PROJECT =
+            new RewriteSimpleAggToHDFSScanRule();
+
     private final boolean hasProjectOperator;
 
-    private RewriteSimpleAggToHDFSScanRule(boolean withoutProject) {
+    private RewriteSimpleAggToHDFSScanRule(boolean /* unused */ noProject) {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(MultiOpPattern.of(SUPPORTED)));
-        hasProjectOperator = withoutProject;
+        hasProjectOperator = false;
     }
 
-    public RewriteSimpleAggToHDFSScanRule() {
+    private RewriteSimpleAggToHDFSScanRule() {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT).addChildren(MultiOpPattern.of(SUPPORTED))));
         hasProjectOperator = true;
@@ -146,7 +148,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         } else if (scanOperator instanceof LogicalIcebergScanOperator) {
             newMetaScan = new LogicalIcebergScanOperator(scanOperator.getTable(),
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate(),
-                    scanOperator.getTableVersionRange());
+                    scanOperator.getTvrVersionRange());
         } else if (scanOperator instanceof LogicalFileScanOperator) {
             newMetaScan = new LogicalFileScanOperator(scanOperator.getTable(),
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());
@@ -155,6 +157,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return null;
         }
         newMetaScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption());
+        newMetaScan.getScanOptimizeOption().setCanUseCountOpt(true);
         try {
             newMetaScan.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
         } catch (AnalysisException e) {
@@ -208,13 +211,9 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return false;
         }
 
-        // filter only involved with partition keys.
-        if (scanOperator.getPredicate() != null) {
-            if (!scanOperator.getPartitionColumns()
-                    .containsAll(scanOperator.getPredicate().getColumnRefs().stream().map(x -> x.getName()).collect(
-                            Collectors.toList()))) {
-                return false;
-            }
+        // no materialized column in predicate of scan
+        if (hasMaterializedColumnInPredicate(scanOperator, scanOperator.getPredicate())) {
+            return false;
         }
 
         // all group by keys are partition keys.
@@ -224,18 +223,12 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return false;
         }
 
-        // no predicate on agg operator
-        if (aggregationOperator.getPredicate() != null) {
+        // no materialized column in predicate of aggregation
+        if (hasMaterializedColumnInPredicate(scanOperator, aggregationOperator.getPredicate())) {
             return false;
         }
 
-        if (scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
-            IcebergTable icebergTable = (IcebergTable) scanOperator.getTable();
-            if (!icebergTable.isUnPartitioned() && !icebergTable.isAllPartitionColumnsAlwaysIdentity()) {
-                return false;
-            }
-        }
-
+        // not applicable if there is no aggregation functions, like `distinct x`.
         if (aggregationOperator.getAggregations().isEmpty()) {
             return false;
         }
@@ -261,6 +254,20 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
                 }
         );
         return allValid;
+    }
+
+    private static boolean hasMaterializedColumnInPredicate(LogicalScanOperator scanOperator, ScalarOperator predicate) {
+        if (predicate == null) {
+            return false;
+        }
+        List<ColumnRefOperator> columnRefOperators = predicate.getColumnRefs();
+        Set<String> partitionColumns = scanOperator.getPartitionColumns();
+        for (ColumnRefOperator c : columnRefOperators) {
+            if (!partitionColumns.contains(c.getName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

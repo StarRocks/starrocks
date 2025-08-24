@@ -18,13 +18,14 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 public class AbstractBackupStmt extends DdlStmt {
     public enum BackupObjectType {
@@ -76,7 +77,7 @@ public class AbstractBackupStmt extends DdlStmt {
             this.allMarker = Sets.newHashSet();
         }
 
-        this.originDbName = originDbName;
+        this.originDbName = normalizeName(originDbName);
         this.withOnClause = withOnClause;
         this.properties = properties == null ? Maps.newHashMap() : properties;
     }

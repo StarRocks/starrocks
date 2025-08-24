@@ -16,8 +16,8 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserVariable;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class SelectHintTest extends PlanTestBase {
 
@@ -61,15 +61,15 @@ public class SelectHintTest extends PlanTestBase {
 
         String str = "[\"{\\\"week\\\":{\\\"day\\\":true,\\\"shift\\\":{\\\"begin\\\":0}},\\\"id\\\":\\\"ID1\\\"}\"]";
         String actual = UserVariable.removeEscapeCharacter(str);
-        Assert.assertEquals("[\"{\"week\":{\"day\":true,\"shift\":{\"begin\":0}},\"id\":\"ID1\"}\"]", actual);
+        Assertions.assertEquals("[\"{\"week\":{\"day\":true,\"shift\":{\"begin\":0}},\"id\":\"ID1\"}\"]", actual);
 
         str = "[\"{\\\"week\\\":{\\\"d\\\"ay\\\":true,\\\"shift\\\":{\\\"begin\\\":0}},\\\"id\\\":\\\"ID1\\\"}\"]";
         actual = UserVariable.removeEscapeCharacter(str);
-        Assert.assertEquals("[\"{\"week\":{\"d\"ay\":true,\"shift\":{\"begin\":0}},\"id\":\"ID1\"}\"]", actual);
+        Assertions.assertEquals("[\"{\"week\":{\"d\"ay\":true,\"shift\":{\"begin\":0}},\"id\":\"ID1\"}\"]", actual);
 
         str = "abc\\\\abc";
         actual = UserVariable.removeEscapeCharacter(str);
-        Assert.assertEquals("abc\\abc", actual);
+        Assertions.assertEquals("abc\\abc", actual);
     }
 
     @Test
@@ -100,7 +100,7 @@ public class SelectHintTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "percentile_approx(CAST(1: v1 AS DOUBLE), 1.0)");
 
-        Exception exception = Assert.assertThrows(SemanticException.class, () -> {
+        Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
             String invalidSql = "select /*+ set_user_variable(@a = 1, @b = 1000000) */ APPROX_TOP_K(v1, @a), " +
                     "APPROX_TOP_K(v1, @a, @b)from t0";
             getFragmentPlan(invalidSql);
@@ -108,13 +108,13 @@ public class SelectHintTest extends PlanTestBase {
         assertContains(exception.getMessage(), "The maximum number of the third parameter is 100000");
 
 
-        exception = Assert.assertThrows(SemanticException.class, () -> {
+        exception = Assertions.assertThrows(SemanticException.class, () -> {
             String invalidSql = "select /*+ set_user_variable(@a = [1, 2, 3]) */ LAG(v1, @a) over (ORDER BY v2) from t0";
             getFragmentPlan(invalidSql);
         });
         assertContains(exception.getMessage(), "The offset parameter of LEAD/LAG must be a constant positive integer");
 
-        exception = Assert.assertThrows(SemanticException.class, () -> {
+        exception = Assertions.assertThrows(SemanticException.class, () -> {
             String invalidSql = "select /*+ set_user_variable(@a = 1, @b = 10) */ percentile_approx(@a, @b) from t0";
             getFragmentPlan(invalidSql);
         });

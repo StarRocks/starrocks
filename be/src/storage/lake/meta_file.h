@@ -44,7 +44,7 @@ public:
                     const std::vector<std::vector<ColumnUID>>& unique_column_id_list);
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
-                       const std::vector<std::string>& orphan_files);
+                       const std::vector<FileMetaPB>& orphan_files);
     void apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
                             int64_t output_rowset_schema_id);

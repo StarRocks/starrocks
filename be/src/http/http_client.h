@@ -21,6 +21,7 @@
 
 #include <cstdio>
 #include <string>
+#include <unordered_map>
 
 #include "common/status.h"
 #include "common/statusor.h"
@@ -55,21 +56,24 @@ public:
     }
 
     // content_type such as "application/json"
-    void set_content_type(const std::string& content_type) {
-        std::string scratch_str = "Content-Type: " + content_type;
-        _header_list = curl_slist_append(_header_list, scratch_str.c_str());
-        curl_easy_setopt(_curl, CURLOPT_HTTPHEADER, _header_list);
-    }
+    void set_content_type(const std::string& content_type) { set_header("Content-Type", content_type); }
 
     void set_payload(const std::string& post_body) {
         curl_easy_setopt(_curl, CURLOPT_POSTFIELDSIZE, (long)post_body.length());
         curl_easy_setopt(_curl, CURLOPT_COPYPOSTFIELDS, post_body.c_str());
     }
 
-    // TODO(zc): support set header
-    // void set_header(const std::string& key, const std::string& value) {
-    // _cntl.http_request().SetHeader(key, value);
-    // }
+    // Set HTTP header
+    void set_header(const std::string& key, const std::string& value);
+
+    // Set multiple headers at once
+    void set_headers(const std::unordered_map<std::string, std::string>& headers);
+
+    // Clear all headers
+    void clear_headers();
+
+    // Set Authorization header with Bearer token (useful for LLM APIs)
+    void set_bearer_token(const std::string& token) { set_header("Authorization", "Bearer " + token); }
 
     std::string get_response_content_type() {
         char* ct = nullptr;
@@ -133,12 +137,18 @@ public:
 private:
     const char* _to_errmsg(CURLcode code);
 
+    // Apply all headers to curl
+    void _apply_headers();
+
 private:
     CURL* _curl = nullptr;
     using HttpCallback = std::function<bool(const void* data, size_t length)>;
     const HttpCallback* _callback = nullptr;
     char _error_buf[CURL_ERROR_SIZE];
     curl_slist* _header_list = nullptr;
+
+    // Store headers for easy management
+    std::unordered_map<std::string, std::string> _headers;
 };
 
 } // namespace starrocks

@@ -12,6 +12,8 @@ displayed_sidebar: docs
 
 如果为多表 UPDATE，则您需要确保 UPDATE 语句中 FROM 子句的表表达式可以转换成等价的 JOIN 查询语句。因为 StarRocks 实际执行 UPDATE 语句时，内部会进行这样的转换。假设 UPDATE 语句为 `UPDATE t0 SET v1=t1.v1 FROM t1 WHERE t0.pk = t1.pk;`，该 FROM 子句的表表达式可以转换为 `t0 JOIN t1 ON t0.pk=t1.pk;`。并且 StarRocks 根据 JOIN 查询的结果集，匹配待更新表的数据行，更新其指定列的值。如果结果集中存在多行数据和待更新表的某一行数据相匹配，则待更新表中这行数据指定列更新后的值，是结果集多行数据中随机一行的指定列的值。
 
+您可以使用系统变量 `insert_timeout` 来设置 UPDATE 操作的超时时间。
+
 ## 语法
 
 **单表 UPDATE**

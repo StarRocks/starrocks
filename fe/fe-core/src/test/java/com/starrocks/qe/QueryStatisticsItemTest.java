@@ -14,7 +14,7 @@
 
 package com.starrocks.qe;
 
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 class QueryStatisticsItemTest {
@@ -29,8 +29,8 @@ class QueryStatisticsItemTest {
                 .queryId("123")
                 .warehouseName("wh1").build();
 
-        Assert.assertEquals("wh1", item.getWarehouseName());
-        Assert.assertEquals("abc", item.getCustomQueryId());
-        Assert.assertEquals("123", item.getQueryId());
+        Assertions.assertEquals("wh1", item.getWarehouseName());
+        Assertions.assertEquals("abc", item.getCustomQueryId());
+        Assertions.assertEquals("123", item.getQueryId());
     }
 }

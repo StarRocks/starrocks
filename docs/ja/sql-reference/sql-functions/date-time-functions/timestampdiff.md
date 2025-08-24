@@ -13,7 +13,7 @@ MILLISECOND (3.2 以降)、SECOND、MINUTE、HOUR、DAY、WEEK、MONTH、また�
 ## Syntax
 
 ```Haskell
-INT TIMESTAMPDIFF(unit,DATETIME datetime_expr1, DATETIME datetime_expr2)
+BIGINT TIMESTAMPDIFF(unit,DATETIME datetime_expr1, DATETIME datetime_expr2)
 ```
 
 ## Parameters
@@ -23,7 +23,7 @@ INT TIMESTAMPDIFF(unit,DATETIME datetime_expr1, DATETIME datetime_expr2)
 
 ## Return value
 
-INT 値を返します。
+BIGINT 値を返します。
 
 ## Examples
 

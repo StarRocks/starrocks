@@ -17,19 +17,18 @@
 #include "common/status.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaColumnStatsUsageScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(1024), sizeof(StringValue), false},
-        {"TABLE_DATABASE", TypeDescriptor::create_varchar_type(1024), sizeof(StringValue), false},
-        {"TABLE_NAME", TypeDescriptor::create_varchar_type(1024), sizeof(StringValue), false},
-        {"COLUMN_NAME", TypeDescriptor::create_varchar_type(1024), sizeof(StringValue), false},
-        {"USAGE", TypeDescriptor::create_varchar_type(1024), sizeof(StringValue), false},
-        {"LAST_USED", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(StringValue), false},
-        {"CREATED", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(StringValue), false},
+        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(1024), sizeof(Slice), false},
+        {"TABLE_DATABASE", TypeDescriptor::create_varchar_type(1024), sizeof(Slice), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(1024), sizeof(Slice), false},
+        {"COLUMN_NAME", TypeDescriptor::create_varchar_type(1024), sizeof(Slice), false},
+        {"USAGE", TypeDescriptor::create_varchar_type(1024), sizeof(Slice), false},
+        {"LAST_USED", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(Slice), false},
+        {"CREATED", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(Slice), false},
 };
 
 SchemaColumnStatsUsageScanner::SchemaColumnStatsUsageScanner()

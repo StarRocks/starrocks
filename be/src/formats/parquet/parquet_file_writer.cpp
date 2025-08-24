@@ -96,6 +96,10 @@ int64_t ParquetFileWriter::get_allocated_bytes() {
     return _memory_pool.bytes_allocated();
 }
 
+int64_t ParquetFileWriter::get_flush_batch_size() {
+    return _writer_options->rowgroup_size;
+}
+
 Status ParquetFileWriter::_flush_row_group() {
     DCHECK(_rowgroup_writer != nullptr);
     try {
@@ -433,7 +437,7 @@ Status ParquetFileWriter::init() {
 
     ASSIGN_OR_RETURN(auto compression, _convert_compression_type(_compression_type));
     _properties = std::make_unique<::parquet::WriterProperties::Builder>()
-                          ->version(::parquet::ParquetVersion::PARQUET_2_6)
+                          ->version(_writer_options->version)
                           ->enable_write_page_index()
                           ->data_pagesize(_writer_options->page_size)
                           ->write_batch_size(_writer_options->write_batch_size)
@@ -476,6 +480,18 @@ Status ParquetFileWriterFactory::init() {
     if (_options.contains(ParquetWriterOptions::USE_INT96_TIMESTAMP_ENCODING)) {
         _parsed_options->use_int96_timestamp_encoding =
                 boost::iequals(_options[ParquetWriterOptions::USE_INT96_TIMESTAMP_ENCODING], "true");
+    }
+    if (_options.contains(ParquetWriterOptions::VERSION)) {
+        const std::string& version = _options[ParquetWriterOptions::VERSION];
+        if (boost::iequals(version, "1.0")) {
+            _parsed_options->version = ::parquet::ParquetVersion::PARQUET_1_0;
+        } else if (boost::iequals(version, "2.4")) {
+            _parsed_options->version = ::parquet::ParquetVersion::PARQUET_2_4;
+        } else if (boost::iequals(version, "2.6")) {
+            _parsed_options->version = ::parquet::ParquetVersion::PARQUET_2_6;
+        } else {
+            return Status::NotSupported(fmt::format("parquet version {} is not supported", version));
+        }
     }
 #ifndef BE_TEST
     _parsed_options->time_zone = _runtime_state->timezone();

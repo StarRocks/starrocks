@@ -21,23 +21,25 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.Collection;
 
 import static com.starrocks.sql.plan.ConnectorPlanTestBase.MOCK_PAIMON_CATALOG_NAME;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class PartitionBasedMvRefreshProcessorPaimonTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
-        ConnectorPlanTestBase.mockCatalog(connectContext, MOCK_PAIMON_CATALOG_NAME, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockCatalog(connectContext, MOCK_PAIMON_CATALOG_NAME, newFolder(temp, "junit").toURI().toString());
     }
 
     @Test
@@ -60,7 +62,7 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVTestBase {
                     triggerRefreshMv(testDb, unpartitionedMaterializedView);
 
                     Collection<Partition> partitions = unpartitionedMaterializedView.getPartitions();
-                    Assert.assertEquals(1, partitions.size());
+                    Assertions.assertEquals(1, partitions.size());
 
                     String query = "SELECT pk, d  FROM `paimon0`.`pmn_db1`.`unpartitioned_table` as a";
                     String plan = getFragmentPlan(query);
@@ -90,10 +92,10 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVTestBase {
                     triggerRefreshMv(testDb, partitionedMaterializedView);
 
                     Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
-                    Assert.assertEquals(10, partitions.size());
+                    Assertions.assertEquals(10, partitions.size());
                     triggerRefreshMv(testDb, partitionedMaterializedView);
 
-                    Assert.assertEquals(10, partitionedMaterializedView.getPartitions().size());
+                    Assertions.assertEquals(10, partitionedMaterializedView.getPartitions().size());
                     triggerRefreshMv(testDb, partitionedMaterializedView);
 
                     String query = "SELECT d, count(pk) FROM " +
@@ -112,5 +114,14 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
     }
 }

@@ -359,4 +359,83 @@ TEST_F(ColumnZoneMapTest, NormalTestCharPage) {
     test_string("NormalTestCharPage", type_info);
 }
 
+// Test for varbinary
+TEST_F(ColumnZoneMapTest, NormalTestVarbinaryPage) {
+    TabletColumn varbinary_column = create_varbinary_key(0);
+    TypeInfoPtr type_info = get_type_info(varbinary_column);
+    test_string("NormalTestVarbinaryPage", type_info);
+}
+
+// Test for varbinary with binary data
+TEST_F(ColumnZoneMapTest, VarbinaryWithBinaryData) {
+    std::string filename = kTestDir + "/VarbinaryWithBinaryData";
+
+    TabletColumn varbinary_column = create_varbinary_key(0);
+    TypeInfoPtr type_info = get_type_info(varbinary_column);
+
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    // Add binary data with various patterns
+    std::vector<std::string> binary_values1 = {
+            std::string("\x00\x01\x02\x03", 4), // Binary data starting with null bytes
+            std::string("\xFF\xFE\xFD\xFC", 4), // Binary data with high bytes
+            std::string("ABCD", 4),             // ASCII data
+            std::string("\x00\x00\x00\x00", 4), // All null bytes
+    };
+
+    for (auto& value : binary_values1) {
+        Slice slice(value);
+        writer->add_values((const uint8_t*)&slice, 1);
+    }
+    writer->flush();
+
+    // Add more binary data with different patterns
+    std::vector<std::string> binary_values2 = {
+            std::string("\x01\x02\x03\x04", 4), std::string("\xFE\xFD\xFC\xFB", 4), std::string("EFGH", 4),
+            std::string("\xFF\xFF\xFF\xFF", 4), // All high bytes
+    };
+
+    for (auto& value : binary_values2) {
+        Slice slice(value);
+        writer->add_values((const uint8_t*)&slice, 1);
+    }
+    writer->add_nulls(1);
+    writer->flush();
+
+    // Add null values
+    writer->add_nulls(3);
+    writer->flush();
+
+    // Write out zone map index
+    ColumnIndexMetaPB index_meta;
+    write_file(*writer, index_meta, filename);
+
+    // Read and verify
+    ZoneMapIndexReader column_zone_map;
+    load_zone_map(column_zone_map, index_meta, filename);
+
+    ASSERT_EQ(3, column_zone_map.num_pages());
+    const std::vector<ZoneMapPB>& zone_maps = column_zone_map.page_zone_maps();
+    ASSERT_EQ(3, zone_maps.size());
+
+    // Check first page - should have min/max from binary_values1
+    // For binary data, comparison is byte-by-byte, so "\x00\x00\x00\x00" is min and "\xFF\xFE\xFD\xFC" is max
+    check_result(zone_maps[0], true, true, std::string("\x00\x00\x00\x00", 4), std::string("\xFF\xFE\xFD\xFC", 4),
+                 false, true);
+
+    // Check second page - should have min/max from binary_values2 plus null
+    // "\x01\x02\x03\x04" is min and "\xFF\xFF\xFF\xFF" is max
+    check_result(zone_maps[1], true, true, std::string("\x01\x02\x03\x04", 4), std::string("\xFF\xFF\xFF\xFF", 4), true,
+                 true);
+
+    // Check third page - should be all nulls
+    check_result(zone_maps[2], false, false, "", "", true, false);
+
+    // Check segment zonemap - should cover all data
+    // The segment zonemap should have the overall min/max across all pages
+    const auto& segment_zonemap = index_meta.zone_map_index().segment_zone_map();
+    check_result(segment_zonemap, true, true, std::string("\x00\x00\x00\x00", 4), std::string("\xFF\xFF\xFF\xFF", 4),
+                 true, true);
+}
+
 } // namespace starrocks

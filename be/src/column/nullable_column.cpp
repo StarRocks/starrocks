@@ -474,6 +474,26 @@ void NullableColumn::crc32_hash_selective(uint32_t* hash, uint16_t* sel, uint16_
     }
 }
 
+void NullableColumn::murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const {
+    if (!_has_null) {
+        _data_column->murmur_hash3_x86_32(hash, from, to);
+        return;
+    }
+
+    const auto& null_data = _null_column->get_data();
+    while (from < to) {
+        uint32_t new_from = from + 1;
+        while (new_from < to && null_data[from] == null_data[new_from]) {
+            ++new_from;
+        }
+        // skip null data
+        if (!null_data[from]) {
+            _data_column->murmur_hash3_x86_32(hash, from, new_from);
+        }
+        from = new_from;
+    }
+}
+
 int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     if (!_has_null) {
         return _data_column->xor_checksum(from, to);

@@ -195,14 +195,14 @@ public:
     void update_allocation(int64_t bytes) {
         if (bytes <= 0) return;
         for (auto* tracker : _all_trackers) {
-            tracker->_allocation->update(bytes);
+            COUNTER_UPDATE(tracker->_allocation, bytes);
         }
     }
 
     void update_deallocation(int64_t bytes) {
         if (bytes <= 0) return;
         for (auto* tracker : _all_trackers) {
-            tracker->_deallocation->update(bytes);
+            COUNTER_UPDATE(tracker->_deallocation, bytes);
         }
     }
 
@@ -374,9 +374,9 @@ public:
 
     int64_t consumption() const { return _consumption->current_value(); }
 
-    int64_t peak_consumption() const { return _consumption->value(); }
-    int64_t allocation() const { return _allocation->value(); }
-    int64_t deallocation() const { return _deallocation->value(); }
+    int64_t peak_consumption() const { return COUNTER_VALUE(_consumption); }
+    int64_t allocation() const { return COUNTER_VALUE(_allocation); }
+    int64_t deallocation() const { return COUNTER_VALUE(_deallocation); }
 
     MemTracker* parent() const { return _parent; }
 
@@ -393,8 +393,8 @@ public:
         msg << "limit: " << _limit << "; "
             << "reserve_limit: " << _reserve_limit << "; "
             << "consumption: " << _consumption->current_value() << "; "
-            << "allocation: " << _allocation->value() << "; "
-            << "deallocation: " << _deallocation->value() << "; "
+            << "allocation: " << COUNTER_VALUE(_allocation) << "; "
+            << "deallocation: " << COUNTER_VALUE(_deallocation) << "; "
             << "label: " << _label << "; "
             << "all tracker size: " << _all_trackers.size() << "; "
             << "limit trackers size: " << _limit_trackers.size() << "; "

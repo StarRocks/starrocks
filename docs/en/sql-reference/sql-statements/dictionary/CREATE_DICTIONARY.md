@@ -54,18 +54,29 @@ CREATE DICTIONARY <dictionary_object_name> USING <dictionary_source>
 
 Take the following dictionary table as an example and insert test data.
 
-```Plain
-MySQL > CREATE TABLE dict (
+```sql
+CREATE TABLE dict (
     order_uuid STRING,
     order_id_int BIGINT AUTO_INCREMENT 
 )
 PRIMARY KEY (order_uuid)
 DISTRIBUTED BY HASH (order_uuid);
-Query OK, 0 rows affected (0.02 sec)
-MySQL > INSERT INTO dict (order_uuid) VALUES ('a1'), ('a2'), ('a3');
+```
+
+```sql
+INSERT INTO dict (order_uuid) VALUES ('a1'), ('a2'), ('a3');
+```
+
+```sql
 Query OK, 3 rows affected (0.12 sec)
 {'label':'insert_9e60b0e4-89fa-11ee-a41f-b22a2c00f66b', 'status':'VISIBLE', 'txnId':'15029'}
-MySQL > SELECT * FROM dict;
+```
+
+```sql
+SELECT * FROM dict;
+```
+
+```sql
 +------------+--------------+
 | order_uuid | order_id_int |
 +------------+--------------+
@@ -78,17 +89,19 @@ MySQL > SELECT * FROM dict;
 
 Create a dictionary object based on the mappings in this dictionary table.
 
-```Plain
-MySQL > CREATE DICTIONARY dict_obj USING dict
+```sql
+CREATE DICTIONARY dict_obj USING dict
     (order_uuid KEY,
      order_id_int VALUE);
-Query OK, 0 rows affected (0.00 sec)
 ```
 
 For future queries of the mappings in the dictionary table, you can directly query the dictionary object instead of the dictionary table. For example, query the value mapped by key `a1`.
 
-```Plain
-MySQL > SELECT dictionary_get("dict_obj", "a1");
+```sql
+SELECT dictionary_get("dict_obj", "a1");
+```
+
+```sql
 +--------------------+
 | DICTIONARY_GET     |
 +--------------------+
@@ -101,8 +114,8 @@ MySQL > SELECT dictionary_get("dict_obj", "a1");
 
 Take the following dimension table as an example and insert test data.
 
-```Plain
-MySQL > CREATE TABLE ProductDimension (
+```sql
+CREATE TABLE ProductDimension (
     ProductKey BIGINT AUTO_INCREMENT,
     ProductName VARCHAR(100) NOT NULL,
     Category VARCHAR(50),
@@ -113,16 +126,28 @@ MySQL > CREATE TABLE ProductDimension (
 )
 PRIMARY KEY (ProductKey)
 DISTRIBUTED BY HASH (ProductKey);
-MySQL > INSERT INTO ProductDimension (ProductName, Category, SubCategory, Brand, Color, Size)
+```
+
+```sql
+INSERT INTO ProductDimension (ProductName, Category, SubCategory, Brand, Color, Size)
 VALUES
     ('T-Shirt', 'Apparel', 'Shirts', 'BrandA', 'Red', 'M'),
     ('Jeans', 'Apparel', 'Pants', 'BrandB', 'Blue', 'L'),
     ('Running Shoes', 'Footwear', 'Athletic', 'BrandC', 'Black', '10'),
     ('Jacket', 'Apparel', 'Outerwear', 'BrandA', 'Green', 'XL'),
     ('Baseball Cap', 'Accessories', 'Hats', 'BrandD', 'White', 'OneSize');
+```
+
+```sql
 Query OK, 5 rows affected (0.48 sec)
 {'label':'insert_e938481f-181e-11ef-a6a9-00163e19e14e', 'status':'VISIBLE', 'txnId':'50'}
-MySQL > SELECT * FROM ProductDimension;
+```
+
+```sql
+SELECT * FROM ProductDimension;
+```
+
+```sql
 +------------+---------------+-------------+-------------+--------+-------+---------+
 | ProductKey | ProductName   | Category    | SubCategory | Brand  | Color | Size    |
 +------------+---------------+-------------+-------------+--------+-------+---------+
@@ -137,8 +162,8 @@ MySQL > SELECT * FROM ProductDimension;
 
 Create a dictionary object to replace the original dimension table.
 
-```Plain
-MySQL > CREATE DICTIONARY dimension_obj USING ProductDimension 
+```sql
+CREATE DICTIONARY dimension_obj USING ProductDimension 
     (ProductKey KEY,
      ProductName VALUE,
      Category VALUE,
@@ -146,17 +171,23 @@ MySQL > CREATE DICTIONARY dimension_obj USING ProductDimension
      Brand VALUE,
      Color VALUE,
      Size VALUE);
+```
+
+```sql
 Query OK, 0 rows affected (0.00 sec)
 ```
 
 For future queries of dimension values, you can directly query the dictionary object instead of the dimension table to obtain dimension values. For example, query the value mapped by key `1`.
 
-```Plain
-MySQL > SELECT dictionary_get("dict_obj", "a1");
-+--------------------+
-| DICTIONARY_GET     |
-+--------------------+
-| {"order_id_int":1} |
-+--------------------+
+```sql
+SELECT dictionary_get("dict_obj", "a1");
+```
+
+```sql
 1 row in set (0.01 sec)
++-----------------------------------------+
+| DICTIONARY_GET('dict_obj', 'a1', false) |
++-----------------------------------------+
+| {"order_id_int":1}                      |
++-----------------------------------------+
 ```

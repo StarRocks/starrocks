@@ -12,21 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.persist.TaskSchedule;
-import com.starrocks.sql.ast.UserIdentity;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.Map;
 
 public class Task implements Writable {
@@ -214,11 +209,6 @@ public class Task implements Writable {
 
     public void setPostRun(String postRun) {
         this.postRun = postRun;
-    }
-
-    public static Task read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Task.class);
     }
 
     @Override

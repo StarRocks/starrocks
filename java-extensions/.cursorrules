@@ -1,0 +1,177 @@
+# StarRocks Java Extensions Cursor Rules
+
+## Overview
+Java Extensions provide connectivity to external data sources and extend StarRocks functionality through Java-based components. These extensions enable StarRocks to read from various external systems and provide extensibility through user-defined functions.
+
+## ⚠️ BUILD WARNING
+**DO NOT attempt to build or run tests unless explicitly requested.** The Maven build system can be resource-intensive.
+
+## Java Extensions Architecture
+
+### External Data Connectors
+
+#### Hadoop Ecosystem
+- `hadoop-ext/` - Hadoop ecosystem integration
+  - Core Hadoop file system support
+  - Hadoop configuration management
+  - Security integration (Kerberos)
+
+#### Data Lake Formats
+- `hive-reader/` - Apache Hive data reader
+  - Hive metastore integration
+  - Hive table format support
+  - Partition handling
+
+- `hudi-reader/` - Apache Hudi integration
+  - Copy-on-write and merge-on-read tables
+  - Timeline and metadata handling
+  - Incremental query support
+
+- `iceberg-metadata-reader/` - Apache Iceberg metadata reader
+  - Iceberg table format support
+  - Snapshot and schema evolution
+  - Partition and file pruning
+
+- `paimon-reader/` - Apache Paimon reader
+  - Paimon table format support
+  - Real-time and batch data access
+  - Schema evolution handling
+
+#### NoSQL and Analytics
+- `kudu-reader/` - Apache Kudu connector
+  - Kudu table scanning
+  - Predicate pushdown
+  - Column pruning
+
+- `odps-reader/` - ODPS (MaxCompute) reader
+  - Alibaba Cloud MaxCompute integration
+  - Table and partition access
+  - Data type mapping
+
+#### Connectivity
+- `jdbc-bridge/` - JDBC connectivity bridge
+  - Generic JDBC data source support
+  - Connection pooling
+  - Query pushdown capabilities
+
+- `jni-connector/` - JNI connectors for C++ integration
+  - Bridge between Java extensions and C++ backend
+  - Memory management for cross-language calls
+  - Type conversion utilities
+
+### Runtime and Utilities
+
+#### Core Runtime
+- `common-runtime/` - Common runtime for Java extensions
+  - Shared utilities and base classes
+  - Configuration management
+  - Logging and error handling
+
+#### Development Tools
+- `java-utils/` - Java utilities and helper classes
+  - Common data structures
+  - Utility functions
+  - Helper methods for connector development
+
+#### User-Defined Functions
+- `udf-extensions/` - UDF extension framework
+  - UDF registration and lifecycle management
+  - Type system integration
+  - Performance optimization
+
+- `udf-examples/` - User-defined function examples
+  - Sample UDF implementations
+  - Best practices and patterns
+  - Testing examples
+
+### Dependencies
+- `hadoop-lib/` - Hadoop library dependencies
+  - Hadoop client libraries
+  - Version management
+  - Compatibility handling
+
+## Development Guidelines
+
+### Project Structure
+- Each extension follows Maven standard directory layout
+- `src/main/java/` - Main source code
+- `src/test/java/` - Unit tests
+- `pom.xml` - Maven build configuration
+
+### Key Interfaces
+- `Connector` - Main connector interface
+- `ConnectorMetadata` - Metadata operations
+- `ConnectorScanRangeSource` - Data scanning
+- `RemoteFileIO` - File I/O operations
+
+### Common Patterns
+- **Builder Pattern**: Used for configuration objects
+- **Factory Pattern**: For creating connector instances
+- **Template Method**: For common connector operations
+- **Strategy Pattern**: For different data access strategies
+
+### Data Type Mapping
+- Consistent mapping between external system types and StarRocks types
+- Handle nullable vs non-nullable types appropriately
+- Support for complex types (arrays, maps, structs) where applicable
+
+### Performance Considerations
+- **Predicate Pushdown**: Push filters to external systems when possible
+- **Column Pruning**: Only read required columns
+- **Partition Pruning**: Skip unnecessary partitions
+- **Parallel Processing**: Support parallel data reading
+- **Memory Management**: Efficient memory usage for large datasets
+
+### Error Handling
+- Use StarRocks exception hierarchy
+- Provide meaningful error messages
+- Handle connection failures gracefully
+- Implement retry mechanisms where appropriate
+
+### Configuration
+- Support both system-wide and per-table configuration
+- Use consistent naming conventions for properties
+- Provide sensible defaults
+- Document all configuration options
+
+### Testing
+- Unit tests for core functionality
+- Integration tests with external systems (when available)
+- Mock external dependencies for reliable testing
+- Performance benchmarks for critical paths
+
+### Security
+- Support authentication mechanisms of external systems
+- Handle credentials securely
+- Support encryption in transit
+- Implement proper access control
+
+## Build System
+- Root `pom.xml` manages all extensions
+- Each extension has its own Maven module
+- Shared dependencies managed at parent level
+- Profiles for different build configurations
+
+## Contribution Guidelines
+
+### PR Titles for Java Extensions Changes
+Use appropriate prefixes for Java extensions PRs:
+- `[BugFix] Fix Hive partition metadata reading issue`
+- `[Feature] Add Delta Lake deletion vector support`
+- `[Enhancement] Improve JDBC connector connection pooling`
+- `[Performance] Optimize Iceberg metadata caching`
+
+### Commit Message Examples for Java Extensions
+```
+[Feature] Add support for Kudu connector predicate pushdown
+
+Implement predicate pushdown optimization for Kudu connector
+to reduce data transfer and improve query performance.
+
+- Add predicate conversion from StarRocks to Kudu format
+- Implement column pruning optimization
+- Add support for complex predicate expressions
+- Include integration tests with Kudu test cluster
+
+Closes: #12345
+```

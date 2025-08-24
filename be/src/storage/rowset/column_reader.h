@@ -197,7 +197,11 @@ public:
 
     const std::vector<std::unique_ptr<ColumnReader>>* sub_readers() const { return _sub_readers.get(); }
 
+    bool is_flat_json() const { return _is_flat_json; }
     bool has_remain_json() const { return _has_remain; }
+
+    // Return the pointer to the remain filter if it exists, otherwise return nullptr.
+    const BloomFilter* get_remain_filter() const { return _remain_filter ? _remain_filter.get() : nullptr; }
 
 private:
     StatusOr<std::unique_ptr<ColumnIterator>> _new_json_iterator(ColumnAccessPath* path = nullptr,

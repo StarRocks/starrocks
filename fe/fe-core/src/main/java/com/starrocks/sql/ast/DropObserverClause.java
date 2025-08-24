@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropObserverClause extends FrontendClause {
@@ -25,7 +24,7 @@ public class DropObserverClause extends FrontendClause {
     }
 
     public DropObserverClause(String hostPort, NodePosition pos) {
-        super(hostPort, FrontendNodeType.OBSERVER, pos);
+        super(hostPort, pos);
     }
 
     @Override

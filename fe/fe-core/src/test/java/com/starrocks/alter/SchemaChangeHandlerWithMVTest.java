@@ -26,14 +26,14 @@ import com.starrocks.utframe.TestWithFeService;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.FixMethodOrder;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.Map;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandlerWithMVTest.class);
@@ -73,6 +73,11 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
         }
     }
 
+    @Override
+    protected void createStarrocksCluster() {
+        UtFrameUtils.createMinStarRocksCluster(false, runMode);
+    }
+
     private void waitAlterJobDone(Map<Long, AlterJobV2> alterJobs) throws Exception {
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
             while (!alterJobV2.getJobState().isFinalState()) {
@@ -80,7 +85,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                 Thread.sleep(500);
             }
             LOG.info("alter job {} is done. state: {}", alterJobV2.getJobId(), alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+            Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
 
             OlapTable tbl = (OlapTable) starRocksAssert.getTable("test", alterJobV2.tableName);
             while (tbl.getState() != OlapTableState.NORMAL) {
@@ -124,7 +129,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                     "alter table sc_dup3 drop column op_id");
             jobSize++;
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -136,7 +141,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                     "alter table sc_dup3 drop column error_code");
             jobSize++;
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -149,7 +154,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                     "create materialized view mv1 as select error_code, error_msg, timestamp from sc_dup3",
                     "alter table sc_dup3 modify column error_code BIGINT");
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -161,7 +166,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                             "where type > 10",
                     "alter table sc_dup3 modify column error_code BIGINT");
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -173,7 +178,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                             "where type > 10",
                     "alter table sc_dup3 modify column type BIGINT");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can not drop/modify the column type, because the column is used " +
+            Assertions.assertTrue(e.getMessage().contains("Can not drop/modify the column type, because the column is used " +
                     "in the related rollup mv1 with the where expr:`test`.`sc_dup3`.`type` > 10, " +
                     "please drop the rollup index first."));
         }
@@ -188,9 +193,9 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                             "group by timestamp",
                     "alter table sc_dup3 drop column op_id");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(),
-                    e.getMessage().contains("Can not drop/modify the column timestamp, because the column " +
-                    "is used in the related rollup mv1, please drop the rollup index first."));
+            Assertions.assertTrue(e.getMessage().contains("Can not drop/modify the column timestamp, because the column " +
+                    "is used in the related rollup mv1, please drop the rollup index first."),
+                    e.getMessage());
         }
     }
 
@@ -202,7 +207,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                             "group by timestamp",
                     "alter table sc_dup3 drop column timestamp");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can not drop/modify the column timestamp, because the column " +
+            Assertions.assertTrue(e.getMessage().contains("Can not drop/modify the column timestamp, because the column " +
                     "is used in the related rollup mv1, please drop the rollup index first."));
         }
     }
@@ -216,7 +221,8 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                             "group by timestamp",
                     "alter table sc_dup3 drop column error_code");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can not drop/modify the column mv_count_error_code, because the column " +
+            Assertions.assertTrue(
+                    e.getMessage().contains("Can not drop/modify the column mv_count_error_code, because the column " +
                     "is used in the related rollup mv1 with the define expr:" +
                     "CASE WHEN `test`.`sc_dup3`.`error_code` IS NULL THEN 0 ELSE 1 END, please drop the rollup index first."));
         }
@@ -231,7 +237,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                             "group by timestamp",
                     "alter table sc_dup3 modify column error_code BIGINT");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can not drop/modify the column mv_count_error_code, because " +
+            Assertions.assertTrue(e.getMessage().contains("Can not drop/modify the column mv_count_error_code, because " +
                     "the column is used in the related rollup mv1 with the define expr:" +
                     "CASE WHEN `test`.`sc_dup3`.`error_code` IS NULL THEN 0 ELSE 1 END, please drop the rollup index first."));
         }
@@ -245,7 +251,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                             "where type > 10 group by timestamp",
                     "alter table sc_dup3 modify column type BIGINT");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can not drop/modify the column type, because the column is " +
+            Assertions.assertTrue(e.getMessage().contains("Can not drop/modify the column type, because the column is " +
                     "used in the related rollup mv1 with the where expr:`test`.`sc_dup3`.`type` > 10, " +
                     "please drop the rollup index first."));
         }
@@ -260,7 +266,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                             "where type > 10 group by timestamp",
                     "alter table sc_dup3 drop column type");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can not drop/modify the column type, because the column is " +
+            Assertions.assertTrue(e.getMessage().contains("Can not drop/modify the column type, because the column is " +
                     "used in the related rollup mv1 with the where expr:`test`.`sc_dup3`.`type` > 10, " +
                     "please drop the rollup index first."));
         }
@@ -276,10 +282,10 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                     "alter table sc_dup3 drop column op_id",
                     false);
             MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
-            Assert.assertFalse(mv.isActive());
-            Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: op_id"));
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: op_id"));
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         } finally {
             try {
                 starRocksAssert.dropMaterializedView("mv1");
@@ -299,10 +305,10 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                     "alter table sc_dup3 drop column error_code",
                     false);
             MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
-            Assert.assertFalse(mv.isActive());
-            Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: error_code"));
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: error_code"));
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         } finally {
             try {
                 starRocksAssert.dropMaterializedView("mv1");
@@ -322,10 +328,10 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                     "alter table sc_dup3 modify column error_code BIGINT",
                     false);
             MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
-            Assert.assertFalse(mv.isActive());
-            Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: error_code"));
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: error_code"));
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         } finally {
             try {
                 starRocksAssert.dropMaterializedView("mv1");
@@ -345,10 +351,10 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                     "alter table sc_dup3 modify column op_id VARCHAR",
                     false);
             MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
-            Assert.assertFalse(mv.isActive());
-            Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: op_id"));
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: op_id"));
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         } finally {
             try {
                 starRocksAssert.dropMaterializedView("mv1");
@@ -368,9 +374,9 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                     "alter table sc_dup3 modify column error_msg VARCHAR(1025)",
                     false);
             MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
-            Assert.assertTrue(mv.isActive());
+            Assertions.assertTrue(mv.isActive());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         } finally {
             try {
                 starRocksAssert.dropMaterializedView("mv1");
@@ -390,9 +396,9 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                     "alter table sc_dup3 drop column error_code, add column col_add bigint",
                     false);
             MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
-            Assert.assertFalse(mv.isActive());
+            Assertions.assertFalse(mv.isActive());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         } finally {
             try {
                 starRocksAssert.dropMaterializedView("mv1");

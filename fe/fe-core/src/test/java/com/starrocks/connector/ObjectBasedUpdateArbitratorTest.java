@@ -47,9 +47,9 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,7 +62,7 @@ public class ObjectBasedUpdateArbitratorTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
@@ -96,13 +96,13 @@ public class ObjectBasedUpdateArbitratorTest {
         TableUpdateArbitrator.UpdateContext updateContext =
                 new TableUpdateArbitrator.UpdateContext(hiveTable, -1, partitionNames);
         TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-        Assert.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
+        Assertions.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
         Map<String, Optional<HivePartitionDataInfo>> hivePartitionDataInfo = arbitrator.getPartitionDataInfos();
-        Assert.assertEquals(4, hivePartitionDataInfo.size());
-        Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240501"));
-        Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240502"));
-        Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240503"));
-        Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240504"));
+        Assertions.assertEquals(4, hivePartitionDataInfo.size());
+        Assertions.assertTrue(hivePartitionDataInfo.containsKey("date=20240501"));
+        Assertions.assertTrue(hivePartitionDataInfo.containsKey("date=20240502"));
+        Assertions.assertTrue(hivePartitionDataInfo.containsKey("date=20240503"));
+        Assertions.assertTrue(hivePartitionDataInfo.containsKey("date=20240504"));
     }
 
     @Test
@@ -129,30 +129,30 @@ public class ObjectBasedUpdateArbitratorTest {
             TableUpdateArbitrator.UpdateContext updateContext =
                     new TableUpdateArbitrator.UpdateContext(hiveTable, 2, partitionNames);
             TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-            Assert.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
+            Assertions.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
             Map<String, Optional<HivePartitionDataInfo>> hivePartitionDataInfo = arbitrator.getPartitionDataInfos();
-            Assert.assertEquals(2, hivePartitionDataInfo.size());
-            Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240503"));
-            Assert.assertFalse(hivePartitionDataInfo.get("date=20240503").isPresent());
-            Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240504"));
-            Assert.assertTrue(hivePartitionDataInfo.get("date=20240504").isPresent());
+            Assertions.assertEquals(2, hivePartitionDataInfo.size());
+            Assertions.assertTrue(hivePartitionDataInfo.containsKey("date=20240503"));
+            Assertions.assertFalse(hivePartitionDataInfo.get("date=20240503").isPresent());
+            Assertions.assertTrue(hivePartitionDataInfo.containsKey("date=20240504"));
+            Assertions.assertTrue(hivePartitionDataInfo.get("date=20240504").isPresent());
         }
 
         {
             TableUpdateArbitrator.UpdateContext updateContext =
                     new TableUpdateArbitrator.UpdateContext(hiveTable, 10, partitionNames);
             TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-            Assert.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
+            Assertions.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
             Map<String, Optional<HivePartitionDataInfo>> hivePartitionDataInfo = arbitrator.getPartitionDataInfos();
-            Assert.assertEquals(4, hivePartitionDataInfo.size());
-            Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240501"));
-            Assert.assertFalse(hivePartitionDataInfo.get("date=20240501").isPresent());
-            Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240502"));
-            Assert.assertTrue(hivePartitionDataInfo.get("date=20240502").isPresent());
-            Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240503"));
-            Assert.assertTrue(hivePartitionDataInfo.get("date=20240503").isPresent());
-            Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240504"));
-            Assert.assertTrue(hivePartitionDataInfo.get("date=20240504").isPresent());
+            Assertions.assertEquals(4, hivePartitionDataInfo.size());
+            Assertions.assertTrue(hivePartitionDataInfo.containsKey("date=20240501"));
+            Assertions.assertFalse(hivePartitionDataInfo.get("date=20240501").isPresent());
+            Assertions.assertTrue(hivePartitionDataInfo.containsKey("date=20240502"));
+            Assertions.assertTrue(hivePartitionDataInfo.get("date=20240502").isPresent());
+            Assertions.assertTrue(hivePartitionDataInfo.containsKey("date=20240503"));
+            Assertions.assertTrue(hivePartitionDataInfo.get("date=20240503").isPresent());
+            Assertions.assertTrue(hivePartitionDataInfo.containsKey("date=20240504"));
+            Assertions.assertTrue(hivePartitionDataInfo.get("date=20240504").isPresent());
         }
     }
 

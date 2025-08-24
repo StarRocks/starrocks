@@ -14,16 +14,13 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.PartitionType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
 public class SingleRangePartitionDesc extends SinglePartitionDesc {
-    private PartitionKeyDesc partitionKeyDesc;
+    private final PartitionKeyDesc partitionKeyDesc;
 
     public SingleRangePartitionDesc(boolean ifNotExists, String partName, PartitionKeyDesc partitionKeyDesc,
                                     Map<String, String> properties) {
@@ -33,23 +30,11 @@ public class SingleRangePartitionDesc extends SinglePartitionDesc {
     public SingleRangePartitionDesc(boolean ifNotExists, String partName, PartitionKeyDesc partitionKeyDesc,
                                     Map<String, String> properties, NodePosition pos) {
         super(ifNotExists, partName, properties, pos);
-        this.type = PartitionType.RANGE;
         this.partitionKeyDesc = partitionKeyDesc;
     }
 
     public PartitionKeyDesc getPartitionKeyDesc() {
         return partitionKeyDesc;
-    }
-
-    public void analyze(int partColNum, Map<String, String> tableProperties) throws AnalysisException {
-        FeNameFormat.checkPartitionName(getPartitionName());
-        partitionKeyDesc.analyze(partColNum);
-
-        if (partColNum == 1) {
-            analyzeProperties(tableProperties, partitionKeyDesc);
-        } else {
-            analyzeProperties(tableProperties, null);
-        }
     }
 
     @Override

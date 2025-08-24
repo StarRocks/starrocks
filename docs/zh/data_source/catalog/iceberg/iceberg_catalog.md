@@ -109,7 +109,7 @@ PROPERTIES
     "type" = "iceberg",
     MetastoreParams,
     StorageCredentialParams,
-    MetadataUpdateParams
+    MetadataRelatedParams
 )
 ```
 
@@ -759,11 +759,11 @@ Google GCS 的 `StorageCredentialParams`：
 
 ---
 
-#### MetadataUpdateParams
+#### MetadataRelatedParams
 
-关于 StarRocks 如何更新 Iceberg 元数据缓存的一组参数。此参数集是可选的。
+关于 StarRocks Iceberg 元数据缓存的一组参数。此参数集是可选的。
 
-从 v3.3.3 开始，StarRocks 支持 [周期性元数据刷新策略](#附录-a-周期性元数据刷新策略)。在大多数情况下，您可以忽略 `MetadataUpdateParams`，不需要调整其中的策略参数，因为这些参数的默认值已经为您提供了开箱即用的性能。您可以使用系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg 元数据解析模式。
+从 v3.3.3 开始，StarRocks 支持 [周期性元数据刷新策略](#附录-a-周期性元数据刷新策略)。在大多数情况下，您可以忽略设置以下参数，不需要调整其中的策略参数，因为这些参数的默认值已经为您提供了开箱即用的性能。您可以使用系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg 元数据解析模式。
 
 | **参数**                                 | **默认值**           | **描述**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
@@ -771,6 +771,12 @@ Google GCS 的 `StorageCredentialParams`：
 | iceberg_manifest_cache_with_column_statistics | false                 | 是否缓存列的统计信息。                  |
 | iceberg_manifest_cache_max_num                | 100000                | 可以缓存的 Manifest 文件的最大数量。     |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发数据文件缓存刷新的最小 Manifest 文件长度。 |
+
+从 v3.4 起，StarRocks 在没有主动触发收集 Iceberg 表统计信息的情况下，可以通过设置以下参数读取 Iceberg 的元数据来获取 Iceberg 表的统计信息。
+
+| **参数**                                       | **默认值**             | **描述**                       |
+| :-------------------------------------------- | :-------------------- | :----------------------------- | 
+| enable_get_stats_from_external_metadata       | false                 | 是否允许系统从 Iceberg 元数据中获取统计信息。当此项设置为 `true` 时，您可以通过会话变量 [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata) 进一步控制要收集的统计信息类型。 |
 
 ### 示例
 
@@ -1298,10 +1304,18 @@ col_name col_type [COMMENT 'comment']
 `partition_desc` 的语法如下：
 
 ```SQL
-PARTITION BY (par_col1[, par_col2...])
+PARTITION BY (partition_expr[, partition_expr...])
 ```
 
-目前 StarRocks 仅支持 [identity transforms](https://iceberg.apache.org/spec/#partitioning)，这意味着 StarRocks 为每个唯一的分区值创建一个分区。
+每个 `partition_expr` 可以是以下形式之一：
+
+```SQL
+column_name
+| transform_expr(column_name)
+| transform_expr(column_name, parameter)
+```
+
+当前，StarRocks 支持 Apache Iceberg 规范 [transform expr](https://iceberg.apache.org/spec/#partitioning) 中定义的分区转换表达式。这使得 StarRocks 能够基于转换后的列值创建具有隐藏分区 (Hidden Partition) 的 Iceberg 表。
 
 :::note
 
@@ -1364,6 +1378,16 @@ PARTITION BY (par_col1[, par_col2...])
    AS SELECT * from employee;
    ```
 
+4. 创建一个名为 `partition_tbl_3` 的表，使用隐藏分区。该表包含三个列：`action`、`id` 和 `dt`。其中，`id` 和 `dt` 用作分区键，但分区是通过转换表达式定义的，因此这些分区是隐藏的。
+
+   ```SQL
+   CREATE TABLE partition_tbl_3 (
+     action VARCHAR(20),
+     id INT,
+     dt DATE
+   )
+   PARTITION BY bucket(id, 10), year(dt);
+   ```
 ---
 
 ### 将数据下沉到 Iceberg 表
@@ -1485,6 +1509,66 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ```SQL
 DROP TABLE <table_name> [FORCE];
+```
+
+### 创建 Iceberg 视图
+
+您可以通过 StarRocks 定义 Iceberg 视图，或者对已有 Iceberg 视图增加 StarRocks 语法风格的定义。在查询视图时，支持读取视图的 StarRocks 定义。此功能从 v3.5 开始支持。
+
+```SQL
+CREATE VIEW [IF NOT EXISTS]
+[<catalog>.<database>.]<view_name>
+(
+    <column_name>[ COMMENT 'column comment']
+    [, <column_name>[ COMMENT 'column comment'], ...]
+)
+[COMMENT 'view comment']
+AS <query_statement>
+```
+
+#### 示例
+
+基于 Iceberg 表 `iceberg_table` 创建 Iceberg 视图 `iceberg_view1`。
+
+```SQL
+CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
+SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+### 为已有 Iceberg 视图增加或修改 StarRocks 语法风格的定义
+
+如果您的 Iceberg 视图由其他系统，如 Apache Spark 创建，同时您希望该视图可以被 StarRocks 查询，则您可以为该视图增加 StarRocks 语法风格的定义。此功能从 v3.5 开始支持。
+
+:::note
+
+- 您需要提前验证确保 StarRocks 语法的定义与其他系统的定义实际含义相同，StarRocks 或其他系统不保证不同定义之间的一致性。
+- 一个视图仅能拥有一个 StarRocks 语法风格的定义，如您希望修改，可以使用 MODIFY 语句进行重写。
+
+:::
+
+```SQL
+ALTER VIEW
+[<catalog>.<database>.]<view_name>
+(
+    <column_name>
+    [, <column_name>]
+)
+{ ADD | MODIFY } DIALECT
+<query_statement>
+```
+
+#### 示例
+
+1. 为已有的 Iceberg 视图 `iceberg_view2` 增加 StarRocks 语法定义。
+
+```SQL
+ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+2. 修改 Iceberg 视图 `iceberg_view2` 的 StarRocks 语法定义。
+
+```SQL
+ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
 ```
 
 ---

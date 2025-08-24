@@ -92,6 +92,14 @@ public:
         }
     }
 
+    static inline int count_one_bits(uint32_t x) {
+#ifdef __POPCNT__
+        return __builtin_popcount(x);
+#else
+        return Bits::CountOnes(x);
+#endif
+    }
+
     // Returns the 'num_bits' least-significant bits of 'v'.
     static inline uint64_t trailing_bits(uint64_t v, int num_bits) {
         if (UNLIKELY(num_bits == 0)) {

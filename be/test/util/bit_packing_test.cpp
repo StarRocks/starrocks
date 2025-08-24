@@ -14,11 +14,11 @@
 
 #include <gtest/gtest.h>
 
-#include "util/bit_packing.inline.h"
+#include "util/bit_packing_default.h"
 
-namespace starrocks {
+namespace starrocks::util::bitpacking_default {
 TEST(BitPacking, UnpackValue) {
-    uint8_t data[BitPacking::MAX_BITWIDTH * 32 / 8];
+    uint8_t data[MAX_BITWIDTH * 32 / 8];
     for (unsigned char& i : data) {
         i = 0x8;
     }
@@ -35,13 +35,13 @@ TEST(BitPacking, UnpackValue) {
 }
 
 TEST(BitPacking, Unpack32Values) {
-    uint8_t data[BitPacking::MAX_BITWIDTH * 32 / 8];
+    uint8_t data[MAX_BITWIDTH * 32 / 8];
     for (unsigned char& i : data) {
         i = 0x8;
     }
 
     uint64_t result[32];
-    const uint8_t* pos = BitPacking::Unpack32Values<uint64_t, 4>(data, BitPacking::MAX_BITWIDTH * 32 / 8, result);
+    const uint8_t* pos = Unpack32Values<uint64_t, 4>(data, MAX_BITWIDTH * 32 / 8, result);
     ASSERT_EQ(pos, data + 4 * 32 / 8);
 
     for (size_t i = 0; i < 32; i++) {
@@ -60,7 +60,7 @@ TEST(BitPacking, UnpackUpTo31Values) {
     }
 
     uint64_t result[15];
-    const uint8_t* pos = BitPacking::UnpackUpTo31Values<uint64_t, 4>(data, 4 * 15, 15, result);
+    const uint8_t* pos = UnpackUpTo31Values<uint64_t, 4>(data, 4 * 15, 15, result);
     ASSERT_EQ(pos, data + 4 * 15 / 8 + 1);
 
     for (size_t i = 0; i < 15; i++) {
@@ -73,7 +73,7 @@ TEST(BitPacking, UnpackUpTo31Values) {
 }
 
 TEST(BitPacking, UnpackValues) {
-    uint8_t data[BitPacking::MAX_BITWIDTH * 48 / 8];
+    uint8_t data[MAX_BITWIDTH * 48 / 8];
     for (unsigned char& i : data) {
         i = 0x8;
     }
@@ -81,7 +81,7 @@ TEST(BitPacking, UnpackValues) {
     uint64_t result[48];
     const uint8_t* pos = nullptr;
     int64_t num = 0;
-    std::tie(pos, num) = BitPacking::UnpackValues<uint64_t>(4, data, 4 * 48 / 8, 48, result);
+    std::tie(pos, num) = UnpackValues<uint64_t>(4, data, 4 * 48 / 8, 48, result);
     ASSERT_EQ(pos, data + 4 * 48 / 8);
     ASSERT_EQ(num, 48);
 
@@ -94,4 +94,4 @@ TEST(BitPacking, UnpackValues) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::util::bitpacking_default

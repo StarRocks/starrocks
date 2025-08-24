@@ -26,7 +26,7 @@ namespace starrocks::spill {
 
 Status DirManager::init(const std::string& spill_dirs) {
     std::vector<starrocks::StorePath> spill_local_storage_paths;
-    RETURN_IF_ERROR(parse_conf_store_paths(spill_dirs, &spill_local_storage_paths));
+    RETURN_IF_ERROR(parse_conf_store_paths(spill_dirs, &spill_local_storage_paths, "config::spill_local_storage_dir"));
     if (spill_local_storage_paths.empty()) {
         return Status::InvalidArgument("cannot find spill_local_storage_dir");
     }

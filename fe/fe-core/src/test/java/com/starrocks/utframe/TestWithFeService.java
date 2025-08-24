@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
@@ -31,7 +32,6 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import org.junit.jupiter.api.AfterAll;
@@ -62,7 +62,7 @@ import java.util.UUID;
  * thus we could wrap common logic in this base class. It's more easy to use.
  * Note:
  * Unit-test method in derived classes must use the JUnit5 {@link org.junit.jupiter.api.Test}
- * annotation, rather than the old JUnit4 {@link org.junit.Test} or others.
+ * annotation, rather than the old JUnit4 {@link org.junit.jupiter.api.Test} or others.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class TestWithFeService {

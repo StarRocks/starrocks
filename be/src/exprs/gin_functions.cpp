@@ -22,7 +22,6 @@
 #include "column/array_column.h"
 #include "column/column_viewer.h"
 #include "column/datum.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 
@@ -32,6 +31,7 @@ Status GinFunctions::tokenize_prepare(FunctionContext* context, FunctionContext:
     }
 
     auto column = context->get_constant_column(0);
+    RETURN_IF(column == nullptr, Status::InvalidArgument("Tokenize function requires constant parameter"));
     auto method = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
 
     lucene::analysis::Analyzer* analyzer;
@@ -115,3 +115,4 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
 }
 
 } // namespace starrocks
+#include "gen_cpp/opcode/GinFunctions.inc"

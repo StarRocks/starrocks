@@ -45,6 +45,8 @@ import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -298,7 +300,8 @@ public class HudiTable extends Table {
         }
 
         if (tableType == HudiTableType.MOR) {
-            tHudiTable.setInstant_time(lastInstant == null ? "" : lastInstant.getCompletionTime());
+            tHudiTable.setInstant_time(lastInstant == null ? "" :
+                    Collections.max(Arrays.asList(lastInstant.requestedTime(), lastInstant.getCompletionTime())));
         }
 
         tHudiTable.setHive_column_names(hudiProperties.get(HUDI_TABLE_COLUMN_NAMES));

@@ -17,8 +17,8 @@ package com.starrocks.planner;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.RemoteMetaSplit;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.IcebergMetaSpec;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -59,10 +59,10 @@ public class IcebergMetadataScanNode extends ScanNode {
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private String serializedTable;
     private boolean loadColumnStats;
-    private final TableVersionRange version;
+    private final TvrVersionRange version;
     private final MetadataTableType metadataTableType;
 
-    public IcebergMetadataScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, TableVersionRange version) {
+    public IcebergMetadataScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, TvrVersionRange version) {
         super(id, desc, planNodeName);
         this.table = (MetadataTable) desc.getTable();
         this.metadataTableType = table.getMetadataTableType();
@@ -138,7 +138,6 @@ public class IcebergMetadataScanNode extends ScanNode {
         msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
-        tHdfsScanNode.setCan_use_min_max_count_opt(false);
 
         String explainString = getExplainString(conjuncts);
         LOG.info("Explain string: " + explainString);

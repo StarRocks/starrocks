@@ -147,12 +147,6 @@ public class MVEpoch implements Writable {
         LOG.info("onEpochReport done: {}", this);
     }
 
-    public static MVEpoch read(DataInput input) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(input), MVEpoch.class);
-    }
-
-
-
     public TMVEpoch toThrift() {
         TMVEpoch res = new TMVEpoch();
         // TODO(murphy) generate an epoch id instead of txn id

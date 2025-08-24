@@ -54,8 +54,8 @@ import static com.starrocks.catalog.Type.ARRAY_TINYINT;
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.catalog.Type.TINYINT;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 class BaseScalarOperatorShuttleTest {
 

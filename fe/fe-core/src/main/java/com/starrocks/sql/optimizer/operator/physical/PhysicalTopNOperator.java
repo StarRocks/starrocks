@@ -166,6 +166,12 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     public void fillDisableDictOptimizeColumns(ColumnRefSet resultSet, Set<Integer> dictColIds) {
         // nothing to do
+        if (preAggCall == null) {
+            return;
+        }
+        preAggCall.forEach((k, v) -> {
+            resultSet.union(v.getUsedColumns());
+        });
     }
 
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
@@ -207,6 +213,12 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         public Builder setPartitionByColumns(
                 List<ColumnRefOperator> partitionByColumns) {
             builder.partitionByColumns = partitionByColumns;
+            return this;
+        }
+
+        public Builder setPreAggregate(
+                Map<ColumnRefOperator, CallOperator> preAggCall) {
+            builder.preAggCall = preAggCall;
             return this;
         }
     }

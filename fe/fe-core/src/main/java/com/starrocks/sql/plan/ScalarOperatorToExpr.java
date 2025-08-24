@@ -58,6 +58,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -167,6 +168,10 @@ public class ScalarOperatorToExpr {
                 hackTypeNull(expr);
                 context.colRefToExpr.put(node, expr);
                 return expr;
+            }
+            if (expr == null) {
+                throw new SemanticException("Cannot convert ColumnRefOperator to Expr, " +
+                        "please check the input expression: " + node);
             }
 
             hackTypeNull(expr);
@@ -387,7 +392,7 @@ public class ScalarOperatorToExpr {
         public Expr visitMatchExprOperator(MatchExprOperator operator, FormatterContext context) {
             Expr child1 = buildExpr.build(operator.getChild(0), context);
             Expr child2 = buildExpr.build(operator.getChild(1), context);
-            return new MatchExpr(child1, child2);
+            return new MatchExpr(operator.getMatchOperator(), child1, child2);
         }
 
         @Override

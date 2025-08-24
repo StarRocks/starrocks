@@ -25,13 +25,13 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.system.Backend;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -46,10 +46,11 @@ import java.util.Set;
  * Second we test fully matched balance, i.e. we add enough backends to match the location
  * requirement of the table, and see whether the balance works as expected.
  */
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class LocationLabeledTableBalanceTest {
     private static final long WAIT_FOR_CLONE_TIMEOUT = 30000;
-    @BeforeClass
+
+    @BeforeAll
     public static void setUp() throws Exception {
         Config.tablet_sched_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
@@ -65,7 +66,7 @@ public class LocationLabeledTableBalanceTest {
         cluster.runSql(null, "create database test");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown();
     }
@@ -75,7 +76,7 @@ public class LocationLabeledTableBalanceTest {
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void test1BestEffortBalance() throws SQLException, InterruptedException {
         // Initialize 3 backends with location: rack:r1, rack:r1, rack:r2
         PseudoCluster cluster = PseudoCluster.getInstance();
@@ -121,12 +122,12 @@ public class LocationLabeledTableBalanceTest {
                     ", clone tasks finished: " + stat.counterCloneTaskSucceeded.get());
             Thread.sleep(500);
             if (System.currentTimeMillis() - start > WAIT_FOR_CLONE_TIMEOUT) {
-                Assert.fail("wait for enough clone tasks for location balance finished timeout");
+                Assertions.fail("wait for enough clone tasks for location balance finished timeout");
             }
         }
         System.out.println("new backend tablets: " + getBackendTabletsByTable(newBackend, olapTable.getId()) +
                 ", clone tasks finished: " + stat.counterCloneTaskSucceeded.get());
-        Assert.assertEquals(3, getBackendTabletsByTable(newBackend, olapTable.getId()).size());
+        Assertions.assertEquals(3, getBackendTabletsByTable(newBackend, olapTable.getId()).size());
 
         // Add another backend with location property rack:r3, check location mismatch repair
         // Replicas will be moved from last added backend(with no location) to this backend.
@@ -138,10 +139,10 @@ public class LocationLabeledTableBalanceTest {
                     ", clone tasks finished: " + stat.counterCloneTaskSucceeded.get());
             Thread.sleep(500);
             if (System.currentTimeMillis() - start > WAIT_FOR_CLONE_TIMEOUT) {
-                Assert.fail("wait for enough clone tasks for location balance finished timeout");
+                Assertions.fail("wait for enough clone tasks for location balance finished timeout");
             }
         }
-        Assert.assertEquals(5, getBackendTabletsByTable(newBackend, olapTable.getId()).size());
+        Assertions.assertEquals(5, getBackendTabletsByTable(newBackend, olapTable.getId()).size());
 
         // Wait for redundant replicas deleted.
         start = System.currentTimeMillis();
@@ -153,7 +154,7 @@ public class LocationLabeledTableBalanceTest {
             firstNewBackendTabletCnt = getBackendTabletsByTable(cluster.getBackend(firstNewBackend),
                     olapTable.getId()).size();
             if (System.currentTimeMillis() - start > WAIT_FOR_CLONE_TIMEOUT) {
-                Assert.fail("wait for replica decommission for location balance finished timeout");
+                Assertions.fail("wait for replica decommission for location balance finished timeout");
             }
         }
     }
@@ -175,7 +176,7 @@ public class LocationLabeledTableBalanceTest {
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void test2LocationMatchedBalance() throws InterruptedException, SQLException {
         Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable olapTable = (OlapTable) test.getTable("test_table_best_effort_balance");
@@ -192,7 +193,7 @@ public class LocationLabeledTableBalanceTest {
             printTabletReplicaInfo(olapTable);
             Thread.sleep(1000);
             if (System.currentTimeMillis() - start > WAIT_FOR_CLONE_TIMEOUT) {
-                Assert.fail("wait for enough clone tasks for location balance finished timeout");
+                Assertions.fail("wait for enough clone tasks for location balance finished timeout");
             }
         }
 
@@ -214,7 +215,7 @@ public class LocationLabeledTableBalanceTest {
             oldBackendTabletCnt = getBackendTabletsByTable(
                     PseudoCluster.getInstance().getBackend(backendIds.iterator().next()), olapTable.getId()).size();
             if (System.currentTimeMillis() - start > WAIT_FOR_CLONE_TIMEOUT) {
-                Assert.fail("wait for replica decommission for location balance finished timeout");
+                Assertions.fail("wait for replica decommission for location balance finished timeout");
             }
         }
     }

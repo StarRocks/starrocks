@@ -36,10 +36,10 @@ import mockit.Mocked;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -48,6 +48,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class BDBEnvironmentTest {
     private static final Logger LOG = LogManager.getLogger(BDBEnvironmentTest.class);
@@ -59,7 +61,7 @@ public class BDBEnvironmentTest {
         return f;
     }
 
-    @After
+    @AfterEach
     public void cleanup() throws Exception {
         for (File tmpDir : tmpDirs) {
             FileUtils.deleteDirectory(tmpDir);
@@ -77,7 +79,7 @@ public class BDBEnvironmentTest {
     }
 
 
-    @Ignore
+    @Disabled
     @Test
     public void testSetupStandalone() throws Exception {
         long startMs = System.currentTimeMillis();
@@ -97,32 +99,34 @@ public class BDBEnvironmentTest {
 
         DatabaseEntry newvalue = new DatabaseEntry();
         db.get(null, key, newvalue, LockMode.READ_COMMITTED);
-        Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
+        Assertions.assertEquals(new String(value.getData()), new String(newvalue.getData()));
         db.close();
         environment.close();
         System.out.println("testSetupStandalone cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     // address already in use
-    @Ignore
-    @Test(expected = JournalException.class)
-    public void testSetupStandaloneMultitimes() throws Exception {
-        long startMs = System.currentTimeMillis();
-        try {
-            String selfNodeHostPort = findUnbindHostPort();
-            for (int i = 0; i < 2; i++) {
-                BDBEnvironment environment = new BDBEnvironment(
-                        createTmpDir(),
-                        "standalone",
-                        selfNodeHostPort,
-                        selfNodeHostPort,
-                        true);
-                environment.setup(true);
+    @Disabled
+    @Test
+    public void testSetupStandaloneMultitimes() {
+        assertThrows(JournalException.class, () -> {
+            long startMs = System.currentTimeMillis();
+            try {
+                String selfNodeHostPort = findUnbindHostPort();
+                for (int i = 0; i < 2; i++) {
+                    BDBEnvironment environment = new BDBEnvironment(
+                            createTmpDir(),
+                            "standalone",
+                            selfNodeHostPort,
+                            selfNodeHostPort,
+                            true);
+                    environment.setup(true);
+                }
+                Assertions.fail();
+            } finally {
+                System.out.println("testSetupStandaloneMultitimes cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
             }
-            Assert.fail();
-        } finally {
-            System.out.println("testSetupStandaloneMultitimes cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
-        }
+        });
     }
 
     /**
@@ -174,7 +178,7 @@ public class BDBEnvironmentTest {
                 leaderNodeHostPort,
                 true);
         leaderEnvironment.setup(true);
-        Assert.assertEquals(0, leaderEnvironment.getDatabaseNames().size());
+        Assertions.assertEquals(0, leaderEnvironment.getDatabaseNames().size());
 
         // set up 2 followers
         for (int i = 0; i < 2; i++) {
@@ -189,7 +193,7 @@ public class BDBEnvironmentTest {
                     true);
             followerEnvironments[i] = followerEnvironment;
             followerEnvironment.setup(true);
-            Assert.assertEquals(0, followerEnvironment.getDatabaseNames().size());
+            Assertions.assertEquals(0, followerEnvironment.getDatabaseNames().size());
         }
         BDBEnvironment.RETRY_TIME = 3;
         BDBEnvironment.SLEEP_INTERVAL_SEC = 1;
@@ -241,7 +245,7 @@ public class BDBEnvironmentTest {
                 leaderNodeHostPort,
                 leaderNodeHostPort,
                 true);
-        Assert.assertTrue(true);
+        Assertions.assertTrue(true);
         try {
             maserEnvironment.setup(true);
         } catch (JournalException e) {
@@ -297,7 +301,7 @@ public class BDBEnvironmentTest {
         LOG.info("---------------------");
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testAddBadFollowerNoFailover() throws Exception {
         long startMs = System.currentTimeMillis();
@@ -305,7 +309,7 @@ public class BDBEnvironmentTest {
         System.out.println("testAddBadFollowerNoFailover cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testAddBadFollowerAfterFailover() throws Exception {
         long startMs = System.currentTimeMillis();
@@ -386,22 +390,22 @@ public class BDBEnvironmentTest {
         };
 
         List<Long> l1 = environment.getDatabaseNamesWithPrefix("");
-        Assert.assertEquals(2, l1.size());
-        Assert.assertEquals((Long) 1001L, l1.get(0));
-        Assert.assertEquals((Long) 2001L, l1.get(1));
+        Assertions.assertEquals(2, l1.size());
+        Assertions.assertEquals((Long) 1001L, l1.get(0));
+        Assertions.assertEquals((Long) 2001L, l1.get(1));
 
         List<Long> l2 = environment.getDatabaseNamesWithPrefix("aaa_");
-        Assert.assertEquals(2, l2.size());
-        Assert.assertEquals((Long) 3001L, l2.get(0));
-        Assert.assertEquals((Long) 4001L, l2.get(1));
+        Assertions.assertEquals(2, l2.size());
+        Assertions.assertEquals((Long) 3001L, l2.get(0));
+        Assertions.assertEquals((Long) 4001L, l2.get(1));
 
         // prefix not fully match
         List<Long> l3 = environment.getDatabaseNamesWithPrefix("aaa");
-        Assert.assertEquals(0, l3.size());
+        Assertions.assertEquals(0, l3.size());
 
         // prefix not match
         List<Long> l4 = environment.getDatabaseNamesWithPrefix("bbb_");
-        Assert.assertEquals(0, l4.size());
+        Assertions.assertEquals(0, l4.size());
 
         environment.close();
         System.out.println("testGetDatabase cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");

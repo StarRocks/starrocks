@@ -13,19 +13,19 @@
 // limitations under the License.
 package com.starrocks.sql.plan;
 
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class SkewJoinV2Test extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(false);
         connectContext.getSessionVariable().setEnableOptimizerSkewJoinByBroadCastSkewValues(true);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(true);
         connectContext.getSessionVariable().setEnableOptimizerSkewJoinByBroadCastSkewValues(false);

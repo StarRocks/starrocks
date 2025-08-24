@@ -6,11 +6,94 @@ displayed_sidebar: docs
 
 :::warning
 
-After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.1, or v3.2.2, otherwise it will cause metadata loss. You must downgrade the cluster to v3.2.3 or later to prevent the issue.
+- After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.1, or v3.2.2, otherwise it will cause metadata loss. You must downgrade the cluster to v3.2.3 or later to prevent the issue.
+- After upgrading StarRocks to v3.3.9, you can only downgrade it to v3.2.11 or later.
 
 :::
 
+## 3.3.17
+
+Release Date: July 30, 2025
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Upgraded HttpClient5 to 5.4.3. [#61298](https://github.com/StarRocks/starrocks/pull/61298)
+- Incorrect `cpu_core_used_permille` limit in resource groups. [#61177](https://github.com/StarRocks/starrocks/pull/61177)
+- Conflict between ALTER jobs and partition creation tasks. [#61167](https://github.com/StarRocks/starrocks/pull/61167)
+- NPE caused by missing `globalStateMgr` in `ConnectContext`. [#60880](https://github.com/StarRocks/starrocks/pull/60880)
+- Partition creation failed when partition names matched case-insensitively but had different values. [#60909](https://github.com/StarRocks/starrocks/pull/60909)
+- Lock competition caused by synchronous access to partition statistics. [#61041](https://github.com/StarRocks/starrocks/pull/61041)
+- ANALYZE tasks stuck in `pending` state after FE restart. [#61113](https://github.com/StarRocks/starrocks/pull/61113)
+- Issue with JIT (Just-In-Time) compilation in BE. [#61060](https://github.com/StarRocks/starrocks/pull/61060)
+- Leader address issue in Starmgr. [#61016](https://github.com/StarRocks/starrocks/pull/61016)
+- CVE vulnerabilities in Broker. [#60908](https://github.com/StarRocks/starrocks/pull/60908)
+- Actual number of JDBC connections exceeded `jdbc_connection_pool_size` limit. [#61004](https://github.com/StarRocks/starrocks/pull/61004)
+- CVE-2022-41404 vulnerability. [#59689](https://github.com/StarRocks/starrocks/pull/59689)
+- CVEs related to Parquet and HttpClient5. [#58750](https://github.com/StarRocks/starrocks/pull/58750)
+- Partition not removed from `_partition_map` when physical partition ID was empty. [#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- Missing version check in shared-data clusters. [#59422](https://github.com/StarRocks/starrocks/pull/59422)
+- Transaction log missing when publishing logs in batches in shared-data clusters. [#60949](https://github.com/StarRocks/starrocks/pull/60949)
+- Concurrent publishing of the same transaction when Batch Publish is enabled in shared-data clusters. [#57574](https://github.com/StarRocks/starrocks/pull/57574)
+- Statistics overwrite issue caused by lack of semi-synchronous mode. [#60897](https://github.com/StarRocks/starrocks/pull/60897)
+- Inaccurate `maxInstantTime` used for filtering Hudi files when retrieving latest merged file slices. [#60927](https://github.com/StarRocks/starrocks/pull/60927)
+- TaskRun state incompatible with earlier versions. [#60438](https://github.com/StarRocks/starrocks/pull/60438)
+- CVE-2025-52999 vulnerability. [#60795](https://github.com/StarRocks/starrocks/pull/60795)
+- Vulnerability caused by `log4j-1.2.17-cloudera6` in Broker. [#59579](https://github.com/StarRocks/starrocks/pull/59579)
+- BE crash when loading OOM partitions. [#60778](https://github.com/StarRocks/starrocks/pull/60778)
+- Base Compaction tasks blocking other compaction tasks. [#60711](https://github.com/StarRocks/starrocks/pull/60711)
+- Inefficient handling of error string truncation. [#60878](https://github.com/StarRocks/starrocks/pull/60878)
+- Materialized view rewrite failed in multi-FE environments. [#60841](https://github.com/StarRocks/starrocks/pull/60841)
+- INSERT OVERWRITE failed on manually created partitions. [#60750](https://github.com/StarRocks/starrocks/pull/60750)
+- Issue caused by using random distribution in aggregate keys. [#60702](https://github.com/StarRocks/starrocks/pull/60702)
+- Crash caused by low cardinality rewrite in `multi_distinct_count`. [#60664](https://github.com/StarRocks/starrocks/pull/60664)
+- Issue with Pivot resolving fields. [#60748](https://github.com/StarRocks/starrocks/pull/60748)
+- Upgraded `hudi-common` to 1.0.2. [#59501](https://github.com/StarRocks/starrocks/pull/59501)
+- BE crash when CLONE and DROP TABLE run concurrently. [#61359](https://github.com/StarRocks/starrocks/pull/61359)
+
+## 3.3.16
+
+Release Date: July 4, 2025
+
+### Improvements
+
+- Optimized error logs when creating Hive tables with duplicate names. [#60076](https://github.com/StarRocks/starrocks/pull/60076)
+- Added the FE parameter `slow_lock_print_stack` to prevent process stalls in large clusters when printing thread stacks. [#59967](https://github.com/StarRocks/starrocks/pull/59967)
+- Reduced unnecessary locks during tablet scheduling. [#59744](https://github.com/StarRocks/starrocks/pull/59744)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- SplitOR fails to prune scan columns. [#60223](https://github.com/StarRocks/starrocks/pull/60223)
+- Incorrect query plan for null-aware left anti joins. [#60119](https://github.com/StarRocks/starrocks/pull/60119)
+- Incorrect query results when rewriting queries with materialized views due to missing NULL partitions. [#60087](https://github.com/StarRocks/starrocks/pull/60087)
+- Partition pruning errors when tables contain empty partitions. [#60162](https://github.com/StarRocks/starrocks/pull/60162)
+- Refresh errors on Iceberg external tables when using partition expressions based on `str2date`. [#60089](https://github.com/StarRocks/starrocks/pull/60089)
+- Unexpected behavior caused by materialized view schema changes. [#60079](https://github.com/StarRocks/starrocks/pull/60079)
+- Issues related to low-cardinality global dictionaries in UNION operators. [#60075](https://github.com/StarRocks/starrocks/pull/60075)
+- Incorrect partition ranges for temporary partitions created using the START END syntax. [#60014](https://github.com/StarRocks/starrocks/pull/60014)
+- Lock issues with SUBMIT TASK. [#60026](https://github.com/StarRocks/starrocks/pull/60026)
+- Partial updates fail on Primary Key tables under certain conditions. [#60052](https://github.com/StarRocks/starrocks/pull/60052)
+- Crashes caused by BE failing to create directories due to a lack of permissions to access storage paths. [#60028](https://github.com/StarRocks/starrocks/pull/60028)
+- Cache failures due to cache key duplication in concurrent scenarios. [#60053](https://github.com/StarRocks/starrocks/pull/60053)
+- Hive table metadata background refresh failure in Unified Catalog. [#55215](https://github.com/StarRocks/starrocks/pull/55215)
+- Query failures caused by incorrect return types of CASE WHEN. [#59972](https://github.com/StarRocks/starrocks/pull/59972)
+- Query failures when Delta Lake tables UNION themselves. [#60030](https://github.com/StarRocks/starrocks/pull/60030)
+- Partition creation failure when writing to multiple tables within the same transaction. [#59954](https://github.com/StarRocks/starrocks/pull/59954)
+- Queries could return empty results instead of errors when tablet versions were updated during execution. [#53060](https://github.com/StarRocks/starrocks/pull/53060)
+- Queries against modified columns in a table return null after upgrading to v3.4. [#59941](https://github.com/StarRocks/starrocks/pull/59941)
+- Authentication information is printed in logs. [#59907](https://github.com/StarRocks/starrocks/pull/59907)
+- Metadata refresh failures for external tables in Hive Catalog. [#54596](https://github.com/StarRocks/starrocks/pull/54596)
+- CACHE SELECT failures for tables after schema changes. [#59812](https://github.com/StarRocks/starrocks/pull/59812)
+- Broker Load could not recover after FE Leader shifts. [#59732](https://github.com/StarRocks/starrocks/pull/59732)
+- Stream Load failures when the target table name contains Chinese characters. [#59722](https://github.com/StarRocks/starrocks/pull/59722)
+- Incorrect query results in external tables due to search key hash collisions (affecting Iceberg/Delta/Paimon). [#59781](https://github.com/StarRocks/starrocks/pull/59781)
+
 ## 3.3.15
+
+Release Date: Jun 20, 2025
 
 ### Bug Fixes
 
@@ -803,6 +886,7 @@ Release date: June 21, 2024
 
 #### Others
 
+- JDK 11 or later is required from StarRocks v3.3.0 onwards.
 - The default value of the materialized view property `partition_refresh_num` has been changed from `-1` to `1`. When a partitioned materialized view needs to be refreshed, instead of refreshing all partitions in a single task, the new behavior will incrementally refresh one partition at a time. This change is intended to prevent excessive resource consumption caused by the original behavior. The default behavior can be adjusted using the FE configuration `default_mv_partition_refresh_number`.
 - Originally, the database consistency checker was scheduled based on GMT+8 time zone. Database consistency checker is scheduled based on the local time zone now. [#45748](https://github.com/StarRocks/starrocks/issues/45748)
 - By default, Data Cache is enabled to accelerate data lake queries. Users can manually disable it by executing `SET enable_scan_datacache = false`. 

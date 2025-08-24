@@ -14,30 +14,33 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
@@ -98,7 +101,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         {
             String query = "select t1.a, t2.b, t1.d, count(distinct t1.c)\n" +
@@ -108,7 +111,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                         " where t1.d in ('2023-08-01')\n" +
                         " group by t1.a, t2.b, t1.d;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertNotContains(plan, "test_mv1");
+            PlanTestBase.assertContains(plan, "test_mv1");
         }
 
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
@@ -160,7 +163,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803"), partitions);
 
         {
             String query = "select a, b, d, count(distinct t1.c)\n" +
@@ -216,7 +219,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803", "p20230803_20230804"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803", "p20230803_20230804"), partitions);
 
         {
             String query = "select  t1.a, t2.b, t3.c, t1.d " +
@@ -288,7 +291,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         {
             String query = "select  t1.a, t2.b, t3.c, t1.d " +
@@ -355,7 +358,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803", "p20230803_20230804"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803", "p20230803_20230804"), partitions);
 
         {
             String query = "select  t1.a, t2.b, t3.c, t1.d " +
@@ -427,7 +430,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         {
             String query = "select  t1.a, t2.b, t3.c, t1.d " +
@@ -518,7 +521,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803", "p20230803_20230804"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803", "p20230803_20230804"), partitions);
 
         {
             String query = "select  count(*) from " + mvName +
@@ -660,7 +663,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803", "p20230803_20230804"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803", "p20230803_20230804"), partitions);
 
         {
             String query = "select  t1.a, t2.b, t3.c, t1.d \n" +
@@ -831,7 +834,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         {
             String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
@@ -916,7 +919,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         {
             String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
@@ -974,7 +977,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803"), partitions);
 
         {
             String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
@@ -1031,7 +1034,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         {
             String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
@@ -1112,7 +1115,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         {
@@ -1198,7 +1201,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
 
         {
@@ -1338,7 +1341,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         {
             String query = "select t1.a, t2.b, t1.d, count(t1.c)\n" +
@@ -1470,7 +1473,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         {
@@ -1612,7 +1615,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         {
@@ -1718,7 +1721,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         {
             String query = "select  t1.d, t2.b, t3.c, bitmap_union(bitmap_hash(t1.a)) " +
@@ -1828,7 +1831,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         {
@@ -1884,7 +1887,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p202308_202309"), partitions);
+        Assertions.assertEquals(Arrays.asList("p202308_202309"), partitions);
 
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         {
@@ -1973,9 +1976,9 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                     "as select a, b, d, bitmap_union(to_bitmap(t1.c))" +
                     " from iceberg0.partitioned_db.part_tbl1 as t1 " +
                     " group by a, b, d;");
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("List partition expression can only be ref-base-table's " +
+            Assertions.assertTrue(e.getMessage().contains("List partition expression can only be ref-base-table's " +
                     "partition expression but contain"));
         }
         Config.enable_mv_list_partition_for_external_table = false;
@@ -1996,7 +1999,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                 " from iceberg0.partitioned_db.part_tbl1 as t1 " +
                 " group by a, b, d;");
         final MaterializedView mv = getMv(mvName);
-        Assert.assertTrue(mv.getPartitionInfo().isListPartition());
+        Assertions.assertTrue(mv.getPartitionInfo().isListPartition());
         Config.enable_mv_list_partition_for_external_table = false;
     }
 
@@ -2013,7 +2016,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                 ")\n" +
                 "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` as a;");
         final MaterializedView mv = getMv(mvName);
-        Assert.assertTrue(mv.getPartitionInfo().isListPartition());
+        Assertions.assertTrue(mv.getPartitionInfo().isListPartition());
         Config.enable_mv_list_partition_for_external_table = false;
     }
 
@@ -2029,12 +2032,11 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                 ")\n" +
                 "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` as a;");
         final MaterializedView mv = getMv(mvName);
-        Assert.assertTrue(mv.getPartitionInfo().isListPartition());
+        Assertions.assertTrue(mv.getPartitionInfo().isListPartition());
     }
 
     @Test
     public void testRefBaseTablePartitionWithTransform() throws Exception {
-        final String mvName = "test_mv1";
         final String sql = "CREATE MATERIALIZED VIEW test_mv1\n" +
                 "PARTITION BY date_trunc('month', ts)\n" +
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
@@ -2047,6 +2049,55 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                         connectContext);
         MaterializedViewAnalyzer.analyze(stmt, starRocksAssert.getCtx());
-        Assert.assertTrue(stmt.isRefBaseTablePartitionWithTransform());
+        Assertions.assertTrue(stmt.isRefBaseTablePartitionWithTransform());
+    }
+
+    @Test
+    public void testRewriteWithIcebergView1() throws Exception {
+        starRocksAssert.withView("CREATE VIEW iceberg_view1 AS " +
+                "SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` order by id, ts;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1\n" +
+                "PARTITION BY date_trunc('month', ts)\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT * from iceberg_view1;");
+        MaterializedView mv = getMv("test", "test_mv1");
+        refreshMaterializedView("test", "test_mv1");
+        List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+        Assertions.assertEquals(2, baseTableInfos.size());
+        List<BaseTableInfo> baseTableInfosWithoutView = mv.getBaseTableInfosWithoutView();
+        Assertions.assertEquals(1, baseTableInfosWithoutView.size());
+
+        String query1 = "select * from iceberg_view1 limit 1;";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan, "test_mv1");
+        List<MvPlanContext> mvPlanContexts =
+                CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv, 3000);
+        // mv's plan contexts should contain 2 entries:
+        // - one is for view with inlined
+        // - one is for view scan operator
+        Assertions.assertTrue(mvPlanContexts.size() == 2);
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv2\n" +
+                "PARTITION BY date_trunc('month', ts)\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT * from test_mv1 where id > 100;");
+        MaterializedView mv2 = getMv("test", "test_mv2");
+        refreshMaterializedView("test", "test_mv2");
+        List<BaseTableInfo> baseTableInfos2 = mv2.getBaseTableInfos();
+        Assertions.assertEquals(1, baseTableInfos2.size());
+        List<BaseTableInfo> baseTableInfosWithoutView2 = mv2.getBaseTableInfosWithoutView();
+        Assertions.assertEquals(1, baseTableInfosWithoutView2.size());
+
+        String query2 = "select * from test_mv1 where id > 100 limit 1;";
+        String plan2 = getFragmentPlan(query2);
+        PlanTestBase.assertContains(plan2, "test_mv2");
+        mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv2, 3000);
+        Assertions.assertTrue(mvPlanContexts.size() == 1);
     }
 }

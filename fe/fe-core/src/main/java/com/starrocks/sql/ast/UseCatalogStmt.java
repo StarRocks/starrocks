@@ -15,8 +15,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 /*
   Use catalog specified by catalog name
@@ -45,7 +46,8 @@ public class UseCatalogStmt extends StatementBase {
 
     public UseCatalogStmt(String catalogParts, NodePosition pos) {
         super(pos);
-        this.catalogParts = catalogParts;
+        this.catalogParts = normalizeName(catalogParts);
+        this.catalogName = normalizeName(catalogParts);
     }
 
     public String getCatalogParts() {
@@ -57,16 +59,11 @@ public class UseCatalogStmt extends StatementBase {
     }
 
     public void setCatalogName(String catalogName) {
-        this.catalogName = catalogName;
+        this.catalogName = normalizeName(catalogName);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitUseCatalogStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 }

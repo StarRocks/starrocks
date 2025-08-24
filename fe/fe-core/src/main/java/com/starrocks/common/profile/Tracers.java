@@ -80,6 +80,10 @@ public class Tracers {
         return THREAD_LOCAL.get();
     }
 
+    public static void set(Tracers tracers) {
+        THREAD_LOCAL.set(tracers);
+    }
+
     /**
      * Init tracer with context and mode.
      * @param context connect context

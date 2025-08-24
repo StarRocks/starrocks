@@ -125,7 +125,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                     if (validDictCollectedVersions.size() == validDictCacheColumns.size()) {
                         version = validDictCollectedVersions.get(j);
                     }
-                    this.validDictCacheColumns.put(validDictCacheColumns.get(i), version);
+                    this.validDictCacheColumns.put(validDictCacheColumns.get(j), version);
                 }
             }
             if (i == tabletMetaList.size() - 1) {

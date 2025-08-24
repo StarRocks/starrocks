@@ -25,15 +25,16 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import mockit.Expectations;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -46,7 +47,7 @@ public class DeltaLakeCacheUpdateProcessorTest {
     private long refreshAfterWriteSec = -1;
     private CachingDeltaLakeMetastore cachingDeltaLakeMetastore;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         client = new HiveMetastoreTest.MockedHiveMetaClient();
         IHiveMetastore hiveMetastore = new HiveMetastore(client, "delta0", MetastoreType.HMS);
@@ -76,7 +77,8 @@ public class DeltaLakeCacheUpdateProcessorTest {
             @mockit.Mock
             public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
                 return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        123, "s3://bucket/path/to/table");
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
             }
         };
 
@@ -84,8 +86,9 @@ public class DeltaLakeCacheUpdateProcessorTest {
             @mockit.Mock
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
-                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
-                        "s3://bucket/path/to/table", null, 0);
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null, null,
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
             }
         };
 
@@ -93,10 +96,10 @@ public class DeltaLakeCacheUpdateProcessorTest {
                 new DeltaLakeCacheUpdateProcessor(cachingDeltaLakeMetastore);
         Table table = cachingDeltaLakeMetastore.getTable("db1", "table1");
 
-        Assert.assertEquals(1, deltaLakeCacheUpdateProcessor.getCachedTableNames().size());
-        Assert.assertTrue(deltaLakeCacheUpdateProcessor.getCachedTableNames().
+        Assertions.assertEquals(1, deltaLakeCacheUpdateProcessor.getCachedTableNames().size());
+        Assertions.assertTrue(deltaLakeCacheUpdateProcessor.getCachedTableNames().
                 contains(DatabaseTableName.of("db1", "table1")));
-        Assert.assertTrue(table instanceof DeltaLakeTable);
+        Assertions.assertTrue(table instanceof DeltaLakeTable);
     }
 
     @Test
@@ -117,7 +120,8 @@ public class DeltaLakeCacheUpdateProcessorTest {
             @mockit.Mock
             public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
                 return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        123, "s3://bucket/path/to/table");
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
             }
         };
 
@@ -125,7 +129,8 @@ public class DeltaLakeCacheUpdateProcessorTest {
             @mockit.Mock
             public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
                 return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        123, "s3://bucket/path/to/table");
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
             }
         };
 
@@ -133,8 +138,9 @@ public class DeltaLakeCacheUpdateProcessorTest {
             @mockit.Mock
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
-                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
-                        "s3://bucket/path/to/table", null, 0);
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null, null,
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
             }
         };
 
@@ -143,10 +149,10 @@ public class DeltaLakeCacheUpdateProcessorTest {
         Table table = cachingDeltaLakeMetastore.getTable("db1", "table1");
 
         deltaLakeCacheUpdateProcessor.refreshTableBackground(table, false, executor);
-        Assert.assertEquals(1, deltaLakeCacheUpdateProcessor.getCachedTableNames().size());
-        Assert.assertTrue(deltaLakeCacheUpdateProcessor.getCachedTableNames().
+        Assertions.assertEquals(1, deltaLakeCacheUpdateProcessor.getCachedTableNames().size());
+        Assertions.assertTrue(deltaLakeCacheUpdateProcessor.getCachedTableNames().
                 contains(DatabaseTableName.of("db1", "table1")));
-        Assert.assertTrue(cachingDeltaLakeMetastore.isTablePresent(DatabaseTableName.of("db1", "table1")));
+        Assertions.assertTrue(cachingDeltaLakeMetastore.isTablePresent(DatabaseTableName.of("db1", "table1")));
 
         // sleep 1s, background refresh table will be skipped
         Thread.sleep(1000);
@@ -159,6 +165,6 @@ public class DeltaLakeCacheUpdateProcessorTest {
         } finally {
             Config.background_refresh_metadata_time_secs_since_last_access_secs = oldValue;
         }
-        Assert.assertFalse(cachingDeltaLakeMetastore.isTablePresent(DatabaseTableName.of("db1", "table1")));
+        Assertions.assertFalse(cachingDeltaLakeMetastore.isTablePresent(DatabaseTableName.of("db1", "table1")));
     }
 }

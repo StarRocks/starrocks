@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -30,7 +29,7 @@ public class DropRollupClause extends AlterTableClause {
     }
 
     public DropRollupClause(String rollupName, Map<String, String> properties, NodePosition pos) {
-        super(AlterOpType.DROP_ROLLUP, pos);
+        super(pos);
         this.rollupName = rollupName;
         this.properties = properties;
     }

@@ -18,6 +18,7 @@ In addition to the native RBAC privilege system, StarRocks v3.1.9 also supports 
 - Creates access policies, masking policies, and row-level filter policies through Apache Ranger.
 - Ranger audit logs.
 - **Ranger Servers that use Kerberos for authentication are not supported.**
+- You can register multiple StarRocks Services in the same Apache Ranger service to manage privileges in different StarRocks clusters.
 
 This topic describes the permission control methods and integration process of StarRocks and Apache Ranger. For information on how to create security policies on Ranger to manage data security, see the [Apache Ranger official website](https://ranger.apache.org/).
 
@@ -84,10 +85,10 @@ Also, please notice that if you didn't install the ranger-starrocks-plugin, then
 This step configures the StarRocks Service on Ranger so that users can perform access control on StarRocks objects through Ranger.
 :::
 
-1. Copy [ranger-servicedef-starrocks.json](https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json) to any directory of the StarRocks FE machine or Ranger machine.
+1. Copy [ranger-servicedef-starrocks.json](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json) to any directory of the StarRocks FE machine or Ranger machine.
 
    ```SQL
-   wget https://raw.githubusercontent.com/StarRocks/ranger/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
+   wget https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json
    ```
 
    :::note
@@ -168,7 +169,7 @@ This step configures the StarRocks Service on Ranger so that users can perform a
    ...
    ```
 
-7. (Optional) If you want to use the Audit Log service of Ranger, you need to create the [ranger-starrocks-audit.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml) file in the `fe/conf` folder of each FE machine. Copy the content, **replace `solr_url` in `xasecure.audit.solr.solr_url` with your own `solr_url`**, and save the file.
+7. (Optional) If you want to use the Audit Log service of Ranger, you need to create the [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) file in the `fe/conf` folder of each FE machine. Copy the content, **replace `solr_url` in `xasecure.audit.solr.solr_url` with your own `solr_url`**, and save the file.
 
 8. Add the configuration `access_control = ranger` to all FE configuration files.
 

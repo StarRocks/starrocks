@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.plan;
 
-import org.junit.Assert;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -35,29 +35,29 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
 
     public void testAllInlineCTE(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("MultiCastDataSinks"));
+        Assertions.assertFalse(plan.contains("MultiCastDataSinks"));
     }
 
     public void testCTE(String sql) throws Exception {
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("MultiCastDataSinks"));
+        Assertions.assertTrue(plan.contains("MultiCastDataSinks"));
 
         connectContext.getSessionVariable().setCboCTERuseRatio(-1);
         plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
-        Assert.assertFalse(plan.contains("MultiCastDataSinks"));
+        Assertions.assertFalse(plan.contains("MultiCastDataSinks"));
     }
 
     public void testForceCTE(String sql) throws Exception {
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("MultiCastDataSinks"));
+        Assertions.assertTrue(plan.contains("MultiCastDataSinks"));
 
         connectContext.getSessionVariable().setCboCTERuseRatio(-1);
         plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
-        Assert.assertTrue(plan.contains("MultiCastDataSinks"));
+        Assertions.assertTrue(plan.contains("MultiCastDataSinks"));
     }
 
     @Test

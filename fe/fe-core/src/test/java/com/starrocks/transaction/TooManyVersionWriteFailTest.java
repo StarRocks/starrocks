@@ -18,13 +18,13 @@ import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.pseudocluster.Tablet;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class TooManyVersionWriteFailTest {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         Config.enable_new_publish_mechanism = true;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
@@ -32,7 +32,7 @@ public class TooManyVersionWriteFailTest {
         cluster.runSql(null, "create database test");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().runSql(null, "drop database test force");
         PseudoCluster.getInstance().shutdown(false);
@@ -55,9 +55,9 @@ public class TooManyVersionWriteFailTest {
                 System.out.println("insert version " + (i + 5));
                 cluster.runSql("test", insertSql);
             }
-            Assert.fail("should fail with too many versions");
+            Assertions.fail("should fail with too many versions");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Too many versions"));
+            Assertions.assertTrue(e.getMessage().contains("Too many versions"));
         }
         Tablet.compactionIntervalMs = 500;
         PseudoBackend.tabletCheckIntervalMs = 1000;

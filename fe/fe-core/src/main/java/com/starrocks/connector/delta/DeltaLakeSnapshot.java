@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.delta;
 
+import com.starrocks.connector.metastore.MetastoreTable;
 import io.delta.kernel.internal.SnapshotImpl;
 
 public class DeltaLakeSnapshot {
@@ -21,17 +22,15 @@ public class DeltaLakeSnapshot {
     private final String tableName;
     private final DeltaLakeEngine deltaLakeEngine;
     private final SnapshotImpl snapshot;
-    private final long createTime;
-    private final String path;
+    private final MetastoreTable metastoreTable;
 
     public DeltaLakeSnapshot(String dbName, String tableName, DeltaLakeEngine engine, SnapshotImpl snapshot,
-                             long createTime, String path) {
+                             MetastoreTable metastoreTable) {
         this.dbName = dbName;
         this.tableName = tableName;
         this.deltaLakeEngine = engine;
         this.snapshot = snapshot;
-        this.createTime = createTime;
-        this.path = path;
+        this.metastoreTable = metastoreTable;
     }
 
     public String getDbName() {
@@ -51,10 +50,14 @@ public class DeltaLakeSnapshot {
     }
 
     public long getCreateTime() {
-        return createTime;
+        return metastoreTable.getCreateTime();
     }
 
     public String getPath() {
-        return path;
+        return metastoreTable.getTableLocation();
+    }
+
+    public MetastoreTable getMetastoreTable() {
+        return metastoreTable;
     }
 }

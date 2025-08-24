@@ -20,16 +20,16 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeJoinTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -70,7 +70,7 @@ public class AnalyzeJoinTest {
         QueryRelation query = ((QueryStatement) analyzeSuccess(
                 "select * from (select sum(v1) as v, sum(v2) from t0) a " +
                         "left semi join (select v1,v2 from t0 order by v3) b on a.v = b.v2")).getQueryRelation();
-        Assert.assertEquals("v,sum(v2)", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v,sum(v2)", String.join(",", query.getColumnOutputNames()));
     }
 
     @Test
@@ -110,19 +110,19 @@ public class AnalyzeJoinTest {
     public void testColumnNames() {
         QueryRelation query = ((QueryStatement) analyzeSuccess(
                 "select * from t0 left semi join t1 on t0.v1 = t1.v4")).getQueryRelation();
-        Assert.assertEquals("v1,v2,v3", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v1,v2,v3", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess(
                 "select t0.*,v1,t1.* from t0 join t1 on t0.v1=t1.v4")).getQueryRelation();
-        Assert.assertEquals("v1,v2,v3,v1,v4,v5,v6", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v1,v2,v3,v1,v4,v5,v6", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess(
                 "select t1.*,v1,t0.* from t0 join t1 on t0.v1=t1.v4")).getQueryRelation();
-        Assert.assertEquals("v4,v5,v6,v1,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v4,v5,v6,v1,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess(
                 "select a.v1 as v, a.v2 as v, b.v1 as v from t0 a,t0 b")).getQueryRelation();
-        Assert.assertEquals("v,v,v", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v,v,v", String.join(",", query.getColumnOutputNames()));
         analyzeFail("select a.v1 as v, a.v2 as v, b.v1 as v from t0 a,t0 b order by v", "Column 'v' is ambiguous");
         analyzeFail("select v1 from (select * from t0 a,t0 b) t", "Column 'v1' is ambiguous");
         analyzeFail("select v from (select a.v1 as v, b.v1 as v from t0 a,t0 b) t", "Column 'v' is ambiguous");
@@ -141,7 +141,7 @@ public class AnalyzeJoinTest {
                 (QueryStatement) analyzeSuccess("select v1 from t0 inner join [broadcast] t1 on t0.v1 = t1.v4");
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
         JoinRelation joinRelation = (JoinRelation) selectRelation.getRelation();
-        Assert.assertEquals("BROADCAST", joinRelation.getJoinHint());
+        Assertions.assertEquals("BROADCAST", joinRelation.getJoinHint());
     }
 
     @Test
@@ -155,33 +155,33 @@ public class AnalyzeJoinTest {
         String sql = "select * from (t0 a, t0 b)";
         QueryStatement queryStatement = (QueryStatement) analyzeSuccess(sql);
         Relation relation = ((SelectRelation) queryStatement.getQueryRelation()).getRelation();
-        Assert.assertTrue(relation instanceof JoinRelation);
-        Assert.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
+        Assertions.assertTrue(relation instanceof JoinRelation);
+        Assertions.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
 
         sql = "select * from (t0 a, (t0))";
         queryStatement = (QueryStatement) analyzeSuccess(sql);
         relation = ((SelectRelation) queryStatement.getQueryRelation()).getRelation();
-        Assert.assertTrue(relation instanceof JoinRelation);
-        Assert.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
+        Assertions.assertTrue(relation instanceof JoinRelation);
+        Assertions.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
         analyzeFail("select * from (t0 a, (t0)) b");
 
         sql = "select * from (t0 a, (t1))";
         queryStatement = (QueryStatement) analyzeSuccess(sql);
         relation = ((SelectRelation) queryStatement.getQueryRelation()).getRelation();
-        Assert.assertTrue(relation instanceof JoinRelation);
-        Assert.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
+        Assertions.assertTrue(relation instanceof JoinRelation);
+        Assertions.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
 
         sql = "select * from (t0 a, t1)";
         queryStatement = (QueryStatement) analyzeSuccess(sql);
         relation = ((SelectRelation) queryStatement.getQueryRelation()).getRelation();
-        Assert.assertTrue(relation instanceof JoinRelation);
-        Assert.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
+        Assertions.assertTrue(relation instanceof JoinRelation);
+        Assertions.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
 
         sql = "select * from (t0 a, (select * from t1) b)";
         queryStatement = (QueryStatement) analyzeSuccess(sql);
         relation = ((SelectRelation) queryStatement.getQueryRelation()).getRelation();
-        Assert.assertTrue(relation instanceof JoinRelation);
-        Assert.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
+        Assertions.assertTrue(relation instanceof JoinRelation);
+        Assertions.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
 
         sql = "select * from (t0 a, (t1 b, t1 c))";
         analyzeSuccess(sql);
@@ -218,22 +218,22 @@ public class AnalyzeJoinTest {
     public void testJoinPrecedence() {
         String sql = "SELECT * FROM t0,t1 INNER JOIN t2 on t1.v4 = t2.v7";
         QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
-        Assert.assertTrue(((SelectRelation) statement.getQueryRelation()).getRelation() instanceof JoinRelation);
+        Assertions.assertTrue(((SelectRelation) statement.getQueryRelation()).getRelation() instanceof JoinRelation);
         JoinRelation joinRelation = (JoinRelation) ((SelectRelation) statement.getQueryRelation()).getRelation();
-        Assert.assertTrue(joinRelation.getJoinOp().isCrossJoin());
+        Assertions.assertTrue(joinRelation.getJoinOp().isCrossJoin());
 
         sql = "SELECT * FROM t0 inner join t1 INNER JOIN t2 on t1.v4 = t2.v7";
         statement = (QueryStatement) analyzeSuccess(sql);
-        Assert.assertTrue(((SelectRelation) statement.getQueryRelation()).getRelation() instanceof JoinRelation);
+        Assertions.assertTrue(((SelectRelation) statement.getQueryRelation()).getRelation() instanceof JoinRelation);
         joinRelation = (JoinRelation) ((SelectRelation) statement.getQueryRelation()).getRelation();
-        Assert.assertTrue(joinRelation.getJoinOp().isInnerJoin());
-        Assert.assertNotNull(joinRelation.getOnPredicate());
+        Assertions.assertTrue(joinRelation.getJoinOp().isInnerJoin());
+        Assertions.assertNotNull(joinRelation.getOnPredicate());
 
         sql = "SELECT * FROM t0 inner join t1,t2";
         statement = (QueryStatement) analyzeSuccess(sql);
-        Assert.assertTrue(((SelectRelation) statement.getQueryRelation()).getRelation() instanceof JoinRelation);
+        Assertions.assertTrue(((SelectRelation) statement.getQueryRelation()).getRelation() instanceof JoinRelation);
         joinRelation = (JoinRelation) ((SelectRelation) statement.getQueryRelation()).getRelation();
-        Assert.assertTrue(joinRelation.getJoinOp().isCrossJoin());
+        Assertions.assertTrue(joinRelation.getJoinOp().isCrossJoin());
 
         analyzeFail("SELECT * FROM t0,t1 INNER JOIN t2 on t0.v1 = t2.v4",
                 "Column '`t0`.`v1`' cannot be resolved");

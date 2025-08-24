@@ -28,9 +28,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
@@ -50,7 +50,7 @@ public class LeaderImplTest {
 
     private final LeaderImpl leader = new LeaderImpl();
 
-    @Before
+    @BeforeEach
     public void setUp() {
         dbId = 1L;
         dbName = "database0";
@@ -78,7 +78,7 @@ public class LeaderImplTest {
             }
         };
         
-        Assert.assertNull(Deencapsulation.invoke(leader, "findRelatedReplica",
+        Assertions.assertNull(Deencapsulation.invoke(leader, "findRelatedReplica",
                 olapTable, physicalPartition, backendId, tabletId, indexId));
         // lake table
         new MockUp<LakeTablet>() {
@@ -97,7 +97,7 @@ public class LeaderImplTest {
             }
         };
 
-        Assert.assertEquals(new Replica(tabletId, backendId, -1, NORMAL), Deencapsulation.invoke(leader, "findRelatedReplica",
+        Assertions.assertEquals(new Replica(tabletId, backendId, -1, NORMAL), Deencapsulation.invoke(leader, "findRelatedReplica",
                 olapTable, physicalPartition, backendId, tabletId, indexId));
     }
 }

@@ -277,6 +277,15 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
         }
     }
 
+    // load extra file size. Include persistent index files and delta column files.
+    if (tablet_updates_pb.has_extra_file_size()) {
+        _extra_file_size_cache.pindex_size = tablet_updates_pb.extra_file_size().pindex_size();
+        _extra_file_size_cache.col_size = tablet_updates_pb.extra_file_size().col_size();
+    } else {
+        _extra_file_size_cache.pindex_size = 0;
+        _extra_file_size_cache.col_size = 0;
+    }
+
     RETURN_IF_ERROR(_load_meta_and_log(tablet_updates_pb));
 
     {
@@ -412,16 +421,7 @@ size_t TabletUpdates::data_size() const {
         LOG_EVERY_N(WARNING, 10) << "data_size() some rowset stats not found tablet=" << _tablet.tablet_id()
                                  << " rowset=" << err_rowsets;
     }
-    auto size_st = _get_extra_file_size();
-    if (!size_st.ok()) {
-        // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
-        // So just print error log and keep going.
-        VLOG(2) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
-                << " status: " << size_st.status();
-        return total_size;
-    } else {
-        return total_size + (*size_st).pindex_size + (*size_st).col_size;
-    }
+    return total_size + _extra_file_size_cache.pindex_size + _extra_file_size_cache.col_size;
 }
 
 size_t TabletUpdates::num_rows() const {
@@ -477,16 +477,7 @@ std::pair<int64_t, int64_t> TabletUpdates::num_rows_and_data_size() const {
         LOG_EVERY_N(WARNING, 10) << "data_size() some rowset stats not found tablet=" << _tablet.tablet_id()
                                  << " rowset=" << err_rowsets;
     }
-    auto size_st = _get_extra_file_size();
-    if (!size_st.ok()) {
-        // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
-        // So just print error log and keep going.
-        VLOG(2) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
-                << " status: " << size_st.status();
-        return {total_row, total_size};
-    } else {
-        return {total_row, total_size + (*size_st).pindex_size + (*size_st).col_size};
-    }
+    return {total_row, total_size + _extra_file_size_cache.pindex_size + _extra_file_size_cache.col_size};
 }
 
 size_t TabletUpdates::num_rowsets() const {
@@ -1637,7 +1628,8 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         }
     }
     span->AddEvent("commit_index");
-    st = index.commit(index_meta);
+    IOStat stat;
+    st = index.commit(index_meta, &stat);
     FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_index_commit_failed,
                                { st = Status::InternalError("inject tablet_apply_index_commit_failed"); });
     if (!st.ok()) {
@@ -1646,6 +1638,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         return apply_st;
     }
 
+    _extra_file_size_cache.pindex_size.store(stat.total_file_size);
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
     // release resource
     // update state only used once, so delete it
@@ -2188,7 +2181,9 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     EditVersionMetaPB edit;
     auto lastv = _edit_version_infos.back().get();
     // handle conflict between column mode partial update
-    RETURN_IF_ERROR(_check_conflict_with_partial_update((*pinfo).get()));
+    if (rowset->num_rows() > 0) {
+        RETURN_IF_ERROR(_check_conflict_with_partial_update((*pinfo).get()));
+    }
     auto edit_version_pb = edit.mutable_version();
     edit_version_pb->set_major_number(lastv->version.major_number());
     edit_version_pb->set_minor_number(lastv->version.minor_number() + 1);
@@ -2507,7 +2502,8 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     }
     int64_t t_index_delvec = MonotonicMillis();
 
-    st = index.commit(index_meta);
+    IOStat stat;
+    st = index.commit(index_meta, &stat);
     FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_index_commit_failed,
                                { st = Status::InternalError("inject tablet_apply_index_commit_failed"); });
     if (!st.ok()) {
@@ -2516,6 +2512,8 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         failure_handler(msg, st.code());
         return apply_st;
     }
+
+    _extra_file_size_cache.pindex_size.store(stat.total_file_size);
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
 
     {
@@ -2766,6 +2764,10 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         std::unique_lock wrlock(_tablet.get_header_lock());
         rewrite_rs_meta(false);
     }
+    // get delta column group file size
+    _extra_file_size_cache.col_size.store(
+            StorageEngine::instance()->update_manager()->get_delta_column_group_file_size_by_tablet_id(
+                    _tablet.tablet_id()));
 
     // GC works that can be done outside of lock
     if (num_version_removed > 0) {
@@ -3080,6 +3082,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
 
     size_t total_valid_rowsets = 0;
     size_t total_valid_segments = 0;
+    bool has_partial_update_by_column = false;
     // level -1 keep empty rowsets and have no IO overhead, so we can merge them with any level
     std::map<int, vector<CompactionEntry>> candidates_by_level;
     {
@@ -3106,6 +3109,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
                 e.num_dels = stat.num_dels;
                 e.bytes = stat.byte_size;
                 e.num_segments = stat.num_segments;
+                has_partial_update_by_column |= stat.partial_update_by_column;
             }
         }
     }
@@ -3116,7 +3120,21 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
     int64_t max_score = 0;
     for (auto& [level, candidates] : candidates_by_level) {
         if (level == -1) {
-            continue;
+            // When we enable lazy delta column compaction, which means that we don't want to merge
+            // delta column back to main segment file too soon, for save compaction IO cost.
+            // Separate delta column won't affect query performance.
+            // check if there is rowset with column update and more than 1, trigger lazy compaction strategy.
+            if (has_partial_update_by_column && candidates.size() > 1 && config::enable_lazy_delta_column_compaction) {
+                for (auto& e : candidates) {
+                    info->inputs.emplace_back(e.rowsetid);
+                }
+                VLOG(1) << "trigger lazy compaction strategy for tablet:" << _tablet.tablet_id()
+                        << " because of column update rowset count:" << candidates.size();
+                // only merge empty rowsets, so no need to consider other level
+                break;
+            } else {
+                continue;
+            }
         }
         int64_t total_segments = 0;
         int64_t del_rows = 0;
@@ -3135,46 +3153,50 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
     int64_t total_merged_segments = 0;
     RowsetStats stat;
     std::set<int32_t> compaction_level_candidate;
-    max_score = 0;
-    do {
-        auto iter = candidates_by_level.find(compaction_level);
-        if (iter == candidates_by_level.end()) {
-            break;
-        }
-        for (auto& e : iter->second) {
-            size_t new_rows = stat.num_rows + e.num_rows - e.num_dels;
-            size_t new_bytes = stat.byte_size;
-            if (e.num_rows != 0) {
-                new_bytes += e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
-            }
-            if ((stat.byte_size > 0 && new_bytes > config::update_compaction_result_bytes * 2) ||
-                info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
+
+    if (info->inputs.empty()) {
+        // no trigger lazy compaction strategy, try to merge level by level
+        max_score = 0;
+        do {
+            auto iter = candidates_by_level.find(compaction_level);
+            if (iter == candidates_by_level.end()) {
                 break;
             }
-            max_score += e.score_per_row * (e.num_rows - e.num_dels);
-            info->inputs.emplace_back(e.rowsetid);
-            stat.num_rows = new_rows;
-            stat.byte_size = new_bytes;
-            total_rows += e.num_rows;
-            total_bytes += e.bytes;
-            total_merged_segments += e.num_segments;
-        }
-        compaction_level_candidate.insert(compaction_level);
-        compaction_level = _calc_compaction_level(&stat);
-        stat.num_segments = stat.byte_size > 0 ? (stat.byte_size - 1) / config::max_segment_file_size + 1 : 0;
-        _calc_compaction_score(&stat);
-    } while (stat.byte_size <= config::update_compaction_result_bytes * 2 &&
-             info->inputs.size() < config::max_update_compaction_num_singleton_deltas &&
-             compaction_level_candidate.find(compaction_level) == compaction_level_candidate.end() &&
-             candidates_by_level.find(compaction_level) != candidates_by_level.end() && stat.compaction_score > 0);
-
-    if (compaction_level_candidate.find(-1) == compaction_level_candidate.end()) {
-        if (candidates_by_level[-1].size() > 0) {
-            for (auto& e : candidates_by_level[-1]) {
+            for (auto& e : iter->second) {
+                size_t new_rows = stat.num_rows + e.num_rows - e.num_dels;
+                size_t new_bytes = stat.byte_size;
+                if (e.num_rows != 0) {
+                    new_bytes += e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
+                }
+                if ((stat.byte_size > 0 && new_bytes > config::update_compaction_result_bytes * 2) ||
+                    info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
+                    break;
+                }
+                max_score += e.score_per_row * (e.num_rows - e.num_dels);
                 info->inputs.emplace_back(e.rowsetid);
+                stat.num_rows = new_rows;
+                stat.byte_size = new_bytes;
+                total_rows += e.num_rows;
+                total_bytes += e.bytes;
                 total_merged_segments += e.num_segments;
             }
-            compaction_level_candidate.insert(-1);
+            compaction_level_candidate.insert(compaction_level);
+            compaction_level = _calc_compaction_level(&stat);
+            stat.num_segments = stat.byte_size > 0 ? (stat.byte_size - 1) / config::max_segment_file_size + 1 : 0;
+            _calc_compaction_score(&stat);
+        } while (stat.byte_size <= config::update_compaction_result_bytes * 2 &&
+                 info->inputs.size() < config::max_update_compaction_num_singleton_deltas &&
+                 compaction_level_candidate.find(compaction_level) == compaction_level_candidate.end() &&
+                 candidates_by_level.find(compaction_level) != candidates_by_level.end() && stat.compaction_score > 0);
+
+        if (compaction_level_candidate.find(-1) == compaction_level_candidate.end()) {
+            if (candidates_by_level[-1].size() > 0) {
+                for (auto& e : candidates_by_level[-1]) {
+                    info->inputs.emplace_back(e.rowsetid);
+                    total_merged_segments += e.num_segments;
+                }
+                compaction_level_candidate.insert(-1);
+            }
         }
     }
 
@@ -3571,38 +3593,6 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
     return num_dels;
 }
 
-StatusOr<ExtraFileSize> TabletUpdates::_get_extra_file_size() const {
-    ExtraFileSize ef_size;
-#if !defined(ADDRESS_SANITIZER)
-    std::string tablet_path_str = _tablet.schema_hash_path();
-    std::filesystem::path tablet_path(tablet_path_str.c_str());
-    try {
-        for (const auto& entry : std::filesystem::directory_iterator(tablet_path)) {
-            if (entry.is_regular_file()) {
-                std::string filename = entry.path().filename().string();
-
-                if (filename.starts_with("index.l")) {
-                    ef_size.pindex_size += entry.file_size();
-                } else if (filename.ends_with(".cols")) {
-                    // TODO skip the expired cols file
-                    ef_size.col_size += entry.file_size();
-                }
-            }
-        }
-    } catch (const std::filesystem::filesystem_error& ex) {
-        std::string err_msg = "Iterate dir " + tablet_path.string() + " Filesystem error: " + ex.what();
-        return Status::InternalError(err_msg);
-    } catch (const std::exception& ex) {
-        std::string err_msg = "Iterate dir " + tablet_path.string() + " Standard error: " + ex.what();
-        return Status::InternalError(err_msg);
-    } catch (...) {
-        std::string err_msg = "Iterate dir " + tablet_path.string() + " Unknown exception occurred.";
-        return Status::InternalError(err_msg);
-    }
-#endif
-    return ef_size;
-}
-
 void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     int64_t min_readable_version = 0;
     int64_t max_readable_version = 0;
@@ -3646,16 +3636,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
         LOG_EVERY_N(WARNING, 10) << "get_tablet_info_extra() some rowset stats not found tablet=" << _tablet.tablet_id()
                                  << " rowset=" << err_rowsets;
     }
-    auto size_st = _get_extra_file_size();
-
-    if (!size_st.ok()) {
-        // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
-        // So just print error log and keep going.
-        VLOG(2) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
-                << " status: " << size_st.status();
-    } else {
-        total_size += (*size_st).pindex_size + (*size_st).col_size;
-    }
+    total_size += _extra_file_size_cache.pindex_size + _extra_file_size_cache.col_size;
     info->__set_version(version);
     info->__set_min_readable_version(min_readable_version);
     info->__set_max_readable_version(max_readable_version);
@@ -4785,15 +4766,7 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
         info.index_mem = index_entry->size();
         index_cache.release(index_entry);
     }
-    auto size_st = _get_extra_file_size();
-    if (!size_st.ok()) {
-        // Ignore error status here, because we don't to break up get basic info because of get pk index disk usage failure.
-        // So just print error log and keep going.
-        VLOG(2) << "get persistent index disk usage fail, tablet_id: " << _tablet.tablet_id()
-                << ", error: " << size_st.status();
-    } else {
-        info.index_disk_usage = (*size_st).pindex_size;
-    }
+    info.index_disk_usage = _extra_file_size_cache.pindex_size;
 }
 
 Status TabletUpdates::pk_index_major_compaction() {
@@ -4822,10 +4795,12 @@ Status TabletUpdates::pk_index_major_compaction() {
         }
     });
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
-    st = index.major_compaction(_tablet.data_dir(), _tablet.tablet_id(), _tablet.updates()->get_index_lock());
+    IOStat stat;
+    st = index.major_compaction(_tablet.data_dir(), _tablet.tablet_id(), _tablet.updates()->get_index_lock(), &stat);
     if (st.ok()) {
         // reset score after major compaction finish
         _pk_index_write_amp_score.store(0.0);
+        _extra_file_size_cache.pindex_size.store(stat.total_file_size);
     }
     return st;
 }
@@ -4860,6 +4835,9 @@ void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
     }
     updates_pb->set_next_rowset_id(_next_rowset_id);
     updates_pb->set_next_log_id(_next_log_id);
+    // set extra file size
+    updates_pb->mutable_extra_file_size()->set_pindex_size(_extra_file_size_cache.pindex_size);
+    updates_pb->mutable_extra_file_size()->set_col_size(_extra_file_size_cache.col_size);
     if (_apply_version_idx < _edit_version_infos.size()) {
         const EditVersion& apply_version = _edit_version_infos[_apply_version_idx]->version;
         updates_pb->mutable_apply_version()->set_major_number(apply_version.major_number());

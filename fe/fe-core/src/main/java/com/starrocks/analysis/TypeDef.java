@@ -41,7 +41,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -79,12 +78,6 @@ public class TypeDef implements ParseNode {
 
     public static TypeDef createChar(int len) {
         return new TypeDef(ScalarType.createCharType(len));
-    }
-
-    //
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        analyze();
     }
 
     public void analyze() {
@@ -159,7 +152,8 @@ public class TypeDef implements ParseNode {
             case DECIMALV2:
             case DECIMAL32:
             case DECIMAL64:
-            case DECIMAL128: {
+            case DECIMAL128:
+            case DECIMAL256: {
                 final String name = scalarType.getPrimitiveType().name();
                 final int precision = scalarType.decimalPrecision();
                 final int scale = scalarType.decimalScale();

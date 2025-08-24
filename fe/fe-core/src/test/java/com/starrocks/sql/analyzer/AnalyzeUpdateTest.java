@@ -37,8 +37,8 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -46,7 +46,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeUpdateTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -130,7 +130,7 @@ public class AnalyzeUpdateTest {
                 // Index
                 MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
                 TabletMeta tabletMeta =
-                        new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
+                        new TabletMeta(dbId, tableId, partitionId, indexId, TStorageMedium.HDD, true);
                 index.addTablet(tablet, tabletMeta);
 
                 // Partition

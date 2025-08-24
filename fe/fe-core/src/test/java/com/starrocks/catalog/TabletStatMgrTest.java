@@ -16,6 +16,8 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -26,6 +28,7 @@ import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -35,15 +38,16 @@ import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,7 +65,7 @@ public class TabletStatMgrTest {
     private static final long INDEX_ID = 4;
     private static final long PH_PARTITION_ID = 5;
 
-    @Before
+    @BeforeEach
     public void before() {
         UtFrameUtils.mockInitWarehouseEnv();
     }
@@ -81,7 +85,7 @@ public class TabletStatMgrTest {
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Tablet2 is LocalTablet
-        TabletMeta tabletMeta2 = new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, 0, TStorageMedium.HDD);
+        TabletMeta tabletMeta2 = new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, TStorageMedium.HDD);
         invertedIndex.addTablet(tablet2Id, tabletMeta2);
         Replica replica = new Replica(tablet2Id + 1, backendId, 0, Replica.ReplicaState.NORMAL);
         invertedIndex.addReplica(tablet2Id, replica);
@@ -123,8 +127,8 @@ public class TabletStatMgrTest {
         TabletStatMgr tabletStatMgr = new TabletStatMgr();
         Deencapsulation.invoke(tabletStatMgr, "updateLocalTabletStat", backendId, result);
 
-        Assert.assertEquals(200L, replica.getDataSize());
-        Assert.assertEquals(201L, replica.getRowCount());
+        Assertions.assertEquals(200L, replica.getDataSize());
+        Assertions.assertEquals(201L, replica.getRowCount());
     }
 
     private LakeTable createLakeTableForTest() {
@@ -151,7 +155,7 @@ public class TabletStatMgrTest {
 
         // Index
         MaterializedIndex index = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, 0, TStorageMedium.HDD, true);
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, TStorageMedium.HDD, true);
         index.addTablet(tablet1, tabletMeta);
         index.addTablet(tablet2, tabletMeta);
 
@@ -221,10 +225,10 @@ public class TabletStatMgrTest {
                 maxTimes = 1;
                 result = new Delegate() {
                     Future<TabletStatResponse> getTabletStats(TabletStatRequest request) {
-                        Assert.assertEquals(LakeService.TIMEOUT_GET_TABLET_STATS, (long) request.timeoutMs);
-                        Assert.assertEquals(2, request.tabletInfos.size());
-                        Assert.assertEquals(tablet1Id, (long) request.tabletInfos.get(0).tabletId);
-                        Assert.assertEquals(tablet2Id, (long) request.tabletInfos.get(1).tabletId);
+                        Assertions.assertEquals(LakeService.TIMEOUT_GET_TABLET_STATS, (long) request.timeoutMs);
+                        Assertions.assertEquals(2, request.tabletInfos.size());
+                        Assertions.assertEquals(tablet1Id, (long) request.tabletInfos.get(0).tabletId);
+                        Assertions.assertEquals(tablet2Id, (long) request.tabletInfos.get(1).tabletId);
 
                         return new Future<TabletStatResponse>() {
                             @Override
@@ -281,12 +285,12 @@ public class TabletStatMgrTest {
         LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
                 .getBaseIndex().getTablets().get(1);
 
-        Assert.assertEquals(tablet1.getRowCount(-1), tablet1NumRows);
-        Assert.assertEquals(tablet1.getDataSize(true), tablet1DataSize);
-        Assert.assertEquals(tablet2.getRowCount(-1), tablet2NumRows);
-        Assert.assertEquals(tablet2.getDataSize(true), tablet2DataSize);
-        Assert.assertTrue(tablet1.getDataSizeUpdateTime() >= t1 && tablet1.getDataSizeUpdateTime() <= t2);
-        Assert.assertTrue(tablet2.getDataSizeUpdateTime() >= t1 && tablet2.getDataSizeUpdateTime() <= t2);
+        Assertions.assertEquals(tablet1.getRowCount(-1), tablet1NumRows);
+        Assertions.assertEquals(tablet1.getDataSize(true), tablet1DataSize);
+        Assertions.assertEquals(tablet2.getRowCount(-1), tablet2NumRows);
+        Assertions.assertEquals(tablet2.getDataSize(true), tablet2DataSize);
+        Assertions.assertTrue(tablet1.getDataSizeUpdateTime() >= t1 && tablet1.getDataSizeUpdateTime() <= t2);
+        Assertions.assertTrue(tablet2.getDataSizeUpdateTime() >= t1 && tablet2.getDataSizeUpdateTime() <= t2);
     }
 
     @Test
@@ -334,12 +338,12 @@ public class TabletStatMgrTest {
         LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
                 .getBaseIndex().getTablets().get(1);
 
-        Assert.assertEquals(0, tablet1.getRowCount(-1));
-        Assert.assertEquals(0, tablet1.getDataSize(true));
-        Assert.assertEquals(0, tablet2.getRowCount(-1));
-        Assert.assertEquals(0, tablet2.getDataSize(true));
-        Assert.assertEquals(0L, tablet1.getDataSizeUpdateTime());
-        Assert.assertEquals(0L, tablet2.getDataSizeUpdateTime());
+        Assertions.assertEquals(0, tablet1.getRowCount(-1));
+        Assertions.assertEquals(0, tablet1.getDataSize(true));
+        Assertions.assertEquals(0, tablet2.getRowCount(-1));
+        Assertions.assertEquals(0, tablet2.getDataSize(true));
+        Assertions.assertEquals(0L, tablet1.getDataSizeUpdateTime());
+        Assertions.assertEquals(0L, tablet2.getDataSizeUpdateTime());
     }
 
     @Test
@@ -430,12 +434,12 @@ public class TabletStatMgrTest {
         LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
                 .getBaseIndex().getTablets().get(1);
 
-        Assert.assertEquals(0, tablet1.getRowCount(-1));
-        Assert.assertEquals(0, tablet1.getDataSize(true));
-        Assert.assertEquals(0, tablet2.getRowCount(-1));
-        Assert.assertEquals(0, tablet2.getDataSize(true));
-        Assert.assertEquals(0L, tablet1.getDataSizeUpdateTime());
-        Assert.assertEquals(0L, tablet2.getDataSizeUpdateTime());
+        Assertions.assertEquals(0, tablet1.getRowCount(-1));
+        Assertions.assertEquals(0, tablet1.getDataSize(true));
+        Assertions.assertEquals(0, tablet2.getRowCount(-1));
+        Assertions.assertEquals(0, tablet2.getDataSize(true));
+        Assertions.assertEquals(0L, tablet1.getDataSizeUpdateTime());
+        Assertions.assertEquals(0L, tablet2.getDataSizeUpdateTime());
     }
 
     @Test
@@ -473,5 +477,137 @@ public class TabletStatMgrTest {
         assertDoesNotThrow(() -> {
             Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
         });
+    }
+
+
+    @Test
+    public void testExceptionAliveNode(@Mocked WarehouseManager warehouseManager, @Mocked LakeService lakeService,
+                                       @Mocked GlobalStateMgr globalStateMgr) {
+        LakeTable table = createLakeTableForTest();
+
+        // db
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return globalStateMgr;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+
+        new MockUp<Utils>() {
+            @Mock
+            public Long chooseNodeId(LakeTablet tablet) {
+                return 1000L;
+            }
+
+            @Mock
+            public ComputeNode chooseNode(LakeTablet tablet) {
+                return null;
+            }
+        };
+
+        new Expectations() {
+            {
+                warehouseManager.getComputeNodeAssignedToTablet((ComputeResource) any, anyLong);
+                result = new Delegate() {
+                    ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                        throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, tabletId);
+                    }
+                };
+            }
+        };
+
+        new Expectations() {
+            {
+                lakeService.getTabletStats((TabletStatRequest) any);
+                times = 0;
+            }
+        };
+
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
+
+    }
+
+    @Test
+    public void testNullAliveNode(@Mocked WarehouseManager warehouseManager, @Mocked LakeService lakeService,
+                                  @Mocked GlobalStateMgr globalStateMgr) {
+        LakeTable table = createLakeTableForTest();
+
+        // db
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return globalStateMgr;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(TNetworkAddress addr) {
+                return lakeService;
+            }
+
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
+            }
+        };
+        new MockUp<Utils>() {
+            @Mock
+            public Long chooseNodeId(LakeTablet tablet) {
+                return 1000L;
+            }
+
+            @Mock
+            public ComputeNode chooseNode(LakeTablet tablet) {
+                return null;
+            }
+        };
+
+        new Expectations() {
+            {
+                warehouseManager.getComputeNodeAssignedToTablet((ComputeResource) any, anyLong);
+                result = new Delegate() {
+                    ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                        if (tabletId == 10L) {
+                            return null;
+                        }
+                        return new ComputeNode(1000L, "127.0.0.1", 9030);
+                    }
+                };
+            }
+        };
+
+        new Expectations() {
+            {
+                lakeService.getTabletStats((TabletStatRequest) any);
+                times = 1;
+            }
+        };
+
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
+
     }
 }

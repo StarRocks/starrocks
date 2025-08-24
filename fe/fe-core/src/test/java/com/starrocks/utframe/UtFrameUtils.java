@@ -61,6 +61,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -114,7 +115,6 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -148,7 +148,7 @@ import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -302,6 +302,10 @@ public class UtFrameUtils {
     }
 
     public static synchronized void createMinStarRocksCluster(boolean startBDB, RunMode runMode) {
+        createMinStarRocksCluster(startBDB, runMode, "fe/mocked/test/" + UUID.randomUUID().toString() + "/");
+    }
+
+    public static synchronized void createMinStarRocksCluster(boolean startBDB, RunMode runMode, String runningDir) {
         // to avoid call createMinStarRocksCluster multiple times
         if (CREATED_MIN_CLUSTER.get()) {
             return;
@@ -310,7 +314,7 @@ public class UtFrameUtils {
             ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ThriftConnectionPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
-            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB, runMode);
+            startFEServer(runningDir, startBDB, runMode);
 
             addMockBackend(10001);
 
@@ -344,21 +348,21 @@ public class UtFrameUtils {
 
     public static Backend addMockBackend(int backendId, String host, int beThriftPort) throws Exception {
         // start be
-        MockedBackend backend = new MockedBackend(host, beThriftPort);
+        MockedBackend backend = new MockedBackend(backendId, host, beThriftPort);
         // add be
         return addMockBackend(backend, backendId);
     }
 
     public static Backend addMockBackend(int backendId) throws Exception {
         // start be
-        MockedBackend backend = new MockedBackend("127.0.0.1");
+        MockedBackend backend = new MockedBackend(backendId, "127.0.0.1");
         // add be
         return addMockBackend(backend, backendId);
     }
 
     public static ComputeNode addMockComputeNode(int backendId) throws Exception {
         // start be
-        MockedBackend backend = new MockedBackend("127.0.108.1");
+        MockedBackend backend = new MockedBackend(backendId, "127.0.108.1");
         // add be
         return addMockComputeNode(backend, backendId);
     }
@@ -471,8 +475,8 @@ public class UtFrameUtils {
             }
         }
 
-        Assert.assertEquals("Some fragments do not belong to the fragment tree",
-                    plan.getFragments().size(), visitedFragments.size());
+        Assertions.assertEquals(plan.getFragments().size(), visitedFragments.size(),
+                "Some fragments do not belong to the fragment tree");
     }
 
     /*
@@ -496,7 +500,7 @@ public class UtFrameUtils {
             }
 
             ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
-            Assert.assertTrue(statementBase instanceof CreateMaterializedViewStatement);
+            Assertions.assertTrue(statementBase instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) statementBase;
             return Pair.create(createMVStmt, createMVStmt.getMaintenancePlan());
         } finally {
@@ -560,7 +564,7 @@ public class UtFrameUtils {
             }
             return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
             return null;
         }
     }
@@ -1188,7 +1192,7 @@ public class UtFrameUtils {
                 } catch (JournalInconsistentException e) {
                     System.err.println("load journal failed, type: " + je.opCode() + " , error: " + e.getMessage());
                     e.printStackTrace();
-                    Assert.fail();
+                    Assertions.fail();
                 }
             }
             System.out.println("replayed " + count + " journal(s) from begin to end");
@@ -1319,6 +1323,7 @@ public class UtFrameUtils {
 
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;
+        Config.mv_refresh_default_planner_optimize_timeout = 300 * 1000; // 5min
 
         if (connectContext != null) {
             // 300s: 5min
@@ -1452,7 +1457,7 @@ public class UtFrameUtils {
         try {
             statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(query, connectContext);
         } catch (Exception e) {
-            Assert.fail("Parse query failed:" + DebugUtil.getStackTrace(e));
+            Assertions.fail("Parse query failed:" + DebugUtil.getStackTrace(e));
         }
         LogicalPlan logicalPlan = UtFrameUtils.getQueryLogicalPlan(connectContext, columnRefFactory, statement);
         OptimizerOptions optimizerOptions = new OptimizerOptions(OptimizerOptions.OptimizerStrategy.RULE_BASED);
@@ -1468,7 +1473,7 @@ public class UtFrameUtils {
     public static List<LogicalScanOperator> getQueryScanOperators(ConnectContext connectContext,
                                                                   String query) {
         OptExpression optExpression = getQueryOptExpression(connectContext, query);
-        Assert.assertNotNull(optExpression);
+        Assertions.assertNotNull(optExpression);
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(optExpression);
         return scanOperators;
     }

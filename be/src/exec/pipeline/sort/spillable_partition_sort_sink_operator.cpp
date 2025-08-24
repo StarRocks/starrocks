@@ -101,7 +101,9 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
 
 Status SpillablePartitionSortSinkOperator::set_finished(RuntimeState* state) {
     _is_finished = true;
-    _chunks_sorter->cancel();
+    if (state->is_cancelled()) {
+        _chunks_sorter->cancel();
+    }
     return Status::OK();
 }
 

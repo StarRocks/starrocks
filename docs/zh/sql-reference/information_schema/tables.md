@@ -13,7 +13,7 @@ displayed_sidebar: docs
 | TABLE_CATALOG   | 表所属的 Catalog 名称。                                      |
 | TABLE_SCHEMA    | 表所属的数据库名称。                                         |
 | TABLE_NAME      | 表名。                                                       |
-| TABLE_TYPE      | 表的类型。有效值：`BASE TABLE` 和 `VIEW`。                  |
+| TABLE_TYPE      | 表的类型。有效值：`TABLE`（`BASE TABLE`）、`VIEW` 和 `SYSTEM VIEW`（仅当 `mysql_server_version` 为 `8.0.33` 时支持）。 |
 | ENGINE          | 表的引擎类型。有效值：`StarRocks`、`MySQL`、`MEMORY` 和空字符串。 |
 | VERSION         | 该字段暂不可用。                                             |
 | ROW_FORMAT      | 该字段暂不可用。                                             |

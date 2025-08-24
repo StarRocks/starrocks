@@ -22,9 +22,11 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
@@ -97,7 +99,7 @@ class IMTCreator {
         // Distribute Key, already set in MVAnalyzer
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
-        DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(columns);
+        DistributionInfo distributionInfo = DistributionInfoBuilder.build(distributionDesc, columns);
         if (distributionInfo.getBucketNum() == 0) {
             int numBucket = CatalogUtils.calBucketNumAccordingToBackends();
             distributionInfo.setBucketNum(numBucket);
@@ -105,7 +107,7 @@ class IMTCreator {
 
         // Refresh
         MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-        mvRefreshScheme.setType(MaterializedView.RefreshType.INCREMENTAL);
+        mvRefreshScheme.setType(MaterializedViewRefreshType.INCREMENTAL);
 
         String mvName = stmt.getTableName().getTbl();
         return new MaterializedView(mvId, dbId, mvName, columns, stmt.getKeysType(), partitionInfo,

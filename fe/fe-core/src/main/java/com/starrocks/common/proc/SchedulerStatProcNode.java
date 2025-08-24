@@ -41,21 +41,18 @@ import com.starrocks.server.GlobalStateMgr;
 
 public class SchedulerStatProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("Item").add("Value").build();
+            .add("Item").add("Value").add("Increase").build();
 
     private TabletSchedulerStat stat;
 
     public SchedulerStatProcNode() {
-        this.stat = GlobalStateMgr.getCurrentState().getTabletScheduler().getStat().getLastSnapshot();
+        this.stat = GlobalStateMgr.getCurrentState().getTabletScheduler().getStat();
     }
 
     @Override
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
-        if (stat == null) {
-            return result;
-        }
         result.setRows(stat.getBrief());
         return result;
     }

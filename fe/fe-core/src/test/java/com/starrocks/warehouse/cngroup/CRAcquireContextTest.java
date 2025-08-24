@@ -16,8 +16,8 @@ package com.starrocks.warehouse.cngroup;
 
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.warehouse.WarehouseTestBase;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
@@ -86,10 +86,17 @@ public class CRAcquireContextTest extends WarehouseTestBase {
     public void testCNAcquireContext5() {
         try {
             CRAcquireContext.of("bad_warehouse");
-            Assert.fail();
+            Assertions.fail();
         } catch (ErrorReportException e) {
             e.printStackTrace();
             assertThat(e.getMessage()).contains("Warehouse name: bad_warehouse not exist");
         }
+    }
+
+    @Test
+    public void testCNAcquireContextToString() {
+        CRAcquireContext context = CRAcquireContext.of(1L, CRAcquireStrategy.STANDARD);
+        String expected = "{warehouseId=1, strategy=STANDARD, prevComputeResource=null}";
+        assertThat(context.toString()).isEqualTo(expected);
     }
 }

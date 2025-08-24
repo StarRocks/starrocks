@@ -54,7 +54,6 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
-import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
@@ -111,6 +110,7 @@ import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
@@ -140,7 +140,7 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -150,6 +150,9 @@ import com.starrocks.storagevolume.StorageVolume;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.SortDirection;
+import org.apache.iceberg.SortField;
+import org.apache.iceberg.SortOrder;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -212,7 +215,7 @@ public class AstToStringBuilder {
         @Override
         public String visitCreateUserStatement(CreateUserStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append("CREATE USER ").append(stmt.getUserIdentity());
+            sb.append("CREATE USER ").append(stmt.getUser());
             sb.append(buildAuthOptionSql(stmt.getAuthOption()));
 
             if (!stmt.getDefaultRoles().isEmpty()) {
@@ -227,7 +230,7 @@ public class AstToStringBuilder {
         @Override
         public String visitAlterUserStatement(AlterUserStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append("ALTER USER ").append(stmt.getUserIdentity());
+            sb.append("ALTER USER ").append(stmt.getUser());
             sb.append(buildAuthOptionSql(stmt.getAuthOption()));
 
             return sb.toString();
@@ -297,8 +300,8 @@ public class AstToStringBuilder {
             } else {
                 sb.append(" FROM ");
             }
-            if (stmt.getUserIdentity() != null) {
-                sb.append("USER ").append(stmt.getUserIdentity());
+            if (stmt.getUser() != null) {
+                sb.append("USER ").append(stmt.getUser());
             } else {
                 sb.append("ROLE '").append(stmt.getRole()).append("'");
             }
@@ -330,7 +333,7 @@ public class AstToStringBuilder {
             if (statement.getGrantType().equals(GrantType.ROLE)) {
                 sqlBuilder.append("ROLE ").append(statement.getRoleOrGroup());
             } else {
-                sqlBuilder.append(statement.getUserIdentity());
+                sqlBuilder.append(statement.getUser());
             }
 
             return sqlBuilder.toString();
@@ -368,7 +371,7 @@ public class AstToStringBuilder {
                     setVarList.add(setVarSql);
                 } else if (setVar instanceof SetPassVar) {
                     SetPassVar setPassVar = (SetPassVar) setVar;
-                    UserIdentity userIdentity = setPassVar.getUserIdent();
+                    UserRef userIdentity = setPassVar.getUser();
                     String setPassSql = "";
                     if (userIdentity == null) {
                         setPassSql += "PASSWORD";
@@ -1951,6 +1954,29 @@ public class AstToStringBuilder {
             createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
         }
 
+        // Order by
+        if (table.isIcebergTable()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            SortOrder sortOrder = icebergTable.getNativeTable().sortOrder();
+            if (sortOrder != null && sortOrder.isSorted()) {
+                List<String> columnNames = table.getFullSchema().stream().map(Column::getName).collect(toList());
+                List<String> sortColumns = new ArrayList<>();
+                List<Integer> sortKeyIndexes = icebergTable.getSortKeyIndexes();
+                for (int idx = 0; idx < sortKeyIndexes.size(); ++idx) {
+                    int sortKeyIndex = sortKeyIndexes.get(idx);
+                    SortField sortField = sortOrder.fields().get(idx);
+                    if (!sortField.transform().isIdentity()) {
+                        continue;
+                    }
+                    String sortColumnName = columnNames.get(sortKeyIndex);
+                    String sortDirection = sortField.direction() == SortDirection.ASC ? "ASC" : "DESC";
+                    String sortNullsOrder = sortField.nullOrder().toString();
+                    sortColumns.add(String.format("%s %s %s", sortColumnName, sortDirection, sortNullsOrder));
+                }
+                createTableSql.append("\nORDER BY (").append(String.join(",", sortColumns)).append(")");
+            }
+        }
+
         // Properties
         Map<String, String> properties = new HashMap<>();
         try {
@@ -1971,12 +1997,7 @@ public class AstToStringBuilder {
 
         if (!properties.isEmpty()) {
             createTableSql.append("\nPROPERTIES (");
-            for (Map.Entry<String, String> kv : properties.entrySet()) {
-                createTableSql.append("\"" + kv.getKey() + "\" = \"").append(kv.getValue()).append("\",");
-            }
-            if (createTableSql.charAt(createTableSql.length() - 1) == ',') {
-                createTableSql.deleteCharAt(createTableSql.length() - 1);
-            }
+            createTableSql.append(new PrintableMap<>(properties, "=", true, false, true).toString());
             createTableSql.append(")");
         }
         createTableSql.append(";");

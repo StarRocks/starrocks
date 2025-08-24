@@ -18,8 +18,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.UnsupportedEncodingException;
 import java.util.Map;
@@ -34,8 +34,8 @@ public class OutFileClauseTest {
         // default column separator and line delimiter
         OutFileClause clause = new OutFileClause("file_path", "csv", properties);
         clause.analyze(scope);
-        Assert.assertEquals("\t", clause.getColumnSeparator());
-        Assert.assertEquals("\n", clause.getRowDelimiter());
+        Assertions.assertEquals("\t", clause.getColumnSeparator());
+        Assertions.assertEquals("\n", clause.getRowDelimiter());
 
         // column separator: | and line delimiter: ,
         properties.clear();
@@ -43,8 +43,8 @@ public class OutFileClauseTest {
         properties.put("line_delimiter", ",");
         clause = new OutFileClause("file_path", "csv", properties);
         clause.analyze(scope);
-        Assert.assertEquals("|", clause.getColumnSeparator());
-        Assert.assertEquals(",", clause.getRowDelimiter());
+        Assertions.assertEquals("|", clause.getColumnSeparator());
+        Assertions.assertEquals(",", clause.getRowDelimiter());
 
         // invisible character column separator and line delimiter
         properties.clear();
@@ -52,7 +52,7 @@ public class OutFileClauseTest {
         properties.put("line_delimiter", "\\x02");
         clause = new OutFileClause("file_path", "csv", properties);
         clause.analyze(scope);
-        Assert.assertEquals(new String(new byte[] {1}, "UTF-8"), clause.getColumnSeparator());
-        Assert.assertEquals(new String(new byte[] {2}, "UTF-8"), clause.getRowDelimiter());
+        Assertions.assertEquals(new String(new byte[] {1}, "UTF-8"), clause.getColumnSeparator());
+        Assertions.assertEquals(new String(new byte[] {2}, "UTF-8"), clause.getRowDelimiter());
     }
 }

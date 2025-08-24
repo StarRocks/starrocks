@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.compress.utils.Lists;
@@ -62,9 +61,9 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
     private final long warehouseId;
     private final BaseSlotManager slotManager;
 
-    public SlotSelectionStrategyV2(long warehouseId) {
+    public SlotSelectionStrategyV2(BaseSlotManager slotManager, long warehouseId) {
         this.warehouseId = warehouseId;
-        this.slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        this.slotManager = slotManager;
     }
 
     public QueryQueueOptions getOpts() {

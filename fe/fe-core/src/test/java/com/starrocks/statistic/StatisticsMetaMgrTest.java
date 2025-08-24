@@ -31,8 +31,8 @@ import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
@@ -71,7 +71,7 @@ public class StatisticsMetaMgrTest extends PlanTestBase  {
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         Table table = globalStateMgr.getLocalMetastore().getTable("_statistics_", tblName);
         m.alterFullStatisticsTable(connectContext, table);
-        Assert.assertTrue(m.checkTableCompatible(tblName));
-        Assert.assertTrue(m.alterTable(FULL_STATISTICS_TABLE_NAME));
+        Assertions.assertTrue(m.checkTableCompatible(tblName));
+        Assertions.assertTrue(m.alterTable(FULL_STATISTICS_TABLE_NAME));
     }
 }

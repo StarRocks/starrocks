@@ -33,8 +33,8 @@ import com.starrocks.thrift.TTabletFailInfo;
 import mockit.Mock;
 import mockit.MockUp;
 import org.awaitility.Awaitility;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -62,9 +62,9 @@ public class JoinTest extends SchedulerTestBase {
         scheduler.cancel("Cancel by test");
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(joinFinished::get);
 
-        Assert.assertTrue(scheduler.isDone());
-        Assert.assertTrue(scheduler.checkBackendState());
-        Assert.assertTrue(scheduler.getExecStatus().isCancelled());
+        Assertions.assertTrue(scheduler.isDone());
+        Assertions.assertTrue(scheduler.checkBackendState());
+        Assertions.assertTrue(scheduler.getExecStatus().isCancelled());
     }
 
     @Test
@@ -84,9 +84,9 @@ public class JoinTest extends SchedulerTestBase {
         };
         Awaitility.await().atMost(7, TimeUnit.SECONDS).until(joinFinished::get);
 
-        Assert.assertFalse(scheduler.isDone());
-        Assert.assertFalse(scheduler.checkBackendState());
-        Assert.assertEquals(TStatusCode.INTERNAL_ERROR, scheduler.getExecStatus().getErrorCode());
+        Assertions.assertFalse(scheduler.isDone());
+        Assertions.assertFalse(scheduler.checkBackendState());
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, scheduler.getExecStatus().getErrorCode());
     }
 
     @Test
@@ -109,8 +109,8 @@ public class JoinTest extends SchedulerTestBase {
 
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(joinFinished::get);
 
-        Assert.assertTrue(scheduler.isDone());
-        Assert.assertEquals(TStatusCode.INTERNAL_ERROR, scheduler.getExecStatus().getErrorCode());
+        Assertions.assertTrue(scheduler.isDone());
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, scheduler.getExecStatus().getErrorCode());
     }
 
     @Test
@@ -132,9 +132,9 @@ public class JoinTest extends SchedulerTestBase {
             scheduler.updateFragmentExecStatus(request);
         });
         for (FragmentInstanceExecState execution : scheduler.getExecutionDAG().getExecutions()) {
-            Assert.assertFalse(execution.isFinished());
+            Assertions.assertFalse(execution.isFinished());
         }
-        Assert.assertFalse(joinFinished.get());
+        Assertions.assertFalse(joinFinished.get());
 
         // Receive duplicated EOS updateFragmentExecStatus for each Execution.
         final List<String> deltaUrls = Lists.newArrayList();
@@ -203,26 +203,26 @@ public class JoinTest extends SchedulerTestBase {
             });
         }
         for (FragmentInstanceExecState execution : scheduler.getExecutionDAG().getExecutions()) {
-            Assert.assertTrue(execution.isFinished());
+            Assertions.assertTrue(execution.isFinished());
         }
 
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(joinFinished::get);
 
-        Assert.assertTrue(scheduler.isDone());
-        Assert.assertTrue(scheduler.getExecStatus().ok());
+        Assertions.assertTrue(scheduler.isDone());
+        Assertions.assertTrue(scheduler.getExecStatus().ok());
 
         // Check updateLoadInformation.
-        Assert.assertEquals(deltaUrls, scheduler.getDeltaUrls());
-        Assert.assertEquals(trackingUrl, scheduler.getTrackingUrl());
-        Assert.assertEquals(exportFiles, scheduler.getExportFiles());
-        Assert.assertEquals(commitInfos, scheduler.getCommitInfos());
-        Assert.assertEquals(failInfos, scheduler.getFailInfos());
-        Assert.assertEquals(new ArrayList<>(rejectedRecordPaths), scheduler.getRejectedRecordPaths());
-        Assert.assertEquals(sinkCommitInfos, scheduler.getSinkCommitInfos());
+        Assertions.assertEquals(deltaUrls, scheduler.getDeltaUrls());
+        Assertions.assertEquals(trackingUrl, scheduler.getTrackingUrl());
+        Assertions.assertEquals(exportFiles, scheduler.getExportFiles());
+        Assertions.assertEquals(commitInfos, scheduler.getCommitInfos());
+        Assertions.assertEquals(failInfos, scheduler.getFailInfos());
+        Assertions.assertEquals(new ArrayList<>(rejectedRecordPaths), scheduler.getRejectedRecordPaths());
+        Assertions.assertEquals(sinkCommitInfos, scheduler.getSinkCommitInfos());
 
         Map<String, String> stringLoadCounters = loadCounters.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> String.valueOf(entry.getValue())));
-        Assert.assertEquals(stringLoadCounters, scheduler.getLoadCounters());
+        Assertions.assertEquals(stringLoadCounters, scheduler.getLoadCounters());
     }
 
     @Test
@@ -257,7 +257,7 @@ public class JoinTest extends SchedulerTestBase {
             int indexInJob = executionIndexes.get(i);
             FragmentInstanceExecState execState = scheduler.getExecutionDAG().getExecution(indexInJob);
             System.out.println(execState.getState());
-            Assert.assertTrue(execState.getState() == FragmentInstanceExecState.State.FINISHED);
+            Assertions.assertTrue(execState.getState() == FragmentInstanceExecState.State.FINISHED);
         }
     }
 }

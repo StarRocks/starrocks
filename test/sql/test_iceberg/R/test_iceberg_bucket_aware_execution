@@ -1,0 +1,336 @@
+-- name: testIcebergBucketAwareExecution
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","enable_get_stats_from_external_metadata"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+set enable_bucket_aware_execution_on_lake = true;
+-- result:
+-- !result
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2 b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2 b join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 c where a.trip_id = b.trip_id and b.trip_id = c.trip_id', 'INNER JOIN (COLOCATE)')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2 b join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 c where a.trip_id = b.trip_id and b.trip_id = c.trip_id', 'INNER JOIN (PARTITIONED)')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2 b join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 c where a.trip_id = b.trip_id and b.trip_id = c.trip_id', 'INNER JOIN (BUCKET_SHUFFLE(S))')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b on a.trip_id = b.trip_id', 'INNER JOIN (BUCKET_SHUFFLE)')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id', 'INNER JOIN (BUCKET_SHUFFLE)')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id', 'INNER JOIN (PARTITIONED)')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id', 'INNER JOIN (BUCKET_SHUFFLE(S))')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id', 'INNER JOIN (COLOCATE)')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_2 b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_2 b on a.trip_id = b.trip_id and a.vendor_id = b.vendor_id', 'INNER JOIN (COLOCATE)')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select sum(trip_distance), trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 group by trip_id', 'update finalize')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select sum(trip_distance), vendor_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 group by vendor_id', 'update finalize')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select sum(trip_distance), trip_id, vendor_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 group by trip_id, vendor_id', 'update finalize')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select sum(a.trip_distance), a.trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2 b on a.trip_id = b.trip_id group by a.trip_id', 'INNER JOIN (COLOCATE)')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select sum(a.trip_distance), a.trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2 b on a.trip_id = b.trip_id group by a.trip_id', 'update finalize')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select sum(a.trip_distance), a.trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b on a.trip_id = b.trip_id group by a.trip_id', 'INNER JOIN (BUCKET_SHUFFLE)')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select sum(a.trip_distance), a.trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b on a.trip_id = b.trip_id group by a.trip_id', 'update finalize')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select trip_id, trip_distance, RANK() over (partition by trip_id order by trip_distance desc) as rank from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_analytic', '1:EXCHANGE')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1', 'colocate')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2', 'colocate')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket', 'BUCKET_SHUFFLE_HASH_PARTITIONED')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_not_match b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_not_match b on a.trip_id = b.trip_id', 'INNER JOIN (BUCKET_SHUFFLE)')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_int32 b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_int32 b on a.trip_id = b.trip_id', 'INNER JOIN (BUCKET_SHUFFLE)')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_2 b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_2 b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo a join [bucket] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b on a.trip_id = b.trip_id', 'INNER JOIN (BUCKET_SHUFFLE)')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select sum(trip_distance), trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_multi_bucket_type group by trip_id', 'update finalize')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select sum(trip_distance), dt from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_multi_bucket_type group by dt', 'update finalize')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select sum(trip_distance), ts from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_multi_bucket_type group by ts', 'update finalize')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select sum(trip_distance), dec from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_multi_bucket_type group by dec', 'update finalize')
+-- result:
+None
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2 b on a.trip_id = b.trip_id;
+-- result:
+3081	3081	717966
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2 b join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 c where a.trip_id = b.trip_id and b.trip_id = c.trip_id;
+-- result:
+9144	9144	2165863
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b on a.trip_id = b.trip_id;
+-- result:
+4002	4002	1032700
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id;
+-- result:
+7842	7842	2007666
+-- !result
+set global_runtime_filter_wait_timeout = 500;
+-- result:
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id;
+-- result:
+7842	7842	2007666
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id;
+-- result:
+7842	7842	2007666
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id;
+-- result:
+7842	7842	2007666
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_2 b on a.trip_id = b.trip_id;
+-- result:
+2969	2969	757258
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_2 b on a.trip_id = b.trip_id and a.vendor_id = b.vendor_id;
+-- result:
+2969	2969	757258
+-- !result
+select sum(trip_distance), trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 group by trip_id order by 1 desc, 2 limit 3;
+-- result:
+3944	493
+3912	489
+3465	495
+-- !result
+select sum(trip_distance), vendor_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 group by vendor_id order by 1 desc, 2 limit 3;
+-- result:
+3944	493
+3912	489
+3465	495
+-- !result
+select sum(trip_distance), trip_id, vendor_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 group by trip_id, vendor_id order by 1 desc, 2, 3 limit 3;
+-- result:
+3944	493	493
+3912	489	489
+3465	495	495
+-- !result
+select sum(a.trip_distance), a.trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2 b on a.trip_id = b.trip_id group by a.trip_id order by 1 desc, 2 limit 3;
+-- result:
+12565	359
+11616	484
+10632	443
+-- !result
+select sum(a.trip_distance), a.trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b on a.trip_id = b.trip_id group by a.trip_id order by 1 desc, 2 limit 3;
+-- result:
+14970	499
+13888	496
+13692	489
+-- !result
+select trip_id, trip_distance, RANK() over (partition by trip_id order by trip_distance desc) as rank from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_analytic order by 3 asc, 1 desc limit 5;
+-- result:
+104	504	1
+103	503	1
+102	502	1
+101	501	1
+100	500	1
+-- !result
+select count(trip_distance), count(*), sum(trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1;
+-- result:
+2000	2001	518132
+-- !result
+select count(trip_distance), count(*), sum(trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2;
+-- result:
+2000	2001	518132
+-- !result
+select count(trip_distance), count(*), sum(trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket;
+-- result:
+2000	2001	518132
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_not_match b on a.trip_id = b.trip_id;
+-- result:
+3015	3015	769471
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_int32 b on a.trip_id = b.trip_id;
+-- result:
+3142	3142	785038
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_2 b on a.trip_id = b.trip_id;
+-- result:
+2041	2041	508677
+-- !result
+set enable_bucket_aware_execution_on_lake = false;
+-- result:
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2 b on a.trip_id = b.trip_id;
+-- result:
+3081	3081	717966
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2 b join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 c where a.trip_id = b.trip_id and b.trip_id = c.trip_id;
+-- result:
+9144	9144	2165863
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b on a.trip_id = b.trip_id;
+-- result:
+4002	4002	1032700
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo c where a.trip_id = b.trip_id and b.trip_id = c.trip_id;
+-- result:
+7842	7842	2007666
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_2 b on a.trip_id = b.trip_id;
+-- result:
+2969	2969	757258
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_2 b on a.trip_id = b.trip_id and a.vendor_id = b.vendor_id;
+-- result:
+2969	2969	757258
+-- !result
+select sum(trip_distance), trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 group by trip_id order by 1 desc, 2 limit 3;
+-- result:
+3944	493
+3912	489
+3465	495
+-- !result
+select sum(trip_distance), vendor_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 group by vendor_id order by 1 desc, 2 limit 3;
+-- result:
+3944	493
+3912	489
+3465	495
+-- !result
+select sum(trip_distance), trip_id, vendor_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 group by trip_id, vendor_id order by 1 desc, 2, 3 limit 3;
+-- result:
+3944	493	493
+3912	489	489
+3465	495	495
+-- !result
+select sum(a.trip_distance), a.trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2 b on a.trip_id = b.trip_id group by a.trip_id order by 1 desc, 2 limit 3;
+-- result:
+12565	359
+11616	484
+10632	443
+-- !result
+select sum(a.trip_distance), a.trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b on a.trip_id = b.trip_id group by a.trip_id order by 1 desc, 2 limit 3;
+-- result:
+14970	499
+13888	496
+13692	489
+-- !result
+select trip_id, trip_distance, RANK() over (partition by trip_id order by trip_distance desc) as rank from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_analytic order by 3 asc, 1 desc limit 5;
+-- result:
+104	504	1
+103	503	1
+102	502	1
+101	501	1
+100	500	1
+-- !result
+select count(trip_distance), count(*), sum(trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1;
+-- result:
+2000	2001	518132
+-- !result
+select count(trip_distance), count(*), sum(trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2;
+-- result:
+2000	2001	518132
+-- !result
+select count(trip_distance), count(*), sum(trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket;
+-- result:
+2000	2001	518132
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_not_match b on a.trip_id = b.trip_id;
+-- result:
+3015	3015	769471
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_int32 b on a.trip_id = b.trip_id;
+-- result:
+3142	3142	785038
+-- !result
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_2 b on a.trip_id = b.trip_id;
+-- result:
+2041	2041	508677
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

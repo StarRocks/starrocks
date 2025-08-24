@@ -43,9 +43,6 @@ import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TFloatLiteral;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -85,7 +82,7 @@ public class FloatLiteral extends LiteralExpr {
         super(pos);
         Double floatValue = null;
         try {
-            floatValue = new Double(value);
+            floatValue = Double.valueOf(value);
             checkValue(floatValue);
         } catch (NumberFormatException e) {
             throw new AnalysisException("Invalid floating-point literal: " + value, e);
@@ -216,23 +213,6 @@ public class FloatLiteral extends LiteralExpr {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeDouble(value);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = in.readDouble();
-    }
-
-    public static FloatLiteral read(DataInput in) throws IOException {
-        FloatLiteral literal = new FloatLiteral();
-        literal.readFields(in);
-        return literal;
-    }
-
-    @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), value);
     }
@@ -246,4 +226,3 @@ public class FloatLiteral extends LiteralExpr {
         }
     }
 }
-

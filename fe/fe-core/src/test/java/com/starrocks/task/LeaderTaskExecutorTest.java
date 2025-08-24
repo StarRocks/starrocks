@@ -17,10 +17,10 @@
 
 package com.starrocks.task;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,13 +31,13 @@ public class LeaderTaskExecutorTest {
 
     private LeaderTaskExecutor executor;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         executor = new LeaderTaskExecutor("master_task_executor_test", THREAD_NUM, false);
         executor.start();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         if (executor != null) {
             executor.close();
@@ -48,23 +48,23 @@ public class LeaderTaskExecutorTest {
     public void testSubmit() {
         // submit task
         LeaderTask task1 = new TestLeaderTask(1L);
-        Assert.assertTrue(executor.submit(task1));
-        Assert.assertEquals(1, executor.getTaskNum());
+        Assertions.assertTrue(executor.submit(task1));
+        Assertions.assertEquals(1, executor.getTaskNum());
         // submit same running task error
-        Assert.assertFalse(executor.submit(task1));
-        Assert.assertEquals(1, executor.getTaskNum());
+        Assertions.assertFalse(executor.submit(task1));
+        Assertions.assertEquals(1, executor.getTaskNum());
 
         // submit another task
         LeaderTask task2 = new TestLeaderTask(2L);
-        Assert.assertTrue(executor.submit(task2));
-        Assert.assertEquals(2, executor.getTaskNum());
+        Assertions.assertTrue(executor.submit(task2));
+        Assertions.assertEquals(2, executor.getTaskNum());
 
         // wait for tasks run to end
         try {
             // checker thread interval is 1s
             // sleep 3s
             Thread.sleep(SLEEP_MS * 300);
-            Assert.assertEquals(0, executor.getTaskNum());
+            Assertions.assertEquals(0, executor.getTaskNum());
         } catch (InterruptedException e) {
             LOG.error("error", e);
         }
@@ -74,9 +74,9 @@ public class LeaderTaskExecutorTest {
     public void testPoolSize() {
         int size = executor.getCorePoolSize();
         executor.setPoolSize(size + 1);
-        Assert.assertEquals(size + 1, executor.getCorePoolSize());
+        Assertions.assertEquals(size + 1, executor.getCorePoolSize());
         executor.setPoolSize(size);
-        Assert.assertEquals(size, executor.getCorePoolSize());
+        Assertions.assertEquals(size, executor.getCorePoolSize());
     }
 
     private class TestLeaderTask extends LeaderTask {

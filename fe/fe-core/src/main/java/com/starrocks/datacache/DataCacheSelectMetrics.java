@@ -32,8 +32,8 @@ import java.util.concurrent.TimeUnit;
 
 public class DataCacheSelectMetrics {
     private static final ShowResultSetMetaData SIMPLE_META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("READ_CACHE_SIZE", ScalarType.createVarcharType()))
-            .addColumn(new Column("WRITE_CACHE_SIZE", ScalarType.createVarcharType()))
+            .addColumn(new Column("AVG_READ_CACHE_SIZE", ScalarType.createVarcharType()))
+            .addColumn(new Column("AVG_WRITE_CACHE_SIZE", ScalarType.createVarcharType()))
             .addColumn(new Column("AVG_WRITE_CACHE_TIME", ScalarType.createVarcharType()))
             .addColumn(new Column("TOTAL_CACHE_USAGE", ScalarType.createVarcharType()))
             .build();
@@ -121,8 +121,15 @@ public class DataCacheSelectMetrics {
         List<String> row = Lists.newArrayList();
         rows.add(row);
 
-        row.add(new ByteSizeValue(readCacheSize).toString());
-        row.add(new ByteSizeValue(writeCacheSize).toString());
+        // get avg write and read bytes
+        long avgWriteCacheSize = 0;
+        long avgReadCacheSize = 0;
+        if (!beMetrics.isEmpty()) {
+            avgReadCacheSize = readCacheSize / beMetrics.size();
+            avgWriteCacheSize = writeCacheSize / beMetrics.size();
+        }
+        row.add(new ByteSizeValue(avgReadCacheSize).toString());
+        row.add(new ByteSizeValue(avgWriteCacheSize).toString());
 
         // get avg write cache time
         long avgWriteCacheTime = 0;

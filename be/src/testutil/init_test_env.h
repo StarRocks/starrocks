@@ -64,7 +64,7 @@ int init_test_env(int argc, char** argv) {
     config::spill_local_storage_dir = spill_path.value();
 
     FLAGS_alsologtostderr = true;
-    init_glog("be_test", true);
+    init_glog(argv[0], true);
     CpuInfo::init();
     DiskInfo::init();
     MemInfo::init();

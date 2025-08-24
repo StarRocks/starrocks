@@ -32,10 +32,10 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -53,7 +53,7 @@ public class ReplayFromDumpTestBase {
     public static List<String> MODEL_LISTS = Lists.newArrayList("[end]", "[dump]", "[result]", "[fragment]",
             "[fragment statistics]");
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         // Should disable Dynamic Partition in replay dump test
@@ -65,6 +65,7 @@ public class ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setJoinImplementationMode("auto");
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(false);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
@@ -79,7 +80,7 @@ public class ReplayFromDumpTestBase {
         };
     }
 
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         BackendResourceStat.getInstance().reset();
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
@@ -87,7 +88,7 @@ public class ReplayFromDumpTestBase {
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws Exception {
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = true;
@@ -117,7 +118,7 @@ public class ReplayFromDumpTestBase {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
         return modelContentBuilder.toString();
     }
@@ -141,7 +142,7 @@ public class ReplayFromDumpTestBase {
         String replayCostPlan = Stream.of(
                         PlanTestBase.format(getCostPlanFragment(dumpString, getTestSessionVariable()).second).split("\n"))
                 .filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
-        Assert.assertEquals(originCostPlan, replayCostPlan);
+        Assertions.assertEquals(originCostPlan, replayCostPlan);
     }
 
     protected static String getDumpInfoFromFile(String fileName) throws Exception {
@@ -155,7 +156,7 @@ public class ReplayFromDumpTestBase {
             }
         } catch (IOException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         return sb.toString();

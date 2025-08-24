@@ -71,7 +71,7 @@ public class IcebergManifestsTableScanner extends AbstractIcebergMetadataScanner
     @Override
     protected void initReader() {
         if (table.currentSnapshot() != null) {
-            reader = table.currentSnapshot().allManifests(table.io()).iterator();
+            reader = table.currentSnapshot().allManifests(fileIO).iterator();
         }
     }
 

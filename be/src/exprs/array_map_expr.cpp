@@ -181,7 +181,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         if constexpr (independent_lambda_expr) {
             cur_chunk->append_column(captured_column, slot_id);
         } else {
-            if (captured_column->is_array()) {
+            if (!captured_column->is_constant() && captured_column->is_array()) {
                 auto view_column = ArrayViewColumn::from_array_column(captured_column);
                 ASSIGN_OR_RETURN(auto replicated_view_column, view_column->replicate(aligned_offsets->get_data()));
                 cur_chunk->append_column(replicated_view_column, slot_id);

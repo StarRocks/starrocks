@@ -115,6 +115,918 @@ TEST_F(Int256Test, constructor_from_int128) {
     }
 }
 
+// =============================================================================
+// Float Constructor Tests - Comprehensive Coverage
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_float_basic) {
+    // Basic positive and negative values
+    {
+        float val = 123.456f;
+        int256_t value(val);
+        ASSERT_EQ("123", value.to_string());
+    }
+
+    {
+        float val = -123.456f;
+        int256_t value(val);
+        ASSERT_EQ("-123", value.to_string());
+    }
+
+    // Zero values
+    {
+        int256_t value(0.0f);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        int256_t value(-0.0f);
+        ASSERT_EQ("0", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_float_special_values) {
+    // NaN values
+    {
+        int256_t value(std::numeric_limits<float>::quiet_NaN());
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        int256_t value(std::numeric_limits<float>::signaling_NaN());
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    // Infinity values
+    {
+        int256_t value(std::numeric_limits<float>::infinity());
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        int256_t value(-std::numeric_limits<float>::infinity());
+        ASSERT_EQ("0", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_float_fractional) {
+    // Values less than 1.0 should truncate to 0
+    {
+        int256_t value(0.1f);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        int256_t value(0.9f);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        int256_t value(-0.9f);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        int256_t value(0.999999f);
+        ASSERT_EQ("0", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_float_precision_boundary) {
+    // Test around 2^24 (float precision boundary)
+    constexpr float max_safe_float = 16777216.0f; // 2^24
+
+    {
+        int256_t value(max_safe_float);
+        ASSERT_EQ("16777216", value.to_string());
+    }
+
+    {
+        int256_t value(max_safe_float - 1.0f);
+        ASSERT_EQ("16777215", value.to_string());
+    }
+
+    {
+        int256_t value(-max_safe_float);
+        ASSERT_EQ("-16777216", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_float_large_values) {
+    // Large values that exceed safe precision
+    {
+        float large_val = 1e20f;
+        int256_t value(large_val);
+        // Should not be zero, but precision may be lost
+        ASSERT_NE("0", value.to_string());
+    }
+
+    {
+        float large_val = -1e20f;
+        int256_t value(large_val);
+        ASSERT_NE("0", value.to_string());
+    }
+
+    // Very large values near float max
+    {
+        float max_val = std::numeric_limits<float>::max();
+        int256_t value(max_val);
+        ASSERT_NE("0", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_float_edge_cases) {
+    // Smallest positive normal float
+    {
+        float min_normal = std::numeric_limits<float>::min();
+        int256_t value(min_normal);
+        ASSERT_EQ("0", value.to_string()); // Too small, should be 0
+    }
+
+    // Denormalized values
+    {
+        float denorm = std::numeric_limits<float>::denorm_min();
+        int256_t value(denorm);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    // Values just above and below 1.0
+    {
+        int256_t value1(1.0f);
+        ASSERT_EQ("1", value1.to_string());
+    }
+
+    {
+        int256_t value2(1.1f);
+        ASSERT_EQ("1", value2.to_string());
+    }
+
+    {
+        int256_t value3(1.9f);
+        ASSERT_EQ("1", value3.to_string());
+    }
+}
+
+// =============================================================================
+// Double Constructor Tests - Comprehensive Coverage
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_basic) {
+    {
+        double val = 123456.789;
+        int256_t value(val);
+        ASSERT_EQ("123456", value.to_string());
+    }
+
+    {
+        double val = -123456.789;
+        int256_t value(val);
+        ASSERT_EQ("-123456", value.to_string());
+    }
+
+    {
+        int256_t value(0.0);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        int256_t value(-0.0);
+        ASSERT_EQ("0", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_special_values) {
+    // NaN values
+    {
+        int256_t value(std::numeric_limits<double>::quiet_NaN());
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        int256_t value(std::numeric_limits<double>::signaling_NaN());
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    // Infinity values
+    {
+        int256_t value(std::numeric_limits<double>::infinity());
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        int256_t value(-std::numeric_limits<double>::infinity());
+        ASSERT_EQ("0", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_precision_boundary) {
+    // Test around 2^53 (double precision boundary)
+    constexpr double max_safe_double = 9007199254740992.0; // 2^53
+
+    {
+        int256_t value(max_safe_double);
+        ASSERT_EQ("9007199254740992", value.to_string());
+    }
+
+    {
+        int256_t value(max_safe_double - 1.0);
+        ASSERT_EQ("9007199254740991", value.to_string());
+    }
+
+    {
+        int256_t value(-max_safe_double);
+        ASSERT_EQ("-9007199254740992", value.to_string());
+    }
+
+    // Beyond safe precision
+    {
+        double beyond_safe = max_safe_double + 1.0;
+        int256_t value(beyond_safe);
+        // May lose precision but should not be zero
+        ASSERT_NE("0", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_large_values) {
+    // 64-bit boundary values
+    {
+        double val = static_cast<double>(INT64_MAX);
+        int256_t value(val);
+        ASSERT_NE("0", value.to_string());
+    }
+
+    {
+        double val = static_cast<double>(INT64_MIN);
+        int256_t value(val);
+        ASSERT_NE("0", value.to_string());
+    }
+
+    // Very large values
+    {
+        double large_val = 1e100;
+        int256_t value(large_val);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        double large_val = -1e100;
+        int256_t value(large_val);
+        ASSERT_EQ("0", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_overflow_detection) {
+    // Values that exceed int256_t range should result in zero
+    constexpr double max_int256_double =
+            5.7896044618658097711785492504343953926634992332820282019728792003956564819968e+76;
+
+    {
+        double overflow_val = max_int256_double * 2.0;
+        int256_t value(overflow_val);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        double max_double = std::numeric_limits<double>::max();
+        int256_t value(max_double);
+        ASSERT_EQ("0", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_fractional) {
+    // Values less than 1.0 should truncate to 0
+    {
+        int256_t value(0.1);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        int256_t value(0.999999999);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        int256_t value(-0.999999999);
+        ASSERT_EQ("0", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_128bit_values) {
+    // Values that require 128-bit representation
+    {
+        double pow_128 = std::pow(2.0, 128);
+        int256_t value(pow_128);
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value > int256_t(0));
+    }
+
+    {
+        double pow_100 = std::pow(2.0, 100);
+        int256_t value(pow_100);
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value > int256_t(0));
+    }
+
+    {
+        double neg_pow_100 = -std::pow(2.0, 100);
+        int256_t value(neg_pow_100);
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value < int256_t(0));
+    }
+}
+
+// =============================================================================
+// Double Conversion Operator Tests - Comprehensive Coverage
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, operator_double_basic_values) {
+    // Basic integer values
+    {
+        int256_t zero(0);
+        double result = static_cast<double>(zero);
+        ASSERT_DOUBLE_EQ(0.0, result);
+    }
+
+    {
+        int256_t one(1);
+        double result = static_cast<double>(one);
+        ASSERT_DOUBLE_EQ(1.0, result);
+    }
+
+    {
+        int256_t neg_one(-1);
+        double result = static_cast<double>(neg_one);
+        ASSERT_DOUBLE_EQ(-1.0, result);
+    }
+
+    {
+        int256_t small_pos(42);
+        double result = static_cast<double>(small_pos);
+        ASSERT_DOUBLE_EQ(42.0, result);
+    }
+
+    {
+        int256_t small_neg(-42);
+        double result = static_cast<double>(small_neg);
+        ASSERT_DOUBLE_EQ(-42.0, result);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, operator_double_64bit_boundary) {
+    // 64-bit boundary values
+    {
+        int256_t max_int64(INT64_MAX);
+        double result = static_cast<double>(max_int64);
+        ASSERT_DOUBLE_EQ(static_cast<double>(INT64_MAX), result);
+    }
+
+    {
+        int256_t min_int64(INT64_MIN);
+        double result = static_cast<double>(min_int64);
+        ASSERT_DOUBLE_EQ(static_cast<double>(INT64_MIN), result);
+    }
+
+    {
+        int256_t max_uint64 = int256_t(0, UINT64_MAX);
+        double result = static_cast<double>(max_uint64);
+        ASSERT_DOUBLE_EQ(static_cast<double>(UINT64_MAX), result);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, operator_double_precision_boundary) {
+    // Double precision boundary (2^53)
+    {
+        int256_t precise_max = int256_t(1) << 53;
+        precise_max = precise_max - 1; // 2^53 - 1
+        double result = static_cast<double>(precise_max);
+        ASSERT_DOUBLE_EQ(std::pow(2.0, 53) - 1.0, result);
+    }
+
+    {
+        int256_t precision_loss = int256_t(1) << 53; // 2^53
+        double result = static_cast<double>(precision_loss);
+        ASSERT_DOUBLE_EQ(std::pow(2.0, 53), result);
+    }
+
+    {
+        int256_t imprecise = (int256_t(1) << 53) + 1; // 2^53 + 1
+        double result = static_cast<double>(imprecise);
+        // Should be rounded to 2^53 due to precision loss
+        ASSERT_DOUBLE_EQ(std::pow(2.0, 53), result);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, operator_double_large_numbers) {
+    // Large numbers requiring high bits
+    {
+        int256_t pow64 = int256_t(1) << 64; // 2^64
+        double result = static_cast<double>(pow64);
+        ASSERT_DOUBLE_EQ(std::pow(2.0, 64), result);
+    }
+
+    {
+        int256_t pow100 = int256_t(1) << 100; // 2^100
+        double result = static_cast<double>(pow100);
+        ASSERT_DOUBLE_EQ(std::pow(2.0, 100), result);
+    }
+
+    {
+        int256_t pow200 = int256_t(1) << 200; // 2^200
+        double result = static_cast<double>(pow200);
+        ASSERT_DOUBLE_EQ(std::pow(2.0, 200), result);
+    }
+
+    {
+        int256_t neg_pow100 = -(int256_t(1) << 100); // -2^100
+        double result = static_cast<double>(neg_pow100);
+        ASSERT_DOUBLE_EQ(-std::pow(2.0, 100), result);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, operator_double_rounding_behavior) {
+    // Test IEEE 754 rounding behavior
+    {
+        // Construct values that require rounding
+        int256_t base = int256_t(1) << 54; // 2^54
+
+        // Should round down to 2^54
+        int256_t round_down = base + 1;
+        double result_down = static_cast<double>(round_down);
+        ASSERT_DOUBLE_EQ(std::pow(2.0, 54), result_down);
+
+        // Should round up to 2^54 + 4
+        int256_t round_up = base + 3;
+        double result_up = static_cast<double>(round_up);
+        ASSERT_DOUBLE_EQ(std::pow(2.0, 54) + 4.0, result_up);
+    }
+
+    // Test banker's rounding (round to even)
+    {
+        // Create a value exactly between two representable doubles
+        int256_t exact_half = (int256_t(1) << 55) + (int256_t(1) << 53); // 2^55 + 2^53
+        double result = static_cast<double>(exact_half);
+        // Should round to even (2^55)
+        ASSERT_DOUBLE_EQ(45035996273704960, result);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, operator_double_overflow_to_infinity) {
+    {
+        int256_t very_large = int256_t(1) << 250; // 2^250
+        double result = static_cast<double>(very_large);
+        ASSERT_TRUE(std::isfinite(result));
+        ASSERT_TRUE(result > 0);
+    }
+
+    {
+        int256_t very_large_neg = -(int256_t(1) << 250); // -2^250
+        double result = static_cast<double>(very_large_neg);
+        ASSERT_TRUE(std::isfinite(result));
+        ASSERT_TRUE(result < 0);
+    }
+
+    {
+        int256_t beyond_max = INT256_MAX;
+        double result = static_cast<double>(beyond_max);
+        std::cout << result << std::endl;
+        ASSERT_TRUE(std::isfinite(result) && result > 1e76);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, operator_double_mixed_high_low) {
+    // Values with both high and low parts set
+    {
+        int256_t mixed(0x123456789ABCDEF0LL, 0xFEDCBA9876543210ULL);
+        double result = static_cast<double>(mixed);
+        ASSERT_TRUE(result > 0);
+        ASSERT_FALSE(std::isnan(result));
+        ASSERT_FALSE(std::isinf(result));
+    }
+
+    {
+        int256_t neg_mixed(-0x123456789ABCDEF0LL, 0xFEDCBA9876543210ULL);
+        double result = static_cast<double>(neg_mixed);
+        ASSERT_TRUE(result < 0);
+        ASSERT_FALSE(std::isnan(result));
+        ASSERT_FALSE(std::isinf(result));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, operator_double_round_trip_conversion) {
+    std::vector<double> test_values = {
+            0.0,
+            1.0,
+            -1.0,
+            42.0,
+            -42.0,
+            1e10,
+            -1e10,
+            1e15,
+            -1e15,
+            9007199254740992.0, // 2^53
+            static_cast<double>(INT32_MAX),
+            static_cast<double>(INT32_MIN),
+    };
+
+    for (double original : test_values) {
+        if (std::abs(original) <= static_cast<double>(INT64_MAX)) {
+            int256_t converted(original);
+            double back = static_cast<double>(converted);
+
+            if (original == std::floor(original)) {
+                ASSERT_DOUBLE_EQ(original, back)
+                        << "Round-trip failed for " << std::fixed << std::setprecision(1) << original;
+            }
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, operator_double_precision_loss_detection) {
+    {
+        int256_t large = (int256_t(1) << 60) + 1; // 2^60 + 1
+        double result = static_cast<double>(large);
+
+        // Should be close to 2^60 but may not be exact
+        double expected = std::pow(2.0, 60);
+        double diff = std::abs(result - expected);
+        ASSERT_TRUE(diff <= expected * 1e-15); // Within reasonable precision
+    }
+
+    {
+        int256_t value = int256_t(1) << 100; // 2^100
+        double result = static_cast<double>(value);
+        double expected = std::pow(2.0, 100);
+
+        // Should be very close
+        double relative_error = std::abs(result - expected) / expected;
+        ASSERT_TRUE(relative_error < 1e-14);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, operator_double_boundary_conditions) {
+    {
+        int256_t pos_zero(0, 0);
+        int256_t neg_zero = -pos_zero;
+
+        ASSERT_DOUBLE_EQ(0.0, static_cast<double>(pos_zero));
+        ASSERT_DOUBLE_EQ(0.0, static_cast<double>(neg_zero));
+    }
+
+    {
+        int256_t boundary_128(1, 0); // 2^128
+        double result = static_cast<double>(boundary_128);
+        ASSERT_DOUBLE_EQ(std::pow(2.0, 128), result);
+    }
+
+    {
+        int256_t below_128(0, static_cast<uint128_t>(-1)); // 2^128 - 1
+        double result = static_cast<double>(below_128);
+        ASSERT_TRUE(result = std::pow(2.0, 128));
+    }
+}
+
+// =============================================================================
+// Cross-Conversion Tests (Float/Double with int256_t)
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, conversion_operator_consistency) {
+    // Test that conversion to double is consistent with mathematical expectations
+    std::vector<int256_t> test_values = {
+            int256_t(0),         int256_t(1),         int256_t(-1),      int256_t(1000),    int256_t(-1000),
+            int256_t(INT32_MAX), int256_t(INT32_MIN), int256_t(1) << 32, int256_t(1) << 40,
+    };
+
+    for (const auto& value : test_values) {
+        double result = static_cast<double>(value);
+
+        // Convert back to int256_t and check if reasonable
+        int256_t back_converted(result);
+
+        // For small values, should be exact
+        if (value >= int256_t(INT32_MIN) && value <= int256_t(INT32_MAX)) {
+            ASSERT_EQ(value, back_converted) << "Round-trip failed for " << value.to_string();
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, extreme_conversion_edge_cases) {
+    {
+        double result_max = static_cast<double>(INT256_MAX);
+        ASSERT_TRUE(result_max > 1e70);
+    }
+
+    {
+        double result_min = static_cast<double>(INT256_MIN);
+        ASSERT_TRUE(result_min < -1e70);
+    }
+
+    {
+        int256_t power_of_2 = int256_t(1) << 50; // 2^50
+        double result = static_cast<double>(power_of_2);
+        ASSERT_DOUBLE_EQ(std::pow(2.0, 50), result);
+
+        int256_t back(result);
+        ASSERT_EQ(power_of_2, back);
+    }
+}
+
+// =============================================================================
+// Large Double Constructor Tests - Beyond 128-bit and Double Precision
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_very_large_values) {
+    {
+        // 2^200 - much larger than 128-bit range
+        double pow_200 = std::pow(2.0, 200);
+        int256_t value(pow_200);
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value > int256_t(0));
+        ASSERT_NE(0, value.high); // Should use high bits
+
+        // Verify it's approximately 2^200
+        std::string result_str = value.to_string();
+        ASSERT_TRUE(result_str.length() > 50); // 2^200 has about 60 decimal digits
+    }
+
+    {
+        // 2^250 - very close to int256_t limit
+        double pow_250 = std::pow(2.0, 250);
+        int256_t value(pow_250);
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value > int256_t(0));
+        ASSERT_NE(0, value.high);
+
+        // Should be a very large positive number
+        std::string result_str = value.to_string();
+        ASSERT_TRUE(result_str.length() > 70); // 2^250 has about 75 decimal digits
+    }
+
+    {
+        // Negative large values
+        double neg_pow_200 = -std::pow(2.0, 200);
+        int256_t value(neg_pow_200);
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value < int256_t(0));
+        ASSERT_NE(0, value.high);
+        ASSERT_TRUE(value.high < 0);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_precision_loss_large_numbers) {
+    // Test numbers where double precision is insufficient
+    {
+        double large_with_precision_loss = 1.23456789012345e50;
+        int256_t value(large_with_precision_loss);
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value > int256_t(0));
+
+        double back_to_double = static_cast<double>(value);
+        double relative_error = std::abs(back_to_double - large_with_precision_loss) / large_with_precision_loss;
+        ASSERT_TRUE(relative_error < 1e-10);
+    }
+
+    {
+        double beyond_exact = 1e60;
+        int256_t value(beyond_exact);
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value > int256_t(0));
+
+        std::string result_str = value.to_string();
+        ASSERT_TRUE(result_str.length() >= 60);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_powers_beyond_128bit) {
+    // Test various powers of 2 that exceed 128-bit range
+    std::vector<int> large_powers = {130, 140, 150, 160, 180, 200, 220, 240, 250};
+
+    for (int power : large_powers) {
+        double pow_val = std::pow(2.0, power);
+
+        if (std::isinf(pow_val)) continue;
+
+        int256_t value(pow_val);
+        ASSERT_NE("0", value.to_string()) << "Failed for 2^" << power;
+        ASSERT_TRUE(value > int256_t(0)) << "Failed for 2^" << power;
+
+        if (power > 128) {
+            ASSERT_NE(0, value.high) << "2^" << power << " should use high bits";
+        }
+
+        double back_converted = static_cast<double>(value);
+        if (!std::isinf(back_converted)) {
+            double relative_error = std::abs(back_converted - pow_val) / pow_val;
+            ASSERT_TRUE(relative_error < 1e-10) << "Too much error for 2^" << power;
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_scientific_notation_large) {
+    {
+        double val = 1.5e100; // 1.5 * 10^100
+        int256_t value(val);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        double val = 9.876543210123456e75; // Large number with many digits
+        int256_t value(val);
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value > int256_t(0));
+
+        std::string result_str = value.to_string();
+        ASSERT_TRUE(result_str.length() > 70);
+    }
+
+    {
+        double val = -2.71828e80; // Large negative
+        int256_t value(val);
+        ASSERT_EQ("0", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_near_int256_limits) {
+    {
+        double near_max = std::pow(2.0, 254); // 2^254
+        int256_t value(near_max);
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value > int256_t(0));
+        ASSERT_TRUE(value < INT256_MAX);
+
+        int256_t expected_2_254 = int256_t(1) << 254;
+        ASSERT_TRUE(value <= expected_2_254 + 1);
+    }
+
+    {
+        double near_min = -std::pow(2.0, 254);
+        int256_t value(near_min);
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value < int256_t(0));
+        ASSERT_TRUE(value > INT256_MIN); // Should be greater than min
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_precision_boundary_large) {
+    // Test around the boundaries where double precision becomes insufficient
+    {
+        double base = std::pow(2.0, 100); // 2^100
+        double offset = 12345.0;          // This offset will be lost due to precision
+        double imprecise = base + offset;
+
+        int256_t value(imprecise);
+        ASSERT_NE("0", value.to_string());
+
+        int256_t expected_base(0, static_cast<uint128_t>(1) << 100);
+
+        double value_as_double = static_cast<double>(value);
+        double expected_as_double = static_cast<double>(expected_base);
+
+        double relative_error = std::abs(value_as_double - expected_as_double) / expected_as_double;
+        ASSERT_TRUE(relative_error < 1e-10);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_mixed_high_low_parts) {
+    // Test values that will populate both high and low parts of int256_t
+    {
+        double large_mixed = std::pow(2.0, 128) + std::pow(2.0, 64) + 12345.0;
+        std::cout << large_mixed << std::endl;
+        int256_t value(large_mixed);
+        std::cout << value.to_string() << std::endl;
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value > int256_t(0));
+        ASSERT_NE(0, value.high);
+
+        ASSERT_TRUE(value.high >= 1);
+    }
+
+    {
+        double complex_val = std::pow(2.0, 200) + std::pow(2.0, 150) + std::pow(2.0, 100);
+        int256_t value(complex_val);
+
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value > int256_t(0));
+        ASSERT_NE(0, value.high);
+
+        std::string result_str = value.to_string();
+        ASSERT_TRUE(result_str.length() > 50);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_round_trip_large_values) {
+    // Test round-trip conversion for large values
+    std::vector<double> large_test_values = {std::pow(2.0, 100),
+                                             std::pow(2.0, 128),
+                                             std::pow(2.0, 150),
+                                             std::pow(2.0, 200),
+                                             1e50,
+                                             1e60,
+                                             1e70,
+                                             -std::pow(2.0, 100),
+                                             -1e50};
+
+    for (double original : large_test_values) {
+        if (std::isinf(original)) continue;
+
+        int256_t converted(original);
+        double back_to_double = static_cast<double>(converted);
+
+        ASSERT_FALSE(std::isnan(back_to_double)) << "NaN result for " << original;
+
+        if (!std::isinf(back_to_double)) {
+            double relative_error = std::abs(back_to_double - original) / std::abs(original);
+            ASSERT_TRUE(relative_error < 1e-10) << "Too much error in round-trip for " << original << " (got "
+                                                << back_to_double << ", error=" << relative_error << ")";
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_arithmetic_with_large_values) {
+    // Test that large double-constructed values work in arithmetic
+    {
+        int256_t large1(std::pow(2.0, 100));
+        int256_t large2(std::pow(2.0, 100));
+        int256_t sum = large1 + large2;
+
+        ASSERT_TRUE(sum > large1);
+        ASSERT_TRUE(sum > large2);
+
+        // Should be approximately 2^101
+        int256_t expected_double = int256_t(1) << 101;
+        // Due to precision issues, we'll check they're in the same ballpark
+        ASSERT_TRUE(sum >= expected_double / 2);
+        ASSERT_TRUE(sum <= expected_double * 2);
+    }
+
+    {
+        int256_t large(std::pow(2.0, 150));
+        int256_t small(1000);
+        int256_t quotient = large / small;
+
+        ASSERT_TRUE(quotient > int256_t(0));
+        ASSERT_TRUE(quotient < large); // Should be smaller than original
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_double_edge_of_overflow) {
+    // Test values right at the edge of what should/shouldn't overflow
+    {
+        // This should be the largest power of 2 that doesn't cause overflow
+        double large_but_safe = std::pow(2.0, 250); // Should fit in int256_t
+        int256_t value(large_but_safe);
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value > int256_t(0));
+    }
+
+    {
+        // Test a value that's very large but should still be handled
+        double very_large = 1e75; // 10^75
+        int256_t value(very_large);
+        ASSERT_NE("0", value.to_string());
+        ASSERT_TRUE(value > int256_t(0));
+
+        // Should be a reasonable large number
+        std::string result_str = value.to_string();
+        ASSERT_TRUE(result_str.length() >= 70);
+        ASSERT_TRUE(result_str.length() <= 80); // Shouldn't be too crazy
+    }
+}
+
 // NOLINTNEXTLINE
 TEST_F(Int256Test, constructor_from_float) {
     {
@@ -804,11 +1716,11 @@ TEST_F(Int256Test, subtraction_with_different_types) {
         ASSERT_EQ("75", result.to_string());
     }
 
-    // {
-    //     double val = 25.0;
-    //     double result = a - val;
-    //     ASSERT_DOUBLE_EQ(75.0, result);
-    // }
+    {
+        double val = 25.0;
+        double result = a - val;
+        ASSERT_DOUBLE_EQ(75.0, result);
+    }
 }
 
 // =============================================================================
@@ -1523,6 +2435,816 @@ TEST_F(Int256Test, serialization_performance_test) {
     // This is mainly to ensure the test runs without issues
     ASSERT_TRUE(serialize_time.count() >= 0);
     ASSERT_TRUE(deserialize_time.count() >= 0);
+}
+
+// =============================================================================
+// Type Conversion Operators Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, explicit_conversion_operators) {
+    // Test bool conversion
+    {
+        ASSERT_FALSE(static_cast<bool>(int256_t(0)));
+        ASSERT_TRUE(static_cast<bool>(int256_t(1)));
+        ASSERT_TRUE(static_cast<bool>(int256_t(-1)));
+        ASSERT_TRUE(static_cast<bool>(int256_t(1, 0))); // high != 0
+        ASSERT_TRUE(static_cast<bool>(int256_t(0, 1))); // low != 0
+    }
+
+    // Test int conversion
+    {
+        ASSERT_EQ(42, static_cast<int>(int256_t(42)));
+        ASSERT_EQ(-42, static_cast<int>(int256_t(-42)));
+        ASSERT_EQ(0, static_cast<int>(int256_t(0)));
+
+        // Test truncation from large values
+        int256_t large(0, static_cast<uint128_t>(0x123456789ABCDEF0ULL));
+        ASSERT_EQ(static_cast<int>(0x9ABCDEF0), static_cast<int>(large));
+    }
+
+    // Test long conversion
+    {
+        ASSERT_EQ(1234567890L, static_cast<long>(int256_t(1234567890L)));
+        ASSERT_EQ(-1234567890L, static_cast<long>(int256_t(-1234567890L)));
+
+        // Test with 64-bit values
+        int256_t val64(0, 0x123456789ABCDEF0ULL);
+        ASSERT_EQ(static_cast<long>(0x123456789ABCDEF0ULL), static_cast<long>(val64));
+    }
+
+    // Test int128_t conversion
+    {
+        __int128 test_val = static_cast<__int128>(1) << 100;
+        int256_t val(0, static_cast<uint128_t>(test_val));
+        ASSERT_EQ(test_val, static_cast<__int128>(val));
+
+        __int128 neg_val = -test_val;
+        int256_t neg_int256(-1, static_cast<uint128_t>(neg_val));
+        ASSERT_EQ(neg_val, static_cast<__int128>(neg_int256));
+    }
+
+    // Test signed char conversion
+    {
+        ASSERT_EQ(static_cast<signed char>(42), static_cast<signed char>(int256_t(42)));
+        ASSERT_EQ(static_cast<signed char>(-42), static_cast<signed char>(int256_t(-42)));
+        ASSERT_EQ(static_cast<signed char>(200), static_cast<signed char>(int256_t(200))); // overflow behavior
+    }
+
+    // Test short int conversion
+    {
+        ASSERT_EQ(static_cast<short>(12345), static_cast<short>(int256_t(12345)));
+        ASSERT_EQ(static_cast<short>(-12345), static_cast<short>(int256_t(-12345)));
+        ASSERT_EQ(static_cast<short>(70000), static_cast<short>(int256_t(70000))); // overflow behavior
+    }
+
+    // Test size_t conversion - valid cases
+    {
+        ASSERT_EQ(static_cast<size_t>(42), static_cast<size_t>(int256_t(42)));
+        ASSERT_EQ(static_cast<size_t>(0), static_cast<size_t>(int256_t(0)));
+
+        size_t max_size = std::numeric_limits<size_t>::max();
+        ASSERT_EQ(max_size, static_cast<size_t>(int256_t(0, max_size)));
+    }
+
+    // Test size_t conversion - exception cases
+    {
+        int256_t small_positive(42);
+        ASSERT_EQ(static_cast<size_t>(small_positive), 42UL);
+
+        int256_t medium_positive(1000000);
+        ASSERT_EQ(static_cast<size_t>(medium_positive), 1000000UL);
+
+        int256_t max_size_t_val(std::numeric_limits<size_t>::max());
+        ASSERT_EQ(static_cast<size_t>(max_size_t_val), std::numeric_limits<size_t>::max());
+
+        int256_t negative_one(-1);
+        size_t result = static_cast<size_t>(negative_one);
+        ASSERT_EQ(result, std::numeric_limits<size_t>::max()); // -1 wraps to max
+
+        int256_t negative_small(-42);
+        result = static_cast<size_t>(negative_small);
+        size_t expected = std::numeric_limits<size_t>::max() - 41; // Modulo arithmetic
+        ASSERT_EQ(result, expected);
+
+        int256_t just_above_max = int256_t(std::numeric_limits<size_t>::max()) + int256_t(1);
+        result = static_cast<size_t>(just_above_max);
+        ASSERT_EQ(result, 0UL); // Should wrap around to 0
+
+        int256_t large_val;
+        large_val.high = 1; // Set high 128 bits to 1
+        large_val.low = 0x123456789ABCDEF0ULL;
+        result = static_cast<size_t>(large_val);
+        ASSERT_EQ(result, 0x123456789ABCDEF0ULL);
+
+        int256_t large_negative;
+        large_negative.high = -1; // All bits set in high part
+        large_negative.low = static_cast<__uint128_t>(-1000LL);
+        result = static_cast<size_t>(large_negative);
+        ASSERT_EQ(result, static_cast<size_t>(static_cast<__uint128_t>(-1000LL)));
+    }
+}
+
+// =============================================================================
+// Friend Comparison Operators Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, friend_comparison_operators) {
+    int256_t value(42);
+    int256_t negative(-10);
+    int256_t zero(0);
+
+    // Test equality comparisons: int == int256_t
+    ASSERT_TRUE(42 == value);
+    ASSERT_FALSE(43 == value);
+    ASSERT_TRUE(0 == zero);
+    ASSERT_FALSE(1 == zero);
+
+    // Test inequality comparisons: int != int256_t
+    ASSERT_FALSE(42 != value);
+    ASSERT_TRUE(43 != value);
+    ASSERT_FALSE(0 != zero);
+    ASSERT_TRUE(1 != zero);
+
+    // Test less than comparisons: int < int256_t
+    ASSERT_TRUE(41 < value);
+    ASSERT_FALSE(42 < value);
+    ASSERT_FALSE(43 < value);
+    ASSERT_TRUE(-20 < negative);
+    ASSERT_FALSE(0 < negative);
+
+    // Test less than or equal comparisons: int <= int256_t
+    ASSERT_TRUE(41 <= value);
+    ASSERT_TRUE(42 <= value);
+    ASSERT_FALSE(43 <= value);
+    ASSERT_TRUE(-10 <= negative);
+    ASSERT_TRUE(-20 <= negative);
+
+    // Test greater than comparisons: int > int256_t
+    ASSERT_FALSE(41 > value);
+    ASSERT_FALSE(42 > value);
+    ASSERT_TRUE(43 > value);
+    ASSERT_FALSE(-20 > negative);
+    ASSERT_TRUE(0 > negative);
+
+    // Test greater than or equal comparisons: int >= int256_t
+    ASSERT_FALSE(41 >= value);
+    ASSERT_TRUE(42 >= value);
+    ASSERT_TRUE(43 >= value);
+    ASSERT_FALSE(-20 >= negative);
+    ASSERT_TRUE(-10 >= negative);
+    ASSERT_TRUE(0 >= negative);
+
+    // Test with edge cases
+    ASSERT_TRUE(INT_MAX == int256_t(INT_MAX));
+    ASSERT_TRUE(INT_MIN == int256_t(INT_MIN));
+    ASSERT_FALSE(INT_MAX == int256_t(INT_MIN));
+}
+
+// =============================================================================
+// Bitwise Operators Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, bitwise_operators) {
+    // Test data
+    int256_t val1(0x12345678, 0x9ABCDEF012345678ULL);
+    int256_t val2(0x87654321, 0x123456789ABCDEF0ULL);
+    int256_t all_ones(-1, static_cast<uint128_t>(-1));
+    int256_t all_zeros(0, 0);
+
+    // Test bitwise AND operator
+    {
+        int256_t result = val1 & val2;
+        int256_t expected(0x12345678 & 0x87654321, 0x9ABCDEF012345678ULL & 0x123456789ABCDEF0ULL);
+        ASSERT_EQ(expected.high, result.high);
+        ASSERT_EQ(expected.low, result.low);
+
+        // Test with all ones and zeros
+        ASSERT_EQ(val1, val1 & all_ones);
+        ASSERT_EQ(all_zeros, val1 & all_zeros);
+    }
+
+    // Test bitwise OR operator
+    {
+        int256_t result = val1 | val2;
+        int256_t expected(0x12345678 | 0x87654321, 0x9ABCDEF012345678ULL | 0x123456789ABCDEF0ULL);
+        ASSERT_EQ(expected.high, result.high);
+        ASSERT_EQ(expected.low, result.low);
+
+        // Test with all ones and zeros
+        ASSERT_EQ(all_ones, val1 | all_ones);
+        ASSERT_EQ(val1, val1 | all_zeros);
+    }
+
+    // Test bitwise XOR operator
+    {
+        int256_t result = val1 ^ val2;
+        int256_t expected(0x12345678 ^ 0x87654321, 0x9ABCDEF012345678ULL ^ 0x123456789ABCDEF0ULL);
+        ASSERT_EQ(expected.high, result.high);
+        ASSERT_EQ(expected.low, result.low);
+
+        // Test XOR properties
+        ASSERT_EQ(all_zeros, val1 ^ val1); // x ^ x = 0
+        ASSERT_EQ(val1, val1 ^ all_zeros); // x ^ 0 = x
+    }
+
+    // Test bitwise NOT operator
+    {
+        int256_t result = ~val1;
+        int256_t expected(~val1.high, ~val1.low);
+        ASSERT_EQ(expected.high, result.high);
+        ASSERT_EQ(expected.low, result.low);
+
+        // Test NOT properties
+        ASSERT_EQ(all_zeros, ~all_ones);
+        ASSERT_EQ(all_ones, ~all_zeros);
+        ASSERT_EQ(val1, ~~val1); // double NOT
+    }
+
+    // Test bitwise AND assignment operator
+    {
+        int256_t test_val = val1;
+        test_val &= val2;
+        int256_t expected = val1 & val2;
+        ASSERT_EQ(expected.high, test_val.high);
+        ASSERT_EQ(expected.low, test_val.low);
+
+        // Test chaining
+        int256_t chain_val = val1;
+        int256_t& result_ref = (chain_val &= val2);
+        ASSERT_EQ(test_val, result_ref);
+        ASSERT_EQ(&chain_val, &result_ref); // Should return reference to self
+    }
+
+    // Test bitwise OR assignment operator
+    {
+        int256_t test_val = val1;
+        test_val |= val2;
+        int256_t expected = val1 | val2;
+        ASSERT_EQ(expected.high, test_val.high);
+        ASSERT_EQ(expected.low, test_val.low);
+
+        // Test chaining
+        int256_t chain_val = val1;
+        int256_t& result_ref = (chain_val |= val2);
+        ASSERT_EQ(test_val, result_ref);
+        ASSERT_EQ(&chain_val, &result_ref);
+    }
+
+    // Test bitwise XOR assignment operator
+    {
+        int256_t test_val = val1;
+        test_val ^= val2;
+        int256_t expected = val1 ^ val2;
+        ASSERT_EQ(expected.high, test_val.high);
+        ASSERT_EQ(expected.low, test_val.low);
+
+        // Test chaining
+        int256_t chain_val = val1;
+        int256_t& result_ref = (chain_val ^= val2);
+        ASSERT_EQ(test_val, result_ref);
+        ASSERT_EQ(&chain_val, &result_ref);
+
+        // Test XOR assignment properties
+        int256_t toggle_val = val1;
+        toggle_val ^= val2;
+        toggle_val ^= val2; // Should return to original
+        ASSERT_EQ(val1, toggle_val);
+    }
+
+    // Test left shift assignment operator (assuming it exists)
+    {
+        int256_t test_val(1);
+        test_val <<= 10;
+        int256_t expected = int256_t(1) << 10;
+        ASSERT_EQ(expected, test_val);
+
+        // Test chaining
+        int256_t chain_val(1);
+        int256_t& result_ref = (chain_val <<= 5);
+        ASSERT_EQ(int256_t(1) << 5, result_ref);
+        ASSERT_EQ(&chain_val, &result_ref);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, double_comparison_operators) {
+    // Test data
+    int256_t zero_val(0);
+    int256_t positive_small(42);
+    int256_t positive_large(123456789);
+    int256_t negative_small(-42);
+
+    // Test equality operator: int256_t == double
+    {
+        ASSERT_TRUE(positive_small == 42.0);
+        ASSERT_TRUE(negative_small == -42.0);
+        ASSERT_TRUE(zero_val == 0.0);
+        ASSERT_TRUE(zero_val == -0.0); // positive and negative zero
+        ASSERT_FALSE(positive_small == 42.1);
+        ASSERT_FALSE(positive_small == 41.9);
+        ASSERT_FALSE(positive_large == std::numeric_limits<double>::infinity());
+        ASSERT_FALSE(positive_large == std::numeric_limits<double>::quiet_NaN());
+    }
+
+    // Test equality operator: double == int256_t
+    {
+        ASSERT_TRUE(42.0 == positive_small);
+        ASSERT_TRUE(-42.0 == negative_small);
+        ASSERT_TRUE(0.0 == zero_val);
+        ASSERT_TRUE(-0.0 == zero_val);
+        ASSERT_FALSE(42.1 == positive_small);
+        ASSERT_FALSE(41.9 == positive_small);
+    }
+
+    // Test inequality operator: int256_t != double
+    {
+        ASSERT_FALSE(positive_small != 42.0);
+        ASSERT_TRUE(positive_small != 42.1);
+        ASSERT_TRUE(negative_small != -41.9);
+        ASSERT_FALSE(zero_val != 0.0);
+    }
+
+    // Test inequality operator: double != int256_t
+    {
+        ASSERT_FALSE(42.0 != positive_small);
+        ASSERT_TRUE(42.1 != positive_small);
+        ASSERT_TRUE(-41.9 != negative_small);
+        ASSERT_FALSE(0.0 != zero_val);
+    }
+
+    // Test less than operator: int256_t < double
+    {
+        ASSERT_TRUE(positive_small < 43.0);
+        ASSERT_TRUE(negative_small < -41.0);
+        ASSERT_TRUE(negative_small < 0.0);
+        ASSERT_FALSE(positive_small < 42.0);
+        ASSERT_FALSE(positive_small < 41.0);
+        ASSERT_FALSE(zero_val < 0.0);
+    }
+
+    // Test less than operator: double < int256_t
+    {
+        ASSERT_TRUE(41.0 < positive_small);
+        ASSERT_TRUE(-43.0 < negative_small);
+        ASSERT_TRUE(-1.0 < zero_val);
+        ASSERT_FALSE(42.0 < positive_small);
+        ASSERT_FALSE(43.0 < positive_small);
+        ASSERT_FALSE(0.0 < zero_val);
+    }
+
+    // Test less than or equal operator: int256_t <= double
+    {
+        ASSERT_TRUE(positive_small <= 42.0);
+        ASSERT_TRUE(positive_small <= 43.0);
+        ASSERT_TRUE(negative_small <= -42.0);
+        ASSERT_FALSE(positive_small <= 41.0);
+    }
+
+    // Test less than or equal operator: double <= int256_t
+    {
+        ASSERT_TRUE(42.0 <= positive_small);
+        ASSERT_TRUE(41.0 <= positive_small);
+        ASSERT_TRUE(-42.0 <= negative_small);
+        ASSERT_FALSE(43.0 <= positive_small);
+    }
+
+    // Test greater than operator: int256_t > double
+    {
+        ASSERT_TRUE(positive_small > 41.0);
+        ASSERT_TRUE(negative_small > -43.0);
+        ASSERT_TRUE(zero_val > -1.0);
+        ASSERT_FALSE(positive_small > 42.0);
+        ASSERT_FALSE(positive_small > 43.0);
+        ASSERT_FALSE(zero_val > 0.0);
+    }
+
+    // Test greater than operator: double > int256_t
+    {
+        ASSERT_TRUE(43.0 > positive_small);
+        ASSERT_TRUE(-41.0 > negative_small);
+        ASSERT_TRUE(1.0 > zero_val);
+        ASSERT_FALSE(42.0 > positive_small);
+        ASSERT_FALSE(41.0 > positive_small);
+        ASSERT_FALSE(0.0 > zero_val);
+    }
+
+    // Test greater than or equal operator: int256_t >= double
+    {
+        ASSERT_TRUE(positive_small >= 42.0);
+        ASSERT_TRUE(positive_small >= 41.0);
+        ASSERT_TRUE(negative_small >= -42.0);
+        ASSERT_FALSE(positive_small >= 43.0);
+    }
+
+    // Test greater than or equal operator: double >= int256_t
+    {
+        ASSERT_TRUE(42.0 >= positive_small);
+        ASSERT_TRUE(43.0 >= positive_small);
+        ASSERT_TRUE(-42.0 >= negative_small);
+        ASSERT_FALSE(41.0 >= positive_small);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, double_arithmetic_operators) {
+    // Test data
+    int256_t zero_val(0);
+    int256_t positive_val(42);
+    int256_t negative_val(-42);
+    int256_t large_val(123456789);
+
+    // Test addition operator: int256_t + double
+    {
+        double result = positive_val + 3.14;
+        ASSERT_DOUBLE_EQ(45.14, result);
+
+        result = negative_val + 3.14;
+        ASSERT_DOUBLE_EQ(-38.86, result);
+
+        result = zero_val + 3.14;
+        ASSERT_DOUBLE_EQ(3.14, result);
+
+        result = positive_val + 0.0;
+        ASSERT_DOUBLE_EQ(42.0, result);
+
+        result = large_val + 1.5;
+        ASSERT_DOUBLE_EQ(123456790.5, result);
+    }
+
+    // Test addition operator: double + int256_t
+    {
+        double result = 3.14 + positive_val;
+        ASSERT_DOUBLE_EQ(45.14, result);
+
+        result = 3.14 + negative_val;
+        ASSERT_DOUBLE_EQ(-38.86, result);
+
+        result = 3.14 + zero_val;
+        ASSERT_DOUBLE_EQ(3.14, result);
+
+        result = 0.0 + positive_val;
+        ASSERT_DOUBLE_EQ(42.0, result);
+
+        result = 1.5 + large_val;
+        ASSERT_DOUBLE_EQ(123456790.5, result);
+    }
+
+    // Test subtraction operator: double - int256_t
+    {
+        double result = 45.14 - positive_val;
+        ASSERT_DOUBLE_EQ(3.14, result);
+
+        result = 3.14 - positive_val;
+        ASSERT_DOUBLE_EQ(-38.86, result);
+
+        result = 3.14 - zero_val;
+        ASSERT_DOUBLE_EQ(3.14, result);
+
+        result = 0.0 - positive_val;
+        ASSERT_DOUBLE_EQ(-42.0, result);
+
+        result = 123456790.5 - large_val;
+        ASSERT_DOUBLE_EQ(1.5, result);
+    }
+
+    // Test multiplication operator: int256_t * double
+    {
+        double result = positive_val * 3.14;
+        ASSERT_NEAR(131.88, result, 1e-10);
+
+        result = negative_val * 3.14;
+        ASSERT_NEAR(-131.88, result, 1e-10);
+
+        result = positive_val * 0.0;
+        ASSERT_DOUBLE_EQ(0.0, result);
+
+        result = zero_val * 3.14;
+        ASSERT_DOUBLE_EQ(0.0, result);
+
+        result = positive_val * 1.0;
+        ASSERT_DOUBLE_EQ(42.0, result);
+
+        result = large_val * 2.5;
+        ASSERT_DOUBLE_EQ(308641972.5, result);
+    }
+
+    // Test multiplication operator: double * int256_t
+    {
+        double result = 3.14 * positive_val;
+        ASSERT_NEAR(131.88, result, 1e-10);
+
+        result = 3.14 * negative_val;
+        ASSERT_NEAR(-131.88, result, 1e-10);
+
+        result = 0.0 * positive_val;
+        ASSERT_DOUBLE_EQ(0.0, result);
+
+        result = 3.14 * zero_val;
+        ASSERT_DOUBLE_EQ(0.0, result);
+
+        result = 1.0 * positive_val;
+        ASSERT_DOUBLE_EQ(42.0, result);
+
+        result = 2.5 * large_val;
+        ASSERT_DOUBLE_EQ(308641972.5, result);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, int_division_operators) {
+    // Test data
+    int256_t zero_val(0);
+    int256_t positive_val(84);
+    int256_t negative_val(-84);
+    int256_t large_val(123456789);
+    int256_t odd_val(85);
+
+    // Test division operator: int256_t / int
+    {
+        int256_t result = positive_val / 2;
+        ASSERT_EQ(int256_t(42), result);
+
+        result = negative_val / 2;
+        ASSERT_EQ(int256_t(-42), result);
+
+        result = positive_val / -2;
+        ASSERT_EQ(int256_t(-42), result);
+
+        result = negative_val / -2;
+        ASSERT_EQ(int256_t(42), result);
+
+        // Test integer division truncation
+        result = odd_val / 2;
+        ASSERT_EQ(int256_t(42), result); // 85/2 = 42.5 -> 42
+
+        result = int256_t(-85) / 2;
+        ASSERT_EQ(int256_t(-42), result); // -85/2 = -42.5 -> -42
+
+        // Test large number division
+        result = large_val / 1000;
+        ASSERT_EQ(int256_t(123456), result);
+
+        // Test division by 1 and -1
+        result = large_val / 1;
+        ASSERT_EQ(large_val, result);
+
+        result = large_val / -1;
+        ASSERT_EQ(int256_t(-123456789), result);
+
+        // Test zero division
+        result = zero_val / 42;
+        ASSERT_EQ(zero_val, result);
+    }
+
+    // Test division by zero exception: int256_t / int
+    {
+        ASSERT_THROW(positive_val / 0, std::domain_error);
+        ASSERT_THROW(negative_val / 0, std::domain_error);
+        ASSERT_THROW(zero_val / 0, std::domain_error);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, double_division_operators) {
+    // Test data
+    int256_t zero_val(0);
+    int256_t positive_val(84);
+    int256_t negative_val(-84);
+    int256_t large_val(123456789);
+    int256_t test_val(42);
+
+    // Test division operator: int256_t / double
+    {
+        double result = positive_val / 2.0;
+        ASSERT_DOUBLE_EQ(42.0, result);
+
+        result = negative_val / 2.0;
+        ASSERT_DOUBLE_EQ(-42.0, result);
+
+        result = positive_val / -2.0;
+        ASSERT_DOUBLE_EQ(-42.0, result);
+
+        result = negative_val / -2.0;
+        ASSERT_DOUBLE_EQ(42.0, result);
+
+        // Test floating point division precision
+        result = int256_t(85) / 2.0;
+        ASSERT_DOUBLE_EQ(42.5, result);
+
+        result = int256_t(-85) / 2.0;
+        ASSERT_DOUBLE_EQ(-42.5, result);
+
+        // Test large number division
+        result = large_val / 1000.0;
+        ASSERT_DOUBLE_EQ(123456.789, result);
+
+        // Test division by fractional number
+        result = test_val / 3.14;
+        ASSERT_NEAR(13.375796, result, 1e-6);
+
+        // Test zero division
+        result = zero_val / 3.14;
+        ASSERT_DOUBLE_EQ(0.0, result);
+    }
+
+    // Test division by zero exception: int256_t / double
+    {
+        ASSERT_THROW(positive_val / 0.0, std::domain_error);
+        ASSERT_THROW(negative_val / 0.0, std::domain_error);
+        ASSERT_THROW(zero_val / 0.0, std::domain_error);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, int_modulo_operators) {
+    // Test data
+    int256_t zero_val(0);
+    int256_t positive_val(85);
+    int256_t negative_val(-85);
+    int256_t large_val(123456789);
+    int256_t even_val(84);
+
+    // Test modulo operator: int256_t % int
+    {
+        int256_t result = positive_val % 10;
+        ASSERT_EQ(int256_t(5), result);
+
+        result = negative_val % 10;
+        ASSERT_EQ(int256_t(-5), result); // C++ modulo preserves dividend sign
+
+        result = positive_val % -10;
+        ASSERT_EQ(int256_t(5), result);
+
+        result = negative_val % -10;
+        ASSERT_EQ(int256_t(-5), result);
+
+        // Test perfect division (remainder 0)
+        result = even_val % 42;
+        ASSERT_EQ(int256_t(0), result);
+
+        result = int256_t(-84) % 42;
+        ASSERT_EQ(int256_t(0), result);
+
+        // Test large number modulo
+        result = large_val % 1000;
+        ASSERT_EQ(int256_t(789), result);
+
+        result = int256_t(-123456789) % 1000;
+        ASSERT_EQ(int256_t(-789), result);
+
+        // Test modulo 1 (always 0)
+        result = large_val % 1;
+        ASSERT_EQ(int256_t(0), result);
+
+        // Test zero modulo
+        result = zero_val % 42;
+        ASSERT_EQ(zero_val, result);
+    }
+
+    // Test modulo operator: int % int256_t
+    {
+        int256_t result = 85 % int256_t(10);
+        ASSERT_EQ(int256_t(5), result);
+
+        result = -85 % int256_t(10);
+        ASSERT_EQ(int256_t(-5), result);
+
+        result = 85 % int256_t(-10);
+        ASSERT_EQ(int256_t(5), result);
+
+        result = -85 % int256_t(-10);
+        ASSERT_EQ(int256_t(-5), result);
+
+        // Test small number modulo large number
+        result = 42 % large_val;
+        ASSERT_EQ(int256_t(42), result);
+
+        result = -42 % large_val;
+        ASSERT_EQ(int256_t(-42), result);
+    }
+
+    // Test modulo by zero exception
+    {
+        ASSERT_THROW(positive_val % 0, std::domain_error);
+        ASSERT_THROW(negative_val % 0, std::domain_error);
+        ASSERT_THROW(zero_val % 0, std::domain_error);
+
+        ASSERT_THROW(85 % int256_t(0), std::domain_error);
+        ASSERT_THROW(-85 % int256_t(0), std::domain_error);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, double_modulo_operators) {
+    // Test data
+    int256_t zero_val(0);
+    int256_t positive_val(85);
+    int256_t negative_val(-85);
+    int256_t test_val(42);
+
+    // Test modulo operator: int256_t % double (using fmod semantics)
+    {
+        double result = positive_val % 10.0;
+        ASSERT_DOUBLE_EQ(5.0, result);
+
+        result = negative_val % 10.0;
+        ASSERT_DOUBLE_EQ(-5.0, result);
+
+        result = positive_val % -10.0;
+        ASSERT_DOUBLE_EQ(5.0, result);
+
+        result = negative_val % -10.0;
+        ASSERT_DOUBLE_EQ(-5.0, result);
+
+        // Test floating point modulo precision
+        result = test_val % 3.14;
+        double expected = std::fmod(42.0, 3.14);
+        ASSERT_NEAR(expected, result, 1e-10);
+
+        result = int256_t(-42) % 3.14;
+        expected = std::fmod(-42.0, 3.14);
+        ASSERT_NEAR(expected, result, 1e-10);
+
+        // Test perfect division (remainder 0)
+        result = int256_t(84) % 42.0;
+        ASSERT_DOUBLE_EQ(0.0, result);
+
+        // Test zero modulo
+        result = zero_val % 3.14;
+        ASSERT_DOUBLE_EQ(0.0, result);
+    }
+
+    // Test modulo operator: double % int256_t (using fmod semantics)
+    {
+        double result = 85.5 % int256_t(10);
+        double expected = std::fmod(85.5, 10.0);
+        ASSERT_NEAR(expected, result, 1e-10);
+
+        result = -85.5 % int256_t(10);
+        expected = std::fmod(-85.5, 10.0);
+        ASSERT_NEAR(expected, result, 1e-10);
+
+        result = 85.5 % int256_t(-10);
+        expected = std::fmod(85.5, -10.0);
+        ASSERT_NEAR(expected, result, 1e-10);
+
+        result = -85.5 % int256_t(-10);
+        expected = std::fmod(-85.5, -10.0);
+        ASSERT_NEAR(expected, result, 1e-10);
+
+        // Test small double modulo large int256_t
+        result = 3.14 % int256_t(123456789);
+        expected = std::fmod(3.14, 123456789.0);
+        ASSERT_NEAR(expected, result, 1e-10);
+    }
+
+    // Test modulo by zero exception: double operations
+    {
+        ASSERT_THROW(positive_val % 0.0, std::domain_error);
+        ASSERT_THROW(negative_val % 0.0, std::domain_error);
+        ASSERT_THROW(zero_val % 0.0, std::domain_error);
+
+        ASSERT_THROW(3.14 % int256_t(0), std::domain_error);
+        ASSERT_THROW(-3.14 % int256_t(0), std::domain_error);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, mixed_type_edge_cases) {
+    // Test data for edge cases
+    int256_t max_safe_int(1);
+    max_safe_int <<= 53; // 2^53, largest safe integer in double
+
+    // Test special double values
+    {
+        double inf = std::numeric_limits<double>::infinity();
+        double neg_inf = -std::numeric_limits<double>::infinity();
+        double nan_val = std::numeric_limits<double>::quiet_NaN();
+
+        // Comparisons with infinity should work
+        ASSERT_FALSE(max_safe_int == inf);
+        ASSERT_FALSE(max_safe_int == neg_inf);
+        ASSERT_TRUE(max_safe_int < inf);
+        ASSERT_FALSE(max_safe_int > inf);
+
+        // Comparisons with NaN should always be false
+        ASSERT_FALSE(max_safe_int == nan_val);
+        ASSERT_FALSE(max_safe_int < nan_val);
+        ASSERT_FALSE(max_safe_int > nan_val);
+    }
+
+    // Test arithmetic with very small doubles
+    {
+        double very_small = 1e-100;
+        double result = int256_t(1) + very_small;
+        ASSERT_NEAR(1.0 + very_small, result, 1e-110);
+
+        result = very_small + int256_t(1);
+        ASSERT_NEAR(1.0 + very_small, result, 1e-110);
+    }
 }
 
 } // end namespace starrocks

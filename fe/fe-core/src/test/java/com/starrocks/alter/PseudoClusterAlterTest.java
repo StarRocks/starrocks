@@ -17,20 +17,20 @@ package com.starrocks.alter;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class PseudoClusterAlterTest {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         Config.alter_scheduler_interval_millisecond = 5000;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         PseudoCluster.getInstance().runSql(null, "create database test");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().runSql(null, "drop database test force");
         PseudoCluster.getInstance().shutdown(true);
@@ -121,7 +121,7 @@ public class PseudoClusterAlterTest {
         stopConcurrentInsert = true;
         concurrentInsertThread.join();
         if (errorInConcurrentInsert != null) {
-            Assert.fail("error in concurrent insert:" + errorInConcurrentInsert.getMessage());
+            Assertions.fail("error in concurrent insert:" + errorInConcurrentInsert.getMessage());
         }
     }
 }

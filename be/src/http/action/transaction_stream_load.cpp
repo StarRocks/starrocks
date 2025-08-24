@@ -95,7 +95,7 @@ static void _send_reply(HttpRequest* req, const std::string& str) {
     if (config::enable_stream_load_verbose_log) {
         LOG(INFO) << "transaction streaming load response: " << str;
     }
-    HttpChannel::send_reply(req, str);
+    HttpChannel::send_reply_json(req, HttpStatus::OK, str);
 }
 
 void TransactionManagerAction::_send_error_reply(HttpRequest* req, const Status& st) {
@@ -103,7 +103,7 @@ void TransactionManagerAction::_send_error_reply(HttpRequest* req, const Status&
     ctx->label = req->header(HTTP_LABEL_KEY);
 
     auto str = ctx->to_resp_json(req->param(HTTP_TXN_OP_KEY), st);
-    HttpChannel::send_reply(req, str);
+    HttpChannel::send_reply_json(req, HttpStatus::OK, str);
 }
 
 void TransactionManagerAction::handle(HttpRequest* req) {
@@ -236,12 +236,17 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
         return -1;
     }
 
+    const auto& table_name = req->header(HTTP_TABLE_KEY);
+
     StreamLoadContext* ctx = nullptr;
     if (!req->header(HTTP_CHANNEL_ID).empty()) {
         int channel_id = std::stoi(req->header(HTTP_CHANNEL_ID));
-        ctx = _exec_env->stream_context_mgr()->get_channel_context(label, channel_id);
+        ctx = _exec_env->stream_context_mgr()->get_channel_context(label, table_name, channel_id);
     } else {
         ctx = _exec_env->stream_context_mgr()->get(label);
+        if (ctx == nullptr) {
+            ctx = _exec_env->stream_context_mgr()->get_channel_context(label, table_name, 0);
+        }
     }
     if (ctx == nullptr) {
         _send_error_reply(req, Status::TransactionNotExists(fmt::format("Transaction with label {} not exists",
@@ -365,6 +370,7 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     request.formatType = ctx->format;
     request.__set_loadId(ctx->id.to_thrift());
     request.fileType = TFileType::FILE_STREAM;
+    request.__set_warehouse(ctx->warehouse);
     auto backend_id = get_backend_id();
     if (backend_id.has_value()) {
         request.__set_backend_id(backend_id.value());
@@ -539,6 +545,7 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
         }
         ctx->put_result.params.query_options.mem_limit = exec_mem_limit;
     }
+    request.__set_warehouse(ctx->warehouse);
 
     // check reuse
     return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);

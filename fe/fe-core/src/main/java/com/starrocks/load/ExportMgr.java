@@ -335,10 +335,9 @@ public class ExportMgr implements MemoryTrackable {
     }
 
     public void removeOldExportJobs() {
-        long currentTimeMs = System.currentTimeMillis();
-
         writeLock();
         try {
+            long currentTimeMs = System.currentTimeMillis();
             Iterator<Map.Entry<Long, ExportJob>> iter = idToJob.entrySet().iterator();
             while (iter.hasNext()) {
                 Map.Entry<Long, ExportJob> entry = iter.next();

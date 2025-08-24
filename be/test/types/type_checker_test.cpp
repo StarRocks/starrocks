@@ -355,6 +355,19 @@ TEST_F(TypeCheckerTest, NotSupportLocalDateTimeType) {
     ASSERT_FALSE(status_or_type.ok());
 }
 
+// Define unit test for java.time.LocalDate
+TEST_F(TypeCheckerTest, SupportLocalDateType) {
+    SlotDescriptor localdate_type_slot(0, "localdate_type_slot", TypeDescriptor(TYPE_DATE));
+    auto status_or_type = type_checker_manager_.checkType("java.time.LocalDate", &localdate_type_slot);
+    ASSERT_TRUE(status_or_type.ok());
+    ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
+}
+TEST_F(TypeCheckerTest, NotSupportLocalDateType) {
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    auto status_or_type = type_checker_manager_.checkType("java.time.LocalDate", &unknown_type_slot);
+    ASSERT_FALSE(status_or_type.ok());
+}
+
 // Define unit test for java.math.BigDecimal
 TEST_F(TypeCheckerTest, SupporBigDecimalType) {
     SlotDescriptor decimal32_type_slot(0, "decimal32_type_slot", TypeDescriptor(TYPE_DECIMAL32));

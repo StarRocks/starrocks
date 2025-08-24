@@ -37,7 +37,6 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
@@ -59,9 +58,6 @@ import com.starrocks.transaction.TransactionStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -413,11 +409,11 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(summary);
     }
 
-    private List<String> getAllPulsarPartitions() throws StarRocksException {
+    public List<String> getAllPulsarPartitions() throws StarRocksException {
         // Get custom properties like tokens
         convertCustomProperties(false);
         return PulsarUtil.getAllPulsarPartitions(serviceUrl, topic,
-                subscription, ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
+                subscription, ImmutableMap.copyOf(convertedCustomProperties), computeResource);
     }
 
     public static PulsarRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws StarRocksException {
@@ -529,44 +525,10 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(customProperties);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, serviceUrl);
-        Text.writeString(out, topic);
-        Text.writeString(out, subscription);
 
-        out.writeInt(customPulsarPartitions.size());
-        for (String partition : customPulsarPartitions) {
-            Text.writeString(out, partition);
-        }
 
-        out.writeInt(customProperties.size());
-        for (Map.Entry<String, String> property : customProperties.entrySet()) {
-            Text.writeString(out, "property." + property.getKey());
-            Text.writeString(out, property.getValue());
-        }
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        serviceUrl = Text.readString(in);
-        topic = Text.readString(in);
-        subscription = Text.readString(in);
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            customPulsarPartitions.add(Text.readString(in));
-        }
 
-        int count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            String propertyKey = Text.readString(in);
-            String propertyValue = Text.readString(in);
-            if (propertyKey.startsWith("property.")) {
-                this.customProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
-            }
-        }
-    }
 
     @Override
     public void modifyDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties) throws DdlException {

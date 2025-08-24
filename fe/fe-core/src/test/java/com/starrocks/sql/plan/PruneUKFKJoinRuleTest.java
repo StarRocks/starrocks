@@ -13,19 +13,19 @@
 // limitations under the License.
 package com.starrocks.sql.plan;
 
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
     Map<String, Long> tpcdsStats = null;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TPCDSPlanTestBase.beforeClass();
         prepareUniqueKeys();
@@ -62,18 +62,18 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
                 "ALTER TABLE t_fk SET(\"foreign_key_constraints\" = \"(v1) REFERENCES t_uk(v1)\");");
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableUKFKOpt(true);
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         super.setUp();
         tpcdsStats = getTPCDSTableStats();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         setTPCDSTableStats(tpcdsStats);
     }
@@ -87,9 +87,9 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
         String planEnabled = getFragmentPlan(query);
         System.out.println(planEnabled);
         if (equals) {
-            Assert.assertEquals(planDisabled, planEnabled);
+            Assertions.assertEquals(planDisabled, planEnabled);
         } else {
-            Assert.assertNotEquals(planDisabled, planEnabled);
+            Assertions.assertNotEquals(planDisabled, planEnabled);
             for (String pattern : patterns) {
                 assertMatches(planDisabled, pattern);
                 assertNotMatches(planEnabled, pattern);

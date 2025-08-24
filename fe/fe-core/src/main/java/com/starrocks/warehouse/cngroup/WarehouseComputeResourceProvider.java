@@ -43,6 +43,11 @@ public final class WarehouseComputeResourceProvider implements ComputeResourcePr
     }
 
     @Override
+    public ComputeResource ofComputeResource(long warehouseId, long workerGroupId) {
+        return WarehouseComputeResource.of(warehouseId);
+    }
+
+    @Override
     public Optional<ComputeResource> acquireComputeResource(Warehouse warehouse, CRAcquireContext acquireContext) {
         final long warehouseId = acquireContext.getWarehouseId();
         if (warehouse == null) {

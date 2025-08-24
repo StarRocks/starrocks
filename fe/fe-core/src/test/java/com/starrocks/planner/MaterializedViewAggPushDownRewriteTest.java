@@ -28,9 +28,9 @@ import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -41,7 +41,7 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.co
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.SAFE_REWRITE_ROLLUP_FUNCTION_MAP;
 
 public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         MaterializedViewTestBase.beforeClass();
@@ -988,7 +988,7 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                     sql(query).contains("mv1");
                 }
             } catch (Exception e) {
-                Assert.fail();
+                Assertions.fail();
             }
         });
     }

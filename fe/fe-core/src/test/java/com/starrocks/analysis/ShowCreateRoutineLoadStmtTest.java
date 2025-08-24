@@ -16,19 +16,21 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class ShowCreateRoutineLoadStmtTest {
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         // create connect context
         ctx = UtFrameUtils.createDefaultCtx();
@@ -40,11 +42,11 @@ public class ShowCreateRoutineLoadStmtTest {
         ctx.setDatabase("testDb");
         ShowCreateRoutineLoadStmt stmt = new ShowCreateRoutineLoadStmt(new LabelName("testDb", "testJob"));
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("testJob", stmt.getName());
-        Assert.assertEquals("testDb", stmt.getDbFullName());
-        Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("Job", stmt.getMetaData().getColumn(0).getName());
-        Assert.assertEquals("Create Job", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals("testJob", stmt.getName());
+        Assertions.assertEquals("testDb", stmt.getDbFullName());
+        Assertions.assertEquals(2, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Job", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
+        Assertions.assertEquals("Create Job", new ShowResultMetaFactory().getMetadata(stmt).getColumn(1).getName());
     }
 
     @Test
@@ -53,7 +55,7 @@ public class ShowCreateRoutineLoadStmtTest {
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable());
 
         ShowCreateRoutineLoadStmt stmt = (ShowCreateRoutineLoadStmt) stmts.get(0);
-        Assert.assertEquals("testDb", stmt.getDbFullName());
-        Assert.assertEquals("rl_test", stmt.getName());
+        Assertions.assertEquals("testDb", stmt.getDbFullName());
+        Assertions.assertEquals("rl_test", stmt.getName());
     }
 }

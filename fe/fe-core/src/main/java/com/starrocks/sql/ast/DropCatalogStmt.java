@@ -17,6 +17,8 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // ToDo(zhuodong): to support internal catalog in the future
 public class DropCatalogStmt extends DdlStmt {
 
@@ -34,7 +36,7 @@ public class DropCatalogStmt extends DdlStmt {
 
     public DropCatalogStmt(String name, boolean ifExists, NodePosition pos) {
         super(pos);
-        this.name = name;
+        this.name = normalizeName(name);
         this.ifExists = ifExists;
     }
 

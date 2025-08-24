@@ -159,6 +159,12 @@ const std::vector<ExprContext*>& ConnectorScanOperatorFactory::partition_exprs()
     return provider->partition_exprs();
 }
 
+const std::vector<TBucketProperty>& ConnectorScanOperatorFactory::get_bucket_properties() const {
+    auto* connector_scan_node = down_cast<ConnectorScanNode*>(_scan_node);
+    auto* provider = connector_scan_node->data_source_provider();
+    return provider->get_bucket_properties();
+}
+
 void ConnectorScanOperatorFactory::set_chunk_source_mem_bytes(int64_t value) {
     _io_tasks_mem_limiter->update_chunk_source_mem_bytes(value);
     _io_tasks_mem_limiter->update_arb_chunk_source_mem_bytes(value);

@@ -14,11 +14,9 @@
 
 #include "table_function_table_sink.h"
 
-#include "common/logging.h"
 #include "connector/file_chunk_sink.h"
-#include "connector/hive_chunk_sink.h"
 #include "exec/data_sink.h"
-#include "exec/hdfs_scanner_text.h"
+#include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exprs/expr.h"
 #include "formats/column_evaluator.h"
@@ -113,6 +111,9 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     if (target_table.__isset.parquet_use_legacy_encoding && target_table.parquet_use_legacy_encoding) {
         sink_ctx->options[formats::ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING] = "true";
         sink_ctx->options[formats::ParquetWriterOptions::USE_INT96_TIMESTAMP_ENCODING] = "true";
+    }
+    if (target_table.__isset.parquet_options && target_table.parquet_options.__isset.version) {
+        sink_ctx->options[formats::ParquetWriterOptions::VERSION] = target_table.parquet_options.version;
     }
 
     auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::FILE);

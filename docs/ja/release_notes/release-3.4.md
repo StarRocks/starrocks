@@ -4,6 +4,52 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.6
+
+リリース日：2025年8月7日
+
+### 改善点
+
+- `INSERT INTO FILES` でデータを Parquet ファイルにエクスポートする際に、[`parquet.version`](https://docs.starrocks.io/docs/ja/sql-reference/sql-functions/table-functions/files.md#parquetversion) を指定してエクスポートする Parquet ファイルのバージョンを選べるようになりました。他のツールでエクスポートされた Parquet ファイルを読み取る際の互換性が向上します。 [#60843](https://github.com/StarRocks/starrocks/pull/60843)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- `TableMetricsManager` におけるロックの粒度が大きすぎて、インポートジョブが失敗する問題。 [#58911](https://github.com/StarRocks/starrocks/pull/58911)
+- `FILES()` を使用して Parquet データをインポートする際、列名が大文字小文字を区別していた問題。 [#61059](https://github.com/StarRocks/starrocks/pull/61059)
+- ストレージとコンピュートが分離されたクラスタを v3.3 から v3.4 以降にアップグレードした後、キャッシュが有効にならない問題。 [#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- パーティション ID が null の場合にゼロ除算エラーが発生し、BE がクラッシュする問題。 [#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- BE 拡張中に Broker Load ジョブがエラーになる問題。 [#60224](https://github.com/StarRocks/starrocks/pull/60224)
+
+### 動作の変更
+
+- `information_schema.keywords` ビュー内の `keyword` 列は `word` にリネームされ、MySQL の定義と互換性を持たせました。 [#60863](https://github.com/StarRocks/starrocks/pull/60863)
+
+## 3.4.5
+
+リリース日: 2025年7月10日
+
+### 改善点
+
+- ロードジョブの実行状況の可観測性を向上: ロードタスクの実行情報を `information_schema.loads` ビューに統一しました。このビューでは、すべての INSERT、Broker Load、Stream Load、Routine Load のサブタスクの実行情報を確認できます。また、より多くのカラムを追加し、ロードタスクの実行状況や親ジョブ（PIPES、Routine Load Job）との関連情報を明確に把握できるようにしました。
+- `ALTER ROUTINE LOAD` ステートメントで `kafka_broker_list` を変更することをサポート。
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- 高頻度ロード時に Compaction が遅延する可能性がある問題。 [#59998](https://github.com/StarRocks/starrocks/pull/59998)
+- Unified Catalog 経由で Iceberg 外部テーブルをクエリすると、`not support getting unified metadata table factory` エラーが発生する問題。 [#59412](https://github.com/StarRocks/starrocks/pull/59412)
+- `DESC FILES()` でリモートストレージ上のCSVファイルを確認する際、システムが `xinf` をFLOAT型と誤認したため、結果が誤って返される問題。 [#59574](https://github.com/StarRocks/starrocks/pull/59574)
+- 空のパーティションに対して `INSERT INTO` を行うと BE がクラッシュする問題。 [#59553](https://github.com/StarRocks/starrocks/pull/59553)
+- Iceberg の Equality Delete ファイルを読み込む際、Icebergテーブルで既に削除されたデータが StarRocks で読み取れてしまう問題。 [#59709](https://github.com/StarRocks/starrocks/pull/59709)
+- カラム名変更後にクエリが失敗する問題。 [#59178](https://github.com/StarRocks/starrocks/pull/59178)
+
+### 動作の変更
+
+- BE 構成パラメータ `skip_pk_preload` のデフォルト値が `false` から `true` に変更されました。これにより、プライマリキーのインデックスプリロードをスキップし、`Reached Timeout` エラーの発生を低減します。この変更により、プライマリキーインデックスの読み込みが必要なクエリの応答時間が増加する可能性があります。
+
 ## 3.4.4
 
 リリース日：2025 年 6 月 10 日
@@ -133,7 +179,6 @@ displayed_sidebar: docs
 
 - [実験的] 遅いクエリの自動最適化のための初期的なQuery Feedback機能を提供します。システムは遅いクエリの実行詳細を収集し、潜在的な最適化の機会を自動的に分析し、クエリに対するカスタマイズされた最適化ガイドを生成します。CBOが後続の同一クエリに対して同じ悪いプランを生成した場合、システムはこのクエリプランをガイドに基づいてローカルに最適化します。詳細は[Query Feedback](https://docs.starrocks.io/docs/using_starrocks/query_feedback/)をご覧ください。
 - [実験的] Python UDFをサポートし、Java UDFと比較してより便利な関数カスタマイズを提供します。詳細は[Python UDF](https://docs.starrocks.io/docs/sql-reference/sql-functions/Python_UDF/)をご覧ください。
-- [実験的] クエリ結果の大容量データのより効率的な読み取りのためのArrow Flightインターフェースをサポートします。また、FEではなくBEが返された結果を処理できるようにし、FEへの負担を大幅に軽減します。特にビッグデータ分析と処理、機械学習を含むビジネスシナリオに適しています。
 - 複数カラムのOR述語のプッシュダウンを可能にし、複数カラムのOR条件（例: `a = xxx OR b = yyy`）を持つクエリが特定のカラムインデックスを利用できるようにし、データの読み取り量を削減し、クエリパフォーマンスを向上させます。
 - TPC-DS 1TB IcebergデータセットでTPC-DSクエリパフォーマンスを約20%最適化しました。最適化方法には、テーブルプルーニングと主キーおよび外部キーを使用した集約カラムプルーニング、集約プッシュダウンが含まれます。
 

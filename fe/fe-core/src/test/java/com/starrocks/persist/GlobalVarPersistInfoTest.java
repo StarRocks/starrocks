@@ -37,8 +37,8 @@ package com.starrocks.persist;
 import com.google.common.collect.Lists;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -51,7 +51,7 @@ import java.util.List;
 public class GlobalVarPersistInfoTest {
     private static String fileName = "./GlobalVarPersistInfoTest";
 
-    @After
+    @AfterEach
     public void tearDown() {
         File file = new File(fileName);
         file.delete();

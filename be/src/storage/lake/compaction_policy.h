@@ -44,6 +44,8 @@ public:
                                                 std::shared_ptr<const TabletMetadataPB> tablet_metadata,
                                                 bool force_base_compaction);
 
+    static bool is_real_time_compaction_strategy(const std::shared_ptr<const TabletMetadataPB>& metadata);
+
 protected:
     explicit CompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata,
                               bool force_base_compaction)

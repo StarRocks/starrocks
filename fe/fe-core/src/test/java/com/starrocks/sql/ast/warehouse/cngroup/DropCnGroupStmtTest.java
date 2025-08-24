@@ -17,8 +17,8 @@ package com.starrocks.sql.ast.warehouse.cngroup;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class DropCnGroupStmtTest {
 
@@ -28,35 +28,35 @@ public class DropCnGroupStmtTest {
             String sqlText = "ALTER WAREHOUSE warehouse1 DROP CNGROUP IF EXISTS cngroup1 FORCE";
             DropCnGroupStmt stmt =
                     (DropCnGroupStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
-            Assert.assertEquals("cngroup1", stmt.getCnGroupName());
-            Assert.assertTrue(stmt.isSetIfExists());
-            Assert.assertTrue(stmt.isSetForce());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertEquals("cngroup1", stmt.getCnGroupName());
+            Assertions.assertTrue(stmt.isSetIfExists());
+            Assertions.assertTrue(stmt.isSetForce());
         }
 
         {
             String sqlText = "ALTER WAREHOUSE warehouse1 DROP CNGROUP IF EXISTS cngroup1";
             DropCnGroupStmt stmt =
                     (DropCnGroupStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
-            Assert.assertEquals("cngroup1", stmt.getCnGroupName());
-            Assert.assertTrue(stmt.isSetIfExists());
-            Assert.assertFalse(stmt.isSetForce());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertEquals("cngroup1", stmt.getCnGroupName());
+            Assertions.assertTrue(stmt.isSetIfExists());
+            Assertions.assertFalse(stmt.isSetForce());
         }
 
         {
             String sqlText = "ALTER WAREHOUSE warehouse1 DROP CNGROUP cngroup1";
             DropCnGroupStmt stmt =
                     (DropCnGroupStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
-            Assert.assertEquals("cngroup1", stmt.getCnGroupName());
-            Assert.assertFalse(stmt.isSetIfExists());
-            Assert.assertFalse(stmt.isSetForce());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertEquals("cngroup1", stmt.getCnGroupName());
+            Assertions.assertFalse(stmt.isSetIfExists());
+            Assertions.assertFalse(stmt.isSetForce());
         }
 
         {
             String sqlText = "ALTER WAREHOUSE warehouse1 DROP CNGROUP";
-            Assert.assertThrows(ParsingException.class,
+            Assertions.assertThrows(ParsingException.class,
                     () -> SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT));
         }
     }

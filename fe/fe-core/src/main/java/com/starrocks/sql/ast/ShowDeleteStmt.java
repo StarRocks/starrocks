@@ -15,11 +15,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.proc.DeleteInfoProcDir;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 public class ShowDeleteStmt extends ShowStmt {
 
@@ -31,7 +29,7 @@ public class ShowDeleteStmt extends ShowStmt {
 
     public ShowDeleteStmt(String dbName, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public String getDbName() {
@@ -39,16 +37,7 @@ public class ShowDeleteStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : DeleteInfoProcDir.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
+        this.dbName = normalizeName(dbName);
     }
 
     @Override
