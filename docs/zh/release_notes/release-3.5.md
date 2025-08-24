@@ -10,6 +10,52 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.4
+
+发布日期: 2025年8月22日
+
+### 功能增强
+
+- 增加日志以明确 Tablet 无法修复的原因。 [#61959](https://github.com/StarRocks/starrocks/pull/61959)
+- 优化日志中的 DROP PARTITION 信息。 [#61787](https://github.com/StarRocks/starrocks/pull/61787)
+- 为统计信息未知的表分配一个较大但可配置的行数，用于统计估算。 [#61332](https://github.com/StarRocks/starrocks/pull/61332)
+- 增加基于标签位置的均衡统计。 [#61905](https://github.com/StarRocks/starrocks/pull/61905)
+- 增加 Colocate Group 均衡统计以提升集群监控能力。 [#61736](https://github.com/StarRocks/starrocks/pull/61736)
+- 当健康副本数超过默认副本数时，跳过 Publish 等待阶段。 [#61820](https://github.com/StarRocks/starrocks/pull/61820)
+- 在 Tablet 报告中加入 Tablet 信息的收集时间。 [#61643](https://github.com/StarRocks/starrocks/pull/61643)
+- 支持写入带标签的 Starlet 文件。 [#61605](https://github.com/StarRocks/starrocks/pull/61605)
+- 支持通过 SHOW PROC 查看集群均衡统计。 [#61578](https://github.com/StarRocks/starrocks/pull/61578)
+- 升级 librdkafka 至 2.11.0 以支持 Kafka 4.0，并移除废弃配置。 [#61698](https://github.com/StarRocks/starrocks/pull/61698)
+- 在 Stream Load 事务接口中新增 `prepared_timeout` 配置。 [#61539](https://github.com/StarRocks/starrocks/pull/61539)
+- 升级 StarOS 至 v3.5-rc3。 [#61685](https://github.com/StarRocks/starrocks/pull/61685)
+
+### 问题修复
+
+修复了以下问题：
+
+- 随机分布表的 Dict 版本错误。 [#61933](https://github.com/StarRocks/starrocks/pull/61933)
+- 在 Context Condition 中的 Query Context 错误。 [#61929](https://github.com/StarRocks/starrocks/pull/61929)
+- ALTER 操作中因 Shadow Tablet 的同步 Publish 导致 Publish 失败。 [#61887](https://github.com/StarRocks/starrocks/pull/61887)
+- 修复 CVE-2025-55163 漏洞。 [#62041](https://github.com/StarRocks/starrocks/pull/62041)
+- 从 Apache Kafka 实时导入数据时发生内存泄漏。 [#61698](https://github.com/StarRocks/starrocks/pull/61698)
+- Lake Persistent Index 中 Rebuild 文件数量统计错误。 [#61859](https://github.com/StarRocks/starrocks/pull/61859)
+- 在生成表达式列上收集统计信息导致跨库查询失败。 [#61829](https://github.com/StarRocks/starrocks/pull/61829)
+- Query Cache 在存算一体集群中不一致，导致结果不一致。 [#61783](https://github.com/StarRocks/starrocks/pull/61783)
+- CatalogRecycleBin 保留已删除分区信息导致内存占用过高。 [#61582](https://github.com/StarRocks/starrocks/pull/61582)
+- SQL Server JDBC 连接在超时超过 65,535 毫秒时失败。 [#61719](https://github.com/StarRocks/starrocks/pull/61719)
+- 安全集成未能加密密码，导致敏感信息泄露。 [#60666](https://github.com/StarRocks/starrocks/pull/60666)
+- Iceberg 分区列上的 `MIN()` 和 `MAX()` 异常返回 NULL。 [#61858](https://github.com/StarRocks/starrocks/pull/61858)
+- 含不可下推子字段的 Join 谓词被错误改写。 [#61868](https://github.com/StarRocks/starrocks/pull/61868)
+- 取消 QueryContext 可能导致 use-after-free。 [#61897](https://github.com/StarRocks/starrocks/pull/61897)
+- CBO 表裁剪逻辑错误忽略其他谓词。 [#61881](https://github.com/StarRocks/starrocks/pull/61881)
+- `COLUMN_UPSERT_MODE` 部分更新将自增列覆盖为 0。 [#61341](https://github.com/StarRocks/starrocks/pull/61341)
+- JDBC TIME 类型转换使用错误的时区偏移，导致时间值错误。 [#61783](https://github.com/StarRocks/starrocks/pull/61783)
+- Routine Load 作业未序列化 `max_filter_ratio`。 [#61755](https://github.com/StarRocks/starrocks/pull/61755)
+- Stream Load 的 `now(precision)` 函数存在精度参数丢失。 [#61721](https://github.com/StarRocks/starrocks/pull/61721)
+- 取消查询可能导致“query id not found”错误。 [#61667](https://github.com/StarRocks/starrocks/pull/61667)
+- LDAP 认证在查询过程中可能漏报 PartialResultException 导致查询结果不完整。 [#60667](https://github.com/StarRocks/starrocks/pull/60667)
+- 查询条件包含 DATETIME 时，Paimon Timestamp 的时区转换错误。 [#60473](https://github.com/StarRocks/starrocks/pull/60473)
+
 ## 3.5.3
 
 发布日期： 2025 年 8 月 11 日

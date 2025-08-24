@@ -306,6 +306,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v2.5.13, v3.0.7, v3.1.4, v3.2.0, v3.3.0
 
+### enable_cbo_based_mv_rewrite
+
+* **Description**: Whether to enable materialized view rewrite in CBO phase which can maximize the likelihood of successful query rewriting (e.g., when the join order differs between materialized views and queries), but it will increase the execution time of the optimizer phase.
+* **Default**: true
+* **Introduced in**: v3.5.5, v4.0.1
+
 ### enable_parquet_reader_bloom_filter
 
 * **Description**: Whether to enable the bloom filter of Parquet file to improve performance. `true` indicates enabling the bloom filter, and `false` indicates disabling it. You can also control this behavior on system level using the BE configuration `parquet_reader_bloom_filter_enable`. Bloom filters in Parquet are maintained **at the column level within each row group**. If a Parquet file contains bloom filters for certain columns, queries can use predicates on those columns to efficiently skip row groups.
@@ -1253,3 +1259,45 @@ The StarRocks version. Cannot be changed.
 * **Description**: Used to specify how columns are matched when StarRocks reads ORC files from Hive. The default value is `false`, which means columns in ORC files are read based on their ordinal positions in the Hive table definition. If this variable is set to `true`, columns are read based on their names.
 * **Default**: false
 * **Introduced in**: v3.1.10
+
+### enable_phased_scheduler
+
+* **Description**: Whether to enable multi-phased scheduling. When multi-phased scheduling is enabled, it will schedule fragments according to their dependencies. For example, the system will first schedule the fragment on the build side of a Shuffle Join, and then the fragment on the probe side (Note that, unlike stage-by-stage scheduling, phased scheduling is still under the MPP execution mode). Enabling multi-phased scheduling can significantly reduce memory usage for a large number of UNION ALL queries.
+* **Default**: false
+* **Introduced in**: v3.3
+
+### phased_scheduler_max_concurrency
+
+* **Description**: The concurrency for phased scheduler scheduling leaf node fragments. For example, the default value means that, in a large number of UNION ALL Scan queries, at most two scan fragments are allowed to be scheduled at the same time.
+* **Default**: 2
+* **Introduced in**: v3.3
+
+### enable_wait_dependent_event
+
+* **Description**: Whether Pipeline waits for a dependent operator to finish execution before continuing within the same fragment. For example, in a left join query, when this feature is enabled, the probe-side operator waits for the build-side operator to finish before it starts executing. Enabling this feature can reduce memory usage, but may increase the query latency. However, for queries reused in CTE, enabling this feature may increase memory usage.
+* **Default**: false
+* **Introduced in**: v3.3
+
+### enable_topn_runtime_filter
+
+* **Description**: Whether to enable TopN Runtime Filter. If this feature is enabled, a runtime filter will be dynamically constructed for ORDER BY LIMIT queries and pushed down to the scan for filtering.
+* **Default**: true
+* **Introduced in**: v3.3
+
+### enable_partition_hash_join
+
+* **Description**: Whether to enable adaptive Partition Hash Join.
+* **Default**: true
+* **Introduced in**: v3.4
+
+### spill_enable_direct_io
+
+* **Description**: Whether to skip Page Cache when reading or writing files for Spilling. If this feature is enabled, Spilling will use direct I/O mode to read or write files directly. Direct I/O mode can reduce the impact on the OS Page Cache, but it may cause increases in disk read/write time.
+* **Default**: false
+* **Introduced in**: v3.4
+
+### spill_enable_compaction
+
+* **Description**: Whether to enable Compaction for small files from Spilling. When this feature is enabled, it reduces memory usage for aggregation and sorting.
+* **Default**: true
+* **Introduced in**: v3.4

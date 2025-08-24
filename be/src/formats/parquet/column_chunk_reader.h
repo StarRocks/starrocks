@@ -24,7 +24,7 @@
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/level_codec.h"

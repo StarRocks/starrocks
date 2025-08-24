@@ -23,6 +23,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -39,13 +40,14 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.Map;
 
-public class DynamicTabletJobMgr extends FrontendDaemon {
+public class DynamicTabletJobMgr extends FrontendDaemon implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(DynamicTabletJobMgr.class);
 
     @SerializedName(value = "dynamicTabletJobs")
     protected final Map<Long, DynamicTabletJob> dynamicTabletJobs = Maps.newConcurrentMap();
 
-    protected final Map<Long, DynamicTablet> dynamicTablets = Maps.newConcurrentMap();
+    // Original tablet id -> dynamic tablet context
+    protected final Map<Long, DynamicTabletContext> dynamicTabletContexts = Maps.newConcurrentMap();
 
     public DynamicTabletJobMgr() {
         super("DynamicTabletJobMgr", Config.dynamic_tablet_job_scheduler_interval_ms);
@@ -59,8 +61,17 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
         return dynamicTabletJobs;
     }
 
-    public DynamicTablet getDynamicTablet(long tabletId) {
-        return dynamicTablets.get(tabletId);
+    public DynamicTablet getDynamicTablet(long tabletId, long visibleVersion) {
+        DynamicTabletContext dynamicTabletContext = dynamicTabletContexts.get(tabletId);
+        if (dynamicTabletContext == null) {
+            return null;
+        }
+
+        if (visibleVersion < dynamicTabletContext.getVisibleVersion()) {
+            return null;
+        }
+
+        return dynamicTabletContext.getDynamicTablet();
     }
 
     public void createDynamicTabletJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
@@ -70,13 +81,11 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
     }
 
     public void addDynamicTabletJob(DynamicTabletJob dynamicTabletJob) throws StarRocksException {
-        synchronized (this) {
-            checkDynamicTabletJob(dynamicTabletJob);
+        checkDynamicTabletJob(dynamicTabletJob);
 
-            DynamicTabletJob existingJob = dynamicTabletJobs.putIfAbsent(dynamicTabletJob.getJobId(), dynamicTabletJob);
-            if (existingJob != null) {
-                throw new StarRocksException("Dynamic tablet job is already existed. " + existingJob);
-            }
+        DynamicTabletJob existingJob = dynamicTabletJobs.putIfAbsent(dynamicTabletJob.getJobId(), dynamicTabletJob);
+        if (existingJob != null) {
+            throw new StarRocksException("Dynamic tablet job is already existed. " + existingJob);
         }
 
         GlobalStateMgr.getCurrentState().getEditLog().logUpdateDynamicTabletJob(dynamicTabletJob);
@@ -128,6 +137,14 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
         return response;
     }
 
+    protected void registerDynamicTablet(long tabletId, DynamicTablet dynamicTablet, long visibleVersion) {
+        dynamicTabletContexts.put(tabletId, new DynamicTabletContext(dynamicTablet, visibleVersion));
+    }
+
+    protected void unregisterDynamicTablet(long tabletId) {
+        dynamicTabletContexts.remove(tabletId);
+    }
+
     @Override
     protected void runAfterCatalogReady() {
         runDynamicTabletJobs();
@@ -138,19 +155,13 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
             throw new StarRocksException("Dynamic tablet job state is not pending. " + dynamicTabletJob);
         }
 
-        long totalParallelTablets = dynamicTabletJob.getParallelTablets();
-        for (DynamicTabletJob job : dynamicTabletJobs.values()) {
-            if (job.isDone()) {
-                continue;
-            }
-
-            if (job.getDbId() == dynamicTabletJob.getDbId() && job.getTableId() == dynamicTabletJob.getTableId()) {
-                throw new StarRocksException("Dynamic tablet job is not done. " + job);
-            }
-            totalParallelTablets += job.getParallelTablets();
+        long currentParallelTablets = getTotalParalelTablets();
+        if (currentParallelTablets <= 0) { // No running jobs
+            return;
         }
 
-        if (totalParallelTablets > Config.dynamic_tablet_max_parallel_tablets) {
+        long newParallelTablets = dynamicTabletJob.getParallelTablets() + currentParallelTablets;
+        if (newParallelTablets > Config.dynamic_tablet_max_parallel_tablets) {
             throw new StarRocksException("Total parallel tablets exceed dynamic_tablet_max_parallel_tablets: "
                     + Config.dynamic_tablet_max_parallel_tablets);
         }
@@ -174,6 +185,17 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
         }
     }
 
+    @Override
+    public void gsonPostProcess() throws IOException {
+        for (DynamicTabletJob job : dynamicTabletJobs.values()) {
+            if (job.isDone()) {
+                continue;
+            }
+
+            job.registerDynamicTabletsOnRestart();
+        }
+    }
+
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.DYNAMIC_TABLET_JOB_MGR, 1);
         writer.writeJson(this);
@@ -183,5 +205,6 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
     public void load(SRMetaBlockReader reader) throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
         DynamicTabletJobMgr dynamicTabletJobMgr = reader.readJson(DynamicTabletJobMgr.class);
         dynamicTabletJobs.putAll(dynamicTabletJobMgr.dynamicTabletJobs);
+        dynamicTabletContexts.putAll(dynamicTabletJobMgr.dynamicTabletContexts);
     }
 }

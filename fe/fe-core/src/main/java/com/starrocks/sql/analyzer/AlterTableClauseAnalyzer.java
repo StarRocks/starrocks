@@ -45,7 +45,6 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -116,6 +115,7 @@ import com.starrocks.sql.ast.SinglePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.StructFieldDesc;
+import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -602,7 +602,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             }
 
             try {
-                expressionPartitionDesc.analyze(columnDefs, olapTable.getProperties());
+                PartitionDescAnalyzer.analyze(expressionPartitionDesc, columnDefs, olapTable.getProperties());
             } catch (AnalysisException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
@@ -1203,7 +1203,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
     @Override
     public Void visitRefreshSchemeClause(RefreshSchemeClause refreshSchemeDesc, ConnectContext context) {
-        if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
+        if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
             throw new SemanticException("Unsupported change to SYNC refresh type", refreshSchemeDesc.getPos());
         }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
@@ -1362,7 +1362,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             if (partitionDesc instanceof SingleRangePartitionDesc) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 SingleRangePartitionDesc singleRangePartitionDesc = ((SingleRangePartitionDesc) partitionDesc);
-                singleRangePartitionDesc.analyze(rangePartitionInfo.getPartitionColumnsSize(), cloneProperties);
+                PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc,
+                        rangePartitionInfo.getPartitionColumnsSize(), cloneProperties);
                 if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
                     rangePartitionInfo.checkAndCreateRange(table.getIdToColumn(), singleRangePartitionDesc,
                             addPartitionClause.isTempPartition());
@@ -1372,8 +1373,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 List<ColumnDef> columnDefList = partitionInfo.getPartitionColumns(olapTable.getIdToColumn()).stream()
                         .map(item -> new ColumnDef(item.getName(), new TypeDef(item.getType())))
                         .collect(Collectors.toList());
-                PartitionDescAnalyzer.analyze(partitionDesc);
-                partitionDesc.analyze(columnDefList, cloneProperties);
+                PartitionDescAnalyzer.analyze(partitionDesc, columnDefList, cloneProperties);
                 if (!existPartitionNameSet.contains(partitionDesc.getPartitionName())) {
                     CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable, partitionDesc,
                             addPartitionClause.isTempPartition());

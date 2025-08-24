@@ -83,7 +83,6 @@ import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
-import com.starrocks.authorization.GrantType;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
@@ -91,7 +90,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -108,8 +106,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.connector.BranchOptions;
-import com.starrocks.connector.TagOptions;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
@@ -180,6 +176,7 @@ import com.starrocks.sql.ast.AnalyzeTypeDesc;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.BackupStmt;
+import com.starrocks.sql.ast.BranchOptions;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CallProcedureStatement;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
@@ -285,6 +282,7 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
 import com.starrocks.sql.ast.GrantRevokePrivilegeObjects;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.Identifier;
@@ -464,6 +462,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.TabletList;
+import com.starrocks.sql.ast.TagOptions;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -2131,8 +2130,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 refreshSchemeDesc = new SyncRefreshSchemeDesc();
             } else {
                 // use new manual refresh
-                refreshSchemeDesc =
-                        new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
+                refreshSchemeDesc = new ManualRefreshSchemeDesc(RefreshSchemeClause.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
             }
         }
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
@@ -8526,13 +8524,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
         NodePosition pos = createPos(context);
-        MaterializedView.RefreshMoment refreshMoment =
+        RefreshSchemeClause.RefreshMoment refreshMoment =
                 Config.default_mv_refresh_immediate ?
-                        MaterializedView.RefreshMoment.IMMEDIATE : MaterializedView.RefreshMoment.DEFERRED;
+                        RefreshSchemeClause.RefreshMoment.IMMEDIATE : RefreshSchemeClause.RefreshMoment.DEFERRED;
         if (context.DEFERRED() != null) {
-            refreshMoment = MaterializedView.RefreshMoment.DEFERRED;
+            refreshMoment = RefreshSchemeClause.RefreshMoment.DEFERRED;
         } else if (context.IMMEDIATE() != null) {
-            refreshMoment = MaterializedView.RefreshMoment.IMMEDIATE;
+            refreshMoment = RefreshSchemeClause.RefreshMoment.IMMEDIATE;
         }
         if (context.ASYNC() != null) {
             boolean defineStartTime = false;

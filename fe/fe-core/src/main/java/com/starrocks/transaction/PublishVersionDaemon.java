@@ -215,7 +215,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
      *
      * @return the thread pool executor
      */
-    private @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
+    public @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
         if (lakeTaskExecutor == null) {
             int numThreads = getOrFixLakeTaskExecutorThreadPoolMaxSizeConfig();
             lakeTaskExecutor =

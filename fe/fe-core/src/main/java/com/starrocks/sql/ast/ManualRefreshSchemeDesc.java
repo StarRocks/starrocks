@@ -14,12 +14,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ManualRefreshSchemeDesc extends RefreshSchemeClause {
-    public ManualRefreshSchemeDesc(MaterializedView.RefreshMoment moment, NodePosition pos) {
-        super(MaterializedView.RefreshType.MANUAL, pos, moment);
+    public ManualRefreshSchemeDesc(RefreshMoment moment, NodePosition pos) {
+        super(pos, moment);
     }
 }
 
