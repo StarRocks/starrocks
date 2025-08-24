@@ -17,7 +17,7 @@ This operation requires the DROP privilege on the target materialized view.
 ## Syntax
 
 ```SQL
-DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
+DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name [FORCE]
 ```
 
 Parameters in brackets [] is optional.
@@ -28,6 +28,7 @@ Parameters in brackets [] is optional.
 | ------------- | ------------ | ------------------------------------------------------------ |
 | IF EXISTS     | no           | If this parameter is specified, StarRocks will not throw an exception when deleting a materialized view that does not exist. If this parameter is not specified, the system will throw an exception when deleting a materialized view that does not exist. |
 | mv_name       | yes          | The name of the materialized view to delete.                 |
+| FORCE         | no           | If you execute DROP MATERIALIZED VIEW FORCE, the system will not check whether there are unfinished transactions, it will be deleted directly and cannot be recovered, this operation is generally not recommended.                 |
 
 ## Examples
 
@@ -74,3 +75,31 @@ Query OK, 0 rows affected (0.00 sec)
 MySQL > DROP MATERIALIZED VIEW k1_k2;
 ERROR 1064 (HY000): Materialized view k1_k2 is not find
 ```
+
+Example 3: Force Drop an existing materialized view
+
+1. View all existing materialized views in the database.
+
+  ```Plain
+  MySQL > SHOW MATERIALIZED VIEWS\G
+  *************************** 1. row ***************************
+              id: 470740
+          name: order_mv1
+  database_name: default_cluster:sr_hub
+        text: SELECT `sr_hub`.`orders`.`dt` AS `dt`, `sr_hub`.`orders`.`order_id` AS `order_id`, `sr_hub`.`orders`.`user_id` AS `user_id`, sum(`sr_hub`.`orders`.`cnt`) AS `total_cnt`, sum(`sr_hub`.`orders`.`revenue`) AS `total_revenue`, count(`sr_hub`.`orders`.`state`) AS `state_count` FROM `sr_hub`.`orders` GROUP BY `sr_hub`.`orders`.`dt`, `sr_hub`.`orders`.`order_id`, `sr_hub`.`orders`.`user_id`
+          rows: 0
+  1 rows in set (0.00 sec)
+  ```
+
+2. Force Drop the materialized view `order_mv1`.
+
+  ```SQL
+  DROP MATERIALIZED VIEW order_mv1 FORCE;
+  ```
+
+3. Check if the dropped materialized view exists.
+
+  ```Plain
+  MySQL > SHOW MATERIALIZED VIEWS;
+  Empty set (0.01 sec)
+  ```
