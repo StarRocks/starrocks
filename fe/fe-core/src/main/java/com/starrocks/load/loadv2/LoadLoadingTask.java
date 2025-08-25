@@ -203,6 +203,8 @@ public class LoadLoadingTask extends LoadTask {
         summaryProfile.addInfoString("Timeout", DebugUtil.getPrettyStringMs(timeoutS * 1000));
         summaryProfile.addInfoString("Strict Mode", String.valueOf(strictMode));
         summaryProfile.addInfoString("Partial Update", String.valueOf(partialUpdate));
+        summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP,
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseComputeResourceName(computeResource));
 
         SessionVariable variables = context.getSessionVariable();
         if (variables != null) {
@@ -295,6 +297,8 @@ public class LoadLoadingTask extends LoadTask {
                         curCoordinator.getRejectedRecordPaths(),
                         System.currentTimeMillis() - writeBeginTime);
             } else {
+                attachment = new BrokerLoadingTaskAttachment(signature,
+                        TabletFailInfo.fromThrift(curCoordinator.getFailInfos()));
                 throw new LoadException(status.getErrorMsg());
             }
         } else {

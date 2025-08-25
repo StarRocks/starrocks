@@ -145,7 +145,7 @@ ExecTime      | 2.583 s
 
 #### 刷新任务完成后分析资源消耗
 
-在刷新任务完成后，您可以通过 Query Profile 来分析其资源消耗情况。
+在刷新任务完成后，您可以通过 Query Profile 来分析其资源消耗情况。您可以通过集群 Leader FE 节点的 Web UI 查看物化视图刷新任务的 Profile。
 
 当异步物化视图正在刷新时，会执行 INSERT OVERWRITE 语句。您可以检查相应的 Query Profile，以分析刷新任务所消耗的时间和资源。
 
@@ -156,7 +156,7 @@ ExecTime      | 2.583 s
 - `QueryMemCost`：查询的总内存成本。
 - 其他针对各个运算符的特定指标，比如连接运算符和聚合运算符。
 
-有关如何分析 Query Profile 和理解其他指标的详细信息，请参阅 [查看分析 Query Profile](../../administration/query_profile_overview.md).
+有关如何分析 Query Profile 和理解其他指标的详细信息，请参阅 [查看分析 Query Profile](../../best_practices/query_tuning/query_profile_overview.md).
 
 ### 验证查询是否被异步物化视图改写
 
@@ -296,7 +296,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
   v3.2 之前版本中，物化视图刷新任务的默认超时时间为 5 分钟，v3.2 版本之后默认为 1 小时。当遇到超时异常时，可以尝试修改超时时间：
 
   ```SQL
-  ALTER MATERIALIZED VIEW mv2 SET ( 'session.query_timeout' = '4000' );
+  ALTER MATERIALIZED VIEW mv2 SET ( 'session.insert_timeout' = '4000' );
   ```
 
 - **分析物化视图性能瓶颈**

@@ -67,6 +67,7 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartition;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -78,11 +79,13 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SparkLoadPendingTaskTest {
 
@@ -112,7 +115,7 @@ public class SparkLoadPendingTaskTest {
         long partitionId = 2L;
         DistributionInfo distributionInfo = new HashDistributionInfo(2, Lists.newArrayList(columns.get(0)));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
-        Partition partition = new Partition(partitionId, 21,  "p1", null, distributionInfo);
+        Partition partition = new Partition(partitionId, 21, "p1", null, distributionInfo);
         List<Partition> partitions = Lists.newArrayList(partition);
 
         // file group
@@ -169,58 +172,62 @@ public class SparkLoadPendingTaskTest {
         SparkLoadPendingTask task = new SparkLoadPendingTask(sparkLoadJob, aggKeyToFileGroups, resource, brokerDesc);
         task.init();
         SparkPendingTaskAttachment attachment = Deencapsulation.getField(task, "attachment");
-        Assert.assertEquals(null, attachment.getAppId());
+        Assertions.assertEquals(null, attachment.getAppId());
         task.executeTask();
-        Assert.assertEquals(appId, attachment.getAppId());
+        Assertions.assertEquals(appId, attachment.getAppId());
     }
 
-    @Test(expected = LoadException.class)
+    @Test
     public void testNoDb(@Injectable SparkLoadJob sparkLoadJob,
                          @Injectable SparkResource resource,
                          @Injectable BrokerDesc brokerDesc,
-                         @Mocked GlobalStateMgr globalStateMgr) throws LoadException {
-        long dbId = 0L;
+                         @Mocked GlobalStateMgr globalStateMgr) {
+        assertThrows(LoadException.class, () -> {
+            long dbId = 0L;
 
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(dbId);
-                result = null;
-            }
-        };
+            new Expectations() {
+                {
+                    globalStateMgr.getLocalMetastore().getDb(dbId);
+                    result = null;
+                }
+            };
 
-        SparkLoadPendingTask task = new SparkLoadPendingTask(sparkLoadJob, null, resource, brokerDesc);
-        task.init();
+            SparkLoadPendingTask task = new SparkLoadPendingTask(sparkLoadJob, null, resource, brokerDesc);
+            task.init();
+        });
     }
 
-    @Test(expected = LoadException.class)
+    @Test
     public void testNoTable(@Injectable SparkLoadJob sparkLoadJob,
                             @Injectable SparkResource resource,
                             @Injectable BrokerDesc brokerDesc,
                             @Mocked GlobalStateMgr globalStateMgr,
-                            @Injectable Database database) throws LoadException {
-        long dbId = 0L;
-        long tableId = 1L;
+                            @Injectable Database database) {
+        assertThrows(LoadException.class, () -> {
+            long dbId = 0L;
+            long tableId = 1L;
 
-        Map<BrokerFileGroupAggInfo.FileGroupAggKey, List<BrokerFileGroup>> aggKeyToFileGroups = Maps.newHashMap();
-        List<BrokerFileGroup> brokerFileGroups = Lists.newArrayList();
-        DataDescription desc = new DataDescription("testTable", null, Lists.newArrayList("abc.txt"),
-                null, null, null, null, false, null);
-        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
-        brokerFileGroups.add(brokerFileGroup);
-        BrokerFileGroupAggInfo.FileGroupAggKey aggKey = new BrokerFileGroupAggInfo.FileGroupAggKey(tableId, null);
-        aggKeyToFileGroups.put(aggKey, brokerFileGroups);
+            Map<BrokerFileGroupAggInfo.FileGroupAggKey, List<BrokerFileGroup>> aggKeyToFileGroups = Maps.newHashMap();
+            List<BrokerFileGroup> brokerFileGroups = Lists.newArrayList();
+            DataDescription desc = new DataDescription("testTable", null, Lists.newArrayList("abc.txt"),
+                    null, null, null, null, false, null);
+            BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+            brokerFileGroups.add(brokerFileGroup);
+            BrokerFileGroupAggInfo.FileGroupAggKey aggKey = new BrokerFileGroupAggInfo.FileGroupAggKey(tableId, null);
+            aggKeyToFileGroups.put(aggKey, brokerFileGroups);
 
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(dbId);
-                result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
-                result = null;
-            }
-        };
+            new Expectations() {
+                {
+                    globalStateMgr.getLocalMetastore().getDb(dbId);
+                    result = database;
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+                    result = null;
+                }
+            };
 
-        SparkLoadPendingTask task = new SparkLoadPendingTask(sparkLoadJob, aggKeyToFileGroups, resource, brokerDesc);
-        task.init();
+            SparkLoadPendingTask task = new SparkLoadPendingTask(sparkLoadJob, aggKeyToFileGroups, resource, brokerDesc);
+            task.init();
+        });
     }
 
     @Test
@@ -260,11 +267,11 @@ public class SparkLoadPendingTaskTest {
         int distributionColumnIndex = 1;
         DistributionInfo distributionInfo =
                 new HashDistributionInfo(3, Lists.newArrayList(columns.get(distributionColumnIndex)));
-        Partition partition1 = new Partition(partition1Id, 21,  "p1", null,
+        Partition partition1 = new Partition(partition1Id, 21, "p1", null,
                 distributionInfo);
-        Partition partition2 = new Partition(partition2Id, 51,  "p2", null,
+        Partition partition2 = new Partition(partition2Id, 51, "p2", null,
                 new HashDistributionInfo(4, Lists.newArrayList(columns.get(distributionColumnIndex))));
-        Partition partition3 = new Partition(partition3Id, 61,  "tp3", null,
+        Partition partition3 = new Partition(partition3Id, 61, "tp3", null,
                 distributionInfo);
         int partitionColumnIndex = 0;
         List<Partition> partitions = Lists.newArrayList(partition1, partition2);
@@ -272,17 +279,17 @@ public class SparkLoadPendingTaskTest {
                 new RangePartitionInfo(Lists.newArrayList(columns.get(partitionColumnIndex)));
         PartitionKeyDesc partitionKeyDesc1 = new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("10")));
         SingleRangePartitionDesc partitionDesc1 = new SingleRangePartitionDesc(false, "p1", partitionKeyDesc1, null);
-        partitionDesc1.analyze(1, null);
+        PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(partitionDesc1, 1, null);
         partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(columns),
                 partitionDesc1, partition1Id, false);
         PartitionKeyDesc partitionKeyDesc2 = new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("20")));
         SingleRangePartitionDesc partitionDesc2 = new SingleRangePartitionDesc(false, "p2", partitionKeyDesc2, null);
-        partitionDesc2.analyze(1, null);
+        PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(partitionDesc2, 1, null);
         partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(columns),
                 partitionDesc2, partition2Id, false);
         PartitionKeyDesc partitionKeyDesc3 = new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("10")));
         SingleRangePartitionDesc partitionDesc3 = new SingleRangePartitionDesc(false, "tp3", partitionKeyDesc1, null);
-        partitionDesc3.analyze(1, null);
+        PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(partitionDesc3, 1, null);
         partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(columns),
                 partitionDesc3, partition3Id, true);
 
@@ -335,49 +342,49 @@ public class SparkLoadPendingTaskTest {
         // create pending task
         SparkLoadPendingTask task = new SparkLoadPendingTask(sparkLoadJob, aggKeyToFileGroups, resource, brokerDesc);
         EtlJobConfig etlJobConfig = Deencapsulation.getField(task, "etlJobConfig");
-        Assert.assertEquals(null, etlJobConfig);
+        Assertions.assertEquals(null, etlJobConfig);
         task.init();
         etlJobConfig = Deencapsulation.getField(task, "etlJobConfig");
-        Assert.assertTrue(etlJobConfig != null);
+        Assertions.assertTrue(etlJobConfig != null);
 
         // check table id
         Map<Long, EtlTable> idToEtlTable = etlJobConfig.tables;
-        Assert.assertEquals(1, idToEtlTable.size());
-        Assert.assertTrue(idToEtlTable.containsKey(tableId));
+        Assertions.assertEquals(1, idToEtlTable.size());
+        Assertions.assertTrue(idToEtlTable.containsKey(tableId));
 
         // check indexes
         EtlTable etlTable = idToEtlTable.get(tableId);
         List<EtlIndex> etlIndexes = etlTable.indexes;
-        Assert.assertEquals(2, etlIndexes.size());
-        Assert.assertEquals(index1Id, etlIndexes.get(0).indexId);
-        Assert.assertEquals(index2Id, etlIndexes.get(1).indexId);
+        Assertions.assertEquals(2, etlIndexes.size());
+        Assertions.assertEquals(index1Id, etlIndexes.get(0).indexId);
+        Assertions.assertEquals(index2Id, etlIndexes.get(1).indexId);
 
         // check base index columns
         EtlIndex baseIndex = etlIndexes.get(0);
-        Assert.assertTrue(baseIndex.isBaseIndex);
-        Assert.assertEquals(3, baseIndex.columns.size());
+        Assertions.assertTrue(baseIndex.isBaseIndex);
+        Assertions.assertEquals(3, baseIndex.columns.size());
         for (int i = 0; i < columns.size(); i++) {
-            Assert.assertEquals(columns.get(i).getName(), baseIndex.columns.get(i).columnName);
+            Assertions.assertEquals(columns.get(i).getName(), baseIndex.columns.get(i).columnName);
         }
-        Assert.assertEquals("AGGREGATE", baseIndex.indexType);
+        Assertions.assertEquals("AGGREGATE", baseIndex.indexType);
 
         // check partitions
         EtlPartitionInfo etlPartitionInfo = etlTable.partitionInfo;
-        Assert.assertEquals("RANGE", etlPartitionInfo.partitionType);
+        Assertions.assertEquals("RANGE", etlPartitionInfo.partitionType);
         List<String> partitionColumns = etlPartitionInfo.partitionColumnRefs;
-        Assert.assertEquals(1, partitionColumns.size());
-        Assert.assertEquals(columns.get(partitionColumnIndex).getName(), partitionColumns.get(0));
+        Assertions.assertEquals(1, partitionColumns.size());
+        Assertions.assertEquals(columns.get(partitionColumnIndex).getName(), partitionColumns.get(0));
         List<String> distributionColumns = etlPartitionInfo.distributionColumnRefs;
-        Assert.assertEquals(1, distributionColumns.size());
-        Assert.assertEquals(columns.get(distributionColumnIndex).getName(), distributionColumns.get(0));
+        Assertions.assertEquals(1, distributionColumns.size());
+        Assertions.assertEquals(columns.get(distributionColumnIndex).getName(), distributionColumns.get(0));
         List<EtlPartition> etlPartitions = etlPartitionInfo.partitions;
-        Assert.assertEquals(2, etlPartitions.size());
-        Assert.assertEquals(21, etlPartitions.get(0).physicalPartitionId);
-        Assert.assertEquals(51, etlPartitions.get(1).physicalPartitionId);
+        Assertions.assertEquals(2, etlPartitions.size());
+        Assertions.assertEquals(21, etlPartitions.get(0).physicalPartitionId);
+        Assertions.assertEquals(51, etlPartitions.get(1).physicalPartitionId);
 
         // check file group
         List<EtlFileGroup> etlFileGroups = etlTable.fileGroups;
-        Assert.assertEquals(1, etlFileGroups.size());
+        Assertions.assertEquals(1, etlFileGroups.size());
 
         // case 1: temporary partition in load stmt
         // file group
@@ -396,34 +403,34 @@ public class SparkLoadPendingTaskTest {
         task.init();
 
         etlJobConfig = Deencapsulation.getField(task, "etlJobConfig");
-        Assert.assertTrue(etlJobConfig != null);
+        Assertions.assertTrue(etlJobConfig != null);
         idToEtlTable = etlJobConfig.tables;
         etlTable = idToEtlTable.get(tableId);
 
         // check partitions
         etlPartitionInfo = etlTable.partitionInfo;
-        Assert.assertEquals("RANGE", etlPartitionInfo.partitionType);
+        Assertions.assertEquals("RANGE", etlPartitionInfo.partitionType);
         partitionColumns = etlPartitionInfo.partitionColumnRefs;
-        Assert.assertEquals(1, partitionColumns.size());
-        Assert.assertEquals(columns.get(partitionColumnIndex).getName(), partitionColumns.get(0));
+        Assertions.assertEquals(1, partitionColumns.size());
+        Assertions.assertEquals(columns.get(partitionColumnIndex).getName(), partitionColumns.get(0));
         distributionColumns = etlPartitionInfo.distributionColumnRefs;
-        Assert.assertEquals(1, distributionColumns.size());
-        Assert.assertEquals(columns.get(distributionColumnIndex).getName(), distributionColumns.get(0));
+        Assertions.assertEquals(1, distributionColumns.size());
+        Assertions.assertEquals(columns.get(distributionColumnIndex).getName(), distributionColumns.get(0));
         etlPartitions = etlPartitionInfo.partitions;
-        Assert.assertEquals(1, etlPartitions.size());
-        Assert.assertEquals(61, etlPartitions.get(0).physicalPartitionId);
+        Assertions.assertEquals(1, etlPartitions.size());
+        Assertions.assertEquals(61, etlPartitions.get(0).physicalPartitionId);
     }
 
     private void internalTestBitmapMapping(SparkLoadPendingTask task, FunctionCallExpr expr, boolean expectLoadException) {
         try {
             task.checkBitmapMapping("col1", expr, true);
             if (expectLoadException) {
-                Assert.fail();
+                Assertions.fail();
             }
         } catch (Exception e) {
             boolean isLoadException = e instanceof LoadException;
             if (isLoadException ^ expectLoadException) {
-                Assert.fail();
+                Assertions.fail();
             }
         }
     }

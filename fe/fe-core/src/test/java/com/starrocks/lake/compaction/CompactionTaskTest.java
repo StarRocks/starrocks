@@ -20,8 +20,8 @@ import com.starrocks.proto.CompactResponse;
 import com.starrocks.rpc.LakeService;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
@@ -89,6 +89,6 @@ public class CompactionTaskTest {
             }
         };
 
-        Assert.assertEquals(100L, task.getSuccessCompactInputFileSize());
+        Assertions.assertEquals(100L, task.getSuccessCompactInputFileSize());
     }
 }

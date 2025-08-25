@@ -24,6 +24,8 @@ import org.apache.hadoop.conf.Configuration;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.starrocks.credential.gcp.GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL;
+
 public class GCPCloudCredential implements CloudCredential {
 
     private final String endpoint;
@@ -32,12 +34,14 @@ public class GCPCloudCredential implements CloudCredential {
     private final String serviceAccountPrivateKeyId;
     private final String serviceAccountPrivateKey;
     private final String impersonationServiceAccount;
+    private final String accessToken;
+    private final String accessTokenExpiresAt;
 
     private final Map<String, String> hadoopConfiguration;
 
     public GCPCloudCredential(String endpoint, boolean useComputeEngineServiceAccount, String serviceAccountEmail,
                               String serviceAccountPrivateKeyId, String serviceAccountPrivateKey,
-                              String impersonationServiceAccount) {
+                              String impersonationServiceAccount, String accessToken, String accessTokenExpiresAt) {
         Preconditions.checkNotNull(endpoint);
         Preconditions.checkNotNull(serviceAccountEmail);
         Preconditions.checkNotNull(serviceAccountPrivateKeyId);
@@ -49,6 +53,8 @@ public class GCPCloudCredential implements CloudCredential {
         this.serviceAccountPrivateKeyId = serviceAccountPrivateKeyId;
         this.serviceAccountPrivateKey = serviceAccountPrivateKey;
         this.impersonationServiceAccount = impersonationServiceAccount;
+        this.accessToken = accessToken;
+        this.accessTokenExpiresAt = accessTokenExpiresAt;
         hadoopConfiguration = new HashMap<>();
         tryGenerateHadoopConfiguration(hadoopConfiguration);
     }
@@ -71,6 +77,12 @@ public class GCPCloudCredential implements CloudCredential {
         if (!impersonationServiceAccount.isEmpty()) {
             hadoopConfiguration.put("fs.gs.auth.impersonation.service.account", impersonationServiceAccount);
         }
+        if (accessToken != null && !accessToken.isEmpty()) {
+            hadoopConfiguration.put("fs.gs.auth.access.token.provider.impl",
+                    ACCESS_TOKEN_PROVIDER_IMPL);
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY, accessToken);
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY, accessTokenExpiresAt);
+        }
     }
 
     @Override
@@ -87,6 +99,9 @@ public class GCPCloudCredential implements CloudCredential {
         }
         if (!serviceAccountEmail.isEmpty() && !serviceAccountPrivateKeyId.isEmpty()
                 && !serviceAccountPrivateKey.isEmpty()) {
+            return true;
+        }
+        if (accessToken != null && !accessToken.isEmpty()) {
             return true;
         }
         return false;
@@ -106,6 +121,8 @@ public class GCPCloudCredential implements CloudCredential {
                 ", serviceAccountPrivateKeyId='" + serviceAccountPrivateKeyId + '\'' +
                 ", serviceAccountPrivateKey='" + serviceAccountPrivateKey + '\'' +
                 ", impersonationServiceAccount='" + impersonationServiceAccount + '\'' +
+                ", accessToken='" + accessToken + '\'' +
+                ", accessTokenExpiresAt='" + accessTokenExpiresAt + '\'' +
                 '}';
     }
 

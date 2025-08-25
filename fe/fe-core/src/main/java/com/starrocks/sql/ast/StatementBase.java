@@ -37,7 +37,6 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
@@ -126,6 +125,14 @@ public abstract class StatementBase implements ParseNode {
         return traceModule;
     }
 
+    public boolean isExplainTrace() {
+        return isExplain && traceMode != null && traceMode != Tracers.Mode.NONE;
+    }
+
+    public boolean isExplainAnalyze() {
+        return isExplain && explainLevel == ExplainLevel.ANALYZE;
+    }
+
     public ExplainLevel getExplainLevel() {
         if (explainLevel == null) {
             return ExplainLevel.defaultValue();
@@ -133,8 +140,6 @@ public abstract class StatementBase implements ParseNode {
             return explainLevel;
         }
     }
-
-    public abstract RedirectStatus getRedirectStatus();
 
     public void setOrigStmt(OriginStatement origStmt) {
         Preconditions.checkState(origStmt != null);

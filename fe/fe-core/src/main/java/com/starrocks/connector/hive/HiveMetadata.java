@@ -24,12 +24,14 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
@@ -39,7 +41,6 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFileOperations;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.PartitionUpdate.UpdateMode;
 import com.starrocks.connector.statistics.StatisticsUtils;
@@ -310,7 +311,7 @@ public class HiveMetadata implements ConnectorMetadata {
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
                                          long limit,
-                                         TableVersionRange version) {
+                                         TvrVersionRange version) {
         if (!properties.enableGetTableStatsFromExternalMetadata()) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
@@ -321,7 +322,7 @@ public class HiveMetadata implements ConnectorMetadata {
             if (session.getSessionVariable().enableHiveColumnStats()) {
                 statistics = statisticsProvider.getTableStatistics(session, table, columnRefOperators, partitionKeys);
             } else {
-                statistics = Statistics.builder().build();
+                statistics = Statistics.builder().setOutputRowCount(Config.default_statistics_output_row_count).build();
                 LOG.warn("Session variable {} is false when getting table statistics on table {}",
                         SessionVariable.ENABLE_HIVE_COLUMN_STATS, table);
             }
@@ -438,7 +439,7 @@ public class HiveMetadata implements ConnectorMetadata {
                 addPartition(context, stmt, alterClause);
             } else {
                 throw new StarRocksConnectorException("This connector doesn't support alter table type: %s",
-                        alterClause.getOpType());
+                        alterClause.getClass().getSimpleName());
             }
         }
     }

@@ -288,11 +288,41 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: FE ノード内の HTTP サーバーが保持するバックログキューの長さ。
 - 導入バージョン: -
 
+##### enable_http_async_handler
 
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: システムが HTTP リクエストを非同期に処理できるようにするかどうかを設定します。この機能を有効にすると、Netty ワーカースレッドが受信した HTTP リクエストは、HTTP サーバのブロックを回避するために、サービスロジックを処理する別のスレッドプールに送信されます。無効にすると、Netty ワーカーがサービスロジックを処理します。
+- 導入バージョン: 4.0.0
 
+##### http_async_threads_num
 
+- デフォルト: 4096
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 非同期 HTTP リクエスト処理用のスレッドプールのサイズ。別名は `max_http_sql_service_task_threads_num` である。
+- 導入バージョン: 4.0.0
 
+##### enable_https
 
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: No
+- 説明: FEノードにおいて、HTTP サーバーと並行して HTTPS サーバーを有効化するかどうか。
+- 導入バージョン: v4.0
+
+##### https_port
+
+- デフォルト: 8443
+- タイプ: Int
+- 単位:  -
+- 変更可能: No
+- 説明: FE ノード内の HTTPS サーバーがリスニングするポート番号。
+- 導入バージョン: v4.0
 
 ##### cluster_name
 
@@ -347,12 +377,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: FE ノード内の Thrift サーバーが保持するバックログキューの長さ。
 - 導入バージョン: -
-
-
-
-
-
-
 
 ##### brpc_idle_wait_max_time
 
@@ -413,7 +437,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### mysql_server_version
 
-- デフォルト: 5.1.0
+- デフォルト: 8.0.33
 - タイプ: String
 - 単位: -
 - 変更可能: はい
@@ -662,6 +686,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: クエリのプロファイルを収集するかどうか。このパラメータが `TRUE` に設定されている場合、システムはクエリのプロファイルを収集します。このパラメータが `FALSE` に設定されている場合、システムはクエリのプロファイルを収集しません。
 - 導入バージョン: -
 
+##### profile_info_format
+
+- デフォルト: default
+- タイプ: String
+- 単位: -
+- 変更可能: はい
+- 説明: システムが出力する Profile のフォーマット。有効な値：`default` と `json`. `default` に設定すると、Profile はデフォルトのフォーマットで出力される。`json` に設定すると、システムは JSON フォーマットで Profile を出力する。
+- 導入バージョン: -
+
 ##### enable_background_refresh_connector_metadata
 
 - デフォルト: v3.0 以降では true、v2.5 では false
@@ -766,6 +799,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: 自動クラスタスナップショットのタスクがトリガされる間隔。
 - 導入バージョン: v3.4.2
+
+##### enable_table_name_case_insensitive
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: カタログ名、データベース名、テーブル名、ビュー名、および非同期マテリアライズドビュー名に対して、大文字小文字を区別しない処理を有効にするかどうか。現在、テーブル名はデフォルトで大文字小文字を区別します。
+  - この機能を有効にすると、関連するすべての名前が小文字で保存され、これらの名前を含むすべての SQL コマンドは自動的に小文字に変換されます。  
+  - この機能はクラスターを作成する際にのみ有効にできます。**クラスターが起動された後、この設定項目の値はどのような手段でも変更できません**。この設定を変更しようとするとエラーが発生します。FE は、この設定項目の値がクラスターが最初に起動された際の値と一致しない場合、起動に失敗します。  
+  - 現在は、この機能は JDBC カタログ名とテーブル名をサポートしていません。JDBC または ODBC データソースで大文字小文字を区別しない処理を実行したい場合は、この機能を有効にしないでください。
+- 導入バージョン: v4.0
 
 ### ユーザー、ロール、および権限
 
@@ -1050,6 +1095,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: オプティマイザがスカラーオペレーターを書き換える最大回数。
 - 導入バージョン: -
 
+##### max_scalar_operator_optimize_depth
+
+- デフォルト: 256
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: ScalarOperator 最適化を適用できる最大深度。
+- 導入バージョン: -
+
+##### max_scalar_operator_flat_children
+
+- デフォルト: 256
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: ScalarOperator のフラットチルドレンの最大数。この上限を設定することで、オプティマイザがメモリを使いすぎるのを防ぐことができます。
+- 導入バージョン: -
+
 ##### enable_statistic_collect
 
 - デフォルト: true
@@ -1293,6 +1356,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 低基数辞書のしきい値。
 - 導入バージョン: v3.5.0
 
+##### enable_manual_collect_array_ndv
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ARRAY タイプの NDV 情報の手動収集を有効にするかどうか。
+- 導入バージョン: v4.0
+
+##### enable_auto_collect_array_ndv
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ARRAY タイプの NDV 情報の自動収集を有効にするかどうか。
+- 導入バージョン: v4.0
+
 ### ロードとアンロード
 
 ##### load_straggler_wait_second
@@ -1374,6 +1455,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: 秒
 - 変更可能: はい
 - 説明: ロードジョブに許可される最小タイムアウト期間。この制限はすべてのタイプのロードジョブに適用されます。
+- 導入バージョン: -
+
+##### prepared_transaction_default_timeout_second
+
+- デフォルト: 86400
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 準備済みトランザクションのデフォルトのタイムアウト期間。
 - 導入バージョン: -
 
 ##### spark_dpp_version
@@ -1695,6 +1785,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: 完了したトランザクションがクリーンアップされる時間間隔。単位: 秒。完了したトランザクションがタイムリーにクリーンアップされるように、短い時間間隔を指定することをお勧めします。
 - 導入バージョン: -
+
+##### transaction_stream_load_coordinator_cache_capacity
+
+- デフォルト：4096
+- タイプ：Int
+- 単位：-
+- 変更可能：是
+- 説明：ストレージトランザクションタグからcoordinatorノードへのマッピングのキャッシュ容量を設定します。
+
+- 導入バージョン：-
+
+##### transaction_stream_load_coordinator_cache_expire_seconds
+
+- デフォルト：900
+- タイプ：Int
+- 単位：-
+- 変更可能：是
+- 説明：トランザクションタグとcoordinatorノードのマッピング関係がキャッシュ内に保持される生存時間（TTL）。
+- 導入バージョン：-
+
+##### enable_file_bundling
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: クラウドネイティブテーブルに対してファイルバンドリング最適化を有効にするかどうか。この機能を有効に設定（`true` に設定）すると、システムはロード、コンパクション、またはパブリッシュ操作によって生成されたデータファイルを自動的にバンドルし、外部ストレージシステムへの高頻度アクセスによる API コストを削減します。この動作は、CREATE TABLE プロパティ `file_bundling` を使用してテーブルレベルで制御することもできます。詳細な手順については、[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) を参照してください。
+- 導入バージョン: v4.0
 
 ### ストレージ
 
@@ -2088,7 +2206,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ: String
 - 単位: -
 - 変更可能: いいえ
-- 説明: 使用するオブジェクトストレージのタイプ。共有データモードでは、StarRocks は Azure Blob（v3.1.1 以降でサポート）および S3 プロトコルと互換性のあるオブジェクトストレージ（AWS S3、Google GCP、MinIO など）にデータを保存することをサポートしています。有効な値: `S3` (デフォルト) 、`HDFS`、`AZBLOB`、`ADLS2`。このパラメータを `S3` に指定する場合、`aws_s3` で始まるパラメータを追加する必要があります。このパラメータを `AZBLOB` に指定する場合、`azure_blob` で始まるパラメータを追加する必要があります。このパラメータを `ADLS2` に指定する場合、`azure_adls2` で始まるパラメータを追加する必要があります。このパラメータを `HDFS` に指定する場合、`cloud_native_hdfs_url` を追加する必要があります。
+- 説明: 使用するオブジェクトストレージのタイプ。共有データモードでは、StarRocksは、HDFS、Azure Blob（v3.1.1以降でサポート）、Azure Data Lake Storage Gen2（v3.4.1以降でサポート）、Google Storage（ネイティブ SDK は v3.5.1 以降でサポート）、およびS3プロトコルと互換性のあるオブジェクトストレージシステム（AWS S3、MinIOなど）へのデータ保存をサポートしています。有効な値: `S3` (デフォルト) 、`HDFS`、`AZBLOB`、`ADLS2`、`GS`。このパラメータを `S3` に指定する場合、`aws_s3` で始まるパラメータを追加する必要があります。このパラメータを `AZBLOB` に指定する場合、`azure_blob` で始まるパラメータを追加する必要があります。このパラメータを `ADLS2` に指定する場合、`azure_adls2` で始まるパラメータを追加する必要があります。このパラメータを `GS` に指定する場合、`gcp_gcs` で始まるパラメータを追加する必要があります。このパラメータを `HDFS` に指定する場合、`cloud_native_hdfs_url` を追加する必要があります。
 - 導入バージョン: -
 
 ##### cloud_native_hdfs_url
@@ -2293,6 +2411,60 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: Azure Blob Storage へのアクセスにネイティブ SDK を使用し、Managed Identity と Service Principal による認証を許可するかどうか。この項目を `false` に設定すると、Shared Key と SAS Token による認証のみが許可される。
 - 導入バージョン: v3.4.4
 
+##### gcp_gcs_path
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: データを保存するために使用される Google Cloud パス。Google Cloud バケットの名前とその下のサブパス（存在する場合）で構成されます。例: `testbucket/subpath`。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_service_account_email
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Service Account 作成時に生成された JSON ファイル内のメールアドレスです。例：`user@hello.iam.gserviceaccount.com`。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_service_account_private_key_id
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Service Account 作成時に生成された JSON ファイル内の秘密鍵 ID です。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_service_account_private_key
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Service Account 作成時に生成された JSON ファイル内の秘密鍵です。例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_impersonation_service_account
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: なりすましベースの認証を使用する場合、なりすます Service Account です。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_use_compute_engine_service_account
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: Compute Engine にバインドされている Service Account を使用するかどうか。
+- 導入バージョン: v3.5.1
+
 ##### lake_compaction_score_selector_min_score
 
 - デフォルト: 10.0
@@ -2419,6 +2591,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 共有データモードでCompactionが無効になっているテーブルまたはパーティションのリスト。形式は `tableId1;partitionId2` で、セミコロンで区切ります。例: `12345;98765`。
 - 導入バージョン: v3.4.4
 
+##### lake_compaction_allow_partial_success
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: この項目を `true` に設定すると、サブタスクの 1 つが成功したときに共有データクラスタでのコンパクション操作が成功したとみなす。
+- 導入バージョン: v3.5.2
+
 ##### lake_enable_balance_tablets_between_workers
 
 - デフォルト: false
@@ -2436,6 +2617,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: 共有データクラスタでのワーカー間の tablet バランスを判断するためにシステムが使用するしきい値。アンバランスファクターは次のように計算されます: `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。ファクターが `lake_balance_tablets_threshold` を超える場合、tablet バランスがトリガーされます。この項目は `lake_enable_balance_tablets_between_workers` が `true` に設定されている場合にのみ有効です。
 - 導入バージョン: v3.3.4
+
+##### shard_group_clean_threshold_sec
+
+- デフォルト: 3600
+- タイプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: FE が共有データクラスター内の未使用の Tablet および Shard Group をクリーニングするまでの時間。この期間内に作成された Tablet と Shard Group はクリーニングされません。
+- 導入バージョン: -
+
+##### star_mgr_meta_sync_interval_sec
+
+- デフォルト: 600
+- タイプ: Long
+- 単位: 秒
+- 変更可能: いいえ
+- 説明: 共有データクラスタ内の FE が StarMgr と の定期的なメタデータ同期を実行する間隔。
+- 導入バージョン: -
+
+##### meta_sync_force_delete_shard_meta
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: リモートストレージ内のファイルのクリーニングをバイパスして、共有データクラスタのメタデータを直接削除できるかどうか。この項目を `true` に設定するのは、クリーニングする Shard の数が多すぎて FE JVM のメモリが極端に圧迫される場合のみにすることを推奨します。この機能を有効にすると、Shard や Tablet に属するデータファイルは自動的にクリーニングできなくなることに注意してください。
+- 導入バージョン: v3.2.10, v3.3.3
 
 ### その他
 
@@ -2610,6 +2818,123 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: ユーザーの認証情報を検索するために使用される管理者のパスワード。
 - 導入バージョン: -
 
+##### jwt_jwks_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JSON Web Key Set (JWKS) サービスの URL または `fe/conf` ディレクトリ内の公開鍵ローカルファイルへのパス。
+- 導入バージョン: v3.5.0
+
+##### jwt_principal_field
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内でサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と一致している必要があります。
+- 導入バージョン: v3.5.0
+
+##### jwt_required_issuer
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 発行者と一致する場合にのみ、JWT は有効と見なされます。
+- 導入バージョン: v3.5.0
+
+##### jwt_required_audience
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内の受信者 (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 受信者と一致する場合にのみ、JWT は有効と見なされます。
+- 導入バージョン: v3.5.0
+
+##### oauth2_auth_server_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: 認可 URL。OAuth 2.0 認可プロセスを開始するためにユーザーのブラウザがリダイレクトされる URL。
+- 導入バージョン: v3.5.0
+
+##### oauth2_token_server_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: StarRocks がアクセストークンを取得する認可サーバーのエンドポイントの URL。
+- 導入バージョン: v3.5.0
+
+##### oauth2_client_id
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: StarRocks クライアントの公開識別子。
+- 導入バージョン: v3.5.0
+
+##### oauth2_client_secret
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: 認可サーバーで StarRocks クライアントを認証するために使用される秘密。
+- 導入バージョン: v3.5.0
+
+##### oauth2_redirect_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: OAuth 2.0 認証が成功した後にユーザーのブラウザがリダイレクトされる URL。この URL に認可コードが送信されます。ほとんどの場合、`http://<starrocks_fe_url>:<fe_http_port>/api/oauth2` として設定する必要があります。
+- 導入バージョン: v3.5.0
+
+##### oauth2_jwks_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JSON Web Key Set (JWKS) サービスの URL または `conf` ディレクトリ内のローカルファイルのパス。
+- 導入バージョン: v3.5.0
+
+##### oauth2_principal_field
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内でサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と同一でなければなりません。
+- 導入バージョン: v3.5.0
+
+##### oauth2_required_issuer
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT の発行者と一致する場合にのみ、JWT は有効と見なされます。
+- 導入バージョン: v3.5.0
+
+##### oauth2_required_audience
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内のオーディエンス (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT のオーディエンスと一致する場合にのみ、JWT は有効と見なされます。
+- 導入バージョン: v3.5.0
+
 ##### auth_token
 
 - デフォルト: 空の文字列
@@ -2768,7 +3093,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト: 8
 - タイプ: Int
 - 単位: -
-- 変更可能: はい
+- 変更可能: いいえ
 - 説明: JDBC catalogs にアクセスするための JDBC 接続プールの最大容量。
 - 導入バージョン: -
 
@@ -2777,7 +3102,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 変更可能: はい
+- 変更可能: いいえ
 - 説明: JDBC catalogs にアクセスするための JDBC 接続プールの最小アイドル接続数。
 - 導入バージョン: -
 
@@ -2786,7 +3111,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト: 600000
 - タイプ: Int
 - 単位: ミリ秒
-- 変更可能: はい
+- 変更可能: いいえ
 - 説明: JDBC catalog にアクセスするための接続がタイムアウトするまでの最大時間。タイムアウトした接続はアイドルと見なされます。
 - 導入バージョン: -
 
@@ -2961,3 +3286,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: FEが Image をロードした後に、再ロードのフラグチェックを行うかどうか。ベースとなるマテリアライズドビューに対してチェックを行う場合、それに関連する他のマテリアライズドビューに対しては必要ありません。
 - 導入バージョン: v3.5.0
+
+##### enable_mv_post_image_reload_cache
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: システムがヒストリカルノードをトレースすることを許可するかどうか。この項目を `true` に設定することで、キャッシュ共有機能を有効にし、エラスティックなスケーリング時にシステムが適切なキャッシュノードを選択できるようにすることができる。
+- 導入バージョン: v3.5.1

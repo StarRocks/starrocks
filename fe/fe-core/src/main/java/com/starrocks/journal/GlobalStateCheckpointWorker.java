@@ -14,6 +14,7 @@
 
 package com.starrocks.journal;
 
+import com.starrocks.lake.snapshot.SnapshotInfoHelper;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
@@ -26,7 +27,7 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
     }
 
     @Override
-    void doCheckpoint(long epoch, long journalId) throws Exception {
+    void doCheckpoint(long epoch, long journalId, boolean needClusterSnapshotInfo) throws Exception {
         long replayedJournalId = -1;
         // generate new image file
         LOG.info("begin to generate new image: image.{}", journalId);
@@ -35,6 +36,8 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
         globalStateMgr.setJournal(journal);
         try {
             globalStateMgr.loadImage();
+            // This is required because the loadImage() may find no image to load, and the initDefaultWarehouse() will
+            // be skipped.
             globalStateMgr.initDefaultWarehouse();
 
             checkEpoch(epoch);
@@ -50,7 +53,14 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
                 MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
             }
             servingGlobalState.setImageJournalId(journalId);
-            LOG.info("checkpoint finished save image.{}", replayedJournalId);
+
+            if (needClusterSnapshotInfo) {
+                this.clusterSnapshotInfo = SnapshotInfoHelper.buildClusterSnapshotInfo(
+                        globalStateMgr.getLocalMetastore().getAllDbs());
+            }
+
+            LOG.info("checkpoint finished save image.{}, needClusterSnapshotInfo: {}",
+                     replayedJournalId, needClusterSnapshotInfo);
         } finally {
             GlobalStateMgr.destroyCheckpoint();
         }

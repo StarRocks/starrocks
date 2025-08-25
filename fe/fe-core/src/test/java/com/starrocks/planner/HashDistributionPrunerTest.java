@@ -48,8 +48,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.List;
@@ -119,14 +119,14 @@ public class HashDistributionPrunerTest extends PlanTestBase {
 
         Collection<Long> results = pruner.prune();
         // 20 = 1 * 5 * 2 * 2 * 1 (element num of each filter)
-        Assert.assertEquals(20, results.size());
+        Assertions.assertEquals(20, results.size());
 
         filters.get("shop_type").getInPredicate().addChild(new StringLiteral("4"));
         filters.get("shop_type").setInPredicate(filters.get("shop_type").getInPredicate());
         results = pruner.prune();
         // 40 = 1 * 5 * 2 * 2 * 2 (element num of each filter)
         // 39 is because these is hash conflict
-        Assert.assertEquals(39, results.size());
+        Assertions.assertEquals(39, results.size());
 
         filters.get("shop_type").getInPredicate().addChild(new StringLiteral("5"));
         filters.get("shop_type").getInPredicate().addChild(new StringLiteral("6"));
@@ -135,7 +135,7 @@ public class HashDistributionPrunerTest extends PlanTestBase {
         filters.get("shop_type").setInPredicate(filters.get("shop_type").getInPredicate());
         results = pruner.prune();
         // 120 = 1 * 5 * 2 * 2 * 6 (element num of each filter) > 100
-        Assert.assertEquals(300, results.size());
+        Assertions.assertEquals(300, results.size());
 
         // check hash conflict
         inList4.add(new StringLiteral("4"));
@@ -161,7 +161,7 @@ public class HashDistributionPrunerTest extends PlanTestBase {
             hashKey.popColumn();
         }
 
-        Assert.assertEquals(39, tablets.size());
+        Assertions.assertEquals(39, tablets.size());
     }
 
     @Test
@@ -199,7 +199,7 @@ public class HashDistributionPrunerTest extends PlanTestBase {
                 tabletIds, columns, filters);
 
         Collection<Long> results = pruner.prune();
-        Assert.assertEquals(tabletIds.size(), results.size());
+        Assertions.assertEquals(tabletIds.size(), results.size());
     }
 
     @Test

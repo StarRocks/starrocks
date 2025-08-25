@@ -62,7 +62,9 @@ ischema_names = {
     "double": DOUBLE,
     # === Fixed-precision ===
     "decimal": DECIMAL,
+    "decimal32": DECIMAL,
     "decimal64": DECIMAL,
+    "decimal128": DECIMAL,
     # === String ===
     "varchar": VARCHAR,
     "char": CHAR,
@@ -108,7 +110,9 @@ class StarRocksTypeCompiler(MySQLTypeCompiler):
         return "LARGEINT"
 
     def visit_ARRAY(self, type_, **kw):
-        return "ARRAY<type>"
+        """Compiles the ARRAY type into the correct StarRocks syntax."""
+        inner_type_sql = self.process(type_.item_type, **kw)
+        return f"ARRAY<{inner_type_sql}>"
 
     def visit_MAP(self, type_, **kw):
         return "MAP<keytype,valuetype>"
@@ -239,7 +243,9 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         # ToDo - Partition
         # ToDo - Distribution
-        # ToDo - Order by
+
+        if "ORDER_BY" in opts:
+            table_opts.append(f"ORDER BY ({opts['ORDER_BY']})")
 
         if "PROPERTIES" in opts:
             props = ",\n".join([f'\t"{k}"="{v}"' for k, v in opts["PROPERTIES"]])

@@ -43,14 +43,15 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.IndexDef;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.IOException;
@@ -61,6 +62,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class OlapTableTest {
@@ -111,14 +113,14 @@ public class OlapTableTest {
             tbl.addRelatedMaterializedView(mvId2);
             MvId mvId3 = new MvId(db.getId(), 30L);
             tbl.addRelatedMaterializedView(mvId3);
-            Assert.assertEquals(Sets.newHashSet(10L, 20L, 30L),
+            Assertions.assertEquals(Sets.newHashSet(10L, 20L, 30L),
                     tbl.getRelatedMaterializedViews().stream().map(mvId -> mvId.getId()).collect(Collectors.toSet()));
             tbl.removeRelatedMaterializedView(mvId1);
             tbl.removeRelatedMaterializedView(mvId2);
-            Assert.assertEquals(Sets.newHashSet(30L),
+            Assertions.assertEquals(Sets.newHashSet(30L),
                     tbl.getRelatedMaterializedViews().stream().map(mvId -> mvId.getId()).collect(Collectors.toSet()));
             tbl.removeRelatedMaterializedView(mvId3);
-            Assert.assertEquals(Sets.newHashSet(), tbl.getRelatedMaterializedViews());
+            Assertions.assertEquals(Sets.newHashSet(), tbl.getRelatedMaterializedViews());
         }
     }
 
@@ -130,19 +132,19 @@ public class OlapTableTest {
         OlapTable copied = new OlapTable();
         olapTable.copyOnlyForQuery(copied);
 
-        Assert.assertEquals(olapTable.hasDelete(), copied.hasDelete());
-        Assert.assertEquals(olapTable.hasForbiddenGlobalDict(), copied.hasForbiddenGlobalDict());
-        Assert.assertEquals(olapTable, copied);
+        Assertions.assertEquals(olapTable.hasDelete(), copied.hasDelete());
+        Assertions.assertEquals(olapTable.hasForbiddenGlobalDict(), copied.hasForbiddenGlobalDict());
+        Assertions.assertEquals(olapTable, copied);
     }
 
     @Test
     public void testFilePathInfo() {
         OlapTable olapTable = new OlapTable();
-        Assert.assertNull(olapTable.getDefaultFilePathInfo());
-        Assert.assertNull(olapTable.getPartitionFilePathInfo(10));
+        Assertions.assertNull(olapTable.getDefaultFilePathInfo());
+        Assertions.assertNull(olapTable.getPartitionFilePathInfo(10));
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Assert.assertNull(olapTable.getDefaultFilePathInfo());
-        Assert.assertNull(olapTable.getPartitionFilePathInfo(10));
+        Assertions.assertNull(olapTable.getDefaultFilePathInfo());
+        Assertions.assertNull(olapTable.getPartitionFilePathInfo(10));
     }
 
     @Test
@@ -168,7 +170,7 @@ public class OlapTableTest {
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
         Partition partition = new Partition(1, 11, "p1", null, null);
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition));
 
         new MockUp<Range<PartitionKey>>() {
             @Mock
@@ -177,7 +179,7 @@ public class OlapTableTest {
             }
         };
 
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition));
     }
 
     @Test
@@ -205,14 +207,14 @@ public class OlapTableTest {
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
         Partition partition = new Partition(1, 11, "p1", null, null);
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition));
     }
 
     @Test
     public void testNullDataCachePartitionDuration() {
         OlapTable olapTable = new OlapTable();
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Assert.assertNull(olapTable.getTableProperty() == null ? null :
+        Assertions.assertNull(olapTable.getTableProperty() == null ? null :
                 olapTable.getTableProperty().getDataCachePartitionDuration());
     }
 
@@ -235,11 +237,11 @@ public class OlapTableTest {
         Partition partition1 = new Partition(1L, 11, "p1", null, null);
 
         // Datacache.partition_duration is not set, cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition1));
 
         // cache is invalid, because we only take k2 into consideration
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition1));
 
         List<String> multiValues2 = new ArrayList<>(Arrays.asList("abcd", LocalDate.now().toString(), "2024-01-01"));
         List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
@@ -248,7 +250,7 @@ public class OlapTableTest {
         Partition partition2 = new Partition(2L, 21, "p2", null, null);
 
         // cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition2));
 
         new MockUp<DateUtils>() {
             @Mock
@@ -256,7 +258,7 @@ public class OlapTableTest {
                 throw new AnalysisException("Error");
             }
         };
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition1));
     }
 
     @Test
@@ -274,11 +276,11 @@ public class OlapTableTest {
         Partition partition1 = new Partition(1L, 11, "p1", null, null);
 
         // Datacache.partition_duration is not set, cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition1));
 
         // cache is invalid
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition1));
 
         List<String> multiValues2 = new ArrayList<>(Arrays.asList(LocalDate.now().toString()));
         List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
@@ -287,7 +289,7 @@ public class OlapTableTest {
         Partition partition2 = new Partition(2L, 21, "p2", null, null);
 
         // cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition2));
 
         new MockUp<DateUtils>() {
             @Mock
@@ -295,7 +297,7 @@ public class OlapTableTest {
                 throw new AnalysisException("Error");
             }
         };
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition1));
     }
 
     @Test
@@ -312,11 +314,11 @@ public class OlapTableTest {
         Partition partition1 = new Partition(1L, 11, "p1", null, null);
 
         // Datacache.partition_duration is not set, cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition1));
 
         // cache is invalid
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition1));
 
         List<String> values2 = new ArrayList<>(Arrays.asList(LocalDate.now().toString()));
         listPartitionInfo.setValues(2L, values2);
@@ -324,7 +326,7 @@ public class OlapTableTest {
         Partition partition2 = new Partition(2L, 21, "p2", null, null);
 
         // cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition2));
 
         new MockUp<DateUtils>() {
             @Mock
@@ -332,7 +334,7 @@ public class OlapTableTest {
                 throw new AnalysisException("Error");
             }
         };
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition1));
     }
 
     @Test
@@ -354,11 +356,11 @@ public class OlapTableTest {
         Partition partition = new Partition(1L, 11, "p1", null, null);
 
         // Datacache.partition_duration is not set, cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition));
 
         // cache is invalid, because we only take k2 into consideration
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition));
 
         List<String> multiValues2 = new ArrayList<>(Arrays.asList("abcd",
                 DateUtils.formatDateTimeUnix(LocalDateTime.now()), "2024-01-01"));
@@ -368,7 +370,7 @@ public class OlapTableTest {
         Partition partition2 = new Partition(2L, 21, "p2", null, null);
 
         // cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition2));
     }
 
     @Test
@@ -391,7 +393,7 @@ public class OlapTableTest {
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
         // cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition1));
     }
 
     @Test
@@ -401,7 +403,7 @@ public class OlapTableTest {
         for (Table table : tables) {
             OlapTable olapTable = (OlapTable) table;
             PhysicalPartition partition = olapTable.getPhysicalPartition("not_existed_name");
-            Assert.assertNull(partition);
+            Assertions.assertNull(partition);
         }
     }
 
@@ -429,8 +431,88 @@ public class OlapTableTest {
         indexesInTable.add(index3);
 
         List<Index> result = OlapTable.getIndexesBySchema(indexesInTable, schema);
-        Assert.assertTrue(result.size() == 2);
-        Assert.assertTrue(result.get(0).getIndexName().equals("index1"));
-        Assert.assertTrue(result.get(1).getIndexName().equals("index2"));
+        Assertions.assertTrue(result.size() == 2);
+        Assertions.assertTrue(result.get(0).getIndexName().equals("index1"));
+        Assertions.assertTrue(result.get(1).getIndexName().equals("index2"));
     }
+
+    @Test
+    public void testGetUniquePropertiesWithFlatJsonConfig() {
+        // Test case 1: Flat JSON enabled with all properties set
+        OlapTable table1 = new OlapTable();
+        TableProperty tableProperty1 = new TableProperty();
+        Map<String, String> properties1 = new HashMap<>();
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.1");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.8");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "50");
+        tableProperty1.modifyTableProperties(properties1);
+        table1.setTableProperty(tableProperty1);
+
+        Map<String, String> result1 = table1.getUniqueProperties();
+        Assertions.assertEquals("true", result1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+        Assertions.assertEquals("0.1", result1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertEquals("0.8", result1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertEquals("50", result1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+
+        // Test case 2: Flat JSON enabled but only some properties set
+        OlapTable table2 = new OlapTable();
+        TableProperty tableProperty2 = new TableProperty();
+        Map<String, String> properties2 = new HashMap<>();
+        properties2.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        properties2.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.2");
+        // Don't set sparsity factor and column max
+        tableProperty2.modifyTableProperties(properties2);
+        table2.setTableProperty(tableProperty2);
+
+        Map<String, String> result2 = table2.getUniqueProperties();
+        Assertions.assertEquals("true", result2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+        Assertions.assertEquals("0.2", result2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertNull(result2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertNull(result2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+
+        // Test case 3: Flat JSON disabled - other properties should not be included
+        OlapTable table3 = new OlapTable();
+        TableProperty tableProperty3 = new TableProperty();
+        Map<String, String> properties3 = new HashMap<>();
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "false");
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.3");
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.9");
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "100");
+        tableProperty3.modifyTableProperties(properties3);
+        table3.setTableProperty(tableProperty3);
+
+        Map<String, String> result3 = table3.getUniqueProperties();
+        Assertions.assertEquals("false", result3.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+        Assertions.assertNull(result3.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertNull(result3.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertNull(result3.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+
+        // Test case 4: No flat JSON properties set
+        OlapTable table4 = new OlapTable();
+        TableProperty tableProperty4 = new TableProperty();
+        table4.setTableProperty(tableProperty4);
+
+        Map<String, String> result4 = table4.getUniqueProperties();
+        Assertions.assertNull(result4.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+        Assertions.assertNull(result4.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertNull(result4.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertNull(result4.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+
+        // Test case 5: Flat JSON enabled with null/empty values
+        OlapTable table5 = new OlapTable();
+        TableProperty tableProperty5 = new TableProperty();
+        Map<String, String> properties5 = new HashMap<>();
+        properties5.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        properties5.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "");
+        properties5.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, null);
+        tableProperty5.modifyTableProperties(properties5);
+        table5.setTableProperty(tableProperty5);
+
+        Map<String, String> result5 = table5.getUniqueProperties();
+        Assertions.assertEquals("true", result5.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+        Assertions.assertNull(result5.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertNull(result5.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+    }
+
 }

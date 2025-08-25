@@ -26,9 +26,9 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowBrokerStmt;
 import mockit.Expectations;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -39,7 +39,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.spy;
 
 public class BrokerMgrTest {
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         EditLog editLog = spy(new EditLog(null));
         doNothing().when(editLog).logEdit(anyShort(), any());
@@ -67,7 +67,7 @@ public class BrokerMgrTest {
 
     @Test
     public void testIPTitle() {
-        Assert.assertEquals("IP", BrokerProcNode.BROKER_PROC_NODE_TITLE_NAMES.get(1));
+        Assertions.assertEquals("IP", BrokerProcNode.BROKER_PROC_NODE_TITLE_NAMES.get(1));
     }
 
     @Test
@@ -76,7 +76,7 @@ public class BrokerMgrTest {
         String json = GsonUtils.GSON.toJson(brokerMgr);
 
         BrokerMgr replayBrokerMgr = GsonUtils.GSON.fromJson(json, BrokerMgr.class);
-        Assert.assertNotNull(replayBrokerMgr.getBroker("HDFS", "127.0.0.1", 8080));
+        Assertions.assertNotNull(replayBrokerMgr.getBroker("HDFS", "127.0.0.1", 8080));
     }
 
     @Test
@@ -89,6 +89,6 @@ public class BrokerMgrTest {
 
         ShowBrokerStmt stmt = new ShowBrokerStmt();
         ShowResultSet showResultSet = ShowExecutor.execute(stmt, connectContext);
-        Assert.assertEquals("HDFS", showResultSet.getResultRows().get(0).get(0));
+        Assertions.assertEquals("HDFS", showResultSet.getResultRows().get(0).get(0));
     }
 }

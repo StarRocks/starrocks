@@ -417,6 +417,7 @@ mysql> SHOW PROC '/cluster_balance';
 +-------------------+--------+
 | Item              | Number |
 +-------------------+--------+
+| balance_stat      | 1      |
 | cluster_load_stat | 1      |
 | working_slots     | 3      |
 | sched_stat        | 1      |
@@ -429,8 +430,30 @@ mysql> SHOW PROC '/cluster_balance';
 
 | **Return** | **Description**                                  |
 | ---------- | ------------------------------------------------ |
-| Item       | Sub-command item in `cluster_balance`. <ul><li>cluster_load_stat: The current load status of the cluster.</li><li>working_slots: The number of currently available working slots.</li><li>sched_stat: The current status of the scheduler.</li><li>priority_repair: The number of Tablet repair tasks that are prioritized.</li><li>pending_tablets: The number of Tablets waiting to be processed.</li><li>running_tablets: The number of Tablets currently being repaired.</li><li>history_tablets: The total number of Tablets repaired historically.</li></ul>         |
+| Item       | Sub-command item in `cluster_balance`. <ul><li>balance_stat: The current balance status of the cluster.</li><li>cluster_load_stat: The current load status of the cluster.</li><li>working_slots: The number of currently available working slots.</li><li>sched_stat: The current status of the scheduler.</li><li>priority_repair: The number of Tablet repair tasks that are prioritized.</li><li>pending_tablets: The number of Tablets waiting to be processed.</li><li>running_tablets: The number of Tablets currently being repaired.</li><li>history_tablets: The total number of Tablets repaired historically.</li></ul>         |
 | Number     | Number of each sub-command in `cluster_balance`. |
+
+```Plain
+mysql> SHOW PROC '/cluster_balance/balance_stat';
++---------------+--------------------------------+----------+----------------+----------------+
+| StorageMedium | BalanceType                    | Balanced | PendingTablets | RunningTablets |
++---------------+--------------------------------+----------+----------------+----------------+
+| HDD           | inter-node disk usage          | true     | 0              | 0              |
+| HDD           | inter-node tablet distribution | true     | 0              | 0              |
+| HDD           | intra-node disk usage          | true     | 0              | 0              |
+| HDD           | intra-node tablet distribution | true     | 0              | 0              |
+| HDD           | colocation group               | true     | 0              | 0              |
+| HDD           | label-aware location           | true     | 0              | 0              |
++---------------+--------------------------------+----------+----------------+----------------+
+```
+
+| **Return**     | **Description**                             |
+| -------------- | ------------------------------------------- |
+| StorageMedium  | Storage medium.                             |
+| BalanceType    | Type of balance.                            |
+| Balanced       | Whether the balanced state is achieved.     |
+| PendingTablets | Number of tablets with task status Pending. | 
+| RunningTablets | Number of tablets with task status Running. |
 
 Example 12: Shows the information of Colocate Join groups in the cluster.
 

@@ -70,7 +70,6 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::PAGE_CACHE, "page_cache"},
         {MemTrackerType::JIT_CACHE, "jit_cache"},
         {MemTrackerType::UPDATE, "update"},
-        {MemTrackerType::CHUNK_ALLOCATOR, "chunk_allocator"},
         {MemTrackerType::CLONE, "clone"},
         {MemTrackerType::DATACACHE, "datacache"},
         {MemTrackerType::POCO_CONNECTION_POOL, "poco_connection_pool"},
@@ -219,7 +218,7 @@ MemTracker::SimpleItem* MemTracker::_get_snapshot_internal(ObjectPool* pool, Sim
     item->level = _level;
     item->limit = _limit;
     item->cur_consumption = _consumption->current_value();
-    item->peak_consumption = _consumption->value();
+    item->peak_consumption = COUNTER_VALUE(_consumption);
 
     if (_level < upper_level) {
         std::lock_guard<std::mutex> l(_child_trackers_lock);

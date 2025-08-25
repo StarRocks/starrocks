@@ -84,20 +84,20 @@ public class ThreadPoolManager {
 
     private static final long KEEP_ALIVE_TIME = 60L;
 
-    private static final ThreadPoolExecutor DICT_CACHE_THREAD_POOL =
-            ThreadPoolManager.newDaemonCacheThreadPool(Config.dict_collect_thread_pool_size, "cache-dict",
+    private static final ThreadPoolExecutor STATS_CACHE_THREAD_POOL =
+            ThreadPoolManager.newDaemonCacheThreadPool(Config.dict_collect_thread_pool_size, "cache-stats",
             false);
 
-    private static final ThreadPoolExecutor DICT_CACHE_THREAD_POOL_FOR_LAKE =
+    private static final ThreadPoolExecutor STATS_CACHE_THREAD_POOL_FOR_LAKE =
             ThreadPoolManager.newDaemonCacheThreadPool(Config.dict_collect_thread_pool_for_lake_size,
-                    "cache-dict-lake", false);
+                    "cache-stats-lake", false);
 
-    public static ThreadPoolExecutor getDictCacheThread() {
-        return DICT_CACHE_THREAD_POOL;
+    public static ThreadPoolExecutor getStatsCacheThread() {
+        return STATS_CACHE_THREAD_POOL;
     }
 
-    public static ThreadPoolExecutor getDictCacheThreadPoolForLake() {
-        return DICT_CACHE_THREAD_POOL_FOR_LAKE;
+    public static ThreadPoolExecutor getStatsCacheThreadPoolForLake() {
+        return STATS_CACHE_THREAD_POOL_FOR_LAKE;
     }
 
     public static void registerAllThreadPoolMetric() {
@@ -253,6 +253,18 @@ public class ThreadPoolManager {
                 throw new RejectedExecutionException(msg);
             }
         }
+    }
+
+    public static void setCacheThreadPoolSize(ThreadPoolExecutor executor, int newMaxPoolSize) {
+        if (executor.getCorePoolSize() > 0) {
+            // skip for non-cache thread pool
+            return;
+        }
+        int maxPoolSize = executor.getMaximumPoolSize();
+        if (newMaxPoolSize <= 0 || maxPoolSize == newMaxPoolSize) { // no change
+            return;
+        }
+        executor.setMaximumPoolSize(newMaxPoolSize);
     }
 
     public static void setFixedThreadPoolSize(ThreadPoolExecutor executor, int poolSize) {

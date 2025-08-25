@@ -42,7 +42,6 @@ import com.google.gson.annotations.SerializedName;
 import com.google.gson.stream.JsonReader;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.common.Config;
-import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
@@ -1170,12 +1169,6 @@ public class NodeMgr {
         return statisticsItems;
     }
 
-    public void setFrontendConfig(Map<String, String> configs, boolean isPersisted, String userIdentity) throws DdlException {
-        for (Map.Entry<String, String> entry : configs.entrySet()) {
-            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue(), isPersisted, userIdentity);
-        }
-    }
-
     public Frontend getMySelf() {
         return frontends.get(nodeName);
     }
@@ -1183,6 +1176,8 @@ public class NodeMgr {
     @VisibleForTesting
     public void setMySelf(Frontend frontend) {
         selfNode = Pair.create(frontend.getHost(), frontend.getRpcPort());
+        nodeName = frontend.getNodeName();
+        role = frontend.getRole();
     }
 
     public ConcurrentHashMap<String, Frontend> getFrontends() {
@@ -1195,6 +1190,7 @@ public class NodeMgr {
 
         int fid = allocateNextFrontendId();
         Frontend self = new Frontend(fid, role, nodeName, selfNode.first, selfNode.second);
+        self.setAlive(true);
         frontends.put(self.getNodeName(), self);
         frontendIds.put(fid, self);
         // reset helper nodes
@@ -1282,5 +1278,12 @@ public class NodeMgr {
 
     public static boolean isFeNodeNameValid(String nodeName, String host, int port) {
         return nodeName.startsWith(host + "_" + port);
+    }
+
+    public long getTotalCpuCores() {
+        return frontends.values()
+                .stream()
+                .mapToLong(Frontend::getCpuCores)
+                .sum() + systemInfo.getTotalCpuCores();
     }
 }

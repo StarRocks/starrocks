@@ -16,6 +16,9 @@ package com.starrocks.common.util;
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.fs.hdfs.HdfsFsManager;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.LoadStmt;
 
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -29,6 +32,7 @@ import java.util.regex.Pattern;
 public class SqlCredentialRedactor {
 
     // Set of credential keys that should be redacted
+    // some of them are taken from common.util.PrintableMap
     private static final Set<String> CREDENTIAL_KEYS = ImmutableSet.<String>builder()
             .add(CloudConfigurationConstants.AWS_S3_ACCESS_KEY)
             .add(CloudConfigurationConstants.AWS_S3_SECRET_KEY)
@@ -38,6 +42,7 @@ public class SqlCredentialRedactor {
             .add(CloudConfigurationConstants.AWS_GLUE_SESSION_TOKEN)
             .add(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY)
             .add(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN)
+            .add(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET)
             .add(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL)
             .add(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY)
             .add(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN)
@@ -54,9 +59,25 @@ public class SqlCredentialRedactor {
             .add(CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY)
             .add(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY)
             .add(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY)
+            .add(CreateRoutineLoadStmt.CONFLUENT_SCHEMA_REGISTRY_URL)
+            .add(HdfsFsManager.FS_S3A_ACCESS_KEY)
+            .add(HdfsFsManager.FS_S3A_SECRET_KEY)
+            .add(HdfsFsManager.FS_KS3_ACCESS_KEY)
+            .add(HdfsFsManager.FS_KS3_SECRET_KEY)
+            .add(HdfsFsManager.FS_OSS_ACCESS_KEY)
+            .add(HdfsFsManager.FS_OSS_SECRET_KEY)
+            .add(HdfsFsManager.FS_COS_ACCESS_KEY)
+            .add(HdfsFsManager.FS_COS_SECRET_KEY)
+            .add(HdfsFsManager.FS_OBS_ACCESS_KEY)
+            .add(HdfsFsManager.FS_OBS_SECRET_KEY)
+            .add(HdfsFsManager.FS_TOS_ACCESS_KEY)
+            .add(HdfsFsManager.FS_TOS_SECRET_KEY)
+            .add(LoadStmt.BOS_SECRET_ACCESSKEY)
             .add("password")
             .add("passwd")
             .add("pwd")
+            .add("property.sasl.password")
+            .add("broker.password")
             .build();
 
     // Pattern to match key-value pairs in SQL

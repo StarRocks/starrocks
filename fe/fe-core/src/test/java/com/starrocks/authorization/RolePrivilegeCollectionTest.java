@@ -15,45 +15,45 @@
 
 package com.starrocks.authorization;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class RolePrivilegeCollectionTest {
     @Test
     public void testFlags() throws Exception {
         RolePrivilegeCollectionV2 collection = new RolePrivilegeCollectionV2("nolabel");
-        Assert.assertFalse(collection.isRemovable());
+        Assertions.assertFalse(collection.isRemovable());
         try {
             collection.addParentRole(-1);
-            Assert.fail();
+            Assertions.fail();
         } catch (PrivilegeException e) {
-            Assert.assertTrue(e.getMessage().contains("is not mutable"));
+            Assertions.assertTrue(e.getMessage().contains("is not mutable"));
         }
 
         collection = new RolePrivilegeCollectionV2(
                 "public",
                 RolePrivilegeCollectionV2.RoleFlags.MUTABLE,
                 RolePrivilegeCollectionV2.RoleFlags.REMOVABLE);
-        Assert.assertTrue(collection.isRemovable());
+        Assertions.assertTrue(collection.isRemovable());
         collection.addSubRole(-1);
         collection.disableMutable();
         try {
             collection.addParentRole(-1);
-            Assert.fail();
+            Assertions.fail();
         } catch (PrivilegeException e) {
-            Assert.assertTrue(e.getMessage().contains("is not mutable"));
+            Assertions.assertTrue(e.getMessage().contains("is not mutable"));
         }
 
 
         collection = new RolePrivilegeCollectionV2(
                 "admin",
                 RolePrivilegeCollectionV2.RoleFlags.REMOVABLE);
-        Assert.assertTrue(collection.isRemovable());
+        Assertions.assertTrue(collection.isRemovable());
         try {
             collection.addParentRole(-1);
-            Assert.fail();
+            Assertions.fail();
         } catch (PrivilegeException e) {
-            Assert.assertTrue(e.getMessage().contains("is not mutable"));
+            Assertions.assertTrue(e.getMessage().contains("is not mutable"));
         }
     }
 }

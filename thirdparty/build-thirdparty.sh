@@ -26,7 +26,7 @@
 # This script will run *download-thirdparty.sh* once again
 # to check if all thirdparties have been downloaded, unpacked and patched.
 #################################################################################
-set -e
+set -eo pipefail
 
 curdir=`dirname "$0"`
 curdir=`cd "$curdir"; pwd`
@@ -50,7 +50,176 @@ if [ ! -f ${TP_DIR}/vars.sh ]; then
 fi
 . ${TP_DIR}/vars.sh
 
+# Check args
+usage() {
+    echo "
+Usage: $0 [options...] [packages...]
+
+  Description:
+    Build thirdparty dependencies for StarRocks. If no packages are specified,
+    all packages will be built in the default order.
+
+  Optional options:
+    -j<num>                Build with <num> parallel jobs (can also use -j <num>)
+    --clean                Clean extracted source before building
+    --continue <package>   Continue building from specified package
+    -h, --help             Show this help message
+
+  Examples:
+    # Build all packages with default parallelism
+    $0
+
+    # Build all packages with 8 parallel jobs
+    $0 -j8
+
+    # Clean and rebuild everything with 16 parallel jobs
+    $0 --clean -j16
+
+    # Continue building from rocksdb (useful after build failure)
+    $0 --continue rocksdb
+
+    # Build only specific packages (in dependency order)
+    # Note: packages are built in the same order as full build to respect dependencies
+    $0 openssl curl protobuf
+
+    # Clean and build only specific packages
+    $0 --clean boost thrift
+  "
+    exit 1
+}
+
+get_all_package_sources() {
+    local archive
+    for archive in $TP_ARCHIVES
+    do
+        local source_var="${archive}_SOURCE"
+        if [[ -n "${!source_var}" ]]; then
+            echo ${!source_var}
+        fi
+    done
+}
+
+# clean function
+clean_sources() {
+    if [[ ! -d "${TP_SOURCE_DIR}" ]]; then
+        echo "Source directory ${TP_SOURCE_DIR} does not exist, nothing to clean."
+        return
+    fi
+
+    echo "Cleaning extracted source directories..."
+
+    # no packages specified, clean all sources
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        local sources_to_clean
+        sources_to_clean=$(get_all_package_sources)
+
+        echo "$sources_to_clean" | while IFS= read -r source; do
+            if [[ -n "$source" ]] && [[ -d "${TP_SOURCE_DIR}/${source}" ]]; then
+                echo "Removing ${TP_SOURCE_DIR}/${source}"
+                rm -rf "${TP_SOURCE_DIR}/${source}"
+            fi
+        done
+    else
+        # clean only specified sources
+        for package in "${packages[@]}"; do
+            # this converts package name to uppercase for matching
+            local source_var_name="${package^^}_SOURCE"
+            local source_dir="${!source_var_name}"
+
+            if [[ -n "$source_dir" ]] && [[ -d "${TP_SOURCE_DIR}/${source_dir}" ]]; then
+                echo "Removing ${TP_SOURCE_DIR}/${source_dir}"
+                rm -rf "${TP_SOURCE_DIR}/${source_dir}"
+            else
+                echo "Warning: Cannot find source directory for package '${package}'"
+            fi
+        done
+    fi
+
+    echo "Clean completed!"
+}
+
+if ! OPTS="$(getopt \
+    -n "$0" \
+    -o 'hj:' \
+    -l 'help,clean,continue:' \
+    -- "$@")"; then
+    usage
+fi
+
+eval set -- "${OPTS}"
+
+KERNEL="$(uname -s)"
+
+if [[ "${KERNEL}" == 'Darwin' ]]; then
+    PARALLEL="$(($(sysctl -n hw.logicalcpu) / 4 + 1))"
+else
+    PARALLEL="$(($(nproc) / 4 + 1))"
+fi
+
+HELP=0
+CLEAN=0
+CONTINUE=0
+start_package=""
+
+while true; do
+    case "$1" in
+    -j)
+        PARALLEL="$2"
+        shift 2
+        ;;
+    -h)
+        HELP=1
+        shift
+        ;;
+    --help)
+        HELP=1
+        shift
+        ;;
+    --clean)
+        CLEAN=1
+        shift
+        ;;
+    --continue)
+        CONTINUE=1
+        start_package="${2}"
+        shift 2
+        ;;
+    --)
+        shift
+        break
+        ;;
+    *)
+        echo "Internal error"
+        exit 1
+        ;;
+    esac
+done
+
+# checking for help first, before processing other arguments
+if [[ "${HELP}" -eq 1 ]]; then
+    usage
+fi
+
+packages=("$@")
+
+if [[ "${CONTINUE}" -eq 1 ]]; then
+    if [[ -z "${start_package}" ]] || [[ "${#}" -ne 0 ]]; then
+        usage
+    fi
+fi
+
+echo "Get params:
+    PARALLEL            -- ${PARALLEL}
+    CLEAN               -- ${CLEAN}
+    PACKAGES            -- ${packages[*]}
+    CONTINUE            -- ${start_package}
+"
+
 cd $TP_DIR
+
+if [[ "${CLEAN}" -eq 1 ]]; then
+    clean_sources
+fi
 
 # Download thirdparties.
 ${TP_DIR}/download-thirdparty.sh
@@ -198,7 +367,7 @@ build_openssl() {
 
     LDFLAGS="-L${TP_LIB_DIR}" \
     LIBDIR="lib" \
-    ./Configure --prefix=$TP_INSTALL_DIR -lz -no-shared ${OPENSSL_PLATFORM}
+    ./Configure --prefix=$TP_INSTALL_DIR -lz -no-shared ${OPENSSL_PLATFORM} --libdir=lib
     make -j$PARALLEL
     make install_sw
 
@@ -358,7 +527,7 @@ build_gflags() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
-    -DCMAKE_POSITION_INDEPENDENT_CODE=On ../
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -383,7 +552,7 @@ build_gtest() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib \
-    -DCMAKE_POSITION_INDEPENDENT_CODE=On ../
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -438,7 +607,7 @@ build_snappy() {
     $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -G "${CMAKE_GENERATOR}" \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
-    -DCMAKE_POSITION_INDEPENDENT_CODE=On \
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DCMAKE_INSTALL_INCLUDEDIR=$TP_INCLUDE_DIR/snappy \
     -DSNAPPY_BUILD_TESTS=0 ../
     ${BUILD_SYSTEM} -j$PARALLEL
@@ -599,7 +768,7 @@ build_rocksdb() {
 build_kerberos() {
     check_if_source_exist $KRB5_SOURCE
     cd $TP_SOURCE_DIR/$KRB5_SOURCE/src
-    CFLAGS="-fcommon -fPIC ${FILE_PREFIX_MAP_OPTION}" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
+    CFLAGS="-std=gnu17 -fcommon -fPIC ${FILE_PREFIX_MAP_OPTION}" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-shared --with-spake-openssl=$TP_INSTALL_DIR
     make -j$PARALLEL
     make install
@@ -694,6 +863,16 @@ build_arrow() {
     export ARROW_FLATBUFFERS_URL=${TP_SOURCE_DIR}/${FLATBUFFERS_NAME}
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
+    if [[ "$THIRD_PARTY_BUILD_WITH_AVX2" == "OFF" ]] ; then
+        # https://github.com/apache/arrow/blob/main/cpp/cmake_modules/DefineOptions.cmake#L179
+        # default to SSE4_2 on x86 and NEON on Arm
+        arrow_simd_level=DEFAULT
+        arrow_runtime_simd_level=SSE4_2
+    else
+        # TODO: what's the correct level setting for ARM arch?
+        arrow_simd_level=AVX2
+        arrow_runtime_simd_level=AVX2
+    fi
 
     # https://github.com/apache/arrow/blob/apache-arrow-5.0.0/cpp/src/arrow/memory_pool.cc#L286
     #
@@ -706,8 +885,8 @@ build_arrow() {
     -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
     -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
     -DARROW_JEMALLOC=OFF -DARROW_MIMALLOC=OFF \
-    -DARROW_SIMD_LEVEL=AVX2 \
-    -DARROW_RUNTIME_SIMD_LEVEL=AVX2 \
+    -DARROW_SIMD_LEVEL=$arrow_simd_level \
+    -DARROW_RUNTIME_SIMD_LEVEL=$arrow_runtime_simd_level \
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DARROW_GFLAGS_USE_SHARED=OFF \
@@ -915,6 +1094,7 @@ build_breakpad() {
     cd $TP_SOURCE_DIR/$BREAK_PAD_SOURCE
     mkdir -p src/third_party/lss
     cp $TP_PATCH_DIR/linux_syscall_support.h src/third_party/lss
+    LDFLAGS="-L${TP_LIB_DIR}" \
     CFLAGS= ./configure --prefix=$TP_INSTALL_DIR --enable-shared=no --disable-samples --disable-libevent-regress
     make -j$PARALLEL
     make install
@@ -1105,8 +1285,8 @@ build_benchmark() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     # https://github.com/google/benchmark/issues/773
-    cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=off \
-          -DBENCHMARK_ENABLE_GTEST_TESTS=off \
+    cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=OFF \
+          -DBENCHMARK_ENABLE_GTEST_TESTS=OFF \
           -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
           -DCMAKE_INSTALL_LIBDIR=lib64 \
           -DRUN_HAVE_STD_REGEX=0 \
@@ -1444,6 +1624,12 @@ build_azure() {
     unset PKG_CONFIG_LIBDIR
 }
 
+build_libdivide() {
+    check_if_source_exist $LIBDIVIDE_SOURCE
+    cd $TP_SOURCE_DIR/$LIBDIVIDE_SOURCE
+    cp libdivide.h $TP_INSTALL_DIR/include/
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1464,9 +1650,8 @@ strip_binary() {
 # strip `$TP_SOURCE_DIR` and `$TP_INSTALL_DIR` from source code file path
 export FILE_PREFIX_MAP_OPTION="-ffile-prefix-map=${TP_SOURCE_DIR}=. -ffile-prefix-map=${TP_INSTALL_DIR}=."
 # set GLOBAL_C*FLAGS for easy restore in each sub build process
-export GLOBAL_CPPFLAGS="-I ${TP_INCLUDE_DIR}"
-# https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
-export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=200112L -gz=zlib ${FILE_PREFIX_MAP_OPTION}"
+export GLOBAL_CPPFLAGS="-I${TP_INCLUDE_DIR} "
+export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=gnu17 -fPIC -g -gz=zlib ${FILE_PREFIX_MAP_OPTION}"
 export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -gz=zlib ${FILE_PREFIX_MAP_OPTION}"
 
 # set those GLOBAL_*FLAGS to the CFLAGS/CXXFLAGS/CPPFLAGS
@@ -1474,81 +1659,101 @@ export CPPFLAGS=$GLOBAL_CPPFLAGS
 export CXXFLAGS=$GLOBAL_CXXFLAGS
 export CFLAGS=$GLOBAL_CFLAGS
 
-build_libevent
-build_zlib
-build_lz4
-build_lzo2
-build_bzip
-build_openssl
-build_boost # must before thrift
-build_protobuf
-build_gflags
-build_gtest
-build_glog
-build_rapidjson
-build_simdjson
-build_snappy
-build_gperftools
-build_curl
-build_re2
-build_thrift
-build_leveldb
-build_brpc
-build_rocksdb
-build_kerberos
-# must build before arrow
-build_sasl
-build_absl
-build_grpc
-build_flatbuffers
-build_jemalloc
-build_brotli
-build_arrow
-# NOTE: librdkafka depends on ZSTD which is generated by Arrow, So this SHOULD be
-# built after arrow
-build_librdkafka
-build_pulsar
-build_s2
-build_bitshuffle
-build_croaringbitmap
-build_cctz
-build_fmt
-build_ryu
-build_hadoop
-build_jdk
-build_ragel
-build_hyperscan
-build_mariadb
-build_aliyun_jindosdk
-build_gcs_connector
-build_aws_cpp_sdk
-build_vpack
-build_opentelemetry
-build_benchmark
-build_fast_float
-build_starcache
-build_streamvbyte
-build_jansson
-build_avro_c
-build_avro_cpp
-build_serdes
-build_datasketches
-build_async_profiler
-build_fiu
-build_llvm
-build_clucene
-build_simdutf
-build_poco
-build_icu
-build_xsimd
-build_libxml2
-build_azure
+# Define default build order
+declare -a all_packages=(
+    libevent
+    zlib
+    lz4
+    lzo2
+    bzip
+    openssl
+    boost # must before thrift
+    protobuf
+    gflags
+    gtest
+    glog
+    rapidjson
+    simdjson
+    snappy
+    gperftools
+    curl
+    re2
+    thrift
+    leveldb
+    brpc
+    rocksdb
+    kerberos
+    # must build before arrow
+    sasl
+    absl
+    grpc
+    flatbuffers
+    jemalloc
+    brotli
+    arrow
+    # NOTE: librdkafka depends on ZSTD which is generated by Arrow, So this SHOULD be
+    # built after arrow
+    librdkafka
+    pulsar
+    s2
+    bitshuffle
+    croaringbitmap
+    cctz
+    fmt
+    ryu
+    hadoop
+    jdk
+    ragel
+    hyperscan
+    mariadb
+    aliyun_jindosdk
+    gcs_connector
+    aws_cpp_sdk
+    vpack
+    opentelemetry
+    benchmark
+    fast_float
+    starcache
+    streamvbyte
+    jansson
+    avro_c
+    avro_cpp
+    serdes
+    datasketches
+    async_profiler
+    fiu
+    llvm
+    clucene
+    simdutf
+    poco
+    icu
+    xsimd
+    libxml2
+    azure
+    libdivide
+)
 
+# Machine specific packages
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
-    build_breakpad
-    build_libdeflate
-    build_tenann
+    all_packages+=(breakpad libdeflate tenann)
 fi
+
+# Initialize packages array - if none specified, build all
+if [[ "${#packages[@]}" -eq 0 ]]; then
+    packages=("${all_packages[@]}")
+fi
+
+# Build packages
+PACKAGE_FOUND=0
+for package in "${packages[@]}"; do
+    if [[ "${package}" == "${start_package}" ]]; then
+        PACKAGE_FOUND=1
+    fi
+    if [[ "${CONTINUE}" -eq 0 ]] || [[ "${PACKAGE_FOUND}" -eq 1 ]]; then
+        command="build_${package}"
+        ${command}
+    fi
+done
 
 # strip unnecessary debug symbol for binaries in thirdparty
 strip_binary

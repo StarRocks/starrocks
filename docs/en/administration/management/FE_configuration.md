@@ -512,6 +512,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
+##### enable_http_async_handler
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to process HTTP requests asynchronously. If this feature is enabled, an HTTP request received by Netty worker threads will then be submitted to a separate thread pool for service logic handling to avoid blocking the HTTP server. If disabled, Netty workers will handle the service logic.
+- Introduced in: 4.0.0
+
+##### enable_https
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable HTTPS server alongside HTTP server in FE nodes.
+- Introduced in: v4.0
+
+##### https_port
+
+- Default: 8443
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The port on which the HTTPS server in the FE node listens.
+- Introduced in: v4.0
+
+##### http_async_threads_num
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Size of the thread pool for asynchronous HTTP request processing. The alias is `max_http_sql_service_task_threads_num`.
+- Introduced in: 4.0.0
+
 ##### cluster_name
 
 - Default: StarRocks Cluster
@@ -675,20 +711,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of threads that can be run by the MySQL server in the FE node to process tasks.
 - Introduced in: -
 
-<!--
-##### max_http_sql_service_task_threads_num
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
 ##### mysql_server_version
 
-- Default: 5.1.0
+- Default: 8.0.33
 - Type: String
 - Unit: -
 - Is mutable: Yes
@@ -1014,6 +1039,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to collect the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query. If this parameter is set to `FALSE`, the system does not collect the profile of the query.
 - Introduced in: -
 
+##### profile_info_format
+
+- Default: default
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The format of the Profile output by the system. Valid values: `default` and `json`. When set to `default`, Profile is of the default format. When set to `json`, the system outputs Profile in JSON format.
+- Introduced in: v2.5
+
 ##### enable_background_refresh_connector_metadata
 
 - Default: true in v3.0 and later and false in v2.5
@@ -1134,6 +1168,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: The interval at which the Automated Cluster Snapshot tasks are triggered.
 - Introduced in: v3.4.2
+
+##### enable_table_name_case_insensitive
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable case-insensitive processing on catalog names, database names, table names, view names, and materialized view names. Currently, table names are case-sensitive by default.
+  - After enabling this feature, all related names will be stored in lowercase, and all SQL commands containing these names will automatically convert them to lowercase.
+  - You can enable this feature only when creating a cluster. **After the cluster is started, the value of this configuration cannot be modified by any means**. Any attempt to modify it will result in an error. FE will fail to start when it detects that the value of this configuration item is inconsistent with that when the cluster was first started.
+  - Currently, this feature does not support JDBC catalog and table names. Do not enable this feature if you want to perform case-insensitive processing on JDBC or ODBC data sources.
+- Introduced in: v4.0
 
 ### User, role, and privilege
 
@@ -1505,6 +1551,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of times that the optimizer can rewrite a scalar operator.
+- Introduced in: -
+
+##### max_scalar_operator_optimize_depth
+
+- Default：256
+- Type：Int
+- Unit：-
+- Is mutable: Yes
+- Description: The maximum depth that ScalarOperator optimization can be applied.
+- Introduced in: -
+
+##### max_scalar_operator_flat_children
+
+- Default：10000
+- Type：Int
+- Unit：-
+- Is mutable: Yes
+- Description：The maximum number of flat children for ScalarOperator. You can set this limit to prevent the optimizer from using too much memory.
 - Introduced in: -
 
 ##### enable_statistic_collect
@@ -1893,6 +1957,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Threshold of low cardinality dictionary.
 - Introduced in: v3.5.0
 
+##### enable_manual_collect_array_ndv
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable manual collection for the NDV information of the ARRAY type.
+- Introduced in: v4.0
+
+##### enable_auto_collect_array_ndv
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable automatic collection for the NDV information of the ARRAY type.
+- Introduced in: v4.0
+
 ### Loading and unloading
 
 ##### load_straggler_wait_second
@@ -2013,17 +2095,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Introduced in: -
 -->
 
-<!--
-##### prepared_transaction_default_timeout_second
-
-- Default: 86400
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ##### max_load_timeout_second
 
 - Default: 259200
@@ -2040,6 +2111,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: Seconds
 - Is mutable: Yes
 - Description: The minimum timeout duration allowed for a load job. This limit applies to all types of load jobs.
+- Introduced in: -
+
+##### prepared_transaction_default_timeout_second
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The default timeout duration for a prepared transaction.
 - Introduced in: -
 
 ##### spark_dpp_version
@@ -2449,6 +2529,33 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: No
 - Description: The time interval at which finished transactions are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that finished transactions can be cleaned up in a timely manner.
 - Introduced in: -
+
+##### transaction_stream_load_coordinator_cache_capacity
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The capacity of the cache that stores the mapping from transaction label to coordinator node.
+- Introduced in: -
+
+##### transaction_stream_load_coordinator_cache_expire_seconds
+
+- Default: 900
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time to keep the coordinator mapping in the cache before it's evicted(TTL).
+- Introduced in: -
+
+##### enable_file_bundling
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the File Bundling optimization for the cloud-native table. When this feature is enabled (set to `true`), the system automatically bundles the data files generated by loading, Compaction, or Publish operations, thereby reducing the API cost caused by high-frequency access to the external storage system. You can also control this behavior on the table level using the CREATE TABLE property `file_bundling`. For detailed instructions, see [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
+- Introduced in: v4.0
 
 ### Storage
 
@@ -2917,27 +3024,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 - Introduced in: -
 
-<!--
-##### shard_group_clean_threshold_sec
-
-- Default: 3600
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### star_mgr_meta_sync_interval_sec
-
-- Default: 600
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
 
 ##### cloud_native_meta_port
 
@@ -2965,7 +3051,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The type of object storage you use. In shared-data mode, StarRocks supports storing data in HDFS, Azure Blob (supported from v3.1.1 onwards), Azure Data Lake Storage Gen2 (supported from v3.4.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default), `HDFS`, `AZBLOB`, and `ADLS2`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. If you specify this parameter as `ADLS2`, you must add the parameters prefixed by `azure_adls2`. If you specify this parameter as `HDFS`, you only need to specify `cloud_native_hdfs_url`.
+- Description: The type of object storage you use. In shared-data mode, StarRocks supports storing data in HDFS, Azure Blob (supported from v3.1.1 onwards), Azure Data Lake Storage Gen2 (supported from v3.4.1 onwards), Google Storage (with native SDK, supported from v3.5.1 onwards), and object storage systems that are compatible with the S3 protocol (such as AWS S3, and MinIO). Valid value: `S3` (Default), `HDFS`, `AZBLOB`, `ADLS2`, and `GS`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. If you specify this parameter as `ADLS2`, you must add the parameters prefixed by `azure_adls2`. If you specify this parameter as `GS`, you must add the parameters prefixed by `gcp_gcs`. If you specify this parameter as `HDFS`, you only need to specify `cloud_native_hdfs_url`.
 - Introduced in: -
 
 ##### cloud_native_hdfs_url
@@ -3170,6 +3256,60 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to use the native SDK to access Azure Blob Storage, thus allowing authentication with Managed Identities and Service Principals. If this item is set to `false`, only authentication with Shared Key and SAS Token is allowed.
 - Introduced in: v3.4.4
 
+##### gcp_gcs_path
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Google Cloud path used to store data. It consists of the name of your Google Cloud bucket and the sub-path (if any) under it, for example, `testbucket/subpath`.
+- Introduced in: v3.5.1
+
+##### gcp_gcs_service_account_email
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The email address in the JSON file generated at the creation of the Service Account, for example, `user@hello.iam.gserviceaccount.com`.
+- Introduced in: v3.5.1
+
+##### gcp_gcs_service_account_private_key_id
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Private Key ID in the JSON file generated at the creation of the Service Account.
+- Introduced in: v3.5.1
+
+##### gcp_gcs_service_account_private_key
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Private Key in the JSON file generated at the creation of the Service Account, for example, `-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`.
+- Introduced in: v3.5.1
+
+##### gcp_gcs_impersonation_service_account
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Service Account that you want to impersonate if you use the impersonation-based authentication to access Google Storage.
+- Introduced in: v3.5.1
+
+##### gcp_gcs_use_compute_engine_service_account
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use the Service Account that is bound to your Compute Engine.
+- Introduced in: v3.5.1
+
 <!--
 ##### starmgr_grpc_timeout_seconds
 
@@ -3340,6 +3480,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The table or partition list of which compaction is disabled in shared-data mode. The format is `tableId1;partitionId2`, seperated by semicolon, for example, `12345;98765`.
 - Introduced in: v3.4.4
 
+##### lake_compaction_allow_partial_success
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: If this item is set to `true`, the system will consider the Compaction operation in a shared-data cluster as successful when one of the sub-tasks succeeds.
+- Introduced in: v3.5.2
+
 ##### lake_enable_balance_tablets_between_workers
 
 - Default: false
@@ -3357,6 +3506,33 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
 - Introduced in: v3.3.4
+
+##### shard_group_clean_threshold_sec
+
+- Default: 3600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time before FE cleans the unused tablet and shard groups in a shared-data cluster. Tablets and shard groups created within this threshold will not be cleaned.
+- Introduced in: -
+
+##### star_mgr_meta_sync_interval_sec
+
+- Default: 600
+- Type: Long
+- Unit: Seconds
+- Is mutable: No
+- Description: The interval at which FE runs the periodical metadata synchronization with StarMgr in a shared-data cluster.
+- Introduced in: -
+
+##### meta_sync_force_delete_shard_meta
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow deleting the metadata of the shared-data cluster directly, bypassing cleaning the remote storage files. It is recommended to set this item to `true` only when there is an excessive number of shards to be cleaned, which leads to extreme memory pressure on the FE JVM. Note that the data files belonging to the shards or tablets cannot be automatically cleaned after this feature is enabled.
+- Introduced in: v3.2.10, v3.3.3
 
 ### Other
 
@@ -3794,6 +3970,123 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The password of the administrator used to search for users' authentication information.
 - Introduced in: -
+
+##### jwt_jwks_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The URL to the JSON Web Key Set (JWKS) service or the path to the public key local file under the `fe/conf` directory.
+- Introduced in: v3.5.0
+
+##### jwt_principal_field
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
+- Introduced in: v3.5.0
+
+##### jwt_required_issuer
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer.
+- Introduced in: v3.5.0
+
+##### jwt_required_audience
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
+- Introduced in: v3.5.0
+
+##### oauth2_auth_server_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The authorization URL. The URL to which the users’ browser will be redirected in order to begin the OAuth 2.0 authorization process.
+- Introduced in: v3.5.0
+
+##### oauth2_token_server_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The URL of the endpoint on the authorization server from which StarRocks obtains the access token.
+- Introduced in: v3.5.0
+
+##### oauth2_client_id
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The public identifier of the StarRocks client.
+- Introduced in: v3.5.0
+
+##### oauth2_client_secret
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The secret used to authorize StarRocks client with the authorization server.
+- Introduced in: v3.5.0
+
+##### oauth2_redirect_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The URL to which the users’ browser will be redirected after the OAuth 2.0 authentication succeeds. The authorization code will be sent to this URL. In most cases, it need to be configured as `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`.
+- Introduced in: v3.5.0
+
+##### oauth2_jwks_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The URL to the JSON Web Key Set (JWKS) service or the path to the local file under the `conf` directory.
+- Introduced in: v3.5.0
+
+##### oauth2_principal_field
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
+- Introduced in: v3.5.0
+
+##### oauth2_required_issuer
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer.
+- Introduced in: v3.5.0
+
+##### oauth2_required_audience
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
+- Introduced in: v3.5.0
 
 <!--
 ##### enable_token_check
@@ -5119,7 +5412,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: 8
 - Type: Int
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum capacity of the JDBC connection pool for accessing JDBC catalogs.
 - Introduced in: -
 
@@ -5128,7 +5421,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: 1
 - Type: Int
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
 - Introduced in: -
 
@@ -5137,7 +5430,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: 600000
 - Type: Int
 - Unit: Milliseconds
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
 - Introduced in: -
 
@@ -5270,3 +5563,12 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to perform reload flag check after FE loaded an image. If the check is performed for a base materialized view, it is not needed for other materialized views that related to it.
 - Introduced in: v3.5.0
+
+##### enable_trace_historical_node
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
+- Introduced in: v3.5.1

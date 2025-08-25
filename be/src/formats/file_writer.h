@@ -60,6 +60,7 @@ public:
     virtual Status init() = 0;
     virtual int64_t get_written_bytes() = 0;
     virtual int64_t get_allocated_bytes() = 0;
+    virtual int64_t get_flush_batch_size() = 0;
     virtual Status write(Chunk* chunk) = 0;
     virtual CommitResult commit() = 0;
 };

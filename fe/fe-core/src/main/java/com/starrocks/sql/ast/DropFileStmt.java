@@ -15,10 +15,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 public class DropFileStmt extends DdlStmt {
     public static final String PROP_CATALOG = "catalog";
@@ -36,7 +37,7 @@ public class DropFileStmt extends DdlStmt {
     public DropFileStmt(String fileName, String dbName, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.fileName = fileName;
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.properties = properties;
     }
 
@@ -49,7 +50,7 @@ public class DropFileStmt extends DdlStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public String getCatalogName() {
@@ -62,11 +63,6 @@ public class DropFileStmt extends DdlStmt {
 
     public Map<String, String> getProperties() {
         return properties;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     @Override

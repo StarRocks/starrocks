@@ -26,12 +26,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class MvRefreshTest extends MVTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
@@ -82,7 +82,7 @@ public class MvRefreshTest extends MVTestBase {
                         // test_mv1.
                         {
                             ExecPlan execPlan = getMVRefreshExecPlan(taskRun);
-                            Assert.assertNotNull("exec plan should not null", execPlan);
+                            Assertions.assertNotNull(execPlan, "exec plan should not null");
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                             PlanTestBase.assertContains(plan, "test_mv1");
                         }
@@ -93,7 +93,7 @@ public class MvRefreshTest extends MVTestBase {
                             executeInsertSql(connectContext, "insert into table_with_partition partition(p1991)" +
                                         " values(\"varchar12\", '1991-03-01', 2, 1, 1)");
                             ExecPlan execPlan = getMVRefreshExecPlan(taskRun);
-                            Assert.assertNotNull("exec plan should not null", execPlan);
+                            Assertions.assertNotNull(execPlan, "exec plan should not null");
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                             PlanTestBase.assertNotContains(plan, "test_mv1");
                         }
@@ -131,7 +131,7 @@ public class MvRefreshTest extends MVTestBase {
                         // test_mv1.
                         {
                             ExecPlan execPlan = getMVRefreshExecPlan(taskRun);
-                            Assert.assertNotNull("exec plan should not null", execPlan);
+                            Assertions.assertNotNull(execPlan, "exec plan should not null");
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                             PlanTestBase.assertNotContains(plan, "test_mv1");
                         }
@@ -171,7 +171,7 @@ public class MvRefreshTest extends MVTestBase {
                         // test_mv1.
                         {
                             ExecPlan execPlan = getMVRefreshExecPlan(taskRun);
-                            Assert.assertNotNull("exec plan should not null", execPlan);
+                            Assertions.assertNotNull(execPlan, "exec plan should not null");
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                             PlanTestBase.assertContains(plan, "test_mv1");
                         }
@@ -182,7 +182,7 @@ public class MvRefreshTest extends MVTestBase {
                             executeInsertSql(connectContext, "insert into table_with_partition partition(p1991)" +
                                         " values(\"varchar12\", '1991-03-01', 2, 1, 1)");
                             ExecPlan execPlan = getMVRefreshExecPlan(taskRun);
-                            Assert.assertNotNull("exec plan should not null", execPlan);
+                            Assertions.assertNotNull(execPlan, "exec plan should not null");
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                             PlanTestBase.assertNotContains(plan, "test_mv1");
                         }

@@ -55,9 +55,6 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -269,7 +266,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     // return map of (BE id -> path hash) of normal replicas
-    public Multimap<Replica, Long> getNormalReplicaBackendPathMap(SystemInfoService infoService) {
+    public Multimap<Replica, Long> getNormalReplicaBackendPathMap(SystemInfoService infoService,
+            boolean allowDecommission) {
         Multimap<Replica, Long> map = LinkedHashMultimap.create();
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
@@ -282,7 +280,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 }
                 ReplicaState state = replica.getState();
                 if (infoService.checkBackendAlive(replica.getBackendId())
-                        && (state == ReplicaState.NORMAL || state == ReplicaState.ALTER)) {
+                        && (state == ReplicaState.NORMAL || state == ReplicaState.ALTER
+                                || (allowDecommission && state == ReplicaState.DECOMMISSION))) {
                     map.put(replica, replica.getPathHash());
                 }
             }
@@ -409,47 +408,6 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.writeLock())) {
             this.replicas.clear();
         }
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        out.writeLong(id);
-        int replicaCount = replicas.size();
-        out.writeInt(replicaCount);
-        for (int i = 0; i < replicaCount; ++i) {
-            replicas.get(i).write(out);
-        }
-
-        out.writeLong(checkedVersion);
-        out.writeLong(0); // write a version_hash for compatibility
-        out.writeBoolean(isConsistent);
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        id = in.readLong();
-        int replicaCount = in.readInt();
-        for (int i = 0; i < replicaCount; ++i) {
-            Replica replica = Replica.read(in);
-            if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
-                // do not need to update immutableReplicas, because it is a view of replicas
-                replicas.add(replica);
-            }
-        }
-
-        checkedVersion = in.readLong();
-        in.readLong(); // read a version_hash for compatibility
-        isConsistent = in.readBoolean();
-    }
-
-    public static LocalTablet read(DataInput in) throws IOException {
-        LocalTablet tablet = new LocalTablet();
-        tablet.readFields(in);
-        return tablet;
     }
 
     @Override

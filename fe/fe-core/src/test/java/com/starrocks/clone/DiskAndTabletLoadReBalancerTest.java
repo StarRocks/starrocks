@@ -35,6 +35,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.clone.DiskAndTabletLoadReBalancer.BackendBalanceState;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
@@ -43,8 +44,8 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -188,23 +189,27 @@ public class DiskAndTabletLoadReBalancerTest {
         rebalancer.updateLoadStatistic(clusterLoadStatistic);
 
         List<TabletSchedCtx> tablets = rebalancer.selectAlternativeTablets();
-        Assert.assertEquals(2, tablets.size());
-        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId3)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId1)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId2)));
+        Assertions.assertEquals(2, tablets.size());
+        Assertions.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId3)));
+        Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId1)));
+        Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId2)));
 
         // set Config.balance_load_disk_safe_threshold to 0.9 to trigger tablet balance
         Config.tablet_sched_balance_load_disk_safe_threshold = 0.9;
         Config.storage_usage_soft_limit_reserve_bytes = 1;
         tablets = rebalancer.selectAlternativeTablets();
-        Assert.assertEquals(2, tablets.size());
-        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId3)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId1)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId2)));
+        Assertions.assertEquals(2, tablets.size());
+        Assertions.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId3)));
+        Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId1)));
+        Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId2)));
+
+        // check balance stat
+        Assertions.assertFalse(materializedIndex.isTabletBalanced());
+        Assertions.assertEquals(BalanceType.INTER_NODE_TABLET_DISTRIBUTION, materializedIndex.getBalanceType());
 
         // set table state to schema_change, balance should be ignored
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-        Assert.assertEquals(0, rebalancer.selectAlternativeTablets().size());
+        Assertions.assertEquals(0, rebalancer.selectAlternativeTablets().size());
     }
 
     /**
@@ -356,13 +361,13 @@ public class DiskAndTabletLoadReBalancerTest {
         rebalancer.updateLoadStatistic(clusterLoadStatistic);
 
         List<TabletSchedCtx> tablets = rebalancer.selectAlternativeTablets();
-        Assert.assertEquals(0, tablets.size());
+        Assertions.assertEquals(0, tablets.size());
 
         // set Config.balance_load_disk_safe_threshold to 0.9 to trigger tablet balance
         Config.tablet_sched_balance_load_disk_safe_threshold = 0.9;
         Config.storage_usage_soft_limit_reserve_bytes = 1;
         tablets = rebalancer.selectAlternativeTablets();
-        Assert.assertEquals(0, tablets.size());
+        Assertions.assertEquals(0, tablets.size());
     }
 
     /**
@@ -562,28 +567,41 @@ public class DiskAndTabletLoadReBalancerTest {
         Config.tablet_sched_balance_load_disk_safe_threshold = 0.4;
         Config.storage_usage_soft_limit_reserve_bytes = 1;
         List<TabletSchedCtx> tablets = rebalancer.selectAlternativeTablets();
-        Assert.assertEquals(2, tablets.size());
-        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId1)));
-        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getSrcBackendId() == beId1)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash12)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash14)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash10)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash13)));
+        Assertions.assertEquals(2, tablets.size());
+        Assertions.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId1)));
+        Assertions.assertTrue(tablets.stream().allMatch(t -> (t.getSrcBackendId() == beId1)));
+        Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash12)));
+        Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash14)));
+        Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash10)));
+        Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash13)));
+
+        // check balance stat
+        BalanceStat stat0 = clusterLoadStatistic.getBackendDiskBalanceStat(TStorageMedium.HDD, beId1);
+        Assertions.assertFalse(stat0.isBalanced());
+        Assertions.assertEquals(BalanceType.INTRA_NODE_DISK_USAGE, stat0.getBalanceType());
+        BalanceStat stat1 = clusterLoadStatistic.getBackendDiskBalanceStat(TStorageMedium.SSD, beId1);
+        Assertions.assertFalse(stat1.isBalanced());
+        Assertions.assertEquals(BalanceType.INTRA_NODE_DISK_USAGE, stat1.getBalanceType());
 
         // set Config.balance_load_disk_safe_threshold to 0.9 to trigger backend tablet distribution balance
         Config.tablet_sched_balance_load_disk_safe_threshold = 0.9;
         tablets = rebalancer.selectAlternativeTablets();
-        Assert.assertEquals(2, tablets.size());
-        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId1)));
-        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getSrcBackendId() == beId1)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash12)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash14)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash10)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash13)));
+        Assertions.assertEquals(2, tablets.size());
+        Assertions.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId1)));
+        Assertions.assertTrue(tablets.stream().allMatch(t -> (t.getSrcBackendId() == beId1)));
+        Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash12)));
+        Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash14)));
+        Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash10)));
+        Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash13)));
+
+        // check balance stat
+        BalanceStat stat2 = materializedIndex.getBalanceStat();
+        Assertions.assertFalse(stat2.isBalanced());
+        Assertions.assertEquals(BalanceType.INTRA_NODE_TABLET_DISTRIBUTION, stat2.getBalanceType());
 
         // set table state to schema_change, balance should be ignored
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-        Assert.assertEquals(0, rebalancer.selectAlternativeTablets().size());
+        Assertions.assertEquals(0, rebalancer.selectAlternativeTablets().size());
     }
 
     private Backend genBackend(long beId, String host, long availableCapB, long dataUsedCapB, long totalCapB,
@@ -619,7 +637,7 @@ public class DiskAndTabletLoadReBalancerTest {
                            TStorageMedium medium,
                            long dbId, long tableId, long physicalPartitionId, long indexId, long tabletId, long replicaId,
                            long beId, long dataSize, long pathHash) {
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, 1111, medium);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, medium);
         Replica replica = new Replica(replicaId, beId, 1L, 1111,
                 dataSize, 1000, ReplicaState.NORMAL, -1, 1);
         invertedIndex.addTablet(tabletId, tabletMeta);
@@ -759,8 +777,13 @@ public class DiskAndTabletLoadReBalancerTest {
             }
         }
 
-        Assert.assertEquals(4, be1SourceCnt);
-        Assert.assertEquals(4, be2SourceCnt);
+        Assertions.assertEquals(4, be1SourceCnt);
+        Assertions.assertEquals(4, be2SourceCnt);
+
+        // check balance stat
+        BalanceStat stat = clusterLoadStatistic.getClusterDiskBalanceStat(TStorageMedium.HDD);
+        Assertions.assertFalse(stat.isBalanced());
+        Assertions.assertEquals(BalanceType.INTER_NODE_DISK_USAGE, stat.getBalanceType());
     }
 
     @Test
@@ -809,13 +832,13 @@ public class DiskAndTabletLoadReBalancerTest {
 
         // add tablet to invertedIndex
         invertedIndex.addTablet(tabletId1,
-                new TabletMeta(1, 2, 3, 4, -1, TStorageMedium.HDD));
+                new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
         Replica replica = new Replica(replicaId1, 1, -1, ReplicaState.NORMAL);
         replica.setPathHash(pathHash10);
         invertedIndex.addReplica(tabletId1, replica);
 
         invertedIndex.addTablet(tabletId2,
-                new TabletMeta(1, 2, 3, 4, -1, TStorageMedium.HDD));
+                new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
         replica = new Replica(replicaId2, 1, -1, ReplicaState.NORMAL);
         replica.setPathHash(pathHash13);
         invertedIndex.addReplica(tabletId2, replica);
@@ -828,44 +851,44 @@ public class DiskAndTabletLoadReBalancerTest {
                 new ArrayList<>());
 
         hState.init();
-        Assert.assertEquals((Long) pathHash10, hState.sortedPath.get(0));
-        Assert.assertEquals((Long) pathHash11, hState.sortedPath.get(1));
-        Assert.assertEquals((Long) pathHash12, hState.sortedPath.get(2));
-        Assert.assertEquals((Long) pathHash13, hState.sortedPath.get(3));
-        Assert.assertEquals((Long) pathHash14, hState.sortedPath.get(4));
-        Assert.assertEquals((Integer) 0, hState.pathSortIndex.get(pathHash10));
-        Assert.assertEquals((Integer) 1, hState.pathSortIndex.get(pathHash11));
-        Assert.assertEquals((Integer) 2, hState.pathSortIndex.get(pathHash12));
-        Assert.assertEquals((Integer) 3, hState.pathSortIndex.get(pathHash13));
-        Assert.assertEquals((Integer) 4, hState.pathSortIndex.get(pathHash14));
-        Assert.assertEquals(10 * tabletDataSize, hState.usedCapacity);
+        Assertions.assertEquals((Long) pathHash10, hState.sortedPath.get(0));
+        Assertions.assertEquals((Long) pathHash11, hState.sortedPath.get(1));
+        Assertions.assertEquals((Long) pathHash12, hState.sortedPath.get(2));
+        Assertions.assertEquals((Long) pathHash13, hState.sortedPath.get(3));
+        Assertions.assertEquals((Long) pathHash14, hState.sortedPath.get(4));
+        Assertions.assertEquals((Integer) 0, hState.pathSortIndex.get(pathHash10));
+        Assertions.assertEquals((Integer) 1, hState.pathSortIndex.get(pathHash11));
+        Assertions.assertEquals((Integer) 2, hState.pathSortIndex.get(pathHash12));
+        Assertions.assertEquals((Integer) 3, hState.pathSortIndex.get(pathHash13));
+        Assertions.assertEquals((Integer) 4, hState.pathSortIndex.get(pathHash14));
+        Assertions.assertEquals(10 * tabletDataSize, hState.usedCapacity);
 
         List<Long> highLoadPaths = hState.getTabletsInHighLoadPath(Lists.newArrayList(tabletId1, tabletId2));
-        Assert.assertEquals(1, highLoadPaths.size());
-        Assert.assertEquals((Long) tabletId1, highLoadPaths.get(0));
+        Assertions.assertEquals(1, highLoadPaths.size());
+        Assertions.assertEquals((Long) tabletId1, highLoadPaths.get(0));
 
         // change threshold to 0.3, tabletId2 will be chosen
         Config.tablet_sched_balance_load_score_threshold = 0.3;
         highLoadPaths = hState.getTabletsInHighLoadPath(Lists.newArrayList(tabletId1, tabletId2));
-        Assert.assertEquals(2, highLoadPaths.size());
-        Assert.assertEquals((Long) tabletId1, highLoadPaths.get(0));
-        Assert.assertEquals((Long) tabletId2, highLoadPaths.get(1));
+        Assertions.assertEquals(2, highLoadPaths.size());
+        Assertions.assertEquals((Long) tabletId1, highLoadPaths.get(0));
+        Assertions.assertEquals((Long) tabletId2, highLoadPaths.get(1));
         // reset
         Config.tablet_sched_balance_load_score_threshold = 0.1;
 
         // minus 4 tablets from pathHash10
         hState.minusUsedCapacity(pathHash10, 4 * tabletDataSize);
-        Assert.assertEquals((Long) pathHash11, hState.sortedPath.get(0));
-        Assert.assertEquals((Long) pathHash12, hState.sortedPath.get(1));
-        Assert.assertEquals((Long) pathHash13, hState.sortedPath.get(2));
-        Assert.assertEquals((Integer) 0, hState.pathSortIndex.get(pathHash11));
-        Assert.assertEquals((Integer) 1, hState.pathSortIndex.get(pathHash12));
-        Assert.assertEquals((Integer) 2, hState.pathSortIndex.get(pathHash13));
-        Assert.assertEquals(6 * tabletDataSize, hState.usedCapacity);
+        Assertions.assertEquals((Long) pathHash11, hState.sortedPath.get(0));
+        Assertions.assertEquals((Long) pathHash12, hState.sortedPath.get(1));
+        Assertions.assertEquals((Long) pathHash13, hState.sortedPath.get(2));
+        Assertions.assertEquals((Integer) 0, hState.pathSortIndex.get(pathHash11));
+        Assertions.assertEquals((Integer) 1, hState.pathSortIndex.get(pathHash12));
+        Assertions.assertEquals((Integer) 2, hState.pathSortIndex.get(pathHash13));
+        Assertions.assertEquals(6 * tabletDataSize, hState.usedCapacity);
         // only tabletId2 will be chosen
         highLoadPaths = hState.getTabletsInHighLoadPath(Lists.newArrayList(tabletId1, tabletId2));
-        Assert.assertEquals(1, highLoadPaths.size());
-        Assert.assertEquals((Long) tabletId2, highLoadPaths.get(0));
+        Assertions.assertEquals(1, highLoadPaths.size());
+        Assertions.assertEquals((Long) tabletId2, highLoadPaths.get(0));
 
         BackendBalanceState lState = new BackendBalanceState(1L,
                 backendLoadStatistic,
@@ -878,8 +901,8 @@ public class DiskAndTabletLoadReBalancerTest {
 
         // add 2 tablets to the lowest path hash, the lowest path will be pathHash13
         Long pathHash = lState.getLowestLoadPath();
-        Assert.assertEquals((Long) pathHash14, pathHash);
+        Assertions.assertEquals((Long) pathHash14, pathHash);
         lState.addUsedCapacity(pathHash14, 2 * tabletDataSize);
-        Assert.assertEquals((Long) pathHash13, lState.getLowestLoadPath());
+        Assertions.assertEquals((Long) pathHash13, lState.getLowestLoadPath());
     }
 }

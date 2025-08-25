@@ -43,6 +43,7 @@ import org.apache.hadoop.hive.metastore.api.AggrStats;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.Catalog;
 import org.apache.hadoop.hive.metastore.api.CheckConstraintsRequest;
+import org.apache.hadoop.hive.metastore.api.CheckLockRequest;
 import org.apache.hadoop.hive.metastore.api.ClientCapabilities;
 import org.apache.hadoop.hive.metastore.api.ClientCapability;
 import org.apache.hadoop.hive.metastore.api.CmRecycleRequest;
@@ -630,9 +631,22 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         }
     }
 
+    public Table getTable(String dbName, String tableName, boolean isCheckTableExist)
+            throws MetaException, TException, NoSuchObjectException {
+        try {
+            return getTable(null, dbName, tableName);
+        } catch (NoSuchObjectException e) {
+            // Do not log warning if it's checking table existence.
+            if (!isCheckTableExist) {
+                LOG.warn("Failed to get table {}.{}", dbName, tableName, e);
+            }
+            throw e;
+        }
+    }
+
     @Override
     public Table getTable(String dbName, String tableName) throws MetaException, TException, NoSuchObjectException {
-        return getTable(null, dbName, tableName);
+        return getTable(dbName, tableName, false);
     }
 
     @Override
@@ -643,7 +657,6 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             return client.get_table(dbName, tableName);
         } catch (NoSuchObjectException e) {
             // NoSuchObjectException need to be thrown when creating iceberg table.
-            LOG.warn("Failed to get table {}.{}", dbName, tableName, e);
             throw e;
         } catch (Exception e) {
             LOG.warn("Using get_table() failed, fail over to use get_table_req()", e);
@@ -1052,7 +1065,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     public boolean tableExists(String databaseName, String tableName)
         throws MetaException, TException, UnknownDBException {
         try {
-            Table table = getTable(databaseName, tableName);
+            Table table = getTable(databaseName, tableName, true);
             return table != null;
         } catch (UnknownDBException | NoSuchObjectException e) {
             return false;
@@ -2046,7 +2059,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public LockResponse checkLock(long lockid)
             throws NoSuchTxnException, TxnAbortedException, NoSuchLockException, TException {
-        throw new TException("method not implemented");
+        return client.check_lock(new CheckLockRequest(lockid));
     }
 
     @Override

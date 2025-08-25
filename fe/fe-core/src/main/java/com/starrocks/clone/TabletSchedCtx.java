@@ -54,7 +54,8 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.clone.DiskAndTabletLoadReBalancer.BalanceType;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletScheduler.PathSlot;
 import com.starrocks.common.Config;
@@ -67,7 +68,6 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -1232,12 +1232,22 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         return System.currentTimeMillis() - lastSchedTime > taskTimeoutMs;
     }
 
+    private String getTabletScheduleStatus() {
+        String status = FeConstants.NULL_STRING;
+        if (type == Type.BALANCE && balanceType != null) {
+            status = balanceType.name();
+        } else if (tabletHealthStatus != null) {
+            status = tabletHealthStatus.name();
+        }
+        return status;
+    }
+
     public List<String> getBrief() {
         List<String> result = Lists.newArrayList();
         result.add(String.valueOf(tabletId));
         result.add(type.name());
         result.add(storageMedium == null ? FeConstants.NULL_STRING : storageMedium.name());
-        result.add(tabletHealthStatus == null ? FeConstants.NULL_STRING : tabletHealthStatus.name());
+        result.add(getTabletScheduleStatus());
         result.add(state.name());
         result.add(origPriority.name());
         result.add(dynamicPriority.name());
@@ -1245,12 +1255,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         result.add(String.valueOf(srcPathHash));
         result.add(String.valueOf(destBackendId));
         result.add(String.valueOf(destPathHash));
-        result.add(String.valueOf(taskTimeoutMs));
+        result.add(String.valueOf(taskTimeoutMs)); // milliseconds
         result.add(TimeUtils.longToTimeString(createTime));
         result.add(TimeUtils.longToTimeString(lastSchedTime));
         result.add(TimeUtils.longToTimeString(lastVisitedTime));
         result.add(TimeUtils.longToTimeString(finishedTime));
-        result.add(copyTimeMs > 0 ? String.valueOf((double) copySize / copyTimeMs / 1000.0) : FeConstants.NULL_STRING);
+        result.add(copyTimeMs > 0 ?
+                String.valueOf((double) copySize * 1000.0 / copyTimeMs / 1048576.0) : FeConstants.NULL_STRING); // MB/s
         result.add(String.valueOf(failedSchedCounter));
         result.add(String.valueOf(failedRunningCounter));
         result.add(TimeUtils.longToTimeString(lastAdjustPrioTime));
@@ -1264,20 +1275,31 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     public TTabletSchedule toTabletScheduleThrift() {
         TTabletSchedule result = new TTabletSchedule();
+        result.setTablet_id(tabletId);
         result.setTable_id(tblId);
         result.setPartition_id(physicalPartitionId);
-        result.setTablet_id(tabletId);
         result.setType(type.name());
-        result.setPriority(dynamicPriority != null ? dynamicPriority.name() : "");
         result.setState(state != null ? state.name() : "");
-        result.setTablet_status(tabletHealthStatus != null ? tabletHealthStatus.name() : "");
+        result.setSchedule_reason(getTabletScheduleStatus());
+        result.setMedium(storageMedium == null ? "" : storageMedium.name());
+        result.setPriority(dynamicPriority != null ? dynamicPriority.name() : "");
+        result.setOrig_priority(origPriority.name());
+        result.setLast_priority_adjust_time(lastAdjustPrioTime / 1000);
+        result.setVisible_version(visibleVersion);
+        result.setCommitted_version(committedVersion);
+        result.setSrc_be_id(srcReplica == null ? -1 : srcReplica.getBackendId());
+        result.setSrc_path(String.valueOf(srcPathHash));
+        result.setDest_be_id(destBackendId);
+        result.setDest_path(String.valueOf(destPathHash));
+        result.setTimeout(taskTimeoutMs / 1000); // seconds
         result.setCreate_time(createTime / 1000.0);
         result.setSchedule_time(lastSchedTime / 1000.0);
         result.setFinish_time(finishedTime / 1000.0);
-        result.setClone_src(srcReplica == null ? -1 : srcReplica.getBackendId());
-        result.setClone_dest(destBackendId);
         result.setClone_bytes(copySize);
-        result.setClone_duration(copyTimeMs / 1000.0);
+        result.setClone_duration(copyTimeMs / 1000.0); // seconds
+        result.setClone_rate(copyTimeMs > 0 ? (double) copySize * 1000.0 / copyTimeMs / 1048576.0 : 0); // MB/s
+        result.setFailed_schedule_count(failedSchedCounter);
+        result.setFailed_running_count(failedRunningCounter);
         result.setError_msg(errMsg);
         return result;
     }
@@ -1333,8 +1355,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("tablet id: ").append(tabletId).append(", status: ").append(tabletHealthStatus.name());
-        sb.append(", state: ").append(state.name()).append(", type: ").append(type.name());
+        sb.append("tablet id: ").append(tabletId).append(", type: ").append(type.name());
+        sb.append(", status: ").append(getTabletScheduleStatus()).append(", state: ").append(state.name());
         if (srcReplica != null) {
             sb.append(". from backend: ").append(srcReplica.getBackendId());
             sb.append(", src path hash: ").append(srcPathHash);

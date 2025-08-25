@@ -38,6 +38,7 @@
 #include "io/throttled_output_stream.h"
 #include "io/throttled_seekable_input_stream.h"
 #include "service/staros_worker.h"
+#include "storage/lake/filenames.h"
 #include "storage/olap_common.h"
 #include "util/defer_op.h"
 #include "util/stopwatch.hpp"
@@ -64,6 +65,11 @@ using ReadOnlyFilePtr = std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>;
 using WritableFilePtr = std::unique_ptr<staros::starlet::fslib::WritableFile>;
 using Anchor = staros::starlet::fslib::Stream::Anchor;
 using EntryStat = staros::starlet::fslib::EntryStat;
+
+static const std::string kFileTagType = "type";
+static const std::string kFileTagTypeData = "data";
+static const std::string kFileTagTypeMeta = "meta";
+static const std::string kFileTagTypeTxnLog = "txnlog";
 
 bool is_starlet_uri(std::string_view uri) {
     return HasPrefixString(uri, "staros://");
@@ -202,7 +208,7 @@ public:
         stats->append(kIOCountRemote, read_stats.io_count_remote);
         stats->append(kIONsReadLocalDisk, read_stats.io_ns_read_local_disk);
         stats->append(kIONsWriteLocalDisk, read_stats.io_ns_write_local_disk);
-        stats->append(kIONsRemote, read_stats.io_ns_read_remote);
+        stats->append(kIONsReadRemote, read_stats.io_ns_read_remote);
         stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
         stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
         stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
@@ -267,6 +273,19 @@ public:
             return to_status(stream_st.status());
         }
         return to_status((*stream_st)->close());
+    }
+
+    StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
+        auto stream_st = _file_ptr->stream();
+        if (!stream_st.ok()) {
+            return to_status(stream_st.status());
+        }
+        const auto& io_stats = (*stream_st)->get_io_stats();
+        auto stats = std::make_unique<io::NumericStatistics>();
+        stats->reserve(2);
+        stats->append(kIONsWriteRemote, io_stats.io_ns_write_remote);
+        stats->append(kBytesWriteRemote, io_stats.bytes_write_remote);
+        return std::move(stats);
     }
 
 private:
@@ -357,6 +376,15 @@ public:
         staros::starlet::fslib::WriteOptions fslib_opts;
         fslib_opts.create_missing_parent = true;
         fslib_opts.skip_fill_local_cache = opts.skip_fill_local_cache;
+        if (config::starlet_write_file_with_tag) {
+            if (lake::is_segment(pair.first)) {
+                fslib_opts.tags[kFileTagType] = kFileTagTypeData;
+            } else if (lake::is_tablet_metadata(pair.first)) {
+                fslib_opts.tags[kFileTagType] = kFileTagTypeMeta;
+            } else if (lake::is_txn_log(pair.first) || lake::is_combined_txn_log(pair.first)) {
+                fslib_opts.tags[kFileTagType] = kFileTagTypeTxnLog;
+            }
+        }
         auto file_st = (*fs_st)->create(pair.first, fslib_opts);
         if (!file_st.ok()) {
             return to_status(file_st.status());

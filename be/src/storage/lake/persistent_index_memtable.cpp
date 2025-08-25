@@ -15,6 +15,7 @@
 #include "storage/lake/persistent_index_memtable.h"
 
 #include "storage/lake/persistent_index_sstable.h"
+#include "util/string_util.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
@@ -30,11 +31,11 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_upsert_us");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
-        auto key = keys[i].to_string();
+        auto key = std::string_view(keys[i].data, keys[i].size);
         const auto value = values[i];
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, value)); inserted) {
             not_founds->insert(i);
-            _keys_size += key.capacity() + sizeof(std::string);
+            _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
         } else {
             auto& old_index_value_ver = it->second;
             auto old_value = old_index_value_ver.second;
@@ -51,18 +52,17 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
 Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_insert_us");
     for (size_t i = 0; i < n; ++i) {
-        auto key = keys[i].to_string();
-        auto size = keys[i].get_size();
+        auto key = std::string_view(keys[i].data, keys[i].size);
         const auto value = values[i];
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, value)); inserted) {
-            _keys_size += key.capacity() + sizeof(std::string);
+            _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
         } else {
             auto& old_index_value_ver = it->second;
             auto old_index_value = old_index_value_ver.second;
             if (old_index_value.get_value() != NullIndexValue) {
                 // shouldn't happen
-                std::string msg = strings::Substitute("PersistentIndexMemtable<$0> insert found duplicate key $1", size,
-                                                      hexdump((const char*)key.data(), size));
+                std::string msg = strings::Substitute("PersistentIndexMemtable<$0> insert found duplicate key $1",
+                                                      key.size(), hexdump((const char*)key.data(), key.size()));
                 LOG(ERROR) << msg;
                 if (!config::experimental_lake_ignore_pk_consistency_check) {
                     return Status::AlreadyExist(msg);
@@ -84,11 +84,11 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_erase_us");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
-        auto key = keys[i].to_string();
+        auto key = std::string_view(keys[i].data, keys[i].size);
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, IndexValue(NullIndexValue))); inserted) {
             old_values[i] = NullIndexValue;
             not_founds->insert(i);
-            _keys_size += key.capacity() + sizeof(std::string);
+            _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
         } else {
             auto& old_index_value_ver = it->second;
             auto old_index_value = old_index_value_ver.second;
@@ -110,9 +110,9 @@ Status PersistentIndexMemtable::erase_with_filter(size_t n, const Slice* keys, c
             // skip
             continue;
         }
-        auto key = keys[i].to_string();
+        auto key = std::string_view(keys[i].data, keys[i].size);
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, IndexValue(NullIndexValue))); inserted) {
-            _keys_size += key.capacity() + sizeof(std::string);
+            _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
         } else {
             auto& old_index_value_ver = it->second;
             update_index_value(&old_index_value_ver, version, IndexValue(NullIndexValue));
@@ -127,12 +127,12 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
                                         const std::vector<size_t>& replace_idxes, int64_t version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_replace_us");
     for (unsigned long idx : replace_idxes) {
-        auto key = keys[idx].to_string();
+        auto key = std::string_view(keys[idx].data, keys[idx].size);
         const auto value = values[idx];
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, value)); !inserted) {
             update_index_value(&it->second, version, value);
         } else {
-            _keys_size += key.capacity() + sizeof(std::string);
+            _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
         }
         _max_rss_rowid = std::max(_max_rss_rowid, value.get_value());
     }
@@ -143,7 +143,7 @@ Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* val
                                     int64_t version) const {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_get_us");
     for (size_t i = 0; i < n; ++i) {
-        auto key = std::string_view(keys[i]);
+        auto key = std::string_view(keys[i].data, keys[i].size);
         auto it = _map.find(key);
         if (it == _map.end()) {
             values[i] = NullIndexValue;
@@ -162,7 +162,7 @@ Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const
                                     KeyIndexSet* found_key_indexes, int64_t version) const {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_get_us");
     for (auto& key_index : key_indexes) {
-        auto key = std::string_view(keys[key_index]);
+        auto key = std::string_view(keys[key_index].data, keys[key_index].size);
         auto it = _map.find(key);
         if (it != _map.end()) {
             // Assuming we want the latest (first) value due to emplace_front in updates/inserts
@@ -176,7 +176,10 @@ Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const
 }
 
 size_t PersistentIndexMemtable::memory_usage() const {
-    return _keys_size + _map.size() * sizeof(IndexValueWithVer);
+    // _keys_heap_size is the memory usage of std::string which are heap allocated.
+    // _map.bytes_used() is the memory usage of the btree.
+    // The total memory usage is the sum of these two.
+    return _keys_heap_size + _map.bytes_used();
 }
 
 Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize) {
@@ -185,6 +188,7 @@ Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize) {
 
 void PersistentIndexMemtable::clear() {
     _map.clear();
+    _keys_heap_size = 0;
 }
 
 } // namespace starrocks::lake

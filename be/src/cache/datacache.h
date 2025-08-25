@@ -49,16 +49,19 @@ public:
     std::shared_ptr<StoragePageCache> page_cache_ptr() const { return _page_cache; }
     bool page_cache_available() const;
 
-    StatusOr<int64_t> get_storage_page_cache_limit();
-    int64_t check_storage_page_cache_limit(int64_t storage_cache_limit);
+    StatusOr<int64_t> get_datacache_limit();
+    int64_t check_datacache_limit(int64_t datacache_limit);
 
     bool adjust_mem_capacity(int64_t delta, size_t min_capacity);
     size_t get_mem_capacity() const;
 
 private:
     StatusOr<CacheOptions> _init_cache_options();
-    Status _init_datacache();
-    Status _init_lrucache_engine();
+#if defined(WITH_STARCACHE)
+    Status _init_starcache_engine(CacheOptions* cache_options);
+    Status _init_peer_cache(const CacheOptions& cache_options);
+#endif
+    Status _init_lrucache_engine(const CacheOptions& cache_options);
     Status _init_page_cache();
 
     GlobalEnv* _global_env;
@@ -67,7 +70,6 @@ private:
     // cache engine
     std::shared_ptr<LocalCacheEngine> _local_cache;
     std::shared_ptr<RemoteCacheEngine> _remote_cache;
-    std::shared_ptr<LocalCacheEngine> _lru_cache;
 
     std::shared_ptr<BlockCache> _block_cache;
     std::shared_ptr<StoragePageCache> _page_cache;

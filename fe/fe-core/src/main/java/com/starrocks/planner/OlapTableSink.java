@@ -77,7 +77,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
@@ -804,14 +803,15 @@ public class OlapTableSink extends DataSink {
                     Tablet tablet = index.getTablets().get(idx);
                     if (table.isCloudNativeTableOrMaterializedView()) {
                         long computeNodeId =
-                                warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet).getId();
+                                warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId()).getId();
                         locationParam.addToTablets(new TTabletLocation(tablet.getId(), Lists.newArrayList(computeNodeId)));
                     } else {
                         // we should ensure the replica backend is alive
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                         LocalTablet localTablet = (LocalTablet) tablet;
+                        // Load task shounld allow decommission replica, otherwise publish version will fail
                         Multimap<Replica, Long> bePathsMap =
-                                localTablet.getNormalReplicaBackendPathMap(infoService);
+                                localTablet.getNormalReplicaBackendPathMap(infoService, true);
                         if (bePathsMap.keySet().size() < quorum) {
                             throw new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR,
                                     String.format("Tablet lost replicas. Check if any backend is down or not. " +

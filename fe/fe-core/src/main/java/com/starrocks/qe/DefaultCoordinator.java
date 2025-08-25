@@ -43,6 +43,7 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -85,7 +86,6 @@ import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TDescriptorTable;
@@ -284,7 +284,8 @@ public class DefaultCoordinator extends Coordinator {
         queryProfile.attachInstances(Collections.singletonList(queryId));
         queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
 
-        this.coordinatorPreprocessor = null;
+        this.coordinatorPreprocessor = new CoordinatorPreprocessor(connectContext, jobSpec, false);
+        this.scheduler = new AllAtOnceExecutionSchedule();
     }
 
     DefaultCoordinator(ConnectContext context, JobSpec jobSpec) {
@@ -574,6 +575,8 @@ public class DefaultCoordinator extends Coordinator {
             deliverExecFragments(option);
         }
 
+        scheduler.continueSchedule(option);
+
         // Prevent `explain scheduler` from waiting until the profile timeout.
         if (!option.doDeploy) {
             queryProfile.finishAllInstances(Status.OK);
@@ -586,7 +589,7 @@ public class DefaultCoordinator extends Coordinator {
             scheduler.tryScheduleNextTurn(fragmentInstanceId);
         } catch (Exception e) {
             LOG.warn("schedule fragment:{} next internal error:", DebugUtil.printId(fragmentInstanceId), e);
-            cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
+            cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, FeConstants.SCHEDULE_FRAGMENT_ERROR + e.getMessage());
             return Status.internalError(e.getMessage());
         }
         return Status.OK;
@@ -598,8 +601,8 @@ public class DefaultCoordinator extends Coordinator {
                 "predicted memory cost: " + getPredictedCost() + "\n" : "";
         return predict +
                 executionDAG.getFragmentsInPreorder().stream()
-                .map(ExecutionFragment::getExplainString)
-                .collect(Collectors.joining("\n"));
+                        .map(ExecutionFragment::getExplainString)
+                        .collect(Collectors.joining("\n"));
     }
 
     private void prepareProfile() {
@@ -1006,6 +1009,11 @@ public class DefaultCoordinator extends Coordinator {
     public void cancel(PPlanFragmentCancelReason reason, String message) {
         lock();
         try {
+            // All results have been obtained. The query has ended. Ignore this error.
+            if (returnedAllResults) {
+                cancelInternal(PPlanFragmentCancelReason.QUERY_FINISHED);
+                return;
+            }
             if (!queryStatus.ok()) {
                 // we can't cancel twice
                 return;
@@ -1019,10 +1027,10 @@ public class DefaultCoordinator extends Coordinator {
             try {
                 // Disable count down profileDoneSignal for collect all backend's profile
                 // but if backend has crashed, we need count down profileDoneSignal since it will not report by itself
-                if (message.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
+                if (message.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR) ||
+                        message.startsWith(FeConstants.SCHEDULE_FRAGMENT_ERROR)) {
                     queryProfile.finishAllInstances(Status.OK);
-                    LOG.info("count down profileDoneSignal since backend has crashed, query id: {}",
-                            DebugUtil.printId(jobSpec.getQueryId()));
+
                 }
             } finally {
                 unlock();

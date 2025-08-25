@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
 import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateAggFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateConstantCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
@@ -93,6 +94,7 @@ public class SPMOptimizer extends Optimizer {
         tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
         deriveLogicalProperty(tree);
 
+        scheduler.rewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
         CTEContext cteContext = context.getCteContext();
         CTEUtils.collectCteOperators(tree, context);
 
@@ -102,7 +104,6 @@ public class SPMOptimizer extends Optimizer {
             CTEUtils.collectCteOperators(tree, context);
         }
 
-        scheduler.rewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
         CTEUtils.collectCteOperators(tree, context);
 
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.AGGREGATE_REWRITE_RULES);
@@ -125,6 +126,7 @@ public class SPMOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
         // Put EliminateAggRule after PRUNE_COLUMNS to give a chance to prune group bys before eliminate aggregations.
         scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggRule.getInstance());
+        scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggFunctionRule.getInstance());
         deriveLogicalProperty(tree);
 
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
@@ -145,7 +147,6 @@ public class SPMOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
 
-        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_ASSERT_ROW_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_PROJECT_RULES);
 
         CTEUtils.collectCteOperators(tree, context);
@@ -242,6 +243,7 @@ public class SPMOptimizer extends Optimizer {
             rootTaskContext.setRequiredColumns(requiredColumns.clone());
             scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
             scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggRule.getInstance());
+            scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggFunctionRule.getInstance());
         }
 
         return tree;

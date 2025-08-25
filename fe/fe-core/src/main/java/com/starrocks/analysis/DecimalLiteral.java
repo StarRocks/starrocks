@@ -42,7 +42,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.common.io.Text;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.NodePosition;
@@ -52,9 +51,6 @@ import com.starrocks.thrift.TExprNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
@@ -417,23 +413,6 @@ public class DecimalLiteral extends LiteralExpr {
     public void swapSign() throws NotImplementedException {
         // swapping sign does not change the type
         value = value.negate();
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, value.toString());
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = new BigDecimal(Text.readString(in));
-    }
-
-    public static DecimalLiteral read(DataInput in) throws IOException {
-        DecimalLiteral dec = new DecimalLiteral();
-        dec.readFields(in);
-        return dec;
     }
 
     // To be compatible with OLAP, only need 9 digits.

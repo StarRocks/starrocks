@@ -51,10 +51,11 @@ public final class PRangeCell extends PCell implements Comparable<PRangeCell> {
      */
     @Override
     public int compareTo(PRangeCell o) {
-        if (isIntersected(o)) {
-            return 0;
+        int res = this.range.lowerEndpoint().compareTo(o.range.lowerEndpoint());
+        if (res != 0) {
+            return res;
         }
-        return this.range.lowerEndpoint().compareTo(o.range.lowerEndpoint());
+        return this.range.upperEndpoint().compareTo(o.range.upperEndpoint());
     }
 
     /**

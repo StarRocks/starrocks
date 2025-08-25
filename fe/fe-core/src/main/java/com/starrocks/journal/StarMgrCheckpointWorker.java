@@ -24,7 +24,7 @@ public class StarMgrCheckpointWorker extends CheckpointWorker {
     }
 
     @Override
-    void doCheckpoint(long epoch, long journalId) throws Exception {
+    void doCheckpoint(long epoch, long journalId, boolean needClusterSnapshotInfo) throws Exception {
         LOG.info("begin to generate new image: image.{}", journalId);
         StarMgrServer starMgrServer = StarMgrServer.getCurrentState();
         try {

@@ -12,4 +12,4 @@ displayed_sidebar: docs
 | -------- | --------------------------------- |
 | BE_ID    | bvar 所在的 BE 的 ID。             |
 | NAME     | bvar 名称。                       |
-| DESC     | bvar 描述，其中包括统计信息的值。 |
+| VALUE     | bvar 的值。                       |

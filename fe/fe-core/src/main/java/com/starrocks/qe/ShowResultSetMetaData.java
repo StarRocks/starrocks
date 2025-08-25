@@ -17,10 +17,6 @@
 
 package com.starrocks.qe;
 
-// Meta data to describe result set of show statement.
-// Because ResultSetMetaData is complicated, redefine it.
-
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -53,11 +49,6 @@ public class ShowResultSetMetaData {
         throw new StarRocksPlannerException("Can't get column " + colName, ErrorType.INTERNAL_ERROR);
     }
 
-    public void removeColumn(int idx) {
-        Preconditions.checkArgument(idx < columns.size());
-        columns.remove(idx);
-    }
-
     public ShowResultSetMetaData(List<Column> columns) {
         this.columns = columns;
     }
@@ -81,6 +72,7 @@ public class ShowResultSetMetaData {
             columns.add(col);
             return this;
         }
+
         public Builder column(String name, ScalarType type) {
             columns.add(new Column(name, type, false, null, true, null, ""));
             return this;

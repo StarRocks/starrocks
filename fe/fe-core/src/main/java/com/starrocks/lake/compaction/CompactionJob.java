@@ -21,6 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.proto.CompactStat;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.VisibleStateWaiter;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,9 +44,11 @@ public class CompactionJob {
     private VisibleStateWaiter visibleStateWaiter;
     private List<CompactionTask> tasks = Collections.emptyList();
     private boolean allowPartialSuccess = false;
+    private final ComputeResource computeResource;
+    private String warehouse;
 
     public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId,
-            boolean allowPartialSuccess) {
+            boolean allowPartialSuccess, ComputeResource computeResource, String warehouse) {
         this.db = Objects.requireNonNull(db, "db is null");
         this.table = Objects.requireNonNull(table, "table is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
@@ -54,6 +57,8 @@ public class CompactionJob {
         this.commitTs = 0L;
         this.finishTs = 0L;
         this.allowPartialSuccess = allowPartialSuccess;
+        this.computeResource = computeResource;
+        this.warehouse = warehouse;
     }
 
     Database getDb() {
@@ -163,11 +168,16 @@ public class CompactionJob {
     }
 
     public String getDebugString() {
-        return String.format("TxnId=%d partition=%s", txnId, getFullPartitionName());
+        return String.format("txnId=%d, partition=%s, warehouse=%s, cngroup=%d", txnId, getFullPartitionName(), warehouse,
+                computeResource.getWorkerGroupId());
     }
 
     public boolean getAllowPartialSuccess() {
         return allowPartialSuccess;
+    }
+
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     public String getExecutionProfile() {
@@ -183,6 +193,7 @@ public class CompactionJob {
         stat.readSegmentCount = 0L;
         stat.writeSegmentCount = 0L;
         stat.writeSegmentBytes = 0L;
+        stat.writeTimeRemote = 0L;
         stat.inQueueTimeSec = 0;
         for (CompactionTask task : tasks) {
             List<CompactStat> subStats = task.getCompactStats();
@@ -217,6 +228,9 @@ public class CompactionJob {
                 }
                 if (subStat.writeSegmentBytes != null) {
                     stat.writeSegmentBytes += subStat.writeSegmentBytes;
+                }
+                if (subStat.writeTimeRemote != null) {
+                    stat.writeTimeRemote += subStat.writeTimeRemote;
                 }
             }
             stat.subTaskCount += subTaskCount;

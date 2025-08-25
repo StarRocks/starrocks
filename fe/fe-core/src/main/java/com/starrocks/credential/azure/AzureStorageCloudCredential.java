@@ -324,8 +324,10 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
                 "oauth2ManagedIdentity=" + oauth2ManagedIdentity +
                 ", oauth2TenantId='" + oauth2TenantId + '\'' +
                 ", oauth2ClientId='" + oauth2ClientId + '\'' +
+                ", endpoint='" + endpoint + '\'' +
                 ", storageAccount='" + storageAccount + '\'' +
                 ", sharedKey='" + sharedKey + '\'' +
+                ", sasToken='" + sasToken + '\'' +
                 ", oauth2ClientSecret='" + oauth2ClientSecret + '\'' +
                 ", oauth2ClientEndpoint='" + oauth2ClientEndpoint + '\'' +
                 '}';

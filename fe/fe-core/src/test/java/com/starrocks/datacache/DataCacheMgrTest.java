@@ -16,8 +16,8 @@ package com.starrocks.datacache;
 
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QualifiedName;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
@@ -30,22 +30,22 @@ public class DataCacheMgrTest {
         QualifiedName qualifiedName = QualifiedName.of(List.of("catalog", "db", "tbl"));
         dataCacheMgr.createCacheRule(qualifiedName, null, -1, null);
 
-        Assert.assertFalse(dataCacheMgr.getCacheRule("*", "*", "*").isPresent());
-        Assert.assertFalse(dataCacheMgr.getCacheRule("*", "db", "*").isPresent());
+        Assertions.assertFalse(dataCacheMgr.getCacheRule("*", "*", "*").isPresent());
+        Assertions.assertFalse(dataCacheMgr.getCacheRule("*", "db", "*").isPresent());
         Optional<DataCacheRule> dataCacheRule = dataCacheMgr.getCacheRule("catalog", "db", "tbl");
-        Assert.assertTrue(dataCacheRule.isPresent());
-        Assert.assertEquals(-1, dataCacheRule.get().getPriority());
+        Assertions.assertTrue(dataCacheRule.isPresent());
+        Assertions.assertEquals(-1, dataCacheRule.get().getPriority());
 
         QualifiedName conflictQualifiedName = QualifiedName.of(List.of("*", "*", "*"));
-        Assert.assertThrows(SemanticException.class, () -> dataCacheMgr.throwExceptionIfRuleIsConflicted("*", "*", "*"));
+        Assertions.assertThrows(SemanticException.class, () -> dataCacheMgr.throwExceptionIfRuleIsConflicted("*", "*", "*"));
 
         dataCacheMgr.dropCacheRule(0);
         dataCacheMgr.createCacheRule(conflictQualifiedName, null, -1, null);
         dataCacheRule = dataCacheMgr.getCacheRule("a", "b", "c");
-        Assert.assertTrue(dataCacheRule.isPresent());
-        Assert.assertEquals(-1, dataCacheRule.get().getPriority());
+        Assertions.assertTrue(dataCacheRule.isPresent());
+        Assertions.assertEquals(-1, dataCacheRule.get().getPriority());
 
-        Assert.assertThrows(SemanticException.class, () -> dataCacheMgr
+        Assertions.assertThrows(SemanticException.class, () -> dataCacheMgr
                 .throwExceptionIfRuleIsConflicted("a", "b", "c"));
     }
 }

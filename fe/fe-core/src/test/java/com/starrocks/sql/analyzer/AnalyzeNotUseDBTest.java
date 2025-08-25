@@ -17,9 +17,9 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -27,7 +27,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeWithoutTestView;
 
 public class AnalyzeNotUseDBTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -126,44 +126,44 @@ public class AnalyzeNotUseDBTest {
 
         QueryStatement queryStatement = (QueryStatement) analyzeSuccess("select * from t0 t join unnest([1,2,3]) t");
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
-        Assert.assertEquals("[v1, v2, v3, unnest]", selectRelation.getColumnOutputNames().toString());
+        Assertions.assertEquals("[v1, v2, v3, unnest]", selectRelation.getColumnOutputNames().toString());
 
         queryStatement = (QueryStatement) analyzeSuccess("select * from t0 join unnest([1,2,3]) t0");
         selectRelation = (SelectRelation) queryStatement.getQueryRelation();
-        Assert.assertEquals("[v1, v2, v3, unnest]", selectRelation.getColumnOutputNames().toString());
+        Assertions.assertEquals("[v1, v2, v3, unnest]", selectRelation.getColumnOutputNames().toString());
 
         queryStatement = (QueryStatement) analyzeSuccess("select * from t0 t join (values(1,2,3)) t");
         selectRelation = (SelectRelation) queryStatement.getQueryRelation();
-        Assert.assertEquals("[v1, v2, v3, column_0, column_1, column_2]", selectRelation.getColumnOutputNames().toString());
+        Assertions.assertEquals("[v1, v2, v3, column_0, column_1, column_2]", selectRelation.getColumnOutputNames().toString());
 
         queryStatement = (QueryStatement) analyzeSuccess("select * from t0 join (values(1,2,3)) t0");
         selectRelation = (SelectRelation) queryStatement.getQueryRelation();
-        Assert.assertEquals("[v1, v2, v3, column_0, column_1, column_2]", selectRelation.getColumnOutputNames().toString());
+        Assertions.assertEquals("[v1, v2, v3, column_0, column_1, column_2]", selectRelation.getColumnOutputNames().toString());
 
         queryStatement = (QueryStatement) analyzeWithoutTestView("select * from t0 t join (select * from t0) t");
         selectRelation = (SelectRelation) queryStatement.getQueryRelation();
-        Assert.assertEquals("[v1, v2, v3, v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
+        Assertions.assertEquals("[v1, v2, v3, v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
         analyzeFail("create view v as select * from t0 t join (select * from t0) t",
                 "Duplicate column name 'v1'");
 
         queryStatement = (QueryStatement) analyzeSuccess("select db1.t.* from t0 t join (select * from t0) t");
         selectRelation = (SelectRelation) queryStatement.getQueryRelation();
-        Assert.assertEquals("[v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
+        Assertions.assertEquals("[v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
 
         queryStatement = (QueryStatement) analyzeWithoutTestView("select t.* from t0 t join (select * from t0) t");
         selectRelation = (SelectRelation) queryStatement.getQueryRelation();
-        Assert.assertEquals("[v1, v2, v3, v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
+        Assertions.assertEquals("[v1, v2, v3, v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
         analyzeFail("create view v as select * from t0 t join (select * from t0) t",
                 "Duplicate column name 'v1'");
 
         queryStatement = (QueryStatement) analyzeWithoutTestView("select t0.* from t0 join (select * from t0) t0");
         selectRelation = (SelectRelation) queryStatement.getQueryRelation();
-        Assert.assertEquals("[v1, v2, v3, v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
+        Assertions.assertEquals("[v1, v2, v3, v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
         analyzeFail("create view v as select * from t0 join (select * from t0) t0",
                 "Duplicate column name 'v1'");
 
         queryStatement = (QueryStatement) analyzeSuccess("select db1.t0.* from t0 join (select * from t0) t0");
         selectRelation = (SelectRelation) queryStatement.getQueryRelation();
-        Assert.assertEquals("[v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
+        Assertions.assertEquals("[v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
     }
 }

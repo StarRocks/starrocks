@@ -27,8 +27,8 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -65,8 +65,8 @@ public class KafkaTaskInfoTest {
                 System.currentTimeMillis(),
                 offset1,
                 Config.routine_load_task_timeout_second * 1000);
-        Assert.assertEquals("kafka", kafkaTaskInfo1.dataSourceType());
-        Assert.assertTrue(kafkaTaskInfo1.readyToExecute());
+        Assertions.assertEquals("kafka", kafkaTaskInfo1.dataSourceType());
+        Assertions.assertTrue(kafkaTaskInfo1.readyToExecute());
 
         Map<Integer, Long> offset2 = Maps.newHashMap();
         offset2.put(0, 100L);
@@ -76,7 +76,7 @@ public class KafkaTaskInfoTest {
                 System.currentTimeMillis(),
                 offset2,
                 Config.routine_load_task_timeout_second * 1000);
-        Assert.assertFalse(kafkaTaskInfo2.readyToExecute());
+        Assertions.assertFalse(kafkaTaskInfo2.readyToExecute());
 
         // consume offset > latest offset
         Map<Integer, Long> offset3 = Maps.newHashMap();
@@ -114,7 +114,7 @@ public class KafkaTaskInfoTest {
                 offset1,
                 Config.routine_load_task_timeout_second * 1000);
 
-        Assert.assertTrue(kafkaTaskInfo.checkReadyToExecuteFast());
+        Assertions.assertTrue(kafkaTaskInfo.checkReadyToExecuteFast());
     }
 
     @Test
@@ -153,12 +153,12 @@ public class KafkaTaskInfoTest {
         KafkaProgress kafkaProgress = new KafkaProgress();
         kafkaProgress.addPartitionOffset(new Pair<>(0, 98L));
         kafkaProgress.addPartitionOffset(new Pair<>(1, 98L));
-        Assert.assertFalse(kafkaTaskInfo.isProgressKeepUp(kafkaProgress));
+        Assertions.assertFalse(kafkaTaskInfo.isProgressKeepUp(kafkaProgress));
 
         kafkaProgress.modifyOffset(Lists.newArrayList(new Pair<>(0, 99L)));
-        Assert.assertFalse(kafkaTaskInfo.isProgressKeepUp(kafkaProgress));
+        Assertions.assertFalse(kafkaTaskInfo.isProgressKeepUp(kafkaProgress));
 
         kafkaProgress.modifyOffset(Lists.newArrayList(new Pair<>(1, 99L)));
-        Assert.assertTrue(kafkaTaskInfo.isProgressKeepUp(kafkaProgress));
+        Assertions.assertTrue(kafkaTaskInfo.isProgressKeepUp(kafkaProgress));
     }
 }

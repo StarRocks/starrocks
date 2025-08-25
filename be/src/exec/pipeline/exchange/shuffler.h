@@ -24,10 +24,11 @@ namespace starrocks::pipeline {
 class Shuffler {
 public:
     Shuffler(bool compatibility, bool is_two_level_shuffle, TPartitionType::type partition_type, size_t num_channels,
-             int32_t num_shuffles_per_channel)
+             int32_t num_shuffles_per_channel, bool bucket_aware = false)
             : _part_type(partition_type),
               _num_channels(num_channels),
-              _num_shuffles_per_channel(num_shuffles_per_channel) {
+              _num_shuffles_per_channel(num_shuffles_per_channel),
+              _bucket_aware(bucket_aware) {
         if (_part_type == TPartitionType::HASH_PARTITIONED && !compatibility) {
             if (is_two_level_shuffle) {
                 _exchange_shuffle = &Shuffler::exchange_shuffle<true, ReduceOp>;
@@ -50,8 +51,8 @@ public:
     }
 
     void exchange_shuffle(std::vector<uint32_t>& shuffle_channel_ids, const std::vector<uint32_t>& hash_values,
-                          size_t num_rows) {
-        (this->*_exchange_shuffle)(shuffle_channel_ids, hash_values, num_rows);
+                          const std::vector<uint32_t>& bucket_ids, size_t num_rows) {
+        (this->*_exchange_shuffle)(shuffle_channel_ids, hash_values, bucket_ids, num_rows);
     }
 
     void local_exchange_shuffle(std::vector<uint32_t>& shuffle_channel_ids, std::vector<uint32_t>& hash_values,
@@ -61,16 +62,18 @@ public:
 
 private:
     void (Shuffler::*_exchange_shuffle)(std::vector<uint32_t>& shuffle_channel_ids,
-                                        const std::vector<uint32_t>& hash_values, size_t num_rows) = nullptr;
+                                        const std::vector<uint32_t>& hash_values,
+                                        const std::vector<uint32_t>& bucket_ids, size_t num_rows) = nullptr;
 
     void (Shuffler::*_local_exchange_shuffle)(std::vector<uint32_t>& shuffle_channel_ids,
                                               std::vector<uint32_t>& hash_values, size_t num_rows) = nullptr;
 
     template <bool two_level_shuffle, typename ReduceOp>
     void exchange_shuffle(std::vector<uint32_t>& shuffle_channel_ids, const std::vector<uint32_t>& hash_values,
-                          size_t num_rows) {
+                          const std::vector<uint32_t>& bucket_ids, size_t num_rows) {
         for (size_t i = 0; i < num_rows; ++i) {
-            size_t channel_id = ReduceOp()(hash_values[i], _num_channels);
+            size_t channel_id = _bucket_aware ? ReduceOp()(bucket_ids[i], _num_channels)
+                                              : ReduceOp()(hash_values[i], _num_channels);
             size_t shuffle_id;
             if constexpr (!two_level_shuffle) {
                 shuffle_id = channel_id;
@@ -101,5 +104,6 @@ private:
     const TPartitionType::type _part_type = TPartitionType::UNPARTITIONED;
     const size_t _num_channels;
     const size_t _num_shuffles_per_channel;
+    const bool _bucket_aware;
 };
 } // namespace starrocks::pipeline

@@ -43,7 +43,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
-import com.starrocks.catalog.combinator.AggStateCombinator;
+import com.starrocks.catalog.combinator.StateFunctionCombinator;
+import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
@@ -89,6 +90,7 @@ public class FunctionSet {
     public static final String FROM_UNIXTIME = "from_unixtime";
     public static final String FROM_UNIXTIME_MS = "from_unixtime_ms";
     public static final String HOUR = "hour";
+    public static final String HOUR_FROM_UNIXTIME = "hour_from_unixtime";
     public static final String MINUTE = "minute";
     public static final String MONTH = "month";
     public static final String MONTHNAME = "monthname";
@@ -186,6 +188,7 @@ public class FunctionSet {
     public static final String ENDS_WITH = "ends_with";
     public static final String FIND_IN_SET = "find_in_set";
     public static final String GROUP_CONCAT = "group_concat";
+    public static final String FORMAT_BYTES = "format_bytes";
     public static final String INSTR = "instr";
     public static final String LCASE = "lcase";
     public static final String LEFT = "left";
@@ -227,6 +230,7 @@ public class FunctionSet {
     public static final String PARSE_JSON = "parse_json";
     public static final String JSON_QUERY = "json_query";
     public static final String JSON_EXISTS = "json_exists";
+    public static final String JSON_CONTAINS = "json_contains";
     public static final String JSON_EACH = "json_each";
     public static final String GET_JSON_BOOL = "get_json_bool";
     public static final String GET_JSON_DOUBLE = "get_json_double";
@@ -234,6 +238,7 @@ public class FunctionSet {
     public static final String GET_JSON_STRING = "get_json_string";
     public static final String GET_JSON_OBJECT = "get_json_object";
     public static final String JSON_LENGTH = "json_length";
+    public static final String JSON_REMOVE = "json_remove";
 
     // Matching functions:
     public static final String ILIKE = "ilike";
@@ -250,11 +255,15 @@ public class FunctionSet {
     public static final String ISNOTNULL = "isnotnull";
     public static final String ASSERT_TRUE = "assert_true";
     public static final String HOST_NAME = "host_name";
+    public static final String ENCODE_SORT_KEY = "encode_sort_key";
     // Aggregate functions:
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
     public static final String APPROX_COUNT_DISTINCT_HLL_SKETCH = "approx_count_distinct_hll_sketch";
     public static final String DS_HLL_COUNT_DISTINCT = "ds_hll_count_distinct";
     public static final String DS_THETA_COUNT_DISTINCT = "ds_theta_count_distinct";
+    public static final String DS_HLL_ACCUMULATE = "ds_hll_accumulate";
+    public static final String DS_HLL_COMBINE = "ds_hll_combine";
+    public static final String DS_HLL_ESTIMATE = "ds_hll_estimate";
     public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
@@ -375,6 +384,7 @@ public class FunctionSet {
 
     // Hash functions:
     public static final String MURMUR_HASH3_32 = "murmur_hash3_32";
+    public static final String CRC32_HASH = "crc32_hash";
 
     // Percentile functions:
     public static final String PERCENTILE_APPROX_RAW = "percentile_approx_raw";
@@ -543,10 +553,15 @@ public class FunctionSet {
     public static final String CURRENT_ROLE = "current_role";
     public static final String CURRENT_GROUP = "current_group";
 
-    public static final String AGG_STATE_SUFFIX = "_state";
+    // scalar function
+    public static final String STATE_SUFFIX = "_state";
+    // agg function
     public static final String AGG_STATE_UNION_SUFFIX = "_union";
     public static final String AGG_STATE_MERGE_SUFFIX = "_merge";
     public static final String AGG_STATE_IF_SUFFIX = "_if";
+
+    public static final String BOOL_OR = "bool_or";
+    public static final String BOOLOR_AGG = "boolor_agg";
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
@@ -642,6 +657,7 @@ public class FunctionSet {
                     .add(FunctionSet.EXCHANGE_BYTES)
                     .add(FunctionSet.EXCHANGE_SPEED)
                     .add(FunctionSet.FIELD)
+                    .add(FunctionSet.SPLIT_PART)
                     .build();
 
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =
@@ -798,6 +814,10 @@ public class FunctionSet {
                     .add(FIRST_VALUE_REWRITE)
                     .add(HISTOGRAM)
                     .add(DICT_MERGE)
+                    // no need to support agg_state
+                    .add(DS_HLL_ACCUMULATE)
+                    .add(DS_HLL_COMBINE)
+                    .add(DS_HLL_ESTIMATE)
                     // Functions with constant contexts in be are not supported.
                     .add(WINDOW_FUNNEL)
                     .add(APPROX_TOP_K)
@@ -876,11 +896,12 @@ public class FunctionSet {
         TableFunction.initBuiltins(this);
         VectorizedBuiltinFunctions.initBuiltins(this);
         initAggregateBuiltins();
+        addBooleanAggregateFunctions();
     }
 
     public boolean isNotAlwaysNullResultWithNullParamFunctions(String funcName) {
         return notAlwaysNullResultWithNullParamFunctions.contains(funcName)
-                || alwaysReturnNonNullableFunctions.contains(funcName);
+                || isAlwaysReturnNonNullableFunction(funcName);
     }
 
     private Function matchFuncCandidates(Function desc, Function.CompareMode mode, List<Function> fns) {
@@ -988,12 +1009,16 @@ public class FunctionSet {
         return matchCastFunction(desc, mode, standFns);
     }
 
+    public static boolean isAlwaysReturnNonNullableFunction(String functionName) {
+        return alwaysReturnNonNullableFunctions.contains(functionName);
+    }
+
     private void addBuiltInFunction(Function fn) {
         Preconditions.checkArgument(!fn.getReturnType().isPseudoType() || fn.isPolymorphic(), fn.toString());
         if (!fn.isPolymorphic() && getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
             return;
         }
-        fn.setIsNullable(!alwaysReturnNonNullableFunctions.contains(fn.functionName()));
+        fn.setIsNullable(!isAlwaysReturnNonNullableFunction(fn.functionName()));
         List<Function> fns = vectorizedFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
         fns.add(fn);
     }
@@ -1008,7 +1033,7 @@ public class FunctionSet {
 
     private void addVectorizedBuiltin(Function fn) {
         fn.setCouldApplyDictOptimize(couldApplyDictOptimizationFunctions.contains(fn.functionName()));
-        fn.setIsNullable(!alwaysReturnNonNullableFunctions.contains(fn.functionName()));
+        fn.setIsNullable(!isAlwaysReturnNonNullableFunction(fn.functionName()));
         List<Function> fns = vectorizedFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
         fns.add(fn);
     }
@@ -1028,7 +1053,7 @@ public class FunctionSet {
 
         if (AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
             // register `_state` combinator
-            AggStateCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
+            StateFunctionCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
             // register `_merge`/`_union` combinator for aggregate functions
             AggStateUnionCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
             AggStateMergeCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
@@ -1041,7 +1066,7 @@ public class FunctionSet {
     }
 
     public static String getAggStateName(String name) {
-        return String.format("%s%s", name, AGG_STATE_SUFFIX);
+        return String.format("%s%s", name, STATE_SUFFIX);
     }
 
     public static String getAggStateUnionName(String name) {
@@ -1140,6 +1165,17 @@ public class FunctionSet {
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
 
+            // DS_HLL_ACCUMULATE
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ACCUMULATE,
+                    Lists.newArrayList(t), Type.VARBINARY, Type.VARBINARY,
+                    true, false, true));
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ACCUMULATE,
+                    Lists.newArrayList(t, Type.INT), Type.VARBINARY, Type.VARBINARY,
+                    true, false, true));
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ACCUMULATE,
+                    Lists.newArrayList(t, Type.INT, Type.VARCHAR), Type.VARBINARY, Type.VARBINARY,
+                    true, false, true));
+
             // ds_hll_count_distinct(col)
             addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
@@ -1174,7 +1210,7 @@ public class FunctionSet {
                     true, false, true));
         }
 
-        // MULTI_DISTINCT_COUNTM
+        // MULTI_DISTINCT_COUNT
         for (Type type : MULTI_DISTINCT_COUNT_TYPES) {
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_COUNT, Lists.newArrayList(type),
                     Type.BIGINT,
@@ -1182,6 +1218,13 @@ public class FunctionSet {
                     false, true, true));
 
         }
+
+        addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COMBINE,
+                Lists.newArrayList(Type.VARBINARY), Type.VARBINARY, Type.VARBINARY,
+                true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ESTIMATE,
+                Lists.newArrayList(Type.VARBINARY), Type.BIGINT, Type.VARBINARY,
+                true, false, true));
 
         // Sum
         registerBuiltinSumAggFunction(SUM);
@@ -1381,8 +1424,15 @@ public class FunctionSet {
             }
         }
         for (ScalarType type : Type.DECIMAL_TYPES) {
+            Type retType;
+            // TODO(stephen): support auto scale up decimal precision
+            if (type.isDecimal256()) {
+                retType = Type.DECIMAL256;
+            } else {
+                retType = Type.DECIMAL128;
+            }
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(type), Type.DECIMAL128, Type.DECIMAL128,
+                    Lists.newArrayList(type), retType, retType,
                     false, true, false));
         }
         addBuiltin(AggregateFunction.createBuiltin(name,
@@ -1407,8 +1457,15 @@ public class FunctionSet {
             }
         }
         for (ScalarType type : Type.DECIMAL_TYPES) {
+            Type retType = Type.DECIMAL128;
+            // TODO(stephen): support auto scale up decimal precision
+            if (type.isDecimal256()) {
+                retType = Type.DECIMAL256;
+            } else {
+                retType = Type.DECIMAL128;
+            }
             addBuiltin(AggregateFunction.createBuiltin(MULTI_DISTINCT_SUM,
-                    Lists.newArrayList(type), Type.DECIMAL128, Type.VARBINARY,
+                    Lists.newArrayList(type), retType, Type.VARBINARY,
                     false, true, false));
         }
         addBuiltin(AggregateFunction.createBuiltin(MULTI_DISTINCT_SUM,
@@ -1443,20 +1500,20 @@ public class FunctionSet {
 
     private void registerBuiltinMapAggFunction() {
         for (ScalarType keyType : Type.getNumericTypes()) {
-                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
-                        Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
-                        false, false, false));
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                    Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
+                    false, false, false));
         }
         for (ScalarType keyType : Type.STRING_TYPES) {
-                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
-                        Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
-                        false, false, false));
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                    Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
+                    false, false, false));
         }
 
         for (ScalarType keyType : Type.DATE_TYPES) {
-                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
-                        Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
-                        false, false, false));
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                    Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
+                    false, false, false));
         }
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
                 Lists.newArrayList(Type.TIME, Type.ANY_ELEMENT), Type.ANY_MAP, null,
@@ -1501,8 +1558,15 @@ public class FunctionSet {
                     false, true, false));
         }
         for (ScalarType type : Type.DECIMAL_TYPES) {
+            Type retType;
+            // TODO(stephen): support auto scale up decimal precision
+            if (type.isDecimal256()) {
+                retType = Type.DECIMAL256;
+            } else {
+                retType = Type.DECIMAL128;
+            }
             addBuiltin(AggregateFunction.createBuiltin(AVG,
-                    Lists.newArrayList(type), Type.DECIMAL128, Type.VARBINARY,
+                    Lists.newArrayList(type), retType, Type.VARBINARY,
                     false, true, false));
         }
         addBuiltin(AggregateFunction.createBuiltin(AVG,
@@ -1633,5 +1697,14 @@ public class FunctionSet {
             builtinFunctions.addAll(entry.getValue());
         }
         return builtinFunctions;
+    }
+
+    // Boolean aggregate functions
+    private void addBooleanAggregateFunctions() {
+        // BOOL_OR: Returns true if any value in the expression is true
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.BOOL_OR,
+                Lists.newArrayList(Type.BOOLEAN),
+                Type.BOOLEAN, Type.BOOLEAN,
+                false, true, false));
     }
 }

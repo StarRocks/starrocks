@@ -49,23 +49,20 @@ import com.starrocks.thrift.TStorageType;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Before;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.util.LinkedList;
 import java.util.List;
 
 public class DropMaterializedViewStmtTest {
 
-    Analyzer analyzer;
     private GlobalStateMgr globalStateMgr;
     @Mocked
     private ConnectContext connectContext;
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer();
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
-        analyzer = new Analyzer(globalStateMgr, connectContext);
         Database db = new Database(50000L, "test");
 
         Column column1 = new Column("col1", Type.BIGINT);
@@ -99,18 +96,6 @@ public class DropMaterializedViewStmtTest {
             @Mock
             Database getDb(String dbName) {
                 return db;
-            }
-        };
-
-        new MockUp<Analyzer>() {
-            @Mock
-            String getClusterName() {
-                return "testCluster";
-            }
-
-            @Mock
-            String getDefaultCatalog() {
-                return "default";
             }
         };
     }

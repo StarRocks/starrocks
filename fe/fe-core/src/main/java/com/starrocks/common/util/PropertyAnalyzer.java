@@ -57,6 +57,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -91,6 +92,7 @@ import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelect
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
@@ -110,6 +112,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -256,6 +259,10 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
     public static final String PROPERTIES_FILE_BUNDLING = "file_bundling";
+
+    public static final String PROPERTIES_COMPACTION_STRATEGY = "compaction_strategy";
+
+    public static final String PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE = "dynamic_tablet_split_size";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
@@ -617,7 +624,7 @@ public class PropertyAnalyzer {
     }
 
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {
-        if (mv.getRefreshScheme().getType() == MaterializedView.RefreshType.MANUAL) {
+        if (mv.getRefreshScheme().getType() == MaterializedViewRefreshType.MANUAL) {
             throw new SemanticException(
                     "The auto_refresh_partitions_limit property does not support manual refresh mode.");
         }
@@ -670,7 +677,7 @@ public class PropertyAnalyzer {
     public static List<TableName> analyzeExcludedTables(Map<String, String> properties,
                                                         String propertiesKey,
                                                         MaterializedView mv) {
-        if (mv.getRefreshScheme().getType() != MaterializedView.RefreshType.ASYNC) {
+        if (mv.getRefreshScheme().getType() != MaterializedViewRefreshType.ASYNC) {
             throw new SemanticException("The " + propertiesKey + " property only applies to asynchronous refreshes.");
         }
         List<TableName> tables = Lists.newArrayList();
@@ -1238,6 +1245,14 @@ public class PropertyAnalyzer {
         return val;
     }
 
+    public static Optional<Long> analyzeLongProp(Map<String, String> properties, String propKey)
+            throws AnalysisException {
+        if (properties == null || !properties.containsKey(propKey)) {
+            return Optional.empty();
+        }
+        return Optional.of(analyzeLongProp(properties, propKey, 0L));
+    }
+
     public static long analyzeLongProp(Map<String, String> properties, String propKey, long defaultVal)
             throws AnalysisException {
         long val = defaultVal;
@@ -1255,7 +1270,7 @@ public class PropertyAnalyzer {
     }
 
     public static double analyzerDoubleProp(Map<String, String> properties, String propKey, double defaultVal)
-        throws AnalysisException {
+            throws AnalysisException {
         double val = defaultVal;
         if (properties != null && properties.containsKey(propKey)) {
             String valStr = properties.get(propKey);
@@ -1539,6 +1554,21 @@ public class PropertyAnalyzer {
         }
         return Config.enable_cloud_native_persistent_index_by_default ? TPersistentIndexType.CLOUD_NATIVE
                 : TPersistentIndexType.LOCAL;
+    }
+
+    public static TCompactionStrategy analyzecompactionStrategy(Map<String, String> properties) throws AnalysisException {
+        if (properties != null && properties.containsKey(PROPERTIES_COMPACTION_STRATEGY)) {
+            String strategy = properties.get(PROPERTIES_COMPACTION_STRATEGY);
+            properties.remove(PROPERTIES_COMPACTION_STRATEGY);
+            if (strategy.equalsIgnoreCase(TableProperty.DEFAULT_COMPACTION_STRATEGY)) {
+                return TCompactionStrategy.DEFAULT;
+            } else if (strategy.equalsIgnoreCase(TableProperty.REAL_TIME_COMPACTION_STRATEGY)) {
+                return TCompactionStrategy.REAL_TIME;
+            } else {
+                throw new AnalysisException("Invalid compaction strategy: " + strategy);
+            }
+        }
+        return TCompactionStrategy.DEFAULT;
     }
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,

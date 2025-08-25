@@ -23,32 +23,26 @@ public class ExplainTest extends PlanTestBase {
         String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
         ExecPlan execPlan = getExecPlan(sql);
         String plan1 = Explain.toString(execPlan.getPhysicalPlan(), execPlan.getOutputColumns());
+        System.out.println("plan1" + plan1);
         assertContains(plan1, "- Output => [1:v1]\n"
                 + "    - AGGREGATE(GLOBAL) [1:v1]\n"
-                + "            Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 96.0}\n"
-                + "        - HASH/LEFT OUTER JOIN [1:v1 = 4:v4] => [1:v1]\n"
-                + "                Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 72.0}\n"
-                + "            - EXCHANGE(SHUFFLE) [1]\n"
-                + "                    Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 20.0}\n"
+                + "            Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 27.6}\n"
+                + "        - EXCHANGE(SHUFFLE) [1]\n"
+                + "                Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 7.6}\n"
+                + "            - AGGREGATE(LOCAL) [1:v1]\n"
+                + "                    Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 6.0}\n"
                 + "                - SCAN [t0] => [1:v1]\n"
-                + "                        Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 4.0}\n"
-                + "                        partitionRatio: 0/1, tabletRatio: 0/0\n"
-                + "            - EXCHANGE(SHUFFLE) [4]\n"
-                + "                    Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 20.0}\n"
-                + "                - SCAN [t1] => [4:v4]\n"
                 + "                        Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 4.0}\n"
                 + "                        partitionRatio: 0/1, tabletRatio: 0/0");
 
         Explain explain = new Explain(true, true, " ", " |");
         String plan2 = explain.print(execPlan.getPhysicalPlan(), execPlan.getOutputColumns());
+        System.out.println("plan2" + plan2);
         assertContains(plan2, "- Output => [1:v1]\n"
                 + " - AGGREGATE(GLOBAL) [1:v1] {rows: 1}\n"
-                + "  - HASH/LEFT OUTER JOIN [1:v1 = 4:v4] => [1:v1] {rows: 1}\n"
-                + "   - EXCHANGE(SHUFFLE) [1] {rows: 1}\n"
+                + "  - EXCHANGE(SHUFFLE) [1] {rows: 1}\n"
+                + "   - AGGREGATE(LOCAL) [1:v1] {rows: 1}\n"
                 + "    - SCAN [t0] => [1:v1] {rows: 1}\n"
-                + "      |partitionRatio: 0/1, tabletRatio: 0/0\n"
-                + "   - EXCHANGE(SHUFFLE) [4] {rows: 1}\n"
-                + "    - SCAN [t1] => [4:v4] {rows: 1}\n"
                 + "      |partitionRatio: 0/1, tabletRatio: 0/0");
     }
 }

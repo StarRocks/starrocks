@@ -73,6 +73,6 @@ You can configure the following parameters in the configuration file **be.conf**
 
 You can configure the following [system variable](../../sql-reference/System_variable.md):
 
-- `query_timeout`
+- `insert_timeout`
 
-  The query timeout duration. Unit: seconds. Value range: `1` to `259200`. Default value: `300`. This variable will act on all query statements in the current connection, as well as INSERT statements.
+  The INSERT timeout duration. Unit: seconds. Value range: `1` to `259200`. Default value: `14400`. This variable will act on all operations involving INSERT jobs (for example, UPDATE, DELETE, CTAS, materialized view refresh, statistics collection, and PIPE) in the current connection.

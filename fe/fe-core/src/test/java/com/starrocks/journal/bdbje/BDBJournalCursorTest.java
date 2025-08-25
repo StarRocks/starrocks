@@ -36,17 +36,19 @@ import mockit.Mocked;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class BDBJournalCursorTest {
     private static final Logger LOG = LogManager.getLogger(BDBJournalCursorTest.class);
@@ -55,7 +57,7 @@ public class BDBJournalCursorTest {
     private byte[] fakeJournalEntityBytes;
     private File tempDir = null;
 
-    @Before
+    @BeforeEach
     public void setup() throws Exception {
         // init fake journal entity
         short op = OperationType.OP_SAVE_NEXTID;
@@ -67,7 +69,7 @@ public class BDBJournalCursorTest {
         fakeJournalEntityBytes = buffer.getData();
     }
 
-    @After
+    @AfterEach
     public void cleanup() throws Exception {
         if (tempDir != null) {
             FileUtils.deleteDirectory(tempDir);
@@ -142,8 +144,8 @@ public class BDBJournalCursorTest {
             BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, i, -1);
             for (int j = i; j <= 6; ++ j) {
                 JournalEntity entity = bdbJournalCursor.next();
-                Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
-                Assert.assertEquals(String.valueOf(j), entity.data().toString());
+                Assertions.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
+                Assertions.assertEquals(String.valueOf(j), entity.data().toString());
             }
             bdbJournalCursor.close();
         }
@@ -153,10 +155,10 @@ public class BDBJournalCursorTest {
         //
         BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 6, -1);
         JournalEntity entity = bdbJournalCursor.next();
-        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
-        Assert.assertEquals("6", entity.data().toString());
+        Assertions.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
+        Assertions.assertEquals("6", entity.data().toString());
 
-        Assert.assertNull(bdbJournalCursor.next());
+        Assertions.assertNull(bdbJournalCursor.next());
 
         //
         // write 7
@@ -170,10 +172,10 @@ public class BDBJournalCursorTest {
         //
         bdbJournalCursor.refresh();
         entity = bdbJournalCursor.next();
-        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
-        Assert.assertEquals("7", entity.data().toString());
+        Assertions.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
+        Assertions.assertEquals("7", entity.data().toString());
 
-        Assert.assertNull(bdbJournalCursor.next());
+        Assertions.assertNull(bdbJournalCursor.next());
 
         //
         // write 8-9
@@ -197,7 +199,7 @@ public class BDBJournalCursorTest {
             LOG.info("got an expected exception, ", e);
             expected = true;
         }
-        Assert.assertTrue(expected);
+        Assertions.assertTrue(expected);
 
         //
         // read 8
@@ -205,8 +207,8 @@ public class BDBJournalCursorTest {
         bdbJournalCursor.refresh();
 
         entity = bdbJournalCursor.next();
-        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
-        Assert.assertEquals("8", entity.data().toString());
+        Assertions.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
+        Assertions.assertEquals("8", entity.data().toString());
 
         //
         // write 10
@@ -227,13 +229,13 @@ public class BDBJournalCursorTest {
         bdbJournalCursor.refresh();
 
         entity = bdbJournalCursor.next();
-        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
-        Assert.assertEquals("9", entity.data().toString());
+        Assertions.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
+        Assertions.assertEquals("9", entity.data().toString());
 
         entity = bdbJournalCursor.next();
-        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
-        Assert.assertEquals("10", entity.data().toString());
-        Assert.assertNull(bdbJournalCursor.next());
+        Assertions.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
+        Assertions.assertEquals("10", entity.data().toString());
+        Assertions.assertNull(bdbJournalCursor.next());
 
         journal.close();
         bdbJournalCursor.close();
@@ -280,8 +282,8 @@ public class BDBJournalCursorTest {
             }
         };
         JournalEntity entity = bdbJournalCursor.next();
-        Assert.assertEquals(entity.opCode(), fakeJournalEntity.opCode());
-        Assert.assertEquals(entity.data().toString(), fakeJournalEntity.data().toString());
+        Assertions.assertEquals(entity.opCode(), fakeJournalEntity.opCode());
+        Assertions.assertEquals(entity.data().toString(), fakeJournalEntity.data().toString());
     }
 
     @Test
@@ -309,7 +311,7 @@ public class BDBJournalCursorTest {
             }
         };
         BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 12, 13);
-        Assert.assertNull(bdbJournalCursor.next());
+        Assertions.assertNull(bdbJournalCursor.next());
     }
 
     @Test
@@ -332,123 +334,133 @@ public class BDBJournalCursorTest {
         };
         BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 12, 13);
         bdbJournalCursor.openDatabaseIfNecessary();
-        Assert.assertEquals(database, bdbJournalCursor.database);
+        Assertions.assertEquals(database, bdbJournalCursor.database);
     }
 
-    @Test(expected = JournalException.class)
-    public void testOpenDBFailedEvenAfterRetry(@Mocked BDBEnvironment environment) throws Exception {
-        // db = [10, 12]
-        // from 12->13
-        new Expectations(environment) {
-            {
-                environment.getDatabaseNamesWithPrefix("");
-                minTimes = 0;
-                result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
+    @Test
+    public void testOpenDBFailedEvenAfterRetry(@Mocked BDBEnvironment environment) {
+        assertThrows(JournalException.class, () -> {
+            // db = [10, 12]
+            // from 12->13
+            new Expectations(environment) {
+                {
+                    environment.getDatabaseNamesWithPrefix("");
+                    minTimes = 0;
+                    result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
 
-                environment.openDatabase("12");
-                minTimes = 0;
-                result = new DatabaseNotFoundException("mock mock");
+                    environment.openDatabase("12");
+                    minTimes = 0;
+                    result = new DatabaseNotFoundException("mock mock");
 
-            }
-        };
-        new Expectations() {
-            {
-                Thread.sleep(anyLong);
-                minTimes = 0;
-            }
-        };
-        BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 12, 13);
-        bdbJournalCursor.openDatabaseIfNecessary();
-        Assert.fail();
+                }
+            };
+            new Expectations() {
+                {
+                    Thread.sleep(anyLong);
+                    minTimes = 0;
+                }
+            };
+            BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 12, 13);
+            bdbJournalCursor.openDatabaseIfNecessary();
+            Assertions.fail();
+        });
     }
 
-    @Test(expected = JournalInconsistentException.class)
-    public void testOpenDBFailedOnInsufficientLogException(@Mocked BDBEnvironment environment) throws Exception {
-        // db = [10, 12]
-        // from 12->13
-        new Expectations(environment) {
-            {
-                environment.getDatabaseNamesWithPrefix("");
-                minTimes = 0;
-                result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
+    @Test
+    public void testOpenDBFailedOnInsufficientLogException(@Mocked BDBEnvironment environment) {
+        assertThrows(JournalInconsistentException.class, () -> {
+            // db = [10, 12]
+            // from 12->13
+            new Expectations(environment) {
+                {
+                    environment.getDatabaseNamesWithPrefix("");
+                    minTimes = 0;
+                    result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
 
-                environment.openDatabase("12");
-                times = 1;
-                result = new InsufficientLogException("mock mock");
+                    environment.openDatabase("12");
+                    times = 1;
+                    result = new InsufficientLogException("mock mock");
 
-                environment.refreshLog((InsufficientLogException) any);
-                times = 1;
-            }
-        };
+                    environment.refreshLog((InsufficientLogException) any);
+                    times = 1;
+                }
+            };
 
-        BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 12, 13);
-        bdbJournalCursor.openDatabaseIfNecessary();
-        Assert.fail();
+            BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 12, 13);
+            bdbJournalCursor.openDatabaseIfNecessary();
+            Assertions.fail();
+        });
     }
 
-    @Test(expected = JournalException.class)
-    public void testBadData(@Mocked BDBEnvironment environment, @Mocked CloseSafeDatabase database) throws Exception {
-        // db = [10, 12]
-        // from 11 ->13
-        new Expectations(environment) {
-            {
-                environment.openDatabase("10");
-                times = 1;
-                result = database;
+    @Test
+    public void testBadData(@Mocked BDBEnvironment environment, @Mocked CloseSafeDatabase database) {
+        assertThrows(JournalException.class, () -> {
+            // db = [10, 12]
+            // from 11 ->13
+            new Expectations(environment) {
+                {
+                    environment.openDatabase("10");
+                    times = 1;
+                    result = database;
 
-                environment.getDatabaseNamesWithPrefix("");
-                minTimes = 0;
-                result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
-            }
-        };
-        new Expectations(database) {
-            {
-                database.get(null, makeKey(11), (DatabaseEntry) any, (LockMode) any);
-                times = 1;
-                result = new Delegate() {
-                    public OperationStatus fakeGet(
-                            final Transaction txn, final DatabaseEntry key, final DatabaseEntry data,
-                            LockMode lockMode) {
-                        data.setData("lalala".getBytes());
-                        return OperationStatus.SUCCESS;
-                    }
-                };
-            }
-        };
-        BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 11, 13);
-        bdbJournalCursor.next();
-        Assert.fail();
+                    environment.getDatabaseNamesWithPrefix("");
+                    minTimes = 0;
+                    result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
+                }
+            };
+            new Expectations(database) {
+                {
+                    database.get(null, makeKey(11), (DatabaseEntry) any, (LockMode) any);
+                    times = 1;
+                    result = new Delegate() {
+                        public OperationStatus fakeGet(
+                                final Transaction txn, final DatabaseEntry key, final DatabaseEntry data,
+                                LockMode lockMode) {
+                            data.setData("lalala".getBytes());
+                            return OperationStatus.SUCCESS;
+                        }
+                    };
+                }
+            };
+            BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 11, 13);
+            bdbJournalCursor.next();
+            Assertions.fail();
+        });
     }
 
-    @Test(expected = JournalException.class)
-    public void testDatabaseNamesFails(@Mocked BDBEnvironment environment) throws Exception {
-        new Expectations(environment) {
-            {
-                environment.getDatabaseNamesWithPrefix("");
-                minTimes = 0;
-                result = null;
-            }
-        };
-        BDBJournalCursor.getJournalCursor(environment, 10, 10);
-        Assert.fail();
+    @Test
+    public void testDatabaseNamesFails(@Mocked BDBEnvironment environment) {
+        assertThrows(JournalException.class, () -> {
+            new Expectations(environment) {
+                {
+                    environment.getDatabaseNamesWithPrefix("");
+                    minTimes = 0;
+                    result = null;
+                }
+            };
+            BDBJournalCursor.getJournalCursor(environment, 10, 10);
+            Assertions.fail();
+        });
     }
 
-    @Test(expected = JournalException.class)
-    public void testInvalidKeyRange(@Mocked BDBEnvironment environment) throws Exception {
-        // db = [10, 12]
-        // from 9,9
-        new Expectations(environment) {
-            {
-                environment.getDatabaseNamesWithPrefix("");
-                minTimes = 0;
-                result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
-            }
-        };
-        BDBJournalCursor.getJournalCursor(environment, 9, 9);
-        Assert.fail();
+    @Test
+    public void testInvalidKeyRange(@Mocked BDBEnvironment environment) {
+        assertThrows(JournalException.class, () -> {
+            // db = [10, 12]
+            // from 9,9
+            new Expectations(environment) {
+                {
+                    environment.getDatabaseNamesWithPrefix("");
+                    minTimes = 0;
+                    result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
+                }
+            };
+            BDBJournalCursor.getJournalCursor(environment, 9, 9);
+            Assertions.fail();
+        });
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testRefreshTime() throws Exception {
         BDBEnvironment environment = initBDBEnv();
@@ -466,7 +478,7 @@ public class BDBJournalCursorTest {
         }
         journal.batchWriteCommit();
         journal.close();
-        Assert.assertEquals(Arrays.asList(1L, 3L, 5L, 7L, 9L), environment.getDatabaseNames());
+        Assertions.assertEquals(Arrays.asList(1L, 3L, 5L, 7L, 9L), environment.getDatabaseNames());
 
         long cnt = 1000000;
         long start = System.currentTimeMillis();
@@ -495,17 +507,19 @@ public class BDBJournalCursorTest {
         journal.read(10, 10);
     }
 
-    @Test(expected = JournalException.class)
-    public void refreshFailed(@Mocked BDBEnvironment environment) throws Exception {
-        new Expectations(environment) {
-            {
-                environment.getDatabaseNamesWithPrefix("");
-                result = new DatabaseNotFoundException("mock mock");
-            }
-        };
-        BDBJEJournal journal = new BDBJEJournal(environment);
-        JournalCursor cursor = journal.read(10, 10);
-        cursor.refresh();
+    @Test
+    public void refreshFailed(@Mocked BDBEnvironment environment) {
+        assertThrows(JournalException.class, () -> {
+            new Expectations(environment) {
+                {
+                    environment.getDatabaseNamesWithPrefix("");
+                    result = new DatabaseNotFoundException("mock mock");
+                }
+            };
+            BDBJEJournal journal = new BDBJEJournal(environment);
+            JournalCursor cursor = journal.read(10, 10);
+            cursor.refresh();
+        });
     }
 
     @Test
@@ -521,7 +535,7 @@ public class BDBJournalCursorTest {
             BDBJournalCursor cursor = new BDBJournalCursor(null, null, 0, 0);
             JournalEntity entity = cursor.deserializeData(entry);
         } catch (JournalException e) {
-            Assert.assertEquals(OperationType.OP_HEARTBEAT_V2, e.getOpCode());
+            Assertions.assertEquals(OperationType.OP_HEARTBEAT_V2, e.getOpCode());
         }
     }
 }

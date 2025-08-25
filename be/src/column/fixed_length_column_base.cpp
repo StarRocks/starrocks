@@ -37,8 +37,12 @@ StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
 
 template <typename T>
 void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
-    const auto& num_src = down_cast<const FixedLengthColumnBase<T>&>(src);
-    _data.insert(_data.end(), num_src._data.begin() + offset, num_src._data.begin() + offset + count);
+    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+
+    const size_t orig_size = _data.size();
+    raw::stl_vector_resize_uninitialized(&_data, orig_size + count);
+
+    strings::memcpy_inlined(_data.data() + orig_size, src_data + offset, count * sizeof(T));
 }
 
 template <typename T>
@@ -48,7 +52,7 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
     const T* src_data = reinterpret_cast<const T*>(src.raw_data());
 
     const size_t orig_size = _data.size();
-    _data.resize(orig_size + size);
+    raw::stl_vector_resize_uninitialized(&_data, orig_size + size);
     auto* dest_data = _data.data() + orig_size;
 
     SIMDGather::gather(dest_data, src_data, indexes, size);
@@ -297,6 +301,34 @@ void FixedLengthColumnBase<T>::crc32_hash_selective(uint32_t* hash, uint16_t* se
 }
 
 template <typename T>
+void FixedLengthColumnBase<T>::murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const {
+    for (uint32_t i = from; i < to; ++i) {
+        uint32_t hash_value = 0;
+        if constexpr (IsDate<T>) {
+            // Julian Day -> epoch day
+            // TODO, This is not a good place to do a project, this is just for test.
+            // If we need to make it more general, we should do this project in `IcebergMurmurHashProject`
+            // but consider that use date type column as bucket transform is rare, we can do it later.
+            int64_t long_value = _data[i].julian() - date::UNIX_EPOCH_JULIAN;
+            hash_value = HashUtil::murmur_hash3_32(&long_value, sizeof(int64_t), 0);
+        } else if constexpr (std::is_same<T, int32_t>::value) {
+            // Integer and long hash results must be identical for all integer values.
+            // This ensures that schema evolution does not change bucket partition values if integer types are promoted.
+            int64_t long_value = _data[i];
+            hash_value = HashUtil::murmur_hash3_32(&long_value, sizeof(int64_t), 0);
+        } else if constexpr (std::is_same<T, int64_t>::value) {
+            hash_value = HashUtil::murmur_hash3_32(&_data[i], sizeof(ValueType), 0);
+        } else {
+            // for decimal/timestamp type, the storage is very different from iceberg,
+            // and consider they are merely used, these types are forbidden by fe
+            DCHECK(false);
+            return;
+        }
+        hash[i] = hash_value;
+    }
+}
+
+template <typename T>
 int64_t FixedLengthColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const {
     int64_t xor_checksum = 0;
     if constexpr (IsDate<T>) {
@@ -399,6 +431,8 @@ std::string FixedLengthColumnBase<T>::get_name() const {
         return "timestamp";
     } else if constexpr (IsInt128<T>) {
         return "int128";
+    } else if constexpr (IsInt256<T>) {
+        return "int256";
     } else if constexpr (std::is_floating_point_v<T>) {
         return "float-" + std::to_string(sizeof(T));
     } else {

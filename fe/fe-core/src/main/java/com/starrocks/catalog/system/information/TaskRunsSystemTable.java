@@ -22,6 +22,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
@@ -32,7 +33,6 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -85,6 +85,8 @@ public class TaskRunsSystemTable extends SystemTable {
                         .column("PROGRESS", ScalarType.createVarchar(64))
                         .column("EXTRA_MESSAGE", ScalarType.createVarchar(8192))
                         .column("PROPERTIES", ScalarType.createVarcharType(512))
+                        .column("JOB_ID", ScalarType.createVarcharType(64))
+                        .column("PROCESS_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .build(), TSchemaTableType.SCH_TASK_RUNS);
     }
 
@@ -214,6 +216,8 @@ public class TaskRunsSystemTable extends SystemTable {
             info.setProgress(status.getProgress() + "%");
             info.setExtra_message(status.getExtraMessage());
             info.setProperties(status.getPropertiesJson());
+            info.setProcess_time(status.getProcessStartTime() / 1000);
+            info.setJob_id(status.getStartTaskRunId());
             tasksResult.add(info);
         }
         return result;

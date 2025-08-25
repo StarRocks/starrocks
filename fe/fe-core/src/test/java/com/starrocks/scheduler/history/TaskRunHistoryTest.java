@@ -34,7 +34,7 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.logging.log4j.util.Strings;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -301,7 +301,7 @@ public class TaskRunHistoryTest {
 
         // run, trigger the expiration
         history.vacuum(true);
-        Assert.assertEquals(0, history.getInMemoryHistory().size());
+        Assertions.assertEquals(0, history.getInMemoryHistory().size());
 
         Config.enable_task_history_archive = true;
     }
@@ -333,7 +333,7 @@ public class TaskRunHistoryTest {
             List<TaskRunStatus> ans = TaskRunStatus.TaskRunStatusJSONRecord.fromJson(jsonString).data;
             Preconditions.checkArgument(ans == null);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Expected a string but was BEGIN_OBJECT at line 1 column 568"));
+            Assertions.assertTrue(e.getMessage().contains("Expected a string but was BEGIN_OBJECT at line 1 column 568"));
         }
     }
 
@@ -347,7 +347,7 @@ public class TaskRunHistoryTest {
         System.out.println(json);
         TaskRunStatus dst = GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
         System.out.println(dst);
-        Assert.assertEquals(json, GsonUtils.GSON.toJson(status));
+        Assertions.assertEquals(json, GsonUtils.GSON.toJson(status));
     }
     @Test
     public void testCase1() {
@@ -359,7 +359,7 @@ public class TaskRunHistoryTest {
         System.out.println(json);
         String res = MessageFormat.format("{0}", Strings.quote(status.toJSON()));
         System.out.println(res);
-        Assert.assertTrue(res.contains("\"datacache\":\"{\\\"enable\\\": \\\"true\\\"}\""));
+        Assertions.assertTrue(res.contains("\"datacache\":\"{\\\"enable\\\": \\\"true\\\"}\""));
     }
 
     private TaskRunStatus createTaskRunStatus(long createdTime) {
@@ -406,10 +406,10 @@ public class TaskRunHistoryTest {
         String dbName = "";
         Set<String> taskNames = Set.of("t1", "t2");
         List<TaskRunStatus> result = history.lookupByTaskNames(dbName, taskNames);
-        Assert.assertEquals(10, result.size());
+        Assertions.assertEquals(10, result.size());
         // result always sorted by createTime desc
         for (int i = 0; i < 10; i++) {
-            Assert.assertEquals(9 - i, result.get(i).getCreateTime());
+            Assertions.assertEquals(9 - i, result.get(i).getCreateTime());
         }
     }
 
@@ -450,10 +450,10 @@ public class TaskRunHistoryTest {
         params.setState(null);
         params.setTask_name("t1");
         List<TaskRunStatus> result = history.lookup(params);
-        Assert.assertEquals(10, result.size());
+        Assertions.assertEquals(10, result.size());
         // result always sorted by createTime desc
         for (int i = 0; i < 10; i++) {
-            Assert.assertEquals(9 - i, result.get(i).getCreateTime());
+            Assertions.assertEquals(9 - i, result.get(i).getCreateTime());
         }
     }
 }

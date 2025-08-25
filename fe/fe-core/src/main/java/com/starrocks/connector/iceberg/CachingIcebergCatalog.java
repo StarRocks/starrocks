@@ -38,6 +38,7 @@ import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
@@ -177,8 +178,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                Schema schema,
                                PartitionSpec partitionSpec,
                                String location,
+                               SortOrder sortOrder,
                                Map<String, String> properties) {
-        return delegate.createTable(connectContext, dbName, tableName, schema, partitionSpec, location, properties);
+        return delegate.createTable(connectContext, dbName, tableName, schema, partitionSpec, location, sortOrder, properties);
     }
 
     @Override
@@ -211,6 +213,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public boolean dropView(ConnectContext connectContext, String dbName, String viewName) {
         return delegate.dropView(connectContext, dbName, viewName);
+    }
+
+    @Override
+    public boolean registerTable(ConnectContext context, String dbName, String tableName, String metadataFileLocation) {
+        return delegate.registerTable(context, dbName, tableName, metadataFileLocation);
     }
 
     public View getView(ConnectContext connectContext, String dbName, String viewName) {

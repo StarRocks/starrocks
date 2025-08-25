@@ -14,6 +14,32 @@
 
 package com.starrocks.sql.optimizer.rule.tree;
 
+/*
+ * EliminateOveruseColumnAccessPathRule is an optimization rule that removes redundant column access paths
+ * for complex data types (such as JSON, Struct) to improve query performance.
+ *
+ * <p>This rule specifically targets scenarios where subfield projections become unnecessary because
+ * the parent query already accesses the entire column content. For example, when a query accesses
+ * a JSON column's root content, any subfield projections on that column can be safely eliminated.</p>
+ *
+ * <p>The rule works by:</p>
+ * <ul>
+ *   <li>Identifying PhysicalScanOperator instances with ColumnAccessPath configurations</li>
+ *   <li>Separating access paths into two categories: non-subfield pruning projections and subfield pruning projections</li>
+ *   <li>Detecting "overuse" scenarios where parent queries already consume the root column content</li>
+ *   <li>Removing redundant subfield access paths to reduce data transfer and processing overhead</li>
+ * </ul>
+ *
+ * <p>This optimization is particularly beneficial for:</p>
+ * <ul>
+ *   <li>JSON field queries with nested access patterns</li>
+ *   <li>Struct type processing with complex field hierarchies</li>
+ *   <li>Any complex data type scenarios where column access can be optimized</li>
+ * </ul>
+ *
+ * <p>The rule processes the query tree top-down, propagating column usage information from parent
+ * operators to child operators to make informed decisions about which access paths can be eliminated.</p>
+ */
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.ColumnAccessPath;
@@ -53,7 +79,7 @@ public class EliminateOveruseColumnAccessPathRule implements TreeRewriteRule {
         }
 
         @Override
-        public Optional<ColumnRefSet> visitPhysicalScan(OptExpression optExpression,
+        public Optional<ColumnRefSet> visitPhysicalOlapScan(OptExpression optExpression,
                                                         ColumnRefSet parentUsedColumnRefs) {
             Preconditions.checkState(parentUsedColumnRefs != null);
             PhysicalScanOperator scan = optExpression.getOp().cast();
@@ -63,7 +89,7 @@ public class EliminateOveruseColumnAccessPathRule implements TreeRewriteRule {
             }
 
             Predicate<ColumnAccessPath> isSubfieldPrunedProjecting = accessPath ->
-                    !accessPath.isFromPredicate() && !accessPath.onlyRoot();
+                    !accessPath.isFromPredicate() && !accessPath.isExtended() && !accessPath.onlyRoot();
 
             Map<Boolean, List<ColumnAccessPath>> accessPathGroups = scan.getColumnAccessPaths()
                     .stream()
@@ -81,6 +107,7 @@ public class EliminateOveruseColumnAccessPathRule implements TreeRewriteRule {
                     .collect(Collectors.toMap(e -> e.getValue().getName(), Map.Entry::getKey));
 
             Predicate<ColumnAccessPath> isOveruseProjecting = accessPath ->
+                    columnNameToIdMap.containsKey(accessPath.getPath()) &&
                     parentUsedColumnRefs.contains(Objects.requireNonNull(columnNameToIdMap.get(accessPath.getPath())));
 
             Map<Boolean, List<ColumnAccessPath>> subfieldPruningProjectingGroups = subfieldPruningProjectings

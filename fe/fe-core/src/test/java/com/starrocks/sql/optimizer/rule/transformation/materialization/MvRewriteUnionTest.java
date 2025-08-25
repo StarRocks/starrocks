@@ -23,18 +23,18 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.List;
 import java.util.Set;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class MvRewriteUnionTest extends MVTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
 
@@ -138,9 +138,9 @@ public class MvRewriteUnionTest extends MVTestBase {
         PlanTestBase.assertContains(plan7, "union_mv_1");
         OptExpression optExpression7 = getOptimizedPlan(query7, connectContext);
         List<PhysicalScanOperator> scanOperators = getScanOperators(optExpression7, "union_mv_1");
-        Assert.assertEquals(1, scanOperators.size());
-        Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("name"));
-        Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("salary"));
+        Assertions.assertEquals(1, scanOperators.size());
+        Assertions.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("name"));
+        Assertions.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("salary"));
 
         dropMv("test", "union_mv_1");
     }
@@ -254,17 +254,16 @@ public class MvRewriteUnionTest extends MVTestBase {
 
         PlanTestBase.assertContains(plan8, "join_agg_union_mv_2");
         PlanTestBase.assertContainsIgnoreColRefs(plan8, "5:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 24: t1d = 20: v1");
-        PlanTestBase.assertContainsIgnoreColRefs(plan8, "1:OlapScanNode\n" +
+                        "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                        "  |  colocate: false, reason: \n" +
+                        "  |  equal join conjunct: 24: t1d = 20: v1",
                 "     TABLE: test_all_type2\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 24: t1d >= 100, 24: t1d < 120");
-        PlanTestBase.assertContainsIgnoreColRefs(plan8, "1:OlapScanNode\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 24: t1d < 120",
                 "     TABLE: t02\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 20: v1 >= 100, 20: v1 < 120");
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: (20: v1 >= 100) OR (20: v1 IS NULL), 20: v1 < 120\n" +
+                        "     partitions=1/1");
         dropMv("test", "join_agg_union_mv_2");
     }
 
@@ -285,9 +284,9 @@ public class MvRewriteUnionTest extends MVTestBase {
                 "GROUP BY `test_base_part`.`c1`, `test_base_part`.`c3`;");
 
         MaterializedView ttlMv1 = getMv("test", "ttl_union_mv_1");
-        Assert.assertNotNull(ttlMv1);
+        Assertions.assertNotNull(ttlMv1);
         GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
-        Assert.assertEquals(3, ttlMv1.getPartitions().size());
+        Assertions.assertEquals(3, ttlMv1.getPartitions().size());
 
         String query4 = "select c3, sum(c2) from test_base_part group by c3";
         String plan4 = getFragmentPlan(query4);
@@ -378,7 +377,7 @@ public class MvRewriteUnionTest extends MVTestBase {
                             "PARTITION START ('%s') END ('%s')", "1", "3"));
                     MaterializedView mv1 = getMv("test", "union_mv0");
                     Set<String> mvNames = mv1.getPartitionNames();
-                    Assert.assertEquals("[p1]", mvNames.toString());
+                    Assertions.assertEquals("[p1]", mvNames.toString());
 
                     {
                         String[] sqls = {

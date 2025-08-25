@@ -51,16 +51,17 @@ set(EXEC_FILES
     aggregator.cpp
     sorted_streaming_aggregator.cpp
     aggregate/agg_hash_variant.cpp
+    aggregate/compress_serializer.cpp
     aggregate/aggregate_base_node.cpp
     aggregate/aggregate_blocking_node.cpp
     aggregate/distinct_blocking_node.cpp
     aggregate/aggregate_streaming_node.cpp
     aggregate/distinct_streaming_node.cpp
+    partition/bucket_aware_partition.cpp
     partition/chunks_partitioner.cpp
     partition/partition_hash_variant.cpp
     analytic_node.cpp
     analytor.cpp
-    csv_scanner.cpp
     tablet_scanner.cpp
     olap_scan_node.cpp
     olap_scan_prepare.cpp
@@ -72,7 +73,9 @@ set(EXEC_FILES
     hash_joiner.cpp
     hash_join_node.cpp
     hash_join_components.cpp
-    join_hash_map.cpp
+    join/join_hash_table_descriptor.cpp
+    join/join_key_constructor.cpp
+    join/join_hash_map.cpp
     topn_node.cpp
     chunks_sorter.cpp
     chunks_sorter_heap_sort.cpp
@@ -83,12 +86,8 @@ set(EXEC_FILES
     union_node.cpp
     except_hash_set.cpp
     except_node.cpp
-    file_scanner.cpp
-    orc_scanner.cpp
-    jni_scanner.cpp
     arrow_to_starrocks_converter.cpp
     arrow_to_json_converter.cpp
-    parquet_scanner.cpp
     parquet_schema_builder.cpp
     parquet_reader.cpp
     parquet_writer.cpp
@@ -97,16 +96,7 @@ set(EXEC_FILES
     assert_num_rows_node.cpp
     intersect_hash_set.cpp
     intersect_node.cpp
-    hdfs_scanner.cpp
-    hdfs_scanner_orc.cpp
-    hdfs_scanner_parquet.cpp
-    hdfs_scanner_text.cpp
-    hdfs_scanner_partition.cpp
-    cache_select_scanner.cpp
-    json_scanner.cpp
     json_parser.cpp
-    avro_scanner.cpp
-    avro_cpp_scanner.cpp
     project_node.cpp
     dict_decode_node.cpp
     repeat_node.cpp
@@ -118,6 +108,20 @@ set(EXEC_FILES
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
     paimon/paimon_delete_file_builder.cpp
+    hdfs_scanner/cache_select_scanner.cpp
+    hdfs_scanner/hdfs_scanner_text.cpp
+    hdfs_scanner/hdfs_scanner_partition.cpp
+    hdfs_scanner/hdfs_scanner_parquet.cpp
+    hdfs_scanner/hdfs_scanner_orc.cpp
+    hdfs_scanner/hdfs_scanner.cpp
+    hdfs_scanner/jni_scanner.cpp
+    file_scanner/avro_cpp_scanner.cpp
+    file_scanner/avro_scanner.cpp
+    file_scanner/csv_scanner.cpp
+    file_scanner/file_scanner.cpp
+    file_scanner/json_scanner.cpp
+    file_scanner/orc_scanner.cpp
+    file_scanner/parquet_scanner.cpp
     schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
@@ -170,6 +174,7 @@ set(EXEC_FILES
     schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
     schema_scanner/schema_applicable_roles_scanner.cpp
     schema_scanner/schema_keywords_scanner.cpp
+    schema_scanner/schema_dynamic_tablet_jobs_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge.cpp

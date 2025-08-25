@@ -46,6 +46,7 @@ vectorized_functions = [
     [100470, "abs", True, False, "DECIMAL32", ["DECIMAL32"], "MathFunctions::abs_decimal32"],
     [100471, "abs", True, False, "DECIMAL64", ["DECIMAL64"], "MathFunctions::abs_decimal64"],
     [100472, "abs", True, False, "DECIMAL128", ["DECIMAL128"], "MathFunctions::abs_decimal128"],
+    [100473, "abs", True, False, "DECIMAL256", ["DECIMAL256"], "MathFunctions::abs_decimal256"],
 
     [10050, "sin", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::sin"],
     [10060, "asin", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::asin"],
@@ -339,6 +340,8 @@ vectorized_functions = [
     [30210, 'instr', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
     [30220, 'locate', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::locate'],
     [30221, 'locate', True, False, 'INT', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::locate_pos'],
+    [30225, 'strpos', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strpos'],
+    [30226, 'strpos', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::strpos_instance'],
 
     [30250, 'concat', True, True, 'VARCHAR', ['VARCHAR', '...'], 'StringFunctions::concat',
      'StringFunctions::concat_prepare', 'StringFunctions::concat_close'],
@@ -432,6 +435,8 @@ vectorized_functions = [
     [304592, 'field', True, False, 'INT', ['DECIMAL128', '...'], 'StringFunctions::field<TYPE_DECIMAL128>', 
      'StringFunctions::field_prepare<TYPE_DECIMAL128>', 'StringFunctions::field_close<TYPE_DECIMAL128>'],
 
+    [30460, 'format_bytes', True, False, 'VARCHAR', ['BIGINT'], 'StringFunctions::format_bytes'],
+
     # Binary Functions
     # to_binary
     [30600, 'to_binary', True, True, 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',
@@ -480,6 +485,8 @@ vectorized_functions = [
     [50080, 'minute', True, False, 'INT', ['DATETIME'], 'TimeFunctions::minute'],
     [50089, 'second', True, False, 'TINYINT', ['DATETIME'], 'TimeFunctions::secondV2'],
     [50090, 'second', True, False, 'INT', ['DATETIME'], 'TimeFunctions::second'],
+
+    [50100, 'weekday', True, False, 'INT', ['DATETIME'], 'TimeFunctions::week_day'],
 
     [50110, 'years_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_add'],
     [50111, 'years_sub', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_sub'],
@@ -582,6 +589,27 @@ vectorized_functions = [
     [50305, 'from_unixtime', True, False, 'VARCHAR', ['INT', 'VARCHAR'],
      'TimeFunctions::from_unix_to_datetime_with_format_32',
      'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
+    [50306, 'to_datetime', True, False, 'DATETIME', ['BIGINT'], 
+     'TimeFunctions::unixtime_to_datetime',
+     'TimeFunctions::unixtime_to_datetime_prepare', 'TimeFunctions::unixtime_to_datetime_close'],
+    [50307, 'to_datetime', True, False, 'DATETIME', ['BIGINT', 'INT'], 
+     'TimeFunctions::unixtime_to_datetime',
+     'TimeFunctions::unixtime_to_datetime_prepare', 'TimeFunctions::unixtime_to_datetime_close'],
+    [50308, 'to_datetime_ntz', True, False, 'DATETIME', ['BIGINT'], 
+     'TimeFunctions::unixtime_to_datetime_ntz',
+     'TimeFunctions::unixtime_to_datetime_ntz_prepare', 'TimeFunctions::unixtime_to_datetime_ntz_close'],
+    [50309, 'to_datetime_ntz', True, False, 'DATETIME', ['BIGINT', 'INT'], 
+     'TimeFunctions::unixtime_to_datetime_ntz',
+     'TimeFunctions::unixtime_to_datetime_ntz_prepare', 'TimeFunctions::unixtime_to_datetime_ntz_close'],
+     
+
+    # specialized version of from_unixtime to reduce the cost of datetime conversion
+    # TODO: 50380 year_from_unixtime
+    # TODO: 50381 month_from_unixtime
+    # TODO: 50382 day_from_unixtime
+    [50383, 'hour_from_unixtime', True, False, 'INT', ['BIGINT'], 'TimeFunctions::hour_from_unixtime'],
+    # TODO: 50384 minute_from_unixtime
+    # TODO: 50385 second_from_unixtime
 
     [50310, 'dayname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::day_name'],
     [50311, 'monthname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::month_name'],
@@ -609,6 +637,10 @@ vectorized_functions = [
     [50402, 'last_day', True, False, 'DATE', ['DATETIME'], 'TimeFunctions::last_day'],
     [50403, 'last_day', True, False, 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::last_day_with_format',
      'TimeFunctions::last_day_prepare', 'TimeFunctions::last_day_close'],
+    [50404, 'last_day', True, False, 'DATE', ['DATE'], 'TimeFunctions::last_day_date'],
+    [50405, 'last_day', True, False, 'DATE', ['DATE', 'VARCHAR'], 'TimeFunctions::last_day_date_with_format',
+     'TimeFunctions::last_day_prepare', 'TimeFunctions::last_day_close'],
+
     [50501, 'makedate', True, False, 'DATE', ['INT', 'INT'], 'TimeFunctions::make_date'],
     [50610, 'time_format', True, False, 'VARCHAR', ['TIME', 'VARCHAR'], 'TimeFunctions::time_format'],
 
@@ -781,6 +813,7 @@ vectorized_functions = [
     [100010, 'murmur_hash3_32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
     [100021, 'xx_hash3_64', True, False, 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_64'],
     [100022, 'xx_hash3_128', True, False, 'LARGEINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_128'],
+    [100023, 'crc32_hash', True, False, 'BIGINT', ['ANY_ARRAY'], 'HashFunctions::crc32_hash'],
 
 
     # Utility functions
@@ -794,6 +827,7 @@ vectorized_functions = [
     [100019, 'assert_true', True, False, 'BOOLEAN', ['BOOLEAN', "VARCHAR"], 'UtilityFunctions::assert_true'],
     [100018, 'host_name', True, False, 'VARCHAR', [], "UtilityFunctions::host_name"],
     [100020, 'get_query_profile', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::get_query_profile"],
+    [100024, 'encode_sort_key', True, False, 'VARBINARY', ['ANY_ELEMENT', '...'], 'UtilityFunctions::encode_sort_key'],
 
     # json string function
     [110022, "get_json_int", False, False, "BIGINT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bigint",
@@ -841,8 +875,11 @@ vectorized_functions = [
     [110018, "json_keys", False, False, "JSON", ["JSON"], "JsonFunctions::json_keys"],
     [110019, "json_keys", False, False, "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    [110024, "json_remove", False, False, "JSON", ["JSON", "VARCHAR", "..."], "JsonFunctions::json_remove",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110100, "to_json", False, False, "JSON", ["ANY_MAP"], "JsonFunctions::to_json"],
     [110101, "to_json", False, False, "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json"],
+    [110112, "json_contains", False, False, "BOOLEAN", ["JSON", "JSON"], "JsonFunctions::json_contains"],
 
     # aes and base64 function
     [120100, "aes_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt"],

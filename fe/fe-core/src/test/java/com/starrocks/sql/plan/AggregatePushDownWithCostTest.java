@@ -22,12 +22,12 @@ import com.starrocks.sql.optimizer.statistics.MultiColumnCombinedStatistics;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import mockit.Expectations;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class AggregatePushDownWithCostTest extends PlanWithCostTestBase {
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
@@ -336,7 +336,7 @@ public class AggregatePushDownWithCostTest extends PlanWithCostTestBase {
                 ") t\n" +
                 "group by v5";
         plan = getFragmentPlan(sql);
-        Assert.assertEquals(4, StringUtils.countMatches(plan, ":AGGREGATE "));
+        Assertions.assertEquals(4, StringUtils.countMatches(plan, ":AGGREGATE "));
     }
 
     @Test

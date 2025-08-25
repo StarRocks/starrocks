@@ -22,6 +22,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -49,15 +51,17 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -67,7 +71,7 @@ public class LocalMetaStoreTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.alter_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
@@ -90,7 +94,7 @@ public class LocalMetaStoreTest {
     public void testGetNewPartitionsFromPartitions() throws DdlException {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
-        Assert.assertTrue(table instanceof OlapTable);
+        Assertions.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         Partition sourcePartition = olapTable.getPartition("t1");
         List<Long> sourcePartitionIds = Lists.newArrayList(sourcePartition.getId());
@@ -98,15 +102,15 @@ public class LocalMetaStoreTest {
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         Map<Long, String> origPartitions = Maps.newHashMap();
         OlapTable copiedTable = localMetastore.getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions);
-        Assert.assertEquals(olapTable.getName(), copiedTable.getName());
+        Assertions.assertEquals(olapTable.getName(), copiedTable.getName());
         Set<Long> tabletIdSet = Sets.newHashSet();
         List<Partition> newPartitions = localMetastore.getNewPartitionsFromPartitions(db,
                     olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds,
                     null, WarehouseManager.DEFAULT_RESOURCE);
-        Assert.assertEquals(sourcePartitionIds.size(), newPartitions.size());
-        Assert.assertEquals(1, newPartitions.size());
+        Assertions.assertEquals(sourcePartitionIds.size(), newPartitions.size());
+        Assertions.assertEquals(1, newPartitions.size());
         Partition newPartition = newPartitions.get(0);
-        Assert.assertEquals("t1_100", newPartition.getName());
+        Assertions.assertEquals("t1_100", newPartition.getName());
         olapTable.addTempPartition(newPartition);
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -115,11 +119,27 @@ public class LocalMetaStoreTest {
                     partitionInfo.getIsInMemory(sourcePartition.getId()));
         olapTable.replacePartition(db.getId(), "t1", "t1_100");
 
-        Assert.assertEquals(newPartition.getId(), olapTable.getPartition("t1").getId());
+        Assertions.assertEquals(newPartition.getId(), olapTable.getPartition("t1").getId());
     }
 
     @Test
     public void testGetPartitionIdToStorageMediumMap() throws Exception {
+        new MockUp<MaterializedViewOptimizer>() {
+            @Mock
+            public MvPlanContext optimize(MaterializedView mv,
+                                          ConnectContext connectContext) {
+                return null;
+            }
+        };
+
+        // Mock the cacheMaterializedView method to avoid actual caching in the background
+        new MockUp<CachingMvPlanContextBuilder>() {
+            @Mock
+            public void cacheMaterializedView(MaterializedView mv) {
+                // Do nothing to avoid actual caching
+            }
+        };
+
         starRocksAssert.withMaterializedView(
                     "CREATE MATERIALIZED VIEW test.mv1\n" +
                                 "distributed by hash(k1) buckets 3\n" +
@@ -139,14 +159,13 @@ public class LocalMetaStoreTest {
         new MockUp<EditLog>() {
             @Mock
             public void logModifyPartition(ModifyPartitionInfo info) {
-                Assert.assertNotNull(info);
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), info.getTableId())
+                Assertions.assertNotNull(info);
+                Assertions.assertTrue(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), info.getTableId())
                             .isOlapTableOrMaterializedView());
-                Assert.assertEquals(TStorageMedium.HDD, info.getDataProperty().getStorageMedium());
-                Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, info.getDataProperty().getCooldownTimeMs());
+                Assertions.assertEquals(TStorageMedium.HDD, info.getDataProperty().getStorageMedium());
+                Assertions.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, info.getDataProperty().getCooldownTimeMs());
             }
         };
-
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         localMetastore.getPartitionIdToStorageMediumMap();
         // Clean test.mv1, avoid its refreshment affecting other cases in this testsuite.
@@ -166,10 +185,10 @@ public class LocalMetaStoreTest {
         localMetaStore.load(reader);
         reader.close();
 
-        Assert.assertNotNull(localMetaStore.getDb(SystemId.INFORMATION_SCHEMA_DB_ID));
-        Assert.assertNotNull(localMetaStore.getDb(InfoSchemaDb.DATABASE_NAME));
-        Assert.assertNotNull(localMetaStore.getDb(SystemId.SYS_DB_ID));
-        Assert.assertNotNull(localMetaStore.getDb(SysDb.DATABASE_NAME));
+        Assertions.assertNotNull(localMetaStore.getDb(SystemId.INFORMATION_SCHEMA_DB_ID));
+        Assertions.assertNotNull(localMetaStore.getDb(InfoSchemaDb.DATABASE_NAME));
+        Assertions.assertNotNull(localMetaStore.getDb(SystemId.SYS_DB_ID));
+        Assertions.assertNotNull(localMetaStore.getDb(SysDb.DATABASE_NAME));
     }
 
     @Test
@@ -180,7 +199,7 @@ public class LocalMetaStoreTest {
         int schemaHash = table.getSchemaHashByIndexId(p.getBaseIndex().getId());
         MaterializedIndex index = new MaterializedIndex();
         TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), p.getId(),
-                    index.getId(), schemaHash, table.getPartitionInfo().getDataProperty(p.getParentId()).getStorageMedium());
+                    index.getId(), table.getPartitionInfo().getDataProperty(p.getParentId()).getStorageMedium());
         index.addTablet(new LocalTablet(0), tabletMeta);
         PhysicalPartitionPersistInfoV2 info = new PhysicalPartitionPersistInfoV2(
                     db.getId(), table.getId(), p.getParentId(), new PhysicalPartition(123, "", p.getId(), index));
@@ -223,7 +242,7 @@ public class LocalMetaStoreTest {
         // create table if not exists, if the table already exists, do nothing
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
-        Assert.assertTrue(table instanceof OlapTable);
+        Assertions.assertTrue(table instanceof OlapTable);
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
 
         new Expectations(localMetastore) {
@@ -243,7 +262,7 @@ public class LocalMetaStoreTest {
                                 " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
         // w/o IF NOT EXIST
-        Assert.assertThrows(AnalysisException.class, () ->
+        Assertions.assertThrows(AnalysisException.class, () ->
                     starRocksAssert.useDatabase("test").withTable(
                                 "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
                                             " distributed by hash(k1) buckets 3 properties('replication_num' = '1');"));
@@ -260,7 +279,7 @@ public class LocalMetaStoreTest {
         try {
             localMetastore.alterTableProperties(db, table, properties);
         } catch (RuntimeException e) {
-            Assert.assertEquals("Cannot parse text to Duration", e.getMessage());
+            Assertions.assertEquals("Cannot parse text to Duration", e.getMessage());
         }
     }
 
@@ -271,43 +290,43 @@ public class LocalMetaStoreTest {
         try {
             Table table = new HiveTable();
             localMetastore.renameColumn(null, table, null);
-            Assert.fail("should not happen");
+            Assertions.fail("should not happen");
         } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE);
+            Assertions.assertEquals(e.getErrorCode(), ErrorCode.ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE);
         }
 
         Database db = localMetastore.getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
         try {
             localMetastore.renameColumn(new Database(1, "_statistics_"), table, null);
-            Assert.fail("should not happen");
+            Assertions.fail("should not happen");
         } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB);
+            Assertions.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB);
         }
 
         try {
             OlapTable olapTable = new OlapTable();
             olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
             localMetastore.renameColumn(db, olapTable, null);
-            Assert.fail("should not happen");
+            Assertions.fail("should not happen");
         } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE);
+            Assertions.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE);
         }
 
         try {
             ColumnRenameClause columnRenameClause = new ColumnRenameClause("k4", "k5");
             localMetastore.renameColumn(db, table, columnRenameClause);
-            Assert.fail("should not happen");
+            Assertions.fail("should not happen");
         } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_BAD_FIELD_ERROR);
+            Assertions.assertEquals(e.getErrorCode(), ErrorCode.ERR_BAD_FIELD_ERROR);
         }
 
         try {
             ColumnRenameClause columnRenameClause = new ColumnRenameClause("k3", "k2");
             localMetastore.renameColumn(db, table, columnRenameClause);
-            Assert.fail("should not happen");
+            Assertions.fail("should not happen");
         } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_DUP_FIELDNAME);
+            Assertions.assertEquals(e.getErrorCode(), ErrorCode.ERR_DUP_FIELDNAME);
         }
     }
 
@@ -319,10 +338,10 @@ public class LocalMetaStoreTest {
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         SerializeFailedTable table = new SerializeFailedTable(1000010L, "serialize_test");
 
-        Assert.assertThrows(DdlException.class, () -> localMetastore.onCreate(db, table, "", true));
+        Assertions.assertThrows(DdlException.class, () -> localMetastore.onCreate(db, table, "", true));
 
-        Assert.assertNull(db.getTable(tableId));
-        Assert.assertNull(db.getTable(tableName));
+        Assertions.assertNull(db.getTable(tableId));
+        Assertions.assertNull(db.getTable(tableName));
     }
 
 }

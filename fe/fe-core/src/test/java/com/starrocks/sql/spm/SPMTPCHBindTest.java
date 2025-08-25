@@ -26,7 +26,6 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -72,7 +71,7 @@ public class SPMTPCHBindTest extends PlanTestBase {
             return statementBase;
         } catch (Exception ex) {
             LOG.error(originStmt, ex);
-            Assert.fail();
+            Assertions.fail();
             throw ex;
         }
     }

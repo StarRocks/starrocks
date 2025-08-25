@@ -16,33 +16,33 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class DateLiteralNewTest {
 
     @Test
     public void testFromString() throws AnalysisException {
         DateLiteral dateLiteral = new DateLiteral("2022-12-12 16:20:17.123456", Type.DATETIME);
-        Assert.assertEquals("2022-12-12 16:20:17.123456", dateLiteral.getStringValue());
-        Assert.assertEquals(123456, dateLiteral.getMicrosecond());
-        Assert.assertEquals(20221212162017.123456, dateLiteral.getDoubleValue(), 0.000001);
+        Assertions.assertEquals("2022-12-12 16:20:17.123456", dateLiteral.getStringValue());
+        Assertions.assertEquals(123456, dateLiteral.getMicrosecond());
+        Assertions.assertEquals(20221212162017.123456, dateLiteral.getDoubleValue(), 0.000001);
 
         dateLiteral = new DateLiteral("2023-03-29 01:01:01.12", Type.DATETIME);
-        Assert.assertEquals("2023-03-29 01:01:01.120000", dateLiteral.getStringValue());
-        Assert.assertEquals(120000, dateLiteral.getMicrosecond());
+        Assertions.assertEquals("2023-03-29 01:01:01.120000", dateLiteral.getStringValue());
+        Assertions.assertEquals(120000, dateLiteral.getMicrosecond());
 
         dateLiteral = new DateLiteral("2023-03-29 01:01:01.1234", Type.DATETIME);
-        Assert.assertEquals("2023-03-29 01:01:01.123400", dateLiteral.getStringValue());
-        Assert.assertEquals(123400, dateLiteral.getMicrosecond());
+        Assertions.assertEquals("2023-03-29 01:01:01.123400", dateLiteral.getStringValue());
+        Assertions.assertEquals(123400, dateLiteral.getMicrosecond());
     }
 
     @Test
     public void testTimeWithMs() {
         DateLiteral dateLiteral = new DateLiteral(2022, 12, 12, 16, 20, 17, 123456);
-        Assert.assertEquals("2022-12-12 16:20:17.123456", dateLiteral.getStringValue());
-        Assert.assertEquals(123456, dateLiteral.getMicrosecond());
-        Assert.assertEquals(20221212162017.123456, dateLiteral.getDoubleValue(), 0.000001);
+        Assertions.assertEquals("2022-12-12 16:20:17.123456", dateLiteral.getStringValue());
+        Assertions.assertEquals(123456, dateLiteral.getMicrosecond());
+        Assertions.assertEquals(20221212162017.123456, dateLiteral.getDoubleValue(), 0.000001);
     }
 
     @Test
@@ -63,7 +63,7 @@ public class DateLiteralNewTest {
                 "not-date",
         };
         for (String c : testDateCases) {
-            Assert.assertThrows(AnalysisException.class, () -> new DateLiteral(c, Type.DATE));
+            Assertions.assertThrows(AnalysisException.class, () -> new DateLiteral(c, Type.DATE));
         }
 
         String[] testDatetimeCases = {
@@ -98,7 +98,7 @@ public class DateLiteralNewTest {
                 "not-date",
         };
         for (String c : testDatetimeCases) {
-            Assert.assertThrows(AnalysisException.class, () -> new DateLiteral(c, Type.DATETIME));
+            Assertions.assertThrows(AnalysisException.class, () -> new DateLiteral(c, Type.DATETIME));
         }
     }
 

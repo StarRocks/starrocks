@@ -73,6 +73,7 @@ import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.OptimizerOptions;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -1193,11 +1194,17 @@ public class MvUtils {
         // add a LogicalTreeAnchorOperator to replace the tree easier
         OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
         doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression);
+
+        // check if there is any view scan operator in the tree
         List<Operator> viewScanOperators = Lists.newArrayList();
         MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
         if (!viewScanOperators.isEmpty()) {
+            OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
+                    "After replacing logical view scan operator but found view scan operator in the tree, "
+                            + "so cannot rewrite the query expression: " + queryExpression);
             return null;
         }
+
         OptExpression newQuery = anchorExpr.inputAt(0);
         deriveLogicalProperty(newQuery);
         return newQuery;
@@ -1209,29 +1216,48 @@ public class MvUtils {
         LogicalOperator op = queryExpression.getOp().cast();
         if (op instanceof LogicalViewScanOperator) {
             LogicalViewScanOperator viewScanOperator = op.cast();
-            OptExpression viewPlan = viewScanOperator.getOriginalPlanEvaluator();
+            OptExpression inlineViewPlan = viewScanOperator.getOriginalPlanEvaluator();
             if (viewScanOperator.getPredicate() != null) {
-                // If viewScanOperator contains predicate, we need to rewrite them,
-                // otherwise predicate will be lost.
-                Map<ColumnRefOperator, ScalarOperator> reverseColumnRefMap =
-                        viewScanOperator.getProjection().getColumnRefMap().entrySet().stream()
-                                .collect(Collectors.toMap(e -> (ColumnRefOperator) e.getValue(), e -> e.getKey()));
-                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(reverseColumnRefMap);
-                Operator.Builder builder = OperatorBuilderFactory.build(viewPlan.getOp());
-                builder.withOperator(viewPlan.getOp());
-                // rewrite predicate
-                builder.setPredicate(rewriter.rewrite(viewScanOperator.getPredicate()));
-                // rewrite projection
-                Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = viewScanOperator.getProjection().getColumnRefMap()
+                // original map records inlined view's column ref to non-inlined view's column ref mapping,
+                // now we need to rewrite non-inlined view's column ref to inlined view's column ref,
+                // so we need to reverse the mapping.
+                Map<ColumnRefOperator, ScalarOperator> originalColumnRefToInlinedColumnRefMap =
+                        Maps.newHashMap(viewScanOperator.getOriginalColumnRefToInlinedColumnRefMap());
+                // add new added column ref mapping
+                if (viewScanOperator.getProjection() != null) {
+                    viewScanOperator.getProjection().getColumnRefMap()
+                            .entrySet()
+                            .stream()
+                            .forEach(e -> originalColumnRefToInlinedColumnRefMap.put(e.getKey(), e.getValue()));
+                }
+                Map<ColumnRefOperator, ScalarOperator> reverseColumnRefMap = originalColumnRefToInlinedColumnRefMap
                         .entrySet()
                         .stream()
-                        .map(e -> Maps.immutableEntry(e.getKey(), rewriter.rewrite(e.getValue())))
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-                builder.setProjection(new Projection(newColumnRefMap));
-                Operator newViewPlanOp = builder.build();
-                parent.setChild(index, OptExpression.create(newViewPlanOp, viewPlan.getInputs()));
+                        .collect(Collectors.toMap(e -> (ColumnRefOperator) e.getValue(), e -> e.getKey()));
+
+                // If viewScanOperator contains predicate, we need to rewrite them, otherwise predicate will be lost.
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(reverseColumnRefMap);
+                Operator.Builder builder = OperatorBuilderFactory.build(inlineViewPlan.getOp());
+                builder.withOperator(inlineViewPlan.getOp());
+                if (viewScanOperator.getPredicate() != null) {
+                    // rewrite predicate
+                    ScalarOperator rewrittenPredicate = rewriter.rewrite(viewScanOperator.getPredicate());
+                    builder.setPredicate(rewrittenPredicate);
+                }
+                // rewrite projection
+                if (viewScanOperator.getPredicate() != null) {
+                    Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = viewScanOperator
+                            .getProjection().getColumnRefMap()
+                            .entrySet()
+                            .stream()
+                            .map(e -> Maps.immutableEntry(e.getKey(), rewriter.rewrite(e.getValue())))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                    builder.setProjection(new Projection(newColumnRefMap));
+                }
+                Operator newInlineViewPlanOp = builder.build();
+                parent.setChild(index, OptExpression.create(newInlineViewPlanOp, inlineViewPlan.getInputs()));
             } else {
-                parent.setChild(index, viewPlan);
+                parent.setChild(index, inlineViewPlan);
             }
             return;
         }
@@ -1377,11 +1403,38 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), baseTableInfo);
+        try {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), baseTableInfo);
+        } catch (Exception e) {
+            // For hive catalog, when meets NoSuchObjectException, we should return empty
+            //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
+            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:178)
+            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:163)
+            //        at com.starrocks.connector.hive.HiveMetaClient.getTable(HiveMetaClient.java:272)
+            //        at com.starrocks.connector.hive.HiveMetastore.getTable(HiveMetastore.java:116)
+            if (e.getMessage() != null && e.getMessage().contains("NoSuchObjectException")) {
+                return Optional.empty();
+            }
+            throw e;
+        }
     }
 
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(new ConnectContext(), baseTableInfo);
+        try {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(new ConnectContext(), baseTableInfo);
+        } catch (Exception e) {
+            // For hive catalog, when meets NoSuchObjectException, we should return empty
+            //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
+            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:178)
+            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:163)
+            //        at com.starrocks.connector.hive.HiveMetaClient.getTable(HiveMetaClient.java:272)
+            //        at com.starrocks.connector.hive.HiveMetastore.getTable(HiveMetastore.java:116)
+            LOG.warn("Failed to get table with baseTableInfo: {}, error: {}", baseTableInfo, e.getMessage());
+            if (e.getMessage() != null && e.getMessage().contains("NoSuchObjectException")) {
+                return Optional.empty();
+            }
+            throw e;
+        }
     }
 
     public static Table getTableChecked(BaseTableInfo baseTableInfo) {
@@ -1498,9 +1551,10 @@ public class MvUtils {
         return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
     }
 
-    public static ScalarOperator convertPartitionKeyRangesToListPredicate(List<? extends ScalarOperator> partitionColRefs,
-                                                                          Collection<PRangeCell> pRangeCells,
-                                                                          boolean areAllRangePartitionsSingleton) {
+    public static ScalarOperator convertPartitionKeyRangesToListPredicate(
+            List<? extends ScalarOperator> partitionColRefs,
+            Collection<PRangeCell> pRangeCells,
+            boolean areAllRangePartitionsSingleton) throws AnalysisException {
         final List<Range<PartitionKey>> partitionRanges = pRangeCells
                 .stream()
                 .map(PRangeCell::getRange)
@@ -1509,15 +1563,25 @@ public class MvUtils {
         return convertPartitionKeysToListPredicate(partitionColRefs, partitionRanges, areAllRangePartitionsSingleton);
     }
 
-    public static ScalarOperator convertPartitionKeysToListPredicate(List<? extends ScalarOperator> partitionColRefs,
-                                                                     Collection<PartitionKey> partitionRanges) {
+    private static ConstantOperator convertLiteralToConstantOperator(ScalarOperator partitionColRef,
+                                                                     LiteralExpr literalExpr) throws AnalysisException {
+        if (!partitionColRef.getType().equals(literalExpr.getType())) {
+            literalExpr = LiteralExpr.create(literalExpr.getStringValue(), partitionColRef.getType());
+        }
+        return (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+    }
+
+    public static ScalarOperator convertPartitionKeysToListPredicate(
+            List<? extends ScalarOperator> partitionColRefs,
+            Collection<PartitionKey> partitionRanges) throws AnalysisException {
         final List<ScalarOperator> values = Lists.newArrayList();
         if (partitionColRefs.size() == 1) {
+            ScalarOperator partitionColRef = partitionColRefs.get(0);
             for (PartitionKey key : partitionRanges) {
                 final List<LiteralExpr> literalExprs = key.getKeys();
                 Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
                 final LiteralExpr literalExpr = literalExprs.get(0);
-                final ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                final ConstantOperator upperBound = convertLiteralToConstantOperator(partitionColRef, literalExpr);
                 values.add(upperBound);
             }
             return MvUtils.convertToInPredicate(partitionColRefs.get(0), values);
@@ -1540,9 +1604,10 @@ public class MvUtils {
         }
     }
 
-    private static ScalarOperator convertPartitionKeysToListPredicate(List<? extends ScalarOperator> partitionColRefs,
-                                                                      Collection<Range<PartitionKey>> partitionRanges,
-                                                                      boolean areAllRangePartitionsSingleton) {
+    private static ScalarOperator convertPartitionKeysToListPredicate(
+            List<? extends ScalarOperator> partitionColRefs,
+            Collection<Range<PartitionKey>> partitionRanges,
+            boolean areAllRangePartitionsSingleton) throws AnalysisException {
 
         if (areAllRangePartitionsSingleton) {
             List<PartitionKey> partitionKeys = partitionRanges

@@ -146,6 +146,7 @@ TEST_F(LakeTabletManagerTest, create_tablet) {
     EXPECT_FALSE(metadata->has_delvec_meta());
     EXPECT_TRUE(metadata->enable_persistent_index());
     EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
+    EXPECT_EQ(CompactionStrategyPB::DEFAULT, metadata->compaction_strategy());
 }
 
 TEST_F(LakeTabletManagerTest, create_tablet_enable_tablet_creation_optimization) {
@@ -191,6 +192,7 @@ TEST_F(LakeTabletManagerTest, create_tablet_enable_tablet_creation_optimization)
     EXPECT_FALSE(metadata->has_delvec_meta());
     EXPECT_TRUE(metadata->enable_persistent_index());
     EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
+    EXPECT_EQ(CompactionStrategyPB::DEFAULT, metadata->compaction_strategy());
 }
 
 TEST_F(LakeTabletManagerTest, create_tablet_with_duplicate_column_id_or_name) {
@@ -258,6 +260,38 @@ TEST_F(LakeTabletManagerTest, create_tablet_without_schema_file) {
             EXPECT_TRUE(st.is_not_found()) << st;
         }
     }
+}
+
+TEST_F(LakeTabletManagerTest, create_tablet_with_compaction_strategy) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.__set_enable_persistent_index(true);
+    req.__set_persistent_index_type(TPersistentIndexType::LOCAL);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+    req.__set_compaction_strategy(TCompactionStrategy::REAL_TIME);
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    EXPECT_TRUE(fs->path_exists(_location_provider->tablet_metadata_location(tablet_id, 1)).ok());
+    EXPECT_TRUE(fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id)).ok());
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+    EXPECT_EQ(tablet_id, metadata->id());
+    EXPECT_EQ(1, metadata->version());
+    EXPECT_EQ(1, metadata->next_rowset_id());
+    EXPECT_FALSE(metadata->has_commit_time());
+    EXPECT_EQ(0, metadata->rowsets_size());
+    EXPECT_EQ(0, metadata->cumulative_point());
+    EXPECT_FALSE(metadata->has_delvec_meta());
+    EXPECT_TRUE(metadata->enable_persistent_index());
+    EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
+    EXPECT_EQ(CompactionStrategyPB::REAL_TIME, metadata->compaction_strategy());
 }
 
 // NOLINTNEXTLINE
@@ -646,17 +680,42 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
 
     metadatas.emplace(1, metadata1);
     metadatas.emplace(2, metadata2);
-    EXPECT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
 
     {
         auto res = _tablet_manager->get_tablet_metadata(1, 2);
-        ASSERT_TRUE(res.ok());
+        EXPECT_TRUE(res.ok()) << res.status().to_string();
         TabletMetadataPtr metadata = std::move(res).value();
         ASSERT_EQ(metadata->schema().id(), 10);
         ASSERT_EQ(metadata->historical_schemas_size(), 2);
     }
 
+    // multi thread read
     {
+        std::vector<std::thread> threads;
+        for (int i = 0; i < 2; ++i) {
+            threads.emplace_back(
+                    [&](int i) {
+                        auto res = _tablet_manager->get_tablet_metadata(i + 1, 2);
+                        ASSERT_TRUE(res.ok());
+                        TabletMetadataPtr metadata = std::move(res).value();
+                        ASSERT_EQ(metadata->schema().id(), 10 + i);
+                        ASSERT_EQ(metadata->historical_schemas_size(), 2 + i);
+                        // check id
+                        ASSERT_EQ(metadata->id(), i + 1);
+                        // check version
+                        ASSERT_EQ(metadata->version(), 2);
+                    },
+                    i);
+        }
+        for (auto& thread : threads) {
+            thread.join();
+        }
+    }
+
+    {
+        // prune metacache
+        _tablet_manager->prune_metacache();
         std::string fp_name = "tablet_schema_not_found_in_bundle_metadata";
         auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
         PFailPointTriggerMode trigger_mode;
@@ -686,6 +745,23 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata4));
     auto res = _tablet_manager->get_tablet_metadata(3, 3);
     ASSERT_TRUE(res.ok());
+
+    // get initial tablet meta by path
+    starrocks::TabletMetadata metadata5;
+    {
+        metadata5.set_id(4);
+        metadata5.set_version(1);
+        metadata5.mutable_schema()->CopyFrom(schema_pb1);
+        auto& item1 = (*metadata5.mutable_historical_schemas())[10];
+        item1.CopyFrom(schema_pb1);
+        auto& item2 = (*metadata5.mutable_historical_schemas())[12];
+        item2.CopyFrom(schema_pb3);
+    }
+    // put initial tablet meta
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(std::make_shared<starrocks::TabletMetadata>(metadata5),
+                                                   _tablet_manager->tablet_initial_metadata_location(metadata5.id())));
+    ASSERT_TRUE(_tablet_manager->get_tablet_metadata(4, 1).ok());
+    ASSERT_TRUE(_tablet_manager->get_tablet_metadata(_tablet_manager->tablet_metadata_location(4, 1)).ok());
 }
 
 TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {

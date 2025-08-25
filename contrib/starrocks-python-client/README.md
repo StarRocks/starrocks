@@ -66,6 +66,37 @@ with engine.connect() as connection:
     print(rows)
 ```
 
+You can also use `Mapped` on SQLAlchemy 2 like [orm-quickstart](https://docs.sqlalchemy.org/en/20/orm/quickstart.html#orm-quickstart):
+
+```
+from datetime import datetime
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+engine = create_engine('starrocks://root:xxx@localhost:9030/hive_catalog.hive_db')
+
+class Base(AsyncAttrs, DeclarativeBase):
+    pass
+
+class table1(Base):
+    __tablename__ = "table1"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[str] = mapped_column(DateTime, default=datetime.now())
+    
+    __table_args__ = {
+        "starrocks_PRIMARY_KEY": "id",
+        "starrocks_engine": "OLAP",
+        "starrocks_comment": "table comment",
+        "starrocks_properties": (
+            ("storage_medium", "SSD"),
+            ("storage_cooldown_time", "2025-06-04 00:00:00"),
+            ("replication_num", "1")
+        ))
+    }
+
+Base.metadata.create_all(bind=engine)
+```
+
 ## Contributing
 ### Unit tests
 To run tests for Starrocks SQLAlchamy dialect (this module), run:

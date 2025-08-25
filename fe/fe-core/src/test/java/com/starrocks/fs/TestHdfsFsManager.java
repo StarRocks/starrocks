@@ -22,12 +22,12 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.hdfs.HdfsFs;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.thrift.THdfsProperties;
-import junit.framework.TestCase;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.io.FileNotFoundException;
@@ -35,13 +35,17 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-public class TestHdfsFsManager extends TestCase {
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+public class TestHdfsFsManager {
 
     private final String testHdfsHost = "hdfs://localhost:9000";
 
     private HdfsFsManager fileSystemManager;
 
-    protected void setUp() throws Exception {
+    @BeforeEach
+    public void setUp() throws Exception {
         fileSystemManager = new HdfsFsManager();
     }
 
@@ -55,7 +59,7 @@ public class TestHdfsFsManager extends TestCase {
             assertNotNull(fs);
             fs.getDFSFileSystem().close();
         } catch (StarRocksException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -70,7 +74,7 @@ public class TestHdfsFsManager extends TestCase {
             assertNotNull(fs);
             fs.getDFSFileSystem().close();
         } catch (StarRocksException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -84,10 +88,10 @@ public class TestHdfsFsManager extends TestCase {
         try {
             HdfsFs fs = fileSystemManager.getFileSystem("s3a://testbucket/data/abc/logs", properties, property);
             assertNotNull(fs);
-            Assert.assertEquals(property.region, "ap-southeast-1");
+            Assertions.assertEquals(property.region, "ap-southeast-1");
             fs.getDFSFileSystem().close();
         } catch (StarRocksException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -101,10 +105,10 @@ public class TestHdfsFsManager extends TestCase {
         try {
             HdfsFs fs = fileSystemManager.getFileSystem("s3a://testbucket/data/abc/logs", properties, property);
             assertNotNull(fs);
-            Assert.assertEquals(property.region, "ap-southeast-1");
+            Assertions.assertEquals(property.region, "ap-southeast-1");
             fs.getDFSFileSystem().close();
         } catch (StarRocksException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -122,16 +126,16 @@ public class TestHdfsFsManager extends TestCase {
         Mockito.when(fs.globStatus(new Path("s3a://dir/"))).thenReturn(files);
 
         // listFileMeta
-        Assert.assertThrows(StarRocksException.class,
+        assertThrows(StarRocksException.class,
                 () -> hdfsFsManager.listFileMeta("not_found", Maps.newHashMap()));
-        Assert.assertThrows(StarRocksException.class,
+        assertThrows(StarRocksException.class,
                 () -> hdfsFsManager.listFileMeta("error", Maps.newHashMap()));
-        Assert.assertFalse(hdfsFsManager.listFileMeta("s3a://dir/", Maps.newHashMap()).isEmpty());
+        Assertions.assertFalse(hdfsFsManager.listFileMeta("s3a://dir/", Maps.newHashMap()).isEmpty());
 
         // listPath
-        Assert.assertEquals(1,
+        Assertions.assertEquals(1,
                 hdfsFsManager.listPath("s3a://dir/", true, Maps.newHashMap()).size());
-        Assert.assertEquals(1,
+        Assertions.assertEquals(1,
                 hdfsFsManager.listPath("s3a://dir/", false, Maps.newHashMap()).size());
     }
 }

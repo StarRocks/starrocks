@@ -18,27 +18,28 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"QUERY_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TASK_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"QUERY_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TASK_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
-        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"EXPIRE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(StringValue), true},
-        {"ERROR_CODE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(StringValue), true},
-        {"ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"PROGRESS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"CATALOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"DATABASE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"DEFINITION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"EXPIRE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(Slice), true},
+        {"ERROR_CODE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(Slice), true},
+        {"ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"PROGRESS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"JOB_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"PROCESS_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true}};
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -146,9 +147,13 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             // STATE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
-                const std::string* str = &task_run_info.state;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                if (task_run_info.__isset.state) {
+                    const std::string* str = &task_run_info.state;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
             }
             break;
         }
@@ -156,12 +161,13 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             // CATALOG
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
-                std::string catalog_name = "default_catalog";
                 if (task_run_info.__isset.catalog) {
-                    catalog_name = task_run_info.catalog;
+                    const std::string* str = &task_run_info.catalog;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
                 }
-                Slice value(catalog_name.c_str(), catalog_name.length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
@@ -169,9 +175,13 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             // DATABASE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
-                const std::string* db_name = &task_run_info.database;
-                Slice value(db_name->c_str(), db_name->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                if (task_run_info.__isset.database) {
+                    const std::string* str = &task_run_info.database;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
             }
             break;
         }
@@ -179,9 +189,13 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             // DEFINITION
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
-                const std::string* str = &task_run_info.definition;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                if (task_run_info.__isset.definition) {
+                    const std::string* str = &task_run_info.definition;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
             }
             break;
         }
@@ -227,8 +241,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {
-                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                    nullable_column->append_nulls(1);
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -242,8 +255,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {
-                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                    nullable_column->append_nulls(1);
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -257,8 +269,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {
-                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                    nullable_column->append_nulls(1);
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -267,10 +278,49 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             // properties
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(14);
-                const std::string* str = &task_run_info.properties;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                if (task_run_info.__isset.properties) {
+                    const std::string* str = &task_run_info.properties;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
             }
+            break;
+        }
+        case 15: {
+            // job_id
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(15);
+                if (task_run_info.__isset.job_id) {
+                    const std::string* str = &task_run_info.job_id;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
+            }
+            break;
+        }
+        case 16: {
+            // process_time
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
+                auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                if (task_run_info.__isset.process_time) {
+                    int64_t complete_time = task_run_info.process_time;
+                    if (complete_time <= 0) {
+                        nullable_column->append_nulls(1);
+                    } else {
+                        DateTimeValue t;
+                        t.from_unixtime(complete_time, _runtime_state->timezone_obj());
+                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                    }
+                } else {
+                    nullable_column->append_nulls(1);
+                }
+            }
+            break;
         }
         default:
             break;
@@ -281,7 +331,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
 }
 
 Status SchemaTaskRunsScanner::get_next(ChunkPtr* chunk, bool* eos) {
-    if (!_is_init) {
+    if (!_is_init || chunk == nullptr || eos == nullptr) {
         return Status::InternalError("Used before initialized.");
     }
     if (_task_run_index >= _task_run_result.task_runs.size()) {

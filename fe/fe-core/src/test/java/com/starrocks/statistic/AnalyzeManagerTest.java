@@ -22,8 +22,8 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -35,9 +35,9 @@ public class AnalyzeManagerTest extends PlanTestBase {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
                 1, 2, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.MIN, Maps.newHashMap()));
-        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(2L));
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(2L));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromNativeDroppedTable();
-        Assert.assertNull(GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(2L));
+        Assertions.assertNull(GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(2L));
     }
 
     @Test
@@ -45,9 +45,9 @@ public class AnalyzeManagerTest extends PlanTestBase {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(new ExternalBasicStatsMeta(
                 "catalogName", "dbName", "tableName", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.MIN, Maps.newHashMap()));
-        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+        Assertions.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromExternalDroppedTable();
-        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+        Assertions.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
 
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(new ExternalBasicStatsMeta(
@@ -56,9 +56,9 @@ public class AnalyzeManagerTest extends PlanTestBase {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(new ExternalHistogramStatsMeta(
                 "catalogName", "dbName", "tableName", "column", StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.MIN, Maps.newHashMap()));
-        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
+        Assertions.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromExternalDroppedTable();
-        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
+        Assertions.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
     }
 
     @Test
@@ -69,24 +69,24 @@ public class AnalyzeManagerTest extends PlanTestBase {
         StatisticAutoCollector statisticAutoCollector
                 = Deencapsulation.newInstance(StatisticAutoCollector.class);
         boolean result = Deencapsulation.invoke(statisticAutoCollector, "checkoutAnalyzeTime", time);
-        Assert.assertTrue(result);
+        Assertions.assertTrue(result);
 
         Config.statistic_auto_analyze_start_time = "20:00:00";
         Config.statistic_auto_analyze_end_time = "06:00:00";
         statisticAutoCollector = Deencapsulation.newInstance(StatisticAutoCollector.class);
         result = Deencapsulation.invoke(statisticAutoCollector, "checkoutAnalyzeTime", time);
-        Assert.assertFalse(result);
+        Assertions.assertFalse(result);
 
         Config.statistic_auto_analyze_start_time = "06:00:00";
         Config.statistic_auto_analyze_end_time = "17:00:00";
         statisticAutoCollector = Deencapsulation.newInstance(StatisticAutoCollector.class);
         result = Deencapsulation.invoke(statisticAutoCollector, "checkoutAnalyzeTime", time);
-        Assert.assertTrue(result);
+        Assertions.assertTrue(result);
 
         Config.statistic_auto_analyze_start_time = "36:00:00";
         Config.statistic_auto_analyze_end_time = "xx:00:00";
         statisticAutoCollector = Deencapsulation.newInstance(StatisticAutoCollector.class);
         result = Deencapsulation.invoke(statisticAutoCollector, "checkoutAnalyzeTime", time);
-        Assert.assertTrue(result);
+        Assertions.assertTrue(result);
     }
 }

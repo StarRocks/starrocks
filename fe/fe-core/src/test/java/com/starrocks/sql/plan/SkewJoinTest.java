@@ -19,25 +19,27 @@ import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.MockHistogramStatisticStorage;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.File;
+import java.io.IOException;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SkewJoinTest extends PlanTestBase {
-    @Rule
-    public ExpectedException expectedException = ExpectedException.none();
 
-    @ClassRule
-    public static TemporaryFolder temp = new TemporaryFolder();
+    @TempDir
+    public static File temp;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, newFolder(temp, "junit").toURI().toString());
 
         int scale = 100;
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockHistogramStatisticStorage(scale));
@@ -78,7 +80,7 @@ public class SkewJoinTest extends PlanTestBase {
                 "properties('replication_num'='1');");
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         try {
             starRocksAssert.dropTable("struct_tbl");
@@ -127,61 +129,54 @@ public class SkewJoinTest extends PlanTestBase {
 
 
     @Test
-    public void testSkewJoinWithException1() throws Exception {
+    public void testSkewJoinWithException1() {
         String sql = "select v2, v5 from t0 right join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("RIGHT JOIN does not support SKEW JOIN optimize");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("RIGHT JOIN does not support SKEW JOIN optimize"));
     }
 
 
     @Test
-    public void testSkewJoinWithException2() throws Exception {
+    public void testSkewJoinWithException2() {
         String sql = "select v2, v5 from t0 right semi join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("RIGHT JOIN does not support SKEW JOIN optimize");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("RIGHT JOIN does not support SKEW JOIN optimize"));
     }
 
     @Test
-    public void testSkewJoinWithException3() throws Exception {
+    public void testSkewJoinWithException3() {
         String sql = "select v2, v5 from t0 right anti join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("RIGHT JOIN does not support SKEW JOIN optimize");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("RIGHT JOIN does not support SKEW JOIN optimize"));
     }
 
     @Test
-    public void testSkewJoinWithException4() throws Exception {
+    public void testSkewJoinWithException4() {
         String sql = "select v2, v5 from t0 cross join[skew|t0.v1(1,2)] t1";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("CROSS JOIN does not support SKEW JOIN optimize");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("CROSS JOIN does not support SKEW JOIN optimize"));
     }
 
     @Test
-    public void testSkewJoinWithException5() throws Exception {
+    public void testSkewJoinWithException5() {
         String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("CROSS JOIN does not support SKEW JOIN optimize");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("CROSS JOIN does not support SKEW JOIN optimize"));
     }
 
     @Test
-    public void testSkewJoinWithException6() throws Exception {
+    public void testSkewJoinWithException6() {
         String sql = "select v2, v5 from t0 left join[skew|abs(t0.v1)(1,2)] t1 on v1 = v4 ";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("Skew join column must be a column reference");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("Skew join column must be a column reference"));
     }
 
     @Test
-    public void testSkewJoinWithException7() throws Exception {
+    public void testSkewJoinWithException7() {
         String sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[skew] hive0.partitioned_db.t3" +
                 " on t1.c1 = t3.c1";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("Skew join column must be specified");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("Skew join column must be specified"));
     }
 
     @Test
@@ -327,5 +322,14 @@ public class SkewJoinTest extends PlanTestBase {
         String sql = "select * from test.customer join test.part on P_SIZE = C_NATIONKEY and p_partkey = c_custkey";
         String sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, "C_NATIONKEY IN (22, 23, 24, 10, 11)");
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
     }
 }

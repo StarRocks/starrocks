@@ -18,10 +18,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.OrderByPair;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -44,8 +42,6 @@ public abstract class ShowStmt extends StatementBase {
         return predicate;
     }
 
-    public abstract ShowResultSetMetaData getMetaData();
-
     public QueryStatement toSelectStmt() throws AnalysisException {
         return null;
     }
@@ -64,11 +60,6 @@ public abstract class ShowStmt extends StatementBase {
 
     public LimitElement getLimitElement() {
         return limitElement;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 
     @Override

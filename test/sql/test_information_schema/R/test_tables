@@ -1,0 +1,38 @@
+-- name: test_tables
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `unique_table_with_null` ( `k1` date, `k2` datetime, `k3` char(20), `k4` varchar(20), `k5` boolean, `v1` tinyint, `v2` smallint, `v3` int, `v4` bigint, `v5` largeint, `v6` float, `v7` double, `v8` decimal(27,9) ) UNIQUE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) COMMENT "OLAP" DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3;
+-- result:
+-- !result
+select TABLE_TYPE, `VERSION`, ROW_FORMAT  from information_schema.tables where TABLE_SCHEMA='db_${uuid0}' limit 1;
+-- result:
+BASE TABLE	None	None
+-- !result
+[UC]select * from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null';
+-- result:
+def	db_9597b2c82a3945b4bb46e90786cce39f	unique_table_with_null	BASE TABLE	StarRocks	None	None	0	0	0	None	None	None	None	2025-07-28 15:59:03	2025-07-28 15:59:03	1970-01-01 08:00:00	utf8_general_ci	None	None	OLAP	db_9597b2c82a3945b4bb46e90786cce39f	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	47167
+None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	test_info_tables_fcb94f92_6b78_11f0_bd7f_00163e0e489a	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	43024
+-- !result
+[UC]select a.TABLE_NAME, b.* from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null';
+-- result:
+unique_table_with_null	db_9597b2c82a3945b4bb46e90786cce39f	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	47167
+None	test_info_tables_fcb94f92_6b78_11f0_bd7f_00163e0e489a	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	43024
+-- !result
+set enable_constant_execute_in_fe=true;
+-- result:
+-- !result
+select a.TABLE_NAME, b.TABLE_MODEL, b.PRIMARY_KEY, b.PARTITION_KEY, b.DISTRIBUTE_KEY from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null' and a.TABLE_SCHEMA='db_${uuid0}';
+-- result:
+unique_table_with_null	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`
+-- !result
+set enable_constant_execute_in_fe=false;
+-- result:
+-- !result
+select a.TABLE_NAME, b.TABLE_MODEL, b.PRIMARY_KEY, b.PARTITION_KEY, b.DISTRIBUTE_KEY from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null' and a.TABLE_SCHEMA='db_${uuid0}';
+-- result:
+unique_table_with_null	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`
+-- !result

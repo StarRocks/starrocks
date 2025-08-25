@@ -20,28 +20,28 @@ import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumper;
 import com.starrocks.sql.plan.PlanTestBase;
 import io.netty.handler.codec.http.HttpResponseStatus;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class QueryDumperTest extends PlanTestBase {
     private DumpInfo prevDumpInfo = null;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
     }
 
-    @Before
+    @BeforeEach
     public void before() {
         prevDumpInfo = connectContext.getDumpInfo();
         connectContext.setDumpInfo(null);
     }
 
-    @After
+    @AfterEach
     public void after() {
         // After dumping query, the connect context should be reset to the previous state.
         assertThat(connectContext.isHTTPQueryDump()).isFalse();

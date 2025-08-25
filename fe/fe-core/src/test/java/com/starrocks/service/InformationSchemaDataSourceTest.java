@@ -19,9 +19,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
+import com.starrocks.catalog.system.information.TablesSystemTable;
+import com.starrocks.catalog.system.information.ViewsSystemTable;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.SlotManager;
@@ -34,7 +39,6 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetApplicableRolesRequest;
@@ -47,24 +51,29 @@ import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
+import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TGetWarehouseMetricsRequest;
 import com.starrocks.thrift.TGetWarehouseMetricsRespone;
 import com.starrocks.thrift.TGetWarehouseQueriesRequest;
 import com.starrocks.thrift.TGetWarehouseQueriesResponse;
 import com.starrocks.thrift.TKeywordInfo;
+import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
+import com.starrocks.thrift.TTableStatus;
+import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -75,18 +84,20 @@ import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class InformationSchemaDataSourceTest {
+public class InformationSchemaDataSourceTest extends StarRocksTestBase {
 
     @Mocked
     ExecuteEnv exeEnv;
-    private static StarRocksAssert starRocksAssert;
+    private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
-        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+        connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        connectContext.setThreadLocalInfo();
+        starRocksAssert = new StarRocksAssert(connectContext);
     }
 
     @Test
@@ -125,31 +136,31 @@ public class InformationSchemaDataSourceTest {
         TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
                 .filter(t -> t.getTable_name().equals("tbl1")).findFirst()
                 .orElseGet(null);
-        Assert.assertEquals("db1", tableConfig.getTable_schema());
-        Assert.assertEquals("tbl1", tableConfig.getTable_name());
-        Assert.assertEquals("OLAP", tableConfig.getTable_engine());
-        Assert.assertEquals("PRIMARY_KEYS", tableConfig.getTable_model());
-        Assert.assertEquals("`k1`, `k2`, `k3`", tableConfig.getPrimary_key());
-        Assert.assertEquals("", tableConfig.getPartition_key());
-        Assert.assertEquals("`k1`, `k2`, `k3`", tableConfig.getDistribute_key());
-        Assert.assertEquals("HASH", tableConfig.getDistribute_type());
-        Assert.assertEquals(3, tableConfig.getDistribute_bucket());
-        Assert.assertEquals("`v2`, `v3`", tableConfig.getSort_key());
+        Assertions.assertEquals("db1", tableConfig.getTable_schema());
+        Assertions.assertEquals("tbl1", tableConfig.getTable_name());
+        Assertions.assertEquals("OLAP", tableConfig.getTable_engine());
+        Assertions.assertEquals("PRIMARY_KEYS", tableConfig.getTable_model());
+        Assertions.assertEquals("`k1`, `k2`, `k3`", tableConfig.getPrimary_key());
+        Assertions.assertEquals("", tableConfig.getPartition_key());
+        Assertions.assertEquals("`k1`, `k2`, `k3`", tableConfig.getDistribute_key());
+        Assertions.assertEquals("HASH", tableConfig.getDistribute_type());
+        Assertions.assertEquals(3, tableConfig.getDistribute_bucket());
+        Assertions.assertEquals("`v2`, `v3`", tableConfig.getSort_key());
 
         TTableConfigInfo mvConfig = response.getTables_config_infos().stream()
                 .filter(t -> t.getTable_engine().equals("MATERIALIZED_VIEW")).findFirst()
                 .orElseGet(null);
-        Assert.assertEquals("MATERIALIZED_VIEW", mvConfig.getTable_engine());
+        Assertions.assertEquals("MATERIALIZED_VIEW", mvConfig.getTable_engine());
         Map<String, String> propsMap = new Gson().fromJson(mvConfig.getProperties(), Map.class);
-        Assert.assertEquals("1", propsMap.get("replication_num"));
-        Assert.assertEquals("HDD", propsMap.get("storage_medium"));
+        Assertions.assertEquals("1", propsMap.get("replication_num"));
+        Assertions.assertEquals("HDD", propsMap.get("storage_medium"));
 
         TTableConfigInfo viewConfig = response.getTables_config_infos().stream()
                 .filter(t -> t.getTable_engine().equals("VIEW")).findFirst()
                 .orElseGet(null);
-        Assert.assertEquals("VIEW", viewConfig.getTable_engine());
-        Assert.assertEquals("db1", viewConfig.getTable_schema());
-        Assert.assertEquals("v1", viewConfig.getTable_name());
+        Assertions.assertEquals("VIEW", viewConfig.getTable_engine());
+        Assertions.assertEquals("db1", viewConfig.getTable_schema());
+        Assertions.assertEquals("v1", viewConfig.getTable_name());
 
     }
 
@@ -192,16 +203,16 @@ public class InformationSchemaDataSourceTest {
         TGetTablesConfigResponse response = impl.getTablesConfig(req);
         TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
                 .filter(t -> t.getTable_name().equals("unique_table_with_null")).findFirst().orElseGet(null);
-        Assert.assertEquals("db2", tableConfig.getTable_schema());
-        Assert.assertEquals("unique_table_with_null", tableConfig.getTable_name());
-        Assert.assertEquals("OLAP", tableConfig.getTable_engine());
-        Assert.assertEquals("UNIQUE_KEYS", tableConfig.getTable_model());
-        Assert.assertEquals("`k1`, `k2`, `k3`, `k4`, `k5`", tableConfig.getPrimary_key());
-        Assert.assertEquals("", tableConfig.getPartition_key());
-        Assert.assertEquals("`k1`, `k2`, `k3`, `k4`, `k5`", tableConfig.getDistribute_key());
-        Assert.assertEquals("HASH", tableConfig.getDistribute_type());
-        Assert.assertEquals(3, tableConfig.getDistribute_bucket());
-        Assert.assertEquals("`k1`, `k2`, `k3`, `k4`, `k5`", tableConfig.getSort_key());
+        Assertions.assertEquals("db2", tableConfig.getTable_schema());
+        Assertions.assertEquals("unique_table_with_null", tableConfig.getTable_name());
+        Assertions.assertEquals("OLAP", tableConfig.getTable_engine());
+        Assertions.assertEquals("UNIQUE_KEYS", tableConfig.getTable_model());
+        Assertions.assertEquals("`k1`, `k2`, `k3`, `k4`, `k5`", tableConfig.getPrimary_key());
+        Assertions.assertEquals("", tableConfig.getPartition_key());
+        Assertions.assertEquals("`k1`, `k2`, `k3`, `k4`, `k5`", tableConfig.getDistribute_key());
+        Assertions.assertEquals("HASH", tableConfig.getDistribute_type());
+        Assertions.assertEquals(3, tableConfig.getDistribute_bucket());
+        Assertions.assertEquals("`k1`, `k2`, `k3`, `k4`, `k5`", tableConfig.getSort_key());
 
     }
     @Test
@@ -221,10 +232,10 @@ public class InformationSchemaDataSourceTest {
         for (TTableInfo tablesInfo : response.tables_infos) {
             if (tablesInfo.getTable_name().equalsIgnoreCase("tables")) {
                 checkTables = true;
-                Assert.assertEquals("SYSTEM VIEW", tablesInfo.getTable_type());
+                Assertions.assertEquals("SYSTEM VIEW", tablesInfo.getTable_type());
             }
         }
-        Assert.assertTrue(checkTables);
+        Assertions.assertTrue(checkTables);
     }
 
     @Test
@@ -263,8 +274,8 @@ public class InformationSchemaDataSourceTest {
         TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
         TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
                 .filter(t -> t.getTable_name().equals("duplicate_table_with_null")).findFirst().orElseGet(null);
-        Assert.assertEquals("db3", partitionMeta.getDb_name());
-        Assert.assertEquals("duplicate_table_with_null", partitionMeta.getTable_name());
+        Assertions.assertEquals("db3", partitionMeta.getDb_name());
+        Assertions.assertEquals("duplicate_table_with_null", partitionMeta.getTable_name());
     }
 
     @Test
@@ -291,9 +302,9 @@ public class InformationSchemaDataSourceTest {
         TGetTablesConfigResponse response = impl.getTablesConfig(req);
         TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
                 .filter(t -> t.getTable_name().equals("duplicate_table_random")).findFirst().orElseGet(null);
-        Assert.assertEquals("RANDOM", tableConfig.getDistribute_type());
-        Assert.assertEquals(3, tableConfig.getDistribute_bucket());
-        Assert.assertEquals("", tableConfig.getDistribute_key());
+        Assertions.assertEquals("RANDOM", tableConfig.getDistribute_type());
+        Assertions.assertEquals(3, tableConfig.getDistribute_bucket());
+        Assertions.assertEquals("", tableConfig.getDistribute_key());
     }
 
     @Test
@@ -327,12 +338,12 @@ public class InformationSchemaDataSourceTest {
         TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
                 .filter(t -> t.getTable_name().equals("duplicate_dynamic_table")).findFirst().orElseGet(null);
         Map<String, String> props = new Gson().fromJson(tableConfig.getProperties(), Map.class);
-        Assert.assertEquals("true", props.get("dynamic_partition.enable"));
-        Assert.assertEquals("DAY", props.get("dynamic_partition.time_unit"));
-        Assert.assertEquals("-3", props.get("dynamic_partition.start"));
-        Assert.assertEquals("3", props.get("dynamic_partition.end"));
-        Assert.assertEquals("p", props.get("dynamic_partition.prefix"));
-        Assert.assertEquals("1", props.get("replication_num"));
+        Assertions.assertEquals("true", props.get("dynamic_partition.enable"));
+        Assertions.assertEquals("DAY", props.get("dynamic_partition.time_unit"));
+        Assertions.assertEquals("-3", props.get("dynamic_partition.start"));
+        Assertions.assertEquals("3", props.get("dynamic_partition.end"));
+        Assertions.assertEquals("p", props.get("dynamic_partition.prefix"));
+        Assertions.assertEquals("1", props.get("replication_num"));
     }
 
     public static ZoneOffset offset(ZoneId id) {
@@ -424,36 +435,36 @@ public class InformationSchemaDataSourceTest {
         TGetKeywordsResponse response = impl.getKeywords(req);
         List<TKeywordInfo> keywordList = response.getKeywords();
 
-        Assert.assertNotNull("Keywords list should not be null", keywordList);
-        Assert.assertFalse("Keywords list should not be empty", keywordList.isEmpty());
+        Assertions.assertNotNull(keywordList, "Keywords list should not be null");
+        Assertions.assertFalse(keywordList.isEmpty(), "Keywords list should not be empty");
 
         List<String> keywordNames = keywordList.stream()
                 .map(TKeywordInfo::getKeyword)
                 .collect(Collectors.toList());
 
-        Assert.assertTrue("Keywords should contain 'SELECT'", keywordNames.contains("SELECT"));
-        Assert.assertTrue("Keywords should contain 'INSERT'", keywordNames.contains("INSERT"));
-        Assert.assertTrue("Keywords should contain 'UPDATE'", keywordNames.contains("UPDATE"));
-        Assert.assertTrue("Keywords should contain 'DELETE'", keywordNames.contains("DELETE"));
-        Assert.assertTrue("Keywords should contain 'TABLE'", keywordNames.contains("TABLE"));
-        Assert.assertTrue("Keywords should contain 'INDEX'", keywordNames.contains("INDEX"));
-        Assert.assertTrue("Keywords should contain 'VIEW'", keywordNames.contains("VIEW"));
-        Assert.assertTrue("Keywords should contain 'USER'", keywordNames.contains("USER"));
-        Assert.assertTrue("Keywords should contain 'PASSWORD'", keywordNames.contains("PASSWORD"));
+        Assertions.assertTrue(keywordNames.contains("SELECT"), "Keywords should contain 'SELECT'");
+        Assertions.assertTrue(keywordNames.contains("INSERT"), "Keywords should contain 'INSERT'");
+        Assertions.assertTrue(keywordNames.contains("UPDATE"), "Keywords should contain 'UPDATE'");
+        Assertions.assertTrue(keywordNames.contains("DELETE"), "Keywords should contain 'DELETE'");
+        Assertions.assertTrue(keywordNames.contains("TABLE"), "Keywords should contain 'TABLE'");
+        Assertions.assertTrue(keywordNames.contains("INDEX"), "Keywords should contain 'INDEX'");
+        Assertions.assertTrue(keywordNames.contains("VIEW"), "Keywords should contain 'VIEW'");
+        Assertions.assertTrue(keywordNames.contains("USER"), "Keywords should contain 'USER'");
+        Assertions.assertTrue(keywordNames.contains("PASSWORD"), "Keywords should contain 'PASSWORD'");
 
         TKeywordInfo selectKeyword = keywordList.stream()
                 .filter(k -> k.getKeyword().equals("SELECT"))
                 .findFirst()
                 .orElse(null);
-        Assert.assertNotNull("SELECT keyword should be present", selectKeyword);
-        Assert.assertTrue("SELECT keyword should be reserved", selectKeyword.isReserved());
+        Assertions.assertNotNull(selectKeyword, "SELECT keyword should be present");
+        Assertions.assertTrue(selectKeyword.isReserved(), "SELECT keyword should be reserved");
 
         TKeywordInfo userKeyword = keywordList.stream()
                 .filter(k -> k.getKeyword().equals("USER"))
                 .findFirst()
                 .orElse(null);
-        Assert.assertNotNull("USER keyword should be present", userKeyword);
-        Assert.assertFalse("USER keyword should not be reserved", userKeyword.isReserved());
+        Assertions.assertNotNull(userKeyword, "USER keyword should be present");
+        Assertions.assertFalse(userKeyword.isReserved(), "USER keyword should not be reserved");
     }
 
     @Test
@@ -472,25 +483,25 @@ public class InformationSchemaDataSourceTest {
         TGetApplicableRolesResponse response = impl.getApplicableRoles(req);
         List<TApplicableRolesInfo> rolesList = response.getRoles();
 
-        Assert.assertNotNull("Roles list should not be null", rolesList);
-        Assert.assertFalse("Roles list should not be empty", rolesList.isEmpty());
+        Assertions.assertNotNull(rolesList, "Roles list should not be null");
+        Assertions.assertFalse(rolesList.isEmpty(), "Roles list should not be empty");
 
         List<String> roleNames = rolesList.stream()
                 .map(TApplicableRolesInfo::getRole_name)
                 .collect(Collectors.toList());
 
-        Assert.assertTrue("Roles should contain 'root'", roleNames.contains("root"));
+        Assertions.assertTrue(roleNames.contains("root"), "Roles should contain 'root'");
 
         TApplicableRolesInfo adminRole = rolesList.stream()
                 .filter(r -> r.getRole_name().equals("root"))
                 .findFirst()
                 .orElse(null);
-        Assert.assertNotNull("root role should be present", adminRole);
-        Assert.assertEquals("User should be root", "root", adminRole.getUser());
-        Assert.assertEquals("Host should be %", "%", adminRole.getHost());
-        Assert.assertEquals("isGrantable should be NO", "NO", "NO");
-        Assert.assertEquals("isDefault should be NO", "NO", "NO");
-        Assert.assertEquals("isMandatory should be NO", "NO", "NO");
+        Assertions.assertNotNull(adminRole, "root role should be present");
+        Assertions.assertEquals("root", adminRole.getUser(), "User should be root");
+        Assertions.assertEquals("%", adminRole.getHost(), "Host should be %");
+        Assertions.assertEquals("NO", "NO", "isGrantable should be NO");
+        Assertions.assertEquals("NO", "NO", "isDefault should be NO");
+        Assertions.assertEquals("NO", "NO", "isMandatory should be NO");
     }
 
     @Test
@@ -505,7 +516,7 @@ public class InformationSchemaDataSourceTest {
         req.setAuth_info(authInfo);
 
         TGetWarehouseMetricsRespone response = impl.getWarehouseMetrics(req);
-        Assert.assertNotNull(response.getMetrics());
+        Assertions.assertNotNull(response.getMetrics());
 
         starRocksAssert.query("select * from information_schema.warehouse_metrics;")
                 .explainContains(" OUTPUT EXPRS:1: WAREHOUSE_ID | 2: WAREHOUSE_NAME | 3: QUEUE_PENDING_LENGTH " +
@@ -526,7 +537,7 @@ public class InformationSchemaDataSourceTest {
         req.setAuth_info(authInfo);
 
         TGetWarehouseQueriesResponse response = impl.getWarehouseQueries(req);
-        Assert.assertTrue(response.getQueries().isEmpty());
+        Assertions.assertTrue(response.getQueries().isEmpty());
 
         starRocksAssert.query("select * from information_schema.warehouse_queries;")
                 .explainContains(" OUTPUT EXPRS:1: WAREHOUSE_ID | 2: WAREHOUSE_NAME | 3: QUERY_ID | 4: STATE " +
@@ -541,11 +552,11 @@ public class InformationSchemaDataSourceTest {
         starRocksAssert.withMaterializedView("create materialized view test_mv1 refresh manual as select * from t1");
 
         MaterializedView mv = starRocksAssert.getMv("d1", "test_mv1");
-        Assert.assertTrue(mv != null);
+        Assertions.assertTrue(mv != null);
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         String taskName = TaskBuilder.getMvTaskName(mv.getId());
         Task task = taskManager.getTask(taskName);
-        Assert.assertTrue(task != null);
+        Assertions.assertTrue(task != null);
 
         TaskRunStatus taskRun = new TaskRunStatus();
         taskRun.setTaskName(taskName);
@@ -569,25 +580,25 @@ public class InformationSchemaDataSourceTest {
         starRocksAssert.query("select TABLE_NAME, LAST_REFRESH_STATE,LAST_REFRESH_ERROR_CODE,IS_ACTIVE,INACTIVE_REASON\n" +
                         "from information_schema.materialized_views where table_name = 'test_mv1")
                 .explainContains(" OUTPUT EXPRS:3: TABLE_NAME | 13: LAST_REFRESH_STATE " +
-                                "| 19: LAST_REFRESH_ERROR_CODE | 5: IS_ACTIVE | 6: INACTIVE_REASON",
-                        "constant exprs: ",
+                                "| 19: LAST_REFRESH_ERROR_CODE | 5: IS_ACTIVE | 6: INACTIVE_REASON\n" +
+                                "  PARTITION: UNPARTITIONED",
                         "'test_mv1' | 'true' | '' | 'SUCCESS' | '0'");
         starRocksAssert.query("select count(1) from information_schema.materialized_views")
                 .explainContains("     constant exprs: ");
         starRocksAssert.query("select * from information_schema.materialized_views")
                 .explainContains("     constant exprs: ",
-                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' ");
         starRocksAssert.query("select * from information_schema.materialized_views where table_name = 'test_mv1' ")
                 .explainContains("     constant exprs: ",
-                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' ");
         starRocksAssert.query("select * from information_schema.materialized_views " +
                         "where TABLE_SCHEMA = 'd1' and TABLE_NAME = 'test_mv1'")
                 .explainContains("     constant exprs: ",
-                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' ");
         starRocksAssert.query("select *, TASK_ID + 1 from information_schema.materialized_views " +
                         "where TABLE_SCHEMA = 'd1' and TABLE_NAME = 'test_mv1'")
                 .explainContains("     constant exprs: ",
-                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' ");
 
         // not supported
         starRocksAssert.query("select * from information_schema.materialized_views where TABLE_NAME != 'test_mv1' ")
@@ -605,8 +616,9 @@ public class InformationSchemaDataSourceTest {
     @Test
     public void testWarehouseMetricsEvaluation() throws Exception {
         starRocksAssert.withDatabase("d1").useDatabase("d1");
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
         new MockUp<SlotManager>() {
             @Mock
@@ -718,5 +730,197 @@ public class InformationSchemaDataSourceTest {
         starRocksAssert.query("select * from information_schema.warehouse_queries where WAREHOUSE_ID = 0 or " +
                         "WAREHOUSE_NAME = 'default_warehouse'")
                 .explainContains("SCAN SCHEMA");
+    }
+
+    @Test
+    public void testTablesSystemTable() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("test_db").useDatabase("test_db");
+        String createTblStmtStr = "CREATE TABLE test_db.`test_tbl1` (\n" +
+                "  `k1` date  COMMENT \"\",\n" +
+                "  `k2` datetime  COMMENT \"\",\n" +
+                "  `k3` varchar(20)  COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY RANGE(k1)()\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"dynamic_partition.enable\" = \"true\",\n" +
+                "\"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                "\"dynamic_partition.start\" = \"-3\",\n" +
+                "\"dynamic_partition.end\" = \"3\",\n" +
+                "\"dynamic_partition.prefix\" = \"p\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        {
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_tbl2'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_NAME = 'test_tbl2'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_SCHEMA = 'test_db_xxx'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select * from information_schema.tables")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select * from information_schema.tables where TABLE_SCHEMA = 'test_db'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select * from information_schema.tables where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_tbl1'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.tables")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_SCHEMA = 'test_db'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_tbl1'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_tbl2'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_SCHEMA = 'test_db' or " +
+                            "TABLE_NAME ='test_view1'")
+                    .explainWithout("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.tables where ENGINE = 'xxx'")
+                    .explainWithout("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.tables where TABLE_CATALOG= 'xxx'")
+                    .explainWithout("     constant exprs: ");
+        }
+
+        TGetTablesInfoRequest params = new TGetTablesInfoRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("test_db");
+        authInfo.setCurrent_user_ident(connectContext.getCurrentUserIdentity().toThrift());
+        params.setAuth_info(authInfo);
+        {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TGetTablesInfoResponse result = impl.getTablesInfo(params);
+            Assertions.assertEquals(1, result.getTables_infos().size());
+            TTableInfo tableStatus = result.getTables_infos().get(0);
+            Assertions.assertEquals("test_tbl1", tableStatus.getTable_name());
+        }
+        {
+            TGetTablesInfoResponse result = TablesSystemTable.query(params);
+            Assertions.assertEquals(1, result.getTables_infos().size());
+            TTableInfo tableStatus = result.getTables_infos().get(0);
+            Assertions.assertEquals("test_tbl1", tableStatus.getTable_name());
+        }
+        {
+            authInfo.setPattern("test_db2");
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TGetTablesInfoResponse result = impl.getTablesInfo(params);
+            Assertions.assertEquals(0, result.getTables_infos().size(),
+                    "Should return empty result for non-existing db");
+        }
+        {
+            params.setTable_name("test_tabl2_xx");
+            TGetTablesInfoResponse result = TablesSystemTable.query(params);
+            Assertions.assertEquals(0, result.getTables_infos().size(),
+                    "Should return empty result for non-existing db");
+        }
+    }
+
+    @Test
+    public void testTablesSystemView() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("test_db").useDatabase("test_db");
+        String createTblStmtStr = "CREATE TABLE test_db.`test_tbl1` (\n" +
+                "  `k1` date  COMMENT \"\",\n" +
+                "  `k2` datetime  COMMENT \"\",\n" +
+                "  `k3` varchar(20)  COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY RANGE(k1)()\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3;";
+        starRocksAssert.withTable(createTblStmtStr);
+        starRocksAssert.withView("CREATE VIEW test_db.test_view1 AS SELECT k1, k2 FROM test_db.test_tbl1");
+
+        {
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_tbl2'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_NAME = 'test_tbl2'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_SCHEMA = 'test_db_xxx'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select * from information_schema.views")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select * from information_schema.views where TABLE_SCHEMA = 'test_db'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select * from information_schema.views where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_view1'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select * from information_schema.views where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_tbl1'")
+                    .explainContains("EMPTYSET");
+            starRocksAssert.query("select count(1) from information_schema.views")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_SCHEMA = 'test_db'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_SCHEMA = 'test_db' " +
+                            "and TABLE_NAME = 'test_view1'")
+                    .explainContains("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_SCHEMA = 'test_db' or " +
+                            "TABLE_NAME ='test_view1'")
+                    .explainWithout("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.views where DEFINER = 'xxx'")
+                    .explainWithout("     constant exprs: ");
+            starRocksAssert.query("select count(1) from information_schema.views where TABLE_CATALOG= 'xxx'")
+                    .explainWithout("     constant exprs: ");
+        }
+
+        TGetTablesParams params = new TGetTablesParams();
+        params.setCurrent_user_ident(connectContext.getCurrentUserIdentity().toThrift());
+        params.setDb("test_db");
+        params.setType(TTableType.SCHEMA_TABLE);
+
+        {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TListTableStatusResult result = impl.listTableStatus(params);
+            Assertions.assertEquals(2, result.getTables().size());
+            Set<String> tableNames = result.getTables().stream()
+                    .map(TTableStatus::getName)
+                    .collect(Collectors.toUnmodifiableSet());
+            Assertions.assertEquals(Set.of("test_tbl1", "test_view1"), tableNames);
+        }
+        {
+            params.setDb("test_db");
+            params.setType(TTableType.SCHEMA_TABLE);
+            TListTableStatusResult result = ViewsSystemTable.query(params, connectContext);
+            Assertions.assertEquals(2, result.getTables().size());
+            Set<String> tableNames = result.getTables().stream()
+                    .map(TTableStatus::getName)
+                    .collect(Collectors.toUnmodifiableSet());
+            Assertions.assertEquals(Set.of("test_tbl1", "test_view1"), tableNames);
+        }
+        {
+            params.setDb("test_db");
+            params.setType(TTableType.VIEW);
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TListTableStatusResult result = impl.listTableStatus(params);
+            Assertions.assertEquals(1, result.getTables().size());
+            TTableStatus tableStatus = result.getTables().get(0);
+            Assertions.assertEquals("test_view1", tableStatus.getName());
+
+        }
+        {
+            params.setDb("test_db");
+            params.setType(TTableType.VIEW);
+            TListTableStatusResult result = ViewsSystemTable.query(params, connectContext);
+            Assertions.assertEquals(1, result.getTables().size());
+            TTableStatus tableStatus = result.getTables().get(0);
+            Assertions.assertEquals("test_view1", tableStatus.getName());
+        }
+        {
+            params.setDb("test_db2");
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TListTableStatusResult result = impl.listTableStatus(params);
+            Assertions.assertEquals(0, result.getTables().size(),
+                    "Should return empty result for non-existing db");
+        }
+        {
+            params.setDb("test_db1");
+            params.setType(TTableType.VIEW);
+            TListTableStatusResult result = ViewsSystemTable.query(params, connectContext);
+            Assertions.assertEquals(0, result.getTables().size(),
+                    "Should return empty result for non-existing db");
+        }
     }
 }

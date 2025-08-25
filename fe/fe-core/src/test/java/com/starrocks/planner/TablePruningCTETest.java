@@ -18,9 +18,9 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
@@ -29,7 +29,7 @@ import java.util.regex.Pattern;
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
 public class TablePruningCTETest extends TablePruningTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
@@ -57,7 +57,7 @@ public class TablePruningCTETest extends TablePruningTestBase {
                                 starRocksAssert.alterTableProperties(addFk);
                             } catch (Exception e) {
                                 e.printStackTrace();
-                                Assert.fail();
+                                Assertions.fail();
                             }
                         }
                 ));
@@ -81,9 +81,9 @@ public class TablePruningCTETest extends TablePruningTestBase {
         };
         for (String[] showAndResult : tpchShowAndResults) {
             List<List<String>> res = starRocksAssert.show(String.format("show create table %s", showAndResult[0]));
-            Assert.assertTrue(res.size() >= 1 && res.get(0).size() >= 2);
+            Assertions.assertTrue(res.size() >= 1 && res.get(0).size() >= 2);
             String createTableSql = res.get(0).get(1);
-            Assert.assertTrue(createTableSql, createTableSql.contains(showAndResult[1]));
+            Assertions.assertTrue(createTableSql.contains(showAndResult[1]), createTableSql);
         }
         FeConstants.runningUnitTest = true;
         ctx.getSessionVariable().setEnableTablePruneOnUpdate(true);
@@ -162,7 +162,7 @@ public class TablePruningCTETest extends TablePruningTestBase {
         String q = getSqlList("sql/tpch_pk_tables/", "q5").get(0);
         String plan = checkHashJoinCountWithOnlyRBO(q, 3);
         plan = plan.replaceAll("\\d+:\\s*", "");
-        Assert.assertTrue(plan.contains("Predicates: " +
+        Assertions.assertTrue(plan.contains("Predicates: " +
                 "l_suppkey IN (1, 2, 100), " +
                 "l_partkey IN (200, 1000), " +
                 "l_partkey IN (200, 1000), " +
@@ -237,7 +237,7 @@ public class TablePruningCTETest extends TablePruningTestBase {
         };
         String subquery = getSqlList("sql/tpch_pk_tables/", "lineitem_flat_subquery").get(0);
         subquery = subquery.replaceAll("inner join", "left join");
-        Assert.assertTrue(subquery.contains("left join"));
+        Assertions.assertTrue(subquery.contains("left join"));
         for (Object[] tc : cases) {
             String items = (String) tc[0];
             int numHashJoins = (Integer) tc[1];
@@ -307,7 +307,7 @@ public class TablePruningCTETest extends TablePruningTestBase {
         };
         String cte = getSqlList("sql/tpch_pk_tables/", "lineitem_flat_cte").get(0);
         cte = cte.replaceAll("inner join", "left join");
-        Assert.assertTrue(cte.contains("left join"));
+        Assertions.assertTrue(cte.contains("left join"));
         for (Object[] tc : cases) {
             String items = (String) tc[0];
             int numHashJoins = (Integer) tc[1];
@@ -356,7 +356,50 @@ public class TablePruningCTETest extends TablePruningTestBase {
             int n = (Integer) tc[1];
             String sql = String.format("%s %s", cte, selectItems);
             String plan = checkHashJoinCountWithBothRBOAndCBO(sql, n);
-            Assert.assertFalse(plan.contains("NESTLOOP"));
+            Assertions.assertFalse(plan.contains("NESTLOOP"));
         }
+    }
+
+    @Test
+    public void testNestedCte() {
+        String sql = "with cte0 as(\n" +
+                "select distinct l_orderkey,l_quantity, l_partkey, l_suppkey, l_linenumber\n" +
+                "from lineitem\n" +
+                "),\n" +
+                "cte1 as(\n" +
+                "select count(distinct l_linenumber) as n, l_orderkey, l_partkey, l_suppkey\n" +
+                "from cte0\n" +
+                "group by l_orderkey, l_partkey, l_suppkey\n" +
+                "),\n" +
+                "cte2 as(\n" +
+                "select count(distinct l_quantity) as n, l_orderkey, l_partkey, l_suppkey\n" +
+                "from cte0\n" +
+                "group by l_orderkey, l_partkey, l_suppkey\n" +
+                "),\n" +
+                "cte3 as(\n" +
+                "select l_orderkey,l_partkey, l_suppkey, sum(n) over(partition by l_orderkey,l_partkey) as sum0\n" +
+                "from cte1\n" +
+                "),\n" +
+                "cte4 as(\n" +
+                "select l_orderkey,l_partkey, l_suppkey, sum(n) over(partition by l_orderkey,l_suppkey) as sum1\n" +
+                "from cte2\n" +
+                "),\n" +
+                "cte5 as(\n" +
+                "select l_orderkey,l_partkey, l_suppkey, sum(n) over(partition by l_partkey) as sum2\n" +
+                "from cte1\n" +
+                "),\n" +
+                "cte6 as(\n" +
+                "select l_orderkey,l_partkey, l_suppkey, sum(n) over(partition by l_suppkey) as sum3\n" +
+                "from cte2\n" +
+                ")\n" +
+                "select /*+SET_VAR(cbo_cte_reuse_rate=0)*/ a.l_orderkey, a.l_partkey, a.l_suppkey, sum0, sum1,sum2,sum3\n" +
+                "from cte3 a \n" +
+                "inner join cte4 b on \n" +
+                "   a.l_orderkey = b.l_orderkey and a.l_partkey = a.l_partkey and a.l_suppkey = b.l_suppkey\n" +
+                "inner join cte5 c on \n" +
+                "   a.l_orderkey = c.l_orderkey and a.l_partkey = c.l_partkey and a.l_suppkey = c.l_suppkey\n" +
+                "inner join cte6 d on \n" +
+                "   a.l_orderkey = d.l_orderkey and a.l_partkey = d.l_partkey and a.l_suppkey = d.l_suppkey;";
+        checkHashJoinCountWithBothRBOAndCBO(sql, 3);
     }
 }

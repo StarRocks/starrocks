@@ -16,6 +16,7 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.collect.Sets;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -67,6 +68,9 @@ public class CompactionControlScheduler {
     public void updateTableForbiddenTimeRanges(Long tableId, String crontab) throws SchedulerException {
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
+        }
+        if (RunMode.isSharedDataMode()) {
+            throw new IllegalArgumentException("compaction control is not supported in shared-data.");
         }
         startScheduler();
         // Generate JobKey and TriggerKey based on tableId

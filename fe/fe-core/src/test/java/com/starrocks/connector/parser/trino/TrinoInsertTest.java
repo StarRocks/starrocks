@@ -14,17 +14,17 @@
 
 package com.starrocks.connector.parser.trino;
 
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class TrinoInsertTest extends TrinoTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         connectContext.getSessionVariable().setSqlDialect("trino");
     }

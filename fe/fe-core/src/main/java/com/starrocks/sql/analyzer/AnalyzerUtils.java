@@ -76,6 +76,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.lake.LakeMaterializedView;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -351,6 +353,25 @@ public class AnalyzerUtils {
                 children.add(head);
             }
         }
+    }
+
+    /**
+     * Shallow copy the table object for query purpose
+     */
+    public static OlapTable getShadowCopyTable(OlapTable olapTable) {
+        OlapTable copiedTable;
+        if (olapTable instanceof LakeMaterializedView) {
+            copiedTable = new LakeMaterializedView();
+        } else if (olapTable instanceof MaterializedView) {
+            copiedTable = new MaterializedView();
+        } else if (olapTable instanceof LakeTable) {
+            copiedTable = new LakeTable();
+        } else {
+            copiedTable = new OlapTable();
+        }
+
+        olapTable.copyOnlyForQuery(copiedTable);
+        return copiedTable;
     }
 
     private static class DBCollector implements AstVisitor<Void, Void> {
@@ -914,8 +935,7 @@ public class AnalyzerUtils {
             int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
             boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
                     relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
-            // TODO: not support LakeTable right now
-            if ((table.isOlapTableOrMaterializedView() && useNonLockOptimization)) {
+            if ((table.isNativeTableOrMaterializedView() && useNonLockOptimization)) {
                 // OlapTable can be copied via copyOnlyForQuery
                 return null;
             } else if (IMMUTABLE_EXTERNAL_TABLES.contains(table.getType())) {
@@ -987,7 +1007,6 @@ public class AnalyzerUtils {
             return null;
         }
 
-        // TODO: support cloud native table and mv
         private Table copyTable(Table originalTable) {
             if (!(originalTable instanceof OlapTable)) {
                 return null;
@@ -999,17 +1018,8 @@ public class AnalyzerUtils {
                 return existed;
             }
 
-            OlapTable copied = null;
-            if (originalTable.isOlapTable()) {
-                copied = new OlapTable();
-            } else if (originalTable.isOlapMaterializedView()) {
-                copied = new MaterializedView();
-            } else {
-                return null;
-            }
-
+            OlapTable copied = getShadowCopyTable(table);
             olapTables.add(table);
-            table.copyOnlyForQuery(copied);
             idMap.put(tableIndexId, copied);
             return copied;
         }
@@ -1246,9 +1256,14 @@ public class AnalyzerUtils {
                 int len = ScalarType.getOlapMaxVarcharLength();
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
-                    if (scalarType.getLength() > 0) {
-                        // Catalog's varchar length may larger than olap's max varchar length
-                        len = Integer.min(scalarType.getLength(), ScalarType.getOlapMaxVarcharLength());
+                    if (Config.transform_type_prefer_string_for_varchar) {
+                        // always use max varchar length for varchar type if transform_type_prefer_string_for_varchar is set.
+                        len = ScalarType.getOlapMaxVarcharLength();
+                    } else {
+                        if (scalarType.getLength() > 0) {
+                            // Catalog's varchar length may larger than olap's max varchar length
+                            len = Integer.min(scalarType.getLength(), ScalarType.getOlapMaxVarcharLength());
+                        }
                     }
                 }
                 newType = ScalarType.createVarcharType(len);
@@ -1257,7 +1272,8 @@ public class AnalyzerUtils {
                 if (convertDouble) {
                     newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
                 }
-            } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
+            } else if (PrimitiveType.DECIMAL256 == srcType.getPrimitiveType() ||
+                    PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
                 newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
@@ -1370,6 +1386,7 @@ public class AnalyzerUtils {
 
     public static AddPartitionClause getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
                                                                               PartitionDesc partitionDesc,
+                                                                              DistributionDesc distributionDesc,
                                                                               List<List<String>> partitionValues,
                                                                               boolean isTemp,
                                                                               String partitionNamePrefix)
@@ -1379,9 +1396,10 @@ public class AnalyzerUtils {
             PartitionMeasure measure = checkAndGetPartitionMeasure(expressionPartitionDesc.getExpr());
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    (ExpressionRangePartitionInfo) partitionInfo);
+                    distributionDesc, (ExpressionRangePartitionInfo) partitionInfo);
         } else {
-            throw new AnalysisException("Unsupported partition type " + partitionDesc.getType());
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            throw new AnalysisException("Unsupported partition type " + partitionInfo.getType());
         }
     }
 
@@ -1400,7 +1418,7 @@ public class AnalyzerUtils {
             Expr expr = partitionExprs.get(0);
             PartitionMeasure measure = checkAndGetPartitionMeasure(expr);
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    expressionRangePartitionInfo);
+                    null, expressionRangePartitionInfo);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
             DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
@@ -1434,14 +1452,7 @@ public class AnalyzerUtils {
                 if (!partitionColNames.contains(partitionName)) {
                     List<List<String>> partitionItems = Collections.singletonList(partitionValue);
                     PListCell cell = new PListCell(partitionItems);
-                    // If the partition name already exists and their partition values are different, change the partition name.
-                    if (tablePartitions.containsKey(partitionName) && !tablePartitions.get(partitionName).equals(cell)) {
-                        partitionName = calculateUniquePartitionName(partitionName, tablePartitions);
-                        if (tablePartitions.containsKey(partitionName)) {
-                            throw new AnalysisException(String.format("partition name %s already exists in table " +
-                                    "%s.", partitionName, olapTable.getName()));
-                        }
-                    }
+                    partitionName = calculateUniquePartitionName(partitionName, cell, tablePartitions);
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
                             partitionName, partitionItems, partitionProperties);
                     multiItemListPartitionDesc.setSystem(true);
@@ -1464,19 +1475,21 @@ public class AnalyzerUtils {
     /**
      * Calculate the unique partition name for list partition.
      */
-    private static String calculateUniquePartitionName(String partitionName,
-                                                       Map<String, PListCell> tablePartitions) {
-        // ensure partition name is unique with case-insensitive
-        int diff = partitionName.hashCode();
-        String newPartitionName = partitionName + "_" + Integer.toHexString(diff);
-        if (tablePartitions.containsKey(newPartitionName)) {
-            int i = 0;
-            do {
-                diff += 1;
-                newPartitionName = partitionName + "_" + Integer.toHexString(diff);
-            } while (i++ < 100 && tablePartitions.containsKey(newPartitionName));
+    private static String calculateUniquePartitionName(String partitionName, PListCell cell,
+                                                       Map<String, PListCell> tablePartitions) throws AnalysisException {
+        String orignialPartitionName = partitionName;
+        int i = 0;
+        // If the partition name already exists and their partition values are different, change the partition name.
+        while (tablePartitions.containsKey(partitionName) && !tablePartitions.get(partitionName).equals(cell)) {
+            // ensure partition name is unique with case-insensitive
+            int diff = orignialPartitionName.hashCode();
+            partitionName = orignialPartitionName + "_" + Integer.toHexString(diff + i);
+            if (++i > 100) {
+                // throw exception
+                throw new AnalysisException("Failed to calculate unique partition name after multiple attempts.");
+            }
         }
-        return newPartitionName;
+        return partitionName;
     }
 
     @VisibleForTesting
@@ -1507,14 +1520,16 @@ public class AnalyzerUtils {
             boolean isTemp,
             String partitionPrefix,
             PartitionMeasure measure,
+            DistributionDesc distributionDesc,
             ExpressionRangePartitionInfo expressionRangePartitionInfo) throws AnalysisException {
         String granularity = measure.getGranularity();
         long interval = measure.getInterval();
         Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())
                 .get(0).getType();
         Short replicationNum = olapTable.getTableProperty().getReplicationNum();
-        DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
-                .toDistributionDesc(olapTable.getIdToColumn());
+        if (distributionDesc == null) {
+            distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc(olapTable.getIdToColumn());
+        }
         Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
         List<PartitionDesc> partitionDescs = Lists.newArrayList();

@@ -27,6 +27,7 @@
 #include "gutil/casts.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
+#include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "util/date_func.h"
 #include "util/percentile_value.h"
@@ -76,6 +77,24 @@ void ColumnHelper::merge_two_filters(const ColumnPtr& column, Filter* __restrict
         // noted that here we don't need to count zero, but to check is there any non-zero.
         // filter values are 0/1, we can use memchr here.
         *all_zero = (memchr(filter->data(), 0x1, filter->size()) == nullptr);
+    }
+}
+
+void ColumnHelper::merge_two_anti_filters(const ColumnPtr& column, NullData& null_data, Filter* __restrict filter) {
+    size_t num_rows = column->size();
+    auto* data_column = get_data_column(column.get());
+
+    if (column->is_nullable()) {
+        const auto* nullable_column = as_raw_const_column<NullableColumn>(column);
+        const auto nulls = nullable_column->null_column_data().data();
+        for (size_t i = 0; i < num_rows; ++i) {
+            null_data[i] |= nulls[i];
+        }
+    }
+
+    const auto* datas = get_cpp_data<TYPE_BOOLEAN>(data_column);
+    for (size_t j = 0; j < num_rows; ++j) {
+        (*filter)[j] &= datas[j];
     }
 }
 
@@ -195,6 +214,56 @@ MutableColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
     auto nullable_column = NullableColumn::create(Int8Column::create(), NullColumn::create());
     nullable_column->append_nulls(1);
     return ConstColumn::create(std::move(nullable_column), chunk_size);
+}
+
+class UpdateColumnNullInfoVisitor : public ColumnVisitorMutableAdapter<UpdateColumnNullInfoVisitor> {
+public:
+    UpdateColumnNullInfoVisitor() : ColumnVisitorMutableAdapter<UpdateColumnNullInfoVisitor>(this) {}
+
+    Status do_visit(ConstColumn* column) {
+        return Status::NotSupported("Unsupported const column in column wise comparator");
+    }
+
+    template <typename T>
+    Status do_visit(ObjectColumn<T>* column) {
+        return Status::NotSupported("Unsupported object column in column wise comparator");
+    }
+
+    Status do_visit(NullableColumn* column) {
+        RETURN_IF_ERROR(column->data_column()->accept_mutable(this));
+        column->update_has_null();
+        return Status::OK();
+    }
+
+    Status do_visit(ArrayColumn* column) {
+        RETURN_IF_ERROR(column->elements_column()->accept_mutable(this));
+        return Status::OK();
+    }
+
+    Status do_visit(MapColumn* column) {
+        RETURN_IF_ERROR(column->keys_column()->accept_mutable(this));
+        RETURN_IF_ERROR(column->values_column()->accept_mutable(this));
+        return Status::OK();
+    }
+
+    Status do_visit(StructColumn* column) {
+        return Status::NotSupported("Unsupported struct column in column wise comparator");
+    }
+
+    template <typename T>
+    Status do_visit(FixedLengthColumnBase<T>* column) {
+        return Status::OK();
+    }
+    template <typename T>
+    Status do_visit(BinaryColumnBase<T>* column) {
+        return Status::OK();
+    }
+};
+
+Status ColumnHelper::update_nested_has_null(Column* column) {
+    UpdateColumnNullInfoVisitor visitor;
+    RETURN_IF_ERROR(column->accept_mutable(&visitor));
+    return Status::OK();
 }
 
 size_t ColumnHelper::find_nonnull(const Column* col, size_t start, size_t end) {

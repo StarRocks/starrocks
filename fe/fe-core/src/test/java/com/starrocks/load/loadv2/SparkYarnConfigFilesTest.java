@@ -19,10 +19,10 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.LoadException;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.util.Map;
@@ -37,7 +37,7 @@ public class SparkYarnConfigFilesTest {
     @Mocked
     GlobalStateMgr globalStateMgr;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         properties = Maps.newHashMap();
         properties.put(SPARK_HADOOP_PREFIX + "hadoop.job.ugi", "test,test");
@@ -57,13 +57,13 @@ public class SparkYarnConfigFilesTest {
             String configDir = sparkYarnConfigFiles.getConfigDir();
             File dir = new File(configDir);
             File[] configFiles = dir.listFiles();
-            Assert.assertEquals(2, configFiles.length);
+            Assertions.assertEquals(2, configFiles.length);
         } catch (LoadException e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
-    @After
+    @AfterEach
     public void clear() {
         delete(YARN_CONFIG_DIR);
     }

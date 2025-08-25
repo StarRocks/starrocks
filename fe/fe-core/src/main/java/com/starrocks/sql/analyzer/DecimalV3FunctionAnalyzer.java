@@ -94,8 +94,9 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.MULTI_DISTINCT_SUM).build();
 
     private static final ScalarType DECIMAL128P38S0 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
+    private static final ScalarType DECIMAL256P76S0 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0);
 
-    // For decimal32/64/128 types, normalize argType's scale and precision
+    // For decimal32/64/128/256 types, normalize argType's scale and precision
     private static Type[] normalizeDecimalArgTypes(final Type[] argTypes, String fnName) {
         if (argTypes == null || argTypes.length == 0) {
             return argTypes;
@@ -230,12 +231,17 @@ public class DecimalV3FunctionAnalyzer {
                 // avg on decimal complies with Snowflake-style
                 // avg actual processed like sum()/count(), it also has a risk of overflow if the scale is too large,
                 // so we limit the maximum scale for this case
-                if (((ScalarType) argType).getScalarScale() > 18) {
+                int scale = ((ScalarType) argType).getScalarScale();
+                ScalarType rhsType = argType.isDecimal256() ? DECIMAL256P76S0 : DECIMAL128P38S0;
+
+                if (argType.isDecimal256() && scale > 36) {
+                    argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 36);
+                } else if (!argType.isDecimal256() && scale > 18) {
                     argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18);
                 }
+
                 final ArithmeticExpr.TypeTriple triple =
-                        ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.DIVIDE, (ScalarType) argType,
-                                DECIMAL128P38S0);
+                        ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.DIVIDE, (ScalarType) argType, rhsType);
                 returnType = triple.returnType;
             } else if (fn.functionName().equals(FunctionSet.APPROX_TOP_K)) {
                 returnType = FunctionSet.APPROX_TOP_N_RET_TYPE_BUILDER.apply(argType);
@@ -244,7 +250,11 @@ public class DecimalV3FunctionAnalyzer {
             } else if (argType.isDecimalV3() && DECIMAL_SUM_FUNCTION_TYPE.contains(fn.functionName())) {
                 // For decimal aggregation sum, there is a risk of overflow if the scale is too large,
                 // so we limit the maximum scale for this case
-                if (((ScalarType) argType).getScalarScale() > 18) {
+                int scale = ((ScalarType) argType).getScalarScale();
+                if (argType.isDecimal256() && scale > 36) {
+                    argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 36);
+                    returnType = argType;
+                } else if (!argType.isDecimal256() && scale > 18) {
                     argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18);
                     returnType = argType;
                 }
@@ -278,10 +288,14 @@ public class DecimalV3FunctionAnalyzer {
         if (!argType.isDecimalV3()) {
             return fn;
         }
-        ScalarType decimal128Type =
-                ScalarType.createDecimalV3NarrowestType(38, ((ScalarType) argType).getScalarScale());
+        ScalarType decimalType;
+        if (argType.isDecimal256()) {
+            decimalType = ScalarType.createDecimalV3NarrowestType(76, ((ScalarType) argType).getScalarScale());
+        } else {
+            decimalType = ScalarType.createDecimalV3NarrowestType(38, ((ScalarType) argType).getScalarScale());
+        }
         AggregateFunction newFn = new AggregateFunction(
-                fn.getFunctionName(), Arrays.asList(sumFn.getArgs()), decimal128Type,
+                fn.getFunctionName(), Arrays.asList(sumFn.getArgs()), decimalType,
                 fn.getIntermediateType(), fn.hasVarArgs());
 
         newFn.setFunctionId(fn.getFunctionId());
@@ -302,10 +316,15 @@ public class DecimalV3FunctionAnalyzer {
         }
         ScalarType decimalType = (ScalarType) argType;
         AggregateFunction fn = (AggregateFunction) sumFn;
-        ScalarType decimal128Type = ScalarType.createDecimalV3Type(
-                PrimitiveType.DECIMAL128, 38, decimalType.getScalarScale());
+        ScalarType retType;
+        // TODO(stephen): support auto scale up decimal precision
+        if (argType.isDecimal256()) {
+            retType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, decimalType.getScalarScale());
+        } else {
+            retType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, decimalType.getScalarScale());
+        }
         AggregateFunction newFn = new AggregateFunction(
-                fn.getFunctionName(), Collections.singletonList(decimalType), decimal128Type,
+                fn.getFunctionName(), Collections.singletonList(decimalType), retType,
                 fn.getIntermediateType(), fn.hasVarArgs());
         newFn.setFunctionId(fn.getFunctionId());
         newFn.setChecksum(fn.getChecksum());
@@ -420,11 +439,20 @@ public class DecimalV3FunctionAnalyzer {
                 commonType = argumentTypes[0];
             } else if (DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName) && argumentTypes[0].isDecimalV3()) {
                 ScalarType argScalarType = (ScalarType) argumentTypes[0];
-                int precision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+                int precision;
+                if (argScalarType.isDecimal256()) {
+                    precision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL256);
+                } else {
+                    precision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+                }
+                
                 int scale = argScalarType.getScalarScale();
                 // TODO(by satanson): Maybe accumulating narrower decimal types to wider decimal types directly w/o
                 //  casting the narrower type to the wider type is sound and efficient.
-                commonType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+                PrimitiveType commonPrimitiveType = argScalarType.isDecimal256() ? PrimitiveType.DECIMAL256 :
+                        PrimitiveType.DECIMAL128;
+                commonType = ScalarType.createDecimalV3Type(commonPrimitiveType, precision, scale);
+
             }
 
             Type argType = argumentTypes[0];

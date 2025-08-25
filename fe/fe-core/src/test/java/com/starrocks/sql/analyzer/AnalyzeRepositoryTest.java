@@ -30,9 +30,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -45,7 +45,7 @@ public class AnalyzeRepositoryTest {
 
     private SnapshotInfo info;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         List<String> files = Lists.newArrayList();
         files.add("1.dat");
@@ -76,7 +76,7 @@ public class AnalyzeRepositoryTest {
         };
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AlterTest.beforeClass();
         AnalyzeTestUtil.init();

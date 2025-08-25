@@ -36,17 +36,14 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ResourceMgr;
-import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.load.EtlJobType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ResourceDesc;
-import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
@@ -61,38 +58,7 @@ public class ResourceDescTest {
         String value = "2g";
         properties.put(key, value);
         ResourceDesc resourceDesc = new ResourceDesc(resourceName, properties);
-        SparkResource resource = new SparkResource(resourceName);
-
-        new Expectations() {
-            {
-                globalStateMgr.getResourceMgr();
-                result = resourceMgr;
-                resourceMgr.getResource(resourceName);
-                result = resource;
-            }
-        };
-
-        resourceDesc.analyze();
-        Assert.assertEquals(resourceName, resourceDesc.getName());
-        Assert.assertEquals(value, resourceDesc.getProperties().get(key));
-        Assert.assertEquals(EtlJobType.SPARK, resourceDesc.getEtlJobType());
-    }
-
-    @Test(expected = AnalysisException.class)
-    public void testNoResource(@Mocked GlobalStateMgr globalStateMgr, @Injectable ResourceMgr resourceMgr)
-            throws AnalysisException {
-        String resourceName = "spark1";
-        ResourceDesc resourceDesc = new ResourceDesc(resourceName, null);
-
-        new Expectations() {
-            {
-                globalStateMgr.getResourceMgr();
-                result = resourceMgr;
-                resourceMgr.getResource(resourceName);
-                result = null;
-            }
-        };
-
-        resourceDesc.analyze();
+        Assertions.assertEquals(resourceName, resourceDesc.getName());
+        Assertions.assertEquals(value, resourceDesc.getProperties().get(key));
     }
 }

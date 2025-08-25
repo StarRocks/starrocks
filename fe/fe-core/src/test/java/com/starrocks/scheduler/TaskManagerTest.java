@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 
 import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.catalog.PrimitiveType;
@@ -26,7 +27,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
@@ -39,17 +43,13 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -58,8 +58,9 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class TaskManagerTest {
 
     private static final Logger LOG = LogManager.getLogger(TaskManagerTest.class);
@@ -70,7 +71,7 @@ public class TaskManagerTest {
     private static final ExecuteOption DEFAULT_NO_MERGE_OPTION = makeExecuteOption(false, false);
     private final TaskRunScheduler taskRunScheduler = new TaskRunScheduler();
 
-    @Before
+    @BeforeEach
     public void setUp() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         new Expectations() {
@@ -87,7 +88,7 @@ public class TaskManagerTest {
         };
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
@@ -164,26 +165,7 @@ public class TaskManagerTest {
             }
             LOG.info("SubmitTaskRegularTest is waiting for TaskRunState retryCount:" + retryCount);
         }
-        Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
-    }
-
-    @Test
-    public void taskSerializeTest() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
-        String submitSQL = "submit task as create table temp as select count(*) as cnt from tbl1";
-        SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, ctx);
-        Task task = TaskBuilder.buildTask(submitTaskStmt, ctx);
-
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
-        task.write(dataOutputStream);
-
-        ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-        DataInputStream dataInputStream = new DataInputStream(inputStream);
-        Task readTask = Task.read(dataInputStream);
-        // upgrade should default task type to manual
-        Assert.assertEquals(readTask.getType(), Constants.TaskType.MANUAL);
-        Assert.assertEquals(readTask.getState(), Constants.TaskState.UNKNOWN);
+        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, state);
     }
 
     @Test
@@ -214,15 +196,15 @@ public class TaskManagerTest {
         queue.offer(taskRun4);
 
         TaskRunStatus get1 = queue.poll().getStatus();
-        Assert.assertEquals(10, get1.getPriority());
+        Assertions.assertEquals(10, get1.getPriority());
         TaskRunStatus get2 = queue.poll().getStatus();
-        Assert.assertEquals(5, get2.getPriority());
-        Assert.assertEquals(now, get2.getCreateTime());
+        Assertions.assertEquals(5, get2.getPriority());
+        Assertions.assertEquals(now, get2.getCreateTime());
         TaskRunStatus get3 = queue.poll().getStatus();
-        Assert.assertEquals(5, get3.getPriority());
-        Assert.assertEquals(now + 100, get3.getCreateTime());
+        Assertions.assertEquals(5, get3.getPriority());
+        Assertions.assertEquals(now + 100, get3.getCreateTime());
         TaskRunStatus get4 = queue.poll().getStatus();
-        Assert.assertEquals(0, get4.getPriority());
+        Assertions.assertEquals(0, get4.getPriority());
 
     }
 
@@ -257,9 +239,9 @@ public class TaskManagerTest {
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
-        Assert.assertTrue(taskRuns != null);
-        Assert.assertEquals(1, taskRuns.size());
-        Assert.assertEquals(10, taskRuns.get(0).getStatus().getPriority());
+        Assertions.assertTrue(taskRuns != null);
+        Assertions.assertEquals(1, taskRuns.size());
+        Assertions.assertEquals(10, taskRuns.get(0).getStatus().getPriority());
     }
 
     @Test
@@ -293,9 +275,9 @@ public class TaskManagerTest {
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
-        Assert.assertTrue(taskRuns != null);
-        Assert.assertEquals(1, taskRuns.size());
-        Assert.assertEquals(10, taskRuns.get(0).getStatus().getPriority());
+        Assertions.assertTrue(taskRuns != null);
+        Assertions.assertEquals(1, taskRuns.size());
+        Assertions.assertEquals(10, taskRuns.get(0).getStatus().getPriority());
 
     }
 
@@ -330,10 +312,10 @@ public class TaskManagerTest {
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
-        Assert.assertTrue(taskRuns != null);
-        Assert.assertEquals(1, taskRuns.size());
+        Assertions.assertTrue(taskRuns != null);
+        Assertions.assertEquals(1, taskRuns.size());
         TaskRun taskRun = taskRuns.get(0);
-        Assert.assertEquals(now, taskRun.getStatus().getCreateTime());
+        Assertions.assertEquals(now, taskRun.getStatus().getCreateTime());
     }
 
     @Test
@@ -367,10 +349,10 @@ public class TaskManagerTest {
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
-        Assert.assertTrue(taskRuns != null);
-        Assert.assertEquals(1, taskRuns.size());
+        Assertions.assertTrue(taskRuns != null);
+        Assertions.assertEquals(1, taskRuns.size());
         TaskRun taskRun = taskRuns.get(0);
-        Assert.assertEquals(now, taskRun.getStatus().getCreateTime());
+        Assertions.assertEquals(now, taskRun.getStatus().getCreateTime());
     }
 
     @Test
@@ -413,8 +395,8 @@ public class TaskManagerTest {
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
-        Assert.assertTrue(taskRuns != null);
-        Assert.assertEquals(3, taskRuns.size());
+        Assertions.assertTrue(taskRuns != null);
+        Assertions.assertEquals(3, taskRuns.size());
     }
 
     @Test
@@ -441,7 +423,7 @@ public class TaskManagerTest {
         taskManager.replayUpdateTaskRun(change1);
 
         TaskRunScheduler taskRunScheduler = taskManager.getTaskRunScheduler();
-        Assert.assertEquals(1, taskRunScheduler.getRunningTaskCount());
+        Assertions.assertEquals(1, taskRunScheduler.getRunningTaskCount());
     }
 
     @Test
@@ -469,8 +451,8 @@ public class TaskManagerTest {
             TaskRunStatusChange change1 = new TaskRunStatusChange(task.getId(), taskRun2.getStatus(),
                     Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
             taskManager.replayUpdateTaskRun(change1);
-            Assert.assertEquals(1, taskRunScheduler.getRunningTaskCount());
-            Assert.assertEquals(1, taskRunScheduler.getPendingQueueCount());
+            Assertions.assertEquals(1, taskRunScheduler.getRunningTaskCount());
+            Assertions.assertEquals(1, taskRunScheduler.getPendingQueueCount());
         }
 
         {
@@ -478,8 +460,8 @@ public class TaskManagerTest {
             TaskRunStatusChange change = new TaskRunStatusChange(task.getId(), taskRun2.getStatus(),
                     Constants.TaskRunState.RUNNING, Constants.TaskRunState.FAILED);
             taskManager.replayUpdateTaskRun(change);
-            Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());
-            Assert.assertEquals(1, taskRunScheduler.getPendingQueueCount());
+            Assertions.assertEquals(0, taskRunScheduler.getRunningTaskCount());
+            Assertions.assertEquals(1, taskRunScheduler.getPendingQueueCount());
         }
 
         {
@@ -487,8 +469,8 @@ public class TaskManagerTest {
             TaskRunStatusChange change = new TaskRunStatusChange(task.getId(), taskRun1.getStatus(),
                     Constants.TaskRunState.PENDING, Constants.TaskRunState.FAILED);
             taskManager.replayUpdateTaskRun(change);
-            Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());
-            Assert.assertEquals(0, taskRunScheduler.getPendingQueueCount());
+            Assertions.assertEquals(0, taskRunScheduler.getRunningTaskCount());
+            Assertions.assertEquals(0, taskRunScheduler.getPendingQueueCount());
         }
     }
 
@@ -504,7 +486,7 @@ public class TaskManagerTest {
         }
         Config.task_runs_max_history_number = 20;
         taskRunManager.getTaskRunHistory().forceGC();
-        Assert.assertEquals(20, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
+        Assertions.assertEquals(20, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
         Config.task_runs_max_history_number = 10000;
         Config.enable_task_history_archive = true;
     }
@@ -520,7 +502,7 @@ public class TaskManagerTest {
         }
         Config.task_runs_max_history_number = 20;
         taskRunManager.getTaskRunHistory().forceGC();
-        Assert.assertEquals(10, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
+        Assertions.assertEquals(10, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
         Config.task_runs_max_history_number = 10000;
     }
 
@@ -531,21 +513,21 @@ public class TaskManagerTest {
 
     @Test
     public void testGetInitialDelayTime1() throws Exception {
-        Assert.assertEquals(50, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:50"),
+        Assertions.assertEquals(50, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:50"),
                 parseLocalDateTime("2023-04-18 20:00:00")));
-        Assert.assertEquals(30, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:30"),
+        Assertions.assertEquals(30, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:30"),
                 parseLocalDateTime("2023-04-18 20:00:00")));
-        Assert.assertEquals(20, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:30"),
+        Assertions.assertEquals(20, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:30"),
                 parseLocalDateTime("2023-04-18 20:00:10")));
-        Assert.assertEquals(0, TaskManager.getInitialDelayTime(20, parseLocalDateTime("2023-04-18 19:08:30"),
+        Assertions.assertEquals(0, TaskManager.getInitialDelayTime(20, parseLocalDateTime("2023-04-18 19:08:30"),
                 parseLocalDateTime("2023-04-18 21:00:10")));
     }
 
     @Test
     public void testGetInitialDelayTime2() throws Exception {
-        Assert.assertEquals(23, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-12-29 19:50:00"),
+        Assertions.assertEquals(23, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-12-29 19:50:00"),
                 LocalDateTime.parse("2024-01-30T15:27:37.342356010")));
-        Assert.assertEquals(50, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-12-29 19:50:00"),
+        Assertions.assertEquals(50, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-12-29 19:50:00"),
                 LocalDateTime.parse("2024-01-30T15:27:10.342356010")));
     }
 
@@ -577,57 +559,57 @@ public class TaskManagerTest {
 
         // If it's a sync refresh, no merge redundant anyway
         SubmitResult result = taskRunManager.submitTaskRun(taskRun1, taskRun1.getExecuteOption());
-        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
+        Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
         result = taskRunManager.submitTaskRun(taskRun2, taskRun2.getExecuteOption());
-        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
+        Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
-        Assert.assertTrue(taskRuns != null);
-        Assert.assertEquals(2, taskRunScheduler.getPendingQueueCount());
-        Assert.assertEquals(2, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+        Assertions.assertTrue(taskRuns != null);
+        Assertions.assertEquals(2, taskRunScheduler.getPendingQueueCount());
+        Assertions.assertEquals(2, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
 
         // If it's a sync refresh, no merge redundant anyway
         TaskRun taskRun3 = makeTaskRun(taskId, task, makeExecuteOption(false, true));
         result = taskRunManager.submitTaskRun(taskRun3, taskRun3.getExecuteOption());
-        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
-        Assert.assertEquals(3, taskRunScheduler.getPendingQueueCount());
-        Assert.assertEquals(3, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+        Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
+        Assertions.assertEquals(3, taskRunScheduler.getPendingQueueCount());
+        Assertions.assertEquals(3, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
         // merge it
         TaskRun taskRun4 = makeTaskRun(taskId, task, makeExecuteOption(true, false));
         result = taskRunManager.submitTaskRun(taskRun4, taskRun4.getExecuteOption());
-        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
+        Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
 
-        Assert.assertEquals(3, taskRunScheduler.getPendingQueueCount());
-        Assert.assertEquals(3, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+        Assertions.assertEquals(3, taskRunScheduler.getPendingQueueCount());
+        Assertions.assertEquals(3, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
 
         // no merge it
         TaskRun taskRun5 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
         result = taskRunManager.submitTaskRun(taskRun5, taskRun5.getExecuteOption());
-        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
-        Assert.assertEquals(4, taskRunScheduler.getPendingQueueCount());
-        Assert.assertEquals(4, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+        Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
+        Assertions.assertEquals(4, taskRunScheduler.getPendingQueueCount());
+        Assertions.assertEquals(4, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
 
         for (int i = 4; i < Config.task_runs_queue_length; i++) {
             TaskRun taskRun = makeTaskRun(taskId, task, makeExecuteOption(false, false));
             result = taskRunManager.submitTaskRun(taskRun, taskRun.getExecuteOption());
-            Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
-            Assert.assertEquals(i + 1, taskRunScheduler.getPendingQueueCount());
-            Assert.assertEquals(i + 1, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+            Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
+            Assertions.assertEquals(i + 1, taskRunScheduler.getPendingQueueCount());
+            Assertions.assertEquals(i + 1, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
         }
         // no assign it: exceed queue's size
         TaskRun taskRun6 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
         result = taskRunManager.submitTaskRun(taskRun6, taskRun6.getExecuteOption());
-        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
-        Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingQueueCount());
-        Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+        Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
+        Assertions.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingQueueCount());
+        Assertions.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
 
         // no assign it: exceed queue's size
         TaskRun taskRun7 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
         result = taskRunManager.submitTaskRun(taskRun7, taskRun7.getExecuteOption());
-        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
-        Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingQueueCount());
-        Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+        Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
+        Assertions.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingQueueCount());
+        Assertions.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
     }
 
 
@@ -657,7 +639,7 @@ public class TaskManagerTest {
             taskRun2.setTaskId(task1.getId());
             taskRun2.initStatus("1", now + 10);
             taskRun2.getStatus().setPriority(0);
-            Assert.assertFalse(taskRun1.equals(taskRun2));
+            Assertions.assertFalse(taskRun1.equals(taskRun2));
         }
 
         {
@@ -665,7 +647,7 @@ public class TaskManagerTest {
             taskRun2.setTaskId(task1.getId());
             taskRun2.initStatus("2", now + 10);
             taskRun2.getStatus().setPriority(10);
-            Assert.assertFalse(taskRun1.equals(taskRun2));
+            Assertions.assertFalse(taskRun1.equals(taskRun2));
         }
         {
             long now = System.currentTimeMillis();
@@ -673,7 +655,7 @@ public class TaskManagerTest {
             taskRun2.initStatus("2", now + 10);
             taskRun2.getStatus().setPriority(10);
             taskRun2.setExecuteOption(DEFAULT_NO_MERGE_OPTION);
-            Assert.assertFalse(taskRun1.equals(taskRun2));
+            Assertions.assertFalse(taskRun1.equals(taskRun2));
         }
 
         {
@@ -682,7 +664,7 @@ public class TaskManagerTest {
             taskRun2.initStatus("2", now + 10);
             taskRun2.getStatus().setPriority(10);
             taskRun2.setExecuteOption(DEFAULT_NO_MERGE_OPTION);
-            Assert.assertFalse(taskRun1.equals(taskRun2));
+            Assertions.assertFalse(taskRun1.equals(taskRun2));
         }
 
         {
@@ -695,9 +677,9 @@ public class TaskManagerTest {
                 taskRunId.setAccessible(true);
                 taskRunId.set(taskRun2, taskRun1.getTaskRunId());
             } catch (Exception e) {
-                Assert.fail();
+                Assertions.fail();
             }
-            Assert.assertTrue(taskRun1.equals(taskRun2));
+            Assertions.assertTrue(taskRun1.equals(taskRun2));
         }
 
         {
@@ -705,10 +687,10 @@ public class TaskManagerTest {
             map1.put(task1.getId(), taskRun1);
             Map<Long, TaskRun> map2 = Maps.newHashMap();
             map2.put(task1.getId(), taskRun1);
-            Assert.assertTrue(map1.equals(map2));
+            Assertions.assertTrue(map1.equals(map2));
             Map<Long, TaskRun> map3 = ImmutableMap.copyOf(map1);
-            Assert.assertTrue(map1.equals(map3));
-            Assert.assertTrue(map1.get(task1.getId()).equals(map3.get(task1.getId())));
+            Assertions.assertTrue(map1.equals(map3));
+            Assertions.assertTrue(map1.get(task1.getId()).equals(map3.get(task1.getId())));
         }
     }
 
@@ -725,7 +707,7 @@ public class TaskManagerTest {
             tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
         }
         long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
-        Assert.assertEquals(pendingTaskRunsCount, 10);
+        Assertions.assertEquals(pendingTaskRunsCount, 10);
     }
 
     @Test
@@ -741,7 +723,7 @@ public class TaskManagerTest {
             tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
         }
         long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
-        Assert.assertTrue(pendingTaskRunsCount == 1);
+        Assertions.assertTrue(pendingTaskRunsCount == 1);
         Config.enable_mv_refresh_sync_refresh_mergeable = false;
     }
 
@@ -760,12 +742,12 @@ public class TaskManagerTest {
                 try {
                     t.getProcessor().postTaskRun(null);
                 } catch (Exception e) {
-                    Assert.fail("Process task run failed:" + e);
+                    Assertions.fail("Process task run failed:" + e);
                 }
             });
         }
         long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
-        Assert.assertTrue(pendingTaskRunsCount == 1);
+        Assertions.assertTrue(pendingTaskRunsCount == 1);
         Config.enable_mv_refresh_sync_refresh_mergeable = false;
     }
 
@@ -784,11 +766,11 @@ public class TaskManagerTest {
             try {
                 taskRun.getProcessor().postTaskRun(null);
             } catch (Exception e) {
-                Assert.fail("Process task run failed:" + e);
+                Assertions.fail("Process task run failed:" + e);
             }
         });
         long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
-        Assert.assertEquals(1, runningTaskRunsCount);
+        Assertions.assertEquals(1, runningTaskRunsCount);
 
         new MockUp<TaskRun>() {
             @Mock
@@ -799,9 +781,9 @@ public class TaskManagerTest {
         // running task run will not be removed if force kill is false
         TaskRunManager taskRunManager = tm.getTaskRunManager();
         taskRunManager.killTaskRun(1L, false);
-        Assert.assertEquals(1, taskRunScheduler.getRunningTaskCount());
+        Assertions.assertEquals(1, taskRunScheduler.getRunningTaskCount());
         taskRunManager.killTaskRun(1L, true);
-        Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());
+        Assertions.assertEquals(0, taskRunScheduler.getRunningTaskCount());
     }
 
     @Test
@@ -818,7 +800,7 @@ public class TaskManagerTest {
         taskRun.initStatus("1", now + 10);
         taskRun.getStatus().setPriority(0);
         TaskRunStatus taskRunStatus = taskRun.getStatus();
-        Assert.assertEquals(taskRunStatus.getDefinition(), "select 1");
+        Assertions.assertEquals(taskRunStatus.getDefinition(), "select 1");
     }
 
     @Test
@@ -841,7 +823,7 @@ public class TaskManagerTest {
         taskRun1.initStatus("1", now);
         taskRun1.getStatus().setPriority(0);
 
-        Assert.assertTrue(taskRun1.getStatus().getDefinition().equals("select 1"));
+        Assertions.assertTrue(taskRun1.getStatus().getDefinition().equals("select 1"));
     }
 
     @Test
@@ -865,7 +847,7 @@ public class TaskManagerTest {
         taskRun1.getStatus().setPriority(0);
 
         String definition = taskRun1.getStatus().getDefinition();
-        Assert.assertTrue(definition.length() == SystemTable.MAX_FIELD_VARCHAR_LENGTH / 4);
+        Assertions.assertTrue(definition.length() == SystemTable.MAX_FIELD_VARCHAR_LENGTH / 4);
     }
 
     @Test
@@ -884,6 +866,95 @@ public class TaskManagerTest {
         taskRun1.getStatus().setPriority(0);
 
         String definition = taskRun1.getStatus().getDefinition();
-        Assert.assertTrue(definition == null);
+        Assertions.assertTrue(definition == null);
+    }
+
+    @Test
+    public void saveTasksV2SkipsSkippedTaskRunStatuses() throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        {
+            TaskManager taskManager = new TaskManager();
+            ImageWriter imageWriter = image.getImageWriter();
+
+            Task task = new Task("task");
+            task.setId(1L);
+            taskManager.replayCreateTask(task);
+
+            TaskRunStatus skippedStatus = new TaskRunStatus();
+            skippedStatus.setTaskId(1);
+            skippedStatus.setQueryId("task_run_1");
+            skippedStatus.setTaskName("task_run_1");
+            skippedStatus.setState(Constants.TaskRunState.SKIPPED);
+            skippedStatus.setExpireTime(System.currentTimeMillis() + 1000000);
+            taskManager.replayCreateTaskRun(skippedStatus);
+
+            TaskRunStatus validStatus = new TaskRunStatus();
+            validStatus.setTaskId(2);
+            validStatus.setQueryId("task_run_2");
+            validStatus.setTaskName("task_run_2");
+            validStatus.setState(Constants.TaskRunState.SUCCESS);
+            validStatus.setExpireTime(System.currentTimeMillis() + 1000000);
+            taskManager.replayCreateTaskRun(validStatus);
+
+            TaskRunHistory taskRunHistory = taskManager.getTaskRunHistory();
+            Assertions.assertEquals(2, taskRunHistory.getTaskRunCount());
+
+            taskManager.saveTasksV2(imageWriter);
+        }
+
+        SRMetaBlockReader imageReader = image.getMetaBlockReader();
+        {
+            TaskManager taskManager = new TaskManager();
+            taskManager.loadTasksV2(imageReader);
+            TaskRunHistory taskRunHistory = taskManager.getTaskRunHistory();
+            Assertions.assertEquals(2, taskRunHistory.getTaskRunCount());
+
+            Set<Constants.TaskRunState> expectedStates = ImmutableSet.of(
+                    Constants.TaskRunState.SUCCESS, Constants.TaskRunState.SKIPPED);
+            taskRunHistory.getInMemoryHistory()
+                    .stream()
+                    .forEach(status -> Assertions.assertTrue(
+                            expectedStates.contains(status.getState()),
+                            "Unexpected task run state: " + status.getState()));
+        }
+    }
+
+    @Test
+    public void replayCreateTaskRunHandlesNullStatusGracefully() {
+        TaskManager taskManager = new TaskManager();
+        taskManager.replayCreateTaskRun(null);
+        // No exception should be thrown, and no log entry should indicate a failure.
+    }
+
+    @Test
+    public void replayCreateTaskRunHandlesInvalidState() {
+        TaskManager taskManager = new TaskManager();
+        TaskRunStatus invalidStatus = new TaskRunStatus();
+        invalidStatus.setState(null);
+        invalidStatus.setTaskName("invalidTask");
+        taskManager.replayCreateTaskRun(invalidStatus);
+        // No exception should be thrown, and no log entry should indicate a failure.
+    }
+
+    @Test
+    public void replayCreateTaskRunSkipsExpiredFinishedTaskRun() {
+        TaskManager taskManager = new TaskManager();
+        TaskRunStatus expiredStatus = new TaskRunStatus();
+        expiredStatus.setState(Constants.TaskRunState.SUCCESS);
+        expiredStatus.setTaskName("expiredTask");
+        expiredStatus.setExpireTime(System.currentTimeMillis() - 1000);
+        taskManager.replayCreateTaskRun(expiredStatus);
+        // The expired task run should be skipped without errors.
+    }
+
+    @Test
+    public void replayCreateTaskRunProcessesValidPendingTaskRun() {
+        TaskManager taskManager = new TaskManager();
+        TaskRunStatus validStatus = new TaskRunStatus();
+        validStatus.setState(Constants.TaskRunState.PENDING);
+        validStatus.setTaskName("validTask");
+        validStatus.setExpireTime(System.currentTimeMillis() + 100000);
+        taskManager.replayCreateTaskRun(validStatus);
+        // The valid task run should be processed without errors.
     }
 }

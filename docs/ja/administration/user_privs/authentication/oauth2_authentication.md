@@ -24,12 +24,12 @@ MySQL クライアントから StarRocks に接続したい場合、MySQL クラ
 
 ## OAuth 2.0 を使用したユーザーの作成
 
-ユーザーを作成する際、認証方法を OAuth 2.0 として `IDENTIFIED WITH authentication_oauth2 AS '{xxx}'` を指定します。`{xxx}` はユーザーの OAuth 2.0 プロパティです。
+ユーザーを作成する際、認証方法を OAuth 2.0 として `IDENTIFIED WITH authentication_oauth2 [AS '{xxx}']` を指定します。`{xxx}` はユーザーの OAuth 2.0 プロパティです。以下の方法の他に、FE 構成ファイルでデフォルトの OAuth 2.0 プロパティを構成することもできます。設定を有効にするには、手動ですべての **fe.conf** ファイルを変更し、すべての FE を再起動する必要があります。FE 構成が設定された後、StarRocks は構成ファイルで指定されたデフォルトのプロパティを使用するので、`AS {xxx}` の部分を省略できます。
 
 構文:
 
 ```SQL
-CREATE USER <username> IDENTIFIED WITH authentication_oauth2 AS 
+CREATE USER <username> IDENTIFIED WITH authentication_oauth2 [AS 
 '{
   "auth_server_url": "<auth_server_url>",
   "token_server_url": "<token_server_url>",
@@ -40,20 +40,20 @@ CREATE USER <username> IDENTIFIED WITH authentication_oauth2 AS
   "principal_field": "<principal_field>",
   "required_issuer": "<required_issuer>",
   "required_audience": "<required_audience>"
-}'
+}']
 ```
 
-プロパティ:
-
-- `auth_server_url`: 認可 URL。OAuth 2.0 認可プロセスを開始するためにユーザーのブラウザがリダイレクトされる URL。
-- `token_server_url`: StarRocks がアクセストークンを取得する認可サーバーのエンドポイントの URL。
-- `client_id`: StarRocks クライアントの公開識別子。
-- `client_secret`: 認可サーバーで StarRocks クライアントを認証するために使用される秘密。
-- `redirect_url`: OAuth 2.0 認証が成功した後にユーザーのブラウザがリダイレクトされる URL。この URL に認可コードが送信されます。ほとんどの場合、`http://<starrocks_fe_url>:<fe_http_port>/api/oauth2` として設定する必要があります。
-- `jwks_url`: JSON Web Key Set (JWKS) サービスの URL または `conf` ディレクトリ内のローカルファイルのパス。
-- `principal_field`: JWT 内でサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と同一でなければなりません。
-- `required_issuer` (オプション): JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT の発行者と一致する場合にのみ、JWT は有効と見なされます。
-- `required_audience` (オプション): JWT 内のオーディエンス (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT のオーディエンスと一致する場合にのみ、JWT は有効と見なされます。
+| プロパティ            | 対応 FE 設定                    | 説明                                                                                                                    |
+| ------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `auth_server_url`   | `oauth2_auth_server_url`       | 認可 URL。OAuth 2.0 認可プロセスを開始するためにユーザーのブラウザがリダイレクトされる URL。                                        |
+| `token_server_url`  | `oauth2_token_server_url`      | StarRocks がアクセストークンを取得する認可サーバーのエンドポイントの URL。                                                        |
+| `client_id`         | `oauth2_client_id`             | StarRocks クライアントの公開識別子。                                                                                        |
+| `client_secret`     | `oauth2_client_id`             | 認可サーバーで StarRocks クライアントを認証するために使用される秘密。                                                            |
+| `redirect_url`      | `oauth2_redirect_url`          | OAuth 2.0 認証が成功した後にユーザーのブラウザがリダイレクトされる URL。この URL に認可コードが送信されます。ほとんどの場合、`http://<starrocks_fe_url>:<fe_http_port>/api/oauth2` として設定する必要があります。 |
+| `jwks_url`          | `oauth2_jwks_url`              | JSON Web Key Set (JWKS) サービスの URL または `conf` ディレクトリ内のローカルファイルのパス。                                    |
+| `principal_field`   | `oauth2_principal_field`       | JWT 内でサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と同一でなければなりません。 |
+| `required_issuer`   | `oauth2_required_issuer`       | (オプション) JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT の発行者と一致する場合にのみ、JWT は有効と見なされます。 |
+| `required_audience` | `oauth2_required_audience`     | (オプション) JWT 内のオーディエンス (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT のオーディエンスと一致する場合にのみ、JWT は有効と見なされます。 |
 
 例:
 
@@ -72,111 +72,23 @@ CREATE USER tom IDENTIFIED WITH authentication_oauth2 AS
 }';
 ```
 
+FE 構成ファイルで OAuth 2.0 プロパティを設定した場合、以下のステートメントを直接実行できる：
+
+```SQL
+CREATE USER tom IDENTIFIED WITH authentication_jwt;
+```
+
 ## JDBC クライアントからの OAuth 2.0 接続
 
 StarRocks は MySQL プロトコルをサポートしています。MySQL プラグインをカスタマイズして、ブラウザログインメソッドを自動的に起動することができます。
 
 以下は JDBC クライアントの例です。
 
-```Java
-
-/**
- * StarRocks 'authentication_oauth2_client' 認証プラグイン。
- */
-public class AuthenticationOAuth2Client implements AuthenticationPlugin<NativePacketPayload> {
-    public static String PLUGIN_NAME = "authentication_oauth2_client";
-
-    private Long connectionId = null;
-    private String sourceOfAuthData = PLUGIN_NAME;
-
-    @Override
-    public void init(Protocol<NativePacketPayload> prot, MysqlCallbackHandler cbh) {
-        connectionId = prot.getServerSession().getCapabilities().getThreadId();
-    }
-
-    @Override
-    public String getProtocolPluginName() {
-        return PLUGIN_NAME;
-    }
-
-    @Override
-    public boolean requiresConfidentiality() {
-        return false;
-    }
-
-    @Override
-    public boolean isReusable() {
-        return false;
-    }
-
-    @Override
-    public void setAuthenticationParameters(String user, String password) {
-    }
-
-    @Override
-    public void setSourceOfAuthData(String sourceOfAuthData) {
-        this.sourceOfAuthData = sourceOfAuthData;
-    }
-
-    @Override
-    public boolean nextAuthenticationStep(NativePacketPayload fromServer, List<NativePacketPayload> toServer) {
-        toServer.clear();
-
-        if (!this.sourceOfAuthData.equals(PLUGIN_NAME) || fromServer.getPayloadLength() == 0) {
-            // サーバーからのペイロードで何もできない場合、
-            // このイテレーションをスキップし、Protocol::AuthSwitchRequest または Protocol::AuthNextFactor を待ちます。
-            return true;
-        }
-
-        // OAuth2 認可プロセスを開始するためにユーザーのブラウザがリダイレクトされる URL
-        int authServerUrlLength = (int) fromServer.readInteger(NativeConstants.IntegerDataType.INT2);
-        String authServerUrl =
-                fromServer.readString(NativeConstants.StringLengthDataType.STRING_VAR, "ASCII", authServerUrlLength);
-
-        // StarRocks クライアントの公開識別子。
-        int clientIdLength = (int) fromServer.readInteger(NativeConstants.IntegerDataType.INT2);
-        String clientId = fromServer.readString(NativeConstants.StringLengthDataType.STRING_VAR, "ASCII", clientIdLength);
-
-        // OAuth2 認証が成功した後にリダイレクトされる URL。
-        int redirectUrlLength = (int) fromServer.readInteger(NativeConstants.IntegerDataType.INT2);
-        String redirectUrl = fromServer.readString(NativeConstants.StringLengthDataType.STRING_VAR, "ASCII", redirectUrlLength);
-
-        // OAuth2 のコールバック URL に含める必要がある StarRocks の接続 ID
-        long connectionId = this.connectionId;
-
-        String authUrl = authServerUrl +
-                "?response_type=code" +
-                "&client_id=" + URLEncoder.encode(clientId, StandardCharsets.UTF_8) +
-                "&redirect_uri=" + URLEncoder.encode(redirectUrl, StandardCharsets.UTF_8) + "?connectionId=" + connectionId +
-                "&scope=openid";
-
-        Desktop desktop = Desktop.getDesktop();
-        try {
-            desktop.browse(new URI(authUrl));
-        } catch (IOException | URISyntaxException e) {
-            throw new RuntimeException(e);
-        }
-
-        NativePacketPayload packet = new NativePacketPayload(StringUtils.getBytes(""));
-        packet.setPosition(packet.getPayloadLength());
-        packet.writeInteger(NativeConstants.IntegerDataType.INT1, 0);
-        packet.setPosition(0);
-
-        toServer.add(packet);
-        return true;
-    }
-}
-
-public class OAuth2Main {
-    public static void main(String[] args) throws ClassNotFoundException {
-        Class.forName("com.mysql.cj.jdbc.Driver");
-        Properties properties = new Properties();
-        properties.setProperty("defaultAuthenticationPlugin", "AuthenticationOAuth2Client");
-        properties.setProperty("authenticationPlugins", "AuthenticationOAuth2Client");
-    }
-}
-```
+JDBC OAuth2 プラグインのサンプルコードについては、[starrocks-jdbc-oauth2-plugin](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-jdbc-oauth2-plugin) の公式ドキュメントを参照してください。
 
 ## MySQL クライアントからの OAuth 2.0 接続
 
-ユーザーのブラウザへの直接呼び出しが許可されていない場合があります。そのような場合、StarRocks はネイティブ MySQL クライアントまたはネイティブ MySQL JDBC ドライバーもサポートしています。このモードでは、StarRocks と直接接続を確立できますが、StarRocks で操作を行うことはできません。コマンドを実行すると URL が返され、この URL にアクセスして OAuth 2.0 認証プロセスを完了する必要があります。
+ご使用の環境でブラウザにアクセスできない場合（ターミナルやサーバを使用している場合など）、ネイティブ MySQL クライアントまたは JDBC ドライバを使用して StarRocks にアクセスすることもできます：
+- 最初にStarRocksに接続すると、URL が返されます。
+- このURLにブラウザでアクセスし、認証を完了する必要があります。
+- 認証が完了すると、StarRocksとやりとりできるようになります。

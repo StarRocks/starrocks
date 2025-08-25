@@ -417,7 +417,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         ConnectContext ctx = Util.getOrCreateInnerContext();
-        ctx.setCurrentWarehouse(warehouseManager.getBackgroundWarehouse().getName());
+        ctx.setCurrentWarehouse(warehouseManager.getBackgroundWarehouse(olapTable.getId()).getName());
 
         Locker locker = new Locker();
         for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {

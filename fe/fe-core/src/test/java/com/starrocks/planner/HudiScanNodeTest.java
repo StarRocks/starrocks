@@ -23,7 +23,7 @@ import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 
@@ -47,5 +47,6 @@ public class HudiScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         HudiScanNode scanNode = new HudiScanNode(new PlanNodeId(0), desc, "XXX");
+        scanNode.setReachLimit();
     }
 }

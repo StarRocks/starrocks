@@ -38,7 +38,6 @@ set(RUNTIME_FILES
     result_sink.cpp
     result_buffer_mgr.cpp
     runtime_state.cpp
-    string_value.cpp
     decimalv2_value.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp

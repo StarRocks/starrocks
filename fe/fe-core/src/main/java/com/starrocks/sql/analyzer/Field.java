@@ -21,6 +21,7 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.ast.QualifiedName;
 
 import java.util.LinkedList;
@@ -174,7 +175,11 @@ public class Field {
                 part = part.toLowerCase();
                 comparedPart = comparedPart.toLowerCase();
             }
-            if (!part.equals(comparedPart)) {
+            boolean matches = !GlobalVariable.enableTableNameCaseInsensitive
+                    ? part.equals(comparedPart)
+                    : part.equalsIgnoreCase(comparedPart);
+
+            if (!matches) {
                 return false;
             }
         }

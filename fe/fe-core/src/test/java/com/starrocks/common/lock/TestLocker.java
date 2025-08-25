@@ -15,8 +15,8 @@ package com.starrocks.common.lock;
 
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -72,6 +72,6 @@ public class TestLocker {
     public void testSetQueryId() {
         Locker locker = new Locker();
         locker.setQueryId(UUID.randomUUID());
-        Assert.assertNotNull(locker.getQueryId());
+        Assertions.assertNotNull(locker.getQueryId());
     }
 }

@@ -25,16 +25,16 @@ import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 public class HudiResourceTest {
     private static ConnectContext connectContext;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
     }
@@ -57,9 +57,9 @@ public class HudiResourceTest {
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         HudiResource resource = (HudiResource) Resource.fromStmt(stmt);
-        Assert.assertEquals("hudi0", resource.getName());
-        Assert.assertEquals(type, resource.getType().name().toLowerCase());
-        Assert.assertEquals(metastoreURIs, resource.getHiveMetastoreURIs());
+        Assertions.assertEquals("hudi0", resource.getName());
+        Assertions.assertEquals(type, resource.getType().name().toLowerCase());
+        Assertions.assertEquals(metastoreURIs, resource.getHiveMetastoreURIs());
     }
 
     @Test
@@ -72,7 +72,7 @@ public class HudiResourceTest {
 
         String json = GsonUtils.GSON.toJson(resource);
         Resource resource2 = GsonUtils.GSON.fromJson(json, Resource.class);
-        Assert.assertTrue(resource2 instanceof HudiResource);
-        Assert.assertEquals(metastoreURIs, ((HudiResource) resource2).getHiveMetastoreURIs());
+        Assertions.assertTrue(resource2 instanceof HudiResource);
+        Assertions.assertEquals(metastoreURIs, ((HudiResource) resource2).getHiveMetastoreURIs());
     }
 }

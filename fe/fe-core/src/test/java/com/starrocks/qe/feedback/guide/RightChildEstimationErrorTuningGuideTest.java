@@ -26,7 +26,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.plan.DistributedEnvPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -49,8 +49,8 @@ class RightChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBas
                 "join (select * from supplier where s_acctbal = 1) s on abs(c_custkey) = abs(s_suppkey)";
         ExecPlan execPlan = getExecPlan(sql);
         OptExpression root = execPlan.getPhysicalPlan();
-        Assert.assertTrue(root.inputAt(0).getOp() instanceof PhysicalOlapScanOperator);
-        Assert.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(root.inputAt(0).getOp() instanceof PhysicalOlapScanOperator);
+        Assertions.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
         NodeExecStats left = new NodeExecStats(0, 500000, 500000, 0, 0, 0);
         NodeExecStats right = new NodeExecStats(4, 5000000, 5000000, 0, 0, 0);
         Map<Integer, NodeExecStats> map = Maps.newHashMap();
@@ -61,17 +61,17 @@ class RightChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBas
         RightChildEstimationErrorTuningGuide guide = new RightChildEstimationErrorTuningGuide((JoinNode) pair.first,
                 JoinTuningGuide.EstimationErrorType.RIGHT_INPUT_UNDERESTIMATED);
         Optional<OptExpression> res = guide.applyImpl(root);
-        Assert.assertTrue(res.isPresent());
+        Assertions.assertTrue(res.isPresent());
 
         OptExpression newPlan = res.get();
         OptExpression newLeftChild = newPlan.inputAt(0);
         OptExpression newRightChild = newPlan.inputAt(1);
-        Assert.assertTrue(newLeftChild.getOp() instanceof PhysicalOlapScanOperator);
-        Assert.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(newLeftChild.getOp() instanceof PhysicalOlapScanOperator);
+        Assertions.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
 
-        Assert.assertTrue("supplier".equals(
+        Assertions.assertTrue("supplier".equals(
                 ((PhysicalOlapScanOperator) newLeftChild.getOp()).getTable().getName()));
-        Assert.assertTrue("customer".equals(
+        Assertions.assertTrue("customer".equals(
                 ((PhysicalOlapScanOperator) newRightChild.inputAt(0).getOp()).getTable().getName()));
     }
 
@@ -83,8 +83,8 @@ class RightChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBas
                 "join (select * from supplier where s_acctbal = 1) s on abs(c_custkey) = abs(s_suppkey)";
         ExecPlan execPlan = getExecPlan(sql);
         OptExpression root = execPlan.getPhysicalPlan();
-        Assert.assertTrue(root.inputAt(0).getOp() instanceof PhysicalOlapScanOperator);
-        Assert.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(root.inputAt(0).getOp() instanceof PhysicalOlapScanOperator);
+        Assertions.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
         NodeExecStats left = new NodeExecStats(0, 2000000, 2000000, 0, 0, 0);
         NodeExecStats right = new NodeExecStats(4, 5000000, 5000000, 0, 0, 0);
         Map<Integer, NodeExecStats> map = Maps.newHashMap();
@@ -95,17 +95,17 @@ class RightChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBas
         RightChildEstimationErrorTuningGuide guide = new RightChildEstimationErrorTuningGuide((JoinNode) pair.first,
                 JoinTuningGuide.EstimationErrorType.RIGHT_INPUT_UNDERESTIMATED);
         Optional<OptExpression> res = guide.applyImpl(root);
-        Assert.assertTrue(res.isPresent());
+        Assertions.assertTrue(res.isPresent());
 
         OptExpression newPlan = res.get();
         OptExpression newLeftChild = newPlan.inputAt(0);
         OptExpression newRightChild = newPlan.inputAt(1);
-        Assert.assertTrue(newLeftChild.getOp() instanceof PhysicalDistributionOperator);
-        Assert.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(newLeftChild.getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
 
-        Assert.assertTrue("supplier".equals(
+        Assertions.assertTrue("supplier".equals(
                 ((PhysicalOlapScanOperator) newLeftChild.inputAt(0).getOp()).getTable().getName()));
-        Assert.assertTrue("customer".equals(
+        Assertions.assertTrue("customer".equals(
                 ((PhysicalOlapScanOperator) newRightChild.inputAt(0).getOp()).getTable().getName()));
     }
 
@@ -117,8 +117,8 @@ class RightChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBas
                 "join (select * from supplier where s_acctbal = 1) s on abs(c_custkey) = abs(s_suppkey)";
         ExecPlan execPlan = getExecPlan(sql);
         OptExpression root = execPlan.getPhysicalPlan();
-        Assert.assertTrue(root.inputAt(0).getOp() instanceof PhysicalOlapScanOperator);
-        Assert.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(root.inputAt(0).getOp() instanceof PhysicalOlapScanOperator);
+        Assertions.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
         NodeExecStats left = new NodeExecStats(0, 5000000, 5000000, 0, 0, 0);
         NodeExecStats right = new NodeExecStats(4, 5000000, 5000000, 0, 0, 0);
         Map<Integer, NodeExecStats> map = Maps.newHashMap();
@@ -129,17 +129,17 @@ class RightChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBas
         RightChildEstimationErrorTuningGuide guide = new RightChildEstimationErrorTuningGuide((JoinNode) pair.first,
                 JoinTuningGuide.EstimationErrorType.RIGHT_INPUT_UNDERESTIMATED);
         Optional<OptExpression> res = guide.applyImpl(root);
-        Assert.assertTrue(res.isPresent());
+        Assertions.assertTrue(res.isPresent());
 
         OptExpression newPlan = res.get();
         OptExpression newLeftChild = newPlan.inputAt(0);
         OptExpression newRightChild = newPlan.inputAt(1);
-        Assert.assertTrue(newLeftChild.getOp() instanceof PhysicalDistributionOperator);
-        Assert.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(newLeftChild.getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
 
-        Assert.assertTrue("customer".equals(
+        Assertions.assertTrue("customer".equals(
                 ((PhysicalOlapScanOperator) newLeftChild.inputAt(0).getOp()).getTable().getName()));
-        Assert.assertTrue("supplier".equals(
+        Assertions.assertTrue("supplier".equals(
                 ((PhysicalOlapScanOperator) newRightChild.inputAt(0).getOp()).getTable().getName()));
     }
 
@@ -151,8 +151,8 @@ class RightChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBas
                 "join (select * from supplier) s on abs(c_custkey) = abs(s_suppkey)";
         ExecPlan execPlan = getExecPlan(sql);
         OptExpression root = execPlan.getPhysicalPlan();
-        Assert.assertTrue(root.inputAt(0).getOp() instanceof PhysicalDistributionOperator);
-        Assert.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(root.inputAt(0).getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
         NodeExecStats left = new NodeExecStats(2, 10, 10, 0, 0, 0);
         NodeExecStats right = new NodeExecStats(5, 5000000, 5000000, 0, 0, 0);
         Map<Integer, NodeExecStats> map = Maps.newHashMap();
@@ -163,17 +163,17 @@ class RightChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBas
         RightChildEstimationErrorTuningGuide guide = new RightChildEstimationErrorTuningGuide((JoinNode) pair.first,
                 JoinTuningGuide.EstimationErrorType.RIGHT_INPUT_UNDERESTIMATED);
         Optional<OptExpression> res = guide.applyImpl(root);
-        Assert.assertTrue(res.isPresent());
+        Assertions.assertTrue(res.isPresent());
 
         OptExpression newPlan = res.get();
         OptExpression newLeftChild = newPlan.inputAt(0);
         OptExpression newRightChild = newPlan.inputAt(1);
-        Assert.assertTrue(newLeftChild.getOp() instanceof PhysicalOlapScanOperator);
-        Assert.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(newLeftChild.getOp() instanceof PhysicalOlapScanOperator);
+        Assertions.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
 
-        Assert.assertTrue("supplier".equals(
+        Assertions.assertTrue("supplier".equals(
                 ((PhysicalOlapScanOperator) newLeftChild.getOp()).getTable().getName()));
-        Assert.assertTrue("customer".equals(
+        Assertions.assertTrue("customer".equals(
                 ((PhysicalOlapScanOperator) newRightChild.inputAt(0).getOp()).getTable().getName()));
     }
 
@@ -185,8 +185,8 @@ class RightChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBas
                 "join (select * from supplier) s on abs(c_custkey) = abs(s_suppkey)";
         ExecPlan execPlan = getExecPlan(sql);
         OptExpression root = execPlan.getPhysicalPlan();
-        Assert.assertTrue(root.inputAt(0).getOp() instanceof PhysicalDistributionOperator);
-        Assert.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(root.inputAt(0).getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
         NodeExecStats left = new NodeExecStats(2, 2000000, 2000000, 0, 0, 0);
         NodeExecStats right = new NodeExecStats(5, 5000000, 5000000, 0, 0, 0);
         Map<Integer, NodeExecStats> map = Maps.newHashMap();
@@ -197,17 +197,17 @@ class RightChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBas
         RightChildEstimationErrorTuningGuide guide = new RightChildEstimationErrorTuningGuide((JoinNode) pair.first,
                 JoinTuningGuide.EstimationErrorType.RIGHT_INPUT_UNDERESTIMATED);
         Optional<OptExpression> res = guide.applyImpl(root);
-        Assert.assertTrue(res.isPresent());
+        Assertions.assertTrue(res.isPresent());
 
         OptExpression newPlan = res.get();
         OptExpression newLeftChild = newPlan.inputAt(0);
         OptExpression newRightChild = newPlan.inputAt(1);
-        Assert.assertTrue(newLeftChild.getOp() instanceof PhysicalDistributionOperator);
-        Assert.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(newLeftChild.getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
 
-        Assert.assertTrue("supplier".equals(
+        Assertions.assertTrue("supplier".equals(
                 ((PhysicalOlapScanOperator) newLeftChild.inputAt(0).getOp()).getTable().getName()));
-        Assert.assertTrue("customer".equals(
+        Assertions.assertTrue("customer".equals(
                 ((PhysicalOlapScanOperator) newRightChild.inputAt(0).getOp()).getTable().getName()));
     }
 
@@ -219,8 +219,8 @@ class RightChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBas
                 "join (select * from supplier) s on abs(c_custkey) = abs(s_suppkey)";
         ExecPlan execPlan = getExecPlan(sql);
         OptExpression root = execPlan.getPhysicalPlan();
-        Assert.assertTrue(root.inputAt(0).getOp() instanceof PhysicalDistributionOperator);
-        Assert.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(root.inputAt(0).getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
         NodeExecStats left = new NodeExecStats(2, 1000000, 1000000, 0, 0, 0);
         NodeExecStats right = new NodeExecStats(5, 5000, 5000, 0, 0, 0);
         Map<Integer, NodeExecStats> map = Maps.newHashMap();
@@ -231,17 +231,17 @@ class RightChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBas
         RightChildEstimationErrorTuningGuide guide = new RightChildEstimationErrorTuningGuide((JoinNode) pair.first,
                 JoinTuningGuide.EstimationErrorType.RIGHT_INPUT_OVERESTIMATED);
         Optional<OptExpression> res = guide.applyImpl(root);
-        Assert.assertTrue(res.isPresent());
+        Assertions.assertTrue(res.isPresent());
 
         OptExpression newPlan = res.get();
         OptExpression newLeftChild = newPlan.inputAt(0);
         OptExpression newRightChild = newPlan.inputAt(1);
-        Assert.assertTrue(newLeftChild.getOp() instanceof PhysicalOlapScanOperator);
-        Assert.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(newLeftChild.getOp() instanceof PhysicalOlapScanOperator);
+        Assertions.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
 
-        Assert.assertTrue("customer".equals(
+        Assertions.assertTrue("customer".equals(
                 ((PhysicalOlapScanOperator) newLeftChild.getOp()).getTable().getName()));
-        Assert.assertTrue("supplier".equals(
+        Assertions.assertTrue("supplier".equals(
                 ((PhysicalOlapScanOperator) newRightChild.inputAt(0).getOp()).getTable().getName()));
     }
 }

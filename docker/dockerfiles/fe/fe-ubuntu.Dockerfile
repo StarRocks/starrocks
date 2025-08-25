@@ -42,7 +42,7 @@ ARG GROUP=starrocks
 ARG MINIMAL
 
 # TODO: switch to `openjdk-##-jre` when the starrocks core is ready.
-RUN OPTIONAL_PKGS="" && if [ "x$MINIMAL" = "xfalse" ] ; then OPTIONAL_PKGS="openjdk-17-jdk curl vim tree net-tools less" ; fi && \
+RUN OPTIONAL_PKGS="" && if [ "x$MINIMAL" = "xfalse" ] ; then OPTIONAL_PKGS="openjdk-17-jdk curl vim tree net-tools less pigz rclone" ; fi && \
         apt-get update -y && apt-get install -y --no-install-recommends \
         openjdk-17-jdk mysql-client tzdata locales netcat $OPTIONAL_PKGS && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \

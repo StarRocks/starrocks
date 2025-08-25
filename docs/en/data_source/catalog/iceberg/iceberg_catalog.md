@@ -109,7 +109,7 @@ PROPERTIES
     "type" = "iceberg",
     MetastoreParams,
     StorageCredentialParams,
-    MetadataUpdateParams
+    MetadataRelatedParams
 )
 ```
 
@@ -301,7 +301,7 @@ PROPERTIES
     "type" = "iceberg",
     "iceberg.catalog.type" = "rest",
     "iceberg.catalog.uri" = "https://api.tabular.io/ws",
-    "iceberg.catalog.credential" = "t-5Ii8e3FIbT9m0:aaaa-3bbbbbbbbbbbbbbbbbbb",
+    "iceberg.catalog.oauth2.credential" = "t-5Ii8e3FIbT9m0:aaaa-3bbbbbbbbbbbbbbbbbbb",
     "iceberg.catalog.warehouse" = "sandbox"
 );
 ```
@@ -724,11 +724,11 @@ Description: The service account that you want to impersonate.
 
 ---
 
-#### MetadataUpdateParams
+#### MetadataRelatedParams
 
-A set of parameters about how StarRocks update the cache of the Iceberg metadata. This parameter set is optional.
+A set of parameters about cache of the Iceberg metadata in StarRocks. This parameter set is optional.
 
-From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance. You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
+From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-a-periodic-metadata-refresh-strategy). In most cases, you can ignore the parameters below and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with performance out-of-the-box. You can adjust the Iceberg metadata parsing mode using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
 
 | **Parameter**                                 | **Default**           | **Description**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
@@ -736,6 +736,12 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 | iceberg_manifest_cache_with_column_statistics | false                 | Whether to cache the statistics of columns.                  |
 | iceberg_manifest_cache_max_num                | 100000                | The maximum number of Manifest files that can be cached.     |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | The minimum Manifest file length that triggers a Data File Cache refresh. |
+
+Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading Iceberg metadata through setting the following parameters, without actively triggering the collection of Iceberg table statistics.
+
+| **Parameter**                                 | **Default**           | **Description**                                         |
+| :-------------------------------------------- | :-------------------- | :-------------------------------------------------------|
+| enable_get_stats_from_external_metadata       | false                 | Whether to obtain statistics from Iceberg metadata. When this item is set to `true`, you can further control which type of statistics to collect through the session variable [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata).  |
 
 ### Examples
 
@@ -1263,10 +1269,18 @@ All non-partition columns must use `NULL` as the default value. This means that 
 The syntax of `partition_desc` is as follows:
 
 ```SQL
-PARTITION BY (par_col1[, par_col2...])
+PARTITION BY (partition_expr[, partition_expr...])
 ```
 
-Currently StarRocks only supports [identity transforms](https://iceberg.apache.org/spec/#partitioning), which means that StarRocks creates a partition for each unique partition value.
+Each `partition_expr` can be one of the following forms:
+
+```SQL
+column_name
+| transform_expr(column_name)
+| transform_expr(column_name, parameter)
+```
+
+Currently, StarRocks supports partition transformation expressions defined in the Apache Iceberg specification [transform expr](https://iceberg.apache.org/spec/#partitioning). This enables StarRocks to create Iceberg tables with hidden partitions based on transformed column values.
 
 :::note
 
@@ -1329,6 +1343,16 @@ Description: The compression algorithm used for the Iceberg table. The supported
    AS SELECT * from employee;
    ```
 
+4. Create a table named `partition_tbl_3` with hidden partitions. The table contains three columns: `action`, `id`, and `dt`. Among them, `id` and `dt` are used as partition keys, but the partitions are defined by transformation expressions, so these partitions are hidden.
+
+```sql
+  CREATE TABLE partition_tbl_3 (
+    action VARCHAR(20),
+    id INT,
+    dt DATE
+  )
+  PARTITION BY bucket(id, 10), year(dt);
+```
 ---
 
 ### Sink data to an Iceberg table
@@ -1452,6 +1476,66 @@ When you forcibly drop an Iceberg table (namely, with the `FORCE` keyword specif
 DROP TABLE <table_name> [FORCE];
 ```
 
+### Create Iceberg view
+
+You can define Iceberg views in StarRocks or add StarRocks dialect to an existing Iceberg view. Queries against such Iceberg views support abstracting the StarRocks dialect of these views. This feature is supported from v3.5 onwards.
+
+```SQL
+CREATE VIEW [IF NOT EXISTS]
+[<catalog>.<database>.]<view_name>
+(
+    <column_name>[ COMMENT 'column comment']
+    [, <column_name>[ COMMENT 'column comment'], ...]
+)
+[COMMENT 'view comment']
+AS <query_statement>
+```
+
+#### Example
+
+Create an Iceberg view `iceberg_view1` based on an Iceberg table `iceberg_table`.
+
+```SQL
+CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
+SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+### Add or modify StarRocks dialect for existing Iceberg view
+
+If your Iceberg views are created from other systems, such as Apache Spark, meanwhile, you want to query these views from StarRocks, you can add StarRocks dialect to these views. This feature is supported from v3.5 onwards.
+
+:::note
+
+- You must guarantee that the essential meanings of both dialects of the view are identical. StarRocks and other systems do not guarantee the consistency among different definitions.
+- You can define only one StarRocks dialect for each Iceberg view. You can change the definition of the dialect using the MODIFY clause.
+
+:::
+
+```SQL
+ALTER VIEW
+[<catalog>.<database>.]<view_name>
+(
+    <column_name>
+    [, <column_name>]
+)
+{ ADD | MODIFY } DIALECT
+<query_statement>
+```
+
+#### Example
+
+1. Add StarRocks dialect to an existing Iceberg view `iceberg_view2`.
+
+```SQL
+ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+2. Modify StarRocks dialect for an existing Iceberg view `iceberg_view2`.
+
+```SQL
+ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
+```
+
 ---
 
 ### Configure metadata caching
@@ -1463,7 +1547,7 @@ StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. 
 - StarRocks first attempts to retrieve the requested metadata from the memory. If the metadata cannot be hit in the memory, StarRock attempts to retrieve the metadata from the disks. The metadata that StarRocks has retrieved from the disks will be loaded into the memory. If the metadata cannot be hit in the disks either, StarRock retrieves the metadata from the remote storage and caches the retrieved metadata in the memory.
 - StarRocks writes the metadata evicted out of the memory into the disks, but it directly discards the metadata evicted out of the disks.
 
-From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
+From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-a-periodic-metadata-refresh-strategy). You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
 
 #### FE Configurations on Iceberg metadata caching
 
@@ -1527,7 +1611,15 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 - Default value: 86400
 - Description: The expiration time of an Iceberg metadata cache refresh task. For the Iceberg catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Iceberg catalog that has not been accessed, StarRocks will not refresh its cached metadata.
 
-## Appendix: Periodic Metadata Refresh Strategy
+## Appendix A: Periodic Metadata Refresh Strategy
+
+Iceberg supports [snapshots](./iceberg_timetravel.md). With the newest snapshot, you can get the newest result. Therefore, only cached snapshots can influence data freshness. As a result, you only need to pay attention to the refresh strategy of cache that contains snapshot.
+
+The following flowchart shows the time intervals on a timeline.
+
+![Timeline for updating and discarding cached metadata](../../../_assets/iceberg_catalog_timeline.png)
+
+## Appendix B: Metadata File Parsing
 
 - **Distributed Plan for Large volume of Metadata**
 

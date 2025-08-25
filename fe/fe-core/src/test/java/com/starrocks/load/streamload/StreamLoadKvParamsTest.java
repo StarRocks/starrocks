@@ -17,7 +17,7 @@ package com.starrocks.load.streamload;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -56,11 +56,11 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TIMEZONE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TRANSMISSION_COMPRESSION_TYPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TRIM_SPACE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WHERE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /** Tests for {@link StreamLoadKvParams}. */
 public class StreamLoadKvParamsTest extends StreamLoadParamsTestBase {

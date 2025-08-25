@@ -45,6 +45,7 @@ public:
         options.enable_tiered_cache = true;
         options.block_size = block_size;
         options.skip_read_factor = 1.0;
+        options.inline_item_count_limit = 1000;
         return options;
     }
 

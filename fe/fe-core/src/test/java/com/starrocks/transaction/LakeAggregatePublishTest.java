@@ -24,7 +24,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.lake.LakeAggregator;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -38,9 +37,9 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -62,7 +61,7 @@ public class LakeAggregatePublishTest {
     private static final String DB = "db_for_test";
     private static final String TABLE = "table_for_test";
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         new MockUp<PublishVersionDaemon>() {
             @Mock
@@ -120,7 +119,7 @@ public class LakeAggregatePublishTest {
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
 
-        Assert.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
     }
 
     @Test
@@ -141,20 +140,17 @@ public class LakeAggregatePublishTest {
         
             WarehouseManager mockManager = mock(WarehouseManager.class);
             when(mockManager.warehouseExists(anyLong())).thenReturn(true);
-            when(mockManager.getComputeNodeAssignedToTablet(any(), any(LakeTablet.class)))
+            when(mockManager.getComputeNodeAssignedToTablet(any(), anyLong()))
                     .thenReturn(null);
             when(mockManager.getBackgroundWarehouse()).thenReturn(new DefaultWarehouse(100, "test"));
             warehouseMgrField.set(GlobalStateMgr.getCurrentState(), mockManager);
 
-        
-            Assert.assertThrows(NoAliveBackendException.class, () -> {
-                Utils.aggregatePublishVersion(tablets, null, 1, 2, null,
-                        null, WarehouseManager.DEFAULT_RESOURCE, null);
-            });
+            Assertions.assertThrows(NoAliveBackendException.class, () -> Utils.aggregatePublishVersion(tablets, null, 1, 2, null,
+                        null, WarehouseManager.DEFAULT_RESOURCE, null));
 
             when(mockManager.getAliveComputeNodes(any())).thenReturn(null);
             LakeAggregator lakeAggregator = new LakeAggregator();
-            Assert.assertNotNull(lakeAggregator.chooseAggregatorNode(WarehouseComputeResource.of(10)));
+            Assertions.assertNotNull(lakeAggregator.chooseAggregatorNode(WarehouseComputeResource.of(10)));
         } finally {
             Field warehouseMgrField = GlobalStateMgr.class.getDeclaredField("warehouseMgr");
             warehouseMgrField.setAccessible(true);

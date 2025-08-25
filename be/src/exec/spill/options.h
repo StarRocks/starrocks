@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <limits>
 #include <memory>
 
 #include "column/vectorized_fwd.h"
@@ -22,6 +21,11 @@
 #include "exec/sorting/sorting.h"
 #include "exec/spill/block_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
+
+namespace starrocks {
+struct AggregatorParams;
+using AggregatorParamsPtr = std::shared_ptr<AggregatorParams>;
+}; // namespace starrocks
 
 namespace starrocks::spill {
 struct SpilledChunkBuildSchema {
@@ -52,7 +56,6 @@ private:
 
 // using ChunkBuilder = std::function<ChunkUniquePtr()>;
 enum class SpillFormaterType { NONE, SPILL_BY_COLUMN };
-
 // spill options
 struct SpilledOptions {
     SpilledOptions() : SpilledOptions(-1) {}
@@ -109,6 +112,8 @@ struct SpilledOptions {
     size_t max_read_buffer_bytes = UINT64_MAX;
 
     int64_t spill_hash_join_probe_op_max_bytes = 1LL << 31;
+
+    mutable std::optional<AggregatorParamsPtr> opt_aggregator_params{};
 };
 
 // spill strategy

@@ -20,15 +20,11 @@ package com.starrocks.analysis;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Map;
 
 // Broker descriptor
@@ -96,32 +92,8 @@ public class BrokerDesc implements ParseNode, Writable {
         return "";
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, name);
-        out.writeInt(properties.size());
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            Text.writeString(out, entry.getValue());
-        }
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        name = Text.readString(in);
-        int size = in.readInt();
-        properties = Maps.newHashMap();
-        for (int i = 0; i < size; ++i) {
-            final String key = Text.readString(in);
-            final String val = Text.readString(in);
-            properties.put(key, val);
-        }
-    }
 
-    public static BrokerDesc read(DataInput in) throws IOException {
-        BrokerDesc desc = new BrokerDesc();
-        desc.readFields(in);
-        return desc;
-    }
 
     public String toString() {
         StringBuilder sb = new StringBuilder();

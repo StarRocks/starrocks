@@ -32,6 +32,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include "exprs/function_context.h"
+
 namespace starrocks {
 class FunctionContext;
 }
@@ -45,6 +47,8 @@ class FunctionUtils {
 public:
     FunctionUtils();
     FunctionUtils(RuntimeState* state);
+    FunctionUtils(RuntimeState* state, const FunctionContext::TypeDesc& return_type,
+                  const std::vector<FunctionContext::TypeDesc>& arg_types);
     ~FunctionUtils();
 
     FunctionContext* get_fn_ctx() { return _fn_ctx; }

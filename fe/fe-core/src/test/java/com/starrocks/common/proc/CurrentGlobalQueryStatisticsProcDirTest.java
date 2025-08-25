@@ -20,7 +20,7 @@ import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.server.NodeMgr;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
@@ -128,7 +128,7 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             };
 
             BaseProcResult result = (BaseProcResult) new CurrentGlobalQueryStatisticsProcDir().fetchResult();
-            Assert.assertEquals(LOCAL_TEST_QUERIES.size() + REMOTE_TEST_QUERIES.size(),
+            Assertions.assertEquals(LOCAL_TEST_QUERIES.size() + REMOTE_TEST_QUERIES.size(),
                     result.getRows().size());
 
             List<List<String>> expectedQueryStatisticsInfo =

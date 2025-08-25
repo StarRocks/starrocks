@@ -217,10 +217,10 @@ KRB5_SOURCE=krb5-1.19.4
 KRB5_MD5SUM="ef76083e58f8c49066180642d7c2814a"
 
 # librdkafka
-LIBRDKAFKA_DOWNLOAD="https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.0.2.tar.gz"
-LIBRDKAFKA_NAME=librdkafka-2.0.2.tar.gz
-LIBRDKAFKA_SOURCE=librdkafka-2.0.2
-LIBRDKAFKA_MD5SUM="c0120dc32acc129bfb4656fe17568da1"
+LIBRDKAFKA_DOWNLOAD="https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.11.0.tar.gz"
+LIBRDKAFKA_NAME=librdkafka-2.11.0.tar.gz
+LIBRDKAFKA_SOURCE=librdkafka-2.11.0
+LIBRDKAFKA_MD5SUM="bc611d0340e269abaa8886d42ff9c558"
 
 # pulsar
 PULSAR_DOWNLOAD="https://github.com/apache/pulsar-client-cpp/archive/refs/tags/v3.3.0.tar.gz"
@@ -229,10 +229,10 @@ PULSAR_SOURCE=pulsar-client-cpp-3.3.0
 PULSAR_MD5SUM="348b7e5ec39e50547668520d13a417a1"
 
 # zstd
-ZSTD_DOWNLOAD="https://github.com/facebook/zstd/archive/v1.5.0.tar.gz"
-ZSTD_NAME=zstd-1.5.0.tar.gz
-ZSTD_SOURCE=zstd-1.5.0
-ZSTD_MD5SUM="d5ac89d5df9e81243ce40d0c6a66691d"
+ZSTD_DOWNLOAD="https://github.com/facebook/zstd/archive/v1.5.7.tar.gz"
+ZSTD_NAME=zstd-1.5.7.tar.gz
+ZSTD_SOURCE=zstd-1.5.7
+ZSTD_MD5SUM="619a019adbbc4536e7fb93cdbb01af3e"
 
 # brotli
 BROTLI_DOWNLOAD="https://github.com/google/brotli/archive/v1.0.9.tar.gz"
@@ -295,10 +295,10 @@ RYU_SOURCE="ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc"
 RYU_MD5SUM="cb82b6da904d919470fe3f5a01ca30ff"
 
 # breakpad
-BREAK_PAD_DOWNLOAD="https://github.com/google/breakpad/archive/refs/tags/v2022.07.12.tar.gz"
-BREAK_PAD_NAME="breakpad-2022.07.12.tar.gz"
-BREAK_PAD_SOURCE="breakpad-2022.07.12"
-BREAK_PAD_MD5SUM="d5bcfd3f7b361ef5bda96123c3abdd0a"
+BREAK_PAD_DOWNLOAD="https://github.com/google/breakpad/archive/refs/tags/v2024.02.16.tar.gz"
+BREAK_PAD_NAME="breakpad-2024.02.16.tar.gz"
+BREAK_PAD_SOURCE="breakpad-2024.02.16"
+BREAK_PAD_MD5SUM="ae8c55b23c157771922b5ddca3803055"
 
 # RAGEL
 # ragel-6.9+ is used by hyperscan, so we build it first
@@ -470,9 +470,15 @@ AZURE_NAME="azure-storage-files-shares_12.12.0.tar.gz"
 AZURE_SOURCE="azure-storage-files-shares_12.12.0"
 AZURE_MD5SUM="cb38786198aa103295d4d670604a9a60"
 
+# libdivide
+LIBDIVIDE_DOWNLOAD="https://github.com/ridiculousfish/libdivide/archive/refs/tags/v5.2.0.tar.gz"
+LIBDIVIDE_NAME="libdivide-v5.2.0.tar.gz"
+LIBDIVIDE_SOURCE="libdivide-v5.2.0"
+LIBDIVIDE_MD5SUM="4ba77777192c295d6de2b86d88f3239a"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
-            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE"
+            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE"

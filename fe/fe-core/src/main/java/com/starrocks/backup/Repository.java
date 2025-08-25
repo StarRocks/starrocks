@@ -43,7 +43,6 @@ import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -55,8 +54,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -684,34 +681,8 @@ public class Repository implements Writable, GsonPostProcessable {
         return info;
     }
 
-    public static Repository read(DataInput in) throws IOException {
-        Repository repo = new Repository();
-        repo.readFields(in);
-        return repo;
-    }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(id);
-        Text.writeString(out, name);
-        out.writeBoolean(isReadOnly);
-        Text.writeString(out, location);
-        storage.write(out);
-        out.writeLong(createTime);
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        id = in.readLong();
-        name = Text.readString(in);
-        isReadOnly = in.readBoolean();
-        location = Text.readString(in);
-        storage = BlobStorage.read(in);
-        createTime = in.readLong();
-
-        if (!GlobalStateMgr.isCheckpointThread()) {
-            genPrefixRepo();
-        }
-    }
 
     @Override
     public void gsonPostProcess() throws IOException {

@@ -144,6 +144,32 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: thrift RPC のタイムアウト。
 - 導入バージョン: -
 
+##### thrift_rpc_strict_mode
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: Thrift の Strict 実行モードが有効かどうか。Thrift の Strict モードについては、[Thrift Binary protocol encoding](https://github.com/apache/thrift/blob/master/doc/specs/thrift-binary-protocol.md) を参照してください。
+- 導入バージョン: -
+
+##### thrift_rpc_max_body_size
+
+- デフォルト: 0
+- タイプ: Int
+- 単位:
+- 変更可能: いいえ
+- 説明: RPC の文字列ボディの最大サイズ。`0` は無制限であることを示す。
+- 導入バージョン: -
+
+##### thrift_rpc_connection_max_valid_time_ms
+
+- デフォルト: 5000
+- タイプ: Int
+- 単位: Milliseconds
+- 変更可能: いいえ
+- 説明: Thrift RPC 接続の最大有効時間。コネクションプールにこの値以上存在すると、コネクションは閉じられます。この値は FE 設定 `thrift_client_timeout_ms` と一致するように設定する必要があります。
+
 #### bRPC
 
 ##### brpc_port
@@ -1149,6 +1175,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: バージョンを公開するために使用される最大スレッド数。この値が `0` 以下に設定されている場合、システムは CPU コア数を値として使用し、インポートの同時実行が高いが固定スレッド数しか使用されない場合にスレッドリソースが不足するのを回避します。v2.5 以降、デフォルト値は `8` から `0` に変更されました。
 - 導入バージョン: -
 
+##### transaction_publish_version_thread_pool_idle_time_ms
+
+- デフォルト: 60000
+- タイプ: Int
+- 単位: ミリ秒
+- 可変: いいえ
+- 説明: スレッドが Publish Version スレッドプールによって再利用されるまでの Idle 時間。
+- 導入バージョン: -
+
 ##### clear_transaction_task_worker_count
 
 - デフォルト: 1
@@ -1517,6 +1552,50 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE ノードの CPU コアごとに Pipeline Connector に割り当てられるスキャンスレッドの数。この設定は v3.1.7 以降、動的に変更されました。
 - 導入バージョン: -
 
+##### pipeline_scan_thread_pool_queue_size
+
+- デフォルト: 102400
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: Pipeline 実行エンジンの SCAN スレッドプールの最大タスクキュー長。
+- 導入バージョン: -
+
+##### pipeline_prepare_thread_pool_thread_num
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: Pipeline 実行エンジン PREPARE Fragment スレッドプールのスレッド数。`0` はシステムの VCPU コア数と同じであることを示す。
+- 導入バージョン: -
+
+##### pipeline_prepare_thread_pool_queue_size
+
+- デフォルト: 102400
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: Pipeline 実行エンジンの PREPARE Fragment スレッドプールの最大キュー長。
+- 導入バージョン: -
+
+##### pipeline_poller_timeout_guard_ms
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: Milliseconds
+- 可変: はい
+- 説明: この項目が `0` より大きい値に設定されている場合、ドライバがポーラの 1 回のディスパッチに `pipeline_poller_timeout_guard_ms` 以上の時間がかかると、ドライバとオペレータの情報が出力される。
+- 導入バージョン: -
+
+##### pipeline_prepare_timeout_guard_ms
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: Milliseconds
+- 可変: はい
+- 説明: この項目が `0` より大きい値に設定されている場合、PREPARE 処理中にプランの Fragment が `pipeline_prepare_timeout_guard_ms` を超えると、プランの Fragment のスタックトレースが出力される。
+
 ##### max_hdfs_file_handle
 
 - デフォルト: 1000
@@ -1683,7 +1762,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - デフォルト: 0
 - タイプ: Int
-- 単位: GB
+- 単位: Bytes
 - 可変: はい
 - 説明: JIT コンパイルのための LRU キャッシュサイズ。0 より大きい場合、キャッシュの実際のサイズを表します。0 以下に設定されている場合、システムは `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` の式を使用してキャッシュを適応的に設定します (ノードの `mem_limit` は 16 GB 以上でなければなりません)。
 - 導入バージョン: -
@@ -1743,6 +1822,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: starlet filesystem インスタンス キャッシュの有効期限。
 - 導入バージョン: v3.3.15, 3.4.5
+
+##### starlet_write_file_with_tag
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 共有データクラスターにおいて、オブジェクトストレージに書き込まれたファイルにオブジェクトストレージタグを付与し、便利なカスタムファイル管理を行うかどうか。
+- 導入バージョン: v3.5.3
 
 ##### lake_compaction_stream_buffer_size_bytes
 
@@ -1805,7 +1893,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - デフォルト: 0
 - タイプ: String
 - 単位: -
-- 可変: いいえ
+- 可変: はい
 - 説明: メモリにキャッシュできるデータの最大量。パーセンテージ (例: `10%`) または物理的な制限 (例: `10G`、`21474836480`) として設定できます。
 - 導入バージョン: -
 
@@ -1814,7 +1902,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - デフォルト: 0
 - タイプ: String
 - 単位: -
-- 可変: いいえ
+- 可変: はい
 - 説明: 単一ディスクにキャッシュできるデータの最大量。パーセンテージ (例: `80%`) または物理的な制限 (例: `2T`、`500G`) として設定できます。たとえば、2 つのディスクを使用し、`datacache_disk_size` パラメータの値を `21474836480` (20 GB) に設定した場合、これらの 2 つのディスクに最大 40 GB のデータをキャッシュできます。デフォルト値は `0` で、これはメモリのみがデータをキャッシュするために使用されることを示します。
 - 導入バージョン: -
 

@@ -153,38 +153,33 @@ public:
 
     /// Constructor from floating point types
     /// @param value Floating point value to convert (truncated to integer)
-    constexpr int256_t(float value)
-            : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
-    constexpr int256_t(double value)
-            : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
+    explicit int256_t(float value);
+    explicit int256_t(double value);
 
     // =============================================================================
     // Type Conversion Operators
     // =============================================================================
 
     /// Convert to boolean (true if non-zero)
-    operator bool() const { return high != 0 || low != 0; }
-    //
-    // /// High precision conversion using bit manipulation
-    // operator double() const;
-    //
-    // /// Convert to size_t (safe conversion with overflow checking)
-    // operator size_t() const {
-    //     if (high < 0) {
-    //         throw std::out_of_range("Cannot convert negative int256_t to size_t");
-    //     }
-    //
-    //     if (high > 0) {
-    //         throw std::out_of_range("int256_t value too large for size_t");
-    //     }
-    //
-    //     constexpr uint128_t max_size_t = std::numeric_limits<size_t>::max();
-    //     if (low > max_size_t) {
-    //         throw std::out_of_range("int256_t value too large for size_t");
-    //     }
-    //
-    //     return static_cast<size_t>(low);
-    // }
+    explicit operator bool() const { return high != 0 || low != 0; }
+
+    /// High precision conversion using bit manipulation
+    explicit operator double() const;
+
+    explicit operator int() const { return static_cast<int>(static_cast<uint32_t>(low)); }
+
+    explicit operator long() const { return static_cast<long>(static_cast<uint64_t>(low)); }
+
+    explicit operator int128_t() const { return static_cast<__int128>(low); }
+
+    /// Convert to signed char
+    explicit operator signed char() const { return static_cast<signed char>(static_cast<int64_t>(low)); }
+
+    /// Convert to short int
+    explicit operator short int() const { return static_cast<short>(static_cast<int64_t>(low)); }
+
+    /// Convert to size_t
+    explicit operator size_t() const { return static_cast<size_t>(low); }
 
     // =============================================================================
     // Unary Operators
@@ -197,6 +192,7 @@ public:
             return int256_t(-high, 0);
         } else {
             uint128_t new_low = ~low + 1;
+
             int128_t new_high = ~high;
             if (new_low == 0) {
                 new_high++;
@@ -276,6 +272,93 @@ public:
     /// @return true if this value is greater than or equal to other
     constexpr bool operator>=(int other) const { return *this >= int256_t(other); }
 
+    /// Equality comparison with double
+    /// @param other Double value to compare with
+    /// @return true if values are equal (within floating point precision)
+    bool operator==(double other) const {
+        if (std::floor(other) != other) {
+            return false;
+        }
+
+        int256_t INT256_MAX{static_cast<int128_t>((static_cast<uint128_t>(1) << 127) - 1), static_cast<uint128_t>(-1)};
+        int256_t INT256_MIN{static_cast<int128_t>(static_cast<uint128_t>(1) << 127), static_cast<uint128_t>(0)};
+
+        if (other > static_cast<double>(INT256_MAX) || other < static_cast<double>(INT256_MIN)) {
+            return false;
+        }
+
+        return *this == int256_t(other);
+    }
+
+    /// Inequality comparison with double
+    /// @param other Double value to compare with
+    /// @return true if values are not equal
+    bool operator!=(double other) const { return !(*this == other); }
+
+    /// Less than comparison with double
+    /// @param other Double value to compare with
+    /// @return true if this value is less than other
+    bool operator<(double other) const { return static_cast<double>(*this) < other; }
+
+    /// Less than or equal comparison with double
+    /// @param other Double value to compare with
+    /// @return true if this value is less than or equal to other
+    bool operator<=(double other) const { return static_cast<double>(*this) <= other; }
+
+    /// Greater than comparison with double
+    /// @param other Double value to compare with
+    /// @return true if this value is greater than other
+    bool operator>(double other) const { return static_cast<double>(*this) > other; }
+
+    /// Greater than or equal comparison with double
+    /// @param other Double value to compare with
+    /// @return true if this value is greater than or equal to other
+    bool operator>=(double other) const { return static_cast<double>(*this) >= other; }
+
+    // =============================================================================
+    // Friend Comparison Operators (for reverse operand order)
+    // =============================================================================
+
+    /// Equality comparison: int == int256_t
+    friend constexpr bool operator==(int lhs, const int256_t& rhs) { return int256_t(lhs) == rhs; }
+
+    /// Inequality comparison: int != int256_t
+    friend constexpr bool operator!=(int lhs, const int256_t& rhs) { return int256_t(lhs) != rhs; }
+
+    /// Less than comparison: int < int256_t
+    friend constexpr bool operator<(int lhs, const int256_t& rhs) { return int256_t(lhs) < rhs; }
+
+    /// Less than or equal comparison: int <= int256_t
+    friend constexpr bool operator<=(int lhs, const int256_t& rhs) { return int256_t(lhs) <= rhs; }
+
+    /// Greater than comparison: int > int256_t
+    friend constexpr bool operator>(int lhs, const int256_t& rhs) { return int256_t(lhs) > rhs; }
+
+    /// Greater than or equal comparison: int >= int256_t
+    friend constexpr bool operator>=(int lhs, const int256_t& rhs) { return int256_t(lhs) >= rhs; }
+
+    // =============================================================================
+    // Friend Comparison Operators (for reverse operand order with double)
+    // =============================================================================
+
+    /// Equality comparison: double == int256_t
+    friend bool operator==(double lhs, const int256_t& rhs) { return rhs == lhs; }
+
+    /// Inequality comparison: double != int256_t
+    friend bool operator!=(double lhs, const int256_t& rhs) { return rhs != lhs; }
+
+    /// Less than comparison: double < int256_t
+    friend bool operator<(double lhs, const int256_t& rhs) { return lhs < static_cast<double>(rhs); }
+
+    /// Less than or equal comparison: double <= int256_t
+    friend bool operator<=(double lhs, const int256_t& rhs) { return lhs <= static_cast<double>(rhs); }
+
+    /// Greater than comparison: double > int256_t
+    friend bool operator>(double lhs, const int256_t& rhs) { return lhs > static_cast<double>(rhs); }
+
+    /// Greater than or equal comparison: double >= int256_t
+    friend bool operator>=(double lhs, const int256_t& rhs) { return lhs >= static_cast<double>(rhs); }
+
     // =============================================================================
     // Arithmetic Operators - Addition
     // =============================================================================
@@ -297,6 +380,21 @@ public:
     /// @param other Integer value to add
     /// @return Sum of this value and other
     constexpr int256_t operator+(int other) const { return *this + int256_t(other); }
+
+    /// Addition with double (returns double)
+    /// @param other Double value to add
+    /// @return Sum as double
+    double operator+(double other) const { return static_cast<double>(*this) + other; }
+
+    // =============================================================================
+    // Friend Arithmetic Operators - Addition
+    // =============================================================================
+
+    /// Addition: double + int256_t (returns double)
+    /// @param lhs Double value
+    /// @param rhs int256_t value
+    /// @return Sum as double
+    friend double operator+(double lhs, const int256_t& rhs) { return lhs + static_cast<double>(rhs); }
 
     // =============================================================================
     // Arithmetic Operators - Subtraction
@@ -323,6 +421,16 @@ public:
     double operator-(double other) const { return static_cast<double>(*this) - other; }
 
     // =============================================================================
+    // Friend Arithmetic Operators - Subtraction
+    // =============================================================================
+
+    /// Subtraction: double - int256_t (returns double)
+    /// @param lhs Double value
+    /// @param rhs int256_t value
+    /// @return Difference as double
+    friend double operator-(double lhs, const int256_t& rhs) { return lhs - static_cast<double>(rhs); }
+
+    // =============================================================================
     // Arithmetic Operators - Multiplication
     // =============================================================================
 
@@ -341,8 +449,23 @@ public:
     /// @return Product of this value and other
     int256_t operator*(int other) const { return *this * int256_t(other); }
 
+    /// Multiplication with double (returns double)
+    /// @param other Double value to multiply by
+    /// @return Product as double
+    double operator*(double other) const { return static_cast<double>(*this) * other; }
+
     // =============================================================================
-    // Arithmetic Operators - Division (Declaration only)
+    // Friend Arithmetic Operators - Multiplication
+    // =============================================================================
+
+    /// Multiplication: double * int256_t (returns double)
+    /// @param lhs Double value
+    /// @param rhs int256_t value
+    /// @return Product as double
+    friend double operator*(double lhs, const int256_t& rhs) { return lhs * static_cast<double>(rhs); }
+
+    // =============================================================================
+    // Arithmetic Operators - Division
     // =============================================================================
 
     /// Division with another int256_t
@@ -351,8 +474,57 @@ public:
     /// @throws std::domain_error if other is zero
     int256_t operator/(const int256_t& other) const;
 
+    /// @brief Division with int
+    /// @param other Integer value to divide by
+    /// @return Quotient of this value divided by other
+    /// @throws std::domain_error if other is zero
+    int256_t operator/(int other) const {
+        if (other == 0) {
+            throw std::domain_error("Division by zero");
+        }
+        return *this / int256_t(other);
+    }
+
+    /// Division with double (returns double)
+    /// @param other Double value to divide by
+    /// @return Quotient as double
+    /// @throws std::domain_error if other is zero
+    double operator/(double other) const {
+        if (other == 0.0) {
+            throw std::domain_error("Division by zero");
+        }
+        return static_cast<double>(*this) / other;
+    }
+
     // =============================================================================
-    // Arithmetic Operators - Modulo (Declaration only)
+    // Friend Arithmetic Operators - Division
+    // =============================================================================
+    /// @brief Division: int / int256_t
+    /// @param lhs Integer value
+    /// @param rhs int256_t value to divide by
+    /// @return Quotient as int256_t
+    /// @throws std::domain_error if rhs is zero
+    friend int256_t operator/(int lhs, const int256_t& rhs) {
+        if (rhs == int256_t(0)) {
+            throw std::domain_error("Division by zero");
+        }
+        return int256_t(lhs) / rhs;
+    }
+
+    /// Division: double / int256_t (returns double)
+    /// @param lhs Double value
+    /// @param rhs int256_t value
+    /// @return Quotient as double
+    /// @throws std::domain_error if rhs is zero
+    friend double operator/(double lhs, const int256_t& rhs) {
+        if (rhs == int256_t(0)) {
+            throw std::domain_error("Division by zero");
+        }
+        return lhs / static_cast<double>(rhs);
+    }
+
+    // =============================================================================
+    // Arithmetic Operators - Modulo
     // =============================================================================
 
     /// Modulo operation with another int256_t
@@ -360,6 +532,55 @@ public:
     /// @return Remainder of this value divided by other
     /// @throws std::domain_error if other is zero
     int256_t operator%(const int256_t& other) const;
+
+    /// Modulo operation with int
+    /// @param other Integer value to take modulo by
+    /// @return Remainder of this value divided by other
+    /// @throws std::domain_error if other is zero
+    int256_t operator%(int other) const {
+        if (other == 0) {
+            throw std::domain_error("Modulo by zero");
+        }
+        return *this % int256_t(other);
+    }
+
+    /// Modulo operation with double (using fmod semantics)
+    /// @param other Double value to take modulo by
+    /// @return Remainder as double (using fmod semantics)
+    /// @throws std::domain_error if other is zero
+    double operator%(double other) const {
+        if (other == 0.0) {
+            throw std::domain_error("Modulo by zero");
+        }
+        return std::fmod(static_cast<double>(*this), other);
+    }
+
+    // =============================================================================
+    // Friend Arithmetic Operators - Modulo
+    // =============================================================================
+    /// Modulo operation: int % int256_t
+    /// @param lhs Integer value
+    /// @param rhs int256_t value to take modulo by
+    /// @return Remainder as int256_t
+    /// @throws std::domain_error if rhs is zero
+    friend int256_t operator%(int lhs, const int256_t& rhs) {
+        if (rhs == int256_t(0)) {
+            throw std::domain_error("Modulo by zero");
+        }
+        return int256_t(lhs) % rhs;
+    }
+
+    /// Modulo operation: double % int256_t (using fmod semantics)
+    /// @param lhs Double value
+    /// @param rhs int256_t value to take modulo by
+    /// @return Remainder as double (using fmod semantics)
+    /// @throws std::domain_error if rhs is zero
+    friend double operator%(double lhs, const int256_t& rhs) {
+        if (rhs == int256_t(0)) {
+            throw std::domain_error("Modulo by zero");
+        }
+        return std::fmod(lhs, static_cast<double>(rhs));
+    }
 
     // =============================================================================
     // Assignment Operators
@@ -480,7 +701,57 @@ public:
     /// Left shift assignment operator
     /// @param shift Number of bits to shift left
     /// @return Reference to this after shifting
-    constexpr int256_t& operator<<=(int shift) { return *this = *this << shift; }
+    int256_t& operator<<=(int shift) { return *this = *this << shift; }
+
+    // =============================================================================
+    // Bitwise Operators
+    // =============================================================================
+
+    /// Bitwise AND operator
+    /// @param other Value to perform AND with
+    /// @return Bitwise AND result
+    int256_t operator&(const int256_t& other) const { return int256_t(high & other.high, low & other.low); }
+
+    /// Bitwise OR operator
+    /// @param other Value to perform OR with
+    /// @return Bitwise OR result
+    int256_t operator|(const int256_t& other) const { return int256_t(high | other.high, low | other.low); }
+
+    /// Bitwise XOR operator
+    /// @param other Value to perform XOR with
+    /// @return Bitwise XOR result
+    int256_t operator^(const int256_t& other) const { return int256_t(high ^ other.high, low ^ other.low); }
+
+    /// Bitwise NOT operator
+    /// @return Bitwise complement of this value
+    int256_t operator~() const { return int256_t(~high, ~low); }
+
+    /// Bitwise AND assignment operator
+    /// @param other Value to perform AND with
+    /// @return Reference to this after AND operation
+    int256_t& operator&=(const int256_t& other) {
+        high &= other.high;
+        low &= other.low;
+        return *this;
+    }
+
+    /// Bitwise OR assignment operator
+    /// @param other Value to perform OR with
+    /// @return Reference to this after OR operation
+    int256_t& operator|=(const int256_t& other) {
+        high |= other.high;
+        low |= other.low;
+        return *this;
+    }
+
+    /// Bitwise XOR assignment operator
+    /// @param other Value to perform XOR with
+    /// @return Reference to this after XOR operation
+    int256_t& operator^=(const int256_t& other) {
+        high ^= other.high;
+        low ^= other.low;
+        return *this;
+    }
 
     // =============================================================================
     // Utility Methods
@@ -635,6 +906,12 @@ int256_t parse_int256(const std::string& str);
 // =============================================================================
 
 namespace std {
+
+/// Specialization of make_signed for int256_t
+template <>
+struct make_signed<starrocks::int256_t> {
+    using type = starrocks::int256_t;
+};
 
 /// Specialization of make_unsigned for int256_t
 template <>

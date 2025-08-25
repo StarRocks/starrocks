@@ -52,7 +52,7 @@
 #include "common/config.h"
 #include "common/process_exit.h"
 #include "common/status.h"
-#include "exec/file_scanner.h"
+#include "exec/file_scanner/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -306,7 +306,7 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
         return;
     }
 
-    auto st = _exec_plan_fragment(cntl, request);
+    auto st = _exec_plan_fragment(cntl, request, response);
     if (!st.ok()) {
         LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.message();
     }
@@ -422,6 +422,15 @@ void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcCont
                                                        PTabletWriterCancelResult* response,
                                                        google::protobuf::Closure* done) {}
 
+static void copy_result_from_thrift_to_protobuf(const TExecPlanFragmentResult& t_response,
+                                                PExecPlanFragmentResult* p_response) {
+    if (t_response.__isset.closed_scan_nodes) {
+        for (auto v : t_response.closed_scan_nodes) {
+            p_response->add_closed_scan_nodes(v);
+        }
+    }
+}
+
 template <typename T>
 void PInternalServiceImplBase<T>::get_load_replica_status(google::protobuf::RpcController* controller,
                                                           const PLoadReplicaStatusRequest* request,
@@ -434,8 +443,8 @@ void PInternalServiceImplBase<T>::load_diagnose(google::protobuf::RpcController*
                                                 google::protobuf::Closure* done) {}
 
 template <typename T>
-Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
-                                                        const PExecPlanFragmentRequest* request) {
+Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, const PExecPlanFragmentRequest* request,
+                                                        PExecPlanFragmentResult* response) {
     auto ser_request = cntl->request_attachment().to_string();
     TExecPlanFragmentParams t_request;
     {
@@ -445,7 +454,10 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
     }
     // incremental scan ranges deployment.
     if (!t_request.__isset.fragment) {
-        return pipeline::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request);
+        TExecPlanFragmentResult t_result;
+        Status code = pipeline::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result);
+        copy_result_from_thrift_to_protobuf(t_result, response);
+        return code;
     }
 
     if (UNLIKELY(!t_request.query_options.__isset.batch_size)) {

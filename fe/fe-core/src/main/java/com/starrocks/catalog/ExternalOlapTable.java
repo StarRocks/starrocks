@@ -459,7 +459,7 @@ public class ExternalOlapTable extends OlapTable {
             THashDistributionInfo hashDist = meta.getDistribution_desc().getHash_distribution();
             DistributionDesc distributionDesc = new HashDistributionDesc(hashDist.getBucket_num(),
                     hashDist.getDistribution_columns());
-            defaultDistributionInfo = distributionDesc.toDistributionInfo(getBaseSchema());
+            defaultDistributionInfo = DistributionInfoBuilder.build(distributionDesc, getBaseSchema());
         }
 
         for (TPartitionMeta partitionMeta : meta.getPartitions()) {
@@ -500,7 +500,7 @@ public class ExternalOlapTable extends OlapTable {
                     }
                     TabletMeta tabletMeta = new TabletMeta(tTabletMeta.getDb_id(), tTabletMeta.getTable_id(),
                             tTabletMeta.getPartition_id(), tTabletMeta.getIndex_id(),
-                            tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
+                            tTabletMeta.getStorage_medium());
                     index.addTablet(tablet, tabletMeta, false);
                 }
                 if (indexMeta.getPartition_id() == physicalPartition.getId()) {

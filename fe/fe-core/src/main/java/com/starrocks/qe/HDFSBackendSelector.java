@@ -25,6 +25,7 @@ import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
@@ -42,7 +43,6 @@ import com.starrocks.qe.scheduler.CandidateWorkerProvider;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.HistoricalNodeMgr;
@@ -51,7 +51,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -189,11 +189,11 @@ public class HDFSBackendSelector implements BackendSelector {
     }
 
     private boolean isCacheSharingExpired(long cacheSharingWorkPeriod) {
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = warehouseManager.getWarehouse(workerProvider.getComputeResource().getWarehouseId());
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
+        ComputeResource computeResource = workerProvider.getComputeResource();
 
-        long lastUpdateTime = historicalNodeMgr.getLastUpdateTime(warehouse.getName());
+        long lastUpdateTime = historicalNodeMgr.getLastUpdateTime(computeResource.getWarehouseId(),
+                computeResource.getWorkerGroupId());
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastUpdateTime > cacheSharingWorkPeriod * 1000) {
             return true;
@@ -231,7 +231,7 @@ public class HDFSBackendSelector implements BackendSelector {
         return node;
     }
 
-    class ComputeNodeFunnel implements Funnel<ComputeNode> {
+    static class ComputeNodeFunnel implements Funnel<ComputeNode> {
         @Override
         public void funnel(ComputeNode computeNode, PrimitiveSink primitiveSink) {
             primitiveSink.putString(computeNode.getHost(), StandardCharsets.UTF_8);
@@ -272,15 +272,17 @@ public class HDFSBackendSelector implements BackendSelector {
 
     @Override
     public void computeScanRangeAssignment() throws StarRocksException {
-        computeGeneralAssignment();
-        if (useIncrementalScanRanges) {
-            boolean hasMore = scanNode.hasMoreScanRanges();
-            TScanRangeParams end = new TScanRangeParams();
-            end.setScan_range(new TScanRange());
-            end.setEmpty(true);
-            end.setHas_more(hasMore);
-            for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
-                assignment.put(computeNode.getId(), scanNode.getId().asInt(), end);
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "computeScanRangeAssignment")) {
+            computeGeneralAssignment();
+            if (useIncrementalScanRanges) {
+                boolean hasMore = scanNode.hasMoreScanRanges();
+                TScanRangeParams end = new TScanRangeParams();
+                end.setScan_range(new TScanRange());
+                end.setEmpty(true);
+                end.setHas_more(hasMore);
+                for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
+                    assignment.put(computeNode.getId(), scanNode.getId().asInt(), end);
+                }
             }
         }
     }

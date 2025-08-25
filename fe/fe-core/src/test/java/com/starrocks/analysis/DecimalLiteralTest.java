@@ -40,12 +40,14 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class DecimalLiteralTest {
 
@@ -59,14 +61,14 @@ public class DecimalLiteralTest {
         int fracValue = buffer.getInt();
         System.out.println("long: " + longValue);
         System.out.println("frac: " + fracValue);
-        Assert.assertEquals(-123456789123456789L, longValue);
-        Assert.assertEquals(-123456789, fracValue);
+        Assertions.assertEquals(-123456789123456789L, longValue);
+        Assertions.assertEquals(-123456789, fracValue);
 
         // if DecimalLiteral need to cast to Decimal and Decimalv2, need to cast
         // to themselves
-        Assert.assertEquals(literal, literal.uncheckedCastTo(Type.DECIMALV2));
+        Assertions.assertEquals(literal, literal.uncheckedCastTo(Type.DECIMALV2));
 
-        Assert.assertEquals(1, literal.compareLiteral(new NullLiteral()));
+        Assertions.assertEquals(1, literal.compareLiteral(new NullLiteral()));
     }
 
     @Test
@@ -90,10 +92,10 @@ public class DecimalLiteralTest {
             DecimalLiteral decimalLiteral = new DecimalLiteral(tc);
             ByteBuffer a = decimalLiteral.getHashValue(Type.DECIMALV2);
             ByteBuffer b = decimalLiteral.getHashValue(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 27, 9));
-            Assert.assertEquals(a.limit(), 12);
-            Assert.assertEquals(a.limit(), b.limit());
-            Assert.assertEquals(a.getLong(), b.getLong());
-            Assert.assertEquals(a.getInt(), b.getInt());
+            Assertions.assertEquals(a.limit(), 12);
+            Assertions.assertEquals(a.limit(), b.limit());
+            Assertions.assertEquals(a.getLong(), b.getLong());
+            Assertions.assertEquals(a.getInt(), b.getInt());
         }
     }
 
@@ -122,10 +124,10 @@ public class DecimalLiteralTest {
             ByteBuffer a = largeIntLiteral.getHashValue(Type.LARGEINT);
             ByteBuffer b =
                     decimalLiteral.getHashValue(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 30, 10));
-            Assert.assertEquals(a.limit(), 16);
-            Assert.assertEquals(a.limit(), b.limit());
-            Assert.assertEquals(a.getLong(), b.getLong());
-            Assert.assertEquals(a.getLong(), b.getLong());
+            Assertions.assertEquals(a.limit(), 16);
+            Assertions.assertEquals(a.limit(), b.limit());
+            Assertions.assertEquals(a.getLong(), b.getLong());
+            Assertions.assertEquals(a.getLong(), b.getLong());
         }
     }
 
@@ -153,9 +155,9 @@ public class DecimalLiteralTest {
             IntLiteral largeIntLiteral = new IntLiteral(bigInt);
             ByteBuffer a = largeIntLiteral.getHashValue(Type.BIGINT);
             ByteBuffer b = decimalLiteral.getHashValue(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 5));
-            Assert.assertEquals(a.limit(), 8);
-            Assert.assertEquals(a.limit(), b.limit());
-            Assert.assertEquals(a.getLong(), b.getLong());
+            Assertions.assertEquals(a.limit(), 8);
+            Assertions.assertEquals(a.limit(), b.limit());
+            Assertions.assertEquals(a.getLong(), b.getLong());
         }
     }
 
@@ -183,9 +185,9 @@ public class DecimalLiteralTest {
             IntLiteral intLiteral = new IntLiteral(bigInt);
             ByteBuffer a = intLiteral.getHashValue(Type.INT);
             ByteBuffer b = decimalLiteral.getHashValue(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
-            Assert.assertEquals(a.limit(), 4);
-            Assert.assertEquals(a.limit(), b.limit());
-            Assert.assertEquals(a.getInt(), b.getInt());
+            Assertions.assertEquals(a.limit(), 4);
+            Assertions.assertEquals(a.limit(), b.limit());
+            Assertions.assertEquals(a.getInt(), b.getInt());
         }
     }
 
@@ -195,61 +197,69 @@ public class DecimalLiteralTest {
         DecimalLiteral decimalLiteral;
         Type type;
         decimalLiteral = new DecimalLiteral(Strings.repeat("9", 38));
-        Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+        Assertions.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
 
         decimalLiteral = new DecimalLiteral("123456789012345678901234567890.1234567890");
-        Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 40, 10));
-        Assert.assertEquals("123456789012345678901234567890.1234567890", decimalLiteral.getStringValue());
+        Assertions.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 40, 10));
+        Assertions.assertEquals("123456789012345678901234567890.1234567890", decimalLiteral.getStringValue());
 
         decimalLiteral = new DecimalLiteral("1234567890123456789012345678901234567890123456789012345678901234567890.1234567890");
-        Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 6));
-        Assert.assertEquals("1234567890123456789012345678901234567890123456789012345678901234567890.123457",
+        Assertions.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 6));
+        Assertions.assertEquals("1234567890123456789012345678901234567890123456789012345678901234567890.123457",
                 decimalLiteral.getStringValue());
 
         decimalLiteral = new DecimalLiteral(new BigDecimal("12345678901234567890.12345678901234567890"));
-        Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 40, 20));
-        Assert.assertEquals("12345678901234567890.12345678901234567890", decimalLiteral.getStringValue());
+        Assertions.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 40, 20));
+        Assertions.assertEquals("12345678901234567890.12345678901234567890", decimalLiteral.getStringValue());
 
         type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4);
         decimalLiteral = new DecimalLiteral("12345678.90", type);
-        Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2));
+        Assertions.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2));
         decimalLiteral = (DecimalLiteral) decimalLiteral.uncheckedCastTo(type);
-        Assert.assertEquals(decimalLiteral.getType(), type);
+        Assertions.assertEquals(decimalLiteral.getType(), type);
 
         type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6);
         decimalLiteral = new DecimalLiteral("12345678.1234567890123", type);
-        Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 14, 6));
+        Assertions.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 14, 6));
         decimalLiteral = (DecimalLiteral) decimalLiteral.uncheckedCastTo(type);
-        Assert.assertEquals(decimalLiteral.getType(), type);
-        Assert.assertEquals(decimalLiteral.getStringValue(), "12345678.123457");
+        Assertions.assertEquals(decimalLiteral.getType(), type);
+        Assertions.assertEquals(decimalLiteral.getStringValue(), "12345678.123457");
         type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 17, 5);
         decimalLiteral = (DecimalLiteral) decimalLiteral.uncheckedCastTo(type);
-        Assert.assertEquals(decimalLiteral.getType(), type);
-        Assert.assertEquals(decimalLiteral.getStringValue(), "12345678.12346");
+        Assertions.assertEquals(decimalLiteral.getType(), type);
+        Assertions.assertEquals(decimalLiteral.getStringValue(), "12345678.12346");
     }
 
-    @Test(expected = Throwable.class)
-    public void testDealWithSingularDecimalLiteralAbnormal0() throws AnalysisException {
-        DecimalLiteral decimalLiteral = new DecimalLiteral(Strings.repeat("9", 77));
+    @Test
+    public void testDealWithSingularDecimalLiteralAbnormal0() {
+        assertThrows(Throwable.class, () -> {
+            DecimalLiteral decimalLiteral = new DecimalLiteral(Strings.repeat("9", 77));
+        });
     }
 
-    @Test(expected = Throwable.class)
+    @Test
     public void testDealWithSingularDecimalLiteralAbnormal1() {
-        BigDecimal decimal = new BigDecimal(Strings.repeat("9", 77));
-        DecimalLiteral decimalLiteral = new DecimalLiteral(decimal);
+        assertThrows(Throwable.class, () -> {
+            BigDecimal decimal = new BigDecimal(Strings.repeat("9", 77));
+            DecimalLiteral decimalLiteral = new DecimalLiteral(decimal);
+        });
     }
 
-    @Test(expected = Throwable.class)
-    public void testDealWithSingularDecimalLiteralAbnormal2() throws AnalysisException {
-        Type type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 2);
-        DecimalLiteral decimalLiteral = new DecimalLiteral("1234567890.1235", type);
+    @Test
+    public void testDealWithSingularDecimalLiteralAbnormal2() {
+        assertThrows(Throwable.class, () -> {
+            Type type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 2);
+            DecimalLiteral decimalLiteral = new DecimalLiteral("1234567890.1235", type);
+        });
     }
 
-    @Test(expected = Throwable.class)
-    public void testDealWithSingularDecimalLiteralAbnormal3() throws AnalysisException {
-        Type type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 2);
-        DecimalLiteral decimalLiteral = new DecimalLiteral("92233720368547758.08");
-        decimalLiteral.uncheckedCastTo(type);
+    @Test
+    public void testDealWithSingularDecimalLiteralAbnormal3() {
+        assertThrows(Throwable.class, () -> {
+            Type type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 2);
+            DecimalLiteral decimalLiteral = new DecimalLiteral("92233720368547758.08");
+            decimalLiteral.uncheckedCastTo(type);
+        });
     }
 
     @Test
@@ -264,7 +274,7 @@ public class DecimalLiteralTest {
         for (BigDecimal dec32 : decimal32Values) {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec32, decimal32p4s3);
-                Assert.fail("should throw exception");
+                Assertions.fail("should throw exception");
             } catch (Exception ignored) {
             }
         }
@@ -279,7 +289,7 @@ public class DecimalLiteralTest {
         for (BigDecimal dec64 : decimal64Values) {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec64, decimal64p10s6);
-                Assert.fail("should throw exception");
+                Assertions.fail("should throw exception");
             } catch (Exception ignored) {
             }
         }
@@ -294,7 +304,7 @@ public class DecimalLiteralTest {
         for (BigDecimal dec128 : decimal128Values) {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec128, decimal128p36s11);
-                Assert.fail("should throw exception");
+                Assertions.fail("should throw exception");
             } catch (Exception ignored) {
             }
         }
@@ -319,7 +329,7 @@ public class DecimalLiteralTest {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec32, decimal32p4s3);
             } catch (Exception ignored) {
-                Assert.fail("should not throw exception");
+                Assertions.fail("should not throw exception");
             }
         }
 
@@ -339,7 +349,7 @@ public class DecimalLiteralTest {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec64, decimal64p10s6);
             } catch (Exception ignored) {
-                Assert.fail("should not throw exception");
+                Assertions.fail("should not throw exception");
             }
         }
 
@@ -359,7 +369,7 @@ public class DecimalLiteralTest {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec128, decimal128p36s11);
             } catch (Exception ignored) {
-                Assert.fail("should not throw exception");
+                Assertions.fail("should not throw exception");
             }
         }
     }
@@ -374,7 +384,7 @@ public class DecimalLiteralTest {
         };
         ScalarType decimal32p9s4 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4);
         for (BigDecimal dec32 : decimal32Values) {
-            Assert.assertFalse(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec32, decimal32p9s4));
+            Assertions.assertFalse(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec32, decimal32p9s4));
         }
 
         BigDecimal decimal64Values[] = {
@@ -385,7 +395,7 @@ public class DecimalLiteralTest {
         };
         ScalarType decimal64p18s6 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6);
         for (BigDecimal dec64 : decimal64Values) {
-            Assert.assertFalse(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec64, decimal64p18s6));
+            Assertions.assertFalse(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec64, decimal64p18s6));
         }
 
         BigDecimal decimal128Values[] = {
@@ -396,7 +406,7 @@ public class DecimalLiteralTest {
         };
         ScalarType decimal128p38s11 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 11);
         for (BigDecimal dec128 : decimal128Values) {
-            Assert.assertFalse(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec128, decimal128p38s11));
+            Assertions.assertFalse(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec128, decimal128p38s11));
         }
     }
 
@@ -415,7 +425,7 @@ public class DecimalLiteralTest {
         };
         ScalarType decimal32p9s4 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4);
         for (BigDecimal dec32 : decimal32Values) {
-            Assert.assertTrue(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec32, decimal32p9s4));
+            Assertions.assertTrue(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec32, decimal32p9s4));
         }
 
         BigDecimal decimal64Values[] = {
@@ -431,7 +441,7 @@ public class DecimalLiteralTest {
         };
         ScalarType decimal64p18s6 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6);
         for (BigDecimal dec64 : decimal64Values) {
-            Assert.assertTrue(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec64, decimal64p18s6));
+            Assertions.assertTrue(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec64, decimal64p18s6));
         }
 
         BigDecimal decimal128Values[] = {
@@ -447,7 +457,7 @@ public class DecimalLiteralTest {
         };
         ScalarType decimal128p38s11 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 11);
         for (BigDecimal dec128 : decimal128Values) {
-            Assert.assertTrue(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec128, decimal128p38s11));
+            Assertions.assertTrue(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec128, decimal128p38s11));
         }
     }
 
@@ -483,7 +493,7 @@ public class DecimalLiteralTest {
                 --j;
             }
             BigInteger expected = new BigInteger(bytes);
-            Assert.assertEquals(expected, integer);
+            Assertions.assertEquals(expected, integer);
         }
     }
 }

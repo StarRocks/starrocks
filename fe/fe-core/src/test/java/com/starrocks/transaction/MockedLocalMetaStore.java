@@ -21,6 +21,7 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -107,7 +108,7 @@ public class MockedLocalMetaStore extends LocalMetastore {
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
-        DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(null);
+        DistributionInfo distributionInfo = DistributionInfoBuilder.build(distributionDesc, null);
 
         long partitionId = idGenerator.getNextId();
         SinglePartitionInfo partitionInfo = new SinglePartitionInfo();

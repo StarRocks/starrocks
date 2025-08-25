@@ -84,10 +84,10 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
-import com.starrocks.sql.optimizer.rule.transformation.MinMaxCountOptOnScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.MinMaxOptOnScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.OuterJoinEliminationRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEConsumeColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyDirectRule;
@@ -116,6 +116,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneUKFKJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneWindowColumnsRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownAggFunPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggProjectFilterRule;
@@ -274,6 +275,7 @@ public class RuleSet {
                     new PushDownPredicateIntersectRule(),
                     new PushDownPredicateTableFunctionRule(),
                     new PushDownPredicateRepeatRule(),
+                    new PushDownAggFunPredicateRule(),
 
                     new PushDownPredicateToExternalTableScanRule(),
                     new MergeTwoFiltersRule(),
@@ -307,11 +309,6 @@ public class RuleSet {
                     new ScalarApply2JoinRule(),
                     new ExistentialApply2OuterJoinRule(),
                     new QuantifiedApply2OuterJoinRule()
-            ));
-
-    public static final Rule PRUNE_ASSERT_ROW_RULES =
-            new CombinationRule(RuleType.GP_PRUNE_ASSERT_ROW, ImmutableList.of(
-                    new PruneAssertOneRowRule()
             ));
 
     public static final Rule PRUNE_UKFK_JOIN_RULES = new CombinationRule(RuleType.GP_PRUNE_UKFK_JOIN, ImmutableList.of(
@@ -418,8 +415,8 @@ public class RuleSet {
                     new PushDownAggToMetaScanRule(),
                     new PushDownFlatJsonMetaToMetaScanRule(),
                     new RewriteSimpleAggToMetaScanRule(),
-                    new RewriteSimpleAggToHDFSScanRule(),
-                    new MinMaxCountOptOnScanRule()
+                    RewriteSimpleAggToHDFSScanRule.SCAN_AND_PROJECT,
+                    new MinMaxOptOnScanRule()
             ));
 
     public RuleSet() {
@@ -438,6 +435,7 @@ public class RuleSet {
     public void addOuterJoinTransformationRules() {
         transformRules.add(JoinAssociativityRule.OUTER_JOIN_ASSOCIATIVITY_RULE);
         transformRules.add(JoinLeftAsscomRule.OUTER_JOIN_LEFT_ASSCOM_RULE);
+        transformRules.add(OuterJoinEliminationRule.getInstance());
     }
 
     public void addJoinCommutativityWithoutInnerRule() {

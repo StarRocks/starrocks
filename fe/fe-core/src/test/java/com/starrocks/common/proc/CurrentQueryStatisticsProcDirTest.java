@@ -20,9 +20,9 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsItem;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -32,7 +32,7 @@ import java.util.Map;
 public class CurrentQueryStatisticsProcDirTest {
     private CurrentQueryStatisticsProcDir currentQueryStatisticsProcDir;
 
-    @Before
+    @BeforeEach
     public void setUp() throws DdlException, AnalysisException {
         currentQueryStatisticsProcDir = new CurrentQueryStatisticsProcDir();
     }
@@ -75,30 +75,30 @@ public class CurrentQueryStatisticsProcDirTest {
         BaseProcResult result = (BaseProcResult) currentQueryStatisticsProcDir.fetchResult();
         List<List<String>> rows = result.getRows();
         List<String> list1 = rows.get(0);
-        Assert.assertEquals(list1.size(), CurrentQueryStatisticsProcDir.TITLE_NAMES.size());
+        Assertions.assertEquals(list1.size(), CurrentQueryStatisticsProcDir.TITLE_NAMES.size());
         // QueryId
-        Assert.assertEquals("queryId1", list1.get(2));
+        Assertions.assertEquals("queryId1", list1.get(2));
         // Warehouse
-        Assert.assertEquals("wh1", list1.get(13));
+        Assertions.assertEquals("wh1", list1.get(13));
         // CustomQueryId
-        Assert.assertEquals("abc1", list1.get(14));
+        Assertions.assertEquals("abc1", list1.get(14));
         // ResourceGroupName
-        Assert.assertEquals("wg1", list1.get(15));
+        Assertions.assertEquals("wg1", list1.get(15));
 
         List<String> list2 = rows.get(1);
-        Assert.assertEquals(list2.size(), CurrentQueryStatisticsProcDir.TITLE_NAMES.size());
+        Assertions.assertEquals(list2.size(), CurrentQueryStatisticsProcDir.TITLE_NAMES.size());
         // QueryId
-        Assert.assertEquals("queryId2", list2.get(2));
+        Assertions.assertEquals("queryId2", list2.get(2));
         // Warehouse
-        Assert.assertEquals("wh1", list2.get(13));
+        Assertions.assertEquals("wh1", list2.get(13));
         // CustomQueryId
-        Assert.assertEquals("abc2", list2.get(14));
+        Assertions.assertEquals("abc2", list2.get(14));
         // ResourceGroupName
-        Assert.assertEquals("wg2", list2.get(15));
+        Assertions.assertEquals("wg2", list2.get(15));
     }
 
     @Test
     public void testRegister() {
-        Assert.assertFalse(currentQueryStatisticsProcDir.register(null, null));
+        Assertions.assertFalse(currentQueryStatisticsProcDir.register(null, null));
     }
 }

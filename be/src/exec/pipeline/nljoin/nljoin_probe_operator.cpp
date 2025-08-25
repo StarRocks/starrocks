@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
@@ -173,7 +174,11 @@ bool NLJoinProbeOperator::_is_left_semi_join() const {
 }
 
 bool NLJoinProbeOperator::_is_left_anti_join() const {
-    return _join_op == TJoinOp::LEFT_ANTI_JOIN;
+    return _join_op == TJoinOp::LEFT_ANTI_JOIN || _join_op == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
+}
+
+bool NLJoinProbeOperator::_is_null_aware_left_anti_join() const {
+    return _join_op == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
 }
 
 bool NLJoinProbeOperator::_is_build_side_empty() const {
@@ -292,6 +297,61 @@ void NLJoinProbeOperator::iterate_enumerate_chunk(const ChunkPtr& chunk,
     }
 }
 
+Status NLJoinProbeOperator::_eval_nullaware_anti_conjuncts(const ChunkPtr& chunk, FilterPtr* filter) {
+    if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
+        size_t num_rows = chunk->num_rows();
+        auto null_column = NullColumn::create(chunk->num_rows());
+        auto& null_data = null_column->get_data();
+
+        *filter = std::make_shared<Filter>(chunk->num_rows(), 1);
+        auto& filter_data = **filter;
+
+        // for null-aware left anti join, join_conjunct[0] is on-predicate
+        // others are other-conjuncts
+        // process on conjuncts
+        {
+            ASSIGN_OR_RETURN(ColumnPtr column, _join_conjuncts[0]->evaluate(chunk.get()));
+            size_t num_false = ColumnHelper::count_false_with_notnull(column);
+            // is null or true
+            size_t num_not_false = column->size() - num_false;
+            if (num_not_false == num_rows) {
+                // nothing to do
+            } else if (0 == num_not_false) {
+                (*filter)->assign(num_rows, 0);
+            } else {
+                ColumnHelper::merge_two_anti_filters(column, null_data, filter->get());
+            }
+        }
+
+        // null data
+        for (size_t i = 0; i < num_rows; ++i) {
+            filter_data[i] |= null_data[i];
+        }
+
+        // process other conjucts
+        for (size_t i = 1; i < _join_conjuncts.size(); ++i) {
+            auto* ctx = _join_conjuncts[i];
+            ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk.get()));
+            size_t true_count = ColumnHelper::count_true_with_notnull(column);
+
+            if (true_count == column->size()) {
+                // all hit, skip
+                continue;
+            } else if (0 == true_count) {
+                (*filter)->assign(num_rows, 0);
+                break;
+            } else {
+                bool all_zero = false;
+                ColumnHelper::merge_two_filters(column, filter->get(), &all_zero);
+                if (all_zero) {
+                    chunk->set_num_rows(0);
+                }
+            }
+        }
+    }
+    return Status::OK();
+}
+
 Status NLJoinProbeOperator::_probe_for_inner_join(const ChunkPtr& chunk) {
     if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
         RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), nullptr, true));
@@ -311,7 +371,11 @@ Status NLJoinProbeOperator::_probe_for_other_join(const ChunkPtr& chunk) {
     bool apply_filter = (!_is_left_semi_join() && !_is_left_anti_join()) || _is_build_side_empty();
     if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
         size_t rows = chunk->num_rows();
-        RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter, apply_filter));
+        if (_is_null_aware_left_anti_join()) {
+            RETURN_IF_ERROR(_eval_nullaware_anti_conjuncts(chunk, &filter));
+        } else {
+            RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter, apply_filter));
+        }
         DCHECK(!!filter);
         // The filter has not been assigned if no rows matched
         if (chunk->num_rows() == 0) {
@@ -594,7 +658,7 @@ Status NLJoinProbeOperator::_permute_right_join(size_t chunk_size) {
         match_flag_index += cur_chunk_size;
     }
     auto permute_right_rows_counter = ADD_COUNTER(_unique_metrics, "PermuteRightRows", TUnit::UNIT);
-    permute_right_rows_counter->set(permute_rows);
+    COUNTER_SET(permute_right_rows_counter, permute_rows);
     _output_accumulator.finalize();
 
     return Status::OK();
@@ -706,15 +770,15 @@ Status NLJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chun
 void NLJoinProbeOperator::update_exec_stats(RuntimeState* state) {
     auto ctx = state->query_ctx();
     if (ctx != nullptr) {
-        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        ctx->update_pull_rows_stats(_plan_node_id, COUNTER_VALUE(_pull_row_num_counter));
         if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
-            ctx->update_pred_filter_stats(_plan_node_id,
-                                          _conjuncts_input_counter->value() - _conjuncts_output_counter->value());
+            ctx->update_pred_filter_stats(
+                    _plan_node_id, COUNTER_VALUE(_conjuncts_input_counter) - COUNTER_VALUE(_conjuncts_output_counter));
         }
 
         if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
-            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
-            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
+            int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
             ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
         }
     }

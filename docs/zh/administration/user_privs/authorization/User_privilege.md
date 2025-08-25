@@ -6,6 +6,7 @@ sidebar_position: 30
 # 管理用户权限
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
+import GrantToGroup from '../../../_assets/commonMarkdown/grant_to_group.mdx'
 
 本文介绍如何在 StarRocks 中管理用户、角色和权限。
 
@@ -88,6 +89,8 @@ CREATE ROLE example_role;
   ```SQL
   GRANT example_role TO ROLE test_role;
   ```
+
+<GrantToGroup />
 
 ### 更改用户的默认角色
 

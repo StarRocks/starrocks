@@ -60,6 +60,12 @@ PROPERTIES(
 | dynamic_partition.start_day_of_month    | No       | When `dynamic_partition.time_unit` is `MONTH`, this parameter is used to specify the first day of each month. Valid values: `1` to `28`. `1` means the 1st of every month and `28` means the 28th of every month. The default value is `1`, which means that every month starts on the 1st. The first day can not be the 29th, 30th, or 31st.                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | dynamic_partition.replication_num       | No       | The number of replicas for tablets in dynamically created partitions. The default value is the same as the number of replicas configured at table creation.  |
 
+:::note
+
+When the partition column is the INT type, its format must be `yyyyMMdd`, regardless of the partition time granularity.
+
+:::
+
 **FE configuration:**
 
 `dynamic_partition_check_interval_seconds`: the interval for scheduling dynamic partitioning. The default value is 600s, which means that the partition situation is checked every 10 minutes to see whether the partitions meet the dynamic partitioning conditions specified in `PROPERTIES`. If not, the partitions will be created and deleted automatically.

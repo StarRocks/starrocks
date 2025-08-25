@@ -17,8 +17,8 @@ package com.starrocks.metric;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class LeaderAwareGaugeMetricTest {
 
@@ -68,7 +68,7 @@ public class LeaderAwareGaugeMetricTest {
             visitor.visit(metricLong);
             // _metricLong{is_leader="true"} 3
             String output = visitor.build();
-            Assert.assertTrue(output, output.contains("_metricLong{is_leader=\"true\"} 3"));
+            Assertions.assertTrue(output.contains("_metricLong{is_leader=\"true\"} 3"), output);
         }
         {
             metricDoubleValue = -10.3;
@@ -76,7 +76,7 @@ public class LeaderAwareGaugeMetricTest {
             visitor.visit(metricDouble);
             // _metricDouble{is_leader="true"} -10.3
             String output = visitor.build();
-            Assert.assertTrue(output, output.contains("_metricDouble{is_leader=\"true\"} -10.3"));
+            Assertions.assertTrue(output.contains("_metricDouble{is_leader=\"true\"} -10.3"), output);
         }
     }
 
@@ -99,7 +99,7 @@ public class LeaderAwareGaugeMetricTest {
             visitor.visit(metricLong);
             // _metricLong{is_leader="false"} 0
             String output = visitor.build();
-            Assert.assertTrue(output, output.contains("_metricLong{is_leader=\"false\"} 0"));
+            Assertions.assertTrue(output.contains("_metricLong{is_leader=\"false\"} 0"), output);
         }
         {
             metricDoubleValue = -10.3;
@@ -107,7 +107,7 @@ public class LeaderAwareGaugeMetricTest {
             visitor.visit(metricDouble);
             // _metricDouble{is_leader="false"} -1.5
             String output = visitor.build();
-            Assert.assertTrue(output, output.contains("_metricDouble{is_leader=\"false\"} -1.5"));
+            Assertions.assertTrue(output.contains("_metricDouble{is_leader=\"false\"} -1.5"), output);
         }
     }
 }

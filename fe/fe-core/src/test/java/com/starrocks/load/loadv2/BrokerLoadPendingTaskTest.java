@@ -49,8 +49,8 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -88,7 +88,7 @@ public class BrokerLoadPendingTaskTest {
         brokerLoadPendingTask.executeTask();
         BrokerPendingTaskAttachment brokerPendingTaskAttachment =
                 Deencapsulation.getField(brokerLoadPendingTask, "attachment");
-        Assert.assertEquals(1, brokerPendingTaskAttachment.getFileNumByTable(aggKey));
-        Assert.assertEquals(tBrokerFileStatus, brokerPendingTaskAttachment.getFileStatusByTable(aggKey).get(0).get(0));
+        Assertions.assertEquals(1, brokerPendingTaskAttachment.getFileNumByTable(aggKey));
+        Assertions.assertEquals(tBrokerFileStatus, brokerPendingTaskAttachment.getFileStatusByTable(aggKey).get(0).get(0));
     }
 }

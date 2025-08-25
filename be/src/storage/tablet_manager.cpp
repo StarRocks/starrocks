@@ -838,8 +838,8 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
     int64_t highest_score = 0;
     TabletSharedPtr best_tablet;
     for (const auto& tablets_shard : _tablets_shards) {
-        std::shared_lock rlock(tablets_shard.lock);
-        for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+        std::vector<TabletSharedPtr> all_tablets_by_shard = _get_all_tablets_from_shard(tablets_shard);
+        for (const auto& tablet_ptr : all_tablets_by_shard) {
             if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
                 continue;
             }
@@ -1000,7 +1000,7 @@ Status TabletManager::report_tablet_info(TTabletInfo* tablet_info) {
                      << " tablet=" << tablet_info->tablet_id;
         return Status::NotFound("tablet not found");
     }
-    LOG(INFO) << "Reporting tablet info. tablet_id=" << tablet_info->tablet_id;
+    VLOG(1) << "Reporting tablet info. tablet_id=" << tablet_info->tablet_id;
 
     tablet->build_tablet_report_info(tablet_info);
     VLOG(10) << "Reported tablet info.";
@@ -1009,6 +1009,8 @@ Status TabletManager::report_tablet_info(TTabletInfo* tablet_info) {
 
 Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tablets_info) {
     DCHECK(tablets_info != nullptr);
+
+    int64_t start_ms = MonotonicMillis();
 
     // build the expired txn map first, outside the tablet map lock
     std::map<TabletInfo, std::vector<int64_t>> expire_txn_map;
@@ -1047,8 +1049,9 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
             }
         }
     }
-    LOG(INFO) << "Report all " << tablets_info->size()
-              << " tablets info. max_tablet_rowset_num:" << max_tablet_rowset_num << " tablet_id:" << max_tablet_id;
+    LOG(INFO) << "Report all " << tablets_info->size() << " tablets info"
+              << ". max_tablet_rowset_num:" << max_tablet_rowset_num << ", tablet_id:" << max_tablet_id
+              << ", cost:" << MonotonicMillis() - start_ms << "ms";
     StarRocksMetrics::instance()->max_tablet_rowset_num.set_value(max_tablet_rowset_num);
     return Status::OK();
 }
@@ -1293,8 +1296,8 @@ bool TabletManager::check_clone_tablet(int64_t tablet_id) {
     return shard.tablets_under_clone.count(tablet_id) > 0;
 }
 
-void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
-                                                  const std::string& tablet_id_path) {
+Status TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
+                                                    const std::string& tablet_id_path) {
     // acquire the read lock, so that there is no creating tablet or load tablet from meta tasks
     // create tablet and load tablet task should check whether the dir exists
     TabletsShard& shard = _get_tablets_shard(tablet_id);
@@ -1304,21 +1307,24 @@ void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId t
     TabletMeta tablet_meta;
     Status st = TabletMetaManager::get_tablet_meta(data_dir, tablet_id, schema_hash, &tablet_meta);
     if (st.ok()) {
-        LOG(INFO) << "Cannot remove schema_hash_path=" << tablet_id_path << ", tablet meta exist in meta store";
+        return Status::InternalError(strings::Substitute(
+                "Cannot remove schema_hash_path=$0, tablet meta exist in meta store", tablet_id_path));
     } else if (st.is_not_found()) {
         if (shard.tablets_under_clone.count(tablet_id) > 0) {
-            LOG(INFO) << "Cannot move schema_hash_path=" << tablet_id_path << " to trash, tablet is under clone";
-            return;
+            return Status::InternalError(strings::Substitute(
+                    "Cannot remove schema_hash_path=$0 to trash, tablet is under clone", tablet_id_path));
         }
 
-        if (st = move_to_trash(tablet_id_path); st.ok()) {
-            LOG(INFO) << "Moved " << tablet_id_path << " to trash";
+        if (st = move_to_trash(tablet_id_path); st.ok() || st.is_not_found()) {
+            return Status::OK();
         } else {
-            LOG(WARNING) << "Fail to move " << tablet_id_path << " to trash: " << st;
+            return Status::InternalError(
+                    strings::Substitute("Fail to move $0 to trash: $1", tablet_id_path, st.to_string()));
         }
     } else {
-        LOG(WARNING) << "Fail to get tablet meta: " << st;
+        return Status::InternalError(strings::Substitute("Fail to get tablet meta: $0", st.to_string()));
     }
+    return Status::OK();
 }
 
 bool TabletManager::try_schema_change_lock(TTabletId tablet_id) {

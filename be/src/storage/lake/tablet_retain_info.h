@@ -17,7 +17,6 @@
 #include <cstdint>
 #include <string>
 #include <unordered_set>
-#include <vector>
 
 namespace starrocks {
 class Status;
@@ -36,7 +35,7 @@ public:
     TabletRetainInfo() = default;
     ~TabletRetainInfo() = default;
 
-    Status init(int64_t tablet_id, const std::vector<int64_t>& retain_versions, TabletManager* tablet_mgr);
+    Status init(int64_t tablet_id, const std::unordered_set<int64_t>& retain_versions, TabletManager* tablet_mgr);
 
     bool contains_file(const std::string& file_name) const;
 

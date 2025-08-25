@@ -36,6 +36,7 @@ package com.starrocks.clone;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
@@ -61,7 +62,6 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -73,6 +73,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -87,6 +88,8 @@ import java.util.stream.Collectors;
  */
 public class TabletChecker extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletChecker.class);
+    // 1 min
+    private static final long LOG_PRINT_INTERVAL = 60000L;
 
     private final TabletScheduler tabletScheduler;
     private final TabletSchedulerStat stat;
@@ -94,6 +97,7 @@ public class TabletChecker extends FrontendDaemon {
     // db id -> (tbl id -> PrioPart)
     // priority of replicas of partitions in this table will be set to VERY_HIGH if unhealthy
     private com.google.common.collect.Table<Long, Long, Set<PrioPart>> urgentTable = HashBasedTable.create();
+    private long lastLogPrintTime = -1L;
 
     // represent a partition which need to be repaired preferentially
     public static class PrioPart {
@@ -201,9 +205,6 @@ public class TabletChecker extends FrontendDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
-        if (RunMode.isSharedDataMode()) {
-            return;
-        }
         int pendingNum = tabletScheduler.getPendingNum();
         int runningNum = tabletScheduler.getRunningNum();
         if (pendingNum > Config.tablet_sched_max_scheduling_tablets
@@ -412,16 +413,25 @@ public class TabletChecker extends FrontendDaemon {
                                                   int replicaNum, List<Long> aliveBeIdsInCluster,
                                                   boolean isPartitionUrgent) {
         TabletCheckerStat partitionTabletCheckerStat = new TabletCheckerStat();
+        Multimap<String, String> locations = olapTbl.getLocation();
+        boolean isLabelLocationTable = locations != null;
+        boolean enoughLocationMatchedBackends = preCheckEnoughLocationMatchedBackends(locations, replicaNum);
+
         // Tablet in SHADOW index can not be repaired or balanced
         if (physicalPartition != null) {
             for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(
                     IndexExtState.VISIBLE)) {
+                BalanceStat balanceStat = BalanceStat.BALANCED_STAT;
+                boolean allTabletsChecked = true;
+
                 for (Tablet tablet : idx.getTablets()) {
                     LocalTablet localTablet = (LocalTablet) tablet;
                     partitionTabletCheckerStat.totalTabletNum++;
 
-                    if (tabletScheduler.containsTablet(tablet.getId())) {
+                    long tabletId = tablet.getId();
+                    if (tabletScheduler.containsTablet(tabletId)) {
                         partitionTabletCheckerStat.tabletInScheduler++;
+                        allTabletsChecked = false;
                         continue;
                     }
 
@@ -433,13 +443,19 @@ public class TabletChecker extends FrontendDaemon {
                                     physicalPartition.getVisibleVersion(),
                                     replicaNum,
                                     aliveBeIdsInCluster,
-                                    olapTbl.getLocation());
+                                    locations);
 
                     if (statusWithPrio.first == TabletHealthStatus.HEALTHY) {
                         // Only set last status check time when status is healthy.
                         localTablet.setLastStatusCheckTime(System.currentTimeMillis());
                         continue;
-                    } else if (isPartitionUrgent) {
+                    } else if (statusWithPrio.first == TabletHealthStatus.LOCATION_MISMATCH && balanceStat.isBalanced()) {
+                        Preconditions.checkState(isLabelLocationTable);
+                        balanceStat = BalanceStat.createLabelLocationBalanceStat(
+                                tabletId, localTablet.getBackendIds(), locations.asMap());
+                    }
+
+                    if (isPartitionUrgent) {
                         statusWithPrio.second = TabletSchedCtx.Priority.VERY_HIGH;
                         partitionTabletCheckerStat.isUrgentPartitionHealthy = false;
                     }
@@ -451,23 +467,34 @@ public class TabletChecker extends FrontendDaemon {
                         continue;
                     }
 
-                    if (statusWithPrio.first == TabletHealthStatus.LOCATION_MISMATCH &&
-                            !preCheckEnoughLocationMatchedBackends(olapTbl.getLocation(), replicaNum)) {
+                    if (statusWithPrio.first == TabletHealthStatus.LOCATION_MISMATCH && !enoughLocationMatchedBackends) {
+                        if (System.currentTimeMillis() - lastLogPrintTime > LOG_PRINT_INTERVAL) {
+                            LOG.warn("tablet: {} is in unhealthy state: {}, " +
+                                            "but there are not enough backends to meet its location requirements: {}, "
+                                            + "can not repair",
+                                    tabletId, statusWithPrio.first, locations);
+                            lastLogPrintTime = System.currentTimeMillis();
+                        }
                         continue;
                     }
 
                     TabletSchedCtx tabletSchedCtx = new TabletSchedCtx(
                             TabletSchedCtx.Type.REPAIR,
                             db.getId(), olapTbl.getId(),
-                            physicalPartition.getId(), idx.getId(), tablet.getId(),
+                            physicalPartition.getId(), idx.getId(), tabletId,
                             System.currentTimeMillis());
                     // the tablet status will be set again when being scheduled
                     tabletSchedCtx.setTabletStatus(statusWithPrio.first);
                     tabletSchedCtx.setOrigPriority(statusWithPrio.second);
                     tabletSchedCtx.setTablet(localTablet);
-                    tabletSchedCtx.setRequiredLocation(olapTbl.getLocation());
+                    tabletSchedCtx.setRequiredLocation(locations);
                     tabletSchedCtx.setReplicaNum(replicaNum);
                     if (!tryChooseSrcBeforeSchedule(tabletSchedCtx)) {
+                        if (System.currentTimeMillis() - lastLogPrintTime > LOG_PRINT_INTERVAL) {
+                            LOG.warn("tablet: {} is in unhealthy state: {}, but there are no healthy replicas, " +
+                                    "can not repair", tabletId, statusWithPrio.first);
+                            lastLogPrintTime = System.currentTimeMillis();
+                        }
                         continue;
                     }
 
@@ -477,6 +504,13 @@ public class TabletChecker extends FrontendDaemon {
                     partitionTabletCheckerStat.waitTotalTime += result.second;
                     if (result.first) {
                         partitionTabletCheckerStat.addToSchedulerTabletNum++;
+                    }
+                }
+
+                if (isLabelLocationTable) {
+                    // set label location balance stat in materialized index if not balanced or all tablets check balanced.
+                    if (!balanceStat.isBalanced() || (balanceStat.isBalanced() && allTabletsChecked)) {
+                        idx.setBalanceStat(balanceStat);
                     }
                 }
             } // indices
@@ -858,7 +892,8 @@ public class TabletChecker extends FrontendDaemon {
     private static LocalTabletHealthStats collectLocalTabletHealthStats(LocalTablet localTablet,
                                                                         SystemInfoService systemInfoService,
                                                                         long visibleVersion,
-                                                                        Multimap<String, String> requiredLocation) {
+                                                                        Multimap<String, String> requiredLocation,
+                                                                        boolean ensureReplicaHA) {
         LocalTabletHealthStats stats = new LocalTabletHealthStats();
         Set<Pair<String, String>> uniqueReplicaLocations = Sets.newHashSet();
         Set<String> hosts = Sets.newHashSet();
@@ -902,9 +937,10 @@ public class TabletChecker extends FrontendDaemon {
                 stats.incrLocationMatchCnt();
             } else {
                 Pair<String, String> backendLocKV = backend.getSingleLevelLocationKV();
-                if (backendLocKV != null) {
-                    if (!uniqueReplicaLocations.contains(backendLocKV) &&
-                            isLocationMatch(backendLocKV.first, backendLocKV.second, requiredLocation)) {
+                if (backendLocKV != null && isLocationMatch(backendLocKV.first, backendLocKV.second, requiredLocation)) {
+                    if (!ensureReplicaHA) {
+                        stats.incrLocationMatchCnt();
+                    } else if (!uniqueReplicaLocations.contains(backendLocKV)) {
                         stats.incrLocationMatchCnt();
                         uniqueReplicaLocations.add(backendLocKV);
                     }
@@ -1027,8 +1063,9 @@ public class TabletChecker extends FrontendDaemon {
             List<Long> aliveBeIdsInCluster,
             Multimap<String, String> requiredLocation) {
         List<Replica> replicas = localTablet.getImmutableReplicas();
+        boolean ensureReplicaHA = shouldEnsureReplicaHA(replicationNum, requiredLocation, systemInfoService);
         LocalTabletHealthStats stats = collectLocalTabletHealthStats(localTablet, systemInfoService,
-                visibleVersion, requiredLocation);
+                visibleVersion, requiredLocation, ensureReplicaHA);
 
         // The priority of handling different unhealthy situations should be:
         // FORCE_REDUNDANT > REPLICA_MISSING > VERSION_INCOMPLETE >
@@ -1086,6 +1123,70 @@ public class TabletChecker extends FrontendDaemon {
         try (CloseableLock ignored = CloseableLock.lock(localTablet.getReadLock())) {
             return getColocateTabletHealthStatusUnlocked(localTablet, visibleVersion, replicationNum, backendsSet);
         }
+    }
+
+    /**
+     * Determines whether high availability (HA) should be ensured for replica placement,
+     * based on the number of replicas and the required location mapping.
+     *
+     * <p>High availability is considered to be required only when the number of
+     * specified locations matches the number of replicas. This typically implies that
+     * multiple racks are assigned during table creation, which helps prevent replica
+     * co-location on the same rack and improves fault tolerance.</p>
+     *
+     * <p>In contrast, if only a single rack is assigned (even if different tables use different racks),
+     * the requirement is typically for physical isolation rather than availability.</p>
+     *
+     * @param replicationNum   the number of replicas configured for the table
+     * @param requiredLocation the mapping of location requirements (e.g., rack assignments)
+     * @return true if high availability should be enforced based on the location configuration; false otherwise
+     */
+    public static boolean shouldEnsureReplicaHA(int replicationNum,
+                                                 Multimap<String, String> requiredLocation,
+                                                 SystemInfoService systemInfoService) {
+        if (requiredLocation == null || requiredLocation.isEmpty()) {
+            return false;
+        }
+
+        // Collect all backend locations into a multimap
+        Multimap<String, String> allLocations = collectDistinctBackendLocations(systemInfoService);
+
+        int requiredUniqueLocationCount = 0;
+
+        // Case 1: requiredLocation contains wildcard '*'
+        if (requiredLocation.keySet().contains("*")) {
+            // Count all unique key:value combinations
+            requiredUniqueLocationCount = allLocations.size();
+        } else {
+            // Case 2: specific keys, e.g., rack:*, zone:zone01
+            for (String locKey : requiredLocation.keySet()) {
+                Collection<String> values = requiredLocation.get(locKey);
+                if (values.contains("*")) {
+                    // If value is '*', count all values under this key
+                    requiredUniqueLocationCount += allLocations.get(locKey).size();
+                } else {
+                    // Otherwise, just count the number of required key-value entries
+                    // assuming all required locations are already validated and present
+                    requiredUniqueLocationCount += values.size();
+                }
+            }
+        }
+
+        // Return whether we have enough distinct location matches to meet the replication requirement
+        return requiredUniqueLocationCount >= replicationNum;
+    }
+
+    public static Multimap<String, String> collectDistinctBackendLocations(SystemInfoService systemInfoService) {
+        HashMultimap<String, String> allLocations = HashMultimap.create();
+        for (Backend backend : systemInfoService.getBackends()) {
+            Map<String, String> location = backend.getLocation();
+            if (location != null && !location.isEmpty()) {
+                for (Map.Entry<String, String> entry : location.entrySet()) {
+                    allLocations.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        return allLocations;
     }
 
     /**

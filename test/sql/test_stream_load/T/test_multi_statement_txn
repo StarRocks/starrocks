@@ -1,0 +1,72 @@
+-- name: test_multi_stream_load_single_table_stmt
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `test` (
+  `id` int
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/begin
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test" -H "source_type:12" -d '1' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/commit
+
+select * from test;
+
+-- name: test_multi_stream_load_single_table_multi_stmt
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `test` (
+  `id` int
+)
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/begin
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test" -H "source_type:12" -H "format:json" -d '{"id":"1"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test" -H "source_type:12" -H "format:json" -d '{"id":"2"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test" -H "source_type:12" -H "format:json" -d '{"id":"3"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/commit
+
+select * from test;
+
+-- name: test_multi_stream_load_multi_table_multi_stmt
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `test1` (
+  `id` int
+);
+
+CREATE TABLE `test2` (
+  `id` int
+);
+
+CREATE TABLE `test3` (
+  `id` int
+);
+
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/begin
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test1" -H "source_type:12" -H "format:json" -d '{"id":"1"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test1" -H "source_type:12" -H "format:json" -d '{"id":"2"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test1" -H "source_type:12" -H "format:json" -d '{"id":"3"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test2" -H "source_type:12" -H "format:json" -d '{"id":"1"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test2" -H "source_type:12" -H "format:json" -d '{"id":"2"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test2" -H "source_type:12" -H "format:json" -d '{"id":"3"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test3" -H "source_type:12" -H "format:json" -d '{"id":"1"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test3" -H "source_type:12" -H "format:json" -d '{"id":"2"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test3" -H "source_type:12" -H "format:json" -d '{"id":"3"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/commit
+
+select * from test1;
+select * from test2;
+select * from test3;

@@ -68,7 +68,9 @@ public class ApplyTuningGuideRule implements TreeRewriteRule {
 
         // delete the useless tuning guides
         if (!tuningGuides.isUseful()) {
-            PlanTuningAdvisor.getInstance().deleteTuningGuides(tuningGuides.getOriginalQueryId());
+            boolean enablePlanAdvisorBlacklist = taskContext.getOptimizerContext().getSessionVariable()
+                    .isEnablePlanAdvisorBlacklist();
+            PlanTuningAdvisor.getInstance().deleteTuningGuides(tuningGuides.getOriginalQueryId(), enablePlanAdvisorBlacklist);
             return root;
         }
 

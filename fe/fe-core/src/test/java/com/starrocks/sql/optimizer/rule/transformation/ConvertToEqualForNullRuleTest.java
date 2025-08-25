@@ -34,14 +34,13 @@ class ConvertToEqualForNullRuleTest extends PlanTestBase {
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
-    @MethodSource("getSqlList")
+    @MethodSource("getConvertToEqualForNullSqlList")
     void testToEqualForNull(String sql, String expectedPlan) throws Exception {
         String plan = getFragmentPlan(sql);
         assertContains(plan, expectedPlan);
     }
 
-
-    private static Stream<Arguments> getSqlList() {
+    private static Stream<Arguments> getConvertToEqualForNullSqlList() {
         List<Arguments> sqlList = Lists.newArrayList();
         sqlList.add(Arguments.of("select * from t0 join t1 on v1 = v4 or v1 is null and v4 is null",
                 "equal join conjunct: 1: v1 <=> 4: v4"));

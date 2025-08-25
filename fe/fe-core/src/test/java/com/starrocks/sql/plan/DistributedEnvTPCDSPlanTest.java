@@ -20,12 +20,12 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class DistributedEnvTPCDSPlanTest extends TPCDSPlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TPCDSPlanTest.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -49,7 +49,7 @@ public class DistributedEnvTPCDSPlanTest extends TPCDSPlanTestBase {
         UtFrameUtils.addMockBackend(10003);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         try {
             UtFrameUtils.dropMockBackend(10002);

@@ -25,8 +25,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -43,10 +43,9 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         LakeTable table = buildLakeTable();
         DatabaseTransactionMgr databaseTransactionMgr = addDatabaseTransactionMgr();
         LakeTableTxnStateListener listener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
-        TransactionCommitFailedException exception = Assert.assertThrows(TransactionCommitFailedException.class, () -> {
-            listener.preCommit(newTransactionState(), buildPartialTabletCommitInfo(), Collections.emptyList());
-        });
-        Assert.assertTrue(exception.getMessage().contains("has unfinished tablets"));
+        TransactionCommitFailedException exception = Assertions.assertThrows(TransactionCommitFailedException.class,
+                () -> listener.preCommit(newTransactionState(), buildPartialTabletCommitInfo(), Collections.emptyList()));
+        Assertions.assertTrue(exception.getMessage().contains("has unfinished tablets"));
     }
 
     @Test
@@ -62,9 +61,8 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         DatabaseTransactionMgr databaseTransactionMgr = addDatabaseTransactionMgr();
         LakeTableTxnStateListener listener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
         makeCompactionScoreExceedSlowdownThreshold();
-        Assert.assertThrows(CommitRateExceededException.class, () -> {
-            listener.preCommit(newTransactionState(), buildFullTabletCommitInfo(), Collections.emptyList());
-        });
+        Assertions.assertThrows(CommitRateExceededException.class,
+                () -> listener.preCommit(newTransactionState(), buildFullTabletCommitInfo(), Collections.emptyList()));
     }
 
     @Test
@@ -89,8 +87,8 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         new MockUp<LakeTableTxnStateListener>() {
             @Mock
             void sendAbortTxnRequestIgnoreResponse(AbortTxnRequest request, ComputeNode node) {
-                Assert.assertNotNull(request);
-                Assert.assertNotNull(node);
+                Assertions.assertNotNull(request);
+                Assertions.assertNotNull(node);
             }
 
             @Mock

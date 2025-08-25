@@ -46,7 +46,7 @@
 #include "connector/iceberg_chunk_sink.h"
 #include "exec/exec_node.h"
 #include "exec/file_builder.h"
-#include "exec/hdfs_scanner_text.h"
+#include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/multi_olap_table_sink.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
@@ -518,6 +518,13 @@ OperatorFactoryPtr DataSink::_create_exchange_sink_operator(pipeline::PipelineBu
         DCHECK_GT(dest_dop, 0);
     }
 
+    std::vector<TBucketProperty> bucket_properties;
+    if (sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+        if (stream_sink.output_partition.__isset.bucket_properties) {
+            bucket_properties = stream_sink.output_partition.bucket_properties;
+        }
+    }
+
     std::shared_ptr<SinkBuffer> sink_buffer =
             std::make_shared<SinkBuffer>(fragment_ctx, sender->destinations(), is_dest_merge);
 
@@ -526,7 +533,8 @@ OperatorFactoryPtr DataSink::_create_exchange_sink_operator(pipeline::PipelineBu
             sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
             sender->get_dest_node_id(), sender->get_partition_exprs(),
             !is_dest_merge && sender->get_enable_exchange_pass_through(),
-            sender->get_enable_exchange_perf() && !context->has_aggregation, fragment_ctx, sender->output_columns());
+            sender->get_enable_exchange_perf() && !context->has_aggregation, fragment_ctx, sender->output_columns(),
+            bucket_properties);
     return exchange_sink;
 }
 

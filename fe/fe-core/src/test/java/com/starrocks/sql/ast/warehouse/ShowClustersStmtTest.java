@@ -16,8 +16,8 @@ package com.starrocks.sql.ast.warehouse;
 
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ShowClustersStmtTest {
 
@@ -27,14 +27,14 @@ public class ShowClustersStmtTest {
             String sqlText = "SHOW CLUSTERS FROM WAREHOUSE warehouse1";
             ShowClustersStmt stmt =
                     (ShowClustersStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
         }
 
         {
             String sqlText = "SHOW CNGROUPS FROM WAREHOUSE warehouse1";
             ShowClustersStmt stmt =
                     (ShowClustersStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
         }
     }
 }

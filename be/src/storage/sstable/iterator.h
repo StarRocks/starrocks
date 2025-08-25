@@ -5,6 +5,7 @@
 #pragma once
 
 #include "common/status.h"
+#include "storage/sstable/sstable_predicate_fwd.h"
 #include "util/slice.h"
 
 namespace starrocks::sstable {
@@ -62,6 +63,19 @@ public:
 
     // Return the max rss_rowid the iterator contains.
     virtual uint64_t max_rss_rowid() const { return 0; };
+
+    /*
+     * Return predicate the iterator contains.
+     * Currently, predicate is available for TwoLevelIterator and MergingIterator, because such
+     * two kind of iterators is sstable-level iterator which derived from Iterator. Other kinds of
+     * iterator will return empty predicate.
+     * 
+     * NOTE: If you use predicate, user must pay special attention that, currently, sstable predicate has not
+     * been pushed down into storage layer(sstable-iterator level), which avoids modifying iterator-level
+     * code and enhances stability. But at the same time, it means that user must handle the predicate
+     * evaluation by themselves wherever they want to use it.
+    */
+    virtual SstablePredicateSPtr predicate() const { return nullptr; }
 
     // Clients are allowed to register function/arg1/arg2 triples that
     // will be invoked when this iterator is destroyed.

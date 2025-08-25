@@ -23,12 +23,14 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.ImageWriter;
@@ -40,15 +42,18 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TGetTasksParams;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -348,6 +353,54 @@ public class TaskManager implements MemoryTrackable {
             throw new DmlException("execute task %s failed: %s", e, task.getName(), e.getMessage());
         } finally {
             taskRunScheduler.removeSyncRunningTaskRun(taskRun);
+        }
+    }
+
+    /**
+     * Get the MV refresh plan explain result for the given task.
+     */
+    public String getMVRefreshExplain(Task task, ExecuteOption option, StatementBase statement) {
+        if (statement == null || !statement.isExplain()) {
+            return null;
+        }
+        ExecPlan execPlan = getMVRefreshExecPlan(task, option, statement);
+        return StmtExecutor.buildExplainString(execPlan, statement,
+                ConnectContext.get(), ResourceGroupClassifier.QueryType.MV, statement.getExplainLevel());
+    }
+
+    /**
+     * Get the MV refresh execution plan for the given task.
+     */
+    public ExecPlan getMVRefreshExecPlan(Task task, ExecuteOption option, StatementBase statement) {
+        if (statement == null || !statement.isExplain()) {
+            return null;
+        }
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task)
+                .properties(option.getTaskRunProperties())
+                .setExecuteOption(option)
+                .setConnectContext(ConnectContext.get()).build();
+        // init task run
+        String queryId = UUIDUtil.genUUID().toString();
+        TaskRunStatus status = taskRun.initStatus(queryId, System.currentTimeMillis());
+        status.setPriority(option.getPriority());
+        status.setMergeRedundant(option.isMergeRedundant());
+        status.setProperties(option.getTaskRunProperties());
+
+        TaskRunProcessor processor = taskRun.getProcessor();
+        if (processor == null || !(processor instanceof MVTaskRunProcessor)) {
+            throw new DmlException("Explain can only support MVTaskRunProcessor: " + task.getName());
+        }
+        MVTaskRunProcessor mvRefreshProcessor = (MVTaskRunProcessor) processor;
+        TaskRunContext taskRunContext = taskRun.buildTaskRunContext();
+        try {
+            // prepare the task run context
+            mvRefreshProcessor.prepare(taskRunContext);
+            // execute the task run
+            return mvRefreshProcessor.getMVRefreshExecPlan();
+        } catch (Exception e) {
+            LOG.warn("Failed to get MV refresh explain for task: {}", task.getName(), e);
+            throw new DmlException("Failed to get MV refresh explain for task: %s, error: %s", e,
+                    task.getName(), e.getMessage());
         }
     }
 
@@ -683,12 +736,28 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void replayCreateTaskRun(TaskRunStatus status) {
+        try {
+            doReplayCreateTaskRun(status);
+        } catch (Exception e) {
+            LOG.warn("replay create task run failed, status: {}, error: {}", status, e.getMessage());
+            // The task run will be replayed in FE restart, If the replay fails, it will cause FE restart failed.
+            // It's fine to discard the task run since it's only task's history records and can be retried later.
+        }
+    }
+
+    private void doReplayCreateTaskRun(TaskRunStatus status) {
+        // NOTE: If current FE is downgraded from a higher version and TaskRunStatus#State is new added which is not defined
+        // in current version, status.getState() will be null.
+        if (status == null || status.getState() == null || Strings.isNullOrEmpty(status.getTaskName())) {
+            LOG.warn("replayCreateTaskRun: status is null or taskId is invalid, status: {}", status);
+            return;
+        }
         if (status.getState().isFinishState() && System.currentTimeMillis() > status.getExpireTime()) {
             return;
         }
         LOG.debug("replayCreateTaskRun:" + status);
-
-        switch (status.getState()) {
+        final Constants.TaskRunState taskRunState = status.getState();
+        switch (taskRunState) {
             case PENDING:
                 String taskName = status.getTaskName();
                 Task task = nameToTaskMap.get(taskName);
@@ -713,17 +782,17 @@ public class TaskManager implements MemoryTrackable {
                 status.setState(Constants.TaskRunState.FAILED);
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
-            case FAILED:
-                taskRunManager.getTaskRunHistory().addHistory(status);
-                break;
-            case MERGED:
-            case SUCCESS:
-                status.setProgress(100);
-                taskRunManager.getTaskRunHistory().addHistory(status);
             case SKIPPED:
                 status.setProgress(0);
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
+            default: {
+                if (taskRunState.isSuccessState()) {
+                    status.setProgress(100);
+                }
+                taskRunManager.getTaskRunHistory().addHistory(status);
+                break;
+            }
         }
     }
 
@@ -769,8 +838,7 @@ public class TaskManager implements MemoryTrackable {
                 LOG.warn("Illegal TaskRun queryId:{} status transform from {} to {}",
                         statusChange.getQueryId(), fromStatus, toStatus);
             }
-        } else if (fromStatus == Constants.TaskRunState.RUNNING &&
-                (toStatus == Constants.TaskRunState.SUCCESS || toStatus == Constants.TaskRunState.FAILED)) {
+        } else if (fromStatus == Constants.TaskRunState.RUNNING && toStatus.isFinishState()) {
             // NOTE: TaskRuns before the fe restart will be replayed in `replayCreateTaskRun` which
             // will not be rerun because `InsertOverwriteJobRunner.replayStateChange` will replay, so
             // the taskRun's may be PENDING/RUNNING/SUCCESS.
@@ -794,6 +862,14 @@ public class TaskManager implements MemoryTrackable {
                 TaskRunStatus status = taskRunManager.getTaskRunHistory().getTask(queryId);
                 if (status == null) {
                     return;
+                }
+                // TaskRun has been in the history but its status is not in the finish state,
+                // this should not happen just protect against the future.
+                if (!status.getState().isFinishState()) {
+                    LOG.warn("replayUpdateTaskRun, queryId:{}, taskId:{}, fromStatus:{}, toStatus:{}",
+                            queryId, taskId, fromStatus, toStatus);
+                    status.setState(toStatus);
+                    status.setProgress(100);
                 }
                 // Do update extra message from change status.
                 status.setExtraMessage(statusChange.getExtraMessage());

@@ -180,3 +180,68 @@ alter table t partition by date_trunc('day',b);
 -- result:
 E: (5064, 'Getting analyzing error. Detail message: Unsupported from granularity month to granularity day when merge partitions.')
 -- !result
+
+-- name: test_merge_partitions_infer_distributition
+create table t(k date) partition by date_trunc('day', k) distributed by hash(k) buckets 3;
+-- result:
+-- !result
+insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
+-- result:
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*p20200101.*
+.*p20200201.*
+.*p20200202.*
+-- !result
+alter table t partition by date_trunc('month',k) between '2020-02-01' and '2020-02-28';
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*p20200101.*
+.*p202002.*k	1	3.*
+-- !result
+
+-- name: test_merge_partitions_specify_distributition
+create table t(k date) partition by date_trunc('day', k) distributed by hash(k) buckets 3;
+-- result:
+-- !result
+insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
+-- result:
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*p20200101.*
+.*p20200201.*
+.*p20200202.*
+-- !result
+alter table t partition by date_trunc('month',k) distributed by hash(k) buckets 4 between '2020-02-01' and '2020-02-28';
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*p20200101.*
+.*p202002.*k	4	3.*
+-- !result
+
+-- name: test_merge_partitions_specify_distributition_fail
+create table t(k date, v int) partition by date_trunc('day', k) distributed by hash(k) buckets 3;
+-- result:
+-- !result
+alter table t partition by date_trunc('month',k) distributed by hash(v) buckets 4 between '2020-02-01' and '2020-02-28';
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Unsupported change distribution column when merge partitions.')
+-- !result
+alter table t partition by date_trunc('month',k) distributed by random between '2020-02-01' and '2020-02-28';
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Unsupported change distribution type when merge partitions.')
+-- !result

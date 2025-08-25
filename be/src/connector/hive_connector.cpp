@@ -18,13 +18,13 @@
 
 #include "common/config.h"
 #include "connector/hive_chunk_sink.h"
-#include "exec/cache_select_scanner.h"
 #include "exec/exec_node.h"
-#include "exec/hdfs_scanner_orc.h"
-#include "exec/hdfs_scanner_parquet.h"
-#include "exec/hdfs_scanner_partition.h"
-#include "exec/hdfs_scanner_text.h"
-#include "exec/jni_scanner.h"
+#include "exec/hdfs_scanner/cache_select_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner_orc.h"
+#include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
+#include "exec/hdfs_scanner/hdfs_scanner_partition.h"
+#include "exec/hdfs_scanner/hdfs_scanner_text.h"
+#include "exec/hdfs_scanner/jni_scanner.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
@@ -44,7 +44,11 @@ std::unique_ptr<ConnectorChunkSinkProvider> HiveConnector::create_data_sink_prov
 // ================================
 
 HiveDataSourceProvider::HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
-        : _scan_node(scan_node), _hdfs_scan_node(plan_node.hdfs_scan_node) {}
+        : _scan_node(scan_node), _hdfs_scan_node(plan_node.hdfs_scan_node) {
+    if (_hdfs_scan_node.__isset.bucket_properties) {
+        _bucket_properties = _hdfs_scan_node.bucket_properties;
+    }
+}
 
 DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<HiveDataSource>(this, scan_range);
@@ -372,11 +376,11 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.case_sensitive) {
         _case_sensitive = hdfs_scan_node.case_sensitive;
     }
-    if (hdfs_scan_node.__isset.can_use_any_column) {
-        _can_use_any_column = hdfs_scan_node.can_use_any_column;
+    if (hdfs_scan_node.__isset.can_use_min_max_opt) {
+        _use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
     }
-    if (hdfs_scan_node.__isset.can_use_min_max_count_opt) {
-        _can_use_min_max_count_opt = hdfs_scan_node.can_use_min_max_count_opt;
+    if (hdfs_scan_node.__isset.can_use_count_opt) {
+        _use_count_opt = hdfs_scan_node.can_use_count_opt;
     }
     if (hdfs_scan_node.__isset.use_partition_column_value_only) {
         _use_partition_column_value_only = hdfs_scan_node.use_partition_column_value_only;
@@ -385,30 +389,32 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // The reason why we need double check here is for iceberg table.
     // for some partitions, partition column maybe is not constant value.
     // If partition column is not constant value, we can not use this optimization,
-    // And we can not use `can_use_any_column` either.
     // So checks are:
-    // 1. can_use_any_column = true
-    // 2. only one materialized slot
-    // 3. besides that, all slots are partition slots.
-    // 4. scan iceberg data file without equality delete files.
-    auto check_opt_on_iceberg = [&]() {
-        if (!_can_use_any_column) {
-            return false;
-        }
-        if ((_partition_slots.size() + 1) != slots.size()) {
+    // 1. only one materialized slot
+    // 2. besides that, all slots are partition slots or extended slots, all of them are constant value.
+    // 3. scan iceberg data file without delete files.
+    auto check_partition_opt = [&]() {
+        if ((_partition_slots.size() + _extended_slots.size() + 1) != slots.size()) {
             return false;
         }
         if (_materialize_slots.size() != 1) {
             return false;
         }
-        if (!_scan_range.delete_files.empty() || !_scan_range.extended_columns.empty()) {
+        if (!_scan_range.delete_files.empty()) {
             return false;
         }
         return true;
     };
-    if (!check_opt_on_iceberg()) {
+    if (!check_partition_opt()) {
         _use_partition_column_value_only = false;
-        _can_use_any_column = false;
+        _use_count_opt = false;
+    }
+
+    // for min/max optimization, we already check that on FE side this iceberg table
+    // is unpartitioned, or all partition columns are constant value.
+    // so we just need to make sure there is no delete file.
+    if (!_scan_range.delete_files.empty()) {
+        _use_min_max_opt = false;
     }
 }
 
@@ -741,8 +747,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.use_file_metacache = _use_file_metacache;
     scanner_params.use_file_pagecache = _use_file_pagecache;
 
-    scanner_params.can_use_any_column = _can_use_any_column;
-    scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
+    scanner_params.use_min_max_opt = _use_min_max_opt;
+    scanner_params.use_count_opt = _use_count_opt;
     scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
 
     HdfsScanner* scanner = nullptr;
@@ -778,7 +784,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (_datacache_options.enable_cache_select) {
         scanner = new CacheSelectScanner();
     } else if (_use_partition_column_value_only) {
-        DCHECK(_can_use_any_column);
         scanner = new HdfsPartitionScanner();
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();

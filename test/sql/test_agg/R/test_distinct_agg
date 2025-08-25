@@ -217,7 +217,6 @@ select count(distinct t1.c1, if(t2.c3 is null, 1, 0)), sum(t1.c2 + if(t2.c3 is n
 -- result:
 1	5000
 -- !result
--- streaming_preaggregation_mode = 'auto' new_planner_agg_stage = '0'
 set streaming_preaggregation_mode = 'auto';
 -- result:
 -- !result
@@ -488,7 +487,6 @@ select array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group b
 [3]	1	5000
 [3]	1	5000
 -- !result
--- streaming_preaggregation_mode = 'force_streaming' new_planner_agg_stage = '2'
 set streaming_preaggregation_mode = 'force_streaming';
 -- result:
 -- !result
@@ -735,7 +733,6 @@ select array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group b
 [3]	1	5000
 [3]	1	5000
 -- !result
--- streaming_preaggregation_mode = 'force_preaggregation' new_planner_agg_stage = '2'
 set streaming_preaggregation_mode = 'force_preaggregation';
 -- result:
 -- !result
@@ -981,6 +978,9 @@ select array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group b
 [3]	1	5000
 [3]	1	5000
 [3]	1	5000
+-- !result
+set enable_constant_execute_in_fe = true;
+-- result:
 -- !result
 select count(c2), count(distinct c3), 'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
 -- result:
@@ -997,6 +997,28 @@ select sum(c2), count(distinct c3), 'a' as a from (select t1.* from skew_agg t0 
 select sum(c2),  'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
 -- result:
 4687500	a
+-- !result
+set enable_constant_execute_in_fe = false;
+-- result:
+-- !result
+select count(c2), count(distinct c3), 'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
+-- result:
+1562500	1	a
+-- !result
+select count(c2), 'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
+-- result:
+1562500	a
+-- !result
+select sum(c2), count(distinct c3), 'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
+-- result:
+4687500	1	a
+-- !result
+select sum(c2),  'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
+-- result:
+4687500	a
+-- !result
+set enable_constant_execute_in_fe = true;
+-- result:
 -- !result
 select sum(c0), count(distinct c2, c3) from skew_agg where c0 = 480816 and c1 = 2 group by c4;
 -- result:

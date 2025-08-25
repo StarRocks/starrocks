@@ -68,8 +68,8 @@ import org.apache.arrow.vector.ipc.ArrowStreamWriter;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.types.pojo.Schema;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -85,9 +85,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Answers.CALLS_REAL_METHODS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -112,7 +112,7 @@ public class ArrowFlightSqlServiceImplTest {
     @Mocked
     AuditEncryptionChecker mockChecker;
 
-    @Before
+    @BeforeEach
     public void setUp() throws IllegalAccessException, NoSuchFieldException {
         sessionManager = mock(ArrowFlightSqlSessionManager.class);
         mockContext = mock(ArrowFlightSqlConnectContext.class, RETURNS_DEEP_STUBS);
@@ -514,9 +514,7 @@ public class ArrowFlightSqlServiceImplTest {
             TNetworkAddress addr = new TNetworkAddress("127.0.0.1", 8080);
             PUniqueId id = new PUniqueId();
 
-            RuntimeException ex = assertThrows(RuntimeException.class, () -> {
-                service.fetchArrowSchema(ctx, addr, id, 1000);
-            });
+            RuntimeException ex = assertThrows(RuntimeException.class, () -> service.fetchArrowSchema(ctx, addr, id, 1000));
 
             assert ex.getMessage().contains("mocked error");
             assert ex.getMessage().contains("mockedId");
@@ -531,56 +529,47 @@ public class ArrowFlightSqlServiceImplTest {
         FlightDescriptor mockDescriptor = FlightDescriptor.command("SELECT 1".getBytes());
         Criteria mockCriteria = mock(Criteria.class);
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.getSchemaStatement(FlightSql.CommandStatementQuery
+        assertThrows(FlightRuntimeException.class, () -> service.getSchemaStatement(FlightSql.CommandStatementQuery
                         .getDefaultInstance(), mockCallContext, mockDescriptor));
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.acceptPutStatement(FlightSql.CommandStatementUpdate
+        assertThrows(FlightRuntimeException.class, () -> service.acceptPutStatement(FlightSql.CommandStatementUpdate
                         .getDefaultInstance(), mockCallContext, mockStream, mockPutListener));
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.acceptPutPreparedStatementUpdate(FlightSql.CommandPreparedStatementUpdate
+        assertThrows(FlightRuntimeException.class,
+                () -> service.acceptPutPreparedStatementUpdate(FlightSql.CommandPreparedStatementUpdate
                         .getDefaultInstance(), mockCallContext, mockStream, mockPutListener));
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.acceptPutPreparedStatementQuery(FlightSql.CommandPreparedStatementQuery
+        assertThrows(FlightRuntimeException.class,
+                () -> service.acceptPutPreparedStatementQuery(FlightSql.CommandPreparedStatementQuery
                         .getDefaultInstance(), mockCallContext, mockStream, mockPutListener));
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.getStreamTypeInfo(FlightSql.CommandGetXdbcTypeInfo
+        assertThrows(FlightRuntimeException.class, () -> service.getStreamTypeInfo(FlightSql.CommandGetXdbcTypeInfo
                         .getDefaultInstance(), mockCallContext, mockServerListener));
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.getStreamCatalogs(mockCallContext, mockServerListener));
+        assertThrows(FlightRuntimeException.class, () -> service.getStreamCatalogs(mockCallContext, mockServerListener));
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.getStreamSchemas(FlightSql.CommandGetDbSchemas
+        assertThrows(FlightRuntimeException.class, () -> service.getStreamSchemas(FlightSql.CommandGetDbSchemas
                         .getDefaultInstance(), mockCallContext, mockServerListener));
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.getStreamTables(FlightSql.CommandGetTables.getDefaultInstance(), mockCallContext, mockServerListener));
+        assertThrows(FlightRuntimeException.class,
+                () -> service.getStreamTables(FlightSql.CommandGetTables.getDefaultInstance(), mockCallContext,
+                        mockServerListener));
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.getStreamTableTypes(mockCallContext, mockServerListener));
+        assertThrows(FlightRuntimeException.class, () -> service.getStreamTableTypes(mockCallContext, mockServerListener));
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.getStreamPrimaryKeys(FlightSql.CommandGetPrimaryKeys
+        assertThrows(FlightRuntimeException.class, () -> service.getStreamPrimaryKeys(FlightSql.CommandGetPrimaryKeys
                         .getDefaultInstance(), mockCallContext, mockServerListener));
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.getStreamExportedKeys(FlightSql.CommandGetExportedKeys
+        assertThrows(FlightRuntimeException.class, () -> service.getStreamExportedKeys(FlightSql.CommandGetExportedKeys
                         .getDefaultInstance(), mockCallContext, mockServerListener));
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.getStreamImportedKeys(FlightSql.CommandGetImportedKeys
+        assertThrows(FlightRuntimeException.class, () -> service.getStreamImportedKeys(FlightSql.CommandGetImportedKeys
                         .getDefaultInstance(), mockCallContext, mockServerListener));
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.getStreamCrossReference(FlightSql.CommandGetCrossReference
+        assertThrows(FlightRuntimeException.class, () -> service.getStreamCrossReference(FlightSql.CommandGetCrossReference
                         .getDefaultInstance(), mockCallContext, mockServerListener));
 
-        assertThrows(FlightRuntimeException.class, () ->
-                service.listFlights(mockCallContext, mockCriteria, mock(FlightProducer.StreamListener.class)));
+        assertThrows(FlightRuntimeException.class,
+                () -> service.listFlights(mockCallContext, mockCriteria, mock(FlightProducer.StreamListener.class)));
     }
 }

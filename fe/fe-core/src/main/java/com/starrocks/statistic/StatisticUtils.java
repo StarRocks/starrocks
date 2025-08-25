@@ -34,12 +34,14 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -53,7 +55,6 @@ import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
@@ -118,6 +119,7 @@ public class StatisticUtils {
         context.getSessionVariable().setEnablePipelineEngine(true);
         context.getSessionVariable().setCboCteReuse(true);
         context.getSessionVariable().setCboCTERuseRatio(0);
+        context.getSessionVariable().setEnablePlanSerializeConcurrently(false);
 
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getBackgroundWarehouse();
@@ -158,7 +160,7 @@ public class StatisticUtils {
             return true;
         }
 
-        return COLLECT_DATABASES_BLACKLIST.stream().anyMatch(d -> databaseName.toLowerCase().contains(d.toLowerCase()));
+        return COLLECT_DATABASES_BLACKLIST.stream().anyMatch(databaseName::equalsIgnoreCase);
     }
 
     public static boolean statisticTableBlackListCheck(long tableId) {
@@ -191,6 +193,7 @@ public class StatisticUtils {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
         // check database
         if (db == null) {
+            LOG.warn("Statistics database {} not found", StatsConstants.STATISTICS_DB_NAME);
             return false;
         }
 
@@ -198,6 +201,7 @@ public class StatisticUtils {
             // check table
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
             if (table == null) {
+                LOG.warn("Statistics table {} not found in database {}", tableName, db.getFullName());
                 return false;
             }
             if (table.isCloudNativeTableOrMaterializedView()) {
@@ -208,6 +212,8 @@ public class StatisticUtils {
             for (Partition partition : table.getPartitions()) {
                 if (partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().stream()
                         .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
+                    LOG.warn("Statistics table {} partition {} has tablets without normal replicas", 
+                            tableName, partition.getName());
                     return false;
                 }
             }
@@ -217,8 +223,8 @@ public class StatisticUtils {
 
     public static LocalDateTime getTableLastUpdateTime(Table table) {
         if (table.isNativeTableOrMaterializedView()) {
-            long maxTime = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
-                    .max(Long::compareTo).orElse(0L);
+            long maxTime = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
+                        PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else {
             try {
@@ -228,6 +234,21 @@ public class StatisticUtils {
                 return null;
             }
         }
+    }
+
+    /**
+     * Retrieves the last update timestamp of the specified table in milliseconds.
+     *
+     * @param table The table object for which the last update time is to be retrieved.
+     * @return The timestamp in milliseconds since the Unix epoch, or null if the update time is not available.
+     */
+    public static Long getTableLastUpdateTimestamp(Table table) {
+        LocalDateTime updateTime = getTableLastUpdateTime(table);
+        if (updateTime == null) {
+            return null;
+        }
+        Instant instant = updateTime.atZone(Clock.systemDefaultZone().getZone()).toInstant();
+        return instant.toEpochMilli();
     }
 
     public static Set<String> getUpdatedPartitionNames(Table table, LocalDateTime checkTime) {
@@ -433,8 +454,16 @@ public class StatisticUtils {
         List<String> columns = new ArrayList<>();
         for (Column column : table.getBaseSchema()) {
             // disable stats collection for auto generated columns, see SelectAnalyzer#analyzeSelect
-            if (column.isGeneratedColumn() && column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+            if (column.isGeneratedColumn() && column.getName()
+                    .startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 continue;
+            }
+            // generated column doesn't support cross DB use
+            if (column.isGeneratedColumn() && column.generatedColumnExprToString() != null) {
+                String expr = column.generatedColumnExprToString().toLowerCase();
+                if (expr.contains("dict_mapping") || expr.contains("dictionary_get")) {
+                    continue;
+                }
             }
             if (!column.isAggregated()) {
                 columns.add(column.getName());

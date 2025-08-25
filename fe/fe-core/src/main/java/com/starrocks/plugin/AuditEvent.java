@@ -133,6 +133,8 @@ public class AuditEvent {
     public long spilledBytes = -1;
     @AuditField(value = "Warehouse")
     public String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    @AuditField(value = "CNGroup")
+    public String cnGroup = "";
 
     // Materialized View usage info
     @AuditField(value = "CandidateMVs", ignore_zero = true)
@@ -153,6 +155,12 @@ public class AuditEvent {
 
     @AuditField(value = "SessionId")
     public String sessionId = "";
+    
+    @AuditField(value = "CustomQueryId")
+    public String customQueryId = "";
+
+    @AuditField(value = "TransmittedBytes")
+    public long transmittedBytes = -1;
 
     public static class AuditEventBuilder {
 
@@ -293,6 +301,11 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder setCNGroup(String cnGroup) {
+            auditEvent.cnGroup = cnGroup;
+            return this;
+        }
+
         public AuditEventBuilder setStmtId(long stmtId) {
             auditEvent.stmtId = stmtId;
             return this;
@@ -397,6 +410,20 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder setCustomQueryId(String customQueryId) {
+            auditEvent.customQueryId = customQueryId;
+            return this;
+        }
+
+        public AuditEventBuilder addTransmittedBytes(long transmittedBytes) {
+            if (auditEvent.transmittedBytes == -1) {
+                auditEvent.transmittedBytes = transmittedBytes;
+            } else {
+                auditEvent.transmittedBytes += transmittedBytes;
+            }
+            return this;
+        }
+
         public AuditEvent build() {
             return this.auditEvent;
         }
@@ -409,6 +436,7 @@ public class AuditEvent {
             this.auditEvent.scanRows = event.scanRows;
             this.auditEvent.spilledBytes = event.spilledBytes;
             this.auditEvent.returnRows = event.returnRows;
+            this.auditEvent.transmittedBytes = event.transmittedBytes;
         }
     }
 }

@@ -44,8 +44,6 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.io.Text;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -54,9 +52,6 @@ import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TSlotRef;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -246,7 +241,7 @@ public class SlotRef extends Expr {
     }
 
     public boolean isFromLambda() {
-        return tblName != null && tblName.getTbl().equals(TableName.LAMBDA_FUNC_TABLE);
+        return tblName != null && tblName.getTbl().equalsIgnoreCase(TableName.LAMBDA_FUNC_TABLE);
     }
 
     public void setTblName(TableName name) {
@@ -270,10 +265,6 @@ public class SlotRef extends Expr {
 
     public SlotDescriptor getSlotDescriptorWithoutCheck() {
         return desc;
-    }
-
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
     @Override
@@ -498,31 +489,8 @@ public class SlotRef extends Expr {
         return true;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // TableName
-        if (tblName == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            tblName.write(out);
-        }
-        Text.writeString(out, colName);
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        if (in.readBoolean()) {
-            tblName = new TableName();
-            tblName.readFields(in);
-        }
-        colName = Text.readString(in);
-    }
 
-    public static SlotRef read(DataInput in) throws IOException {
-        SlotRef slotRef = new SlotRef();
-        slotRef.readFields(in);
-        return slotRef;
-    }
 
     /**
      * Below function is added by new analyzer
