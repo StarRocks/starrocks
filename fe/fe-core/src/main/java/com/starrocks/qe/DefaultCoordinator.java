@@ -575,6 +575,8 @@ public class DefaultCoordinator extends Coordinator {
             deliverExecFragments(option);
         }
 
+        scheduler.continueSchedule(option);
+
         // Prevent `explain scheduler` from waiting until the profile timeout.
         if (!option.doDeploy) {
             queryProfile.finishAllInstances(Status.OK);
