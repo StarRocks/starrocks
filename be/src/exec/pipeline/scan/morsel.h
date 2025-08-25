@@ -252,6 +252,7 @@ public:
 
     virtual Status append_morsels(int driver_seq, Morsels&& morsels);
     virtual void set_has_more(bool v) {}
+    virtual bool reach_limit() const { return false; }
 };
 
 class SharedMorselQueueFactory final : public MorselQueueFactory {
@@ -268,6 +269,7 @@ public:
 
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
     void set_has_more(bool v) override;
+    bool reach_limit() const override;
 
 private:
     MorselQueuePtr _queue;
@@ -293,6 +295,7 @@ public:
 
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
     void set_has_more(bool v) override;
+    bool reach_limit() const override;
 
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
@@ -369,11 +372,16 @@ public:
         DCHECK(tablet_schema != nullptr);
         _tablet_schema = tablet_schema;
     }
+    // is there any more scan ranges delivered from FE to be processed?
     bool has_more() const { return _has_more; }
     void set_has_more(bool v) { _has_more = v; }
+    // do scan operator emit enough rows that we can stop processing scan ranges?
+    void set_reach_limit(bool v) { _reach_limit = v; }
+    bool reach_limit() const { return _reach_limit; }
 
 protected:
     std::atomic<bool> _has_more = false;
+    std::atomic<bool> _reach_limit = false;
     Morsels _morsels;
     size_t _num_morsels = 0;
     MorselPtr _unget_morsel = nullptr;
