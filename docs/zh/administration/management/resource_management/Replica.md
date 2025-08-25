@@ -349,7 +349,7 @@ Tablet Scheduler 调度 Tablet 时，会选择一定数量的正常 Tablet 作�
   ```
 
   - `BeId`：BE 节点 ID。
-  - `BackendDiskBalanceStat`：节点内磁盘之间基于磁盘使用率的均衡情况。包括是否均衡。如果不均衡，则显示磁盘最大最小使用率及对应的磁盘路径。
+  - `BackendDiskBalanceStat`：节点内磁盘之间基于磁盘使用率的均衡情况。如果不均衡，则显示磁盘最大最小使用率及对应的磁盘路径。
 
 - **查看按 tablet 分布的均衡情况：**
 
