@@ -152,11 +152,11 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinc
 import com.starrocks.sql.optimizer.rule.transformation.RewriteCountIfFunction;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxByMonotonicFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteToVectorPlanRule;
-import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxByMonotonicFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
