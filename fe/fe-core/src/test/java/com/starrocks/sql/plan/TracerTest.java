@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import org.junit.Test;
 
