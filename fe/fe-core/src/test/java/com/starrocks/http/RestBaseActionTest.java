@@ -111,8 +111,8 @@ public class RestBaseActionTest {
             public static Pair<String, Integer> getCurrentFe() {
                 return new Pair<>("fe1", 8030);
             }
+        };
 
-    };
         List<Pair<String, Integer>> fronts = restBaseAction.getOtherAliveFe();
         verify(restBaseAction).getCurrentFe();
 
