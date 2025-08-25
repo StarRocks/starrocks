@@ -462,11 +462,6 @@ Status ReplicationTxnManager::collect_all_rowsets_for_replication(
         int64_t target_tablet_id, const std::string& src_meta_dir, const std::shared_ptr<FileSystem>& shared_src_fs,
         std::set<RowsetMetadataPB, RowsetMetaComparator>* new_rowsets) {
     if (incremental) {
-        // find all rowsets
-        for (auto v = data_version + 1; v <= src_visible_version; ++v) {
-            ASSIGN_OR_RETURN(auto tablet_meta, build_source_tablet_meta(src_tablet_id, v, src_meta_dir, shared_src_fs));
-            new_rowsets->insert(tablet_meta->rowsets().begin(), tablet_meta->rowsets().end());
-        }
         // starting at `src_visible_version`, read the tablet metadata forward along
         // the `prev_garbage_version` pointer until the version reached `data_version`.
         // then excluded those rowsets who comes from compaction (by checking compaction_inputs of tablet meta).
