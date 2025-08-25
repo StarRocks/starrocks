@@ -1,4 +1,4 @@
-For more information on how to create a ストレージボリューム for other オブジェクトストレージ and set the default ストレージボリューム, see [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) and [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md).
+他のオブジェクトストレージ用のストレージボリュームの作成方法およびデフォルトのストレージボリュームの設定方法については、[CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) および [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md) を参照してください。
 
 ### データベースとクラウドネイティブテーブルの作成
 
