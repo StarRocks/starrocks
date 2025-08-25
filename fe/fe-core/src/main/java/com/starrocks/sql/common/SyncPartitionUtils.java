@@ -122,20 +122,25 @@ public class SyncPartitionUtils {
                                                             RangePartitionDiffer differ) {
         PrimitiveType partitionColumnType = functionCallExpr.getType().getPrimitiveType();
         Map<String, Range<PartitionKey>> rollupRange = Maps.newHashMap();
+        Map<String, Range<PartitionKey>> virtualRange = Maps.newHashMap();
         if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
-            rollupRange = toMappingRanges(baseRangeMap, granularity, partitionColumnType);
+            MVRangePartitionMapper.PartitionRangeWrapper rangeWrapper =
+                    toMappingRanges(baseRangeMap, granularity, partitionColumnType, differ == null || differ.mv == null ? null :
+                            differ.mv);
+            rollupRange = rangeWrapper.getPartitionRangeMap();
+            virtualRange = rangeWrapper.getVirtualPartitionRangeMap();
         } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
             rollupRange = mappingRangeListForDate(baseRangeMap);
         }
-        return getRangePartitionDiff(mvRangeMap, rollupRange, differ);
+        return getRangePartitionDiff(mvRangeMap, rollupRange, virtualRange, differ);
     }
 
-    public static Map<String, Range<PartitionKey>> toMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
+    public static MVRangePartitionMapper.PartitionRangeWrapper toMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                    String granularity,
-                                                                   PrimitiveType partitionType) {
+                                                                   PrimitiveType partitionType, MaterializedView mv) {
         MVRangePartitionMapper mapper = MVRangePartitionMapper.getInstance(granularity);
-        return mapper.toMappingRanges(baseRangeMap, granularity, partitionType);
+        return mapper.toMappingRanges(baseRangeMap, granularity, partitionType, mv);
     }
 
     private static Map<String, Range<PartitionKey>> mappingRangeListForDate(
@@ -156,10 +161,12 @@ public class SyncPartitionUtils {
     @NotNull
     private static PartitionDiff getRangePartitionDiff(Map<String, Range<PartitionKey>> mvRangeMap,
                                                        Map<String, Range<PartitionKey>> rollupRange,
+                                                       Map<String, Range<PartitionKey>> virtualRange,
                                                        RangePartitionDiffer differ) {
         // TODO: Callers may use `List<PartitionRange>` directly.
         PartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap) :
                 RangePartitionDiffer.simpleDiff(rollupRange, mvRangeMap);
+        diff.setVirtualPartitionMapping(virtualRange);
         return diff;
     }
 
@@ -518,6 +525,16 @@ public class SyncPartitionUtils {
     }
 
     @NotNull
+    public static LocalDateTime nextDateTime(LocalDateTime upperDateTime, String granularity, String dateFunc) {
+        if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_ADD)) {
+            return nextUpperDateTime(upperDateTime, granularity);
+        } else if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_SUB)) {
+            return nextLowerDateTime(upperDateTime, granularity);
+        } else {
+            throw new SemanticException("Do not support date_trunc format string:{}, dateFunc", granularity, dateFunc);
+        }
+    }
+
     public static LocalDateTime nextUpperDateTime(LocalDateTime upperDateTime, String granularity) {
         LocalDateTime truncUpperDateTime;
         switch (granularity) {
@@ -543,6 +560,44 @@ public class SyncPartitionUtils {
                 break;
             case YEAR:
                 truncUpperDateTime = upperDateTime.plusYears(1).with(TemporalAdjusters.firstDayOfYear());
+                break;
+            default:
+                throw new SemanticException("Do not support date_trunc format string:{}", granularity);
+        }
+        final DateLiteral maxDateTime = DateLiteral.createMaxValue(Type.DATETIME);
+        if (truncUpperDateTime.isAfter(maxDateTime.toLocalDateTime())) {
+            return upperDateTime;
+        }
+        return truncUpperDateTime;
+    }
+
+
+    @NotNull
+    public static LocalDateTime nextLowerDateTime(LocalDateTime upperDateTime, String granularity) {
+        LocalDateTime truncUpperDateTime;
+        switch (granularity) {
+            case MINUTE:
+                truncUpperDateTime = upperDateTime.minusMinutes(1).withNano(0).withSecond(0);
+                break;
+            case HOUR:
+                truncUpperDateTime = upperDateTime.minusHours(1).withNano(0).withSecond(0).withMinute(0);
+                break;
+            case DAY:
+                truncUpperDateTime = upperDateTime.minusDays(1).with(LocalTime.MIN);
+                break;
+            case WEEK:
+                truncUpperDateTime = upperDateTime.minusWeeks(1).with(LocalTime.MIN);
+                break;
+            case MONTH:
+                truncUpperDateTime = upperDateTime.minusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
+                break;
+            case QUARTER:
+                LocalDateTime nextDateTime = upperDateTime.minusMonths(3);
+                truncUpperDateTime = nextDateTime.with(nextDateTime.getMonth().firstMonthOfQuarter())
+                        .with(TemporalAdjusters.firstDayOfMonth());
+                break;
+            case YEAR:
+                truncUpperDateTime = upperDateTime.minusYears(1).with(TemporalAdjusters.firstDayOfYear());
                 break;
             default:
                 throw new SemanticException("Do not support date_trunc format string:{}", granularity);

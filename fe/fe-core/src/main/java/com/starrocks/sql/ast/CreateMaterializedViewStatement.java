@@ -107,6 +107,8 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // partition contains transform function.
     private boolean isRefBaseTablePartitionWithTransform = false;
 
+    private List<Expr> unionOtherOutputExpression;
+
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
                                            List<IndexDef> indexDefs,
@@ -355,6 +357,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setRefBaseTablePartitionWithTransform(boolean refBaseTablePartitionWithTransform) {
         isRefBaseTablePartitionWithTransform = refBaseTablePartitionWithTransform;
+    }
+
+    public List<Expr> getUnionOtherOutputExpression() {
+        return unionOtherOutputExpression;
+    }
+
+    public void setUnionOtherOutputExpression(List<Expr> unionOtherOutputExpression) {
+        this.unionOtherOutputExpression = unionOtherOutputExpression;
     }
 
     @Override

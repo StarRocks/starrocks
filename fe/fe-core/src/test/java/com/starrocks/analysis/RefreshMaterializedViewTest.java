@@ -50,6 +50,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.Period;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -1483,5 +1484,181 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         starRocksAssert.dropTable("dim_data");
         starRocksAssert.dropMaterializedView("mv_dim_data1");
         starRocksAssert.dropMaterializedView("mv_test1");
+    }
+
+
+
+    @Test
+    public void testUnionSupportMultipleExpr() throws Exception {
+        starRocksAssert
+                .createDatabaseIfNotExists("mvuniontest")
+                .useDatabase("mvuniontest")
+                .withTable("CREATE TABLE IF NOT EXISTS mvuniontest.par_tbl1\n" +
+                        "(\n" +
+                        "    datekey DATETIME,\n" +
+                        "    item_id STRING,\n" +
+                        "    v1      INT\n" +
+                        ")PRIMARY KEY (`datekey`,`item_id`)\n" +
+                        "PARTITION BY RANGE(`datekey`)\n" +
+                        "(\n" +
+                        "PARTITION p20250101 VALUES [(\"2025-01-01\"), (\"2025-01-02\")),\n" +
+                        "PARTITION p20250102 VALUES [(\"2025-01-02\"), (\"2025-01-03\"))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`datekey`, `item_id`)"
+                );
+        executeInsertSql(connectContext, "INSERT INTO mvuniontest.par_tbl1 values ('2025-01-01 00:00:00', '1', 1);");
+        executeInsertSql(connectContext, "INSERT INTO mvuniontest.par_tbl1 values ('2025-01-02 00:00:00', '1', 1);");
+
+        withRefreshedMV("CREATE\n" +
+                "MATERIALIZED VIEW mv_union_test\n" +
+                "REFRESH ASYNC EVERY(INTERVAL 60 MINUTE)\n" +
+                "PARTITION BY p_time\n" +
+                "PROPERTIES (\n" +
+                "\"partition_refresh_number\" = \"1\"\n" +
+                ")\n" +
+                "AS\n" +
+                "select date_trunc(\"day\", a.datekey) as p_time, sum(a.v1) as value\n" +
+                "from mvuniontest.par_tbl1 a\n" +
+                "group by p_time, a.item_id\n" +
+                "union all\n" +
+                "select date_trunc('day', date_add(b.datekey, INTERVAL 1 DAY)) AS p_time, sum(b.v1) as value\n" +
+                "from mvuniontest.par_tbl1 b\n" +
+                "group by p_time, item_id\n" +
+                ";", () -> {
+            starRocksAssert.refreshMV("refresh materialized view mvuniontest.mv_union_test");
+            MaterializedView mv = getMv("mvuniontest", "mv_union_test");
+            Assertions.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+            Collection<Partition> partitions = mv.getPartitions();
+            Assertions.assertEquals(3, partitions.size());
+            Assertions.assertEquals(1, mv.getVirtualPartitionMapping().size());
+            Assertions.assertEquals("p20250103_20250104", mv.getVirtualPartitionMapping().entrySet().stream().findFirst().get().getKey());
+        });
+    }
+
+    @Test
+    public void testUnionSupportMultipleExprWithSkipPartition() throws Exception {
+        starRocksAssert
+                .createDatabaseIfNotExists("mvuniontest")
+                .useDatabase("mvuniontest")
+                .withTable("CREATE TABLE IF NOT EXISTS mvuniontest.par_tbl1\n" +
+                        "(\n" +
+                        "    datekey DATETIME,\n" +
+                        "    item_id STRING,\n" +
+                        "    v1      INT\n" +
+                        ")PRIMARY KEY (`datekey`,`item_id`)\n" +
+                        "PARTITION BY RANGE(`datekey`)\n" +
+                        "(\n" +
+                        "PARTITION p20250101 VALUES [(\"2025-01-01\"), (\"2025-01-02\")),\n" +
+                        "PARTITION p20250102 VALUES [(\"2025-01-02\"), (\"2025-01-03\")),\n" +
+                        "PARTITION p20250110 VALUES [(\"2025-01-10\"), (\"2025-01-11\"))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`datekey`, `item_id`)"
+                );
+        executeInsertSql(connectContext, "INSERT INTO mvuniontest.par_tbl1 values ('2025-01-01 00:00:00', '1', 1);");
+        executeInsertSql(connectContext, "INSERT INTO mvuniontest.par_tbl1 values ('2025-01-02 00:00:00', '1', 1);");
+        executeInsertSql(connectContext, "INSERT INTO mvuniontest.par_tbl1 values ('2025-01-10 00:00:00', '1', 1);");
+
+        withRefreshedMV("CREATE\n" +
+                "MATERIALIZED VIEW mv_union_test\n" +
+                "REFRESH ASYNC EVERY(INTERVAL 60 MINUTE)\n" +
+                "PARTITION BY p_time\n" +
+                "PROPERTIES (\n" +
+                "\"partition_refresh_number\" = \"1\"\n" +
+                ")\n" +
+                "AS\n" +
+                "select date_trunc(\"day\", a.datekey) as p_time, sum(a.v1) as value\n" +
+                "from mvuniontest.par_tbl1 a\n" +
+                "group by p_time, a.item_id\n" +
+                "union all\n" +
+                "select date_trunc('day', date_add(b.datekey, INTERVAL 1 DAY)) AS p_time, sum(b.v1) as value\n" +
+                "from mvuniontest.par_tbl1 b\n" +
+                "group by p_time, item_id\n" +
+                ";", () -> {
+            starRocksAssert.refreshMV("refresh materialized view mvuniontest.mv_union_test");
+            MaterializedView mv = getMv("mvuniontest", "mv_union_test");
+            Assertions.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+            Collection<Partition> partitions = mv.getPartitions();
+            Assertions.assertEquals(5, partitions.size());
+            Assertions.assertEquals(2, mv.getVirtualPartitionMapping().size());
+            Set<String> expectedPartitions = Sets.newHashSet("p20250103_20250104", "p20250111_20250112");
+            mv.getVirtualPartitionMapping().forEach((key, value) -> {;
+                Assertions.assertTrue(expectedPartitions.contains(key));
+            });
+        });
+    }
+
+
+    @Test
+    public void testUnionSupportMultipleExpr2() throws Exception {
+        starRocksAssert
+                .createDatabaseIfNotExists("mvuniontest")
+                .useDatabase("mvuniontest")
+                .withTable("CREATE TABLE IF NOT EXISTS mvuniontest.par_tbl1\n" +
+                        "(\n" +
+                        "    datekey DATETIME,\n" +
+                        "    item_id STRING,\n" +
+                        "    v1      INT\n" +
+                        ")PRIMARY KEY (`datekey`,`item_id`)\n" +
+                        "PARTITION BY RANGE(`datekey`)\n" +
+                        "(\n" +
+                        "PARTITION p20250101 VALUES [(\"2025-01-01\"), (\"2025-01-02\")),\n" +
+                        "PARTITION p20250102 VALUES [(\"2025-01-02\"), (\"2025-01-03\"))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`datekey`, `item_id`)"
+                );
+        executeInsertSql(connectContext, "INSERT INTO mvuniontest.par_tbl1 values ('2025-01-01 00:00:00', '1', 1);");
+        executeInsertSql(connectContext, "INSERT INTO mvuniontest.par_tbl1 values ('2025-01-02 00:00:00', '1', 1);");
+
+        withRefreshedMV("CREATE\n" +
+                "MATERIALIZED VIEW mv_union_test\n" +
+                "REFRESH ASYNC EVERY(INTERVAL 60 MINUTE)\n" +
+                "PARTITION BY p_time\n" +
+                "PROPERTIES (\n" +
+                "\"partition_refresh_number\" = \"1\"\n" +
+                ")\n" +
+                "AS\n" +
+                "select date_trunc(\"day\", a.datekey) as p_time, sum(a.v1) as value\n" +
+                "from par_tbl1 a\n" +
+                "group by p_time, a.item_id\n" +
+                "\n" +
+                "union all\n" +
+                "select date_trunc('day', DATE_SUB(b.datekey, INTERVAL 1 DAY)) AS p_time, sum(b.v1) as value\n" +
+                "from par_tbl1 b\n" +
+                "group by p_time, item_id\n" +
+                "\n" +
+                "union all\n" +
+                "select date_trunc('day', DATE_SUB(b.datekey, INTERVAL 3 DAY)) AS p_time, sum(b.v1) as value\n" +
+                "from par_tbl1 b\n" +
+                "group by p_time, item_id\n" +
+                "\n" +
+                "union all\n" +
+                "select date_trunc('day', date_add(b.datekey, INTERVAL 4 DAY)) AS p_time, sum(b.v1) as value\n" +
+                "from par_tbl1 b\n" +
+                "group by p_time, item_id\n" +
+                "\n" +
+                "union all\n" +
+                "select date_trunc('day', date_add(b.datekey, INTERVAL 5 DAY)) AS p_time, sum(b.v1) as value\n" +
+                "from par_tbl1 b\n" +
+                "group by p_time, item_id\n" +
+                ";", () -> {
+            starRocksAssert.refreshMV("refresh materialized view mvuniontest.mv_union_test");
+            MaterializedView mv = getMv("mvuniontest", "mv_union_test");
+            Assertions.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+            Collection<Partition> partitions = mv.getPartitions();
+            Assertions.assertEquals(10, partitions.size());
+            Assertions.assertEquals(8, mv.getVirtualPartitionMapping().size());
+            Set<String> expectedPartitions = Sets.newHashSet(
+                    "p20241229_20241230",
+                    "p20241230_20241231",
+                    "p20241231_20250101",
+                    "p20250103_20250104",
+                    "p20250104_20250105",
+                    "p20250105_20250106",
+                    "p20250106_20250107",
+                    "p20250107_20250108");
+            mv.getVirtualPartitionMapping().forEach((key, value) -> {
+                Assertions.assertTrue(expectedPartitions.contains(key));
+            });
+        });
     }
 }

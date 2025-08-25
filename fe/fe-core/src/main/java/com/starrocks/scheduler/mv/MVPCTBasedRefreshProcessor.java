@@ -17,6 +17,7 @@ package com.starrocks.scheduler.mv;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -51,6 +52,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
 
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -126,6 +128,8 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         // check to refresh partitions of mv and base tables
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
             updatePCTToRefreshMetas(taskRunContext);
+            // append virtual partitions
+            pctMVToRefreshedPartitions = appendVirtualPartitions(pctMVToRefreshedPartitions);
             if (CollectionUtils.isEmpty(pctMVToRefreshedPartitions)) {
                 return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
             }
@@ -164,6 +168,26 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         }
 
         return Constants.TaskRunState.SUCCESS;
+    }
+
+    /**
+     * Appends virtual partitions to the set of materialized view partitions to be refreshed.
+     *
+     * @param mvToRefreshedPartitions The set of materialized view partitions to be refreshed.
+     * @return A set of materialized view partitions including virtual partitions if applicable.
+     */
+    private Set<String> appendVirtualPartitions(Set<String> mvToRefreshedPartitions) {
+        // Add virtual partitions only during the final refresh batch to avoid duplicate processing
+        if (CollectionUtils.isEmpty(mvToRefreshedPartitions) || !mvContext.hasNextBatchPartition()) {
+            if (mv.getVirtualPartitionMapping() == null || mv.getVirtualPartitionMapping().isEmpty()) {
+                return mvToRefreshedPartitions;
+            }
+            HashSet<String> newSet = Sets.newHashSet(mvToRefreshedPartitions);
+            newSet.addAll(mv.getVirtualPartitionMapping().keySet());
+            mvContext.getExecuteOption().setVirtualPartitions(mv.getVirtualPartitionMapping().keySet());
+            return newSet;
+        }
+        return mvToRefreshedPartitions;
     }
 
     /**
@@ -288,6 +312,7 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         int priority = executeOption.getPriority() > Constants.TaskRunPriority.LOWEST.value() ?
                 executeOption.getPriority() : Constants.TaskRunPriority.HIGHER.value();
         ExecuteOption option = new ExecuteOption(priority, true, newProperties);
+        option.setVirtualPartitions(mvContext.getExecuteOption().getVirtualPartitions());
         logger.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}, " +
                         "priority={}, properties={}", mv.getName(), mv.getId(),
                 mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority, properties);
