@@ -67,7 +67,9 @@ public class HttpUtilsTest extends StarRocksHttpTestCase {
     public void testHttpPost() {
         Map<String, String> header = Map.of(HttpHeaders.AUTHORIZATION, rootAuth);
         String url = URI + "/_query_plan";
-        StringEntity entity = new StringEntity("{ \"sql\" :  \" select k1 as alias_1,k2 from " + DB_NAME + "." + TABLE_NAME + " \" }", StandardCharsets.UTF_8);
+        StringEntity entity = new StringEntity(
+                "{ \"sql\" :  \" select k1 as alias_1,k2 from " + DB_NAME + "." + TABLE_NAME + " \" }", 
+                StandardCharsets.UTF_8);
         String result = HttpUtils.post(url, entity, header);
         Assertions.assertTrue(true);
         Assertions.assertNull(result);
