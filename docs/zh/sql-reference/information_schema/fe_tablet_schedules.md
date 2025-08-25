@@ -35,4 +35,4 @@ displayed_sidebar: docs
 | CLONE_RATE                | 拷贝速率，单位：MB/s。                  |
 | FAILED_SCHEDULE_COUNT     | 任务调度失败的次数。                   |
 | FAILED_RUNNING_COUNT      | 任务执行失败的次数。                   |
-| MSG                       | 任务相关的信息。                       |
+| MSG                       | 任务调度及执行相关的信息。             |
