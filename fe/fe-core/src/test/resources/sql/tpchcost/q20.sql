@@ -356,6 +356,7 @@ column statistics:
       "P_NAME": "[-Infinity, Infinity, 0.0, 55.0, 1.99997E7] ESTIMATE"
     }
   },
+  "histogram_statistics": {},
   "be_number": 3,
   "be_core_stat": {
     "numOfHardwareCoresPerBe": "{}",

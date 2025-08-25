@@ -382,6 +382,7 @@ column statistics:
       "O_CUSTKEY": "[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE"
     }
   },
+  "histogram_statistics": {},
   "be_number": 3,
   "be_core_stat": {
     "numOfHardwareCoresPerBe": "{}",
