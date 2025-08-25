@@ -129,7 +129,8 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::build_prepare(RuntimeState*
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
     if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        ASOF_BUFFER(table_items).resize(table_items->row_count + 1);
+        auto& asof_buffer = ASOF_BUFFER(table_items);
+        asof_buffer->resize(table_items->row_count + 1);
     }
 }
 
@@ -428,7 +429,8 @@ void LinearChainedJoinHashMap2<LT>::build_prepare(RuntimeState* state, JoinHashT
     table_items->fps.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
     if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        ASOF_BUFFER(table_items).resize(table_items->row_count + 1);
+        auto& asof_buffer = ASOF_BUFFER(table_items);
+        asof_buffer->resize(table_items->row_count + 1);
     }
 }
 
@@ -440,27 +442,7 @@ void LinearChainedJoinHashMap2<LT>::construct_hash_table(JoinHashTableItems* tab
         auto process_build_rows = [&]<LogicalType ASOF_LT>() {
             using ASOF_CppType = RunTimeCppType<ASOF_LT>;
 
-            // 🚀 提取具体类型的 Buffer，一次性操作，零开销！
-            // 由于 variant_index 是预计算的，这里的 switch 在编译时就能优化
-            auto get_buffer = [&]() -> auto& {
-                switch (table_items->asof_variant_index) {
-                    case 0:  return std::get<0>(table_items->asof_lookup_vectors);
-                    case 1:  return std::get<1>(table_items->asof_lookup_vectors);
-                    case 2:  return std::get<2>(table_items->asof_lookup_vectors);
-                    case 3:  return std::get<3>(table_items->asof_lookup_vectors);
-                    case 4:  return std::get<4>(table_items->asof_lookup_vectors);
-                    case 5:  return std::get<5>(table_items->asof_lookup_vectors);
-                    case 6:  return std::get<6>(table_items->asof_lookup_vectors);
-                    case 7:  return std::get<7>(table_items->asof_lookup_vectors);
-                    case 8:  return std::get<8>(table_items->asof_lookup_vectors);
-                    case 9:  return std::get<9>(table_items->asof_lookup_vectors);
-                    case 10: return std::get<10>(table_items->asof_lookup_vectors);
-                    case 11: return std::get<11>(table_items->asof_lookup_vectors);
-                    default: __builtin_unreachable();
-                }
-            };
-            auto& asof_buffer = get_buffer();
-
+            auto& asof_buffer = ASOF_BUFFER(table_items);
             if (!table_items->build_chunk) {
                 CHECK(false) << "ASOF JOIN: build_chunk is null";
                 return;
@@ -679,7 +661,8 @@ void DirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinHashTa
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
     if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        ASOF_BUFFER(table_items).resize(table_items->row_count + 1);
+        auto& asof_buffer = ASOF_BUFFER(table_items);
+        asof_buffer->resize(table_items->row_count + 1);
     }
 }
 
@@ -800,7 +783,8 @@ void RangeDirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinH
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
     if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        ASOF_BUFFER(table_items).resize(table_items->row_count + 1);
+        auto& asof_buffer = ASOF_BUFFER(table_items);
+        asof_buffer->resize(table_items->row_count + 1);
     }
 }
 
@@ -1004,7 +988,8 @@ void DenseRangeDirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, 
     table_items->first.resize(table_items->row_count + 1, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
     if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        ASOF_BUFFER(table_items).resize(table_items->row_count + 1);
+        auto& asof_buffer = ASOF_BUFFER(table_items);
+        asof_buffer->resize(table_items->row_count + 1);
     }
 }
 

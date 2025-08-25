@@ -1058,8 +1058,6 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_inner_join(RuntimeState* s
     auto process_probe_rows = [&]<LogicalType ASOF_LT>() {
         using AsofColumnCppType = RunTimeCppType<ASOF_LT>;
 
-        const auto& asof_buffer = ASOF_BUFFER(_table_items);
-
         const auto* typed_column =
                 ColumnHelper::get_data_column_by_type<ASOF_LT>(_probe_state->asof_temporal_condition_column.get());
         const NullColumn* nullable_asof_column =
@@ -1083,8 +1081,9 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_inner_join(RuntimeState* s
             }
 
             AsofColumnCppType probe_asof_value = asof_probe_temporal_values[i];
-            uint32_t optimal_build_row_index = optimal_build_row_index = asof_buffer[build_index]->find_asof_match(probe_asof_value);
 
+            auto& asof_buffer = ASOF_BUFFER(_table_items);
+            uint32_t optimal_build_row_index = asof_buffer[build_index]->find_asof_match(probe_asof_value);
             if (optimal_build_row_index != 0) {
                 _probe_state->probe_index[match_count] = i;
                 _probe_state->build_index[match_count] = optimal_build_row_index;
@@ -1157,9 +1156,6 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join(RuntimeSta
     auto process_probe_rows = [&]<LogicalType ASOF_LT>() {
         using AsofColumnCppType = RunTimeCppType<ASOF_LT>;
 
-        // 🚀 提取具体类型的 Buffer，一次性操作，零开销！
-        const auto& asof_buffer = ASOF_BUFFER(_table_items);
-
         const auto* typed_column =
                 ColumnHelper::get_data_column_by_type<ASOF_LT>(_probe_state->asof_temporal_condition_column.get());
         const NullColumn* nullable_asof_column =
@@ -1184,8 +1180,8 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join(RuntimeSta
 
             AsofColumnCppType probe_asof_value = asof_probe_temporal_values[i];
 
-            uint32_t optimal_build_row_index = optimal_build_row_index = asof_buffer[build_index]->find_asof_match(probe_asof_value);
-
+            auto& asof_buffer = ASOF_BUFFER(_table_items);
+            uint32_t optimal_build_row_index = asof_buffer[build_index]->find_asof_match(probe_asof_value);
 
             if (optimal_build_row_index != 0) {
                 _probe_state->probe_index[match_count] = i;
@@ -1265,8 +1261,8 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
             PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index)) \
                                                                                                               \
             AsofColumnCppType probe_asof_value = asof_probe_temporal_values[i];                               \
-            uint32_t optimal_build_row_index =                                                                \
-                    _table_items->find_asof_match<AsofColumnCppType>(build_index, probe_asof_value);          \
+    auto& asof_buffer = ASOF_BUFFER(_table_items); \
+    uint32_t optimal_build_row_index = asof_buffer[build_index]->find_asof_match(probe_asof_value);         \
                                                                                                               \
             if (optimal_build_row_index != 0) {                                                               \
                 COWAIT_IF_CHUNK_FULL()                                                                        \
@@ -1365,8 +1361,8 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
             PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index)) \
                                                                                                               \
             AsofColumnCppType probe_asof_value = asof_probe_temporal_values[i];                               \
-            uint32_t optimal_build_row_index =                                                                \
-                    _table_items->find_asof_match<AsofColumnCppType>(build_index, probe_asof_value);          \
+            auto& asof_buffer = ASOF_BUFFER(_table_items); \
+            uint32_t optimal_build_row_index = asof_buffer[build_index]->find_asof_match(probe_asof_value);         \
                                                                                                               \
             if (optimal_build_row_index != 0) {                                                               \
                 /* Found ASOF match */                                                                        \

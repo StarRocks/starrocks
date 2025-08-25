@@ -76,4 +76,5 @@ INSTANTIATE_ASOF_VECTOR(DateValue)
 INSTANTIATE_ASOF_VECTOR(TimestampValue)
 
 #undef INSTANTIATE_ASOF_VECTOR
+
 } // namespace starrocks

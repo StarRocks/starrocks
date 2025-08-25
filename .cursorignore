@@ -1,0 +1,51 @@
+# Java 编译产物
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+
+# Maven 构建目录
+target/
+**/target/**
+
+# Gradle 构建目录
+build/
+**/build/**
+.gradle/
+**/.gradle/**
+
+# IDE 文件 (避免与 IntelliJ IDEA 冲突)
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+**/out/**
+
+# 临时文件
+*.tmp
+*.temp
+*.log
+*.pid
+
+# Maven 本地仓库
+.m2/
+**/.m2/**
+
+# Java 工具生成的文件
+hs_err_pid*
+replay_pid*
+
+# 编译缓存
+.vscode/
+!.vscode/settings.json
+
+# StarRocks 特定的构建目录
+be/build/
+be/cmake-build-*/
+fe/build/
+java-extensions/target/
+gensrc/build/
+thirdparty/installed/
+
