@@ -673,8 +673,11 @@ Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& ta
 
 Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& snapshot_dir, int64_t snapshot_version,
                                                bool incremental_snapshot) {
-    if (tablet->max_version().second >= snapshot_version) {
-        return Status::OK();
+    {
+        std::shared_lock lock(tablet->get_header_lock());
+        if (tablet->max_version().second >= snapshot_version) {
+            return Status::OK();
+        }
     }
 
     if (tablet->updates() != nullptr) {
