@@ -1,4 +1,4 @@
-他のオブジェクトストレージ用のストレージボリュームを作成し、デフォルトのストレージボリュームを設定する方法については、 [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) および [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md) を参照してください。
+他のオブジェクトストレージ用のストレージボリュームの作成方法およびデフォルトのストレージボリュームの設定方法については、[CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) および [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md) を参照してください。
 
 ### データベースとクラウドネイティブテーブルを作成する
 
@@ -86,4 +86,4 @@ mysql> SHOW PROC "/dbs/xxxxx";
 
 > **NOTE**
 >
-> 共有データ StarRocks クラスターは [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md) をサポートしていません。
+> 共有データ StarRocks クラスターは、v3.4.0 から [同期マテリアライズドビュー](../../using_starrocks/Materialized_view-single_table.md) をサポートしています。
