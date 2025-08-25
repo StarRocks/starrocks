@@ -1731,4 +1731,5 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
+CONF_mBool(disable_delete_tablets, "false");
 } // namespace starrocks::config

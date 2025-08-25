@@ -711,6 +711,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_ids.begin(), tablet_ids.end()));
 
+    RETURN_IF(config::disable_delete_tablets, Status::OK());
+
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
 
     std::unordered_set<int64_t> bundle_tablet_versions;
