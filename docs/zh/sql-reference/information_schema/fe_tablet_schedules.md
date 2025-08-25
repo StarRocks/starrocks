@@ -15,7 +15,7 @@ displayed_sidebar: docs
 | PARTITION_ID              | Tablet 所属分区的 ID。                 |
 | TYPE                      | 任务的类型。有效值：`REPAIR` 和 `BALANCE`。|
 | STATE                     | 任务的状态。                           |
-| SCHEDULE_REASON           | 任务的原因。                           |
+| SCHEDULE_REASON           | 任务调度的原因。                       |
 | MEDIUM                    | Tablet 所在的存储介质。                |
 | PRIORITY                  | 任务当前的优先级。                     |
 | ORIG_PRIORITY             | 任务最初的优先级。                     |
