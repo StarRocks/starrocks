@@ -233,7 +233,7 @@ public class SecurityIntegrationTest {
 
         Assertions.assertThrows(AuthenticationException.class, () ->
                 ldapAuthProviderForNative.authenticate(
-                        context,
+                        context.getAuthenticationContext(),
                         new UserIdentity("admin", "%"),
                         "x".getBytes(StandardCharsets.UTF_8)));
     }

@@ -38,7 +38,18 @@ import java.util.stream.Collectors;
 public class AuthenticationHandler {
     private static final Logger LOG = LogManager.getLogger(AuthenticationHandler.class);
 
-    public static UserIdentity authenticate(ConnectContext context, String user, String remoteHost, byte[] authResponse)
+    /**
+     * Authenticate user
+     *
+     * @param context      the connection context
+     * @param user         username
+     * @param remoteHost   remote host address
+     * @param authResponse authentication response from client
+     * @return authenticated user identity
+     * @throws AuthenticationException when authentication fails
+     */
+    public static UserIdentity authenticate(ConnectContext context, String user, String remoteHost,
+                                            byte[] authResponse)
             throws AuthenticationException {
         if (user == null || user.isEmpty()) {
             throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "", authResponse.length == 0 ? "NO" : "YES");
@@ -50,11 +61,12 @@ public class AuthenticationHandler {
          * For example, a meaningless authentication of OAuth2 may cause a long wait.
          */
         AuthenticationResult authenticationResult;
-        authenticationResult = authenticateWithNative(context, user, remoteHost, authResponse);
+        authenticationResult = authenticateWithNative(context.getAuthenticationContext(), user, remoteHost, authResponse);
 
         // If the user does not exist in the native authentication method, authentication is performed in Security Integration
         if (authenticationResult == null) {
-            authenticationResult = authenticateWithSecurityIntegration(context, user, remoteHost, authResponse);
+            authenticationResult =
+                    authenticateWithSecurityIntegration(context.getAuthenticationContext(), user, remoteHost, authResponse);
         }
 
         if (authenticationResult == null) {
@@ -65,7 +77,7 @@ public class AuthenticationHandler {
         return authenticationResult.authenticatedUser;
     }
 
-    private static AuthenticationResult authenticateWithNative(ConnectContext context, String user, String remoteHost,
+    private static AuthenticationResult authenticateWithNative(AuthenticationContext authContext, String user, String remoteHost,
                                                                byte[] authResponse)
             throws AuthenticationException {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
@@ -92,18 +104,18 @@ public class AuthenticationHandler {
             }
 
             Preconditions.checkState(provider != null);
-            context.setAuthenticationProvider(provider);
+            authContext.setAuthenticationProvider(provider);
 
             if (Config.enable_auth_check) {
                 //Throw an exception directly and feedback to the client
-                provider.authenticate(context, matchedUserIdentity.getKey(), authResponse);
+                provider.authenticate(authContext, matchedUserIdentity.getKey(), authResponse);
             }
 
             return new AuthenticationResult(matchedUserIdentity.getKey(), List.of(Config.group_provider), null);
         }
     }
 
-    private static AuthenticationResult authenticateWithSecurityIntegration(ConnectContext context,
+    private static AuthenticationResult authenticateWithSecurityIntegration(AuthenticationContext authContext,
                                                                             String user,
                                                                             String remoteHost,
                                                                             byte[] authResponse) throws AuthenticationException {
@@ -123,14 +135,14 @@ public class AuthenticationHandler {
             }
 
             if (!Objects.requireNonNull(AuthPlugin.covertFromServerToClient(securityIntegration.getType()))
-                    .equalsIgnoreCase(context.getAuthPlugin())) {
+                    .equalsIgnoreCase(authContext.getAuthPlugin())) {
                 continue;
             }
 
             AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
             try {
-                context.setAuthenticationProvider(provider);
-                provider.authenticate(context, UserIdentity.createEphemeralUserIdent(user, remoteHost), authResponse);
+                authContext.setAuthenticationProvider(provider);
+                provider.authenticate(authContext, UserIdentity.createEphemeralUserIdent(user, remoteHost), authResponse);
             } catch (AuthenticationException e) {
                 exceptions.add(new Pair<>(authMechanism, e));
                 continue;
@@ -152,7 +164,8 @@ public class AuthenticationHandler {
         return authenticationResult;
     }
 
-    private static void setAuthenticationResultToContext(ConnectContext context, AuthenticationResult authenticationResult)
+    private static void setAuthenticationResultToContext(ConnectContext context,
+                                                         AuthenticationResult authenticationResult)
             throws AuthenticationException {
         String user = authenticationResult.authenticatedUser.getUser();
 
