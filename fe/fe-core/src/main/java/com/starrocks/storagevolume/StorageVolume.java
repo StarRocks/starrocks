@@ -29,6 +29,7 @@ import com.staros.proto.GSFileStoreInfo;
 import com.staros.proto.HDFSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
@@ -38,10 +39,12 @@ import com.starrocks.credential.CloudType;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.solr.common.StringUtils;
 
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,13 +63,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     // can not be handled. They will be treated as the same storage volume.
     @SerializedName("i")
     private String id;
-
-    // `uniqueId` is introduced as a globally unique identifier with long value. Its persistence is guranteed
-    // by the file store related to this storage volume.
-    // In scenarios like shared-data cluster replication, this `uniqueId` is needed to act as the virtual tablet id
-    // that point to storage infos on the source cluster.
-    @SerializedName("ui")
-    private long uniqueId;
 
     @SerializedName("n")
     private String name;
@@ -88,6 +84,9 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     @SerializedName("e")
     private boolean enabled;
 
+    @SerializedName("vt")
+    private Pair<Long, Long> vTabletIdToGroupIdPair;
+
     public static String CREDENTIAL_MASK = "******";
 
     private String dumpMaskedParams(Map<String, String> params) {
@@ -98,9 +97,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public StorageVolume(String id, String name, String svt, List<String> locations,
-                         Map<String, String> params, boolean enabled, String comment, long uniqueId) throws DdlException {
+                         Map<String, String> params, boolean enabled, String comment) throws DdlException {
         this.id = id;
-        this.uniqueId = uniqueId;
         this.name = name;
         this.svt = toStorageVolumeType(svt);
         this.locations = new ArrayList<>(locations);
@@ -118,7 +116,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public StorageVolume(StorageVolume sv) throws DdlException {
         this.id = sv.id;
-        this.uniqueId = sv.uniqueId;
         this.name = sv.name;
         this.svt = sv.svt;
         this.locations = new ArrayList<>(sv.locations);
@@ -165,14 +162,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         return id;
     }
 
-    public long getUniqueId() {
-        return uniqueId;
-    }
-
-    public void setUniqueId(long uniqueId) {
-        this.uniqueId = uniqueId;
-    }
-
     public String getName() {
         return name;
     }
@@ -183,6 +172,14 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public Boolean getEnabled() {
         return enabled;
+    }
+
+    public Pair<Long, Long> getVTabletIdToGroupIdPair() {
+        return vTabletIdToGroupIdPair;
+    }
+
+    public void setVTabletIdToGroupIdPair(Pair<Long, Long> vTabletIdToGroupIdPair) {
+        this.vTabletIdToGroupIdPair = vTabletIdToGroupIdPair;
     }
 
     public void setComment(String comment) {
@@ -274,13 +271,15 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public static FileStoreInfo createFileStoreInfo(String name, String svt,
                                                     List<String> locations, Map<String, String> params,
                                                     boolean enabled, String comment) throws DdlException {
-        StorageVolume sv = new StorageVolume("", name, svt, locations, params, enabled, comment, -1);
+        StorageVolume sv = new StorageVolume("", name, svt, locations, params, enabled, comment);
         return sv.toFileStoreInfo();
     }
 
     public FileStoreInfo toFileStoreInfo() {
-        Map<String, String> properties = new HashMap<>();
-        properties.put("unique_id", String.valueOf(uniqueId));
+        return toFileStoreInfo(Collections.emptyMap());
+    }
+
+    public FileStoreInfo toFileStoreInfo(Map<String, String> properties) {
         FileStoreInfo.Builder builder = cloudConfiguration.toFileStoreInfo().toBuilder();
         builder.setFsKey(id)
                 .setFsName(this.name)
@@ -294,10 +293,18 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) throws DdlException {
         String svt = fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
-        String uniqueId = fsInfo.getPropertiesMap().get("unique_id");
-        return new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
-                fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment(),
-                uniqueId == null || uniqueId.isEmpty() ? -1L : Long.parseLong(uniqueId));
+        StorageVolume storageVolume = new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
+                fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment());
+
+        Map<String, String> propertiesMap = fsInfo.getPropertiesMap();
+        if (propertiesMap.containsKey("v_shard_id") && propertiesMap.containsKey("v_shard_group_id")) {
+            String vTabletIdStr = propertiesMap.get("v_shard_id");
+            String vTabletIdGroupIdStr = propertiesMap.get("v_shard_group_id");
+            Long vTabletId = StringUtils.isEmpty(vTabletIdStr) ? -1L : Long.parseLong(vTabletIdStr);
+            Long vTabletIdGroupId = StringUtils.isEmpty(vTabletIdGroupIdStr) ? -1L : Long.parseLong(vTabletIdGroupIdStr);
+            storageVolume.setVTabletIdToGroupIdPair(Pair.create(vTabletId, vTabletIdGroupId));
+        }
+        return storageVolume;
     }
 
     public static Map<String, String> getParamsFromFileStoreInfo(FileStoreInfo fsInfo) {

@@ -20,6 +20,8 @@ import com.staros.client.StarClientException;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -83,7 +85,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
@@ -210,7 +211,6 @@ public class SharedDataStorageVolumeMgrTest {
                 .getEndpoint());
         StorageVolume sv1 = svm.getStorageVolume(sv.getId());
         Assertions.assertEquals(sv1.getId(), sv.getId());
-        Assertions.assertEquals(sv1.getUniqueId(), sv.getUniqueId());
         try {
             svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
             Assertions.fail();
@@ -219,32 +219,29 @@ public class SharedDataStorageVolumeMgrTest {
         }
 
         // update
-        StorageVolume svBeforeUpdate = svm.getStorageVolumeByName(svName);
         storageParams.put(AWS_S3_REGION, "region1");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint1");
         storageParams.put(AWS_S3_ACCESS_KEY, "ak");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         try {
-            svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(false), "test update", -1);
+            svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(false), "test update");
             Assertions.fail();
         } catch (IllegalStateException e) {
             Assertions.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
         storageParams.put("aaa", "bbb");
         Assertions.assertThrows(DdlException.class, () ->
-                svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update", -1));
+                svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update"));
         storageParams.remove("aaa");
-        svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update", -1);
-        StorageVolume svUpdated = svm.getStorageVolumeByName(svName);
-        cloudConfiguration = svUpdated.getCloudConfiguration();
+        svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update");
+        sv = svm.getStorageVolumeByName(svName);
+        cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals("region1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getRegion());
         Assertions.assertEquals("endpoint1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getEndpoint());
-        Assertions.assertEquals("test update", svUpdated.getComment());
-        Assertions.assertEquals(true, svUpdated.getEnabled());
-        Assertions.assertEquals(svBeforeUpdate.getId(), svUpdated.getId());
-        Assertions.assertEquals(svBeforeUpdate.getUniqueId(), svUpdated.getUniqueId());
+        Assertions.assertEquals("test update", sv.getComment());
+        Assertions.assertEquals(true, sv.getEnabled());
 
         // set default storage volume
         try {
@@ -254,10 +251,10 @@ public class SharedDataStorageVolumeMgrTest {
             Assertions.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
         svm.setDefaultStorageVolume(svName);
-        Assertions.assertEquals(svUpdated.getId(), svm.getDefaultStorageVolumeId());
+        Assertions.assertEquals(sv.getId(), svm.getDefaultStorageVolumeId());
 
         Throwable ex = Assertions.assertThrows(IllegalStateException.class,
-                () -> svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(false), "", -1));
+                () -> svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(false), ""));
         Assertions.assertEquals("Default volume can not be disabled", ex.getMessage());
 
         // remove
@@ -272,7 +269,7 @@ public class SharedDataStorageVolumeMgrTest {
         Assertions.assertEquals("Storage volume 'test1' does not exist", ex.getMessage());
 
         svm.createStorageVolume(svName1, "S3", locations, storageParams, Optional.of(false), "");
-        svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(true), "test update", -1);
+        svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(true), "test update");
         svm.setDefaultStorageVolume(svName1);
 
         sv = svm.getStorageVolumeByName(svName);
@@ -296,14 +293,14 @@ public class SharedDataStorageVolumeMgrTest {
             Map<String, String> modifyParams = new HashMap<>();
             modifyParams.put(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX, "true");
             Assertions.assertThrows(DdlException.class, () ->
-                    svm.updateStorageVolume(svName, null, null, modifyParams, Optional.of(false), "", -1));
+                    svm.updateStorageVolume(svName, null, null, modifyParams, Optional.of(false), ""));
         }
 
         {
             Map<String, String> modifyParams = new HashMap<>();
             modifyParams.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX, "12");
             Assertions.assertThrows(DdlException.class, () ->
-                    svm.updateStorageVolume(svName, null, null, modifyParams, Optional.of(false), "", -1));
+                    svm.updateStorageVolume(svName, null, null, modifyParams, Optional.of(false), ""));
         }
     }
 
@@ -324,7 +321,7 @@ public class SharedDataStorageVolumeMgrTest {
         Assertions.assertTrue(svm.bindDbToStorageVolume(svName, 1L));
         Assertions.assertTrue(svm.bindTableToStorageVolume(svName, 1L, 1L));
 
-        svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(false), "test update", -1);
+        svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(false), "test update");
         // disabled storage volume can not be bound.
         Throwable ex = Assertions.assertThrows(DdlException.class, () -> svm.bindDbToStorageVolume(svName, 1L));
         Assertions.assertEquals(String.format("Storage volume %s is disabled", svName), ex.getMessage());
@@ -934,7 +931,7 @@ public class SharedDataStorageVolumeMgrTest {
 
         storageParams.put("dfs.client.failover.proxy.provider",
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
-        svm.updateStorageVolume("test", null, null, storageParams, Optional.of(false), "", -1);
+        svm.updateStorageVolume("test", null, null, storageParams, Optional.of(false), "");
         Assertions.assertEquals(false, svm.getStorageVolumeByName(svName).getEnabled());
     }
 
@@ -1033,7 +1030,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testGetOrCreateVirtualTabletIdAfertResetUniqueId()
+    public void testGetOrCreateVirtualTabletIdNormal()
             throws DdlException, AlreadyExistsException, StarClientException {
 
         long expectedVirtualTabletId = 20001;
@@ -1061,7 +1058,7 @@ public class SharedDataStorageVolumeMgrTest {
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         String svKey = svm.createStorageVolume(storageVolumeName, "S3", locations, storageParams, Optional.empty(), "");
-        Assertions.assertEquals(true, svm.exists(storageVolumeName));
+        Assertions.assertTrue(svm.exists(storageVolumeName));
         Assertions.assertEquals(storageVolumeName, svm.getStorageVolumeName(svKey));
 
         long groupId = 1001L;
@@ -1086,19 +1083,109 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testHasVirtualTabletIdBinded() {
+    public void testGetOrCreateVirtualTabletIdWhileStorageVolumeAlreadyHasVirtualTabletId()
+            throws DdlException, AlreadyExistsException {
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            Map<String, FileStoreInfo> fileStores = new HashMap<>();
+            private long id = 1;
+            final long existedShardId = 10001L;
+            final long existedGroupId = 20001L;
+
+            @Mock
+            public String addFileStore(FileStoreInfo fsInfo) {
+                if (fsInfo.getFsKey().isEmpty()) {
+                    Map<String, String> properties = new HashMap<>();
+                    properties.put("v_shard_id", String.valueOf(existedShardId));
+                    properties.put("v_shard_group_id", String.valueOf(existedGroupId));
+                    fsInfo = fsInfo.toBuilder().setFsKey(String.valueOf(id++)).putAllProperties(properties).build();
+                }
+                fileStores.put(fsInfo.getFsKey(), fsInfo);
+                return fsInfo.getFsKey();
+            }
+
+            @Mock
+            public FileStoreInfo getFileStoreByName(String fsName) {
+                for (FileStoreInfo fsInfo : fileStores.values()) {
+                    if (fsInfo.getFsName().equals(fsName)) {
+                        return fsInfo;
+                    }
+                }
+                return null;
+            }
+
+            @Mock
+            public FileStoreInfo getFileStore(String fsKey) {
+                return fileStores.get(fsKey);
+            }
+        };
+
+        String storageVolumeName = "test_sv";
+        String srcServiceId = "test_service_id";
+
+        // create
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
-        long groupId = 10001L;
-        Assertions.assertFalse(svm.hasVirtualTabletIdBinded(groupId));
+        String svKey = svm.createStorageVolume(storageVolumeName, "S3", locations, storageParams, Optional.empty(), "");
+        Assertions.assertTrue(svm.exists(storageVolumeName));
+        Assertions.assertEquals(storageVolumeName, svm.getStorageVolumeName(svKey));
 
-        long expectedVirtualTabletId = 20001L;
-        Map<String, Pair<Long, Long>> storageVolumeNameToShardMap = new ConcurrentHashMap<>();
-        storageVolumeNameToShardMap.put("test_sv", Pair.create(expectedVirtualTabletId, groupId));
-        Deencapsulation.setField(svm, "storageVolumeNameToShardMap", storageVolumeNameToShardMap);
+        long existedShardId = 10001L;
+        long existedGroupId = 20001L;
+        StorageVolume storageVolume = svm.getStorageVolumeByName(storageVolumeName);
+        storageVolume.setVTabletIdToGroupIdPair(Pair.create(existedShardId, existedGroupId));
 
-        Assertions.assertTrue(svm.hasVirtualTabletIdBinded(groupId));
+        ExceptionChecker.expectThrowsNoException(() -> {
+            Assertions.assertEquals(existedShardId, svm.getOrCreateVirtualTabletId(storageVolumeName, srcServiceId));
+        });
+    }
 
-        // test groupId not found
-        Assertions.assertFalse(svm.hasVirtualTabletIdBinded(groupId + 1));
+    @Test
+    public void testHasStorageVolumeBindAsVirtualGroup() throws DdlException {
+
+        S3FileStoreInfo s3FsInfo = S3FileStoreInfo.newBuilder()
+                .setRegion("region").setEndpoint("endpoint").build();
+
+        long existedShardId = 10001L;
+        long existedGroupId = 20001L;
+        long notExistedGroupId = 30001L;
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("v_shard_id", String.valueOf(existedShardId));
+        properties.put("v_shard_group_id", String.valueOf(existedGroupId));
+
+        FileStoreInfo fsInfo1 = FileStoreInfo.newBuilder().setFsKey("test-fskey-1")
+                .setFsName("test-fsname-1").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo)
+                .putAllProperties(properties).build();
+        FileStoreInfo fsInfo2 = FileStoreInfo.newBuilder().setFsKey("test-fskey-2")
+                .setFsName("test-fsname-2").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo).build();
+
+        List<FileStoreInfo> fileStoreInfos = new ArrayList<>();
+        fileStoreInfos.add(fsInfo1);
+        fileStoreInfos.add(fsInfo2);
+
+        new Expectations() {
+            {
+                starOSAgent.listFileStore();
+                result = fileStoreInfos;
+                minTimes = 0;
+            }
+        };
+
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        Assertions.assertTrue(svm.hasStorageVolumeBindAsVirtualGroup(existedGroupId));
+        Assertions.assertFalse(svm.hasStorageVolumeBindAsVirtualGroup(notExistedGroupId));
     }
 }

@@ -253,8 +253,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             return false;
         }
 
-        if (GlobalStateMgr.getCurrentState().getStorageVolumeMgr().hasVirtualTabletIdBinded(shardGroupId)) {
-            LOG.debug("shard group {} can not be delete shard for now, because it has shard bind to storage volume",
+        if (GlobalStateMgr.getCurrentState().getStorageVolumeMgr().hasStorageVolumeBindAsVirtualGroup(shardGroupId)) {
+            LOG.debug("shard group {} can not be deleted for now, because it has been bind to storage volume",
                     shardGroupId);
             return false;
         }

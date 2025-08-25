@@ -251,7 +251,7 @@ public class StarMgrMetaSyncerTest {
 
         new MockUp<StorageVolumeMgr>() {
             @Mock
-            public boolean hasVirtualTabletIdBinded(String shardGroupoupId) {
+            public boolean hasStorageVolumeBindAsVirtualGroup(String shardGroupoupId) {
                 return false;
             }
         };
