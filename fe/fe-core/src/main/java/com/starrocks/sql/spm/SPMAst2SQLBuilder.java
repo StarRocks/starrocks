@@ -88,7 +88,6 @@ public class SPMAst2SQLBuilder {
             options.setHideCredential(true);
             options.setEnableDigest(false);
             options.setEnableNewLine(false);
-            options.setPrintLevelCompound(false);
         }
 
         public FormatOptions getOptions() {
