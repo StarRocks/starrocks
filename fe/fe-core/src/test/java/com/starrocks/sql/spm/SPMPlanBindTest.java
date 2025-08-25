@@ -168,11 +168,11 @@ public class SPMPlanBindTest extends PlanTestBase {
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
         generator.execute();
         assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2` FROM `test`.`t0` , `test`.`t1`  "
-                + "WHERE (`test`.`t0`.`v3` = `test`.`t1`.`v6` AND `test`.`t0`.`v2` IN (?))");
+                + "WHERE (`test`.`t0`.`v3` = `test`.`t1`.`v6`) AND (`test`.`t0`.`v2` IN (?))");
 
         assertContains(generator.getBindSql(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2` "
-                + "FROM `test`.`t0` , `test`.`t1`  WHERE (`test`.`t0`.`v3` = `test`.`t1`.`v6` "
-                + "AND `test`.`t0`.`v2` IN (_spm_const_list(1, 1, 2, 3, 4)))");
+                + "FROM `test`.`t0` , `test`.`t1`  WHERE (`test`.`t0`.`v3` = `test`.`t1`.`v6`) "
+                + "AND (`test`.`t0`.`v2` IN (_spm_const_list(1, 1, 2, 3, 4)))");
 
         assertContains(generator.getPlanStmtSQL(),
                 "SELECT v2, v4 FROM (SELECT * FROM t0 WHERE v2 IN (_spm_const_list(1, 1, 2, 3, 4))) t_0 "
@@ -191,13 +191,15 @@ public class SPMPlanBindTest extends PlanTestBase {
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
         generator.execute();
         assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2` "
-                + "FROM `test`.`t0` , `test`.`t1`  WHERE (`test`.`t0`.`v3` = `test`.`t1`.`v6` "
-                + "AND `test`.`t0`.`v2` IN (?) AND `test`.`t1`.`v5` = ?)");
+                + "FROM `test`.`t0` , `test`.`t1`  "
+                + "WHERE ((`test`.`t0`.`v3` = `test`.`t1`.`v6`) "
+                + "AND (`test`.`t0`.`v2` IN (?))) AND (`test`.`t1`.`v5` = ?)");
 
         assertContains(generator.getBindSql(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2` "
-                + "FROM `test`.`t0` , `test`.`t1`  WHERE (`test`.`t0`.`v3` = `test`.`t1`.`v6` "
-                + "AND `test`.`t0`.`v2` IN (_spm_const_list(1, 10, 11)) "
-                + "AND `test`.`t1`.`v5` = _spm_const_var(2, 5))");
+                + "FROM `test`.`t0` , `test`.`t1`  "
+                + "WHERE ((`test`.`t0`.`v3` = `test`.`t1`.`v6`) "
+                + "AND (`test`.`t0`.`v2` IN (_spm_const_list(1, 10, 11)))) "
+                + "AND (`test`.`t1`.`v5` = _spm_const_var(2, 5))");
 
         assertContains(generator.getPlanStmtSQL(),
                 "SELECT v2, v4 FROM (SELECT * FROM t0 WHERE v2 IN (_spm_const_list(1, 10, 11))) t_0 "
@@ -217,13 +219,15 @@ public class SPMPlanBindTest extends PlanTestBase {
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
         generator.execute();
         assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2` "
-                + "FROM `test`.`t0` , `test`.`t1`  WHERE (`test`.`t0`.`v3` = `test`.`t1`.`v6` "
-                + "AND `test`.`t0`.`v2` IN (?) AND `test`.`t1`.`v5` = ?)");
+                + "FROM `test`.`t0` , `test`.`t1`  "
+                + "WHERE ((`test`.`t0`.`v3` = `test`.`t1`.`v6`) "
+                + "AND (`test`.`t0`.`v2` IN (?))) AND (`test`.`t1`.`v5` = ?)");
 
         assertContains(generator.getBindSql(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2` "
-                + "FROM `test`.`t0` , `test`.`t1`  WHERE (`test`.`t0`.`v3` = `test`.`t1`.`v6` "
-                + "AND `test`.`t0`.`v2` IN (_spm_const_list(1, 10, 11)) "
-                + "AND `test`.`t1`.`v5` = _spm_const_var(2, 1))");
+                + "FROM `test`.`t0` , `test`.`t1`  "
+                + "WHERE ((`test`.`t0`.`v3` = `test`.`t1`.`v6`) "
+                + "AND (`test`.`t0`.`v2` IN (_spm_const_list(1, 10, 11)))) "
+                + "AND (`test`.`t1`.`v5` = _spm_const_var(2, 1))");
 
         assertContains(generator.getPlanStmtSQL(), "SELECT v2, v4 FROM "
                 + "(SELECT * FROM t0 WHERE v2 IN (_spm_const_list(1, 10, 11))) t_0 "
