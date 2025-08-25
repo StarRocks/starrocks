@@ -100,13 +100,12 @@ public class RestBaseActionTest {
     public void testGetOtherAliveFronts() {
         new MockUp<RestBaseAction>() {
             @Mock
-            public static List<Pair<String, Integer>> getAllAliveFe(){
+            public static List<Pair<String, Integer>> getAllAliveFe() {
                 return List.of(
                         new Pair<>("fe1", 8030),
                         new Pair<>("fe2", 8031)
                 );
-
-        }
+            }
 
             @Mock
             public static Pair<String, Integer> getCurrentFe() {
