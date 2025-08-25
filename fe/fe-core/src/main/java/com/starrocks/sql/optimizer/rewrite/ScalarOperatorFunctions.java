@@ -803,7 +803,7 @@ public class ScalarOperatorFunctions {
             if (scaleValue != 3 && scaleValue != 6) {
                 return ConstantOperator.NULL;
             }
-            seconds /= (long) Math.pow(10, scaleValue);
+            seconds = Math.floorDiv(seconds, (long) Math.pow(10, scaleValue));
         }
         if (seconds < 0 || seconds > TimeUtils.MAX_UNIX_TIMESTAMP) {
             return ConstantOperator.NULL;

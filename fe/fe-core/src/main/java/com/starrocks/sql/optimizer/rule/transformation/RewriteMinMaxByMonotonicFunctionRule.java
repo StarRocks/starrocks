@@ -38,8 +38,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.OperatorFunctionChecker;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
@@ -118,7 +120,7 @@ public class RewriteMinMaxByMonotonicFunctionRule extends TransformationRule {
                     .getStats(new ColumnIdentifier(table.getId(), column.getColumnId()),
                             new StatsVersion(-1, lastUpdateTime));
             if (minMax.isPresent()) {
-                return true;
+                return validateArgumentDomain(projected, minMax.get());
             }
         }
         return false;
@@ -251,6 +253,33 @@ public class RewriteMinMaxByMonotonicFunctionRule extends TransformationRule {
             }
             // require one child which is column
             return !call.getChildren().isEmpty() && call.getChild(0).isColumnRef();
+        }
+        return false;
+    }
+
+    private static boolean validateArgumentDomain(ScalarOperator projected, IMinMaxStatsMgr.ColumnMinMax minMax) {
+        FunctionWithChild fnWithChild = extractFunctionAndChild(projected);
+        String functionName = fnWithChild.call.getFunction().functionName();
+        if (functionName.equalsIgnoreCase(FunctionSet.FROM_UNIXTIME) ||
+                functionName.equalsIgnoreCase(FunctionSet.TO_DATETIME)) {
+            long minValue = Long.parseLong(minMax.minValue());
+            long maxValue = Long.parseLong(minMax.maxValue());
+            ConstantOperator scale = ConstantOperator.createInt(0);
+            if (fnWithChild.call.getArguments().size() > 1) {
+                ScalarOperator arg0 = fnWithChild.call.getArguments().get(1);
+                if (!(arg0 instanceof ConstantOperator)) {
+                    return false;
+                }
+                scale = (ConstantOperator) arg0;
+            }
+            if (ScalarOperatorFunctions.toDatetime(ConstantOperator.createBigint(minValue), scale).isNull()) {
+                return false;
+            }
+            if (ScalarOperatorFunctions.toDatetime(ConstantOperator.createBigint(maxValue), scale).isNull()) {
+                return false;
+            }
+
+            return true;
         }
         return false;
     }

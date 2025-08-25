@@ -108,6 +108,19 @@ public class MinMaxMonotonicRewriteTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertNotContains(plan, expectedAggregation);
         }
+
+        {
+            // invalid MinMaxStats
+            new MockUp<ColumnMinMaxMgr>() {
+                @Mock
+                public Optional<IMinMaxStatsMgr.ColumnMinMax> getStats(ColumnIdentifier identifier,
+                                                                       StatsVersion version) {
+                    return Optional.of(new IMinMaxStatsMgr.ColumnMinMax("-1", "100"));
+                }
+            };
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, expectedAggregation);
+        }
     }
 
     @ParameterizedTest
