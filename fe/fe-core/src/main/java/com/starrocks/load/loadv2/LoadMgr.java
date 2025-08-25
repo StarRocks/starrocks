@@ -473,11 +473,11 @@ public class LoadMgr implements MemoryTrackable {
             // remove the ones that finished earlier
             int numJobsToRemove = idToLoadJob.size() - Config.label_keep_max_num;
             if (numJobsToRemove > 0) {
-                LOG.info("remove {} jobs from {}", numJobsToRemove, jobs.size());
+                LOG.debug("remove {} jobs from {}", numJobsToRemove, jobs.size());
                 Iterator<LoadJob> iterator = jobs.iterator();
                 for (int i = 0; i != numJobsToRemove && iterator.hasNext(); ++i) {
                     LoadJob job = iterator.next();
-                    LOG.info("remove redundant job: {}", job.getLabel());
+                    LOG.debug("remove redundant job: {}", job.getLabel());
                     unprotectedRemoveJobReleatedMeta(job);
                 }
             }
