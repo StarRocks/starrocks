@@ -280,6 +280,117 @@ capacityCoefficient= 2 * Disk utilization - 0.5
 
 Tablet Scheduler が tablet をスケジュールするたびに、Load Balancer を通じてバランスされる候補の tablet として一定数の健全な tablet を選択します。次回 tablet をスケジュールする際、Tablet Scheduler はこれらの健全な tablet をバランスします。
 
+### システム全体のバランス状態を確認する
+
+システム全体の現在のバランス状態と、さまざまなバランスタイプの詳細を確認できます。
+
+- **システム全体の現在のバランス状態を確認する:**
+
+  ```SQL
+  SHOW PROC '/cluster_balance/balance_stat';
+  ```
+
+  例:
+
+  ```Plain
+  +---------------+--------------------------------+----------+----------------+----------------+
+  | StorageMedium | BalanceType                    | Balanced | PendingTablets | RunningTablets |
+  +---------------+--------------------------------+----------+----------------+----------------+
+  | HDD           | inter-node disk usage          | true     | 0              | 0              |
+  | HDD           | inter-node tablet distribution | true     | 0              | 0              |
+  | HDD           | intra-node disk usage          | true     | 0              | 0              |
+  | HDD           | intra-node tablet distribution | true     | 0              | 0              |
+  | HDD           | colocation group               | true     | 0              | 0              |
+  | HDD           | label-aware location           | true     | 0              | 0              |
+  +---------------+--------------------------------+----------+----------------+----------------+
+  ```
+
+  - `StorageMedium`: ストレージメディア。
+  - `BalanceType`: バランス状態の種類。
+  - `Balanced`: バランス状態が達成されているかどうか。
+  - `PendingTablets`: タスク状態が「Pending」のTabletの数。
+  - `RunningTablets`: タスク状態が「Running」のTabletの数。
+
+- **ノードごとのディスク使用率のバランスを確認する:**
+
+  ```SQL
+  SHOW PROC '/cluster_balance/cluster_load_stat';
+  ```
+
+  例:
+
+  ```Plain
+  +---------------+----------------------------------------------------------------------------------------------------------------------+
+  | StorageMedium | ClusterDiskBalanceStat                                                                                               |
+  +---------------+----------------------------------------------------------------------------------------------------------------------+
+  | HDD           | {"balanced":false,"maxBeId":1,"minBeId":2,"maxUsedPercent":0.9,"minUsedPercent":0.1,"type":"INTER_NODE_DISK_USAGE"}  |
+  | SSD           | {"balanced":true}                                                                                                    |
+  +---------------+----------------------------------------------------------------------------------------------------------------------+
+  ```
+
+  - `StorageMedium`: ストレージメディア。  
+  - `ClusterDiskBalanceStat`: ディスク使用量に基づくノード間のバランス状態。バランスが取れていない場合、最大と最小のディスク使用率と対応する BE を表示します。
+
+- **ノード内のディスク使用量のバランスを確認する:**
+
+  ```SQL
+  SHOW PROC '/cluster_balance/cluster_load_stat/HDD';
+  ```
+
+  例:
+
+  ```Plain
+  +-------+-----------------+-----------+--------------+--------------+-------------+------------+----------+-----------+-------+-------+---------------------------------------------------------------------------------------------------------------------------------------------+
+  | BeId  | Cluster         | Available | UsedCapacity | Capacity     | UsedPercent | ReplicaNum | CapCoeff | ReplCoeff | Score | Class | BackendDiskBalanceStat                                                                                                                      |
+  +-------+-----------------+-----------+--------------+--------------+-------------+------------+----------+-----------+-------+-------+---------------------------------------------------------------------------------------------------------------------------------------------+
+  | 10004 | default_cluster | true      | 651509602    | 243695955810 | 0.267       | 339        | 0.5      | 0.5       | 1.0   | MID   | {"maxUsedPercent":0.9,"minUsedPercent":0.1,"beId":1,"maxPath":"/disk1","minPath":"/disk2","type":"INTRA_NODE_DISK_USAGE","balanced":false}  |
+  | 10005 | default_cluster | true      | 651509602    | 243695955810 | 0.267       | 339        | 0.5      | 0.5       | 1.0   | MID   | {"balanced":true}                                                                                                                           |
+  +-------+-----------------+-----------+--------------+--------------+-------------+------------+----------+-----------+-------+-------+---------------------------------------------------------------------------------------------------------------------------------------------+
+  ```
+
+  - `BeId`: BEノードのID。  
+  - `BackendDiskBalanceStat`: ノード内のディスク間のバランス状態を、ディスクの使用率に基づいて表示します。バランスが取れていない場合、最大と最小のディスク使用率と対応するディスクパスを表示します。
+
+- **Tabletごとのバランスの分布を表示:**
+
+  ```SQL
+  SHOW PROC '/dbs/ssb/lineorder/partitions/lineorder';
+  ```
+
+  例:
+
+  ```Plain
+  +---------+-----------+--------+--------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+  | IndexId | IndexName | State  | LastConsistencyCheckTime | TabletBalanceStat                                                                                                                                  |
+  +---------+-----------+--------+--------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+  | 11129   | lineorder | NORMAL | NULL                     | {"maxTabletNum":23,"minTabletNum":21,"maxBeId":10012,"minBeId":10013,"type":"INTER_NODE_TABLET_DISTRIBUTION","balanced":false}                     |
+  | 11230   | lineorder | NORMAL | NULL                     | {"maxTabletNum":23,"minTabletNum":21,"beId":10012,"maxPath":"/disk1","minPath":"/disk2","type":"INTRA_NODE_TABLET_DISTRIBUTION","balanced":false}  |
+  | 10432   | lineorder | NORMAL | NULL                     | {"tabletId":10435,"currentBes":[10002,10004],"expectedBes":[10003,10004],"type":"COLOCATION_GROUP","balanced":false}                               |
+  | 10436   | lineorder | NORMAL | NULL                     | {"tabletId":10438,"currentBes":[10005,10006],"expectedLocations":{"rack":["rack1","rack2"]},"type":"LABEL_AWARE_LOCATION","balanced":false}        |
+  +---------+-----------+--------+--------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+  ```
+
+  - `IndexId`: パーティション内のマテリアライズドインデックスの ID。  
+  - `TabletBalanceStat`: ノード間またはノード内のTabletの分布のバランス状態。バランスが取れていない場合、不均衡の詳細（Colocation Group、Label-aware Location など）を表示します。
+
+- **不均衡なTablet分布を持つパーティションを表示:**
+
+  ```SQL
+  SELECT DB_NAME, TABLE_NAME, PARTITION_NAME, TABLET_BALANCED FROM information_schema.partitions_meta WHERE TABLET_BALANCED = 0;
+  ```
+
+  例:
+
+  ```Plain
+  +--------------+---------------+----------------+-----------------+
+  | DB_NAME      | TABLE_NAME    | PARTITION_NAME | TABLET_BALANCED |
+  +--------------+---------------+----------------+-----------------+
+  | ssb          | lineorder     | lineorder      |               0 |
+  +--------------+---------------+----------------+-----------------+
+  ```
+
+  - `TABLET_BALANCED`: Tabletの配置がバランスが取れているかどうか。
+
 ### tablet スケジューリングタスクを確認する
 
 保留中、実行中、および完了した tablet スケジューリングタスクを確認できます。
