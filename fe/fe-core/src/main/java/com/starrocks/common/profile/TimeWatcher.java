@@ -32,13 +32,13 @@ public class TimeWatcher {
     private final List<String> levels = Lists.newArrayList();
     private final Table<String, String, ScopedTimer> scopedTimers = HashBasedTable.create();
 
-    public Timer scope(long time, int orderId, String name) {
+    public Timer scope(long time, String name) {
         ScopedTimer t;
         String prefix = String.join("/", levels);
         if (scopedTimers.row(name).containsKey(prefix)) {
             t = scopedTimers.row(name).get(prefix);
         } else {
-            t = new ScopedTimer(time, orderId, name);
+            t = new ScopedTimer(time, name);
             scopedTimers.put(name, prefix, t);
         }
         t.start();
@@ -60,7 +60,7 @@ public class TimeWatcher {
     }
 
     public List<Timer> getAllTimerWithOrder() {
-        return scopedTimers.values().stream().sorted(Comparator.comparingInt(o -> o.getOrderId()))
+        return scopedTimers.values().stream().sorted(Comparator.comparingLong(o -> o.firstTimePoints))
                 .collect(Collectors.toList());
     }
 
@@ -72,13 +72,11 @@ public class TimeWatcher {
 
         private int count = 0;
         private int reentrantCount = 0;
-        private int orderId = 0;
 
-        public ScopedTimer(long time, int orderId, String name) {
+        public ScopedTimer(long time, String name) {
             this.firstTimePoints = time;
             this.name = name;
             this.scopeLevel = levels.size();
-            this.orderId = orderId;
         }
 
         @Override
@@ -106,11 +104,6 @@ public class TimeWatcher {
         @Override
         public long getFirstTimePoint() {
             return firstTimePoints;
-        }
-
-        @Override
-        public int getOrderId() {
-            return orderId;
         }
 
         @Override
