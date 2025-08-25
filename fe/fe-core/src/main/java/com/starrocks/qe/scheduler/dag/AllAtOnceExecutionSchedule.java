@@ -72,9 +72,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
                 return;
             }
             try (TracerContext tracerContext = new TracerContext(currentTracers)) {
-                try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployScanRanges")) {
-                    runOnce();
-                }
+                runOnce();
             }
             // If run in the executor service, we need to start the next turn.
             // To submit this task again so all queries could get the same opportunity to run by queueing up
@@ -82,7 +80,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
         }
 
         public void runOnce() {
-            try {
+            try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployScanRanges")) {
                 states = coordinator.assignIncrementalScanRangesToDeployStates(deployer, states);
                 if (states.isEmpty()) {
                     return;
