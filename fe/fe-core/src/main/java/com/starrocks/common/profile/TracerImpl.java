@@ -46,9 +46,13 @@ class TracerImpl extends Tracer {
         return timing.elapsed(TimeUnit.MILLISECONDS);
     }
 
+    private long timePointNanoSecond() {
+        return timing.elapsed(TimeUnit.NANOSECONDS);
+    }
+
     public Timer watchScope(String name) {
         tracerCost.start();
-        Timer t = watcher.scope(timePoint(), name);
+        Timer t = watcher.scope(timePointNanoSecond(), name);
         tracerCost.stop();
         return t;
     }

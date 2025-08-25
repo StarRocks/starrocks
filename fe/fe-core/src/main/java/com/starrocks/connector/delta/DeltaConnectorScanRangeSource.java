@@ -141,7 +141,7 @@ public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     @Override
     public boolean sourceHasMoreOutput() {
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getScanFiles")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.hasMoreOutput")) {
             return remoteFileInfoSource.hasMoreOutput();
         }
     }
