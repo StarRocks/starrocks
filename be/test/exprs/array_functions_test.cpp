@@ -5999,7 +5999,7 @@ TEST_F(ArrayFunctionsTest, null_or_empty) {
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         array->append_nulls(1);
-        array->append_datum(DatumArray{{1,2}});
+        array->append_datum(DatumArray{{1, 2}});
         array->append_datum(DatumArray{});
 
         auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(array)}).value();
