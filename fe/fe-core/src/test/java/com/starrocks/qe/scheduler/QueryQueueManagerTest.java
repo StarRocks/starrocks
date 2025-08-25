@@ -1726,8 +1726,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
         long runningCnt = queryStateMap.values().stream().filter("RUNNING"::equals).count();
         long pendingCnt = queryStateMap.values().stream().filter("PENDING"::equals).count();
-        Assert.assertEquals(runningCnt, 2L);
-        Assert.assertEquals(pendingCnt, 2L);
+        Assertions.assertEquals(runningCnt, 2L);
+        Assertions.assertEquals(pendingCnt, 2L);
 
         coords.forEach(coor -> coor.cancel("Cancel by test"));
         runningCoords.forEach(DefaultCoordinator::onFinished);
