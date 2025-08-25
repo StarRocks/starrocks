@@ -44,7 +44,6 @@ import com.google.common.primitives.Ints;
 import com.google.gson.Gson;
 import com.starrocks.alter.AlterJobException;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;
@@ -175,6 +174,7 @@ import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
@@ -508,7 +508,29 @@ public class StmtExecutor {
     }
 
     public int getExecTimeout() {
-        return parsedStmt.getTimeout();
+        if (parsedStmt instanceof CreateTableAsSelectStmt ctas) {
+            Map<String, String> properties = ctas.getInsertStmt().getProperties();
+            if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
+                try {
+                    return Integer.parseInt(properties.get(LoadStmt.TIMEOUT_PROPERTY));
+                } catch (NumberFormatException e) {
+                    // ignore
+                }
+            }
+            return ConnectContext.get().getSessionVariable().getInsertTimeoutS();
+        } else if (parsedStmt instanceof DmlStmt) {
+            Map<String, String> properties = ((DmlStmt) parsedStmt).getProperties();
+            if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
+                try {
+                    return Integer.parseInt(properties.get(LoadStmt.TIMEOUT_PROPERTY));
+                } catch (NumberFormatException e) {
+                    // ignore
+                }
+            }
+            return ConnectContext.get().getSessionVariable().getInsertTimeoutS();
+        } else {
+            return ConnectContext.get().getSessionVariable().getQueryTimeoutS();
+        }
     }
 
     public String getExecType() {
@@ -2702,7 +2724,7 @@ public class StmtExecutor {
 
             // insert will fail if 'filtered rows / total rows' exceeds max_filter_ratio
             // for native table and external catalog table(without insert load job)
-            if (filteredRows > (filteredRows + loadedRows) * stmt.getMaxFilterRatio()) {
+            if (filteredRows > (filteredRows + loadedRows) * getMaxFilterRatio(stmt)) {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                     RemoteTransactionMgr.abortRemoteTransaction(externalTable.getSourceTableDbId(), transactionId,
@@ -3191,5 +3213,17 @@ public class StmtExecutor {
                 && !isPreQuerySQL
                 && !(parsedStmt instanceof ShowStmt)
                 && !(parsedStmt instanceof AdminSetConfigStmt);
+    }
+
+    public double getMaxFilterRatio(DmlStmt dmlStmt) {
+        Map<String, String> properties = dmlStmt.getProperties();
+        if (properties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            try {
+                return Double.parseDouble(properties.get(LoadStmt.MAX_FILTER_RATIO_PROPERTY));
+            } catch (NumberFormatException e) {
+                // ignore
+            }
+        }
+        return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
     }
 }

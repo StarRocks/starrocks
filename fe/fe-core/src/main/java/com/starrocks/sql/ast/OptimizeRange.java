@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 

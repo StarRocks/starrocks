@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.common;
 
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;

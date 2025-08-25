@@ -16,6 +16,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;

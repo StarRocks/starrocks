@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.spm;
 
-import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
@@ -23,6 +22,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SystemVariable;

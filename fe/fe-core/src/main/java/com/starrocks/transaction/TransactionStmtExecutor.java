@@ -56,6 +56,7 @@ import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
@@ -490,7 +491,7 @@ public class TransactionStmtExecutor {
 
             // insert will fail if 'filtered rows / total rows' exceeds max_filter_ratio
             // for native table and external catalog table(without insert load job)
-            if (filteredRows > (filteredRows + loadedRows) * dmlStmt.getMaxFilterRatio()) {
+            if (filteredRows > (filteredRows + loadedRows) * getMaxFilterRatio(dmlStmt)) {
                 String trackingSql = "select tracking_log from information_schema.load_tracking_logs where job_id=" + jobId;
                 throw new LoadException(ErrorCode.ERR_LOAD_HAS_FILTERED_DATA,
                         "txn_id = " + transactionId + ", tracking sql = " + trackingSql);
@@ -559,5 +560,17 @@ public class TransactionStmtExecutor {
         } else {
             return "Query";
         }
+    }
+
+    public static double getMaxFilterRatio(DmlStmt dmlStmt) {
+        Map<String, String> properties = dmlStmt.getProperties();
+        if (properties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            try {
+                return Double.parseDouble(properties.get(LoadStmt.MAX_FILTER_RATIO_PROPERTY));
+            } catch (NumberFormatException e) {
+                // ignore
+            }
+        }
+        return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
     }
 }

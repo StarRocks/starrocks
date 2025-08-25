@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -135,6 +134,7 @@ import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
