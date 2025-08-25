@@ -28,6 +28,6 @@ public class ShowEnginesStmt extends ShowStmt {
     }
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowEnginesStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowEnginesStatement(this, context);
     }
 }

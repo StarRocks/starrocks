@@ -24,7 +24,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
@@ -73,7 +73,7 @@ public class AuthenticationAnalyzer {
                 !context.getCurrentUserIdentity().equals(UserIdentity.ROOT);
     }
 
-    public static class AuthenticationAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class AuthenticationAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private AuthorizationMgr authorizationManager = null;
 
         public void analyze(StatementBase statement, ConnectContext session) {

@@ -243,6 +243,6 @@ public class CallOperator extends ArgsScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCall(this, context);
+        return  visitor.visitCall(this, context);
     }
 }

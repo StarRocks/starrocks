@@ -27,6 +27,6 @@ public class CreateImageClause extends AlterClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateImageClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateImageClause(this, context);
     }
 }

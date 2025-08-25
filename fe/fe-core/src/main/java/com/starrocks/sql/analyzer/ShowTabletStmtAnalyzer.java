@@ -36,7 +36,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowTabletStmt;
 
@@ -49,7 +49,7 @@ public class ShowTabletStmtAnalyzer {
         new ShowTabletStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowTabletStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ShowTabletStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         private long version = -1;
         private long backendId = -1;

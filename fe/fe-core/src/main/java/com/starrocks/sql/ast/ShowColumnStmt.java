@@ -152,6 +152,6 @@ public class ShowColumnStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowColumnStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowColumnStatement(this, context);
     }
 }

@@ -54,6 +54,6 @@ public class AdminCheckTabletsStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminCheckTabletsStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminCheckTabletsStatement(this, context);
     }
 }

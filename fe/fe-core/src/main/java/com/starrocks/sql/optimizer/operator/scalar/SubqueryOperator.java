@@ -95,7 +95,7 @@ public class SubqueryOperator extends ScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitSubqueryOperator(this, context);
+        return  visitor.visitSubqueryOperator(this, context);
     }
 
     @Override

@@ -31,6 +31,6 @@ public class DropDataCacheRuleStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropDataCacheRuleStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropDataCacheRuleStatement(this, context);
     }
 }

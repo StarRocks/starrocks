@@ -201,7 +201,7 @@ public class TableRelation extends Relation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitTable(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitTable(this, context);
     }
 
     @Override

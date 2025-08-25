@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.feedback;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowPlanAdvisorStmt extends PlanAdvisorStmt {
@@ -25,6 +26,6 @@ public class ShowPlanAdvisorStmt extends PlanAdvisorStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowPlanAdvisorStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowPlanAdvisorStatement(this, context);
     }
 }

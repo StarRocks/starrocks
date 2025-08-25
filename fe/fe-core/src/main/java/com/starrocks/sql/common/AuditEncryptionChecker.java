@@ -17,7 +17,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -51,7 +51,7 @@ import java.util.Map;
  * Responsible for determining whether the corresponding statement
  * needs to encrypt sensitive information in the audit log
  */
-public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
+public class AuditEncryptionChecker implements AstVisitorExtendInterface<Boolean, Void> {
     private static final AuditEncryptionChecker INSTANCE = new AuditEncryptionChecker();
 
     private AuditEncryptionChecker() {

@@ -50,6 +50,6 @@ public class AdminSetConfigStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminSetConfigStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminSetConfigStatement(this, context);
     }
 }

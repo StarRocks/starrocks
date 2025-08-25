@@ -37,6 +37,6 @@ public class NormalizedTableFunctionRelation extends JoinRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitNormalizedTableFunction(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitNormalizedTableFunction(this, context);
     }
 }

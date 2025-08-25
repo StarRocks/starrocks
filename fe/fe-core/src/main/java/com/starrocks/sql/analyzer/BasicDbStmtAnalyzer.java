@@ -16,7 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -34,7 +34,7 @@ public class BasicDbStmtAnalyzer {
         new BasicDbStmtAnalyzerVisitor().analyze(statement, session);
     }
 
-    private static class BasicDbStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    private static class BasicDbStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
         }

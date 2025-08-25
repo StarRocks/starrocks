@@ -341,6 +341,6 @@ public class CreateTableStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateTableStatement(this, context);
     }
 }

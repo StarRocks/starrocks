@@ -142,6 +142,6 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateAnalyzeJobStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateAnalyzeJobStatement(this, context);
     }
 }
