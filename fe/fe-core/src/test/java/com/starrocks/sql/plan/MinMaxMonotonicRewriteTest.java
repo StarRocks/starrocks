@@ -20,6 +20,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.sql.optimizer.statistics.ColumnMinMaxMgr;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
@@ -52,17 +54,18 @@ public class MinMaxMonotonicRewriteTest extends PlanTestBase {
     @ParameterizedTest
     @CsvSource(delimiter = '|',
             value = {
-                    "select to_datetime(1756099237) | '2025-08-25 13:20:37'",
-                    "select to_datetime(1756099237, 0) | '2025-08-25 13:20:37'",
-                    "select to_datetime(1756099237000, 3) | '2025-08-25 13:20:37'",
-                    "select to_datetime(1756099237000000, 6) | '2025-08-25 13:20:37'",
+                    "1756099237 | 0 | '2025-08-25 13:20:37'",
+                    "1756099237 | 0 | '2025-08-25 13:20:37'",
+                    "1756099237001 | 3 | '2025-08-25 13:20:37.001000'",
+                    "1756099237001000 | 6 | '2025-08-25 13:20:37.001000'",
 
-                    "select to_datetime(-1) | NULL",
-                    "select to_datetime(1756099237000000000, 4) | NULL",
+                    "-1 | 0 |null",
+                    "1756099237000000000 | 4 |null",
             })
-    public void testToDatetime(String sql, String result) throws Exception {
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, result);
+    public void testToDatetime(long ts, int scale, String expect) throws Exception {
+        ConstantOperator datetime = ScalarOperatorFunctions.toDatetime(ConstantOperator.createBigint(ts),
+                ConstantOperator.createInt(scale));
+        assertEquals(expect, datetime.toString());
     }
 
     @ParameterizedTest

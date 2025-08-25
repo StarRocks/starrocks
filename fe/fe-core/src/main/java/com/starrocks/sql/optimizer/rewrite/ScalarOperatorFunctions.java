@@ -798,19 +798,38 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "to_datetime", argTypes = {BIGINT, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator toDatetime(ConstantOperator unixtime, ConstantOperator scale) {
         long seconds = unixtime.getBigint();
+        long nanos = 0;
+        int scaleValue = 0;
         if (scale != null && scale.getInt() > 0) {
-            int scaleValue = scale.getInt();
-            if (scaleValue != 3 && scaleValue != 6) {
-                return ConstantOperator.NULL;
-            }
-            seconds = Math.floorDiv(seconds, (long) Math.pow(10, scaleValue));
+            scaleValue = scale.getInt();
         }
-        if (seconds < 0 || seconds > TimeUtils.MAX_UNIX_TIMESTAMP) {
+        switch (scaleValue) {
+            case 0:
+                break;
+            case 3:
+                nanos = (seconds % 1000) * 1000_000;
+                seconds /= 1000;
+                break;
+            case 6:
+                nanos = (seconds % 1000_000) * 1000;
+                seconds /= 1000_000;
+                break;
+            default:
+                return ConstantOperator.NULL;
+        }
+
+        if (seconds < 0 || seconds > TimeUtils.MAX_UNIX_TIMESTAMP || nanos < 0) {
             return ConstantOperator.NULL;
         }
 
-        return ConstantOperator.createDatetime(
-                LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds), TimeUtils.getTimeZone().toZoneId()));
+        if (scaleValue == 0) {
+            return ConstantOperator.createDatetime(
+                    LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds), TimeUtils.getTimeZone().toZoneId()));
+        } else {
+            return ConstantOperator.createDatetime(
+                    LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds).plusNanos(nanos),
+                            TimeUtils.getTimeZone().toZoneId()));
+        }
     }
 
     @ConstantFunction(name = "to_datetime", argTypes = {BIGINT}, returnType = DATETIME, isMonotonic = true)
