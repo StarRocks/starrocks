@@ -3828,8 +3828,4 @@ public class Config extends ConfigBase {
     @ConfField(comment = "Enable case-insensitive catalog/database/table names. " +
             "Only configurable during cluster initialization, immutable once set.")
     public static boolean enable_table_name_case_insensitive = false;
-
-    @ConfField(mutable = true, comment = "Whether to prevent faked shard group from being removed by meta syncer, " +
-            "used only for cloud-native table migration. Set this config value to true before start migration")
-    public static boolean enable_keep_fake_shard_group_alive = false;
 }
