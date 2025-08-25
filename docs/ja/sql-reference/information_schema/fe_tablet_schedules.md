@@ -15,7 +15,7 @@ displayed_sidebar: docs
 | PARTITION_ID    | タブレットが属するパーティションの ID。                |
 | TYPE            | タスクの種類。有効な値：`REPAIR` と `BALANCE`。       |
 | STATE           | タスクの状態。                                      |
-| SCHEDULE_REASON | タスクの理由。                                      |
+| SCHEDULE_REASON | タスクスケジューリングの理由。                        |
 | MEDIUM          | タブレットが配置されているストレージメディア。           |
 | PRIORITY        | タスクの現在の優先度。                               |
 | ORIG_PRIORITY   | タスクの元の優先度。                                 |
@@ -34,4 +34,4 @@ displayed_sidebar: docs
 | CLONE_RATE      | クローン速度（MB/秒）。                             |
 | FAILED_SCHEDULE_COUNT | タスクのスケジュール失敗回数。                 |
 | FAILED_RUNNING_COUNT | タスクの実行失敗回数。                        |
-| MSG             | タスクに関連する情報。                             |
+| MSG             | タスクのスケジューリングと実行に関する情報。           |
