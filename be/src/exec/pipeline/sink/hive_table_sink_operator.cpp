@@ -17,6 +17,8 @@
 #include <utility>
 
 #include "exec/parquet_builder.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/workgroup/work_group.h"
 #include "table_function_table_sink_operator.h"
 #include "util/path_util.h"
 
@@ -62,6 +64,9 @@ bool HiveTableSinkOperator::is_finished() const {
 }
 
 Status HiveTableSinkOperator::set_finishing(RuntimeState* state) {
+    state->fragment_ctx()->workgroup()->executors()->driver_executor()->report_audit_statistics(state->query_ctx(),
+                                                                                                state->fragment_ctx());
+
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
             WARN_IF_ERROR(writer.second->close(state), "close writer failed");
