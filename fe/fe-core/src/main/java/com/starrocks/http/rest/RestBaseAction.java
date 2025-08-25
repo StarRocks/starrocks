@@ -336,13 +336,17 @@ public class RestBaseAction extends BaseAction {
 
     public static List<Pair<String, Integer>> getAllAliveFe() {
 
-        return GlobalStateMgr.getCurrentState()
-                .getNodeMgr()
-                .getAllFrontends()
-                .stream()
-                .filter(Frontend::isAlive)
-                .map(fe -> new Pair<>(fe.getHost(), Config.http_port))
-                .collect(Collectors.toList());
+        if (GlobalStateMgr.getCurrentState() == null) {
+            return List.of();
+        } else {
+            return GlobalStateMgr.getCurrentState()
+                    .getNodeMgr()
+                    .getAllFrontends()
+                    .stream()
+                    .filter(Frontend::isAlive)
+                    .map(fe -> new Pair<>(fe.getHost(), Config.http_port))
+                    .collect(Collectors.toList());
+        }
     }
 
     public static Pair<String, Integer> getCurrentFe() {
