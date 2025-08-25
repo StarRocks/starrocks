@@ -1,58 +1,164 @@
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.base.ColumnIdentifier;
+import com.starrocks.sql.optimizer.statistics.ColumnMinMaxMgr;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
+import com.starrocks.sql.optimizer.statistics.StatsVersion;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class MinMaxMonotonicRewriteTest extends PlanTestBase {
 
     @ParameterizedTest
-    @CsvSource(
-            delimiter = '|',
+    @CsvSource(delimiter = '|',
             value = {
-                    "select min(to_datetime(id_datetime)) from test_all_type " +
-                            "| output: min(8: id_datetime) " +
-                            "| to_datetime(",
-                    "select max(to_datetime(id_datetime)) from test_all_type " +
-                            "| output: max(8: id_datetime) " +
-                            "| to_date(",
-                    "select max(from_unixtime(id_datetime)) from test_all_type " +
-                            "| output: max(8: id_datetime) " +
-                            "| from_unixtime(",
+                    "select to_datetime(1756099237) | '2025-08-25 13:20:37'",
+                    "select to_datetime(1756099237, 0) | '2025-08-25 13:20:37'",
+                    "select to_datetime(1756099237000, 3) | '2025-08-25 13:20:37'",
+                    "select to_datetime(1756099237000000, 6) | '2025-08-25 13:20:37'",
+
+                    "select to_datetime(-1) | NULL",
+                    "select to_datetime(1756099237000000000, 4) | NULL",
             })
-    public void testRewriteMinMaxMonotonic(String sql, String expectedAggregation, String expectedProject)
-            throws Exception {
+    public void testToDatetime(String sql, String result) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertContains(plan, expectedAggregation);
-        assertContains(plan, ":Project\n", expectedProject);
+        assertContains(plan, result);
     }
 
     @ParameterizedTest
     @CsvSource(
             delimiter = '|',
             value = {
-                    "select min(id_int + 1) from test_all_type " +
-                            "| output: min(1: id_int + 1) " +
-                            "| 1: id_int + 1",
-                    "select max(id_int * 2) from test_all_type " +
-                            "| output: max(1: id_int * 2) " +
-                            "| 1: id_int * 2",
-                    "select min(concat(id_varchar, 'suffix')) from test_all_type " +
-                            "| output: min(2: concat(id_varchar, 'suffix')) " +
-                            "| 2: concat(id_varchar, 'suffix')",
-                    "select max(abs(id_int)) from test_all_type " +
-                            "| output: max(abs(1: id_int)) " +
-                            "| abs(1: id_int)",
-                    "select min(if(id_int > 0, id_int, 0)) from test_all_type " +
-                            "| output: min(if(1: id_int > 0, 1: id_int, 0)) " +
-                            "| if(1: id_int > 0, 1: id_int, 0)",
-                    "select min(cast(id_datetime as date)) from test_all_type " +
-                            "| output: min(8: id_datetime) " +
-                            "| CAST(8: id_datetime AS DATE)"
+                    "select min(to_datetime(t1d)) from test_all_type " +
+                            "| to_datetime(13: min) ",
+                    "select max(to_datetime(t1d)) from test_all_type " +
+                            "| to_datetime(13: max) ",
+                    "select min(to_datetime(t1d, 6)) from test_all_type " +
+                            "| to_datetime(13: min) ",
+
+                    "select max(from_unixtime(t1d)) from test_all_type " +
+                            "| from_unixtime(13: max) ",
+                    "select max(from_unixtime(get_json_int(v_json, 'ts'))) from tjson " +
+                            "| from_unixtime(6: max)",
+                    "select date_diff('millisecond',    " +
+                            "   min(from_unixtime(t1d)), " +
+                            "   max(from_unixtime(t1d))) from test_all_type " +
+                            "|  from_unixtime(15: min)",
+                    "select date_diff('millisecond',    " +
+                            "   min(to_datetime(t1d)), " +
+                            "   max(to_datetime(t1d))) from test_all_type " +
+                            "|  to_datetime(15: min)",
+                    "select date_diff('millisecond',    " +
+                            "   min(to_datetime(get_json_int(v_json, 'ts'), 6)), " +
+                            "   max(to_datetime(get_json_int(v_json, 'ts'), 6))) from tjson" +
+                            "|  to_datetime(8: min)",
             })
-    public void testNoRewriteForNonMonotonicExpressions(String sql, String expectedAggregation, String expectedProject)
+    public void testRewriteMinMaxMonotonic(String sql, String expectedAggregation)
+            throws Exception {
+        {
+            // with MinMaxStats
+            new MockUp<ColumnMinMaxMgr>() {
+                @Mock
+                public Optional<IMinMaxStatsMgr.ColumnMinMax> getStats(ColumnIdentifier identifier,
+                                                                       StatsVersion version) {
+                    return Optional.of(new IMinMaxStatsMgr.ColumnMinMax("1", "100"));
+                }
+            };
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, expectedAggregation);
+        }
+
+        {
+            // without MinMaxStats
+            new MockUp<ColumnMinMaxMgr>() {
+                @Mock
+                public Optional<IMinMaxStatsMgr.ColumnMinMax> getStats(ColumnIdentifier identifier,
+                                                                       StatsVersion version) {
+                    return Optional.empty();
+                }
+            };
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, expectedAggregation);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource(
+            delimiter = '|',
+            value = {
+                    "select min(t1d + 1) from test_all_type " +
+                            "| output: min(4: t1d + 1)",
+                    "select max(t1d * 2) from test_all_type " +
+                            "| output: max(4: t1d * 2)",
+                    "select min(concat(t1a, 'suffix')) from test_all_type " +
+                            "| output: min(concat(1: t1a, 'suffix'))",
+                    "select max(abs(t1d)) from test_all_type " +
+                            "| output: max(abs(4: t1d))",
+                    "select min(if(t1d > 0, t1d, 0)) from test_all_type " +
+                            "| output: min(if(4: t1d > 0, 4: t1d, 0))",
+                    "select min(cast(t1d as date)) from test_all_type " +
+                            "| output: min(CAST(4: t1d AS DATE))",
+            })
+    public void testNoRewriteForNonMonotonicExpressions(String sql, String expectedAggregation)
             throws Exception {
         String plan = getFragmentPlan(sql);
         assertContains(plan, expectedAggregation);
-        assertNotContains(plan, ":Project\n");
+    }
+
+    @Test
+    public void testColumnMinMaxMgrGenSql() throws Exception {
+        // Test regular column
+        Database mockDb = mock(Database.class);
+        when(mockDb.getOriginName()).thenReturn("test_db");
+
+        OlapTable mockTable = mock(OlapTable.class);
+        when(mockTable.getName()).thenReturn("test_table");
+
+        Column regularColumn = mock(Column.class);
+        when(regularColumn.getName()).thenReturn("id");
+        when(regularColumn.getType()).thenReturn(Type.BIGINT);
+        when(regularColumn.getColumnId()).thenReturn(ColumnId.create("id"));
+
+        String sql1 = ColumnMinMaxMgr.genMinMaxSql("default_catalog", mockDb, mockTable, regularColumn);
+        String expectedSql1 =
+                "select min(id) as min, max(id) as max from `default_catalog`.`test_db`.`test_table`[_META_];";
+        assertEquals(expectedSql1, sql1);
+
+        // Test JSON column with BIGINT type
+        Column jsonColumn = mock(Column.class);
+        when(jsonColumn.getName()).thenReturn("json_col");
+        when(jsonColumn.getType()).thenReturn(Type.BIGINT);
+        when(jsonColumn.getColumnId()).thenReturn(ColumnId.create("json_col.field1"));
+
+        String sql2 = ColumnMinMaxMgr.genMinMaxSql("default_catalog", mockDb, mockTable, jsonColumn);
+        String expectedSql2 = "select min(get_json_int(`json_col`, 'field1')) as min, " +
+                "max(get_json_int(`json_col`, 'field1')) as max " +
+                "from `default_catalog`.`test_db`.`test_table`[_META_];";
+        assertEquals(expectedSql2, sql2);
+
+        // Test JSON column with STRING type
+        when(jsonColumn.getName()).thenReturn("json_col");
+        when(jsonColumn.getType()).thenReturn(Type.VARCHAR);
+        when(jsonColumn.getColumnId()).thenReturn(ColumnId.create("json_col.field2"));
+
+        String sql3 = ColumnMinMaxMgr.genMinMaxSql("default_catalog", mockDb, mockTable, jsonColumn);
+        String expectedSql3 = "select min(get_json_string(`json_col`, 'field2')) as min, " +
+                "max(get_json_string(`json_col`, 'field2')) as max " +
+                "from `default_catalog`.`test_db`.`test_table`[_META_];";
+        assertEquals(expectedSql3, sql3);
     }
 }

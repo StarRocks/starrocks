@@ -795,6 +795,34 @@ public class ScalarOperatorFunctions {
         return dateFormat(dl, fmtLiteral);
     }
 
+    @ConstantFunction(name = "to_datetime", argTypes = {BIGINT, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator toDatetime(ConstantOperator unixtime, ConstantOperator scale) {
+        long seconds = unixtime.getBigint();
+        if (scale != null && scale.getInt() > 0) {
+            int scaleValue = scale.getInt();
+            if (scaleValue != 3 && scaleValue != 6) {
+                return ConstantOperator.NULL;
+            }
+            seconds /= (long) Math.pow(10, scaleValue);
+        }
+        if (seconds < 0 || seconds > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            return ConstantOperator.NULL;
+        }
+
+        return ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds), TimeUtils.getTimeZone().toZoneId()));
+    }
+
+    @ConstantFunction(name = "to_datetime", argTypes = {BIGINT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator toDatetime(ConstantOperator unixtime) {
+        long seconds = unixtime.getBigint();
+        if (seconds < 0 || seconds > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            return ConstantOperator.NULL;
+        }
+        return ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds), TimeUtils.getTimeZone().toZoneId()));
+    }
+
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "curtime", argTypes = {}, returnType = TIME),
             @ConstantFunction(name = "current_time", argTypes = {}, returnType = TIME)

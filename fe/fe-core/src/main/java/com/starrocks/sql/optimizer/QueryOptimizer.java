@@ -685,6 +685,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
 
         scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForOlapScan());
+        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.AGGREGATE_REWRITE_RULES);
 
         scheduler.rewriteOnce(tree, rootTaskContext, new EliminateSortColumnWithEqualityPredicateRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
