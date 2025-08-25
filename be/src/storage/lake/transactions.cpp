@@ -191,7 +191,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     }
 
     auto new_version_metadata_or_error = [=](const Status& error) -> StatusOr<TabletMetadataPtr> {
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, new_version, txns.back().gtid());
+        auto res = tablet_mgr->get_tablet_metadata(tablet_id, new_version, true, txns.back().gtid());
         if (res.ok()) return res;
         return error;
     };
