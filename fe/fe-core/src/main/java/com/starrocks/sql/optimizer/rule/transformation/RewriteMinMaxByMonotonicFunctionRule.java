@@ -81,7 +81,13 @@ public class RewriteMinMaxByMonotonicFunctionRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = input.getOp().cast();
         LogicalScanOperator scanOperator = input.inputAt(0).getOp().cast();
-        if (agg.getAggregations().isEmpty()) {
+        if (!context.getSessionVariable().isCboRewriteMonotonicMinMaxAggregation()) {
+            return false;
+        }
+        // 1. No aggregation
+        // 2. No projection
+        // 3. HAVING
+        if (agg.getAggregations().isEmpty() || agg.getPredicate() != null || scanOperator.getProjection() == null) {
             return false;
         }
         // Fast check: at least one MIN/MAX over a projected monotonic function of a single column

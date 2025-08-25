@@ -25,6 +25,8 @@ import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -36,6 +38,16 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class MinMaxMonotonicRewriteTest extends PlanTestBase {
+
+    @BeforeAll
+    public static void beforeAll() {
+        starRocksAssert.getCtx().getSessionVariable().setCboRewriteMonotonicMinmax(true);
+    }
+
+    @AfterAll
+    public static void afterAll() {
+        starRocksAssert.getCtx().getSessionVariable().setCboRewriteMonotonicMinmax(false);
+    }
 
     @ParameterizedTest
     @CsvSource(delimiter = '|',
@@ -139,6 +151,8 @@ public class MinMaxMonotonicRewriteTest extends PlanTestBase {
                             "| output: min(if(4: t1d > 0, 4: t1d, 0))",
                     "select min(cast(t1d as date)) from test_all_type " +
                             "| output: min(CAST(4: t1d AS DATE))",
+                    "select min(t1d) from test_all_type having min(t1d) > 100 " +
+                            "| output: min(4: t1d)",
             })
     public void testNoRewriteForNonMonotonicExpressions(String sql, String expectedAggregation)
             throws Exception {
