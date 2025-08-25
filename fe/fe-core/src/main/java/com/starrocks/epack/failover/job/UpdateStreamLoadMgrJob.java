@@ -4,6 +4,7 @@ package com.starrocks.epack.failover.job;
 
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.load.streamload.StreamLoadMgrEPack;
+import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -20,8 +21,9 @@ public class UpdateStreamLoadMgrJob extends FailoverGroupJob {
 
     @Override
     public void execute() {
-        for (StreamLoadTask streamLoadTask : failoverGroup.getObjectMeta().getStreamLoadMgr().getIdToStreamLoadTask()
+        for (AbstractStreamLoadTask task : failoverGroup.getObjectMeta().getStreamLoadMgr().getIdToStreamLoadTask()
                 .values()) {
+            StreamLoadTask streamLoadTask = (StreamLoadTask) task;
             if (streamLoadTask.getState() != StreamLoadTask.State.FINISHED) {
                 continue;
             }

@@ -108,7 +108,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
         FRONTEND_STREAMING(8),          // FE streaming load use this type
         MV_REFRESH(9),                  // Refresh MV
         REPLICATION(10),                // Replication
-        BYPASS_WRITE(11);               // Bypass BE, and write data file directly
+        BYPASS_WRITE(11),               // Bypass BE, and write data file directly
+        MULTI_STATEMENT_STREAMING(12);  // multi statement streaming load
 
         private final int flag;
 

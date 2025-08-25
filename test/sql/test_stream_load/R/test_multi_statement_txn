@@ -1,0 +1,311 @@
+-- name: test_multi_stream_load_single_table_stmt
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `test` (
+  `id` int
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/begin
+-- result:
+0
+{
+  "Status": "OK",
+  "Message": ""
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test" -H "source_type:12" -d '1' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_fda89880f9794af4a7be32229f1f526d",
+    "TxnId": 3005,
+    "LoadBytes": 1,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/commit
+-- result:
+0
+{
+  "Label": "llal_fda89880f9794af4a7be32229f1f526d",
+  "Status": "OK",
+  "TxnId": 3005,
+  "ChannelId": 0,
+  "Message": "",
+  "Prepared Channel Num": 1
+}
+-- !result
+select * from test;
+-- result:
+1
+-- !result
+-- name: test_multi_stream_load_single_table_multi_stmt
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `test` (
+  `id` int
+)
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/begin
+-- result:
+0
+{
+  "Status": "OK",
+  "Message": ""
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test" -H "source_type:12" -H "format:json" -d '{"id":"1"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_f119223b1ca143b38cb6dd5a27f94ce8",
+    "TxnId": 3004,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test" -H "source_type:12" -H "format:json" -d '{"id":"2"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_f119223b1ca143b38cb6dd5a27f94ce8",
+    "TxnId": 3004,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test" -H "source_type:12" -H "format:json" -d '{"id":"3"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_f119223b1ca143b38cb6dd5a27f94ce8",
+    "TxnId": 3004,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/commit
+-- result:
+0
+{
+  "Label": "llal_f119223b1ca143b38cb6dd5a27f94ce8",
+  "Status": "OK",
+  "TxnId": 3004,
+  "ChannelId": 0,
+  "Message": "",
+  "Prepared Channel Num": 1
+}
+-- !result
+select * from test;
+-- result:
+1
+3
+2
+-- !result
+-- name: test_multi_stream_load_multi_table_multi_stmt
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `test1` (
+  `id` int
+);
+-- result:
+-- !result
+CREATE TABLE `test2` (
+  `id` int
+);
+-- result:
+-- !result
+CREATE TABLE `test3` (
+  `id` int
+);
+-- result:
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/begin
+-- result:
+0
+{
+  "Status": "OK",
+  "Message": ""
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test1" -H "source_type:12" -H "format:json" -d '{"id":"1"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_14fbd896490246ae86e8d3027d1e19d9",
+    "TxnId": 3006,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test1" -H "source_type:12" -H "format:json" -d '{"id":"2"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_14fbd896490246ae86e8d3027d1e19d9",
+    "TxnId": 3006,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test1" -H "source_type:12" -H "format:json" -d '{"id":"3"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_14fbd896490246ae86e8d3027d1e19d9",
+    "TxnId": 3006,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test2" -H "source_type:12" -H "format:json" -d '{"id":"1"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_14fbd896490246ae86e8d3027d1e19d9",
+    "TxnId": 3006,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test2" -H "source_type:12" -H "format:json" -d '{"id":"2"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_14fbd896490246ae86e8d3027d1e19d9",
+    "TxnId": 3006,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test2" -H "source_type:12" -H "format:json" -d '{"id":"3"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_14fbd896490246ae86e8d3027d1e19d9",
+    "TxnId": 3006,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test3" -H "source_type:12" -H "format:json" -d '{"id":"1"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_14fbd896490246ae86e8d3027d1e19d9",
+    "TxnId": 3006,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test3" -H "source_type:12" -H "format:json" -d '{"id":"2"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_14fbd896490246ae86e8d3027d1e19d9",
+    "TxnId": 3006,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test3" -H "source_type:12" -H "format:json" -d '{"id":"3"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_14fbd896490246ae86e8d3027d1e19d9",
+    "TxnId": 3006,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/commit
+-- result:
+0
+{
+  "Label": "llal_14fbd896490246ae86e8d3027d1e19d9",
+  "Status": "OK",
+  "TxnId": 3006,
+  "ChannelId": 0,
+  "Message": "",
+  "Prepared Channel Num": 1
+}
+-- !result
+select * from test1;
+-- result:
+1
+3
+2
+-- !result
+select * from test2;
+-- result:
+2
+3
+1
+-- !result
+select * from test3;
+-- result:
+1
+3
+2
+-- !result

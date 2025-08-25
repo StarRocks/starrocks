@@ -119,34 +119,45 @@ public:
         return Status::OK();
     }
 
-    Status put_channel_context(const string& label, int channel_id, StreamLoadContext* ctx) {
+    Status put_channel_context(const string& label, const string& table_name, int channel_id, StreamLoadContext* ctx) {
         std::lock_guard<std::mutex> l(_lock);
         auto it = _channel_stream_map.find(label);
         if (it == std::end(_channel_stream_map)) {
-            std::unordered_map<int, StreamLoadContext*> empty_map;
+            std::unordered_map<std::string, std::unordered_map<int, StreamLoadContext*>> empty_map;
             it = _channel_stream_map.emplace(label, std::move(empty_map)).first;
         }
-        auto& label_channel_map = it->second;
-        auto it2 = label_channel_map.find(channel_id);
-        if (it2 != std::end(label_channel_map)) {
+        auto& label_map = it->second;
+        auto it_table = label_map.find(table_name);
+        if (it_table == std::end(label_map)) {
+            std::unordered_map<int, StreamLoadContext*> empty_channel_map;
+            it_table = label_map.emplace(table_name, std::move(empty_channel_map)).first;
+        }
+        auto& channel_map = it_table->second;
+        auto it2 = channel_map.find(channel_id);
+        if (it2 != std::end(channel_map)) {
             return Status::InternalError("channel id " + std::to_string(channel_id) + " for label " + label +
                                          " already exist");
         }
         ctx->ref();
-        label_channel_map.emplace(channel_id, ctx);
+        channel_map.emplace(channel_id, ctx);
         LOG(INFO) << "stream load: " << label << ", channel_id: " << std::to_string(channel_id) << " start pipe";
         return Status::OK();
     }
 
-    StreamLoadContext* get_channel_context(const string& label, int channel_id) {
+    StreamLoadContext* get_channel_context(const string& label, const string& table_name, int channel_id) {
         std::lock_guard<std::mutex> l(_lock);
         auto it = _channel_stream_map.find(label);
         if (it == std::end(_channel_stream_map)) {
             return nullptr;
         }
-        auto& label_channel_map = it->second;
-        auto it2 = label_channel_map.find(channel_id);
-        if (it2 == std::end(label_channel_map)) {
+        auto& label_map = it->second;
+        auto it_table = label_map.find(table_name);
+        if (it_table == std::end(label_map)) {
+            return nullptr;
+        }
+        auto& channel_map = it_table->second;
+        auto it2 = channel_map.find(channel_id);
+        if (it2 == std::end(channel_map)) {
             return nullptr;
         }
         auto stream = it2->second;
@@ -156,50 +167,63 @@ public:
 
     void remove_channel_context(StreamLoadContext* ctx) {
         const string& label = ctx->label;
+        const string& table_name = ctx->table;
         int channel_id = ctx->channel_id;
         std::lock_guard<std::mutex> l(_lock);
         auto it = _channel_stream_map.find(label);
         if (it != std::end(_channel_stream_map)) {
-            auto& label_channel_map = it->second;
-            auto it2 = label_channel_map.find(channel_id);
-            if (it2 != std::end(label_channel_map)) {
-                if (it2->second->unref()) {
-                    delete it2->second;
+            auto& label_map = it->second;
+            auto it_table = label_map.find(table_name);
+            if (it_table != std::end(label_map)) {
+                auto& channel_map = it_table->second;
+                auto it2 = channel_map.find(channel_id);
+                if (it2 != std::end(channel_map)) {
+                    if (it2->second->unref()) {
+                        delete it2->second;
+                    }
+                    channel_map.erase(it2);
+                    VLOG(3) << "remove channel stream load context: " << label << ", table: " << table_name
+                            << ", channel_id: " << std::to_string(channel_id);
                 }
-                label_channel_map.erase(it2);
-                VLOG(3) << "remove channel stream load context: " << label
-                        << ", channel_id: " << std::to_string(channel_id);
+                if (channel_map.size() == 0) {
+                    label_map.erase(it_table);
+                }
             }
-            if (label_channel_map.size() == 0) {
+            if (label_map.size() == 0) {
                 _channel_stream_map.erase(it);
             }
         }
     };
 
-    Status finish_body_sink(const string& label, int channel_id) {
+    Status finish_body_sink(const string& label, const string& table_name, int channel_id) {
         std::lock_guard<std::mutex> l(_lock);
         auto it = _channel_stream_map.find(label);
         if (it != std::end(_channel_stream_map)) {
-            auto& label_channel_map = it->second;
-            auto it2 = label_channel_map.find(channel_id);
-            if (it2 != std::end(label_channel_map)) {
-                if (it2->second->body_sink != nullptr) {
-                    StreamLoadContext* ctx = it2->second;
-                    // 1. finish stream pipe & wait it done
-                    if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
-                        ctx->buffer->flip();
-                        RETURN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)));
-                        ctx->buffer = nullptr;
+            auto& label_map = it->second;
+            auto it_table = label_map.find(table_name);
+            if (it_table != std::end(label_map)) {
+                auto& channel_map = it_table->second;
+                auto it2 = channel_map.find(channel_id);
+                if (it2 != std::end(channel_map)) {
+                    if (it2->second->body_sink != nullptr) {
+                        StreamLoadContext* ctx = it2->second;
+                        // 1. finish stream pipe & wait it done
+                        if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
+                            ctx->buffer->flip();
+                            RETURN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)));
+                            ctx->buffer = nullptr;
+                        }
+                        RETURN_IF_ERROR(ctx->body_sink->finish());
+                    } else {
+                        std::string error_msg =
+                                fmt::format("stream load {} table {} channel_id {}'s pipe doesn't exist", label,
+                                            table_name, std::to_string(channel_id));
+                        LOG(WARNING) << error_msg;
+                        return Status::InternalError(error_msg);
                     }
-                    RETURN_IF_ERROR(ctx->body_sink->finish());
-                } else {
-                    std::string error_msg = fmt::format("stream load {} channel_id {}'s pipe doesn't exist", label,
-                                                        std::to_string(channel_id));
-                    LOG(WARNING) << error_msg;
-                    return Status::InternalError(error_msg);
+                    LOG(INFO) << "stream load: " << label << ", table: " << table_name
+                              << ", channel_id: " << std::to_string(channel_id) << " finish pipe";
                 }
-                LOG(INFO) << "stream load: " << label << ", channel_id: " << std::to_string(channel_id)
-                          << " finish pipe";
             }
         }
         return Status::OK();
@@ -208,7 +232,8 @@ public:
 private:
     std::mutex _lock;
     std::unordered_map<std::string, StreamLoadContext*> _stream_map;
-    std::unordered_map<std::string, std::unordered_map<int, StreamLoadContext*>> _channel_stream_map;
+    std::unordered_map<std::string, std::unordered_map<std::string, std::unordered_map<int, StreamLoadContext*>>>
+            _channel_stream_map;
 };
 
 class TransactionMgr {
