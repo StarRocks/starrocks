@@ -15,13 +15,13 @@
 package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.system.HistoricalNodeSet;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -45,16 +45,16 @@ public class HistoricalNodeProcNode implements ProcNodeInterface {
         result.setNames(TITLES);
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         HistoricalNodeMgr historicalNodeMgr = globalStateMgr.getHistoricalNodeMgr();
-        ConcurrentHashMap<Pair<Long, Long>, HistoricalNodeSet> resourceToNodeSet = historicalNodeMgr.getAllHistoricalNodeSet();
-        for (Pair<Long, Long> resourceId : resourceToNodeSet.keySet()) {
-            HistoricalNodeSet nodeSet = resourceToNodeSet.get(resourceId);
-            Warehouse warehouse = warehouseManager.getWarehouse(resourceId.first);
+        ConcurrentHashMap<ComputeResource, HistoricalNodeSet> resourceToNodeSet = historicalNodeMgr.getAllHistoricalNodeSet();
+        for (ComputeResource computeResource : resourceToNodeSet.keySet()) {
+            HistoricalNodeSet nodeSet = resourceToNodeSet.get(computeResource);
+            Warehouse warehouse = warehouseManager.getWarehouseAllowNull(computeResource.getWarehouseId());
             if (nodeSet == null || warehouse == null) {
                 continue;
             }
             List<String> row = new ArrayList<>();
             row.add(warehouse.getName());
-            row.add(resourceId.second.toString());
+            row.add(String.valueOf(computeResource.getWorkerGroupId()));
             row.add(nodeSet.getHistoricalBackendIds().toString());
             row.add(nodeSet.getHistoricalComputeNodeIds().toString());
             row.add(TimeUtils.longToTimeString(nodeSet.getLastUpdateTime()));

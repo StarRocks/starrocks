@@ -192,8 +192,7 @@ public class HDFSBackendSelector implements BackendSelector {
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
         ComputeResource computeResource = workerProvider.getComputeResource();
 
-        long lastUpdateTime = historicalNodeMgr.getLastUpdateTime(computeResource.getWarehouseId(),
-                computeResource.getWorkerGroupId());
+        long lastUpdateTime = historicalNodeMgr.getLastUpdateTime(computeResource);
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastUpdateTime > cacheSharingWorkPeriod * 1000) {
             return true;
