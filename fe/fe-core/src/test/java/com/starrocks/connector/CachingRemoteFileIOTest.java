@@ -40,7 +40,7 @@ public class CachingRemoteFileIOTest {
         hiveRemoteFileIO.setFileSystem(fs);
         FeConstants.runningUnitTest = true;
         ExecutorService executor = Executors.newFixedThreadPool(5);
-        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executor, 10, 10, 10);
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executor, 10, 10, 0.1);
 
         String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";
         RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
@@ -63,7 +63,7 @@ public class CachingRemoteFileIOTest {
         Assertions.assertEquals(20, blockDesc.getLength());
         Assertions.assertEquals(2, blockDesc.getReplicaHostIds().length);
 
-        CachingRemoteFileIO queryLevelCache = CachingRemoteFileIO.createQueryLevelInstance(cachingFileIO, 5);
+        CachingRemoteFileIO queryLevelCache = CachingRemoteFileIO.createQueryLevelInstance(cachingFileIO, 0.1);
         Assertions.assertEquals(1, queryLevelCache.getRemoteFiles(pathKey).size());
 
         Map<RemotePathKey, List<RemoteFileDesc>> presentRemoteFileInfos =
