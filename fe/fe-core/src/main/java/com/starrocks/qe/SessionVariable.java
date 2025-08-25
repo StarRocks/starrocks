@@ -415,6 +415,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
     public static final String CBO_PREDICATE_SUBFIELD_PATH = "cbo_enable_predicate_subfield_path";
     public static final String CBO_PREPARE_METADATA_THREAD_POOL_SIZE = "cbo_prepare_metadata_thread_pool_size";
+    public static final String CBO_REWRITE_MONOTONIC_MINMAX = "cbo_rewrite_monotonic_minmax_aggregation";
 
     public static final String CBO_ENABLE_PARALLEL_PREPARE_METADATA = "enable_parallel_prepare_metadata";
 
@@ -2520,6 +2521,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
     private boolean cboPredicateSubfieldPath = true;
+
+    @VarAttr(name = CBO_REWRITE_MONOTONIC_MINMAX, flag = VariableMgr.INVISIBLE)
+    private boolean cboRewriteMonotonicMinMaxAggregation = true;
 
     @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
     private long crossJoinCostPenalty = 1000000;
@@ -4830,6 +4834,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboEqBaseType(String cboEqBaseType) {
         this.cboEqBaseType = cboEqBaseType;
+    }
+
+    public void setCboRewriteMonotonicMinmax(boolean value) {
+        this.cboRewriteMonotonicMinMaxAggregation = value;
+    }
+
+    public boolean isCboRewriteMonotonicMinMaxAggregation() {
+        return cboRewriteMonotonicMinMaxAggregation;
     }
 
     public boolean isAuditExecuteStmt() {
