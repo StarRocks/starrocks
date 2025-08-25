@@ -15,7 +15,7 @@ The following fields are provided in `fe_tablet_schedules`:
 | PARTITION_ID    | The ID of the partition to which the Tablet belongs.         |
 | TYPE            | The type of the task. Valid values: `REPAIR` and `BALANCE`.  |
 | STATE           | The status of the task.                                      |
-| SCHEDULE_REASON | The reason for the task.                                     |
+| SCHEDULE_REASON | The reason for the task scheduling.                          |
 | MEDIUM          | The storage medium where the Tablet is located.              |
 | PRIORITY        | The current priority of the task.                            |
 | ORIG_PRIORITY   | The original priority of the task.                           |
@@ -34,4 +34,4 @@ The following fields are provided in `fe_tablet_schedules`:
 | CLONE_RATE      | Clone rate in MB/s.                                          |
 | FAILED_SCHEDULE_COUNT | The number of task scheduling failures.                |
 | FAILED_RUNNING_COUNT | Number of task execution failures.                      |
-| MSG             | Task-related information.                                    |
+| MSG             | Information on task scheduling and exection.                 |
