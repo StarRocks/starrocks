@@ -329,7 +329,7 @@ Tablet Scheduler 调度 Tablet 时，会选择一定数量的正常 Tablet 作�
   ```
 
   - `StorageMedium`：存储介质。
-  - `ClusterDiskBalanceStat`：节点之间基于磁盘使用率的均衡情况。包括是否均衡。如果不均衡，则显示磁盘最大最小使用率及对应的 BE。
+  - `ClusterDiskBalanceStat`：节点之间基于磁盘使用率的均衡情况。如果不均衡，则显示磁盘最大最小使用率及对应的 BE。
 
 - **查看按节点内部磁盘使用率的均衡情况：**
 
