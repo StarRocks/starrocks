@@ -329,7 +329,7 @@ Tablet Scheduler が tablet をスケジュールするたびに、Load Balancer
   ```
 
   - `StorageMedium`: ストレージメディア。  
-  - `ClusterDiskBalanceStat`: ディスク使用量に基づくノード間のバランス状態。バランスの状態が達成されているかどうかを示します。バランスが取れていない場合、最大と最小のディスク使用率と対応する BE を表示します。
+  - `ClusterDiskBalanceStat`: ディスク使用量に基づくノード間のバランス状態。バランスが取れていない場合、最大と最小のディスク使用率と対応する BE を表示します。
 
 - **ノード内のディスク使用量のバランスを確認する:**
 
@@ -349,7 +349,7 @@ Tablet Scheduler が tablet をスケジュールするたびに、Load Balancer
   ```
 
   - `BeId`: BEノードのID。  
-  - `BackendDiskBalanceStat`: ノード内のディスク間のバランス状態を、ディスクの使用率に基づいて表示します。バランス状態が達成されているかどうかを含みます。バランスが取れていない場合、最大と最小のディスク使用率と対応するディスクパスを表示します。
+  - `BackendDiskBalanceStat`: ノード内のディスク間のバランス状態を、ディスクの使用率に基づいて表示します。バランスが取れていない場合、最大と最小のディスク使用率と対応するディスクパスを表示します。
 
 - **Tabletごとのバランスの分布を表示:**
 
@@ -371,7 +371,7 @@ Tablet Scheduler が tablet をスケジュールするたびに、Load Balancer
   ```
 
   - `IndexId`: パーティション内のマテリアライズドインデックスの ID。  
-  - `TabletBalanceStat`: ノード間またはノード内のTabletの分布のバランス状態。バランスの状態が達成されているかどうかを含みます。バランスが取れていない場合、不均衡の詳細（Colocation Group、Label-aware Location など）を表示します。
+  - `TabletBalanceStat`: ノード間またはノード内のTabletの分布のバランス状態。バランスが取れていない場合、不均衡の詳細（Colocation Group、Label-aware Location など）を表示します。
 
 - **不均衡なTablet分布を持つパーティションを表示:**
 
