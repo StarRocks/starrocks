@@ -42,7 +42,7 @@ public class DropPartitionInfo implements Writable {
     private Long dbId;
     @SerializedName(value = "tableId")
     private Long tableId;
-    @SerializedName(value = "partitionName")
+    @SerializedName(value = "name")
     private String partitionName;
     @SerializedName(value = "isTempPartition")
     private boolean isTempPartition = false;

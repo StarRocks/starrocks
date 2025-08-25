@@ -14,9 +14,45 @@
 
 package com.starrocks.sql.common;
 
-public record PCellWithName(String partitionName, PCell cell) {
-
+/**
+ * PCellWithName is a record that associates a partition name with a PCell.
+ */
+public record PCellWithName(String name, PCell cell) implements Comparable<PCellWithName> {
     public static PCellWithName of(String partitionName, PCell cell) {
         return new PCellWithName(partitionName, cell);
+    }
+
+    @Override
+    public String toString() {
+        return "name='" + name + '\'' +
+                ", cell=" + cell;
+    }
+
+    @Override
+    public int hashCode() {
+        return name.hashCode() * 31 + cell.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof PCellWithName)) {
+            return false;
+        }
+        PCellWithName that = (PCellWithName) o;
+        return name.equals(that.name) && cell.equals(that.cell);
+    }
+
+    @Override
+    public int compareTo(PCellWithName o) {
+        // compare by pcell
+        int cellComparison = this.cell.compareTo(o.cell);
+        if (cellComparison != 0) {
+            return cellComparison;
+        }
+        // if pcell is equal, compare by partition name
+        return this.name.compareTo(o.name);
     }
 }

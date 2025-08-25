@@ -70,7 +70,7 @@ public class HyperStatisticSQLs {
             ", $maxFunction" + // VARCHAR
             ", $minFunction" + // VARCHAR
             ", cast($collectionSizeFunction as BIGINT)" + // BIGINT
-            " FROM `$dbName`.`$tableName` partition `$partitionName`";
+            " FROM `$dbName`.`$tableName` partition `$name`";
 
     public static final String BATCH_META_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
@@ -82,7 +82,7 @@ public class HyperStatisticSQLs {
             ", $maxFunction" + // VARCHAR, max
             ", $minFunction " + // VARCHAR, min
             ", cast(-1 as BIGINT) " + // BIGINT, collection_size
-            " FROM `$dbName`.`$tableName` partitions(`$partitionName`) [_META_]";
+            " FROM `$dbName`.`$tableName` partitions(`$name`) [_META_]";
 
     public static final String BATCH_DATA_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
@@ -142,7 +142,7 @@ public class HyperStatisticSQLs {
         context.put("version", StatsConstants.STATISTIC_BATCH_VERSION_V5);
         context.put("partitionId", p.getId());
         context.put("columnNameStr", columnNameStr);
-        context.put("partitionName", p.getName());
+        context.put("name", p.getName());
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
         context.put("quoteColumnName", quoteColumnName);

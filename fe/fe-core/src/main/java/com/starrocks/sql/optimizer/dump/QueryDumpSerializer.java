@@ -236,7 +236,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
                 String partitionName = partitionEntry.getKey();
                 if (entry.getValue().size() == 1 && dict.containsKey(partitionEntry.getKey())) {
-                    // the partitionName of table without setting partition is the table name
+                    // the name of table without setting partition is the table name
                     partitionName = DesensitizedSQLBuilder.desensitizeTblName(partitionName, dict);
                 }
                 partitionRowCount.addProperty(partitionName, partitionEntry.getValue());

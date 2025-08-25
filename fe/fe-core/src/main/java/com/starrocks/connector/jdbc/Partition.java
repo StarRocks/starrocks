@@ -67,7 +67,7 @@ public class Partition implements PartitionInfo {
     @Override
     public String toString() {
         final StringBuilder sb = new StringBuilder("Partition{");
-        sb.append("partitionName=").append(partitionName);
+        sb.append("name=").append(partitionName);
         sb.append(", modifiedTime=").append(modifiedTime);
         sb.append('}');
         return sb.toString();
@@ -75,7 +75,7 @@ public class Partition implements PartitionInfo {
 
     public JsonObject toJson() {
         JsonObject obj = new JsonObject();
-        obj.add("partitionName", (GsonUtils.GSON.toJsonTree(partitionName)));
+        obj.add("name", (GsonUtils.GSON.toJsonTree(partitionName)));
         obj.add("modifiedTime", (GsonUtils.GSON.toJsonTree(modifiedTime)));
         return obj;
     }

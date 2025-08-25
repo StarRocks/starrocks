@@ -599,7 +599,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     public String toString() {
         StringBuilder buffer = new StringBuilder();
         buffer.append("partitionId: ").append(id).append("; ");
-        buffer.append("partitionName: ").append(name).append("; ");
+        buffer.append("name: ").append(name).append("; ");
         buffer.append("parentPartitionId: ").append(parentId).append("; ");
         buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
         buffer.append("isImmutable: ").append(isImmutable()).append("; ");

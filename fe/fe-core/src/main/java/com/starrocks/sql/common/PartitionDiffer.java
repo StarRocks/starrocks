@@ -68,8 +68,8 @@ public abstract class PartitionDiffer {
 
     /**
      * Generate the mapping from materialized view partition to base table partition.
-     * @param mvRangeMap : materialized view partition range map: <partitionName, partitionRange>
-     * @param baseRangeMap: base table partition range map, <baseTable, <partitionName, partitionRange>>
+     * @param mvRangeMap : materialized view partition range map: <name, partitionRange>
+     * @param baseRangeMap: base table partition range map, <baseTable, <name, partitionRange>>
      * @return mv partition name -> <base table, base partition names> mapping
      */
     public abstract Map<String, Map<Table, Set<String>>> generateMvRefMap(Map<String, PCell> mvRangeMap,

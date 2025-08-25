@@ -1549,12 +1549,12 @@ public class OlapTable extends Table {
      * formal or temporary partition.
      * Therefore, we need to get the partition through this method:
      *
-     * `getPartition(String partitionName, boolean isTemp)`
+     * `getPartition(String name, boolean isTemp)`
      *
      * To avoid modifying too much code, we leave the `getPartition(String
-     * partitionName)`, which is same as:
+     * name)`, which is same as:
      *
-     * `getPartition(partitionName, false)`
+     * `getPartition(name, false)`
      *
      * 2. Get by id
      *

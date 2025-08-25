@@ -48,7 +48,7 @@ public class QueryDumpInfo implements DumpInfo {
     private final Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> hmsTableMap = new HashMap<>();
     // viewId-><dbName, view>
     private final Map<Long, Pair<String, View>> viewMap = new LinkedHashMap<>();
-    // dbName.tableName->partitionName->partitionRowCount
+    // dbName.tableName->name->partitionRowCount
     private final Map<String, Map<String, Long>> partitionRowCountMap = new HashMap<>();
     // tableName->columnName->column statistics
     private final Map<String, Map<String, ColumnStatistic>> tableStatisticsMap = new HashMap<>();

@@ -239,7 +239,7 @@ public class EditLog {
                     PartitionPersistInfoV2 info = (PartitionPersistInfoV2) journal.data();
                     LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
-                            + " partitionName = " + info.getPartition().getName());
+                            + " name = " + info.getPartition().getName());
                     globalStateMgr.getLocalMetastore().replayAddPartition(info);
                     break;
                 }
@@ -261,7 +261,7 @@ public class EditLog {
                     DropPartitionInfo info = (DropPartitionInfo) journal.data();
                     LOG.info("Begin to unprotect drop partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
-                            + " partitionName = " + info.getPartitionName());
+                            + " name = " + info.getPartitionName());
                     globalStateMgr.getLocalMetastore().replayDropPartition(info);
                     break;
                 }

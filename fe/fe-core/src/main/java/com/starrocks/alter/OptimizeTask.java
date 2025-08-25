@@ -22,7 +22,7 @@ import java.util.List;
 
 public class OptimizeTask extends Task {
 
-    @SerializedName("partitionName")
+    @SerializedName("name")
     private String partitionName;
 
     @SerializedName("tempPartitionName")
@@ -96,7 +96,7 @@ public class OptimizeTask extends Task {
     public String toString() {
         return super.toString() +
                 " OptimizeTask{" +
-                "partitionName='" + partitionName + '\'' +
+                "name='" + partitionName + '\'' +
                 ", tempPartitionName='" + tempPartitionName + '\'' +
                 ", optimizeTaskState=" + optimizeTaskState +
                 ", lastVersion=" + lastVersion;

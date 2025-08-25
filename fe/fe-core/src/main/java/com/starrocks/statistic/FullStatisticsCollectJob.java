@@ -84,7 +84,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
             ", cast($collectionSizeFunction as BIGINT)" + // BIGINT
-            " FROM (select $quoteColumnName as column_key from `$dbName`.`$tableName` partition `$partitionName`) tt";
+            " FROM (select $quoteColumnName as column_key from `$dbName`.`$tableName` partition `$name`) tt";
     private static final String OVERWRITE_PARTITION_TEMPLATE =
             "INSERT INTO " + TABLE_NAME + "(" + StatisticUtils.buildStatsColumnDef(TABLE_NAME).stream().map(ColumnDef::getName)
                     .collect(Collectors.joining(", ")) + ") " + "\n" +
@@ -181,7 +181,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
     // INSERT INTO column_statistics(table_id, partition_id, column_name, db_id, table_name,
     // partition_name, row_count, data_size, ndv, null_count, max, min, update_time, collection_size) values
-    // ($tableId, $partitionId, '$columnName', $dbId, '$dbName.$tableName', '$partitionName',
+    // ($tableId, $partitionId, '$columnName', $dbId, '$dbName.$tableName', '$name',
     //  $count, $dataSize, hll_deserialize('$hll'), $countNull, $maxFunction, $minFunction, NOW(), $collectionSizeFunction);
     @Override
     public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
@@ -331,7 +331,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         context.put("partitionId", partition.getId());
         context.put("columnNameStr", columnNameStr);
         context.put("dataSize", fullAnalyzeGetDataSize(quoteColumnKey, columnType));
-        context.put("partitionName", partition.getName());
+        context.put("name", partition.getName());
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
         context.put("quoteColumnName", quoteColumnName);

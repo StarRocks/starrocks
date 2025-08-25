@@ -22,8 +22,8 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.scheduler.MvTaskRunContext;
-import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellNone;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -86,10 +86,10 @@ public class MVPCTRefreshRangePartitionerTest {
 
         MVPCTRefreshRangePartitioner partitioner = new MVPCTRefreshRangePartitioner(mvContext, null, null, mv);
 
-        Map<String, PCell> toRefreshPartitions = Maps.newHashMap();
-        toRefreshPartitions.put("partition1", mock(PCell.class));
-        toRefreshPartitions.put("partition2", mock(PCell.class));
-        toRefreshPartitions.put("partition3", mock(PCell.class));
+        PCellSortedSet toRefreshPartitions = PCellSortedSet.of();
+        toRefreshPartitions.add(PCellWithName.of("partition1", new PCellNone()));
+        toRefreshPartitions.add(PCellWithName.of("partition2", new PCellNone()));
+        toRefreshPartitions.add(PCellWithName.of("partition3", new PCellNone()));
 
         partitioner.filterPartitionsByTTL(toRefreshPartitions, true);
 

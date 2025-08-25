@@ -2551,7 +2551,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         for (String partitionName : partitionNames) {
             try {
-                //updatePartitionInMemoryMeta(db, olapTable.getName(), partitionName, isInMemory);
+                //updatePartitionInMemoryMeta(db, olapTable.getName(), name, isInMemory);
                 updatePartitionTabletMeta(db, olapTable.getName(), partitionName, isInMemory, TTabletMetaType.INMEMORY);
             } catch (Exception e) {
                 String errMsg = "Failed to update partition[" + partitionName + "]'s 'in_memory' property. " +
