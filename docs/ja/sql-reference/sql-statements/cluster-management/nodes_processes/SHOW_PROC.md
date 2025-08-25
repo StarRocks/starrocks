@@ -419,6 +419,7 @@ mysql> SHOW PROC '/cluster_balance';
 +-------------------+--------+
 | Item              | Number |
 +-------------------+--------+
+| balance_stat      | 1      |
 | cluster_load_stat | 1      |
 | working_slots     | 3      |
 | sched_stat        | 1      |
@@ -431,8 +432,30 @@ mysql> SHOW PROC '/cluster_balance';
 
 | **戻り値** | **説明**                                  |
 | ---------- | ------------------------------------------------ |
-| Item       | `cluster_balance` のサブコマンド項目。 <ul><li>cluster_load_stat: クラスターの現在の負荷状況。</li><li>working_slots: 現在利用可能な作業スロットの数。</li><li>sched_stat: スケジューラの現在の状態。</li><li>priority_repair: 優先されるタブレット修復タスクの数。</li><li>pending_tablets: 処理待ちのタブレットの数。</li><li>running_tablets: 現在修復中のタブレットの数。</li><li>history_tablets: 過去に修復されたタブレットの総数。</li></ul>         |
+| Item       | `cluster_balance` のサブコマンド項目。 <ul><li>balance_stat: クラスターの現在のバランス状態。</li><li>cluster_load_stat: クラスターの現在の負荷状況。</li><li>working_slots: 現在利用可能な作業スロットの数。</li><li>sched_stat: スケジューラの現在の状態。</li><li>priority_repair: 優先されるタブレット修復タスクの数。</li><li>pending_tablets: 処理待ちのタブレットの数。</li><li>running_tablets: 現在修復中のタブレットの数。</li><li>history_tablets: 過去に修復されたタブレットの総数。</li></ul>         |
 | Number     | `cluster_balance` の各サブコマンドの数。 |
+
+```Plain
+mysql> SHOW PROC '/cluster_balance/balance_stat';
++---------------+--------------------------------+----------+----------------+----------------+
+| StorageMedium | BalanceType                    | Balanced | PendingTablets | RunningTablets |
++---------------+--------------------------------+----------+----------------+----------------+
+| HDD           | inter-node disk usage          | true     | 0              | 0              |
+| HDD           | inter-node tablet distribution | true     | 0              | 0              |
+| HDD           | intra-node disk usage          | true     | 0              | 0              |
+| HDD           | intra-node tablet distribution | true     | 0              | 0              |
+| HDD           | colocation group               | true     | 0              | 0              |
+| HDD           | label-aware location           | true     | 0              | 0              |
++---------------+--------------------------------+----------+----------------+----------------+
+```
+
+| **戻り値**      | **説明**                                  |
+| -------------- | ------------------------------------------- |
+| StorageMedium  | ストレージメディア。                           |
+| BalanceType    | バランス状態の種類。                           |
+| Balanced       | バランス状態が達成されているかどうか。            |
+| PendingTablets | タスク状態が「Pending」の Tablet の数。         | 
+| RunningTablets | タスク状態が「Running」の Tablet の数。        |
 
 例 12: クラスター内の Colocate Join グループの情報を表示します。
 
