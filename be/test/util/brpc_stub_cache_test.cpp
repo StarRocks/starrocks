@@ -18,8 +18,10 @@
 #include "util/brpc_stub_cache.h"
 
 #include <gtest/gtest.h>
+#include <testutil/assert.h>
 
 #include "util/failpoint/fail_point.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -27,10 +29,22 @@ class BrpcStubCacheTest : public testing::Test {
 public:
     BrpcStubCacheTest() = default;
     ~BrpcStubCacheTest() override = default;
+    void SetUp() override {
+        _env._pipeline_timer = new pipeline::PipelineTimer();
+        ASSERT_OK(_env._pipeline_timer->start());
+
+    }
+    void TearDown() override {
+        delete _env._pipeline_timer;
+        _env._pipeline_timer = nullptr;
+    }
+
+private:
+    ExecEnv _env;
 };
 
 TEST_F(BrpcStubCacheTest, normal) {
-    BrpcStubCache cache;
+    BrpcStubCache cache(&_env);
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
@@ -46,7 +60,7 @@ TEST_F(BrpcStubCacheTest, normal) {
 }
 
 TEST_F(BrpcStubCacheTest, invalid) {
-    BrpcStubCache cache;
+    BrpcStubCache cache(&_env);
     TNetworkAddress address;
     address.hostname = "invalid.cm.invalid";
     address.port = 123;
@@ -55,7 +69,7 @@ TEST_F(BrpcStubCacheTest, invalid) {
 }
 
 TEST_F(BrpcStubCacheTest, reset) {
-    BrpcStubCache cache;
+    BrpcStubCache cache(&_env);
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
