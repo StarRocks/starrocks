@@ -1768,11 +1768,11 @@ StatusOr<ColumnPtr> ArrayFunctions::null_or_empty(FunctionContext* context, cons
 
     auto size = columns[0]->size();
     if (columns[0]->only_null()) {
-        return ColumnHelper::create_const_column(1, size);
+        return ColumnHelper::create_const_column<TYPE_BOOLEAN>(1, size);
     }
     if (columns[0]->is_constant()) {
         auto* array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(columns[0].get()));
-        return ColumnHelper::create_const_column(array_column->get_element_size(0) == 0, size);
+        return ColumnHelper::create_const_column<TYPE_BOOLEAN>(array_column->get_element_size(0) == 0, size);
     }
     auto* array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(columns[0].get()));
 
