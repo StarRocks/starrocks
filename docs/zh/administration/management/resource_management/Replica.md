@@ -371,7 +371,7 @@ Tablet Scheduler 调度 Tablet 时，会选择一定数量的正常 Tablet 作�
   ```
 
   - `IndexId`：分区内 Materialized Index 的 ID。
-  - `TabletBalanceStat`：节点之间或者节点内部 Tablet 分布的均衡情况。包括是否均衡。如果不均衡，则显示不均衡的具体情况,包括 Colocation Group、Label-aware Location。
+  - `TabletBalanceStat`：节点之间或者节点内部 Tablet 分布的均衡情况。如果不均衡，则显示不均衡的具体情况,包括 Colocation Group、Label-aware Location。
 
 - **查看 Tablet 分布不均衡的分区：**
 
