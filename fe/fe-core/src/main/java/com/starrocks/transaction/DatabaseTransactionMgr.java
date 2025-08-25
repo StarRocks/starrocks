@@ -1687,9 +1687,11 @@ public class DatabaseTransactionMgr {
     private void clearTransactionState(TransactionState transactionState) {
         idToFinalStatusTransactionState.remove(transactionState.getTransactionId());
         Set<Long> txnIds = unprotectedGetTxnIdsByLabel(transactionState.getLabel());
-        txnIds.remove(transactionState.getTransactionId());
-        if (txnIds.isEmpty()) {
-            labelToTxnIds.remove(transactionState.getLabel());
+        if (txnIds != null) {
+            txnIds.remove(transactionState.getTransactionId());
+            if (txnIds.isEmpty()) {
+                labelToTxnIds.remove(transactionState.getLabel());
+            }
         }
     }
 
