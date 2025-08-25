@@ -121,7 +121,8 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
                 [&](auto&& arg) {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (is_type_in<T, std::monostate, int96_t, decimal12_t, DecimalV2Value, DatumArray,
-                                             DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*>()) {
+                                             DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*,
+                                             VariantValue*>()) {
                         // ignore these types
                     } else if constexpr (std::is_same_v<T, Slice>) {
                         res = std::string(arg.data, arg.size);
