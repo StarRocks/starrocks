@@ -366,11 +366,15 @@ public class TaskManager implements MemoryTrackable {
         }
         TaskRun taskRun = buildTaskRun(task, option);
         ExecPlan execPlan = getMVRefreshExecPlan(taskRun, task, option, statement);
-        Optional<Set<String>> pctmvToRefreshedPartitions = getPCTMVToRefreshedPartitions(taskRun);
         String explainString = StmtExecutor.buildExplainString(execPlan, statement,
                 ConnectContext.get(), ResourceGroupClassifier.QueryType.MV, statement.getExplainLevel());
-        if (pctmvToRefreshedPartitions.isPresent() && statement.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
-            explainString += "\n" + "MVToRefreshedPartitions: " + pctmvToRefreshedPartitions.get();
+
+        // append pctmvToRefreshedPartitions
+        if (statement.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
+            Optional<Set<String>> pctmvToRefreshedPartitions = getPCTMVToRefreshedPartitions(taskRun);
+            if (pctmvToRefreshedPartitions.isPresent()) {
+                explainString += "\n" + "MVToRefreshedPartitions: " + pctmvToRefreshedPartitions.get();
+            }
         }
         return explainString;
     }
