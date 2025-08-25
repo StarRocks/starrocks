@@ -92,6 +92,7 @@ public class AuthenticationHandler {
             }
 
             Preconditions.checkState(provider != null);
+            context.setAuthenticationProvider(provider);
 
             if (Config.enable_auth_check) {
                 //Throw an exception directly and feedback to the client
@@ -128,6 +129,7 @@ public class AuthenticationHandler {
 
             AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
             try {
+                context.setAuthenticationProvider(provider);
                 provider.authenticate(context, UserIdentity.createEphemeralUserIdent(user, remoteHost), authResponse);
             } catch (AuthenticationException e) {
                 exceptions.add(new Pair<>(authMechanism, e));

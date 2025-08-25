@@ -36,23 +36,16 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.CaseSensibility;
-import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.sql.analyzer.FeNameFormat;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TUserIdentity;
 
 import java.io.IOException;
 
 // https://dev.mysql.com/doc/refman/8.0/en/account-names.html
 // username must be literally matched.
-public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
+public class UserIdentity implements Writable, GsonPostProcessable {
     @SerializedName("user")
     private String user;
     @SerializedName("host")
@@ -66,19 +59,16 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
      */
     private boolean ephemeral;
 
-    private final NodePosition pos;
-
     public static final UserIdentity ROOT;
 
     static {
-        ROOT = new UserIdentity(AuthenticationMgr.ROOT_USER, "%");
+        ROOT = new UserIdentity("root", "%");
     }
 
     /**
      * Allow empty construction for gson
      */
     public UserIdentity() {
-        pos = NodePosition.ZERO;
     }
 
     public UserIdentity(String user, String host) {
@@ -86,15 +76,14 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
     }
 
     public UserIdentity(boolean ephemeral, String user, String host) {
-        this(user, host, false, ephemeral, NodePosition.ZERO);
+        this(user, host, false, ephemeral);
     }
 
     public UserIdentity(String user, String host, boolean isDomain) {
-        this(user, host, isDomain, false, NodePosition.ZERO);
+        this(user, host, isDomain, false);
     }
 
-    public UserIdentity(String user, String host, boolean isDomain, boolean ephemeral, NodePosition pos) {
-        this.pos = pos;
+    public UserIdentity(String user, String host, boolean isDomain, boolean ephemeral) {
         this.user = user;
         this.host = Strings.emptyToNull(host);
         this.isDomain = isDomain;
@@ -111,7 +100,7 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
 
     public static UserIdentity fromThrift(TUserIdentity tUserIdent) {
         return new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain,
-                tUserIdent.is_ephemeral, NodePosition.ZERO);
+                tUserIdent.is_ephemeral);
     }
 
     public static UserIdentity createEphemeralUserIdent(String user, String host) {
@@ -132,17 +121,6 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
 
     public boolean isEphemeral() {
         return ephemeral;
-    }
-
-    public void analyze() {
-        if (Strings.isNullOrEmpty(user)) {
-            throw new SemanticException("Does not support anonymous user");
-        }
-
-        FeNameFormat.checkUserName(user);
-
-        // reuse createMysqlPattern to validate host pattern
-        PatternMatcher.createMysqlPattern(host, CaseSensibility.HOST.getCaseSensibility());
     }
 
     public static UserIdentity fromString(String userIdentStr) {
@@ -221,10 +199,5 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
     @Override
     public void gsonPostProcess() throws IOException {
         user = ClusterNamespace.getNameFromFullName(user);
-    }
-
-    @Override
-    public NodePosition getPos() {
-        return pos;
     }
 }

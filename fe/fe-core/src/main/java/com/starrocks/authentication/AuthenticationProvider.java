@@ -47,4 +47,8 @@ public interface AuthenticationProvider {
             throws AuthenticationException {
         return null;
     }
+
+    default void checkLoginSuccess(ConnectContext context) throws AuthenticationException {
+        // do nothing
+    }
 }
