@@ -1648,6 +1648,7 @@ struct TQueryStatisticsInfo {
     14: optional string customQueryId
     15: optional string resourceGroupName
     16: optional string execProgress
+    17: optional string execState
 }
 
 struct TGetQueryStatisticsResponse {
