@@ -38,10 +38,12 @@ import com.starrocks.credential.CloudType;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.solr.common.StringUtils;
 
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,6 +82,12 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     @SerializedName("e")
     private boolean enabled;
+
+    @SerializedName("vt")
+    private long vTabletId = -1L;
+
+    @SerializedName("vtg")
+    private long vTabletGroupId = -1L;
 
     public static String CREDENTIAL_MASK = "******";
 
@@ -166,6 +174,22 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public Boolean getEnabled() {
         return enabled;
+    }
+
+    public long getVTabletId() {
+        return vTabletId;
+    }
+
+    public void setVTabletId(long vTabletId) {
+        this.vTabletId = vTabletId;
+    }
+
+    public long getVTabletGroupId() {
+        return vTabletGroupId;
+    }
+
+    public void setVTabletGroupId(long vTabletGroupId) {
+        this.vTabletGroupId = vTabletGroupId;
     }
 
     public void setComment(String comment) {
@@ -262,20 +286,35 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public FileStoreInfo toFileStoreInfo() {
+        return toFileStoreInfo(Collections.emptyMap());
+    }
+
+    public FileStoreInfo toFileStoreInfo(Map<String, String> properties) {
         FileStoreInfo.Builder builder = cloudConfiguration.toFileStoreInfo().toBuilder();
         builder.setFsKey(id)
                 .setFsName(this.name)
                 .setComment(this.comment)
                 .setEnabled(this.enabled)
-                .addAllLocations(locations);
+                .addAllLocations(locations)
+                .putAllProperties(properties);
         return builder.build();
     }
 
     public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) throws DdlException {
         String svt = fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
-        return new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
+        StorageVolume storageVolume = new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
                 fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment());
+
+        Map<String, String> propertiesMap = fsInfo.getPropertiesMap();
+        if (propertiesMap.containsKey("v_shard_id") && propertiesMap.containsKey("v_shard_group_id")) {
+            String vTabletIdStr = propertiesMap.get("v_shard_id");
+            String vTabletIdGroupIdStr = propertiesMap.get("v_shard_group_id");
+            storageVolume.setVTabletId(StringUtils.isEmpty(vTabletIdStr) ? -1L : Long.parseLong(vTabletIdStr));
+            storageVolume.setVTabletGroupId(
+                    StringUtils.isEmpty(vTabletIdGroupIdStr) ? -1L : Long.parseLong(vTabletIdGroupIdStr));
+        }
+        return storageVolume;
     }
 
     public static Map<String, String> getParamsFromFileStoreInfo(FileStoreInfo fsInfo) {

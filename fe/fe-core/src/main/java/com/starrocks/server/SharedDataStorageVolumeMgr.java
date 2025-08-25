@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.common.base.Strings;
+import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.util.LockCloseable;
@@ -28,9 +29,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.TableStorageInfo;
 import com.starrocks.persist.TableStorageInfos;
@@ -116,6 +119,16 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     protected void removeInternalNoLock(StorageVolume sv) throws DdlException {
         GlobalStateMgr.getCurrentState().getStarOSAgent().removeFileStoreByName(sv.getName());
+
+        // remove virtual tablets
+        if (sv.getVTabletId() != -1) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(Collections.singleton(sv.getVTabletId()));
+        }
+
+        if (sv.getVTabletGroupId() != -1) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShardGroup(
+                    Collections.singletonList(sv.getVTabletGroupId()));
+        }
     }
 
     @Override
@@ -614,6 +627,64 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 return "";
             default:
                 return "";
+        }
+    }
+
+    @Override
+    public boolean hasStorageVolumeBindAsVirtualGroup(long shardGroupId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            List<FileStoreInfo> fileStoreInfos = GlobalStateMgr.getCurrentState().getStarOSAgent().listFileStore();
+            for (FileStoreInfo fileStoreInfo : fileStoreInfos) {
+                Map<String, String> properties = fileStoreInfo.getPropertiesMap();
+                if (properties.containsKey("v_shard_group_id")) {
+                    String vShardGroupId = properties.get("v_shard_group_id");
+                    if (String.valueOf(shardGroupId).equals(vShardGroupId)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (DdlException e) {
+            LOG.warn("Failed to check virtual tablet id binding", e);
+        }
+        return false;
+    }
+
+    public long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId) throws MetaNotFoundException {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            StorageVolume storageVolume = this.getStorageVolumeByName(storageVolumeName);
+            if (storageVolume == null) {
+                throw new MetaNotFoundException(
+                        "Unknown src storage volume while creating virtual tablet: " + storageVolumeName);
+            }
+
+            long vTabletId = storageVolume.getVTabletId();
+            if (vTabletId != -1) {
+                return vTabletId;
+            }
+
+            try {
+                StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+                FilePathInfo pathInfo = starOSAgent.allocateFilePath(storageVolume.getId(), srcServiceId);
+                FileCacheInfo cacheInfo =
+                        FileCacheInfo.newBuilder().setEnableCache(false).setTtlSeconds(-1).setAsyncWriteBack(false).build();
+                // assume each shard group has only one shard
+                long shardGroupId = starOSAgent.createShardGroupForVirtualTablet();
+                Map<String, String> properties = new HashMap<>();
+                // create a new id as tablet id
+                vTabletId = GlobalStateMgr.getCurrentState().getNextId();
+
+                starOSAgent.createShardWithVirtualTabletId(pathInfo, cacheInfo, shardGroupId, properties, vTabletId,
+                        WarehouseManager.DEFAULT_RESOURCE);
+                LOG.info("Created shard for storage volume: {}, vTablet id: {}, group id: {}, src service id: {}",
+                        storageVolumeName, vTabletId, shardGroupId, srcServiceId);
+
+                // update storage volume
+                updateStorageVolumeVTabletMapping(storageVolumeName, vTabletId, shardGroupId);
+                return vTabletId;
+            } catch (Exception e) {
+                LOG.error("Failed to create shard for storage volume {} ", storageVolumeName, e);
+                throw new RuntimeException("Failed to create shard for storage volume: " + storageVolumeName, e);
+            }
         }
     }
 }
