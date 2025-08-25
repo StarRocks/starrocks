@@ -306,6 +306,7 @@ set(EXEC_FILES
         ./storage/lake/primary_key_compaction_task_test.cpp
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/lake/meta_file_test.cpp
+        ./storage/lake/txn_log_applier_test.cpp
         ./storage/lake/metacache_test.cpp
         ./storage/lake/compaction_scheduler_test.cpp
         ./storage/lake/compaction_task_context_test.cpp
