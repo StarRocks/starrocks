@@ -36,3 +36,25 @@ select count(*) from t1 where c0 like 's_%';
 -- result:
 2560032
 -- !result
+-- name: test_push_down_cast_expr
+CREATE TABLE `test003` (
+  `data_date` date NOT NULL COMMENT "",
+  `user_id` varchar(128) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`data_date`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`data_date`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into test003 values("2025-08-12", NULL);
+-- result:
+-- !result
+set sql_mode = 'ALLOW_THROW_EXCEPTION';
+-- result:
+-- !result
+select * from test003 where CAST(user_id AS INT) ;
+-- result:
+-- !result
