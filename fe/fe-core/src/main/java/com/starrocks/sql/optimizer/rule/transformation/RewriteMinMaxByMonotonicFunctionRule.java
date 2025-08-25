@@ -1,6 +1,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
@@ -18,8 +19,8 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.OperatorFunctionChecker;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -34,6 +35,12 @@ import java.util.Objects;
  *  - CAST(DATETIME AS DATE)
  */
 public class RewriteMinMaxByMonotonicFunctionRule extends TransformationRule {
+
+    private static final ImmutableSet<String> SUPPORTED_FUNCTION_SET = ImmutableSet.of(
+            FunctionSet.TO_DATETIME,
+            FunctionSet.FROM_UNIXTIME
+    );
+
     public RewriteMinMaxByMonotonicFunctionRule() {
         super(RuleType.TF_REWRITE_MINMAX_BY_MONOTONIC_FUNCTION,
                 Pattern.create(OperatorType.LOGICAL_AGGR)
@@ -179,7 +186,7 @@ public class RewriteMinMaxByMonotonicFunctionRule extends TransformationRule {
             if (!OperatorFunctionChecker.onlyContainMonotonicFunctions(call).first) {
                 return false;
             }
-            if (!call.getFnName().equalsIgnoreCase(FunctionSet.TO_DATE)) {
+            if (!SUPPORTED_FUNCTION_SET.contains(call.getFnName().toLowerCase())) {
                 return false;
             }
             // require one child which is column
