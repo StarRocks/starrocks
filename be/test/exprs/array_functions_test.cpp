@@ -6004,9 +6004,9 @@ TEST_F(ArrayFunctionsTest, null_or_empty) {
 
         auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(array)}).value();
         EXPECT_EQ(3, result->size());
-        EXPECT_TRUE("true", result->debug_item(0));
-        EXPECT_EQ("false", result->debug_item(1));
-        EXPECT_EQ("true", result->debug_item(2));
+        EXPECT_EQ("1", result->debug_item(0));
+        EXPECT_EQ("0", result->debug_item(1));
+        EXPECT_EQ("1", result->debug_item(2));
     }
 }
 } // namespace starrocks
