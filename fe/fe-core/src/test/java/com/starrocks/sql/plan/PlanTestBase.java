@@ -891,6 +891,23 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `tprimary_multi_cols` (\n" +
+                "  `pk` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v1` string NOT NULL COMMENT \"\",\n" +
+                "  `v2` int NOT NULL COMMENT \"\",\n" +
+                "  `v3` int NOT NULL COMMENT \"\",\n" +
+                "  `v4` int NOT NULL COMMENT \"\",\n" +
+                "  `v5` int NOT NULL COMMENT \"\",\n" +
+                "  `v6` int NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk`)\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"false\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE `tprimary_auto_increment` (\n" +
                 "  `pk` bigint NOT NULL COMMENT \"\",\n" +
                 "  `v1` bigint NOT NULL COMMENT \"\",\n" +
