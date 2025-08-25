@@ -19,6 +19,7 @@ The Frontend (FE) is the Java layer of StarRocks that provides the SQL interface
     - `qe/` — Query execution coordination and session management
     - `privilege/` — Authentication and authorization
     - `scheduler/`, `load/`, `backup/` — Scheduling, data loading, backup/restore
+- `fe/fe-grammar/` — ANTLR grammars (.g4) for StarRocks SQL
 - `fe/fe-parser/` — StarRocks SQL parser and full AST definitions
 - `fe/fe-spi/` — FE Service Provider Interfaces (contracts for connectors/plugins)
 - `fe/connector/` — Data source connector implementations and FE-side integration
@@ -31,8 +32,9 @@ Related:
 
 ## Extensibility overview
 - Syntax/AST:
-  - Extend grammar in `fe/fe-parser/` and add new AST nodes under `com.starrocks.sql.ast`.
-  - Follow AST conventions: include source positions; keep nodes immutable.
+  - Extend SQL grammar in `fe/fe-grammar/` (ANTLR .g4 files).
+  - Parser and AST live in `fe/fe-parser/` (package `com.starrocks.sql.parser` and `com.starrocks.sql.ast`).
+  - Follow AST conventions: include source positions; keep nodes immutable; push semantics to analyzer.
   - Update analyzer/optimizer and add tests.
 - Connectors (data sources):
   - Implement FE SPI in a dedicated module; provide discovery metadata (e.g., ServiceLoader or plugin manifest).
@@ -63,6 +65,7 @@ Related:
 - Prefer targeted changes and module-level verification.
 
 ## References
+- Grammar: `fe/fe-grammar/`
 - Parser and AST: `fe/fe-parser/`
 - SPI contracts: `fe/fe-spi/`
 - Connectors: `fe/connector/`
@@ -70,4 +73,3 @@ Related:
 - Utilities: `fe/fe-utils/`
 - Testing: `fe/fe-testing/`
 - Docs: https://docs.starrocks.io/
-

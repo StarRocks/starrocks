@@ -29,6 +29,7 @@ under the License.
     <packaging>pom</packaging>
 
     <modules>
+        <module>fe-grammar</module>
         <module>fe-spi</module>
         <module>fe-utils</module>
         <module>fe-testing</module>
