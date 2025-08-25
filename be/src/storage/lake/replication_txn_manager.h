@@ -69,12 +69,6 @@ private:
                                                          const std::string& meta_dir,
                                                          const std::shared_ptr<FileSystem>& shared_src_fs);
 
-    Status collect_all_rowsets_for_replication(bool incremental, int64_t data_version, int64_t src_visible_version,
-                                               int64_t src_tablet_id, int64_t target_tablet_id,
-                                               const std::string& src_meta_dir,
-                                               const std::shared_ptr<FileSystem>& shared_src_fs,
-                                               std::set<RowsetMetadataPB, RowsetMetaComparator>* new_rowsets);
-
     // incrementally build mutable rowset metadata for txn log,
     Status convert_lake_replicate_rowset_meta(const RowsetMetadataPB& src_rowset_meta, TxnLogPB::OpWrite* op_write);
 

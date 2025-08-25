@@ -267,30 +267,32 @@ Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnap
             << ", data dir: " << src_data_dir << ", txn_id: " << txn_id << ", src_tablet_id: " << src_tablet_id
             << ", tablet_id: " << target_tablet_id;
 
-    // mak incremental replication first, if `data_version` is lt 1 or source tablet meta lost, turn to full replication
-    // `status_or_last_src_tablet_meta` indicates the tablet meta corresponding to `data_version + 1` on source cluster
-    bool incremental = true;
-    if (data_version <= 1) {
-        incremental = false;
-    } else {
-        auto status_or_last_src_tablet_meta =
-                build_source_tablet_meta(src_tablet_id, data_version + 1, src_meta_dir, shared_src_fs);
-        if (!status_or_last_src_tablet_meta.ok()) {
-            LOG(INFO) << "Failed to get last src tablet meta, txn_id: " << txn_id
-                      << ", src_tablet_id: " << src_tablet_id << ", tablet_id: " << target_tablet_id
-                      << ", data_version: " << data_version << ", src_visible_version: " << src_visible_version
-                      << ", make full replication";
-            incremental = false; // if failed to get last src tablet meta, we should do full snapshot
-        }
-    }
+    // mak full replication for shared-data cluster migration
+    bool incremental = false;
 
+    // collect all rowsets for replication
     // `new_rowsets` indicates all rowsets that will be covered to replicate files to target storage
-    std::set<RowsetMetadataPB, RowsetMetaComparator> new_rowsets;
-    RETURN_IF_ERROR(collect_all_rowsets_for_replication(incremental, data_version, src_visible_version, src_tablet_id,
-                                                        target_tablet_id, src_meta_dir, shared_src_fs, &new_rowsets));
+    std::vector<std::shared_ptr<BaseRowset>> new_rowsets;
+    ASSIGN_OR_RETURN(auto src_visible_version_tablet_meta,
+                     build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
+    for (int i = 0, size = src_visible_version_tablet_meta->rowsets_size(); i < size; i++) {
+        auto rowset = std::make_shared<Rowset>(this, src_visible_version_tablet_meta, i, 0);
+        new_rowsets.emplace_back(std::static_pointer_cast<BaseRowset>(rowset));
+    }
 
     VLOG(3) << "Start to convert rowset metas for tablet_id: " << target_tablet_id
             << ", src_tablet_id: " << src_tablet_id << ", rowsets size: " << new_rowsets.size();
+
+    std::unordered_set<std::string> target_existed_segment_uuids;
+    ASSIGN_OR_RETURN(auto target_data_version_tablet_meta,
+                     _tablet_manager->get_tablet_metadata(target_tablet_id, data_version, false, 0, nullptr));
+    // remove rowsets that are already existed in `target_data_version_tablet_meta` from `new_rowsets`
+    for (const auto& rowset : target_data_version_tablet_meta->rowsets()) {
+        for (int i = 0; i < rowset.segments_size(); ++i) {
+            auto segment_name = rowset.segments(i);
+            target_existed_segment_uuids.emplace(extract_uuid_from(segment_name));
+        }
+    }
 
     // build file_locations mappings between source and target file locations,
     // it contains all files that need to replicate from source to target storage
@@ -335,9 +337,12 @@ Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnap
             if (UNLIKELY(new_segment_filename.empty())) {
                 return Status::Corruption("Failed to generate new segment filename from: " + src_segment_filename);
             }
-            // use src segment filename as target segment filename
-            auto target_segment_path = _tablet_manager->segment_location(target_tablet_id, new_segment_filename);
-            file_locations.emplace(join_path(src_data_dir, src_segment_filename), target_segment_path);
+
+            if (target_existed_segment_uuids.count(extract_uuid_from(src_segment_filename)) == 0) {
+                // not existed, means need to replicate from source to target, add it to file_locations map
+                auto target_segment_path = _tablet_manager->segment_location(target_tablet_id, new_segment_filename);
+                file_locations.emplace(join_path(src_data_dir, src_segment_filename), target_segment_path);
+            }
 
             FileEncryptionInfo encryption_info;
             if (config::enable_transparent_data_encryption) {
@@ -368,8 +373,6 @@ Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnap
             << ", target_tablet_id: " << target_tablet_id << ", filename_map size: " << filename_map.size();
 
     // copy source schema
-    ASSIGN_OR_RETURN(auto src_visible_version_tablet_meta,
-                     build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
     txn_log->mutable_op_replication()->mutable_source_schema()->CopyFrom(src_visible_version_tablet_meta->schema());
     const TabletSchemaPB* source_schema_pb = &txn_log->op_replication().source_schema();
     if (source_schema_pb == nullptr) {
@@ -398,7 +401,6 @@ Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnap
         }
         const auto& target_file_location = it->second;
         // check if need to convert segment file while downloading
-        // debug if (is_segment(src_file_name)) {
         if (is_segment(src_file_name) && !column_unique_id_map.empty()) {
             // file_size might be empty, in that case we'll get it while downloading the file
             auto file_size = segment_name_to_size_map[src_file_name];
@@ -459,48 +461,6 @@ StatusOr<TabletMetadataPtr> ReplicationTxnManager::build_source_tablet_meta(
         return src_tablet_meta_or;
     }
     return src_tablet_meta_or.value();
-}
-
-Status ReplicationTxnManager::collect_all_rowsets_for_replication(
-        bool incremental, int64_t data_version, int64_t src_visible_version, int64_t src_tablet_id,
-        int64_t target_tablet_id, const std::string& src_meta_dir, const std::shared_ptr<FileSystem>& shared_src_fs,
-        std::set<RowsetMetadataPB, RowsetMetaComparator>* new_rowsets) {
-    if (incremental) {
-        // starting at `src_visible_version`, read the tablet metadata forward along
-        // the `prev_garbage_version` pointer until the version reached `data_version`.
-        // then excluded those rowsets who comes from compaction (by checking compaction_inputs of tablet meta).
-        auto version = src_visible_version;
-        auto min_version = data_version + 1;
-        while (version >= min_version) {
-            ASSIGN_OR_RETURN(auto tablet_meta,
-                             build_source_tablet_meta(src_tablet_id, version, src_meta_dir, shared_src_fs));
-            if (tablet_meta->compaction_inputs_size() > 0) {
-                for (auto& rowset : tablet_meta->rowsets()) {
-                    new_rowsets->erase(rowset);
-                }
-            }
-            CHECK_LT(tablet_meta->prev_garbage_version(), version);
-            version = tablet_meta->prev_garbage_version();
-        }
-    } else {
-        ASSIGN_OR_RETURN(auto src_visible_version_tablet_meta,
-                         build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
-        for (auto& rowset : src_visible_version_tablet_meta->rowsets()) {
-            new_rowsets->insert(rowset);
-        }
-    }
-
-    ASSIGN_OR_RETURN(auto target_data_version_tablet_meta,
-                     _tablet_manager->get_tablet_metadata(target_tablet_id, data_version, false, 0, nullptr));
-    // remove rowsets that are already existed in `target_data_version_tablet_meta` from `new_rowsets`
-    for (const auto& rowset : target_data_version_tablet_meta->rowsets()) {
-        auto it = new_rowsets->find(rowset);
-        if (it != new_rowsets->end()) {
-            new_rowsets->erase(it);
-        }
-    }
-
-    return Status::OK();
 }
 
 Status ReplicationTxnManager::convert_lake_replicate_rowset_meta(const RowsetMetadataPB& src_rowset_meta,
