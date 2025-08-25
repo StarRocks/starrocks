@@ -14,13 +14,19 @@
 
 #include "exec/aggregate/aggregate_streaming_node.h"
 
+#include <memory>
+#include <type_traits>
 #include <variant>
 
+#include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_streaming_source_operator.h"
+#include "exec/pipeline/aggregate/sorted_aggregate_streaming_sink_operator.h"
+#include "exec/pipeline/aggregate/sorted_aggregate_streaming_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exprs/expr.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 
@@ -215,9 +221,11 @@ Status AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
 pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
+    context->has_aggregation = true;
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
     size_t degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
 
+    bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
     auto should_cache = context->should_interpolate_cache_operator(id(), ops_with_sink[0]);
     bool could_local_shuffle = !should_cache && !context->enable_group_execution();
     if (could_local_shuffle && _tnode.agg_node.__isset.interpolate_passthrough &&
@@ -227,17 +235,32 @@ pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::Pi
     }
 
     auto* upstream_source_op = context->source_operator(ops_with_sink);
-    auto operators_generator = [this, should_cache, upstream_source_op, context](bool post_cache) {
+    auto operators_generator = [this, should_cache, upstream_source_op, context,
+                                sorted_streaming_aggregate](bool post_cache) {
         // shared by sink operator factory and source operator factory
-        AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
-        auto aggr_mode = should_cache ? (post_cache ? AM_STREAMING_POST_CACHE : AM_STREAMING_PRE_CACHE) : AM_DEFAULT;
-        aggregator_factory->set_aggr_mode(aggr_mode);
-        auto sink_operator = std::make_shared<AggregateStreamingSinkOperatorFactory>(
-                context->next_operator_id(), id(), aggregator_factory, _build_runtime_filters);
-        auto source_operator = std::make_shared<AggregateStreamingSourceOperatorFactory>(context->next_operator_id(),
-                                                                                         id(), aggregator_factory);
-        context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
-        return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>{sink_operator, source_operator};
+        if (sorted_streaming_aggregate) {
+            StreamingAggregatorFactoryPtr aggregator_factory = std::make_shared<StreamingAggregatorFactory>(_tnode);
+            auto aggr_mode =
+                    should_cache ? (post_cache ? AM_STREAMING_POST_CACHE : AM_STREAMING_PRE_CACHE) : AM_DEFAULT;
+            aggregator_factory->set_aggr_mode(aggr_mode);
+            auto sink_operator = std::make_shared<SortedAggregateStreamingSinkOperatorFactory>(
+                    context->next_operator_id(), id(), aggregator_factory, _build_runtime_filters);
+            auto source_operator = std::make_shared<SortedAggregateStreamingSourceOperatorFactory>(
+                    context->next_operator_id(), id(), aggregator_factory);
+            context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
+            return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>{sink_operator, source_operator};
+        } else {
+            AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+            auto aggr_mode =
+                    should_cache ? (post_cache ? AM_STREAMING_POST_CACHE : AM_STREAMING_PRE_CACHE) : AM_DEFAULT;
+            aggregator_factory->set_aggr_mode(aggr_mode);
+            auto sink_operator = std::make_shared<AggregateStreamingSinkOperatorFactory>(
+                    context->next_operator_id(), id(), aggregator_factory, _build_runtime_filters);
+            auto source_operator = std::make_shared<AggregateStreamingSourceOperatorFactory>(
+                    context->next_operator_id(), id(), aggregator_factory);
+            context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
+            return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>{sink_operator, source_operator};
+        }
     };
 
     auto [agg_sink_op, agg_source_op] = operators_generator(false);
@@ -257,6 +280,21 @@ pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::Pi
                 context->interpolate_cache_operator(id(), ops_with_sink, ops_with_source, operators_generator);
     }
     context->add_pipeline(ops_with_sink);
+
+    // insert local shuffle after sorted streaming aggregate
+    if (_tnode.agg_node.need_finalize && sorted_streaming_aggregate && could_local_shuffle &&
+        _tnode.agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
+        auto try_interpolate_local_shuffle = [this, context](auto& ops) {
+            return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), ops, [this]() {
+                std::vector<ExprContext*> group_by_expr_ctxs;
+                WARN_IF_ERROR(Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs,
+                                                      runtime_state(), true),
+                              "create grouping expr failed");
+                return group_by_expr_ctxs;
+            });
+        };
+        ops_with_source = try_interpolate_local_shuffle(ops_with_source);
+    }
 
     if (limit() != -1) {
         ops_with_source.emplace_back(

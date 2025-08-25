@@ -18,6 +18,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
@@ -64,15 +68,15 @@ import java.util.Set;
 
 /**
  * JsonPathRewriteRule rewrites JSON function calls to column access paths for better performance.
- *
+ * <p>
  * Example transformation:
  * get_json_string(c1, '$.f1') = 1
  * =>
  * c1.f1 = 1
- *
+ * <p>
  * This rule supports the following JSON functions:
  * - get_json_string
- * - get_json_int  
+ * - get_json_int
  * - get_json_double
  * - get_json_bool
  */
@@ -371,6 +375,36 @@ public class JsonPathRewriteRule extends TransformationRule {
         }
         ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
         return scalarOperatorRewriter.rewrite(scalar, Arrays.asList(rewriter));
+    }
+
+    // Resolve the extended column from expression: get_json_int(data, 'a.b')  -> a.b
+    // return null if cannot resolve this expression
+    public static Column resolveJsonExpr(Expr expr, OlapTable olapTable) {
+        if (!(expr instanceof FunctionCallExpr func) ||
+                !SUPPORTED_JSON_FUNCTIONS.contains(func.getFnName().getFunction().toLowerCase())) {
+            return null;
+        }
+        List<Expr> params = func.getParams().exprs();
+        if (params.size() != 2 || !(params.get(0) instanceof SlotRef) || !params.get(1).isLiteral()) {
+            return null;
+        }
+        String columnName = ((SlotRef) params.get(0)).getColumnName();
+        String jsonPath = ((StringLiteral) params.get(1)).getStringValue();
+        String extendedName = columnName + "." + jsonPath;
+        Column res = olapTable.getColumn(extendedName);
+        if (res == null) {
+            return res;
+        }
+        res = res.deepCopy();
+        // The type in ORDER-BY can be different from the query type, we cannot support it
+        Type type = switch (func.getFnName().getFunction()) {
+            case FunctionSet.GET_JSON_INT -> Type.BIGINT;
+            case FunctionSet.GET_JSON_STRING -> Type.VARCHAR;
+            case FunctionSet.GET_JSON_DOUBLE -> Type.DOUBLE;
+            default -> Type.UNKNOWN_TYPE;
+        };
+        res.setType(type);
+        return res;
     }
 
     /**
