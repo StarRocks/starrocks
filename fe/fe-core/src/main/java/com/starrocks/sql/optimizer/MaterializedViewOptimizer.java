@@ -64,6 +64,7 @@ public class MaterializedViewOptimizer {
         optimizerOptions.disableRule(RuleType.TF_ELIMINATE_AGG);
         optimizerOptions.disableRule(RuleType.TF_ELIMINATE_AGG_FUNCTION);
         optimizerOptions.disableRule(RuleType.TF_PULL_UP_PREDICATE_SCAN);
+        optimizerOptions.disableRule(RuleType.TF_JSON_PATH_REWRITE);
         // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
         if (mv.getRefreshScheme().isSync()) {
             optimizerOptions.disableRule(RuleType.TF_MATERIALIZED_VIEW);
