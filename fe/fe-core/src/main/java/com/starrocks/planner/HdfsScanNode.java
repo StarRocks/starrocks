@@ -59,6 +59,7 @@ import static com.starrocks.thrift.TExplainLevel.VERBOSE;
  * TODO: Dictionary pruning
  */
 public class HdfsScanNode extends ScanNode {
+    private volatile boolean reachLimit = false;
     private HiveConnectorScanRangeSource scanRangeSource = null;
 
     private HiveTable hiveTable = null;
@@ -115,7 +116,12 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public boolean hasMoreScanRanges() {
-        return scanRangeSource.hasMoreOutput();
+        return !reachLimit && scanRangeSource.hasMoreOutput();
+    }
+
+    @Override
+    public void setReachLimit() {
+        reachLimit = true;
     }
 
     @Override

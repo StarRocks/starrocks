@@ -47,5 +47,6 @@ public class HdfsScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         HdfsScanNode scanNode = new HdfsScanNode(new PlanNodeId(0), desc, "XXX");
+        scanNode.setReachLimit();
     }
 }
