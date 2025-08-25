@@ -23,7 +23,6 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
@@ -260,9 +259,15 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 validateLocations(svType, locations);
                 newStorageVolume = new StorageVolume(oldStorageVolume.getId(), name, svType, locations, params,
                         enabled.orElse(oldStorageVolume.getEnabled()), comment);
-                if (oldStorageVolume.getVTabletIdToGroupIdPair() != null) {
-                    newStorageVolume.setVTabletIdToGroupIdPair(oldStorageVolume.getVTabletIdToGroupIdPair());
+
+                if (oldStorageVolume.getVTabletId() != -1) {
+                    newStorageVolume.setVTabletId(oldStorageVolume.getVTabletId());
                 }
+
+                if (oldStorageVolume.getVTabletGroupId() != -1) {
+                    newStorageVolume.setVTabletGroupId(oldStorageVolume.getVTabletGroupId());
+                }
+
                 locationChangedStorageVolumeId = newStorageVolume.getId();
             }
 
@@ -280,7 +285,8 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
         StorageVolume copied = new StorageVolume(sv);
         // reset global unique id
-        copied.setVTabletIdToGroupIdPair(Pair.create(vTabletId, vTabletGroupId));
+        copied.setVTabletId(vTabletId);
+        copied.setVTabletGroupId(vTabletGroupId);
         updateInternalNoLock(copied);
     }
 

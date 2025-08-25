@@ -43,7 +43,6 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
@@ -1145,7 +1144,8 @@ public class SharedDataStorageVolumeMgrTest {
         long existedShardId = 10001L;
         long existedGroupId = 20001L;
         StorageVolume storageVolume = svm.getStorageVolumeByName(storageVolumeName);
-        storageVolume.setVTabletIdToGroupIdPair(Pair.create(existedShardId, existedGroupId));
+        storageVolume.setVTabletId(existedShardId);
+        storageVolume.setVTabletGroupId(existedGroupId);
 
         ExceptionChecker.expectThrowsNoException(() -> {
             Assertions.assertEquals(existedShardId, svm.getOrCreateVirtualTabletId(storageVolumeName, srcServiceId));

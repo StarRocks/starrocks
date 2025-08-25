@@ -29,7 +29,6 @@ import com.staros.proto.GSFileStoreInfo;
 import com.staros.proto.HDFSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
@@ -85,7 +84,10 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     private boolean enabled;
 
     @SerializedName("vt")
-    private Pair<Long, Long> vTabletIdToGroupIdPair;
+    private long vTabletId = -1L;
+
+    @SerializedName("vtg")
+    private long vTabletGroupId = -1L;
 
     public static String CREDENTIAL_MASK = "******";
 
@@ -174,12 +176,20 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         return enabled;
     }
 
-    public Pair<Long, Long> getVTabletIdToGroupIdPair() {
-        return vTabletIdToGroupIdPair;
+    public long getVTabletId() {
+        return vTabletId;
     }
 
-    public void setVTabletIdToGroupIdPair(Pair<Long, Long> vTabletIdToGroupIdPair) {
-        this.vTabletIdToGroupIdPair = vTabletIdToGroupIdPair;
+    public void setVTabletId(long vTabletId) {
+        this.vTabletId = vTabletId;
+    }
+
+    public long getVTabletGroupId() {
+        return vTabletGroupId;
+    }
+
+    public void setVTabletGroupId(long vTabletGroupId) {
+        this.vTabletGroupId = vTabletGroupId;
     }
 
     public void setComment(String comment) {
@@ -300,9 +310,9 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         if (propertiesMap.containsKey("v_shard_id") && propertiesMap.containsKey("v_shard_group_id")) {
             String vTabletIdStr = propertiesMap.get("v_shard_id");
             String vTabletIdGroupIdStr = propertiesMap.get("v_shard_group_id");
-            Long vTabletId = StringUtils.isEmpty(vTabletIdStr) ? -1L : Long.parseLong(vTabletIdStr);
-            Long vTabletIdGroupId = StringUtils.isEmpty(vTabletIdGroupIdStr) ? -1L : Long.parseLong(vTabletIdGroupIdStr);
-            storageVolume.setVTabletIdToGroupIdPair(Pair.create(vTabletId, vTabletIdGroupId));
+            storageVolume.setVTabletId(StringUtils.isEmpty(vTabletIdStr) ? -1L : Long.parseLong(vTabletIdStr));
+            storageVolume.setVTabletGroupId(
+                    StringUtils.isEmpty(vTabletIdGroupIdStr) ? -1L : Long.parseLong(vTabletIdGroupIdStr));
         }
         return storageVolume;
     }

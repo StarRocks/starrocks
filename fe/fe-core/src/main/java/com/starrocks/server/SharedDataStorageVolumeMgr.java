@@ -30,7 +30,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
@@ -121,13 +120,14 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     protected void removeInternalNoLock(StorageVolume sv) throws DdlException {
         GlobalStateMgr.getCurrentState().getStarOSAgent().removeFileStoreByName(sv.getName());
 
-        // remove virtual shards
-        Pair<Long, Long> tabletIdToGroupIdMap = sv.getVTabletIdToGroupIdPair();
-        if (tabletIdToGroupIdMap != null) {
-            GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .deleteShards(Collections.singleton(tabletIdToGroupIdMap.first));
-            GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .deleteShardGroup(Collections.singletonList(tabletIdToGroupIdMap.second));
+        // remove virtual tablets
+        if (sv.getVTabletId() != -1) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(Collections.singleton(sv.getVTabletId()));
+        }
+
+        if (sv.getVTabletGroupId() != -1) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShardGroup(
+                    Collections.singletonList(sv.getVTabletGroupId()));
         }
     }
 
@@ -657,9 +657,9 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                         "Unknown src storage volume while creating virtual tablet: " + storageVolumeName);
             }
 
-            Pair<Long, Long> vTabletIdToGroupIdPair = storageVolume.getVTabletIdToGroupIdPair();
-            if (vTabletIdToGroupIdPair != null) {
-                return vTabletIdToGroupIdPair.first;
+            long vTabletId = storageVolume.getVTabletId();
+            if (vTabletId != -1) {
+                return vTabletId;
             }
 
             try {
@@ -670,7 +670,8 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 // assume each shard group has only one shard
                 long shardGroupId = starOSAgent.createShardGroupForVirtualTablet();
                 Map<String, String> properties = new HashMap<>();
-                long vTabletId = GlobalStateMgr.getCurrentState().getNextId();
+                // create a new id as tablet id
+                vTabletId = GlobalStateMgr.getCurrentState().getNextId();
 
                 starOSAgent.createShardWithVirtualTabletId(pathInfo, cacheInfo, shardGroupId, properties, vTabletId,
                         WarehouseManager.DEFAULT_RESOURCE);
