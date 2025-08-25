@@ -22,6 +22,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "simd/simd.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -662,8 +663,11 @@ Status NLJoinProbeOperator::_permute_right_join(size_t chunk_size) {
             }
         }
         permute_rows += chunk->num_rows();
-
-        RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
+        {
+            CommonExprEvalScopeGuard guard(chunk, _common_expr_ctxs);
+            RETURN_IF_ERROR(guard.evaluate());
+            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
+        }
         RETURN_IF_ERROR(_output_accumulator.push(std::move(chunk)));
         match_flag_index += cur_chunk_size;
     }
