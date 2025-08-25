@@ -153,52 +153,84 @@ private:
     }
 };
 
-// Super-compact AsofVector variant - from 15+ lines to 4 lines!
-#define ASOF_VECTOR_TYPES(T) \
-    std::unique_ptr<AsofLookupVector<T, TExprOpcode::LT>>, \
-    std::unique_ptr<AsofLookupVector<T, TExprOpcode::LE>>, \
-    std::unique_ptr<AsofLookupVector<T, TExprOpcode::GT>>, \
-    std::unique_ptr<AsofLookupVector<T, TExprOpcode::GE>>
+#define ASOF_BUFFER_TYPES(T) \
+    Buffer<std::unique_ptr<AsofLookupVector<T, TExprOpcode::LT>>>, \
+    Buffer<std::unique_ptr<AsofLookupVector<T, TExprOpcode::LE>>>, \
+    Buffer<std::unique_ptr<AsofLookupVector<T, TExprOpcode::GT>>>, \
+    Buffer<std::unique_ptr<AsofLookupVector<T, TExprOpcode::GE>>>
 
-using AsofVectorVariant = std::variant<
-    ASOF_VECTOR_TYPES(int64_t),        // 0-3
-    ASOF_VECTOR_TYPES(DateValue),      // 4-7
-    ASOF_VECTOR_TYPES(TimestampValue)  // 8-11
+using AsofBufferVariant = std::variant<
+    ASOF_BUFFER_TYPES(int64_t),        // 0-3: Buffer<AsofLookupVector<int64_t, OP>*>
+    ASOF_BUFFER_TYPES(DateValue),      // 4-7: Buffer<AsofLookupVector<DateValue, OP>*>
+    ASOF_BUFFER_TYPES(TimestampValue)  // 8-11: Buffer<AsofLookupVector<TimestampValue, OP>*>
 >;
 
 
-// Method 2: Cache-optimized safe check (recommended for production)
-inline bool is_asof_vector_uninitialized(const AsofVectorVariant& variant) {
-    // Fast path: Check most common cases first (assuming int64_t is most frequent)
-    size_t idx = variant.index();
-    if (idx < 4) {  // int64_t cases (0-3) - most likely
-        switch (idx) {
-            case 0: return !std::get<0>(variant);   case 1: return !std::get<1>(variant);
-            case 2: return !std::get<2>(variant);   case 3: return !std::get<3>(variant);
-        }
-    } else if (idx < 8) {  // DateValue cases (4-7)
-        switch (idx) {
-            case 4: return !std::get<4>(variant);   case 5: return !std::get<5>(variant);
-            case 6: return !std::get<6>(variant);   case 7: return !std::get<7>(variant);
-        }
-    } else if (idx < 12) {  // TimestampValue cases (8-11)
-        switch (idx) {
-            case 8:  return !std::get<8>(variant);  case 9:  return !std::get<9>(variant);
-            case 10: return !std::get<10>(variant); case 11: return !std::get<11>(variant);
-        }
-    }
-    return true;  // Invalid index
-    // Performance: ~2-3 CPU cycles (still much faster than std::visit)
+constexpr size_t get_asof_variant_index(LogicalType logical_type, TExprOpcode::type opcode) {
+    size_t base = (logical_type == TYPE_BIGINT) ? 0 : (logical_type == TYPE_DATE) ? 4 : 8;
+    size_t offset = (opcode == TExprOpcode::LT) ? 0 : (opcode == TExprOpcode::LE) ? 1 : (opcode == TExprOpcode::GT) ? 2 : 3;
+    return base + offset;
 }
 
-// Alternative: Cache the "first access" pattern for each bucket
-// Most buckets will either be completely empty or get multiple values
-// So we can optimize for the "already initialized" case
+// 🚀 根据 variant_index 创建对应类型的 Buffer
+inline AsofBufferVariant create_asof_buffer_by_index(size_t variant_index) {
+    switch (variant_index) {
+        case 0:  return Buffer<std::unique_ptr<AsofLookupVector<int64_t, TExprOpcode::LT>>>{};
+        case 1:  return Buffer<std::unique_ptr<AsofLookupVector<int64_t, TExprOpcode::LE>>>{};
+        case 2:  return Buffer<std::unique_ptr<AsofLookupVector<int64_t, TExprOpcode::GT>>>{};
+        case 3:  return Buffer<std::unique_ptr<AsofLookupVector<int64_t, TExprOpcode::GE>>>{};
+        case 4:  return Buffer<std::unique_ptr<AsofLookupVector<DateValue, TExprOpcode::LT>>>{};
+        case 5:  return Buffer<std::unique_ptr<AsofLookupVector<DateValue, TExprOpcode::LE>>>{};
+        case 6:  return Buffer<std::unique_ptr<AsofLookupVector<DateValue, TExprOpcode::GT>>>{};
+        case 7:  return Buffer<std::unique_ptr<AsofLookupVector<DateValue, TExprOpcode::GE>>>{};
+        case 8:  return Buffer<std::unique_ptr<AsofLookupVector<TimestampValue, TExprOpcode::LT>>>{};
+        case 9:  return Buffer<std::unique_ptr<AsofLookupVector<TimestampValue, TExprOpcode::LE>>>{};
+        case 10: return Buffer<std::unique_ptr<AsofLookupVector<TimestampValue, TExprOpcode::GT>>>{};
+        case 11: return Buffer<std::unique_ptr<AsofLookupVector<TimestampValue, TExprOpcode::GE>>>{};
+        default: __builtin_unreachable();
+    }
+}
 
-// Factory function declaration - implementation moved to .cpp file
-AsofVectorVariant create_asof_lookup_vector_base(LogicalType logical_type, TExprOpcode::type opcode);
+// 🚀 简洁的 ASOF Buffer 获取宏
+#define ASOF_BUFFER(table_items) \
+    ([](auto* items) -> auto& { \
+        switch (items->asof_variant_index) { \
+            case 0:  return std::get<0>(items->asof_lookup_vectors); \
+            case 1:  return std::get<1>(items->asof_lookup_vectors); \
+            case 2:  return std::get<2>(items->asof_lookup_vectors); \
+            case 3:  return std::get<3>(items->asof_lookup_vectors); \
+            case 4:  return std::get<4>(items->asof_lookup_vectors); \
+            case 5:  return std::get<5>(items->asof_lookup_vectors); \
+            case 6:  return std::get<6>(items->asof_lookup_vectors); \
+            case 7:  return std::get<7>(items->asof_lookup_vectors); \
+            case 8:  return std::get<8>(items->asof_lookup_vectors); \
+            case 9:  return std::get<9>(items->asof_lookup_vectors); \
+            case 10: return std::get<10>(items->asof_lookup_vectors); \
+            case 11: return std::get<11>(items->asof_lookup_vectors); \
+            default: __builtin_unreachable(); \
+        } \
+    }(table_items))
 
-#undef ASOF_VECTOR_TYPES
+#define CREATE_ASOF_VECTOR_BY_INDEX(buffer, variant_index, asof_lookup_index) \
+    do { \
+        switch (variant_index) { \
+            case 0:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::LT>>(); break; \
+            case 1:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::LE>>(); break; \
+            case 2:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::GT>>(); break; \
+            case 3:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::GE>>(); break; \
+            case 4:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::LT>>(); break; \
+            case 5:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::LE>>(); break; \
+            case 6:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::GT>>(); break; \
+            case 7:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::GE>>(); break; \
+            case 8:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::LT>>(); break; \
+            case 9:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::LE>>(); break; \
+            case 10: buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::GT>>(); break; \
+            case 11: buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::GE>>(); break; \
+            default: __builtin_unreachable(); \
+        } \
+    } while (0)
+
+#undef ASOF_BUFFER_TYPES
 
 
 
@@ -256,20 +288,15 @@ struct JoinHashTableItems {
     float keys_per_bucket = 0;
     AsofJoinConditionDesc asof_join_condition_desc;
 
-    Buffer<AsofVectorVariant> asof_lookup_vectors;
-
-    template <typename CppType>
-    void add_asof_row(uint32_t lookup_index, CppType asof_value, uint32_t row_index);
-
-    template <typename CppType>
-    uint32_t find_asof_match(uint32_t lookup_index, CppType probe_value) const;
+    AsofBufferVariant asof_lookup_vectors;
+    size_t asof_variant_index = 0;
 
     void finalize_asof_lookup_vectors() {
-        for (auto& variant : asof_lookup_vectors) {
-            std::visit([](auto& ptr) {
+        std::visit([](auto& buffer) {
+            for (auto& ptr : buffer) {
                 if (ptr) ptr->sort();
-            }, variant);
-        }
+            }
+        }, asof_lookup_vectors);
     }
 
 public:

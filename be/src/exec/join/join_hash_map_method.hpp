@@ -129,7 +129,7 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::build_prepare(RuntimeState*
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
     if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        table_items->asof_lookup_vectors.resize(table_items->row_count + 1);
+        ASOF_BUFFER(table_items).resize(table_items->row_count + 1);
     }
 }
 
@@ -143,6 +143,8 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(JoinHa
         LogicalType asof_join_build_type = table_items->asof_join_condition_desc.build_logical_type;
         auto process_build_rows = [&]<LogicalType ASOF_LT>() {
             using CppType = RunTimeCppType<ASOF_LT>;
+
+            auto& asof_buffer = ASOF_BUFFER(table_items);
 
             const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
                     table_items->asof_join_condition_desc.build_slot_id);
@@ -221,12 +223,11 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(JoinHa
 
                 uint32_t asof_lookup_index = _extract_data(first[bucket_num]);
 
-                if (is_asof_vector_uninitialized(table_items->asof_lookup_vectors[asof_lookup_index])) {
-                    table_items->asof_lookup_vectors[asof_lookup_index] = create_asof_lookup_vector_base(
-                            asof_join_build_type, table_items->asof_join_condition_desc.condition_op);
+                if (!asof_buffer[asof_lookup_index]) {
+                    CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
                 }
 
-                table_items->add_asof_row(asof_lookup_index, probe_temporal_values[i], i);
+                asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i], i);
             }
         };
 
@@ -427,7 +428,7 @@ void LinearChainedJoinHashMap2<LT>::build_prepare(RuntimeState* state, JoinHashT
     table_items->fps.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
     if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        table_items->asof_lookup_vectors.resize(table_items->row_count + 1);
+        ASOF_BUFFER(table_items).resize(table_items->row_count + 1);
     }
 }
 
@@ -438,6 +439,27 @@ void LinearChainedJoinHashMap2<LT>::construct_hash_table(JoinHashTableItems* tab
         LogicalType asof_join_build_type = table_items->asof_join_condition_desc.build_logical_type;
         auto process_build_rows = [&]<LogicalType ASOF_LT>() {
             using ASOF_CppType = RunTimeCppType<ASOF_LT>;
+
+            // 🚀 提取具体类型的 Buffer，一次性操作，零开销！
+            // 由于 variant_index 是预计算的，这里的 switch 在编译时就能优化
+            auto get_buffer = [&]() -> auto& {
+                switch (table_items->asof_variant_index) {
+                    case 0:  return std::get<0>(table_items->asof_lookup_vectors);
+                    case 1:  return std::get<1>(table_items->asof_lookup_vectors);
+                    case 2:  return std::get<2>(table_items->asof_lookup_vectors);
+                    case 3:  return std::get<3>(table_items->asof_lookup_vectors);
+                    case 4:  return std::get<4>(table_items->asof_lookup_vectors);
+                    case 5:  return std::get<5>(table_items->asof_lookup_vectors);
+                    case 6:  return std::get<6>(table_items->asof_lookup_vectors);
+                    case 7:  return std::get<7>(table_items->asof_lookup_vectors);
+                    case 8:  return std::get<8>(table_items->asof_lookup_vectors);
+                    case 9:  return std::get<9>(table_items->asof_lookup_vectors);
+                    case 10: return std::get<10>(table_items->asof_lookup_vectors);
+                    case 11: return std::get<11>(table_items->asof_lookup_vectors);
+                    default: __builtin_unreachable();
+                }
+            };
+            auto& asof_buffer = get_buffer();
 
             if (!table_items->build_chunk) {
                 CHECK(false) << "ASOF JOIN: build_chunk is null";
@@ -534,18 +556,16 @@ void LinearChainedJoinHashMap2<LT>::construct_hash_table(JoinHashTableItems* tab
 
                     uint32_t asof_lookup_index = first[bucket_num];
 
-                    if (asof_lookup_index >= table_items->asof_lookup_vectors.size()) {
-                        CHECK(false) << "ASOF JOIN: asof_lookup_index out of bounds. index=" << asof_lookup_index
-                                     << ", size=" << table_items->asof_lookup_vectors.size();
-                        return;
+                    // 直接使用提取的 buffer，避免 variant 操作
+                    if (asof_lookup_index >= asof_buffer.size()) {
+                        asof_buffer.resize(asof_lookup_index + 1);
+                    }
+                    if (!asof_buffer[asof_lookup_index]) {
+                        CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
                     }
 
-                    if (is_asof_vector_uninitialized(table_items->asof_lookup_vectors[asof_lookup_index])) {
-                        table_items->asof_lookup_vectors[asof_lookup_index] = create_asof_lookup_vector_base(
-                                asof_join_build_type, table_items->asof_join_condition_desc.condition_op);
-                    }
-
-                    table_items->add_asof_row(asof_lookup_index, probe_temporal_values[i + j], i + j);
+                    // 直接调用，零 variant 开销
+                    asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i + j], i + j);
                 }
             }
         };
@@ -659,7 +679,7 @@ void DirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinHashTa
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
     if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        table_items->asof_lookup_vectors.resize(table_items->row_count + 1);
+        ASOF_BUFFER(table_items).resize(table_items->row_count + 1);
     }
 }
 
@@ -675,6 +695,8 @@ void DirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems* tabl
 
         auto process_build_rows = [&]<LogicalType ASOF_LT>() {
             using CppType = RunTimeCppType<ASOF_LT>;
+
+            auto& asof_buffer = ASOF_BUFFER(table_items);
 
             const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
                     table_items->asof_join_condition_desc.build_slot_id);
@@ -698,12 +720,12 @@ void DirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems* tabl
 
                 uint32_t asof_lookup_index = table_items->first[bucket_num];
 
-                if (is_asof_vector_uninitialized(table_items->asof_lookup_vectors[asof_lookup_index])) {
-                    table_items->asof_lookup_vectors[asof_lookup_index] = create_asof_lookup_vector_base(
-                            asof_join_build_type, table_items->asof_join_condition_desc.condition_op);
+                if (!asof_buffer[asof_lookup_index]) {
+                    CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
                 }
 
-                table_items->add_asof_row(asof_lookup_index, probe_temporal_values[i], i);
+                // 🚀 直接调用，零开销！
+                asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i], i);
             }
         };
 
@@ -778,7 +800,7 @@ void RangeDirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinH
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
     if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        table_items->asof_lookup_vectors.resize(table_items->row_count + 1);
+        ASOF_BUFFER(table_items).resize(table_items->row_count + 1);
     }
 }
 
@@ -794,6 +816,8 @@ void RangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems*
 
         auto process_build_rows = [&]<LogicalType ASOF_LT>() {
             using CppType = RunTimeCppType<ASOF_LT>;
+
+            auto& asof_buffer = ASOF_BUFFER(table_items);
 
             const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
                     table_items->asof_join_condition_desc.build_slot_id);
@@ -817,12 +841,11 @@ void RangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems*
 
                 uint32_t asof_lookup_index = table_items->first[bucket_num];
 
-                if (is_asof_vector_uninitialized(table_items->asof_lookup_vectors[asof_lookup_index])) {
-                    table_items->asof_lookup_vectors[asof_lookup_index] = create_asof_lookup_vector_base(
-                            asof_join_build_type, table_items->asof_join_condition_desc.condition_op);
+                if (!asof_buffer[asof_lookup_index]) {
+                    CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
                 }
 
-                table_items->add_asof_row(asof_lookup_index, probe_temporal_values[i], i);
+                asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i], i);
             }
         };
 
@@ -981,7 +1004,7 @@ void DenseRangeDirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, 
     table_items->first.resize(table_items->row_count + 1, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
     if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        table_items->asof_lookup_vectors.resize(table_items->row_count + 1);
+        ASOF_BUFFER(table_items).resize(table_items->row_count + 1);
     }
 }
 
@@ -996,6 +1019,8 @@ void DenseRangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableI
 
         auto process_build_rows = [&]<LogicalType ASOF_LT>() {
             using AsofCppType = RunTimeCppType<ASOF_LT>;
+
+            auto& asof_buffer = ASOF_BUFFER(table_items);
 
             const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
                     table_items->asof_join_condition_desc.build_slot_id);
@@ -1046,12 +1071,11 @@ void DenseRangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableI
 
                 uint32_t asof_lookup_index = table_items->first[index];
 
-                if (is_asof_vector_uninitialized(table_items->asof_lookup_vectors[asof_lookup_index])) {
-                    table_items->asof_lookup_vectors[asof_lookup_index] = create_asof_lookup_vector_base(
-                            asof_join_build_type, table_items->asof_join_condition_desc.condition_op);
+                if (!asof_buffer[asof_lookup_index]) {
+                    CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
                 }
 
-                table_items->add_asof_row(asof_lookup_index, probe_temporal_values[i], i);
+                asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i], i);
             }
         };
 

@@ -373,6 +373,13 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items->join_keys = param.join_keys;
     _table_items->asof_join_condition_desc = param.asof_join_condition_desc;
 
+    if (_table_items->join_type == TJoinOp::ASOF_INNER_JOIN || _table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
+        _table_items->asof_variant_index = get_asof_variant_index(
+            _table_items->asof_join_condition_desc.build_logical_type,
+            _table_items->asof_join_condition_desc.condition_op);
+        _table_items->asof_lookup_vectors = create_asof_buffer_by_index(_table_items->asof_variant_index);
+    }
+
     _init_probe_column(param);
     _init_build_column(param);
 
