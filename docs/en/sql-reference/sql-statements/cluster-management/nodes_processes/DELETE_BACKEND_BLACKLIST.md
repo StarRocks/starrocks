@@ -2,11 +2,11 @@
 displayed_sidebar: docs
 ---
 
-# DELETE BACKEND BLACKLIST
+# DELETE BACKEND/COMPUTE NOT BLACKLIST
 
-DELETE BACKEND BLACKLIST removes a BE node from the BE Blacklist. Please note that StarRocks will not remove the BE nodes that are manually blacklisted by users.
+Removes a BE/CN node from the BE Blacklist. Please note that StarRocks will not remove the BE/CN nodes that are manually blacklisted by users.
 
-This feature is supported from v3.3.0 onwards. For more information, see [Manage BE Blacklist](../../../../administration/management/BE_blacklist.md).
+BE Blacklist is supported from v3.3.0 onwards and CN Blacklist is supported from v4.0 onwards. For more information, see [Manage BE and CN Blacklist](../../../../administration/management/BE_blacklist.md).
 
 :::note
 
@@ -17,12 +17,12 @@ Only users with the SYSTEM-level BLACKLIST privilege can perform this operation.
 ## Syntax
 
 ```SQL
-DELETE BACKEND BLACKLIST <be_id>[, ...]
+DELETE { BACKEND | COMPUTE NODE } BLACKLIST { <be_id>[, ...] | <cn_id>[, ...] }
 ```
 
 ## Parameters
 
-`be_id`: ID of the BE node to be removed from the blacklist. You can obtain the ID of the blacklisted BE by executing [SHOW BACKEND BLACKLIST](./SHOW_BACKEND_BLACKLIST.md).
+`be_id` or `cn_id`: ID of the BE or CN node to be removed from the blacklist. You can obtain the ID of the blacklisted BE/CN by executing [SHOW BACKEND/COMPUTE NODE BLACKLIST](./SHOW_BACKEND_BLACKLIST.md).
 
 ## Examples
 
@@ -32,7 +32,8 @@ DELETE BACKEND BLACKLIST 10001;
 
 ## Relevant SQLs
 
-- [ADD BACKEND BLACKLIST](./ADD_BACKEND_BLACKLIST.md)
-- [SHOW BACKEND BLACKLIST](./SHOW_BACKEND_BLACKLIST.md)
-- [SHOW BACKENDS](SHOW_BACKENDS.md)
+- [ADD BACKEND/COMPUTE NODE BLACKLIST](./ADD_BACKEND_BLACKLIST.md)
+- [SHOW BACKEND/COMPUTE NODE BLACKLIST](./SHOW_BACKEND_BLACKLIST.md)
+- [SHOW BACKENDS](./SHOW_BACKENDS.md)
+- [SHOW COMPUTE NODES](./SHOW_COMPUTE_NODES.md)
 
