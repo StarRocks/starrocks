@@ -144,6 +144,9 @@ public abstract class ScanNode extends PlanNode {
         return false;
     }
 
+    public void setReachLimit() {
+    }
+
     /**
      * cast expr to SlotDescriptor type
      */
