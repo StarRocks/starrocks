@@ -30,7 +30,7 @@ displayed_sidebar: docs
 | CREATE_TIME               | 任务创建时间。                         |
 | SCHEDULE_TIME             | 任务开始调度执行时间。                 |
 | FINISH_TIME               | 任务完成时间。                         |
-| CLONE_BYTES               | 拷贝文件的大小，单位字节。              |
+| CLONE_BYTES               | 拷贝文件的大小，单位：字节。            |
 | CLONE_DURATION            | 拷贝耗时，单位：秒。                     |
 | CLONE_RATE                | 拷贝速率，单位：MB/s。                  |
 | FAILED_SCHEDULE_COUNT     | 任务调度失败的次数。                   |
