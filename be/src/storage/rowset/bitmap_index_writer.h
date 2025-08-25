@@ -55,15 +55,20 @@ public:
     BitmapIndexWriter() = default;
     virtual ~BitmapIndexWriter() = default;
 
+    virtual void add_value_with_current_rowid(const void* vptr) = 0;
+
     virtual void add_values(const void* values, size_t count) = 0;
 
     virtual void add_nulls(uint32_t count) = 0;
 
     virtual Status finish(WritableFile* file, ColumnIndexMetaPB* index_meta) = 0;
+    virtual Status finish(WritableFile* file, BitmapIndexPB* meta) = 0;
 
     virtual uint64_t size() const = 0;
 
+    virtual void incre_rowid() = 0;
 private:
+
     BitmapIndexWriter(const BitmapIndexWriter&) = delete;
     const BitmapIndexWriter& operator=(const BitmapIndexWriter&) = delete;
 };
