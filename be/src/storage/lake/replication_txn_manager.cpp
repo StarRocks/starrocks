@@ -331,8 +331,12 @@ Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnap
 
         for (int i = 0; i < src_rowset_meta.segments_size(); ++i) {
             auto src_segment_filename = src_rowset_meta.segments(i);
-            // user src segment filename as target segment filename
-            auto target_segment_path = _tablet_manager->segment_location(target_tablet_id, src_segment_filename);
+            auto new_segment_filename = gen_segment_filename_from(txn_id, src_segment_filename);
+            if (UNLIKELY(new_segment_filename.empty())) {
+                return Status::Corruption("Failed to generate new segment filename from: " + src_segment_filename);
+            }
+            // use src segment filename as target segment filename
+            auto target_segment_path = _tablet_manager->segment_location(target_tablet_id, new_segment_filename);
             file_locations.emplace(join_path(src_data_dir, src_segment_filename), target_segment_path);
 
             FileEncryptionInfo encryption_info;
@@ -341,17 +345,17 @@ Status ReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnap
                 op_write->mutable_rowset()->add_segment_encryption_metas(pair.encryption_meta);
                 encryption_info = std::move(pair.info);
             }
-            op_write->mutable_rowset()->add_segments(src_segment_filename);
+            op_write->mutable_rowset()->add_segments(new_segment_filename);
 
             if (segment_size_size > 0) {
                 auto segment_size = src_rowset_meta.segment_size(i);
                 op_write->mutable_rowset()->add_segment_size(segment_size);
-                segment_name_to_size_map.emplace(src_segment_filename, segment_size);
+                segment_name_to_size_map.emplace(new_segment_filename, segment_size);
             }
 
             // reuse filename map structure
             auto pair = filename_map.emplace(src_segment_filename,
-                                             std::pair(src_segment_filename, std::move(encryption_info)));
+                                             std::pair(new_segment_filename, std::move(encryption_info)));
             if (!pair.second) {
                 return Status::Corruption("Duplicated segment file: " + pair.first->first);
             }
