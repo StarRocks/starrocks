@@ -307,6 +307,7 @@ public class FunctionSet {
     public static final String DISTINCT_PC = "distinct_pc";
     public static final String DISTINCT_PCSA = "distinct_pcsa";
     public static final String HISTOGRAM = "histogram";
+    public static final String HISTOGRAM_HLL_NDV = "histogram_hll_ndv";
     public static final String FLAT_JSON_META = "flat_json_meta";
     public static final String MANN_WHITNEY_U_TEST = "mann_whitney_u_test";
 
@@ -813,6 +814,7 @@ public class FunctionSet {
                     .add(EXCHANGE_SPEED)
                     .add(FIRST_VALUE_REWRITE)
                     .add(HISTOGRAM)
+                    .add(HISTOGRAM_HLL_NDV)
                     .add(DICT_MERGE)
                     // no need to support agg_state
                     .add(DS_HLL_ACCUMULATE)
@@ -1387,6 +1389,9 @@ public class FunctionSet {
         for (Type t : HISTOGRAM_TYPE) {
             addBuiltin(AggregateFunction.createBuiltin(HISTOGRAM,
                     Lists.newArrayList(t, Type.INT, Type.DOUBLE), Type.VARCHAR, Type.VARCHAR,
+                    false, false, false));
+            addBuiltin(AggregateFunction.createBuiltin(HISTOGRAM_HLL_NDV,
+                    Lists.newArrayList(t, Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
         }
 
