@@ -76,7 +76,9 @@ public class PushDownPredicateScanRule extends TransformationRule {
         ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
         ScalarOperator predicates = Utils.compoundAnd(lfo.getPredicate(), logicalScanOperator.getPredicate());
 
-        predicates = ScalarOperatorRewriter.simplifyCaseWhen(predicates);
+        if (context.getSessionVariable().isEnableSimplifyCaseWhen()) {
+            predicates = ScalarOperatorRewriter.simplifyCaseWhen(predicates);
+        }
 
         ScalarRangePredicateExtractor rangeExtractor = new ScalarRangePredicateExtractor();
         predicates = rangeExtractor.rewriteOnlyColumn(Utils.compoundAnd(Utils.extractConjuncts(predicates)
