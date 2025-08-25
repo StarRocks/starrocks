@@ -119,7 +119,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
 
     @Override
     public void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
-        List<DeployState> states = new ArrayList<>();        
+        List<DeployState> states = new ArrayList<>();
         for (List<ExecutionFragment> executionFragments : dag.getFragmentsInTopologicalOrderFromRoot()) {
             final DeployState deployState = deployer.createFragmentExecStates(executionFragments);
             deployer.deployFragments(deployState);
@@ -130,16 +130,12 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
         if (option.useQueryDeployExecutor) {
             deployScanRangesTask.executorService = GlobalStateMgr.getCurrentState().getQueryDeployExecutor();
             deployScanRangesTask.currentTracers = Tracers.get();
-        } else {
-            deployScanRangesTask.start();
         }
     }
 
     @Override
     public void continueSchedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
-        if (option.useQueryDeployExecutor) {
-            deployScanRangesTask.start();
-        }
+        deployScanRangesTask.start();
     }
 
     @Override
