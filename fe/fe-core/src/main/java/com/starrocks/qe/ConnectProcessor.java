@@ -402,7 +402,7 @@ public class ConnectProcessor {
 
                 AuthenticationProvider authenticationProvider = ctx.getAuthenticationProvider();
                 try {
-                    authenticationProvider.checkLoginSuccess(ctx);
+                    authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAuthenticationContext());
                 } catch (AuthenticationException authenticationException) {
                     ErrorReport.report(authenticationException.getMessage());
                     ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
