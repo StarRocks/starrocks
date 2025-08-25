@@ -16,9 +16,9 @@ package com.starrocks.scheduler;
 
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
@@ -43,7 +43,7 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
                     .setDb(ctx.getDatabase())
                     .setCatalog(ctx.getCurrentCatalog());
             Tracers.register(ctx);
-            Tracers.init(ctx, Tracers.Mode.TIMER, null);
+            Tracers.init(ctx, "TIMER", null);
 
             StatementBase sqlStmt = SqlParser.parse(context.getDefinition(), ctx.getSessionVariable()).get(0);
             sqlStmt.setOrigStmt(new OriginStatement(context.getDefinition(), 0));

@@ -33,8 +33,8 @@ import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.load.routineload.PulsarRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
@@ -458,7 +458,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return dataSourceProperties;
     }
 
-    public static RoutineLoadDesc getLoadDesc(OriginStatement origStmt, Map<String, String> sessionVariables) {
+    public static RoutineLoadDesc getLoadDesc(OriginStatementInfo origStmt, Map<String, String> sessionVariables) {
 
         // parse the origin stmt to get routine load desc
         try {
