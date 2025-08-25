@@ -544,6 +544,14 @@ if [[ -d $TP_SOURCE_DIR/$BZIP_SOURCE ]] ; then
     echo "Finished patching $BZIP_SOURCE"
 fi
 
+if [[ -d $TP_SOURCE_DIR/$SIMDJSON_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$SIMDJSON_SOURCE
+    patch -p1 < "$TP_PATCH_DIR/simdjson_2.patch"
+    touch "$PATCHED_MARK"
+    cd -
+    echo "Finished patching $SIMDJSON_SOURCE"
+fi
+
 # patch bitshuffle
 if [[ -d $TP_SOURCE_DIR/$BITSHUFFLE_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$BITSHUFFLE_SOURCE
