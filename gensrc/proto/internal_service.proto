@@ -424,6 +424,10 @@ message PTabletReaderScanGetNextResult {
 
 message PExecPlanFragmentResult {
     required StatusPB status = 1;
+
+    // short circuit optimization on `select limit`
+    // scan nodes that don't need any scan ranges.
+    repeated int32 closed_scan_nodes = 2;
 };
 
 message PExecBatchPlanFragmentsRequest {

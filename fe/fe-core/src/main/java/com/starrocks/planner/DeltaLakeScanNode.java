@@ -53,6 +53,7 @@ public class DeltaLakeScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private CloudConfiguration cloudConfiguration = null;
     private DeltaConnectorScanRangeSource scanRangeSource = null;
+    private volatile boolean reachLimit = false;
     private int selectedPartitionCount = -1;
 
     public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -100,7 +101,12 @@ public class DeltaLakeScanNode extends ScanNode {
 
     @Override
     public boolean hasMoreScanRanges() {
-        return scanRangeSource.hasMoreOutput();
+        return !reachLimit && scanRangeSource.hasMoreOutput();
+    }
+
+    @Override
+    public void setReachLimit() {
+        reachLimit = true;
     }
 
     public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames, boolean enableIncrementalScanRanges)
