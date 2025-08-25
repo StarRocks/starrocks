@@ -2654,7 +2654,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableConnectorIncrementalScanRanges = true;
 
     @VarAttr(name = ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES_BACKGROUND)
-    private boolean enableConnectorIncrementalScanRangesBackground = false;
+    private boolean enableConnectorIncrementalScanRangesBackground = true;
 
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
     private int connectorIncrementalScanRangeSize = 500;
