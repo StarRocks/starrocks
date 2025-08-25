@@ -41,6 +41,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.OAuth2Context;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.VariableExpr;
+import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
@@ -188,10 +191,8 @@ public class ConnectContext {
     // If the downstream system needs it, it needs to be obtained from the ConnectContext.
     protected volatile String authToken = null;
 
-    // Only used in OAuth2 authentication mode to store
-    // relevant information of OAuth2 authentication.
-    // Ensure that necessary information can be obtained during OAuth2 http callback process.
-    private volatile OAuth2Context oAuth2Context = null;
+    // The authentication provider used for this authentication.
+    private AuthenticationProvider authenticationProvider = null;
 
     // After negotiate and switching with the client,
     // the auth plugin type used for this authentication is finally determined.
@@ -541,6 +542,8 @@ public class ConnectContext {
     }
 
     public String getAuthToken() {
+
+
         return authToken;
     }
 
@@ -548,12 +551,12 @@ public class ConnectContext {
         this.authToken = authToken;
     }
 
-    public void setOAuth2Context(OAuth2Context oAuth2Context) {
-        this.oAuth2Context = oAuth2Context;
+    public void setAuthenticationProvider(AuthenticationProvider authenticationProvider) {
+        this.authenticationProvider = authenticationProvider;
     }
 
-    public OAuth2Context getOAuth2Context() {
-        return oAuth2Context;
+    public AuthenticationProvider getAuthenticationProvider() {
+        return authenticationProvider;
     }
 
     public void setAuthPlugin(String authPlugin) {

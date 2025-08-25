@@ -16,6 +16,8 @@ package com.starrocks.http.rest;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.OAuth2AuthenticationProvider;
 import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.authentication.OAuth2ResultMessage;
 import com.starrocks.authentication.OpenIdConnectVerifier;
@@ -80,7 +82,9 @@ public class OAuth2Action extends RestBaseAction {
         }
 
         try {
-            OAuth2Context oAuth2Context = context.getOAuth2Context();
+            AuthenticationProvider authenticationProvider = context.getAuthenticationProvider();
+            OAuth2Context oAuth2Context = ((OAuth2AuthenticationProvider) authenticationProvider).getoAuth2Context();
+
             String oidcToken = getToken(authorizationCode, oAuth2Context, connectionId);
             JWKSet jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(oAuth2Context.jwksUrl());
 

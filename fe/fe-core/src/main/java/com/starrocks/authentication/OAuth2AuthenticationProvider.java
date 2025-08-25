@@ -15,11 +15,13 @@
 package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 
 import java.io.ByteArrayOutputStream;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 public class OAuth2AuthenticationProvider implements AuthenticationProvider {
@@ -93,13 +95,29 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
         MysqlCodec.writeInt2(outputStream, bytes.length);
         MysqlCodec.writeBytes(outputStream, bytes);
 
-        context.setOAuth2Context(oAuth2Context);
-
         return outputStream.toByteArray();
     }
 
     @Override
     public byte[] authSwitchRequestPacket(ConnectContext context, String user, String host) {
         return authMoreDataPacket(context, user, host);
+    }
+
+    @Override
+    public void checkLoginSuccess(ConnectContext ctx) throws AuthenticationException {
+        if (ctx.getAuthToken() == null) {
+            String authUrl = oAuth2Context.authServerUrl() +
+                    "?response_type=code" +
+                    "&client_id=" + URLEncoder.encode(oAuth2Context.clientId(), StandardCharsets.UTF_8) +
+                    "&redirect_uri=" + URLEncoder.encode(oAuth2Context.redirectUrl(), StandardCharsets.UTF_8) +
+                    "&state=" + ctx.getConnectionId() +
+                    "&scope=openid";
+
+            throw new AuthenticationException(ErrorCode.ERR_OAUTH2_NOT_AUTHENTICATED, authUrl);
+        }
+    }
+
+    public OAuth2Context getoAuth2Context() {
+        return oAuth2Context;
     }
 }
