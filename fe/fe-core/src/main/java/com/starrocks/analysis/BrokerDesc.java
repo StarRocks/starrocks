@@ -23,6 +23,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;

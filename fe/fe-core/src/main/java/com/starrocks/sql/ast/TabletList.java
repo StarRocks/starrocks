@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

@@ -37,7 +37,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;

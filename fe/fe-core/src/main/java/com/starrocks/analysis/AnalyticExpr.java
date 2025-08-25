@@ -43,6 +43,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import org.apache.commons.collections.CollectionUtils;

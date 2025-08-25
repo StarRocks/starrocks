@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
@@ -27,6 +26,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
