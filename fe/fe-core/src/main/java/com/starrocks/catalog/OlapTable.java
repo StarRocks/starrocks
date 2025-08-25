@@ -1769,6 +1769,9 @@ public class OlapTable extends Table {
             LocalDateTime currentDateTime = LocalDateTime.now();
             PartitionValue currentPartitionValue = new PartitionValue(
                     currentDateTime.format(DateUtils.DATE_FORMATTER_UNIX));
+            if (partitionType.isDatetime()) {
+                currentPartitionValue = new PartitionValue(currentDateTime.format(DateUtils.DATE_TIME_FORMATTER_UNIX));
+            }
             PartitionKey currentPartitionKey = PartitionKey.createPartitionKey(
                     ImmutableList.of(currentPartitionValue), partitionColumns);
             // For date types, ttl number should not consider future time
