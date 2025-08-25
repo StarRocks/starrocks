@@ -14,6 +14,7 @@
 
 package com.starrocks.http;
 
+import com.starrocks.common.Pair;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.channel.ChannelHandlerContext;
@@ -23,10 +24,13 @@ import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpVersion;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.util.List;
 
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
@@ -85,4 +89,36 @@ public class RestBaseActionTest {
         restBaseAction.redirectTo(mockRequest, mockResponse, mockAddr);
         verify(mockResponse).updateHeader(HttpHeaderNames.LOCATION.toString(), asciiUri);
     }
+
+    @Test
+    public void verifyCallGetAllAliveFe() {
+        List<Pair<String, Integer>> fronts = restBaseAction.getOtherAliveFe();
+        verify(restBaseAction).getAllAliveFe();
+    }
+
+    @Test
+    public void testGetOtherAliveFronts() {
+        new MockUp<RestBaseAction>() {
+            @Mock
+            public static List<Pair<String, Integer>> getAllAliveFe(){
+                return List.of(
+                        new Pair<>("fe1", 8030),
+                        new Pair<>("fe2", 8031)
+                );
+
+        }
+
+            @Mock
+            public static Pair<String, Integer> getCurrentFe() {
+                return new Pair<>("fe1", 8030);
+            }
+
+    };
+        List<Pair<String, Integer>> fronts = restBaseAction.getOtherAliveFe();
+        verify(restBaseAction).getCurrentFe();
+
+        assert fronts.size() == 1;
+
+    }
+
 }

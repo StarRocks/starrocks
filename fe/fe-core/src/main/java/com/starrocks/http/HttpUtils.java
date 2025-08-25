@@ -22,6 +22,8 @@ import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.config.Registry;
 import org.apache.http.config.RegistryBuilder;
 import org.apache.http.conn.socket.ConnectionSocketFactory;
@@ -40,6 +42,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -47,8 +50,6 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 import javax.net.ssl.SSLContext;
-
-import static org.apache.http.Consts.UTF_8;
 
 public class HttpUtils {
 
@@ -59,7 +60,7 @@ public class HttpUtils {
     private static PoolingHttpClientConnectionManager clientConnectionManager;
 
 
-    private static CloseableHttpClient getInstance() {
+    public static CloseableHttpClient getInstance() {
         if (httpClient == null) {
             httpClient = getHttpClient();
         }
@@ -114,75 +115,48 @@ public class HttpUtils {
 
     }
 
-
     public static String get(String uri, Map<String, String> header) {
-        CloseableHttpClient httpclient = getInstance();
-        if (Objects.isNull(httpClient)) {
-            LOG.error("HttpClient is null for uri: {}", uri);
-            return null;
-        }
         HttpGet httpGet = new HttpGet(uri);
-        CloseableHttpResponse response = null;
-        try {
-            if (header != null && !header.isEmpty()) {
-                header.forEach(httpGet::addHeader);
-            }
-            response = httpclient.execute(httpGet);
-            int code = response.getStatusLine().getStatusCode();
-            String result = EntityUtils.toString(response.getEntity(), UTF_8);
-            if (code == HttpStatus.SC_OK) {
-                return result;
-            } else {
-                LOG.error("request {}, error code:{}, result:{}", uri, code, result);
-                return null;
-            }
-        } catch (IOException e) {
-            LOG.error("http get exception", e);
-        } finally {
-            try {
-                if (response != null) {
-                    response.close();
-                }
-            } catch (IOException e) {
-                LOG.error("Get close exception in http get method", e);
-            }
-        }
-        return null;
+        addHeaders(httpGet, header);
+        return executeRequest(uri, httpGet, null);
     }
 
     public static String post(String uri, AbstractHttpEntity entity, Map<String, String> header) {
-        CloseableHttpClient httpclient = getInstance();
+        HttpPost httpPost = new HttpPost(uri);
+        httpPost.setEntity(entity);
+        addHeaders(httpPost, header);
+        return executeRequest(uri, httpPost, entity);
+    }
+
+    private static void addHeaders(HttpRequestBase request, Map<String, String> headers) {
+        if (headers != null && !headers.isEmpty()) {
+            headers.forEach(request::addHeader);
+        }
+    }
+
+    private static String executeRequest(String uri, HttpUriRequest request, AbstractHttpEntity entity) {
+        CloseableHttpClient httpClient = getInstance();
         if (Objects.isNull(httpClient)) {
             LOG.error("HttpClient is null for uri: {}", uri);
             return null;
         }
-        HttpPost httpPost = new HttpPost(uri);
-        CloseableHttpResponse response = null;
-        try {
-            httpPost.setEntity(entity);
-            if (header != null && !header.isEmpty()) {
-                header.forEach(httpPost::addHeader);
-            }
-            response = httpclient.execute(httpPost);
+        try (CloseableHttpResponse response = httpClient.execute(request)) {
             int code = response.getStatusLine().getStatusCode();
-            String result = EntityUtils.toString(response.getEntity(), UTF_8);
+            String result = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
             if (code == HttpStatus.SC_OK) {
                 return result;
             } else {
-                LOG.error("request url{}, error code:{}, body:{}, result:{}", uri, code, entity, result);
+                if (entity != null) {
+                    LOG.error("request url:{}, error code:{}, body:{}, result:{}", uri, code, entity, result);
+                } else {
+                    LOG.error("request url:{}, error code:{}, result:{}", uri, code, result);
+                }
                 return null;
             }
         } catch (IOException e) {
-            LOG.error("http post exception", e);
-        } finally {
-            try {
-                if (response != null) {
-                    response.close();
-                }
-            } catch (IOException e) {
-                LOG.error("Get close exception in http post method", e);
-            }
+            LOG.error("http request exception, uri: {}", uri, e);
+            return null;
         }
-        return null;
     }
+
 }
