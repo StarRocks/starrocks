@@ -35,7 +35,7 @@
 namespace starrocks {
 
 std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {
-        META_FLAT_JSON_META, META_DICT_MERGE, META_MAX, META_MIN, META_COUNT_ROWS, META_COUNT_COL};
+        META_FLAT_JSON_META, META_DICT_MERGE, META_MAX, META_MIN, META_COUNT_ROWS, META_COUNT_COL, META_COLUMN_SIZE};
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
@@ -140,6 +140,14 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             desc.children.emplace_back(item_desc);
             MutableColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
+        } else if (field == META_COLUMN_SIZE) {
+            TypeDescriptor item_desc;
+            item_desc.type = TYPE_BIGINT;
+            TypeDescriptor desc;
+            desc.type = TYPE_BIGINT;
+            desc.children.emplace_back(item_desc);
+            ColumnPtr column = ColumnHelper::create_column(desc, true);
+            chunk->append_column(std::move(column), slot->id());
         } else {
             MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             chunk->append_column(std::move(column), slot->id());
@@ -236,6 +244,8 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
         return _collect_flat_json(cid, column);
     } else if (name == META_COUNT_COL) {
         return _collect_count(cid, column, type);
+    } else if (name == META_COLUMN_SIZE) {
+        return _collect_column_size(cid, column);
     }
     return Status::NotSupported("Not Support Collect Meta: " + name);
 }
@@ -270,6 +280,16 @@ std::string append_read_name(const ColumnReader* col_reader) {
         return str.substr(0, str.size() - 2);
     }
     return stream.str();
+}
+
+Status SegmentMetaCollecter::_collect_column_size(ColumnId cid, Column* column) {
+    const ColumnReader* col_reader = _segment->column(cid);
+    if (col_reader == nullptr) {
+        return Status::NotFound("don't found column");
+    }
+
+    column->append_datum(int64_t(col_reader->total_mem_footprint()));
+    return Status::OK();
 }
 
 Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
