@@ -66,6 +66,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -74,6 +75,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -1041,6 +1043,82 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute runAfterCatalogReady", e);
         }
+    }
+
+    public synchronized List<List<String>> getCatalogRecycleBinInfo() {
+        Map<Long, Long> dbToDataSize = Maps.newHashMap();
+        List<List<String>> tableInfos = Lists.newArrayList();
+        for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
+            for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {
+                List<String> info = Lists.newArrayList();
+                info.add("Table");
+                RecycleTableInfo tableInfo = entry.getValue();
+                Table table = tableInfo.getTable();
+                info.add(table.getName());
+                info.add(String.valueOf(tableInfo.getDbId()));
+                info.add(String.valueOf(entry.getKey()));
+                info.add("");
+                info.add(Long.toString((idToRecycleTime.get(entry.getKey())) / 1000L));
+                tableInfos.add(info);
+            }
+        }
+        // sort by Name, DropTime
+        tableInfos.sort((x, y) -> {
+            int nameRet = x.get(1).compareTo(y.get(1));
+            if (nameRet == 0) {
+                return x.get(5).compareTo(y.get(5));
+            } else {
+                return nameRet;
+            }
+        });
+
+        List<List<String>> partitionInfos = Lists.newArrayList();
+        for (Map.Entry<Long, RecyclePartitionInfo> entry : idToPartition.entrySet()) {
+            List<String> info = Lists.newArrayList();
+            info.add("Partition");
+            RecyclePartitionInfo partitionInfo = entry.getValue();
+            Partition partition = partitionInfo.getPartition();
+            info.add(partition.getName());
+            info.add(String.valueOf(partitionInfo.getDbId()));
+            info.add(String.valueOf(partitionInfo.getTableId()));
+            info.add(String.valueOf(entry.getKey()));
+            info.add(Long.toString((idToRecycleTime.get(entry.getKey())) / 1000L));
+            partitionInfos.add(info);
+        }
+        // sort by Name, DropTime
+        partitionInfos.sort((x, y) -> {
+            int nameRet = x.get(1).compareTo(y.get(1));
+            if (nameRet == 0) {
+                return x.get(5).compareTo(y.get(5));
+            } else {
+                return nameRet;
+            }
+        });
+
+        List<List<String>> dbInfos = Lists.newArrayList();
+        for (Map.Entry<Long, RecycleDatabaseInfo> entry : idToDatabase.entrySet()) {
+            List<String> info = Lists.newArrayList();
+            info.add("Database");
+            RecycleDatabaseInfo dbInfo = entry.getValue();
+            Database db = dbInfo.getDb();
+            info.add(db.getFullName());
+            info.add(String.valueOf(entry.getKey()));
+            info.add("");
+            info.add("");
+            info.add(Long.toString((idToRecycleTime.get(entry.getKey())) / 1000L));
+            dbInfos.add(info);
+        }
+        // sort by Name, DropTime
+        dbInfos.sort((x, y) -> {
+            int nameRet = x.get(1).compareTo(y.get(1));
+            if (nameRet == 0) {
+                return x.get(5).compareTo(y.get(5));
+            } else {
+                return nameRet;
+            }
+        });
+
+        return Stream.of(dbInfos, tableInfos, partitionInfos).flatMap(Collection::stream).collect(Collectors.toList());
     }
 
     @VisibleForTesting
