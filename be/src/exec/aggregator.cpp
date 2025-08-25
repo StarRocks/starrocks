@@ -538,6 +538,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         }
         state->obj_pool()->add(_agg_fn_ctxs[i]);
         _agg_fn_ctxs[i]->set_mem_usage_counter(&_agg_state_mem_usage);
+        _agg_fn_ctxs[i]->set_agg_state_column_allocator(_allocator.get());
     }
 
     // save TFunction object
