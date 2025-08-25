@@ -124,8 +124,51 @@ ALTER TABLE t2_primary ADD INDEX gin_english(value) USING GIN ("parser" = "engli
 function: wait_alter_table_finish()
 show create table t2_primary;
 
-drop database test_gin_index;
+--name: rewrite_predicate
+CREATE TABLE rewrite_test (
+    AAA DATETIME not NULL COMMENT "",
+    BBB VARCHAR(200) not NULL COMMENT "",
+    CCC VARCHAR(200) not NULL COMMENT "",
+    DDD VARCHAR(2000) COMMENT "",
+    EEE LARGEINT  NULL COMMENT "",
+    FFF DECIMAL(20,10) NULL COMMENT "",
+    GGG VARCHAR(200)  NULL COMMENT "",
+    HHH FLOAT  NULL COMMENT "",
+    III BOOLEAN  NULL COMMENT "",
+    KKK CHAR(20)   NULL COMMENT "",
+    LLL STRING   NULL COMMENT "",
+    MMM VARCHAR(20)   NULL COMMENT "",
+    NNN BINARY  NULL COMMENT "",
+    OOO TINYINT NULL COMMENT "",
+    PPP DATETIME NULL COMMENT "",
+    QQQ ARRAY<INT> NULL COMMENT "",
+    RRR JSON NULL COMMENT "",
+    SSS MAP<INT,INT> NULL COMMENT "",
+    TTT STRUCT<a INT, b INT> NULL COMMENT "",
+    INDEX init_bitmap_index (KKK) USING BITMAP
+)
+primary KEY(AAA, BBB, CCC)
+PARTITION BY RANGE (`AAA`) (
+    START ("1970-01-01") END ("2030-01-01") EVERY (INTERVAL 30 YEAR)
+)
+DISTRIBUTED BY HASH(`AAA`, `BBB`) BUCKETS 1
+ORDER BY(`AAA`,`BBB`,`CCC`,`DDD`)
+PROPERTIES (
+      "replicated_storage"="true",
+      "replication_num" = "1",
+      "storage_format" = "v2",
+      "enable_persistent_index" = "true",
+      "bloom_filter_columns" = "MMM"
+  );
+CREATE INDEX idx ON rewrite_test(DDD) USING GIN('parser' = 'english');
+function: wait_alter_table_finish()
 
+show create table rewrite_test;
+
+insert into rewrite_test values ('1977-10-08 20:50:42', 'AgMXONftRPruaiBlvJHO', 'uemCTOqkQCJZZwDxGrIW', 'srCfYYvbThIBOwSaMErV', 5187, -69123.51853, 'wUEOQaCkRLZvSHRBhseT', 599331301.446185, False, 'aMUVBOGurHVaHmErWVJq', 'PnuvSmQaKeJnMzfZMbAj', 'WUxeIhcQNraNBlfHkptk', '', 9, '2017-12-03 04:20:42', [3243, 7145, 12296], '{"job": "Archivist", "company": "Kelley-Booth", "ssn": "168-18-5592", "residence": "743 Mcpherson Street Suite 502\nPort Zachary, UT 66496", "current_location": ["43.016968", "154.620014"], "blood_group": "A+", "website": ["https://www.castillo.info/", "http://www.cuevas.biz/", "https://www.rogers-mendez.biz/", "https://www.hall.info/"], "username": "nicole21", "name": "Kaylee Turner", "sex": "F", "address": "421 Andrew Prairie Apt. 354\nJamesville, NC 40343", "mail": "kchurch@gmail.com", "birthdate": "1975-11-19"}', null, null);
+select * from rewrite_test where DDD match 'srcfyyvbthibowsamerv';
+
+drop database test_gin_index;
 
 
 
