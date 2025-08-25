@@ -67,7 +67,7 @@ public class Partition implements PartitionInfo {
     @Override
     public String toString() {
         return "PaimonPartitionInfo{" +
-                "partitionName='" + partitionName + '\'' +
+                "name='" + partitionName + '\'' +
                 ", lastUpdateTime=" + lastUpdateTime +
                 ", recordCount=" + recordCount +
                 ", fileSizeInBytes=" + fileSizeInBytes +

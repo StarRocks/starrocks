@@ -53,10 +53,10 @@ public class IcebergPartitionUtils {
     // Normalize partition name to yyyy-MM-dd (Type is Date) or yyyy-MM-dd HH:mm:ss (Type is Datetime)
     // Iceberg partition field transform support year, month, day, hour now,
     // eg.
-    // year(ts)  partitionName : 2023              return 2023-01-01 (Date) or 2023-01-01 00:00:00 (Datetime)
-    // month(ts) partitionName : 2023-01           return 2023-01-01 (Date) or 2023-01-01 00:00:00 (Datetime)
-    // day(ts)   partitionName : 2023-01-01        return 2023-01-01 (Date) or 2023-01-01 00:00:00 (Datetime)
-    // hour(ts)  partitionName : 2023-01-01-12     return 2023-01-01 12:00:00 (Datetime)
+    // year(ts)  name : 2023              return 2023-01-01 (Date) or 2023-01-01 00:00:00 (Datetime)
+    // month(ts) name : 2023-01           return 2023-01-01 (Date) or 2023-01-01 00:00:00 (Datetime)
+    // day(ts)   name : 2023-01-01        return 2023-01-01 (Date) or 2023-01-01 00:00:00 (Datetime)
+    // hour(ts)  name : 2023-01-01-12     return 2023-01-01 12:00:00 (Datetime)
     public static String normalizeTimePartitionName(String partitionName,
                                                     PartitionField partitionField,
                                                     Schema schema,
@@ -110,7 +110,7 @@ public class IcebergPartitionUtils {
             // format to string
             result = localDateTime.format(formatter);
         } catch (Exception e) {
-            LOG.warn("parse partition name failed, partitionName: {}, partitionField: {}, type: {}",
+            LOG.warn("parse partition name failed, name: {}, partitionField: {}, type: {}",
                     partitionName, partitionField, type);
             throw new StarRocksConnectorException("parse/format partition name failed", e);
         }

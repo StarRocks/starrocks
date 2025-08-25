@@ -133,7 +133,7 @@ public class PartitionUtil {
     }
 
 
-    // If partitionName is `par_col=0/par_date=2020-01-01`, return ["0", "2020-01-01"]
+    // If name is `par_col=0/par_date=2020-01-01`, return ["0", "2020-01-01"]
     public static List<String> toPartitionValues(String partitionName) {
         // mimics Warehouse.makeValsFromName
         ImmutableList.Builder<String> resultBuilder = ImmutableList.builder();
@@ -564,7 +564,7 @@ public class PartitionUtil {
         Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
         PrimitiveType partitionColPrimType = isConvertToDate ? PrimitiveType.DATE : partitionColumn.getPrimitiveType();
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
-            // Adapt to the range partitioning method of JDBC Table, the partitionName adopts the name of upperBound
+            // Adapt to the range partitioning method of JDBC Table, the name adopts the name of upperBound
             partitionName = entry.getKey();
             if (lastPartitionKey == null) {
                 lastPartitionKey = entry.getValue();

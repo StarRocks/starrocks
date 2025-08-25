@@ -58,6 +58,7 @@ import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -569,7 +570,7 @@ public abstract class BaseMVRefreshProcessor {
         final MVRefreshParams mvRefreshParams = new MVRefreshParams(mv.getPartitionInfo(), context.getProperties(), isForce);
 
         final Set<String> mvPotentialPartitionNames = Sets.newHashSet();
-        Set<String> mvToRefreshedPartitions = mvRefreshPartitioner.getMVToRefreshedPartitions(
+        final PCellSortedSet mvToRefreshedPartitions = mvRefreshPartitioner.getMVToRefreshedPartitions(
                 snapshotBaseTables, mvRefreshParams, partitionRefreshStrategy, mvPotentialPartitionNames, tentative);
         // update mv extra message
         if (!tentative) {
@@ -580,7 +581,7 @@ public abstract class BaseMVRefreshProcessor {
                 extraMessage.setPartitionEnd(mvRefreshParams.getRangeEnd());
             });
         }
-        return mvToRefreshedPartitions;
+        return mvToRefreshedPartitions.getPartitionNames();
     }
 
     /**

@@ -544,7 +544,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                         // sanity check. should not happen
                         if (!index.visibleForTransaction(txnState.getTransactionId())) {
                             LOG.warn("Ignore shadow index included in the transaction but not visible, " +
-                                    "partitionId: {}, partitionName: {}, txnId: {}, indexId: {}, indexName: {}",
+                                    "partitionId: {}, name: {}, txnId: {}, indexId: {}, indexName: {}",
                                     partition.getId(), partition.getName(), txnState.getTransactionId(),
                                     index.getId(), table.getIndexNameById(index.getId()));
                             continue;

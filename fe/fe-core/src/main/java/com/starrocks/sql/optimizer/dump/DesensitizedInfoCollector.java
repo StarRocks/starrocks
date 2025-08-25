@@ -83,7 +83,7 @@ public class DesensitizedInfoCollector {
         }
 
         for (Map<String, Long> partitions : dumpInfo.getPartitionRowCountMap().values()) {
-            // desensitized partitionName
+            // desensitized name
             partitions.keySet().forEach(this::addIntoDict);
         }
         collectStmtDictInfo();

@@ -775,7 +775,7 @@ public class GlueMetastoreClientDelegate {
             throws TException {
         checkArgument(StringUtils.isNotEmpty(dbName), "dbName cannot be null or empty");
         checkArgument(StringUtils.isNotEmpty(tblName), "tblName cannot be null or empty");
-        checkArgument(StringUtils.isNotEmpty(partitionName), "partitionName cannot be null or empty");
+        checkArgument(StringUtils.isNotEmpty(partitionName), "name cannot be null or empty");
         List<String> values = partitionNameToVals(partitionName);
         return getPartition(dbName, tblName, values);
     }

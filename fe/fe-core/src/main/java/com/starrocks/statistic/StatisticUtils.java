@@ -631,7 +631,7 @@ public class StatisticUtils {
         return baseColumnType;
     }
 
-    // Use murmur3_128 hash function to break up the partitionName as randomly and scattered as possible,
+    // Use murmur3_128 hash function to break up the name as randomly and scattered as possible,
     // and return an ordered list of partitionNames.
     // In order to ensure more accurate sampling, put min and max in the sampled result.
     public static List<String> getRandomPartitionsSample(List<String> partitions, int sampleSize) {

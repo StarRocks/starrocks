@@ -52,7 +52,7 @@ public class DeleteInfo implements Writable {
     private String tableName;
     @SerializedName(value = "partitionId")
     private long partitionId;
-    @SerializedName(value = "partitionName")
+    @SerializedName(value = "name")
     private String partitionName;
     @SerializedName(value = "partitionVersion")
     private long partitionVersion;

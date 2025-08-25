@@ -601,7 +601,7 @@ public class HiveCommitter {
                                     HivePartitionStats statistics, boolean merge) {
             this.dbName = requireNonNull(dbName, "dbName is null");
             this.tableName = requireNonNull(tableName, "tableName is null");
-            this.partitionName = requireNonNull(partitionName, "partitionName is null");
+            this.partitionName = requireNonNull(partitionName, "name is null");
             this.updatePartitionStat = requireNonNull(statistics, "statistics is null");
             this.merge = merge;
         }
