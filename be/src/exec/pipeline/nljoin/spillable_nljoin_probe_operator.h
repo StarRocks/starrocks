@@ -30,8 +30,8 @@ namespace starrocks::pipeline {
 class NLJoinProber {
 public:
     NLJoinProber(TJoinOp::type join_op, const std::vector<ExprContext*>& join_conjuncts,
-                 const std::vector<ExprContext*>& conjunct_ctxs, const std::vector<SlotDescriptor*>& col_types,
-                 size_t probe_column_count);
+                 const std::vector<ExprContext*>& conjunct_ctxs, const std::map<SlotId, ExprContext*>& common_expr_ctxs,
+                 const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count);
 
     ~NLJoinProber() = default;
 
@@ -80,6 +80,7 @@ private:
 
     const std::vector<ExprContext*>& _join_conjuncts;
     const std::vector<ExprContext*>& _conjunct_ctxs;
+    const std::map<SlotId, ExprContext*>& _common_expr_ctxs;
 
     //
     ChunkPtr _probe_chunk = nullptr;
@@ -98,6 +99,7 @@ public:
                                  TJoinOp::type join_op, const std::string& sql_join_conjuncts,
                                  const std::vector<ExprContext*>& join_conjuncts,
                                  const std::vector<ExprContext*>& conjunct_ctxs,
+                                 const std::map<SlotId, ExprContext*>& common_expr_ctxs,
                                  const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
                                  const std::shared_ptr<NLJoinContext>& cross_join_context);
 
@@ -153,6 +155,7 @@ public:
                                         const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
                                         std::string sql_join_conjuncts, std::vector<ExprContext*>&& join_conjuncts,
                                         std::vector<ExprContext*>&& conjunct_ctxs,
+                                        std::map<SlotId, ExprContext*>&& common_expr_ctxs,
                                         std::shared_ptr<NLJoinContext>&& cross_join_context, TJoinOp::type join_op)
             : OperatorWithDependencyFactory(id, "spillable_nl_join_left", plan_node_id),
               _join_op(join_op),
@@ -161,6 +164,7 @@ public:
               _sql_join_conjuncts(std::move(sql_join_conjuncts)),
               _join_conjuncts(std::move(join_conjuncts)),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
+              _common_expr_ctxs(std::move(common_expr_ctxs)),
               _cross_join_context(std::move(cross_join_context)) {}
 
     ~SpillableNLJoinProbeOperatorFactory() override = default;
@@ -184,6 +188,7 @@ private:
     std::string _sql_join_conjuncts;
     std::vector<ExprContext*> _join_conjuncts;
     std::vector<ExprContext*> _conjunct_ctxs;
+    std::map<SlotId, ExprContext*> _common_expr_ctxs;
 
     std::shared_ptr<NLJoinContext> _cross_join_context;
 };

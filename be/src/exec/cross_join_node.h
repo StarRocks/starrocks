@@ -128,6 +128,8 @@ private:
 
     std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
     bool _interpolate_passthrough = false;
+
+    std::map<SlotId, ExprContext*> _common_expr_ctxs;
 };
 
 } // namespace starrocks

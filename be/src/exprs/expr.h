@@ -179,9 +179,11 @@ public:
 
     /// Convenience function for preparing multiple expr trees.
     static Status prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
+    static Status prepare(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state);
 
     /// Convenience function for opening multiple expr trees.
     static Status open(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
+    static Status open(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state);
 
     /// Clones each ExprContext for multiple expr trees. 'new_ctxs' must be non-NULL.
     /// Idempotent: if '*new_ctxs' is empty, a clone of each context in 'ctxs' will be added
@@ -192,6 +194,7 @@ public:
 
     /// Convenience function for closing multiple expr trees.
     static void close(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
+    static void close(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state);
 
     /// Convenience functions for closing a list of ScalarExpr.
     static void close(const std::vector<Expr*>& exprs);
