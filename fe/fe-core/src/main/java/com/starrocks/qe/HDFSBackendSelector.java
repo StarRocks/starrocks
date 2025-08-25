@@ -24,7 +24,12 @@ import com.google.common.hash.Funnel;
 import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 import com.starrocks.catalog.PartitionKey;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.profile.Timer;
+>>>>>>> cb8d003434 ([Enhancement] fix profile when deploying scan ranges in background (#62223))
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
@@ -240,6 +245,7 @@ public class HDFSBackendSelector implements BackendSelector {
     }
 
     @Override
+<<<<<<< HEAD
     public void computeScanRangeAssignment() throws UserException {
         computeGeneralAssignment();
         if (useIncrementalScanRanges) {
@@ -250,6 +256,20 @@ public class HDFSBackendSelector implements BackendSelector {
             end.setHas_more(hasMore);
             for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
                 assignment.put(computeNode.getId(), scanNode.getId().asInt(), end);
+=======
+    public void computeScanRangeAssignment() throws StarRocksException {
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "computeScanRangeAssignment")) {
+            computeGeneralAssignment();
+            if (useIncrementalScanRanges) {
+                boolean hasMore = scanNode.hasMoreScanRanges();
+                TScanRangeParams end = new TScanRangeParams();
+                end.setScan_range(new TScanRange());
+                end.setEmpty(true);
+                end.setHas_more(hasMore);
+                for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
+                    assignment.put(computeNode.getId(), scanNode.getId().asInt(), end);
+                }
+>>>>>>> cb8d003434 ([Enhancement] fix profile when deploying scan ranges in background (#62223))
             }
         }
     }

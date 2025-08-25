@@ -143,8 +143,13 @@ public class DeltaConnectorScanRangeSource implements ConnectorScanRangeSource {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean hasMoreOutput() {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getScanFiles")) {
+=======
+    public boolean sourceHasMoreOutput() {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.hasMoreOutput")) {
+>>>>>>> cb8d003434 ([Enhancement] fix profile when deploying scan ranges in background (#62223))
             return remoteFileInfoSource.hasMoreOutput();
         }
     }

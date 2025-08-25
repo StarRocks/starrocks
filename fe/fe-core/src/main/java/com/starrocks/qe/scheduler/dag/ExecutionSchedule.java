@@ -27,5 +27,14 @@ public interface ExecutionSchedule {
 
     void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, UserException;
 
+<<<<<<< HEAD
+=======
+    default void continueSchedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
+    }
+
+    default void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException {
+    }
+
+>>>>>>> cb8d003434 ([Enhancement] fix profile when deploying scan ranges in background (#62223))
     void cancel();
 }
