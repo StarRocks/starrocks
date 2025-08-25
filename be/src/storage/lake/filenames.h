@@ -122,6 +122,22 @@ inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
 }
 
+inline std::string extract_uuid_from(const std::string& segment_file_name) {
+    auto pos = segment_file_name.find('_');
+    if (UNLIKELY(!is_segment(segment_file_name) || pos != 16 || segment_file_name.size() < 21)) {
+        return {};
+    }
+    return segment_file_name.substr(pos + 1, segment_file_name.size() - pos - 4);
+}
+
+inline std::string gen_segment_filename_from(int64_t txn_id, const std::string& old_file_name) {
+    auto uuid = extract_uuid_from(old_file_name);
+    if (UNLIKELY(uuid.empty())) {
+        return {};
+    }
+    return fmt::format("{:016x}_{}.dat", txn_id, uuid);
+}
+
 inline std::string gen_cols_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.cols", txn_id, generate_uuid_string());
 }
