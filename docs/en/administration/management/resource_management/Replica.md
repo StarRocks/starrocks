@@ -329,7 +329,7 @@ You can view the current overall balance status of the system and the details of
   ```
 
   - `StorageMedium`: Storage medium.
-  - `ClusterDiskBalanceStat`: Balance status across nodes based on disk usage. Indicates whether the balanced state is achieved. If not balanced, displays the maximum and minimum disk utilization and the corresponding BEs.
+  - `ClusterDiskBalanceStat`: Balance status across nodes based on disk usage. If not balanced, displays the maximum and minimum disk utilization and the corresponding BEs.
 
 - **View the balance of disk usage within node:**
 
@@ -349,7 +349,7 @@ You can view the current overall balance status of the system and the details of
   ```
 
   - `BeId`: ID of the BE node.
-  - `BackendDiskBalanceStat`: Balance status between disks within the node based on disk utilization. Includes whether the balanced state is achieved. If not balanced, displays the maximum and minimum disk usage and the corresponding disk paths.
+  - `BackendDiskBalanceStat`: Balance status between disks within the node based on disk utilization. If not balanced, displays the maximum and minimum disk usage and the corresponding disk paths.
 
 - **View balanced distribution by tablet:**
 
@@ -371,7 +371,7 @@ You can view the current overall balance status of the system and the details of
   ```
 
   - `IndexId`: ID of the Materialized Index within the partition.
-  - `TabletBalanceStat`: Balance status of tablet distribution between nodes or within nodes. Includes whether the balanced state is achieved. If not balanced, displays the details of the imbalance, including Colocation Group, Label-aware Location.
+  - `TabletBalanceStat`: Balance status of tablet distribution between nodes or within nodes. If not balanced, displays the details of the imbalance, including Colocation Group, Label-aware Location.
 
 - **View partitions with imbalanced tablet distribution:**
 
