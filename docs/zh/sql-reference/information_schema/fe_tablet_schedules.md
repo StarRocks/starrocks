@@ -19,7 +19,7 @@ displayed_sidebar: docs
 | MEDIUM                    | Tablet 所在的存储介质。                |
 | PRIORITY                  | 任务当前的优先级。                     |
 | ORIG_PRIORITY             | 任务最初的优先级。                     |
-| LAST_PRIORITY_ADJUST_TIME | 最后一次调整任务优先级的时间。           |
+| LAST_PRIORITY_ADJUST_TIME | 上一次任务优先级调整的时间。             |
 | VISIBLE_VERSION           | Tablet 可见的数据版本。                |
 | COMMITTED_VERSION         | Tablet 已提交的数据版本。              |
 | SRC_BE_ID                 | 源副本所在的 BE 的 ID。                |
