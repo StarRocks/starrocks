@@ -170,6 +170,8 @@ public:
     // length is only used for CHAR/VARCHAR, and used to allocate enough memory for min/max value.
     explicit ZoneMapIndexWriterImpl(TypeInfo* type_info);
 
+    void enable_truncate_string() override { _truncate_string = true; }
+
     void add_values(const void* values, size_t count) override;
 
     void add_nulls(uint32_t count) override { _page_zone_map.has_null |= count > 0; }
@@ -182,6 +184,8 @@ public:
     uint64_t size() const override { return _estimated_size; }
 
 private:
+    void _truncate_string_minmax_if_needed(ZoneMap<type>* zm);
+
     void _reset_zone_map(ZoneMap<type>* zone_map) {
         // we should allocate max varchar length and set to max for min value
         zone_map->min_value.reset(_type_info);
@@ -198,6 +202,9 @@ private:
     // serialized ZoneMapPB for each data page
     std::vector<std::string> _values;
     uint64_t _estimated_size = 0;
+
+    // Whether truncate the string to `string_prefix_zonemap_prefix_len` length
+    bool _truncate_string = false;
 };
 
 template <LogicalType type>
@@ -209,7 +216,10 @@ ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(TypeInfo* type_info) : _typ
 // Truncate string min/max values at write time to reduce comparison/metadata overhead.
 // For max values that are truncated, append 0xFF to preserve an upper bound.
 template <LogicalType LT>
-static inline void _truncate_string_minmax_if_needed(ZoneMap<LT>* zm) {
+void ZoneMapIndexWriterImpl<LT>::_truncate_string_minmax_if_needed(ZoneMap<LT>* zm) {
+    if (!_truncate_string) {
+        return;
+    }
     const size_t kPrefixLen = std::max<int32_t>(8, config::string_prefix_zonemap_prefix_len);
     if constexpr (is_string_type(LT) || is_binary_type(LT)) {
         auto& min_slice = zm->min_value.value;
@@ -235,12 +245,12 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
             if (unaligned_load<CppType>(pmin) < _page_zone_map.min_value.value) {
                 _page_zone_map.min_value.resize_container_for_fit(_type_info, pmin);
                 _type_info->direct_copy(&_page_zone_map.min_value.value, pmin);
-                _truncate_string_minmax_if_needed<type>(&_page_zone_map);
+                _truncate_string_minmax_if_needed(&_page_zone_map);
             }
             if (unaligned_load<CppType>(pmax) > _page_zone_map.max_value.value) {
                 _page_zone_map.max_value.resize_container_for_fit(_type_info, pmax);
                 _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
-                _truncate_string_minmax_if_needed<type>(&_page_zone_map);
+                _truncate_string_minmax_if_needed(&_page_zone_map);
             }
         } else {
             _page_zone_map.min_value.resize_container_for_fit(_type_info, pmin);
@@ -248,7 +258,7 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
 
             _page_zone_map.max_value.resize_container_for_fit(_type_info, pmax);
             _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
-            _truncate_string_minmax_if_needed<type>(&_page_zone_map);
+            _truncate_string_minmax_if_needed(&_page_zone_map);
         }
         _page_zone_map.has_not_null = true;
     }
@@ -262,12 +272,12 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
             if (_page_zone_map.min_value.value < _segment_zone_map.min_value.value) {
                 _segment_zone_map.min_value.resize_container_for_fit(_type_info, &_page_zone_map.min_value.value);
                 _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value);
-                _truncate_string_minmax_if_needed<type>(&_segment_zone_map);
+                _truncate_string_minmax_if_needed(&_segment_zone_map);
             }
             if (_page_zone_map.max_value.value > _segment_zone_map.max_value.value) {
                 _segment_zone_map.max_value.resize_container_for_fit(_type_info, &_page_zone_map.max_value.value);
                 _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value);
-                _truncate_string_minmax_if_needed<type>(&_segment_zone_map);
+                _truncate_string_minmax_if_needed(&_segment_zone_map);
             }
         } else {
             _segment_zone_map.min_value.resize_container_for_fit(_type_info, &_page_zone_map.min_value.value);
@@ -275,7 +285,7 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
 
             _segment_zone_map.max_value.resize_container_for_fit(_type_info, &_page_zone_map.max_value.value);
             _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value);
-            _truncate_string_minmax_if_needed<type>(&_segment_zone_map);
+            _truncate_string_minmax_if_needed(&_segment_zone_map);
         }
         _segment_zone_map.has_not_null = true;
     }
