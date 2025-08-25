@@ -150,6 +150,9 @@ import com.starrocks.storagevolume.StorageVolume;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.SortDirection;
+import org.apache.iceberg.SortField;
+import org.apache.iceberg.SortOrder;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -1949,6 +1952,29 @@ public class AstToStringBuilder {
         // Comment
         if (!Strings.isNullOrEmpty(table.getComment())) {
             createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
+        }
+
+        // Order by
+        if (table.isIcebergTable()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            SortOrder sortOrder = icebergTable.getNativeTable().sortOrder();
+            if (sortOrder != null && sortOrder.isSorted()) {
+                List<String> columnNames = table.getFullSchema().stream().map(Column::getName).collect(toList());
+                List<String> sortColumns = new ArrayList<>();
+                List<Integer> sortKeyIndexes = icebergTable.getSortKeyIndexes();
+                for (int idx = 0; idx < sortKeyIndexes.size(); ++idx) {
+                    int sortKeyIndex = sortKeyIndexes.get(idx);
+                    SortField sortField = sortOrder.fields().get(idx);
+                    if (!sortField.transform().isIdentity()) {
+                        continue;
+                    }
+                    String sortColumnName = columnNames.get(sortKeyIndex);
+                    String sortDirection = sortField.direction() == SortDirection.ASC ? "ASC" : "DESC";
+                    String sortNullsOrder = sortField.nullOrder().toString();
+                    sortColumns.add(String.format("%s %s %s", sortColumnName, sortDirection, sortNullsOrder));
+                }
+                createTableSql.append("\nORDER BY (").append(String.join(",", sortColumns)).append(")");
+            }
         }
 
         // Properties
