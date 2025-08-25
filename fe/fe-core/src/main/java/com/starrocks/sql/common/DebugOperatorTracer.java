@@ -90,7 +90,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitLogicalTableScan(LogicalScanOperator node, Void context) {
         return "LogicalScanOperator" + " {" +
-                "table='" + node.getTable().getId() + '\'' +
+                "table='" + node.getTable().getName() + '\'' +
                 ", outputColumns='" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) + '\'' +
                 '}';
     }
@@ -110,7 +110,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalOlapScan(LogicalOlapScanOperator node, Void context) {
-        return "LogicalOlapScanOperator" + " {" + "table=" + node.getTable().getId() +
+        return "LogicalOlapScanOperator" + " {" + "table=" + node.getTable().getName() +
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
                 ", selectedIndexId=" + node.getSelectedIndexId() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
