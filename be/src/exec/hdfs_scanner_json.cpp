@@ -95,7 +95,10 @@ Status HdfsScannerJsonReader::_construct_row_without_jsonpath(simdjson::ondemand
             if (_map_size > 0) {
                 auto iter = _name_map.find(key);
                 if (iter != _name_map.end()) {
+                    LOG(ERROR) << "LXH: key not found: " << key;
                     key = iter->second;
+                } else {
+                    LOG(ERROR) << "LXH: key found: " << key;
                 }
             }
             if (_prev_parsed_position.size() > key_index && _prev_parsed_position[key_index].key == key) {
@@ -160,7 +163,7 @@ Status HdfsScannerJsonReader::_construct_row_without_jsonpath(simdjson::ondemand
     return Status::OK();
 }
 
-bool parseToMap(const std::string& str1, const std::string& str2,
+bool parseToMap(const std::string& str1, std::string& str2,
                 std::map<std::string, std::string>& result) {
     // 检查str1是否包含"mapping."前缀
     const std::string prefix = "mapping.";
@@ -182,6 +185,7 @@ bool parseToMap(const std::string& str1, const std::string& str2,
     }
 
     // 存入map
+    boost::algorithm::to_lower(str2);
     result[str2] = key;
     return true;
 }
@@ -345,7 +349,7 @@ static TypeDescriptor construct_json_type(const TypeDescriptor& src_type) {
 }
 
 HdfsJsonScanner::HdfsJsonScanner(std::map<std::string, std::string> name_map) {
-    for (const auto& item : name_map) {
+    for (auto& item : name_map) {
         (void) parseToMap(item.first, item.second, _old_name_map);
     }
     for (const auto& item : _old_name_map) {
