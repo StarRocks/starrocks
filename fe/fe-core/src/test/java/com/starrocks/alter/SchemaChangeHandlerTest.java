@@ -62,7 +62,6 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -72,6 +71,7 @@ import java.util.Map;
 public class SchemaChangeHandlerTest extends TestWithFeService {
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandlerTest.class);
+    private int jobSize = 0;
 
     @Override
     protected void createStarrocksCluster() {
@@ -128,12 +128,8 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
     }
 
-    private void waitAlterJobDone(long dbId, long tableId) throws Exception {
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+    private void waitAlterJobDone(Map<Long, AlterJobV2> alterJobs) throws Exception {
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            if (alterJobV2.getDbId() != dbId || alterJobV2.getTableId() != tableId) {
-                continue;
-            }
             while (!alterJobV2.getJobState().isFinalState()) {
                 LOG.info("alter job {} is running. state: {}", alterJobV2.getJobId(), alterJobV2.getJobState());
                 Thread.sleep(1000);
@@ -148,19 +144,6 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
                 Thread.sleep(1000);
             }
         }
-    }
-
-    private void executeAndWaitAlterJob(long dbId, long tableId, String alterSql) throws Exception {
-        AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
-        DDLStmtExecutor.execute(stmt, connectContext);
-        waitAlterJobDone(dbId, tableId);
-    }
-
-    private void executeAlterAndVerifyJobNum(AlterTableStmt stmt) throws Exception {
-        int numAlterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().size();
-        DDLStmtExecutor.execute(stmt, connectContext);
-        Assertions.assertEquals(numAlterJobs + 1,
-                GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().size());
     }
 
     @Test
@@ -226,7 +209,11 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process agg add value column schema change
         String addValColStmtStr = "alter table test.sc_agg add column new_v1 int MAX default '0'";
         AlterTableStmt addValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr);
-        executeAlterAndVerifyJobNum(addValColStmt);
+        DDLStmtExecutor.execute(addValColStmt, connectContext);
+        jobSize++;
+        // check alter job, do not create job
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        Assertions.assertEquals(jobSize, alterJobs.size());
 
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
@@ -242,8 +229,12 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process agg add  key column schema change
         String addKeyColStmtStr = "alter table test.sc_agg add column new_k1 int default '1'";
         AlterTableStmt addKeyColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addKeyColStmtStr);
-        executeAlterAndVerifyJobNum(addKeyColStmt);
-        waitAlterJobDone(db.getId(), tbl.getId());
+        DDLStmtExecutor.execute(addKeyColStmt, connectContext);
+
+        //check alter job
+        jobSize++;
+        Assertions.assertEquals(jobSize, alterJobs.size());
+        waitAlterJobDone(alterJobs);
 
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
@@ -259,7 +250,11 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process agg drop value column schema change
         String dropValColStmtStr = "alter table test.sc_agg drop column new_v1";
         AlterTableStmt dropValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropValColStmtStr);
-        executeAlterAndVerifyJobNum(dropValColStmt);
+        DDLStmtExecutor.execute(dropValColStmt, connectContext);
+        jobSize++;
+        //check alter job, do not create job
+        LOG.info("alterJobs:{}", alterJobs);
+        Assertions.assertEquals(jobSize, alterJobs.size());
 
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
@@ -282,7 +277,11 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process agg drop value column with rollup schema change
         String dropRollUpValColStmtStr = "alter table test.sc_agg drop column max_dwell_time";
         AlterTableStmt dropRollUpValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropRollUpValColStmtStr);
-        executeAlterAndVerifyJobNum(dropRollUpValColStmt);
+        DDLStmtExecutor.execute(dropRollUpValColStmt, connectContext);
+        jobSize++;
+        //check alter job, need create job
+        LOG.info("alterJobs:{}", alterJobs);
+        Assertions.assertEquals(jobSize, alterJobs.size());
 
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
@@ -317,7 +316,12 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process uniq add value column schema change
         String addValColStmtStr = "alter table test.sc_uniq add column new_v1 int default '0'";
         AlterTableStmt addValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr);
-        executeAlterAndVerifyJobNum(addValColStmt);
+        DDLStmtExecutor.execute(addValColStmt, connectContext);
+        jobSize++;
+        //check alter job, do not create job
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        LOG.info("alterJobs:{}", alterJobs);
+        Assertions.assertEquals(jobSize, alterJobs.size());
 
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
@@ -333,7 +337,10 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process uniq drop val column schema change
         String dropValColStmtStr = "alter table test.sc_uniq drop column new_v1";
         AlterTableStmt dropValColStm = (AlterTableStmt) parseAndAnalyzeStmt(dropValColStmtStr);
-        executeAlterAndVerifyJobNum(dropValColStm);
+        DDLStmtExecutor.execute(dropValColStm, connectContext);
+        jobSize++;
+        //check alter job
+        Assertions.assertEquals(jobSize, alterJobs.size());
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertEquals(8, tbl.getBaseSchema().size());
@@ -367,7 +374,12 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process uniq add value column schema change
         String addValColStmtStr = "alter table test.sc_dup add column new_v1 int default '0'";
         AlterTableStmt addValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr);
-        executeAlterAndVerifyJobNum(addValColStmt);
+        DDLStmtExecutor.execute(addValColStmt, connectContext);
+        jobSize++;
+        //check alter job, do not create job
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        LOG.info("alterJobs:{}", alterJobs);
+        Assertions.assertEquals(jobSize, alterJobs.size());
 
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
@@ -383,7 +395,10 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process uniq drop val column schema change
         String dropValColStmtStr = "alter table test.sc_dup drop column new_v1";
         AlterTableStmt dropValColStm = (AlterTableStmt) parseAndAnalyzeStmt(dropValColStmtStr);
-        executeAlterAndVerifyJobNum(dropValColStm);
+        DDLStmtExecutor.execute(dropValColStm, connectContext);
+        jobSize++;
+        //check alter job
+        Assertions.assertEquals(jobSize, alterJobs.size());
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertEquals(6, tbl.getBaseSchema().size());
@@ -412,19 +427,19 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         }
         List<Index> newIndexes = tbl.getCopiedIndexes();
 
-        int numAlterJobs = alterJobs.size();
         Assertions.assertDoesNotThrow(
                     () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
                                 .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 100, 100,
                                             indexToNewSchemaId, false));
-        Assertions.assertEquals(numAlterJobs + 1, alterJobs.size());
+        jobSize++;
+        Assertions.assertEquals(jobSize, alterJobs.size());
 
-        numAlterJobs = alterJobs.size();
         Assertions.assertDoesNotThrow(
                     () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
                                 .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 101, 101,
                                             indexToNewSchemaId, true));
-        Assertions.assertEquals(numAlterJobs + 1, alterJobs.size());
+        jobSize++;
+        Assertions.assertEquals(jobSize, alterJobs.size());
 
         OlapTableState beforeState = tbl.getState();
         tbl.setState(OlapTableState.ROLLUP);
@@ -666,224 +681,5 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         boolean result = handler.updateFlatJsonConfigMeta(db, 99999L, properties,
                 TTabletMetaType.FLAT_JSON_CONFIG);
         Assertions.assertFalse(result);
-    }
-
-    private List<Column> getShortKeyColumns(Database db, OlapTable table) {
-        Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
-        try {
-            long baseIndexId = table.getBaseIndexId();
-            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(baseIndexId);
-            List<Column> schema = indexMeta.getSchema();
-            List<Column> shortKeyCols = new ArrayList<>();
-            List<Integer> sortKeyIdxes = indexMeta.getSortKeyIdxes();
-            int count = indexMeta.getShortKeyColumnCount();
-            if (sortKeyIdxes != null && !sortKeyIdxes.isEmpty()) {
-                for (int i = 0; i < count; i++) {
-                    shortKeyCols.add(schema.get(sortKeyIdxes.get(i)));
-                }
-            } else {
-                for (int i = 0; i < count; i++) {
-                    shortKeyCols.add(schema.get(i));
-                }
-            }
-            return shortKeyCols;
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
-        }
-    }
-
-    private boolean isShortKeyChanged(Database db, OlapTable table, List<Column> oldShortKeys) {
-        List<Column> newShortKeys = getShortKeyColumns(db, table);
-        if (oldShortKeys.size() != newShortKeys.size()) {
-            return true;
-        }
-        for (int i = 0; i < oldShortKeys.size(); i++) {
-            if (!oldShortKeys.get(i).equals(newShortKeys.get(i))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean isFastSchemaEvolution(Database db, OlapTable table, long oldIndexId) {
-        Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
-        try {
-            return oldIndexId == table.getBaseIndexId();
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
-        }
-    }
-
-    private boolean isSchemaMatch(Database db, OlapTable table, List<String> columNames) {
-        Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
-        try {
-            long baseIndexId = table.getBaseIndexId();
-            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(baseIndexId);
-            List<Column> schema = indexMeta.getSchema();
-            if (schema.size() != columNames.size()) {
-                return false;
-
-            }
-            for (int i = 0; i < schema.size(); i++) {
-                if (!schema.get(i).getName().equals(columNames.get(i))) {
-                    return false;
-                }
-            }
-            return true;
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
-        }
-    }
-
-    private void createDupTableForAddKeyColumnTest(String tableName) throws Exception {
-        String createStmt = "CREATE TABLE IF NOT EXISTS test." + tableName + " (\n"
-                + "k0 DATETIME,\n"
-                + "k1 INT,\n"
-                + "k2 BIGINT,"
-                + "v0 VARCHAR(1024)\n"
-                + ") DUPLICATE  KEY(k0, k1, k2)\n"
-                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
-        createTable(createStmt);
-    }
-
-    private void createUniqueTableForAddKeyColumnTest(String tableName) throws Exception {
-        String createStmt = "CREATE TABLE IF NOT EXISTS test." + tableName + " (\n"
-                + "k0 DATETIME,\n"
-                + "k1 INT,\n"
-                + "k2 BIGINT,"
-                + "v0 VARCHAR(1024)\n"
-                + ") UNIQUE KEY(k0, k1, k2)\n"
-                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
-        createTable(createStmt);
-    }
-
-    private void createAggTableForAddKeyColumnTest(String tableName) throws Exception {
-        String createStmt = "CREATE TABLE IF NOT EXISTS test." + tableName + " (\n"
-                + "k0 DATETIME,\n"
-                + "k1 INT,\n"
-                + "k2 BIGINT,"
-                + "v0 INT SUM DEFAULT '0'\n"
-                + ") AGGREGATE KEY(k0, k1, k2)\n"
-                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
-        createTable(createStmt);
-    }
-
-    private void testAddKeyColumnWithFastSchemaEvolutionBase(String tableName) throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getFullName(), tableName);
-        Assertions.assertNotNull(tbl);
-        long oldIndexId = tbl.getBaseIndexId();
-        List<Column> oldShortKeys = getShortKeyColumns(db, tbl);
-
-        executeAndWaitAlterJob(db.getId(), tbl.getId(),
-                String.format("ALTER TABLE test.%s ADD COLUMN new_k1 INT KEY DEFAULT '0'", tableName));
-        Assertions.assertTrue(isFastSchemaEvolution(db, tbl, oldIndexId));
-        Assertions.assertFalse(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
-                Lists.newArrayList("k0", "k1", "k2", "new_k1", "v0")));
-
-        executeAndWaitAlterJob(db.getId(), tbl.getId(),
-                String.format("ALTER TABLE test.%s ADD COLUMN new_k2 INT KEY DEFAULT NULL", tableName));
-        Assertions.assertTrue(isFastSchemaEvolution(db, tbl, oldIndexId));
-        Assertions.assertFalse(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
-                Lists.newArrayList("k0", "k1", "k2", "new_k1", "new_k2", "v0")));
-
-        executeAndWaitAlterJob(db.getId(), tbl.getId(),
-                String.format(
-                        "ALTER TABLE test.%s ADD COLUMN new_k3 DATETIME KEY DEFAULT CURRENT_TIMESTAMP", tableName));
-        Assertions.assertTrue(isFastSchemaEvolution(db, tbl, oldIndexId));
-        Assertions.assertFalse(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
-                Lists.newArrayList("k0", "k1", "k2", "new_k1", "new_k2", "new_k3", "v0")));
-
-        executeAndWaitAlterJob(db.getId(), tbl.getId(),
-                String.format(
-                        "ALTER TABLE test.%s ADD COLUMN new_k4 VARCHAR(100) KEY AFTER k2", tableName));
-        Assertions.assertTrue(isFastSchemaEvolution(db, tbl, oldIndexId));
-        Assertions.assertFalse(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
-                Lists.newArrayList("k0", "k1", "k2", "new_k4", "new_k1", "new_k2", "new_k3", "v0")));
-    }
-
-    private void testAddKeyColumnWithoutFastSchemaEvolutionBase(String tableName) throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getFullName(), tableName);
-        Assertions.assertNotNull(tbl);
-        long oldIndexId = tbl.getBaseIndexId();
-        List<Column> oldShortKeys = getShortKeyColumns(db, tbl);
-
-        executeAndWaitAlterJob(db.getId(), tbl.getId(),
-                String.format("ALTER TABLE test.%s ADD COLUMN new_k1 INT KEY FIRST", tableName));
-        Assertions.assertFalse(isFastSchemaEvolution(db, tbl, oldIndexId));
-        Assertions.assertTrue(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
-                Lists.newArrayList("new_k1", "k0", "k1", "k2", "v0")));
-
-        oldShortKeys = getShortKeyColumns(db, tbl);
-        executeAndWaitAlterJob(db.getId(), tbl.getId(),
-                String.format("ALTER TABLE test.%s ADD COLUMN new_k2 VARCHAR(100) KEY AFTER k0", tableName));
-        Assertions.assertFalse(isFastSchemaEvolution(db, tbl, oldIndexId));
-        Assertions.assertTrue(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
-                Lists.newArrayList("new_k1", "k0", "new_k2", "k1", "k2", "v0")));
-
-        oldShortKeys = getShortKeyColumns(db, tbl);
-        executeAndWaitAlterJob(db.getId(), tbl.getId(),
-                String.format("ALTER TABLE test.%s MODIFY COLUMN new_k1 BIGINT KEY", tableName));
-        Assertions.assertFalse(isFastSchemaEvolution(db, tbl, oldIndexId));
-        Assertions.assertTrue(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
-                Lists.newArrayList("new_k1", "k0", "new_k2", "k1", "k2", "v0")));
-    }
-
-    @Test
-    public void testDupTableAddKeyColumnWithFastSchemaEvolution() throws Exception {
-        String tableName = "dup_add_key_with_fse";
-        createDupTableForAddKeyColumnTest(tableName);
-        testAddKeyColumnWithFastSchemaEvolutionBase(tableName);
-    }
-
-    @Test
-    public void testDupTableAddKeyColumnWithoutFastSchemaEvolution() throws Exception {
-        String tableName = "dup_add_key_without_fse";
-        createDupTableForAddKeyColumnTest(tableName);
-        testAddKeyColumnWithoutFastSchemaEvolutionBase(tableName);
-    }
-
-    @Test
-    public void testUniqueTableAddKeyColumnWithFastSchemaEvolution() throws Exception {
-        String tableName = "unique_add_key_with_fse";
-        createUniqueTableForAddKeyColumnTest(tableName);
-        testAddKeyColumnWithFastSchemaEvolutionBase(tableName);
-    }
-
-    @Test
-    public void testUniqueTableAddKeyColumnWithoutFastSchemaEvolution() throws Exception {
-        String tableName = "unique_add_key_without_fse";
-        createUniqueTableForAddKeyColumnTest(tableName);
-        testAddKeyColumnWithoutFastSchemaEvolutionBase(tableName);
-    }
-
-    @Test
-    public void testAggTableAddKeyColumnWithFastSchemaEvolution() throws Exception {
-        String tableName = "agg_add_key_with_fse";
-        createAggTableForAddKeyColumnTest(tableName);
-        testAddKeyColumnWithFastSchemaEvolutionBase(tableName);
-    }
-
-    @Test
-    public void testAggTableAddKeyColumnWithoutFastSchemaEvolution() throws Exception {
-        String tableName = "agg_add_key_without_fse";
-        createAggTableForAddKeyColumnTest(tableName);
-        testAddKeyColumnWithoutFastSchemaEvolutionBase(tableName);
     }
 }
