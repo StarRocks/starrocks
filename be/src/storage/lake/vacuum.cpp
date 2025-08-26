@@ -268,6 +268,18 @@ public:
         return AsyncFileDeleter::finish();
     }
 
+    void print_info() const {
+        std::stringstream ss;
+        ss << "AsyncBundleFileDeleter info: " << std::endl;
+        for (const auto& [path, count] : _pending_files) {
+            ss << path << " " << count << std::endl;
+        }
+        for (const auto& path : _delay_delete_files) {
+            ss << path << " " << std::endl;
+        }
+        LOG(INFO) << ss.str();
+    }
+
     bool is_empty() const { return _pending_files.empty(); }
 
 private:
@@ -1014,6 +1026,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                     if (rowset.bundle_file_offsets_size() == 0 ||
                         can_bundle_meta_file_to_be_deleted(versions_and_states[latest_metadata->version()])) {
                         RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, rowset.segments(i))));
+                        LOG(INFO) << "Delete segment file: " << join_path(data_dir, rowset.segments(i)) << " tablet id: " << latest_metadata->id() << " version: " << latest_metadata->version();
                     }
                 }
             }

@@ -171,6 +171,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             request.tabletIds = Lists.newArrayList(shards);
 
             try {
+                LOG.info("sending request to delete tablet: {}", shards);
                 LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 // Delete tablets in parallel
                 futureMap.put(backendId, lakeService.deleteTablet(request));
