@@ -22,7 +22,6 @@ class IcebergRowIdReader final : public ColumnReader {
 public:
     explicit IcebergRowIdReader(int64_t first_row_id) : ColumnReader(nullptr), _first_row_id(first_row_id) {
         _cur_row_id = _first_row_id;
-        // LOG(INFO) << "create IcebergRowIdReader with first_row_id: " << _first_row_id;
     }
     ~IcebergRowIdReader() override = default;
 
@@ -48,6 +47,9 @@ public:
                                               const uint64_t rg_first_row, const uint64_t rg_num_rows) override;
 
 private:
+    // Helper method to apply a single predicate and return the resulting range
+    StatusOr<bool> _apply_single_predicate(const ColumnPredicate* pred, SparseRange<int64_t>& result_range);
+
     int64_t _first_row_id = 0;
     int64_t _cur_row_id = 0;
 };
