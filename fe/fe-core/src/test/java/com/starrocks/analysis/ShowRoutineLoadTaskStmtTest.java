@@ -37,12 +37,6 @@ public class ShowRoutineLoadTaskStmtTest {
     }
 
     @Test
-    public void testGetRedirectStatus() {
-        ShowRoutineLoadTaskStmt loadStmt = new ShowRoutineLoadTaskStmt("", null);
-        Assertions.assertTrue(loadStmt.getRedirectStatus().equals(RedirectStatus.FORWARD_WITH_SYNC));
-    }
-
-    @Test
     public void testParser() {
         String sql = "SHOW ROUTINE LOAD TASK WHERE JobName = \"test1\";";
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);

@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -48,10 +47,5 @@ public class ExecuteStmt extends StatementBase {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitExecuteStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return null;
     }
 }

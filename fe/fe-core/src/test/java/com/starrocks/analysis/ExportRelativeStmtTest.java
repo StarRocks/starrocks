@@ -43,7 +43,6 @@ public class ExportRelativeStmtTest {
         String originStmt = "EXPORT TABLE tall TO \"hdfs://hdfs_host:port/a/b/c/\" " +
                 "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         ExportStmt stmt = (ExportStmt) analyzeSuccess(originStmt);
-        Assertions.assertNotNull(stmt.getRedirectStatus());
         Assertions.assertTrue(AuditEncryptionChecker.needEncrypt(stmt));
         Assertions.assertNotNull(stmt.getRowDelimiter());
         Assertions.assertNotNull(stmt.getTblName());
@@ -176,7 +175,6 @@ public class ExportRelativeStmtTest {
         String originStmt = "Show Export limit 10";
         ShowExportStmt stmt = (ShowExportStmt) analyzeSuccess(originStmt);
         Assertions.assertNotNull(new ShowResultMetaFactory().getMetadata(stmt));
-        Assertions.assertNotNull(stmt.getRedirectStatus());
         Assertions.assertNull(stmt.getJobState());
         Assertions.assertEquals(0, stmt.getJobId());
         Assertions.assertNull(stmt.getQueryId());

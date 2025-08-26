@@ -32,7 +32,6 @@ public class SqlBlacklistAndWhitelistTest {
         AddSqlBlackListStmt stmt = (AddSqlBlackListStmt) analyzeSuccess("ADD SQLBLACKLIST \"select count\\(distinct .+\\) from .+\";");
         Assertions.assertEquals("select count(distinct .+) from .+", stmt.getSql());
         Assertions.assertNotNull(stmt.getSqlPattern());
-        Assertions.assertNotNull(stmt.getRedirectStatus());
         // bad cases
         analyzeFail("add SQLBLACKLIST \"select from ?i)\";");
     }
@@ -41,7 +40,6 @@ public class SqlBlacklistAndWhitelistTest {
     public void testDelSqlBlacklist() {
         DelSqlBlackListStmt stmt = (DelSqlBlackListStmt) analyzeSuccess("delete sqlblacklist  2, 6;");
         Assertions.assertEquals(Lists.asList(2L, new Long[]{6L}), stmt.getIndexs());
-        Assertions.assertNotNull(stmt.getRedirectStatus());
         // bad cases
         analyzeFail("DELETE SQLBLACKLIST");
     }

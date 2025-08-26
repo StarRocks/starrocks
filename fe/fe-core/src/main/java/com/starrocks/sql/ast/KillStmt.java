@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 /**
@@ -53,11 +52,6 @@ public class KillStmt extends StatementBase {
 
     public String getQueryId() {
         return queryId;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 
     @Override

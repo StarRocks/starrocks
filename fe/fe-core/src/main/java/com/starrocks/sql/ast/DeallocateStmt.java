@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DeallocateStmt extends StatementBase {
@@ -31,11 +30,6 @@ public class DeallocateStmt extends StatementBase {
     @Override
     public String toSql() {
         return "DROP PREPARE " + stmtName;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return null;
     }
 
     @Override

@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.epack.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -32,13 +31,6 @@ public class ShowPasswordPolicyStmt extends ShowStmt {
 
     public ShowPasswordPolicyStmt(NodePosition pos) {
         super(pos);
-    }
-
-
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

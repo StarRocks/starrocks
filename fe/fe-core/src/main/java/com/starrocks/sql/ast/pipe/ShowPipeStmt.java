@@ -18,7 +18,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
@@ -132,11 +131,6 @@ public class ShowPipeStmt extends ShowStmt {
 
     public void setOrderByPairs(List<OrderByPair> orderByPairs) {
         this.orderByPairs = orderByPairs;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

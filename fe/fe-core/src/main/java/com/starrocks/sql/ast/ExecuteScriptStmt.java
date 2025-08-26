@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 // EXECUTE ON <BE_ID> <SCRIPT>
@@ -65,10 +64,5 @@ public class ExecuteScriptStmt extends StatementBase {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitExecuteScriptStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 }

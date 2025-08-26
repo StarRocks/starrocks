@@ -13,21 +13,11 @@
 // limitations under the License.
 package com.starrocks.epack.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowCreatePasswordPolicyStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Policy", ScalarType.createVarchar(100)))
-                    .addColumn(new Column("Create Policy", ScalarType.createVarchar(100)))
-                    .build();
-
     private final String policyName;
 
     public ShowCreatePasswordPolicyStmt(String policyName, NodePosition pos) {
@@ -37,13 +27,6 @@ public class ShowCreatePasswordPolicyStmt extends ShowStmt {
 
     public String getPolicyName() {
         return policyName;
-    }
-
-
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

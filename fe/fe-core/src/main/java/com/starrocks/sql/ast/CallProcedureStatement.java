@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ProcedureArgument;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.connector.Procedure;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.parser.NodePosition;
@@ -64,11 +63,6 @@ public class CallProcedureStatement extends StatementBase {
             throw new IllegalArgumentException("Arguments cannot be null");
         }
         this.analyzedArguments = arguments;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 
     @Override

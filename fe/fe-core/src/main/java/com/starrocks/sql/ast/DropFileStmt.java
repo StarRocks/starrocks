@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -64,11 +63,6 @@ public class DropFileStmt extends DdlStmt {
 
     public Map<String, String> getProperties() {
         return properties;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
     @Override

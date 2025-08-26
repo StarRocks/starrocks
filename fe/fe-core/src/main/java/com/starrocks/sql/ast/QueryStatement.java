@@ -19,7 +19,6 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OutFileClause;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
@@ -70,11 +69,6 @@ public class QueryStatement extends StatementBase {
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitQueryStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
     }
 
     public int getQueryStartIndex() {
