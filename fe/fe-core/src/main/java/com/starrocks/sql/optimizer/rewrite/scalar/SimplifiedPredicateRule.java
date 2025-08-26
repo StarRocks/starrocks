@@ -577,6 +577,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     }
 
     // Simplify hour(from_unixtime(ts)) to hour_from_unixtime(ts)
+    // Also simplify hour(to_datetime(ts)) and hour(to_datetime(ts, 0)) to hour_from_unixtime(ts)
     private static ScalarOperator simplifiedHourFromUnixTime(CallOperator call) {
         if (call.getChildren().size() != 1) {
             return call;
@@ -588,19 +589,53 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         CallOperator childCall = (CallOperator) child;
-        if (!FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(childCall.getFnName())) {
-            return call;
+        String childFnName = childCall.getFnName();
+
+        // Case 1: hour(from_unixtime(ts)) -> hour_from_unixtime(ts)
+        if (FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(childFnName)) {
+            // Keep original behavior: only succeeds when argument list matches hour_from_unixtime signature
+            Type[] argTypes = childCall.getChildren().stream().map(ScalarOperator::getType).toArray(Type[]::new);
+            Function fn =
+                    Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
+
+            if (fn == null) {
+                return call;
+            }
+
+            return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(), childCall.getChildren(), fn);
         }
 
-        // Create hour_from_unixtime function call
-        Type[] argTypes = childCall.getChildren().stream().map(ScalarOperator::getType).toArray(Type[]::new);
-        Function fn =
-                Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
+        // Case 2: hour(to_datetime(ts)) or hour(to_datetime(ts, 0)) -> hour_from_unixtime(ts)
+        if (FunctionSet.TO_DATETIME.equalsIgnoreCase(childFnName)) {
+            List<ScalarOperator> args = childCall.getChildren();
+            // Accept single argument, or two arguments with constant scale 0
+            boolean acceptable;
+            if (args.size() == 1) {
+                acceptable = true;
+            } else if (args.size() == 2 && args.get(1) instanceof ConstantOperator) {
+                ConstantOperator scale = (ConstantOperator) args.get(1);
+                acceptable = Type.INT.equals(scale.getType()) && !scale.isNull() && scale.getInt() == 0;
+            } else {
+                acceptable = false;
+            }
 
-        if (fn == null) {
-            return call;
+            if (!acceptable) {
+                return call;
+            }
+
+            // Build hour_from_unixtime(ts) with only the first argument
+            ScalarOperator tsArg = args.get(0);
+            Type[] argTypes = new Type[] { tsArg.getType() };
+            Function fn =
+                    Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
+
+            if (fn == null) {
+                return call;
+            }
+
+            return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(), Lists.newArrayList(tsArg), fn);
         }
 
-        return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(), childCall.getChildren(), fn);
+        return call;
     }
 }

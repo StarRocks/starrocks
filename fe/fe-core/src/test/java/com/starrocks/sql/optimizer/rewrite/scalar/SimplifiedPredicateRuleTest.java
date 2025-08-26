@@ -140,4 +140,43 @@ public class SimplifiedPredicateRuleTest {
         ScalarOperator result2 = rule.apply(hourCall2, null);
         assertEquals(hourCall2, result2);
     }
+
+    @Test
+    public void applyHourToDatetimeRewrite() {
+        // hour(to_datetime(ts)) -> hour_from_unixtime(ts)
+        ColumnRefOperator tsColumn = new ColumnRefOperator(2, Type.BIGINT, "ts2", true);
+
+        CallOperator toDatetimeCall = new CallOperator(FunctionSet.TO_DATETIME, Type.DATETIME,
+                Lists.newArrayList(tsColumn), null);
+        CallOperator hourCall = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
+                Lists.newArrayList(toDatetimeCall), null);
+
+        ScalarOperator result = rule.apply(hourCall, null);
+        assertEquals(OperatorType.CALL, result.getOpType());
+        CallOperator resultCall = (CallOperator) result;
+        assertEquals(FunctionSet.HOUR_FROM_UNIXTIME, resultCall.getFnName());
+        assertEquals(1, resultCall.getChildren().size());
+        assertEquals(tsColumn, resultCall.getChild(0));
+
+        // hour(to_datetime(ts, 0)) -> hour_from_unixtime(ts)
+        CallOperator toDatetimeCallScale0 = new CallOperator(FunctionSet.TO_DATETIME, Type.DATETIME,
+                Lists.newArrayList(tsColumn, ConstantOperator.createInt(0)), null);
+        CallOperator hourCall2 = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
+                Lists.newArrayList(toDatetimeCallScale0), null);
+
+        ScalarOperator result2 = rule.apply(hourCall2, null);
+        assertEquals(OperatorType.CALL, result2.getOpType());
+        CallOperator resultCall2 = (CallOperator) result2;
+        assertEquals(FunctionSet.HOUR_FROM_UNIXTIME, resultCall2.getFnName());
+        assertEquals(1, resultCall2.getChildren().size());
+        assertEquals(tsColumn, resultCall2.getChild(0));
+
+        // hour(to_datetime(ts, 3)) should NOT be rewritten
+        CallOperator toDatetimeCallScale3 = new CallOperator(FunctionSet.TO_DATETIME, Type.DATETIME,
+                Lists.newArrayList(tsColumn, ConstantOperator.createInt(3)), null);
+        CallOperator hourCall3 = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
+                Lists.newArrayList(toDatetimeCallScale3), null);
+        ScalarOperator result3 = rule.apply(hourCall3, null);
+        assertEquals(hourCall3, result3);
+    }
 }
