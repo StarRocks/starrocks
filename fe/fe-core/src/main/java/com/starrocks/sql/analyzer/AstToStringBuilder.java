@@ -405,7 +405,7 @@ public class AstToStringBuilder {
                 .append(" (\n");
 
         // Columns
-        List<String> columns = table.getFullSchema().stream().map(AstToStringBuilder::toMysqlDDL).
+        List<String> columns = table.getFullVisibleSchema().stream().map(AstToStringBuilder::toMysqlDDL).
                 collect(Collectors.toList());
         createTableSql.append(String.join(",\n", columns))
                 .append("\n)");
