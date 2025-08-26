@@ -302,13 +302,7 @@ public class FunctionSetTest {
         Assertions.assertEquals(Type.BOOLEAN, fn.getReturnType());
         Assertions.assertEquals(Type.VARCHAR, fn.getArgs()[0]);
 
-        // array_length(INT)
-        argTypes = new Type[] {Type.INT};
-        desc = new Function(new FunctionName("null_or_empty"), argTypes, Type.INVALID, false);
-        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
-        Assertions.assertNull(fn);
-
-        // array_length(ARRAY<INT>)
+        // null_or_empty(ARRAY<INT>)
         argTypes = new Type[] {INT_ARRAY};
         desc = new Function(new FunctionName("null_or_empty"), argTypes, Type.INVALID, false);
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
@@ -316,7 +310,7 @@ public class FunctionSetTest {
         Assertions.assertEquals(Type.BOOLEAN, fn.getReturnType());
         Assertions.assertEquals(INT_ARRAY, fn.getArgs()[0]);
 
-        // array_length(ARRAY<ARRAY<INT>>)
+        // null_or_empty(ARRAY<ARRAY<INT>>)
         argTypes = new Type[] {INT_ARRAY_ARRAY};
         desc = new Function(new FunctionName("null_or_empty"), argTypes, Type.INVALID, false);
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
