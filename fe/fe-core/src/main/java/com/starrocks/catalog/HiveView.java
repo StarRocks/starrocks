@@ -15,9 +15,9 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.StarRocksPlannerException;
