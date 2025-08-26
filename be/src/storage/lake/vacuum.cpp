@@ -816,6 +816,7 @@ static Status delete_files_under_txnlog(const std::string& data_dir, const TxnLo
             // Iterate through all segments in the rowset and delete them
             for (const auto& segment : op.rowset().segments()) {
                 RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
+                LOG(INFO) << "delete_files_under_txnlog, write: " << join_path(data_dir, segment);
             }
         }
         // delete del files
@@ -827,6 +828,7 @@ static Status delete_files_under_txnlog(const std::string& data_dir, const TxnLo
         const auto& op = log.op_compaction();
         for (const auto& segment : op.output_rowset().segments()) {
             RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
+            LOG(INFO) << "delete_files_under_txnlog, compaction: " << join_path(data_dir, segment);
         }
     }
     if (log.has_op_schema_change()) {
@@ -834,6 +836,7 @@ static Status delete_files_under_txnlog(const std::string& data_dir, const TxnLo
         for (const auto& rowset : op.rowsets()) {
             for (const auto& segment : rowset.segments()) {
                 RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
+                LOG(INFO) << "delete_files_under_txnlog, schema_change: " << join_path(data_dir, segment);
             }
         }
     }
