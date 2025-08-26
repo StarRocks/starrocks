@@ -87,7 +87,8 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
 
     private JsonObject serializeSensitiveContent(QueryDumpInfo dumpInfo) {
         JsonObject dumpJson = new JsonObject();
-        if (dumpInfo.isDesensitizedInfo()) {
+        ConnectContext context = ConnectContext.get();
+        if (context.getSessionVariable(). || dumpInfo.isDesensitizedInfo()) {
             try {
                 desensitizeContent(dumpInfo, dumpJson);
                 return dumpJson;

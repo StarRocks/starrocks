@@ -24,6 +24,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * AstToSQLBuilder inherits AstToStringBuilder and rewrites some special AST logic to
@@ -65,6 +66,15 @@ public class AstToSQLBuilder {
         } catch (Exception e) {
             LOG.info("Ast to sql failed.", e);
             return defaultSql;
+        }
+    }
+
+    public static Optional<String> toSQL(StatementBase statement, FormatOptions options) {
+        try {
+            return Optional.of(AST2SQLVisitor.withOptions(options).visit(statement));
+        } catch (Exception e) {
+            LOG.info("Ast to sql failed.", e);
+            return Optional.empty();
         }
     }
 
