@@ -284,6 +284,7 @@ public class EditLogDeserializer {
                 data = ChangeMaterializedViewRefreshSchemeLog.read(in);
                 break;
             }
+            // This is for compatibility reasons. Do not delete the read code. You can delete it in version 4.2.
             case OperationType.OP_FINISH_CONSISTENCY_CHECK: {
                 data = new ConsistencyCheckInfo();
                 ((ConsistencyCheckInfo) data).readFields(in);
