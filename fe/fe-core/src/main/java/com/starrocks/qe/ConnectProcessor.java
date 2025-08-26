@@ -441,13 +441,14 @@ public class ConnectProcessor {
                 }
             }
         } catch (AnalysisException e) {
-            LOG.warn("Failed to parse SQL: " + originStmt + ", because.", e);
+            LOG.warn("Failed to parse SQL: " + SqlCredentialRedactor.redact(originStmt) + ", because.", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
-            LOG.warn("Process one query failed. SQL: " + originStmt + ", because unknown reason: ", e);
+            LOG.warn("Process one query failed. SQL: " + SqlCredentialRedactor.redact(originStmt) +
+                    ", because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
