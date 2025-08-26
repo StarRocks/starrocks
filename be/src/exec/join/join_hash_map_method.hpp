@@ -128,10 +128,10 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::build_prepare(RuntimeState*
     table_items->log_bucket_size = __builtin_ctz(table_items->bucket_size);
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
-    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        auto& asof_buffer = ASOF_BUFFER(table_items);
-        asof_buffer->resize(table_items->row_count + 1);
-    }
+    // if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
+    //     auto& asof_buffer = ASOF_BUFFER(table_items);
+    //     asof_buffer->resize(table_items->row_count + 1);
+    // }
 }
 
 template <LogicalType LT, bool NeedBuildChained>
@@ -140,117 +140,117 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(JoinHa
                                                                           const Buffer<uint8_t>* is_nulls) {
     const auto num_rows = 1 + table_items->row_count;
 
-    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        LogicalType asof_join_build_type = table_items->asof_join_condition_desc.build_logical_type;
-        auto process_build_rows = [&]<LogicalType ASOF_LT>() {
-            using CppType = RunTimeCppType<ASOF_LT>;
-
-            auto& asof_buffer = ASOF_BUFFER(table_items);
-
-            const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
-                    table_items->asof_join_condition_desc.build_slot_id);
-            const auto* typed_column = ColumnHelper::get_data_column_by_type<ASOF_LT>(asof_temporal_column.get());
-            const NullColumn* nullable_asof_column = ColumnHelper::get_null_column(asof_temporal_column);
-            const CppType* probe_temporal_values = typed_column->get_data().data();
-
-            const uint32_t bucket_size_mask = table_items->bucket_size - 1;
-            auto* __restrict next = table_items->next.data();
-            auto* __restrict first = table_items->first.data();
-            const uint8_t* __restrict is_nulls_data = is_nulls ? is_nulls->data() : nullptr;
-
-            auto need_calc_bucket_num = [&](const uint32_t index) {
-                // Only check `is_nulls_data[i]` for the nullable slice type. The hash calculation overhead for
-                // fixed-size types is small, and thus we do not check it to allow vectorization of the hash calculation.
-                if constexpr (!std::is_same_v<CppType, Slice>) {
-                    return true;
-                } else {
-                    return is_nulls_data != nullptr && is_nulls_data[index] == 0;
-                }
-            };
-            auto is_null = [&](const uint32_t index) {
-                return is_nulls_data != nullptr && is_nulls_data[index] != 0;
-            };
-
-            // Phase 1: Calculate hash values and store temporarily in next array
-            for (uint32_t i = 1; i < num_rows; i++) {
-                if (is_nulls_data != nullptr && is_nulls_data[i] != 0) {
-                    continue;
-                }
-
-                if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
-                    continue;
-                }
-
-                // Use `next` stores `bucket_num` temporarily.
-                if (need_calc_bucket_num(i)) {
-                    next[i] = JoinHashMapHelper::calc_bucket_num<
-                            typename LinearChainedJoinHashMap<LT, NeedBuildChained>::CppType>(
-                            keys[i], table_items->bucket_size << FP_BITS, table_items->log_bucket_size + FP_BITS);
-                }
-            }
-
-            // Phase 2: Process ASOF entries using linear probing
-            for (uint32_t i = 1; i < num_rows; i++) {
-                if (is_nulls_data != nullptr && is_nulls_data[i] != 0) {
-                    continue;
-                }
-
-                if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
-                    continue;
-                }
-
-                if (i + 16 < num_rows && !is_null(i + 16)) {
-                    __builtin_prefetch(first + _get_bucket_num_from_hash(next[i + 16]));
-                }
-
-                const uint32_t hash = next[i];
-                const uint32_t fp = _get_fp_from_hash(hash);
-                uint32_t bucket_num = _get_bucket_num_from_hash(hash);
-
-                uint32_t probe_times = 1;
-                while (true) {
-                    if (first[bucket_num] == 0) {
-                        first[bucket_num] = _combine_data_fp(i, fp);
-                        break;
-                    }
-
-                    if (fp == _extract_fp(first[bucket_num]) && keys[i] == keys[_extract_data(first[bucket_num])]) {
-                        break;
-                    }
-
-                    bucket_num = (bucket_num + probe_times) & bucket_size_mask;
-                    probe_times++;
-                }
-
-                uint32_t asof_lookup_index = _extract_data(first[bucket_num]);
-
-                if (!asof_buffer[asof_lookup_index]) {
-                    CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
-                }
-
-                asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i], i);
-            }
-        };
-
-        switch (asof_join_build_type) {
-        case TYPE_BIGINT:
-            process_build_rows.template operator()<TYPE_BIGINT>();
-            break;
-        case TYPE_DATE:
-            process_build_rows.template operator()<TYPE_DATE>();
-            break;
-        case TYPE_DATETIME:
-            process_build_rows.template operator()<TYPE_DATETIME>();
-            break;
-        default:
-            CHECK(false) << "ASOF JOIN: Unsupported build_type: " << asof_join_build_type
-                         << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
-            __builtin_unreachable();
-        }
-
-        table_items->finalize_asof_lookup_vectors();
-        return;
-    }
+    // if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
+    //     LogicalType asof_join_build_type = table_items->asof_join_condition_desc.build_logical_type;
+    //     auto process_build_rows = [&]<LogicalType ASOF_LT>() {
+    //         using CppType = RunTimeCppType<ASOF_LT>;
+    //
+    //         auto& asof_buffer = ASOF_BUFFER(table_items);
+    //
+    //         const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
+    //                 table_items->asof_join_condition_desc.build_slot_id);
+    //         const auto* typed_column = ColumnHelper::get_data_column_by_type<ASOF_LT>(asof_temporal_column.get());
+    //         const NullColumn* nullable_asof_column = ColumnHelper::get_null_column(asof_temporal_column);
+    //         const CppType* probe_temporal_values = typed_column->get_data().data();
+    //
+    //         const uint32_t bucket_size_mask = table_items->bucket_size - 1;
+    //         auto* __restrict next = table_items->next.data();
+    //         auto* __restrict first = table_items->first.data();
+    //         const uint8_t* __restrict is_nulls_data = is_nulls ? is_nulls->data() : nullptr;
+    //
+    //         auto need_calc_bucket_num = [&](const uint32_t index) {
+    //             // Only check `is_nulls_data[i]` for the nullable slice type. The hash calculation overhead for
+    //             // fixed-size types is small, and thus we do not check it to allow vectorization of the hash calculation.
+    //             if constexpr (!std::is_same_v<CppType, Slice>) {
+    //                 return true;
+    //             } else {
+    //                 return is_nulls_data != nullptr && is_nulls_data[index] == 0;
+    //             }
+    //         };
+    //         auto is_null = [&](const uint32_t index) {
+    //             return is_nulls_data != nullptr && is_nulls_data[index] != 0;
+    //         };
+    //
+    //         // Phase 1: Calculate hash values and store temporarily in next array
+    //         for (uint32_t i = 1; i < num_rows; i++) {
+    //             if (is_nulls_data != nullptr && is_nulls_data[i] != 0) {
+    //                 continue;
+    //             }
+    //
+    //             if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
+    //                 continue;
+    //             }
+    //
+    //             // Use `next` stores `bucket_num` temporarily.
+    //             if (need_calc_bucket_num(i)) {
+    //                 next[i] = JoinHashMapHelper::calc_bucket_num<
+    //                         typename LinearChainedJoinHashMap<LT, NeedBuildChained>::CppType>(
+    //                         keys[i], table_items->bucket_size << FP_BITS, table_items->log_bucket_size + FP_BITS);
+    //             }
+    //         }
+    //
+    //         // Phase 2: Process ASOF entries using linear probing
+    //         for (uint32_t i = 1; i < num_rows; i++) {
+    //             if (is_nulls_data != nullptr && is_nulls_data[i] != 0) {
+    //                 continue;
+    //             }
+    //
+    //             if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
+    //                 continue;
+    //             }
+    //
+    //             if (i + 16 < num_rows && !is_null(i + 16)) {
+    //                 __builtin_prefetch(first + _get_bucket_num_from_hash(next[i + 16]));
+    //             }
+    //
+    //             const uint32_t hash = next[i];
+    //             const uint32_t fp = _get_fp_from_hash(hash);
+    //             uint32_t bucket_num = _get_bucket_num_from_hash(hash);
+    //
+    //             uint32_t probe_times = 1;
+    //             while (true) {
+    //                 if (first[bucket_num] == 0) {
+    //                     first[bucket_num] = _combine_data_fp(i, fp);
+    //                     break;
+    //                 }
+    //
+    //                 if (fp == _extract_fp(first[bucket_num]) && keys[i] == keys[_extract_data(first[bucket_num])]) {
+    //                     break;
+    //                 }
+    //
+    //                 bucket_num = (bucket_num + probe_times) & bucket_size_mask;
+    //                 probe_times++;
+    //             }
+    //
+    //             uint32_t asof_lookup_index = _extract_data(first[bucket_num]);
+    //
+    //             if (!asof_buffer[asof_lookup_index]) {
+    //                 CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
+    //             }
+    //
+    //             asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i], i);
+    //         }
+    //     };
+    //
+    //     switch (asof_join_build_type) {
+    //     case TYPE_BIGINT:
+    //         process_build_rows.template operator()<TYPE_BIGINT>();
+    //         break;
+    //     case TYPE_DATE:
+    //         process_build_rows.template operator()<TYPE_DATE>();
+    //         break;
+    //     case TYPE_DATETIME:
+    //         process_build_rows.template operator()<TYPE_DATETIME>();
+    //         break;
+    //     default:
+    //         CHECK(false) << "ASOF JOIN: Unsupported build_type: " << asof_join_build_type
+    //                      << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
+    //         __builtin_unreachable();
+    //     }
+    //
+    //     table_items->finalize_asof_lookup_vectors();
+    //     return;
+    // }
 
     auto process = [&]<bool IsNullable>() {
         const uint32_t bucket_size_mask = table_items->bucket_size - 1;
@@ -428,148 +428,148 @@ void LinearChainedJoinHashMap2<LT>::build_prepare(RuntimeState* state, JoinHashT
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->fps.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
-    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        auto& asof_buffer = ASOF_BUFFER(table_items);
-        asof_buffer->resize(table_items->row_count + 1);
-    }
+    // if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
+    //     auto& asof_buffer = ASOF_BUFFER(table_items);
+    //     asof_buffer->resize(table_items->row_count + 1);
+    // }
 }
 
 template <LogicalType LT>
 void LinearChainedJoinHashMap2<LT>::construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
                                                          const Buffer<uint8_t>* is_nulls) {
-    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        LogicalType asof_join_build_type = table_items->asof_join_condition_desc.build_logical_type;
-        auto process_build_rows = [&]<LogicalType ASOF_LT>() {
-            using ASOF_CppType = RunTimeCppType<ASOF_LT>;
-
-            auto& asof_buffer = ASOF_BUFFER(table_items);
-            if (!table_items->build_chunk) {
-                CHECK(false) << "ASOF JOIN: build_chunk is null";
-                return;
-            }
-
-            const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
-                    table_items->asof_join_condition_desc.build_slot_id);
-
-            if (!asof_temporal_column) {
-                CHECK(false) << "ASOF JOIN: asof_temporal_column is null for slot_id: "
-                             << table_items->asof_join_condition_desc.build_slot_id;
-                return;
-            }
-
-            const auto* typed_column = ColumnHelper::get_data_column_by_type<ASOF_LT>(asof_temporal_column.get());
-
-            if (!typed_column) {
-                CHECK(false) << "ASOF JOIN: typed_column is null for type: " << ASOF_LT;
-                return;
-            }
-
-            const NullColumn* nullable_asof_column = ColumnHelper::get_null_column(asof_temporal_column);
-            const ASOF_CppType* probe_temporal_values = typed_column->get_data().data();
-
-            if (!probe_temporal_values) {
-                CHECK(false) << "ASOF JOIN: probe_temporal_values is null";
-                return;
-            }
-
-            const auto num_rows = 1 + table_items->row_count;
-            auto* __restrict next = table_items->next.data();
-            auto* __restrict first = table_items->first.data();
-            auto* __restrict fps = table_items->fps.data();
-            const uint8_t* __restrict is_nulls_data = is_nulls ? is_nulls->data() : nullptr;
-
-            const uint32_t bucket_size_mask = table_items->bucket_size - 1;
-            auto is_null = [&](const uint32_t index) { return is_nulls_data[index] != 0; };
-
-            auto need_calc_bucket_num = [&](const uint32_t index) {
-                // Only check `is_nulls_data[i]` for the nullable slice type. The hash calculation overhead for
-                // fixed-size types is small, and thus we do not check it to allow vectorization of the hash calculation.
-                if constexpr (!std::is_same_v<CppType, Slice>) {
-                    return true;
-                } else {
-                    return is_nulls_data[index] == 0;
-                }
-            };
-
-            static constexpr uint32_t BATCH_SIZE = 4096;
-            uint8_t buffer_fps[BATCH_SIZE];
-            for (uint64_t i = 1; i < num_rows; i += BATCH_SIZE) {
-                const uint32_t count = std::min<uint32_t>(BATCH_SIZE, num_rows - i);
-
-                auto* buffer_bucket_nums = next + i;
-                for (uint32_t j = 0; j < count; j++) {
-                    if (need_calc_bucket_num(i + j)) {
-                        std::tie(buffer_bucket_nums[j], buffer_fps[j]) =
-                                JoinHashMapHelper::calc_bucket_num_and_fp<CppType>(
-                                        keys[i + j], table_items->bucket_size, table_items->log_bucket_size);
-                    }
-                }
-
-                for (uint32_t j = 0; j < count; j++) {
-                    if (is_nulls_data != nullptr && is_null(i + j)) {
-                        continue;
-                    }
-
-                    if (nullable_asof_column && nullable_asof_column->get_data()[i + j] != 0) {
-                        continue;
-                    }
-                    // if (j + 16 < count && !is_null(i + j + 16)) {
-                    //     __builtin_prefetch(first + buffer_bucket_nums[j + 16]);
-                    // }
-
-                    uint32_t bucket_num = buffer_bucket_nums[j];
-                    const uint8_t fp = buffer_fps[j];
-
-                    uint32_t probe_times = 1;
-                    while (true) {
-                        if (fps[bucket_num] == 0) {
-                            first[bucket_num] = i + j;
-                            fps[bucket_num] = fp;
-                            break;
-                        }
-
-                        if (fp == fps[bucket_num] && keys[i + j] == keys[first[bucket_num]]) {
-                            break;
-                        }
-
-                        bucket_num = (bucket_num + probe_times) & bucket_size_mask;
-                        probe_times++;
-                    }
-
-                    uint32_t asof_lookup_index = first[bucket_num];
-
-                    // 直接使用提取的 buffer，避免 variant 操作
-                    if (asof_lookup_index >= asof_buffer.size()) {
-                        asof_buffer.resize(asof_lookup_index + 1);
-                    }
-                    if (!asof_buffer[asof_lookup_index]) {
-                        CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
-                    }
-
-                    // 直接调用，零 variant 开销
-                    asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i + j], i + j);
-                }
-            }
-        };
-
-        switch (asof_join_build_type) {
-        case TYPE_BIGINT:
-            process_build_rows.template operator()<TYPE_BIGINT>();
-            break;
-        case TYPE_DATE:
-            process_build_rows.template operator()<TYPE_DATE>();
-            break;
-        case TYPE_DATETIME:
-            process_build_rows.template operator()<TYPE_DATETIME>();
-            break;
-        default:
-            CHECK(false) << "ASOF JOIN: Unsupported build_type: " << asof_join_build_type
-                         << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
-            __builtin_unreachable();
-        }
-
-        table_items->finalize_asof_lookup_vectors();
-    }
+    // if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
+    //     LogicalType asof_join_build_type = table_items->asof_join_condition_desc.build_logical_type;
+    //     auto process_build_rows = [&]<LogicalType ASOF_LT>() {
+    //         using ASOF_CppType = RunTimeCppType<ASOF_LT>;
+    //
+    //         auto& asof_buffer = ASOF_BUFFER(table_items);
+    //         if (!table_items->build_chunk) {
+    //             CHECK(false) << "ASOF JOIN: build_chunk is null";
+    //             return;
+    //         }
+    //
+    //         const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
+    //                 table_items->asof_join_condition_desc.build_slot_id);
+    //
+    //         if (!asof_temporal_column) {
+    //             CHECK(false) << "ASOF JOIN: asof_temporal_column is null for slot_id: "
+    //                          << table_items->asof_join_condition_desc.build_slot_id;
+    //             return;
+    //         }
+    //
+    //         const auto* typed_column = ColumnHelper::get_data_column_by_type<ASOF_LT>(asof_temporal_column.get());
+    //
+    //         if (!typed_column) {
+    //             CHECK(false) << "ASOF JOIN: typed_column is null for type: " << ASOF_LT;
+    //             return;
+    //         }
+    //
+    //         const NullColumn* nullable_asof_column = ColumnHelper::get_null_column(asof_temporal_column);
+    //         const ASOF_CppType* probe_temporal_values = typed_column->get_data().data();
+    //
+    //         if (!probe_temporal_values) {
+    //             CHECK(false) << "ASOF JOIN: probe_temporal_values is null";
+    //             return;
+    //         }
+    //
+    //         const auto num_rows = 1 + table_items->row_count;
+    //         auto* __restrict next = table_items->next.data();
+    //         auto* __restrict first = table_items->first.data();
+    //         auto* __restrict fps = table_items->fps.data();
+    //         const uint8_t* __restrict is_nulls_data = is_nulls ? is_nulls->data() : nullptr;
+    //
+    //         const uint32_t bucket_size_mask = table_items->bucket_size - 1;
+    //         auto is_null = [&](const uint32_t index) { return is_nulls_data[index] != 0; };
+    //
+    //         auto need_calc_bucket_num = [&](const uint32_t index) {
+    //             // Only check `is_nulls_data[i]` for the nullable slice type. The hash calculation overhead for
+    //             // fixed-size types is small, and thus we do not check it to allow vectorization of the hash calculation.
+    //             if constexpr (!std::is_same_v<CppType, Slice>) {
+    //                 return true;
+    //             } else {
+    //                 return is_nulls_data[index] == 0;
+    //             }
+    //         };
+    //
+    //         static constexpr uint32_t BATCH_SIZE = 4096;
+    //         uint8_t buffer_fps[BATCH_SIZE];
+    //         for (uint64_t i = 1; i < num_rows; i += BATCH_SIZE) {
+    //             const uint32_t count = std::min<uint32_t>(BATCH_SIZE, num_rows - i);
+    //
+    //             auto* buffer_bucket_nums = next + i;
+    //             for (uint32_t j = 0; j < count; j++) {
+    //                 if (need_calc_bucket_num(i + j)) {
+    //                     std::tie(buffer_bucket_nums[j], buffer_fps[j]) =
+    //                             JoinHashMapHelper::calc_bucket_num_and_fp<CppType>(
+    //                                     keys[i + j], table_items->bucket_size, table_items->log_bucket_size);
+    //                 }
+    //             }
+    //
+    //             for (uint32_t j = 0; j < count; j++) {
+    //                 if (is_nulls_data != nullptr && is_null(i + j)) {
+    //                     continue;
+    //                 }
+    //
+    //                 if (nullable_asof_column && nullable_asof_column->get_data()[i + j] != 0) {
+    //                     continue;
+    //                 }
+    //                 // if (j + 16 < count && !is_null(i + j + 16)) {
+    //                 //     __builtin_prefetch(first + buffer_bucket_nums[j + 16]);
+    //                 // }
+    //
+    //                 uint32_t bucket_num = buffer_bucket_nums[j];
+    //                 const uint8_t fp = buffer_fps[j];
+    //
+    //                 uint32_t probe_times = 1;
+    //                 while (true) {
+    //                     if (fps[bucket_num] == 0) {
+    //                         first[bucket_num] = i + j;
+    //                         fps[bucket_num] = fp;
+    //                         break;
+    //                     }
+    //
+    //                     if (fp == fps[bucket_num] && keys[i + j] == keys[first[bucket_num]]) {
+    //                         break;
+    //                     }
+    //
+    //                     bucket_num = (bucket_num + probe_times) & bucket_size_mask;
+    //                     probe_times++;
+    //                 }
+    //
+    //                 uint32_t asof_lookup_index = first[bucket_num];
+    //
+    //                 // 直接使用提取的 buffer，避免 variant 操作
+    //                 if (asof_lookup_index >= asof_buffer.size()) {
+    //                     asof_buffer.resize(asof_lookup_index + 1);
+    //                 }
+    //                 if (!asof_buffer[asof_lookup_index]) {
+    //                     CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
+    //                 }
+    //
+    //                 // 直接调用，零 variant 开销
+    //                 asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i + j], i + j);
+    //             }
+    //         }
+    //     };
+    //
+    //     switch (asof_join_build_type) {
+    //     case TYPE_BIGINT:
+    //         process_build_rows.template operator()<TYPE_BIGINT>();
+    //         break;
+    //     case TYPE_DATE:
+    //         process_build_rows.template operator()<TYPE_DATE>();
+    //         break;
+    //     case TYPE_DATETIME:
+    //         process_build_rows.template operator()<TYPE_DATETIME>();
+    //         break;
+    //     default:
+    //         CHECK(false) << "ASOF JOIN: Unsupported build_type: " << asof_join_build_type
+    //                      << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
+    //         __builtin_unreachable();
+    //     }
+    //
+    //     table_items->finalize_asof_lookup_vectors();
+    // }
 }
 
 template <LogicalType LT>
@@ -660,10 +660,10 @@ void DirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinHashTa
     table_items->log_bucket_size = __builtin_ctz(table_items->bucket_size);
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
-    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        auto& asof_buffer = ASOF_BUFFER(table_items);
-        asof_buffer->resize(table_items->row_count + 1);
-    }
+    // if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
+    //     auto& asof_buffer = ASOF_BUFFER(table_items);
+    //     asof_buffer->resize(table_items->row_count + 1);
+    // }
 }
 
 template <LogicalType LT>
@@ -673,63 +673,64 @@ void DirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems* tabl
 
     const auto num_rows = 1 + table_items->row_count;
 
-    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        LogicalType asof_join_build_type = table_items->asof_join_condition_desc.build_logical_type;
-
-        auto process_build_rows = [&]<LogicalType ASOF_LT>() {
-            using CppType = RunTimeCppType<ASOF_LT>;
-
-            auto& asof_buffer = ASOF_BUFFER(table_items);
-
-            const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
-                    table_items->asof_join_condition_desc.build_slot_id);
-            const auto* typed_column = ColumnHelper::get_data_column_by_type<ASOF_LT>(asof_temporal_column.get());
-            const NullColumn* nullable_asof_column = ColumnHelper::get_null_column(asof_temporal_column);
-            const CppType* probe_temporal_values = typed_column->get_data().data();
-
-            for (uint32_t i = 1; i < num_rows; i++) {
-                if (is_nulls != nullptr && is_nulls->data()[i] != 0) {
-                    continue;
-                }
-
-                if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
-                    continue;
-                }
-
-                const size_t bucket_num = keys[i] - MIN_VALUE;
-                if (table_items->first[bucket_num] == 0) {
-                    table_items->first[bucket_num] = i;
-                }
-
-                uint32_t asof_lookup_index = table_items->first[bucket_num];
-
-                if (!asof_buffer[asof_lookup_index]) {
-                    CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
-                }
-
-                // 🚀 直接调用，零开销！
-                asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i], i);
-            }
-        };
-
-        switch (asof_join_build_type) {
-        case TYPE_BIGINT:
-            process_build_rows.template operator()<TYPE_BIGINT>();
-            break;
-        case TYPE_DATE:
-            process_build_rows.template operator()<TYPE_DATE>();
-            break;
-        case TYPE_DATETIME:
-            process_build_rows.template operator()<TYPE_DATETIME>();
-            break;
-        default:
-            CHECK(false) << "ASOF JOIN: Unsupported build_type: " << asof_join_build_type
-                         << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
-            __builtin_unreachable();
-        }
-
-        table_items->finalize_asof_lookup_vectors();
-    } else if (is_nulls == nullptr) {
+    // if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
+    //     LogicalType asof_join_build_type = table_items->asof_join_condition_desc.build_logical_type;
+    //
+    //     auto process_build_rows = [&]<LogicalType ASOF_LT>() {
+    //         using CppType = RunTimeCppType<ASOF_LT>;
+    //
+    //         auto& asof_buffer = ASOF_BUFFER(table_items);
+    //
+    //         const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
+    //                 table_items->asof_join_condition_desc.build_slot_id);
+    //         const auto* typed_column = ColumnHelper::get_data_column_by_type<ASOF_LT>(asof_temporal_column.get());
+    //         const NullColumn* nullable_asof_column = ColumnHelper::get_null_column(asof_temporal_column);
+    //         const CppType* probe_temporal_values = typed_column->get_data().data();
+    //
+    //         for (uint32_t i = 1; i < num_rows; i++) {
+    //             if (is_nulls != nullptr && is_nulls->data()[i] != 0) {
+    //                 continue;
+    //             }
+    //
+    //             if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
+    //                 continue;
+    //             }
+    //
+    //             const size_t bucket_num = keys[i] - MIN_VALUE;
+    //             if (table_items->first[bucket_num] == 0) {
+    //                 table_items->first[bucket_num] = i;
+    //             }
+    //
+    //             uint32_t asof_lookup_index = table_items->first[bucket_num];
+    //
+    //             if (!asof_buffer[asof_lookup_index]) {
+    //                 CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
+    //             }
+    //
+    //             // 🚀 直接调用，零开销！
+    //             asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i], i);
+    //         }
+    //     };
+    //
+    //     switch (asof_join_build_type) {
+    //     case TYPE_BIGINT:
+    //         process_build_rows.template operator()<TYPE_BIGINT>();
+    //         break;
+    //     case TYPE_DATE:
+    //         process_build_rows.template operator()<TYPE_DATE>();
+    //         break;
+    //     case TYPE_DATETIME:
+    //         process_build_rows.template operator()<TYPE_DATETIME>();
+    //         break;
+    //     default:
+    //         CHECK(false) << "ASOF JOIN: Unsupported build_type: " << asof_join_build_type
+    //                      << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
+    //         __builtin_unreachable();
+    //     }
+    //
+    //     table_items->finalize_asof_lookup_vectors();
+    // } else
+    if (is_nulls == nullptr) {
         for (uint32_t i = 1; i < num_rows; i++) {
             const size_t bucket_num = keys[i] - MIN_VALUE;
             table_items->next[i] = table_items->first[bucket_num];
@@ -783,8 +784,7 @@ void RangeDirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinH
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
     if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        auto& asof_buffer = ASOF_BUFFER(table_items);
-        asof_buffer->resize(table_items->row_count + 1);
+        table_items->resize_asof_lookup_vectors(table_items->row_count + 1);
     }
 }
 
@@ -797,11 +797,13 @@ void RangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems*
 
     if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
         LogicalType asof_join_build_type = table_items->asof_join_condition_desc.build_logical_type;
+        TExprOpcode::type opcode = table_items->asof_join_condition_desc.condition_op;
 
-        auto process_build_rows = [&]<LogicalType ASOF_LT>() {
+        auto process_build_rows = [&]<LogicalType ASOF_LT, TExprOpcode::type OpCode>() {
             using CppType = RunTimeCppType<ASOF_LT>;
 
-            auto& asof_buffer = ASOF_BUFFER(table_items);
+            constexpr size_t variant_index = get_asof_variant_index(ASOF_LT, OpCode);
+            auto& asof_buffer = get_asof_buffer_static<variant_index>(table_items);
 
             const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
                     table_items->asof_join_condition_desc.build_slot_id);
@@ -826,22 +828,42 @@ void RangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems*
                 uint32_t asof_lookup_index = table_items->first[bucket_num];
 
                 if (!asof_buffer[asof_lookup_index]) {
-                    CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
+                    create_asof_vector_static<variant_index>(table_items, asof_lookup_index);
                 }
 
+                // 🚀 完全静态的直接调用，最优性能
                 asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i], i);
             }
         };
 
+        // 🚀 双重静态分发：LogicalType + TExprOpcode
         switch (asof_join_build_type) {
         case TYPE_BIGINT:
-            process_build_rows.template operator()<TYPE_BIGINT>();
+            switch (opcode) {
+                case TExprOpcode::LT: process_build_rows.template operator()<TYPE_BIGINT, TExprOpcode::LT>(); break;
+                case TExprOpcode::LE: process_build_rows.template operator()<TYPE_BIGINT, TExprOpcode::LE>(); break;
+                case TExprOpcode::GT: process_build_rows.template operator()<TYPE_BIGINT, TExprOpcode::GT>(); break;
+                case TExprOpcode::GE: process_build_rows.template operator()<TYPE_BIGINT, TExprOpcode::GE>(); break;
+                default: __builtin_unreachable();
+            }
             break;
         case TYPE_DATE:
-            process_build_rows.template operator()<TYPE_DATE>();
+            switch (opcode) {
+                case TExprOpcode::LT: process_build_rows.template operator()<TYPE_DATE, TExprOpcode::LT>(); break;
+                case TExprOpcode::LE: process_build_rows.template operator()<TYPE_DATE, TExprOpcode::LE>(); break;
+                case TExprOpcode::GT: process_build_rows.template operator()<TYPE_DATE, TExprOpcode::GT>(); break;
+                case TExprOpcode::GE: process_build_rows.template operator()<TYPE_DATE, TExprOpcode::GE>(); break;
+                default: __builtin_unreachable();
+            }
             break;
         case TYPE_DATETIME:
-            process_build_rows.template operator()<TYPE_DATETIME>();
+            switch (opcode) {
+                case TExprOpcode::LT: process_build_rows.template operator()<TYPE_DATETIME, TExprOpcode::LT>(); break;
+                case TExprOpcode::LE: process_build_rows.template operator()<TYPE_DATETIME, TExprOpcode::LE>(); break;
+                case TExprOpcode::GT: process_build_rows.template operator()<TYPE_DATETIME, TExprOpcode::GT>(); break;
+                case TExprOpcode::GE: process_build_rows.template operator()<TYPE_DATETIME, TExprOpcode::GE>(); break;
+                default: __builtin_unreachable();
+            }
             break;
         default:
             CHECK(false) << "ASOF JOIN: Unsupported build_type: " << asof_join_build_type
@@ -987,10 +1009,10 @@ void DenseRangeDirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, 
     table_items->dense_groups.resize((value_interval + 31) / 32);
     table_items->first.resize(table_items->row_count + 1, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
-    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        auto& asof_buffer = ASOF_BUFFER(table_items);
-        asof_buffer->resize(table_items->row_count + 1);
-    }
+    // if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
+    //     auto& asof_buffer = ASOF_BUFFER(table_items);
+    //     asof_buffer->resize(table_items->row_count + 1);
+    // }
 }
 
 template <LogicalType LT>
@@ -999,89 +1021,89 @@ void DenseRangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableI
                                                                   const Buffer<uint8_t>* is_nulls) {
     const uint64_t min_value = table_items->min_value;
     const auto num_rows = 1 + table_items->row_count;
-    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        LogicalType asof_join_build_type = table_items->asof_join_condition_desc.build_logical_type;
-
-        auto process_build_rows = [&]<LogicalType ASOF_LT>() {
-            using AsofCppType = RunTimeCppType<ASOF_LT>;
-
-            auto& asof_buffer = ASOF_BUFFER(table_items);
-
-            const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
-                    table_items->asof_join_condition_desc.build_slot_id);
-            const auto* typed_column = ColumnHelper::get_data_column_by_type<ASOF_LT>(asof_temporal_column.get());
-            const NullColumn* nullable_asof_column = ColumnHelper::get_null_column(asof_temporal_column);
-            const AsofCppType* probe_temporal_values = typed_column->get_data().data();
-
-            for (uint32_t i = 1; i < num_rows; i++) {
-                if (is_nulls != nullptr && is_nulls->data()[i] != 0) {
-                    continue;
-                }
-
-                if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
-                    continue;
-                }
-
-                const uint32_t bucket_num = keys[i] - min_value;
-                const uint32_t group_index = bucket_num / 32;
-                const uint32_t index_in_group = bucket_num % 32;
-                table_items->dense_groups[group_index].bitset |= 1 << index_in_group;
-            }
-
-            for (uint32_t start_index = 0; auto& group : table_items->dense_groups) {
-                group.start_index = start_index;
-                start_index += BitUtil::count_one_bits(group.bitset);
-            }
-
-            for (uint32_t i = 1; i < num_rows; i++) {
-                if (is_nulls != nullptr && is_nulls->data()[i] != 0) {
-                    continue;
-                }
-
-                if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
-                    continue;
-                }
-
-                const uint32_t bucket_num = keys[i] - min_value;
-                const uint32_t group_index = bucket_num / 32;
-                const uint32_t index_in_group = bucket_num % 32;
-
-                const uint32_t cur_bitset = table_items->dense_groups[group_index].bitset & ((1 << index_in_group) - 1);
-                const uint32_t offset_in_group = BitUtil::count_one_bits(cur_bitset);
-                const uint32_t index = table_items->dense_groups[group_index].start_index + offset_in_group;
-
-                if (table_items->first[index] == 0) {
-                    table_items->first[index] = i;
-                }
-
-                uint32_t asof_lookup_index = table_items->first[index];
-
-                if (!asof_buffer[asof_lookup_index]) {
-                    CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
-                }
-
-                asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i], i);
-            }
-        };
-
-        switch (asof_join_build_type) {
-        case TYPE_BIGINT:
-            process_build_rows.template operator()<TYPE_BIGINT>();
-            break;
-        case TYPE_DATE:
-            process_build_rows.template operator()<TYPE_DATE>();
-            break;
-        case TYPE_DATETIME:
-            process_build_rows.template operator()<TYPE_DATETIME>();
-            break;
-        default:
-            CHECK(false) << "ASOF JOIN: Unsupported build_type: " << asof_join_build_type
-                         << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
-            __builtin_unreachable();
-        }
-
-        table_items->finalize_asof_lookup_vectors();
-    } else {
+    // if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
+    //     LogicalType asof_join_build_type = table_items->asof_join_condition_desc.build_logical_type;
+    //
+    //     auto process_build_rows = [&]<LogicalType ASOF_LT>() {
+    //         using AsofCppType = RunTimeCppType<ASOF_LT>;
+    //
+    //         auto& asof_buffer = ASOF_BUFFER(table_items);
+    //
+    //         const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
+    //                 table_items->asof_join_condition_desc.build_slot_id);
+    //         const auto* typed_column = ColumnHelper::get_data_column_by_type<ASOF_LT>(asof_temporal_column.get());
+    //         const NullColumn* nullable_asof_column = ColumnHelper::get_null_column(asof_temporal_column);
+    //         const AsofCppType* probe_temporal_values = typed_column->get_data().data();
+    //
+    //         for (uint32_t i = 1; i < num_rows; i++) {
+    //             if (is_nulls != nullptr && is_nulls->data()[i] != 0) {
+    //                 continue;
+    //             }
+    //
+    //             if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
+    //                 continue;
+    //             }
+    //
+    //             const uint32_t bucket_num = keys[i] - min_value;
+    //             const uint32_t group_index = bucket_num / 32;
+    //             const uint32_t index_in_group = bucket_num % 32;
+    //             table_items->dense_groups[group_index].bitset |= 1 << index_in_group;
+    //         }
+    //
+    //         for (uint32_t start_index = 0; auto& group : table_items->dense_groups) {
+    //             group.start_index = start_index;
+    //             start_index += BitUtil::count_one_bits(group.bitset);
+    //         }
+    //
+    //         for (uint32_t i = 1; i < num_rows; i++) {
+    //             if (is_nulls != nullptr && is_nulls->data()[i] != 0) {
+    //                 continue;
+    //             }
+    //
+    //             if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
+    //                 continue;
+    //             }
+    //
+    //             const uint32_t bucket_num = keys[i] - min_value;
+    //             const uint32_t group_index = bucket_num / 32;
+    //             const uint32_t index_in_group = bucket_num % 32;
+    //
+    //             const uint32_t cur_bitset = table_items->dense_groups[group_index].bitset & ((1 << index_in_group) - 1);
+    //             const uint32_t offset_in_group = BitUtil::count_one_bits(cur_bitset);
+    //             const uint32_t index = table_items->dense_groups[group_index].start_index + offset_in_group;
+    //
+    //             if (table_items->first[index] == 0) {
+    //                 table_items->first[index] = i;
+    //             }
+    //
+    //             uint32_t asof_lookup_index = table_items->first[index];
+    //
+    //             if (!asof_buffer[asof_lookup_index]) {
+    //                 CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
+    //             }
+    //
+    //             asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i], i);
+    //         }
+    //     };
+    //
+    //     switch (asof_join_build_type) {
+    //     case TYPE_BIGINT:
+    //         process_build_rows.template operator()<TYPE_BIGINT>();
+    //         break;
+    //     case TYPE_DATE:
+    //         process_build_rows.template operator()<TYPE_DATE>();
+    //         break;
+    //     case TYPE_DATETIME:
+    //         process_build_rows.template operator()<TYPE_DATETIME>();
+    //         break;
+    //     default:
+    //         CHECK(false) << "ASOF JOIN: Unsupported build_type: " << asof_join_build_type
+    //                      << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
+    //         __builtin_unreachable();
+    //     }
+    //
+    //     table_items->finalize_asof_lookup_vectors();
+    // } else {
         const uint8_t* is_nulls_data = is_nulls == nullptr ? nullptr : is_nulls->data();
         auto is_null = [&]<bool Nullable>(const uint32_t index) {
             if constexpr (Nullable) {
@@ -1132,7 +1154,7 @@ void DenseRangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableI
         } else {
             process.template operator()<true>();
         }
-    }
+    // }
 }
 
 template <LogicalType LT>

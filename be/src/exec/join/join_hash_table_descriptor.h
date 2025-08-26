@@ -165,9 +165,11 @@ using AsofBufferVariant = std::variant<
     ASOF_BUFFER_TYPES(TimestampValue)  // 8-11: Buffer<AsofLookupVector<TimestampValue, OP>*>
 >;
 
+// 🚀 前向声明，用于模板函数
+struct JoinHashTableItems;
 
 constexpr size_t get_asof_variant_index(LogicalType logical_type, TExprOpcode::type opcode) {
-    size_t base = (logical_type == TYPE_BIGINT) ? 0 : (logical_type == TYPE_DATE) ? 4 : 8;
+    size_t base = (logical_type == TYPE_BIGINT) ? 0 : (logical_type == TYPE_DATE) ? 4 : 8; // TYPE_DATETIME -> TimestampValue (index 8-11)
     size_t offset = (opcode == TExprOpcode::LT) ? 0 : (opcode == TExprOpcode::LE) ? 1 : (opcode == TExprOpcode::GT) ? 2 : 3;
     return base + offset;
 }
@@ -191,26 +193,14 @@ inline AsofBufferVariant create_asof_buffer_by_index(size_t variant_index) {
     }
 }
 
-// 🚀 简洁的 ASOF Buffer 获取宏
-#define ASOF_BUFFER(table_items) \
-    ([](auto* items) -> auto& { \
-        switch (items->asof_variant_index) { \
-            case 0:  return std::get<0>(items->asof_lookup_vectors); \
-            case 1:  return std::get<1>(items->asof_lookup_vectors); \
-            case 2:  return std::get<2>(items->asof_lookup_vectors); \
-            case 3:  return std::get<3>(items->asof_lookup_vectors); \
-            case 4:  return std::get<4>(items->asof_lookup_vectors); \
-            case 5:  return std::get<5>(items->asof_lookup_vectors); \
-            case 6:  return std::get<6>(items->asof_lookup_vectors); \
-            case 7:  return std::get<7>(items->asof_lookup_vectors); \
-            case 8:  return std::get<8>(items->asof_lookup_vectors); \
-            case 9:  return std::get<9>(items->asof_lookup_vectors); \
-            case 10: return std::get<10>(items->asof_lookup_vectors); \
-            case 11: return std::get<11>(items->asof_lookup_vectors); \
-            default: __builtin_unreachable(); \
-        } \
-    }(table_items))
 
+
+
+
+
+
+
+// 🚀 运行时分发版本（保留用于动态情况）
 #define CREATE_ASOF_VECTOR_BY_INDEX(buffer, variant_index, asof_lookup_index) \
     do { \
         switch (variant_index) { \
@@ -290,6 +280,12 @@ struct JoinHashTableItems {
 
     AsofBufferVariant asof_lookup_vectors;
     size_t asof_variant_index = 0;
+
+    void resize_asof_lookup_vectors(size_t size) {
+        std::visit([size](auto& buffer) {
+            buffer.resize(size);
+        }, asof_lookup_vectors);
+    }
 
     void finalize_asof_lookup_vectors() {
         std::visit([](auto& buffer) {
@@ -493,5 +489,48 @@ struct HashTableParam {
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
 };
+
+// 🚀 静态类型版本的 ASOF Buffer 获取函数（需要完整的 JoinHashTableItems 定义）
+template<size_t VariantIndex>
+constexpr auto& get_asof_buffer_static(JoinHashTableItems* table_items) {
+    static_assert(VariantIndex < 12, "Invalid variant index");
+    return std::get<VariantIndex>(table_items->asof_lookup_vectors);
+}
+
+// 🚀 静态版本的 ASOF Vector 创建函数
+template<size_t VariantIndex>
+void create_asof_vector_static(JoinHashTableItems* table_items, uint32_t asof_lookup_index) {
+    auto& buffer = get_asof_buffer_static<VariantIndex>(table_items);
+
+    if constexpr (VariantIndex == 0) {
+        buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::LT>>();
+    } else if constexpr (VariantIndex == 1) {
+        buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::LE>>();
+    } else if constexpr (VariantIndex == 2) {
+        buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::GT>>();
+    } else if constexpr (VariantIndex == 3) {
+        buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::GE>>();
+    } else if constexpr (VariantIndex == 4) {
+        buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::LT>>();
+    } else if constexpr (VariantIndex == 5) {
+        buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::LE>>();
+    } else if constexpr (VariantIndex == 6) {
+        buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::GT>>();
+    } else if constexpr (VariantIndex == 7) {
+        buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::GE>>();
+    } else if constexpr (VariantIndex == 8) {
+        buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::LT>>();
+    } else if constexpr (VariantIndex == 9) {
+        buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::LE>>();
+    } else if constexpr (VariantIndex == 10) {
+        buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::GT>>();
+    } else if constexpr (VariantIndex == 11) {
+        buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::GE>>();
+    } else {
+        static_assert(VariantIndex < 12, "Invalid variant index");
+    }
+}
+
+
 } // namespace starrocks
 
