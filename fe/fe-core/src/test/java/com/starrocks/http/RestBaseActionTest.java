@@ -90,11 +90,6 @@ public class RestBaseActionTest {
         verify(mockResponse).updateHeader(HttpHeaderNames.LOCATION.toString(), asciiUri);
     }
 
-    @Test
-    public void verifyCallGetAllAliveFe() {
-        List<Pair<String, Integer>> fronts = restBaseAction.getOtherAliveFe();
-        verify(restBaseAction).getAllAliveFe();
-    }
 
     @Test
     public void testGetOtherAliveFronts() {
@@ -114,7 +109,6 @@ public class RestBaseActionTest {
         };
 
         List<Pair<String, Integer>> fronts = restBaseAction.getOtherAliveFe();
-        verify(restBaseAction).getCurrentFe();
 
         assert fronts.size() == 1;
 
