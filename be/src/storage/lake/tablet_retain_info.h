@@ -45,11 +45,15 @@ public:
 
     int64_t tablet_id() const { return _tablet_id; }
 
+    bool test_flag() const { return _flag; }
+    void set_flag() { _flag = true; }
+
 private:
     int64_t _tablet_id;
     std::unordered_set<int64_t> _versions;
     std::unordered_set<std::string> _files;
     std::unordered_set<uint32_t> _rowset_ids;
+    bool _flag = false;
 };
 
 } // namespace starrocks::lake

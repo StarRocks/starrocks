@@ -350,6 +350,10 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
             }
         }
 
+        if (retain_info.test_flag()) {
+            bundle_file_deleter->print_info();
+        }
+
         for (const auto& del_file : rowset.del_files()) {
             if (del_file.shared()) {
                 continue;
@@ -449,6 +453,9 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                 DCHECK_LE(version, final_retain_version);
                 RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, datafile_deleter, bundle_file_deleter,
                                                       &prepare_vacuum_file_size, retain_info));
+                if (tablet_retain_info.test_flag()) {
+                    LOG(INFO) << "current final_retain_version: " << final_retain_version;
+                }
             } else {
                 int64_t compare_time = 0;
                 if (metadata->has_commit_time() && metadata->commit_time() > 0) {
@@ -485,6 +492,9 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                     // The metadata will be retained, but garbage files recorded in it can be deleted.
                     RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, datafile_deleter, bundle_file_deleter,
                                                           total_datafile_size, retain_info));
+                    if (tablet_retain_info.test_flag()) {
+                        LOG(INFO) << "current final_retain_version: " << final_retain_version;   
+                    }
                 } else {
                     DCHECK_LE(version, final_retain_version);
                     final_retain_version = version;
@@ -561,6 +571,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     for (auto& tablet_info : tablet_infos) {
         TabletRetainInfo tablet_retain_info;
         RETURN_IF_ERROR(tablet_retain_info.init(tablet_info.tablet_id(), retain_versions, tablet_mgr));
+        tablet_retain_info.set_flag();
 
         int64_t tablet_vacuumed_version = 0;
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
