@@ -146,6 +146,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     @SerializedName(value = "materializedColumnExpr")
     private ExpressionSerializedObject generatedColumnExprSerialized;
     private ColumnIdExpr generatedColumnExpr;
+    // whether the column should be hidden when show create table or desc table.
+    // for example, the iceberg table has some reserved fields that are not visible to users
+    // but can be accessed during queries.
+    private boolean isHidden = false;
 
     // Only for persist
     public Column() {
@@ -260,6 +264,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
         this.uniqueId = column.getUniqueId();
         this.generatedColumnExpr = column.generatedColumnExpr;
+        this.isHidden = column.isHidden;
     }
 
     public Column deepCopy() {
@@ -383,6 +388,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public void setIsAutoIncrement(boolean isAutoIncrement) {
         this.isAutoIncrement = isAutoIncrement;
+    }
+
+    public void setIsHidden(boolean isHidden) {
+        this.isHidden = isHidden;
+    }
+
+    public boolean isHidden() {
+        return isHidden;
     }
 
     public DefaultExpr getDefaultExpr() {
@@ -858,6 +871,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
         if (this.isGeneratedColumn() &&
                 !this.generatedColumnExpr.equals(other.generatedColumnExpr)) {
+            return false;
+        }
+        if (this.isHidden != other.isHidden()) {
             return false;
         }
 

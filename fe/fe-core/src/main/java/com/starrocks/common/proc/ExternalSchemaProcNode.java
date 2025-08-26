@@ -46,7 +46,7 @@ public class ExternalSchemaProcNode implements ProcNodeInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        List<Column> schema = table.getFullSchema();
+        List<Column> schema = table.getFullVisibleSchema();
         List<String> partitionColumns = table.getPartitionColumnNames();
 
         for (Column column : schema) {
