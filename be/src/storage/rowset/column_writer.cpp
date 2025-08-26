@@ -608,7 +608,7 @@ Status ScalarColumnWriter::finish_current_page() {
             } else if (decision == CreateIndexDecision::Good) {
                 // Stop judging
                 _zone_map_index_quality_judger.reset();
-                VLOG(2) << "ZoneMapIndexQualityJudger decided to not create the index for this column";
+                VLOG(2) << "ZoneMapIndexQualityJudger decided to create the index for this column";
             }
         }
     }

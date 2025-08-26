@@ -498,16 +498,6 @@ struct ZoneMapWrapper {
                (other.zone_map.max_value.value >= zone_map.min_value.value &&
                 other.zone_map.max_value.value <= zone_map.max_value.value);
     }
-
-    bool operator<(const ZoneMapWrapper& other) const {
-        if (zone_map.min_value.value < other.zone_map.min_value.value) {
-            return true;
-        } else if (zone_map.min_value.value > other.zone_map.min_value.value) {
-            return false;
-        } else {
-            return zone_map.max_value.value < other.zone_map.max_value.value;
-        }
-    }
 };
 
 template <LogicalType type>
@@ -522,7 +512,6 @@ CreateIndexDecision ZoneMapIndexQualityJudgerImpl<type>::make_decision() const {
         parsed_zonemap.emplace_back(zonemap);
     }
 
-    // step: check overlap
     double total_overlap = 0.0;
     for (size_t i = 0; i < parsed_zonemap.size(); ++i) {
         for (size_t j = i + 1; j < parsed_zonemap.size(); ++j) {

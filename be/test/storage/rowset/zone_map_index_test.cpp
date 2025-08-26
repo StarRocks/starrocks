@@ -586,7 +586,7 @@ TEST_F(ZoneMapIndexQualityJudgerTest, BadIndexHighOverlap) {
     ASSERT_EQ(CreateIndexDecision::Bad, judger->make_decision());
 }
 
-TEST_F(ZoneMapIndexQualityJudgerTest, ModerateOverlapThreshold) {
+TEST_F(ZoneMapIndexQualityJudgerTest, HighOverlapThreshold) {
     auto type_info = create_string_type_info();
     auto judger = ZoneMapIndexQualityJudger::create(type_info.get(), 0.5, 3); // 50% overlap threshold
 
@@ -595,13 +595,13 @@ TEST_F(ZoneMapIndexQualityJudgerTest, ModerateOverlapThreshold) {
     judger->feed(create_zone_map_pb("c", "g")); // c-g (overlaps with a-e)
     judger->feed(create_zone_map_pb("f", "j")); // f-j (overlaps with c-g)
 
-    // Zone 1 overlaps with zone 2
-    // Zone 2 overlaps with zones 1 and 3
-    // Zone 3 overlaps with zone 2
-    // Total overlaps: 4 (excluding self-comparisons)
-    // Overlap ratio: 4 / (3 * 3) = 4/9 = 0.44
-    // Since 0.44 <= 0.5, this should be a good index
-    ASSERT_EQ(CreateIndexDecision::Good, judger->make_decision());
+    // Zone 1 overlaps with zone 2 (a-e overlaps with c-g from c to e)
+    // Zone 2 overlaps with zone 3 (c-g overlaps with f-j from f to g)
+    // Zone 1 does not overlap with zone 3 (a-e ends at e, f-j starts at f)
+    // Total overlaps: 2 (unique pairs)
+    // Overlap ratio: 2 / (3 * 2 / 2) = 2/3 = 0.67
+    // Since 0.67 > 0.5, this should be a bad index
+    ASSERT_EQ(CreateIndexDecision::Bad, judger->make_decision());
 }
 
 TEST_F(ZoneMapIndexQualityJudgerTest, EdgeCaseExactThreshold) {
@@ -613,12 +613,12 @@ TEST_F(ZoneMapIndexQualityJudgerTest, EdgeCaseExactThreshold) {
     judger->feed(create_zone_map_pb("c", "f")); // c-f (overlaps with a-d)
     judger->feed(create_zone_map_pb("e", "h")); // e-h (overlaps with c-f)
 
-    // Zone 1 overlaps with zone 2
-    // Zone 2 overlaps with zones 1 and 3
-    // Zone 3 overlaps with zone 2
-    // Total overlaps: 4 (excluding self-comparisons)
-    // Overlap ratio: 4 / (3 * 3) = 4/9 = 0.44
-    // Since 0.44 > 0.33, this should be a bad index
+    // Zone 1 overlaps with zone 2 (a-d overlaps with c-f from c to d)
+    // Zone 2 overlaps with zone 3 (c-f overlaps with e-h from e to f)
+    // Zone 1 does not overlap with zone 3 (a-d ends at d, e-h starts at e)
+    // Total overlaps: 2 (unique pairs)
+    // Overlap ratio: 2 / (3 * 2 / 2) = 2/3 = 0.67
+    // Since 0.67 > 0.33, this should be a bad index
     ASSERT_EQ(CreateIndexDecision::Bad, judger->make_decision());
 }
 
@@ -634,7 +634,7 @@ TEST_F(ZoneMapIndexQualityJudgerTest, NullValueOverlapBehavior) {
 
     // These zones have no value overlap and no nulls
     // Total overlaps: 0
-    // Overlap ratio: 0 / (4 * 4) = 0
+    // Overlap ratio: 0 / (4 * 3 / 2) = 0 / 6 = 0
     // Since 0 <= 0.5, this should be a good index
     ASSERT_EQ(CreateIndexDecision::Good, judger->make_decision());
 
@@ -859,7 +859,7 @@ TEST_F(ZoneMapIndexBuilderIntegrationTest, AdaptiveIndexCreation) {
     // Create in-memory file system for testing
     auto fs = std::make_shared<MemoryFileSystem>();
     ASSERT_TRUE(fs->create_dir("/tmp").ok());
-    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file("/tmp/zonemap_adaptive_test"))
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file("/tmp/zonemap_adaptive_test"));
 
     auto writer = std::make_unique<ScalarColumnWriter>(opts, type_info, wfile.get());
     ASSERT_TRUE(writer->init().ok());
@@ -891,6 +891,9 @@ TEST_F(ZoneMapIndexBuilderIntegrationTest, AdaptiveIndexCreation) {
 
     // Finish writing - this should trigger the quality judger decision
     ASSERT_TRUE(writer->finish().ok());
+
+    // Write the zone map index - this is required to actually write the index to the file
+    ASSERT_TRUE(writer->write_zone_map().ok());
 
     // Close the file
     ASSERT_OK(wfile->close());
