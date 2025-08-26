@@ -15,7 +15,6 @@
 
 package com.starrocks.scheduler.mv;
 
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
@@ -26,6 +25,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.sql.common.PCellNone;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 
 import java.util.Iterator;
@@ -63,42 +63,44 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public List<PCellWithName> getMVPartitionsToRefreshWithForce() {
-        return  mv.getVisiblePartitionNames()
+    public PCellSortedSet getMVPartitionsToRefreshWithForce() {
+        return getNonPartitionedMVPartitionsToRefresh();
+    }
+
+    private PCellSortedSet getNonPartitionedMVPartitionsToRefresh() {
+        List<PCellWithName> pCellWithNames = mv.getVisiblePartitionNames()
                 .stream()
                 .map(partitionName -> PCellWithName.of(partitionName, new PCellNone()))
                 .collect(Collectors.toList());
+        return PCellSortedSet.of(pCellWithNames);
     }
 
     @Override
-    public List<PCellWithName> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
-                                                        Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
-                                                        MVRefreshParams mvRefreshParams,
-                                                        Set<String> mvPotentialPartitionNames) {
+    public PCellSortedSet getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
+                                                   Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
+                                                   MVRefreshParams mvRefreshParams,
+                                                   Set<String> mvPotentialPartitionNames) {
         // non-partitioned materialized view
         if (mvRefreshParams.isForce() || isNonPartitionedMVNeedToRefresh(snapshotBaseTables, mv)) {
-            return mv.getVisiblePartitionNames()
-                    .stream()
-                    .map(partitionName -> PCellWithName.of(partitionName, new PCellNone()))
-                    .collect(Collectors.toList());
+            return getNonPartitionedMVPartitionsToRefresh();
         }
-        return Lists.newArrayList();
+        return PCellSortedSet.of();
     }
 
     @Override
-    public List<PCellWithName> getMVPartitionNamesWithTTL(MaterializedView materializedView,
-                                                          MVRefreshParams mvRefreshParams,
-                                                          boolean isAutoRefresh) {
-        return Lists.newArrayList();
+    public PCellSortedSet getMVPartitionNamesWithTTL(MaterializedView materializedView,
+                                                     MVRefreshParams mvRefreshParams,
+                                                     boolean isAutoRefresh) {
+        return PCellSortedSet.of();
     }
 
-    public void filterPartitionByRefreshNumber(List<PCellWithName> mvPartitionsToRefresh,
+    public void filterPartitionByRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
                                                Set<String> mvPotentialPartitionNames, boolean tentative) {
         // do nothing
     }
 
     @Override
-    public void filterPartitionByAdaptiveRefreshNumber(List<PCellWithName> mvPartitionsToRefresh,
+    public void filterPartitionByAdaptiveRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
                                                        Set<String> mvPotentialPartitionNames, boolean tentative) {
         // do nothing
     }

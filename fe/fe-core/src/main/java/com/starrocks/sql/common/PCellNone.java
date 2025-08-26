@@ -14,8 +14,34 @@
 
 package com.starrocks.sql.common;
 
-public class PCellNone extends PCell {
+/**
+ * PCellNone is a special PCell that represents the absence of a partition cell which can be used for non-partitioned tables.
+ */
+public final class PCellNone extends PCell {
     public boolean isIntersected(PCell o) {
         return false;
+    }
+
+    @Override
+    public int compareTo(PCell o) {
+        if (o instanceof PCellNone) {
+            return 0; // Both are PCellNone, considered equal.
+        }
+        return -1; // PCellNone is less than any other PCell type.
+    }
+
+    @Override
+    public String toString() {
+        return "PCellNone";
+    }
+
+    @Override
+    public int hashCode() {
+        return 0; // PCellNone has no meaningful state, so it can return a constant hash code.
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof PCellNone; // Only equal to another PCellNone instance.
     }
 }
