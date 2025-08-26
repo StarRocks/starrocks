@@ -26,6 +26,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -136,6 +137,16 @@ public interface ConnectorMetadata {
                                                  Optional<ConnectorTableVersion> startVersion,
                                                  Optional<ConnectorTableVersion> endVersion) {
         return TvrTableSnapshot.empty();
+    }
+
+    default TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
+        return TvrTableSnapshot.empty();
+    }
+
+    default List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                          TvrTableSnapshot fromSnapshotExclusive,
+                                                          TvrTableSnapshot toSnapshotInclusive) {
+        return Lists.newArrayList();
     }
 
     default boolean tableExists(ConnectContext context, String dbName, String tblName) {

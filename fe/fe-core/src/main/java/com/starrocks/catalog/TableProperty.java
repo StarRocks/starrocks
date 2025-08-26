@@ -215,6 +215,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // It represents the mode selected to determine the number of partitions to refresh
     private String partitionRefreshStrategy = Config.default_mv_partition_refresh_strategy;
 
+    // This property only applies to materialized views/
+    // It represents the mode selected to determine how to refresh the materialized view
+    private String mvRefreshMode = Config.default_mv_refresh_mode;
+
     // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
     // By default, all partitions will be refreshed.
@@ -429,6 +433,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionRefreshNumber();
         buildMVPartitionRefreshStrategy();
         buildAutoRefreshPartitionsLimit();
+        buildMVRefreshMode();
         buildExcludedTriggerTables();
         buildResourceGroup();
         buildConstraint();
@@ -558,6 +563,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildMVPartitionRefreshStrategy() {
         partitionRefreshStrategy = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY,
                 Config.default_mv_partition_refresh_strategy);
+        return this;
+    }
+
+    public TableProperty buildMVRefreshMode() {
+        mvRefreshMode = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_REFRESH_MODE,
+                Config.default_mv_refresh_mode);
         return this;
     }
 
@@ -981,6 +992,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public void setPartitionRefreshStrategy(String partitionRefreshStrategy) {
         this.partitionRefreshStrategy = partitionRefreshStrategy;
+    }
+
+    public void setMvRefreshMode(String mvRefreshMode) {
+        this.mvRefreshMode = mvRefreshMode;
+    }
+
+    public String getMvRefreshMode() {
+        return mvRefreshMode;
     }
 
     public void setResourceGroup(String resourceGroup) {
