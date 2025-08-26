@@ -20,7 +20,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
@@ -47,7 +46,6 @@ public class RangePartitionDesc extends PartitionDesc {
 
     public RangePartitionDesc(List<String> partitionColNames, List<PartitionDesc> partitionDescs, NodePosition pos) {
         super(pos);
-        type = PartitionType.RANGE;
         this.partitionColNames = partitionColNames;
 
         singleRangePartitionDescs = Lists.newArrayList();

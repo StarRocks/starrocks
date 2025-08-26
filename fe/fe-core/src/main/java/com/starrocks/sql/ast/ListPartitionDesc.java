@@ -21,7 +21,6 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
@@ -71,7 +70,6 @@ public class ListPartitionDesc extends PartitionDesc {
     public ListPartitionDesc(List<String> partitionColNames,
                              List<PartitionDesc> partitionDescs, NodePosition pos) {
         super(pos);
-        super.type = PartitionType.LIST;
         this.partitionColNames = partitionColNames;
         this.singleListPartitionDescs = Lists.newArrayList();
         this.multiListPartitionDescs = Lists.newArrayList();

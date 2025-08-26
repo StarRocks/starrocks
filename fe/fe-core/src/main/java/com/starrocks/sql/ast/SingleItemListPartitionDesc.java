@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
@@ -48,10 +47,9 @@ public class SingleItemListPartitionDesc extends SinglePartitionDesc {
 
     @VisibleForTesting
     public SingleItemListPartitionDesc(boolean ifNotExists, String partName, Short replicationNum,
-            DataProperty dataProperty, TTabletType tabletType, Long versionInfo, boolean isInMemory,
-            DataCacheInfo dataCacheInfo, List<String> values, List<ColumnDef> columnDefList) {
+                                       DataProperty dataProperty, TTabletType tabletType, Long versionInfo, boolean isInMemory,
+                                       DataCacheInfo dataCacheInfo, List<String> values, List<ColumnDef> columnDefList) {
         super(ifNotExists, partName, replicationNum, dataProperty, tabletType, versionInfo, isInMemory, dataCacheInfo);
-        this.type = PartitionType.LIST;
         this.values = values;
         this.columnDefList = columnDefList;
     }
@@ -64,7 +62,6 @@ public class SingleItemListPartitionDesc extends SinglePartitionDesc {
     public SingleItemListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
                                        Map<String, String> properties, NodePosition pos) {
         super(ifNotExists, partitionName, properties, pos);
-        this.type = PartitionType.LIST;
         this.values = values;
     }
 

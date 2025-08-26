@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.lake.DataCacheInfo;
@@ -29,10 +28,9 @@ public class SingleRangePartitionDesc extends SinglePartitionDesc {
     private PartitionKeyDesc partitionKeyDesc;
 
     public SingleRangePartitionDesc(boolean ifNotExists, String partName, Short replicationNum,
-            DataProperty dataProperty, TTabletType tabletType, Long versionInfo, boolean isInMemory,
-            DataCacheInfo dataCacheInfo, PartitionKeyDesc partitionKeyDesc) {
+                                    DataProperty dataProperty, TTabletType tabletType, Long versionInfo, boolean isInMemory,
+                                    DataCacheInfo dataCacheInfo, PartitionKeyDesc partitionKeyDesc) {
         super(ifNotExists, partName, replicationNum, dataProperty, tabletType, versionInfo, isInMemory, dataCacheInfo);
-        this.type = PartitionType.RANGE;
         this.partitionKeyDesc = partitionKeyDesc;
     }
 
@@ -44,7 +42,6 @@ public class SingleRangePartitionDesc extends SinglePartitionDesc {
     public SingleRangePartitionDesc(boolean ifNotExists, String partName, PartitionKeyDesc partitionKeyDesc,
                                     Map<String, String> properties, NodePosition pos) {
         super(ifNotExists, partName, properties, pos);
-        this.type = PartitionType.RANGE;
         this.partitionKeyDesc = partitionKeyDesc;
     }
 

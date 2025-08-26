@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
@@ -42,10 +41,10 @@ public class MultiItemListPartitionDesc extends SinglePartitionDesc {
     private List<ColumnDef> columnDefList;
 
     public MultiItemListPartitionDesc(boolean ifNotExists, String partName, Short replicationNum,
-            DataProperty dataProperty, TTabletType tabletType, Long versionInfo, boolean isInMemory,
-            DataCacheInfo dataCacheInfo, List<List<String>> multiValues, List<ColumnDef> columnDefList) {
+                                      DataProperty dataProperty, TTabletType tabletType, Long versionInfo, boolean isInMemory,
+                                      DataCacheInfo dataCacheInfo, List<List<String>> multiValues,
+                                      List<ColumnDef> columnDefList) {
         super(ifNotExists, partName, replicationNum, dataProperty, tabletType, versionInfo, isInMemory, dataCacheInfo);
-        this.type = PartitionType.LIST;
         this.multiValues = multiValues;
         this.columnDefList = columnDefList;
     }
@@ -58,7 +57,6 @@ public class MultiItemListPartitionDesc extends SinglePartitionDesc {
     public MultiItemListPartitionDesc(boolean ifNotExists, String partitionName, List<List<String>> multiValues,
                                       Map<String, String> properties, NodePosition pos) {
         super(ifNotExists, partitionName, properties, pos);
-        this.type = PartitionType.LIST;
         this.multiValues = multiValues;
     }
 
