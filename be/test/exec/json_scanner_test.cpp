@@ -1726,7 +1726,8 @@ TEST_F(JsonScannerTest, test_large_compressed_json_large) {
 
     // Ensure cleanup happens even if test fails
     // auto cleanup = [temp_file]() { cleanup_temp_file(temp_file); };
-    // DeferOp defer_cleanup(cleanup);
+    auto cleanup = [temp_file]() { cleanup_temp_file(temp_file); };
+    DeferOp defer_cleanup(cleanup);
 
     // Verify file was created and has reasonable size
     std::ifstream file_check(temp_file, std::ios::binary | std::ios::ate);
