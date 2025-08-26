@@ -33,6 +33,7 @@ fe_plugins/output
 fe/mocked
 fe/ut_ports
 fe/*/target
+fe/plugin/*/target/
 fe/fe-core/gen
 fe/fe-common/.classpath
 fe/fe-core/src/main/java/com/starrocks/sql/parser/gen
