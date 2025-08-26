@@ -72,9 +72,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
                 return;
             }
             try (TracerContext tracerContext = new TracerContext(currentTracers)) {
-                try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployScanRanges")) {
-                    runOnce();
-                }
+                runOnce();
             }
             // If run in the executor service, we need to start the next turn.
             // To submit this task again so all queries could get the same opportunity to run by queueing up
@@ -82,7 +80,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
         }
 
         public void runOnce() {
-            try {
+            try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployScanRanges")) {
                 states = coordinator.assignIncrementalScanRangesToDeployStates(deployer, states);
                 if (states.isEmpty()) {
                     return;
@@ -119,7 +117,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
 
     @Override
     public void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
-        List<DeployState> states = new ArrayList<>();        
+        List<DeployState> states = new ArrayList<>();
         for (List<ExecutionFragment> executionFragments : dag.getFragmentsInTopologicalOrderFromRoot()) {
             final DeployState deployState = deployer.createFragmentExecStates(executionFragments);
             deployer.deployFragments(deployState);
@@ -130,16 +128,12 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
         if (option.useQueryDeployExecutor) {
             deployScanRangesTask.executorService = GlobalStateMgr.getCurrentState().getQueryDeployExecutor();
             deployScanRangesTask.currentTracers = Tracers.get();
-        } else {
-            deployScanRangesTask.start();
         }
     }
 
     @Override
     public void continueSchedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
-        if (option.useQueryDeployExecutor) {
-            deployScanRangesTask.start();
-        }
+        deployScanRangesTask.start();
     }
 
     @Override
