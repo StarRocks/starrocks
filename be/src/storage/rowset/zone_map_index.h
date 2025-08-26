@@ -62,6 +62,8 @@ public:
 
     virtual ~ZoneMapIndexWriter() = default;
 
+    virtual void enable_truncate_string() = 0;
+
     virtual void add_values(const void* values, size_t count) = 0;
 
     virtual void add_nulls(uint32_t count) = 0;

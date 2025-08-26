@@ -323,6 +323,11 @@ CONF_mBool(enable_zonemap_index_memory_page_cache, "true");
 // whether to enable the ordinal index memory cache
 CONF_mBool(enable_ordinal_index_memory_page_cache, "true");
 
+// Enable ZoneMap for string (CHAR/VARCHAR) columns using prefix-based min/max
+CONF_mBool(enable_string_prefix_zonemap, "true");
+// Prefix length used for string ZoneMap min/max when enabled
+CONF_mInt32(string_prefix_zonemap_prefix_len, "16");
+
 CONF_mInt32(base_compaction_check_interval_seconds, "60");
 CONF_mInt64(min_base_compaction_num_singleton_deltas, "5");
 CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");

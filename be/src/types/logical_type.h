@@ -143,14 +143,8 @@ inline bool is_decimalv3_field_type(LogicalType type) {
 LogicalType string_to_logical_type(const std::string& type_str);
 const char* logical_type_to_string(LogicalType type);
 
-inline bool is_binary_type(LogicalType type) {
-    switch (type) {
-    case TYPE_BINARY:
-    case TYPE_VARBINARY:
-        return true;
-    default:
-        return false;
-    }
+constexpr bool is_binary_type(LogicalType type) {
+    return type == TYPE_BINARY || type == TYPE_VARBINARY;
 }
 
 inline bool is_scalar_field_type(LogicalType type) {
