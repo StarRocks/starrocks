@@ -809,7 +809,7 @@ Status JsonReader::_read_non_seekable_stream() {
         // Check if we've exceeded the size limit
         if (total_read >= max_buffer_size) {
             return Status::MemoryLimitExceeded(fmt::format(
-                    "The stream size exceeds the limit {}, adjust the FE configuration json_file_size_limit "
+                    "The stream size {} exceeds the limit {}, adjust the FE configuration json_file_size_limit "
                     "if you are sure you want to perform the operation",
                     total_read, max_buffer_size));
         }
