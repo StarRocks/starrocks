@@ -546,7 +546,7 @@ size_t AdaptivePartitionHashJoinBuilder::_estimate_hash_table_probing_bytes_per_
         if (join_key.type != nullptr) {
             estimated_each_row += get_size_of_fixed_length_type(join_key.type->type);
             // The benefit from non-fixed key columns is less than those from fixed key columns, so the penalty (/4) is applied here.
-            estimated_each_row += type_estimated_overhead_bytes(join_key.type->type) / 4 * _cache_miss_factor;
+            estimated_each_row += type_estimated_overhead_bytes(join_key.type->type) / 4;
         }
     }
 
@@ -555,7 +555,7 @@ size_t AdaptivePartitionHashJoinBuilder::_estimate_hash_table_probing_bytes_per_
         for (const auto* slot : tuple->slots()) {
             if (param.build_output_slots.empty() || param.build_output_slots.contains(slot->id())) {
                 estimated_each_row += get_size_of_fixed_length_type(slot->type().type);
-                estimated_each_row += type_estimated_overhead_bytes(slot->type().type) * _cache_miss_factor;
+                estimated_each_row += type_estimated_overhead_bytes(slot->type().type);
             }
         }
     }
