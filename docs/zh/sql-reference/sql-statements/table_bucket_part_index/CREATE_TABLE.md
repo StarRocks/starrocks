@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-keywords: [`chuang'jian`]
+keywords: ['chuang jian']
 ---
 
 # CREATE TABLE
