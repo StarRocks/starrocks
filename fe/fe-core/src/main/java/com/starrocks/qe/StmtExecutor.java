@@ -181,6 +181,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
@@ -2177,15 +2178,21 @@ public class StmtExecutor {
             explainString += "PLAN NOT AVAILABLE\n";
         }
 
-        if (parsedStmt.getTraceMode() == Tracers.Mode.TIMER) {
+        Tracers.Mode mode = Tracers.Mode.NONE;
+        try {
+            mode = Tracers.Mode.valueOf(parsedStmt.getTraceMode());
+        } catch (Exception e) {
+            // pass
+        }
+        if (mode == Tracers.Mode.TIMER) {
             explainString += Tracers.printScopeTimer();
-        } else if (parsedStmt.getTraceMode() == Tracers.Mode.VARS) {
+        } else if (mode == Tracers.Mode.VARS) {
             explainString += Tracers.printVars();
-        } else if (parsedStmt.getTraceMode() == Tracers.Mode.TIMING) {
+        } else if (mode == Tracers.Mode.TIMING) {
             explainString += Tracers.printTiming();
-        } else if (parsedStmt.getTraceMode() == Tracers.Mode.LOGS) {
+        } else if (mode == Tracers.Mode.LOGS) {
             explainString += Tracers.printLogs();
-        } else if (parsedStmt.getTraceMode() == Tracers.Mode.REASON) {
+        } else if (mode == Tracers.Mode.REASON) {
             explainString += Tracers.printReasons();
         } else {
             OperatorTuningGuides.OptimizedRecord optimizedRecord = PlanTuningAdvisor.getInstance()
@@ -2197,6 +2204,7 @@ public class StmtExecutor {
                 explainString += execPlan.getExplainString(explainLevel);
             }
         }
+
         return explainString;
     }
 

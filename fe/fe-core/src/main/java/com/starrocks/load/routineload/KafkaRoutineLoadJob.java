@@ -68,7 +68,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
 import com.starrocks.load.RoutineLoadDesc;
-import com.starrocks.qe.OriginStatement;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -777,7 +777,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
      */
     @Override
     public void modifyJob(RoutineLoadDesc routineLoadDesc, Map<String, String> jobProperties,
-                          RoutineLoadDataSourceProperties dataSourceProperties, OriginStatement originStatement,
+                          RoutineLoadDataSourceProperties dataSourceProperties, OriginStatementInfo originStatement,
                           boolean isReplay) throws DdlException {
         if (!isReplay && dataSourceProperties != null && dataSourceProperties.hasAnalyzedProperties()) {
             List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();

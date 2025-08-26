@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.qe;
+package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
@@ -24,7 +24,7 @@ import com.starrocks.common.io.Writable;
  * This class represents an origin statement
  * in multiple statements.
  */
-public class OriginStatement implements Writable {
+public class OriginStatementInfo implements Writable {
     // the origin stmt from client. this may includes more than one statement.
     // eg: "select 1; select 2; select 3"
     @SerializedName(value = "originStmt")
@@ -33,12 +33,12 @@ public class OriginStatement implements Writable {
     @SerializedName(value = "idx")
     public final int idx;
 
-    public OriginStatement(String originStmt, int idx) {
+    public OriginStatementInfo(String originStmt, int idx) {
         this.originStmt = originStmt;
         this.idx = idx;
     }
 
-    public OriginStatement(String singleOriginStmt) {
+    public OriginStatementInfo(String singleOriginStmt) {
         this(singleOriginStmt, 0);
     }
 
@@ -52,9 +52,5 @@ public class OriginStatement implements Writable {
 
     public String getOrigStmt() {
         return originStmt;
-    }
-
-    public int getIdx() {
-        return idx;
     }
 }

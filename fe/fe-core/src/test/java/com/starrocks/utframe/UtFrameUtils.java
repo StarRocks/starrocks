@@ -577,7 +577,7 @@ public class UtFrameUtils {
             return Pair.create(planPair.first, planAndTrace);
         } else {
             Tracers.register(connectContext);
-            Tracers.init(connectContext, Tracers.Mode.LOGS, module);
+            Tracers.init(connectContext, "LOGS", module);
             try {
                 Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
                 String pr = Tracers.printLogs();

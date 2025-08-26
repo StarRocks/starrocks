@@ -49,16 +49,17 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.LabelName;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
@@ -982,7 +983,7 @@ public class RoutineLoadManagerTest {
         long discardJobId = 1L;
         RoutineLoadJob discardJob = new KafkaRoutineLoadJob(discardJobId, "discardJob",
                 1, 1, "xxx", "xxtopic");
-        discardJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        discardJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(discardJob, db);
         discardJob.updateState(RoutineLoadJob.JobState.CANCELLED,
                 new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
@@ -992,7 +993,7 @@ public class RoutineLoadManagerTest {
         long goodJobId = 2L;
         RoutineLoadJob goodJob = new KafkaRoutineLoadJob(goodJobId, "goodJob",
                 1, 1, "xxx", "xxtopic");
-        goodJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        goodJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(goodJob, db);
         goodJob.updateState(RoutineLoadJob.JobState.CANCELLED,
                 new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
@@ -1022,14 +1023,14 @@ public class RoutineLoadManagerTest {
 
         RoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(1L, "kafkaJob",
                 1, 1, "xxx", "xxtopic");
-        kafkaRoutineLoadJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        kafkaRoutineLoadJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(kafkaRoutineLoadJob, db);
 
         createSQL = "CREATE ROUTINE LOAD db0.routine_load_2 ON t1 " +
                 "PROPERTIES(\"format\" = \"json\",\"jsonpaths\"=\"[\\\"$.k1\\\",\\\"$.k2.\\\\\\\"k2.1\\\\\\\"\\\"]\") " +
                 "FROM PULSAR(\"pulsar_service_url\" = \"xxx.xxx.xxx.xxx:xxx\",\"pulsar_topic\" = \"topic_0\");";
         RoutineLoadJob pulsarRoutineLoadJob = new PulsarRoutineLoadJob(2L, "pulsarJob", 1, 1, "xxxx", "xxx", "xxx");
-        pulsarRoutineLoadJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        pulsarRoutineLoadJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(pulsarRoutineLoadJob, db);
 
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
