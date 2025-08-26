@@ -1423,7 +1423,7 @@ public class StmtExecutor {
             return;
         }
 
-        coord.execWithQueryDeployExecutor();
+        coord.execWithQueryDeployExecutor(context);
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
         coord.setExecPlan(execPlan);
 

@@ -900,6 +900,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
     public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
     public static final String ENABLE_CONNECTOR_ASYNC_LIST_PARTITIONS = "enable_connector_async_list_partitions";
+    public static final String ENABLE_CONNECTOR_DEPLOY_SCAN_RANGES_BACKGROUND =
+            "enable_connector_deploy_scan_ranges_background";
     public static final String ENABLE_PLAN_ANALYZER = "enable_plan_analyzer";
 
     public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
@@ -1276,6 +1278,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_USE_DB_LOCK, flag = VariableMgr.INVISIBLE)
     private boolean cboUseDBLock = false;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = CBO_JSON_V2_REWRITE)
+    private boolean cboJSONV2Rewrite = true;
+
+    @VarAttr(name = CBO_JSON_V2_DICT_OPT)
+    private boolean cboJSONV2DictOpt = true;
+
+>>>>>>> a5efb18e9e ([Enhancement] add a session variable to deploy scan range in foreground thread (#62291))
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature
@@ -2628,6 +2639,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES)
     private boolean enableConnectorIncrementalScanRanges = true;
+
+    @VarAttr(name = ENABLE_CONNECTOR_DEPLOY_SCAN_RANGES_BACKGROUND)
+    private boolean enableConnectorDeployScanRangesBackground = true;
 
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
     private int connectorIncrementalScanRangeSize = 500;
@@ -5070,6 +5084,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableConnectorIncrementalScanRanges;
     }
 
+    public boolean isEnableConnectorDeployScanRangesBackground() {
+        return enableConnectorDeployScanRangesBackground;
+    }
+
     public boolean isEnableConnectorAsyncListPartitions() {
         return enableConnectorAsyncListPartitions;
     }
@@ -5182,6 +5200,97 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.historicalNodesMinUpdateInterval = historicalNodesMinUpdateInterval;
     }
 
+<<<<<<< HEAD
+=======
+    public long getColumnViewConcatRowsLimit() {
+        return columnViewConcatRowsLimit;
+    }
+
+    public void setColumnViewConcatRowsLimit(long value) {
+        this.columnViewConcatRowsLimit = value;
+    }
+
+    public long getColumnViewConcatBytesLimit() {
+        return columnViewConcatBytesLimit;
+    }
+
+    public void setColumnViewConcatBytesLimit(long value) {
+        this.columnViewConcatBytesLimit = value;
+    }
+
+    public void setEnableDeferProjectAfterTopN(boolean enableDeferProjectAfterTopN) {
+        this.enableDeferProjectAfterTopN = enableDeferProjectAfterTopN;
+    }
+
+    public boolean isEnableDeferProjectAfterTopN() {
+        return enableDeferProjectAfterTopN;
+    }
+
+    public boolean isEnableSPMRewrite() {
+        return enableSPMRewrite;
+    }
+
+    public void setEnableSPMRewrite(boolean enableSPMRewrite) {
+        this.enableSPMRewrite = enableSPMRewrite;
+    }
+
+    public int getSemiJoinDeduplicateMode() {
+        return semiJoinDeduplicateMode;
+    }
+
+    public void setSemiJoinDeduplicateMode(int semiJoinDeduplicateMode) {
+        this.semiJoinDeduplicateMode = semiJoinDeduplicateMode;
+    }
+
+    public boolean isEnableInnerJoinToSemi() {
+        return enableInnerJoinToSemi;
+    }
+
+    public void setEnableInnerJoinToSemi(boolean enableInnerJoinToSemi) {
+        this.enableInnerJoinToSemi = enableInnerJoinToSemi;
+    }
+
+    public String getCboPushDownDistinct() {
+        return cboPushDownDistinct;
+    }
+
+    public int getJoinReorderDrivingTableMaxElement() {
+        return joinReorderDrivingTableMaxElement;
+    }
+
+    public boolean isEnableJoinReorderBeforeDeduplicate() {
+        return enableJoinReorderBeforeDeduplicate;
+    }
+
+    public void setEnableJoinReorderBeforeDeduplicate(boolean enableJoinReorderBeforeDeduplicate) {
+        this.enableJoinReorderBeforeDeduplicate = enableJoinReorderBeforeDeduplicate;
+    }
+
+    public int getSpmRewriteTimeoutMs() {
+        return spmRewriteTimeoutMs;
+    }
+
+    public void setSpmRewriteTimeoutMs(int spmRewriteTimeoutMs) {
+        this.spmRewriteTimeoutMs = spmRewriteTimeoutMs;
+    }
+
+    public void setEnableMultiCastLimitPushDown(boolean enableMultiCastLimitPushDown) {
+        this.enableMultiCastLimitPushDown = enableMultiCastLimitPushDown;
+    }
+
+    public boolean isEnableMultiCastLimitPushDown() {
+        return enableMultiCastLimitPushDown;
+    }
+
+    public boolean isEnableJSONV2Rewrite() {
+        return cboJSONV2Rewrite;
+    }
+
+    public void setEnableJSONV2Rewrite(boolean enableJSONV2Rewrite) {
+        this.cboJSONV2Rewrite = enableJSONV2Rewrite;
+    }
+
+>>>>>>> a5efb18e9e ([Enhancement] add a session variable to deploy scan range in foreground thread (#62291))
     public boolean isEnableDropTableCheckMvDependency() {
         return enableDropTableCheckMvDependency;
     }
@@ -5387,6 +5496,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return root.toString();
     }
 
+<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, getJsonString());
@@ -5396,6 +5506,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         readFromJson(in);
     }
 
+=======
+>>>>>>> a5efb18e9e ([Enhancement] add a session variable to deploy scan range in foreground thread (#62291))
     private void readFromJson(DataInput in) throws IOException {
         String json = Text.readString(in);
         replayFromJson(json);
