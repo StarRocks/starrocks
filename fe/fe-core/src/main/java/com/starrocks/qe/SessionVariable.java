@@ -900,8 +900,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
     public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
     public static final String ENABLE_CONNECTOR_ASYNC_LIST_PARTITIONS = "enable_connector_async_list_partitions";
-    public static final String ENABLE_CONNECTOR_DEPLOYSCAN_RANGES_BACKGROUND =
-            "enable_connector_incremental_scan_ranges_background";
+    public static final String ENABLE_CONNECTOR_DEPLOY_SCAN_RANGES_BACKGROUND =
+            "enable_connector_deploy_scan_ranges_background";
     public static final String ENABLE_PLAN_ANALYZER = "enable_plan_analyzer";
 
     public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
@@ -2653,7 +2653,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES)
     private boolean enableConnectorIncrementalScanRanges = true;
 
-    @VarAttr(name = ENABLE_CONNECTOR_DEPLOYSCAN_RANGES_BACKGROUND)
+    @VarAttr(name = ENABLE_CONNECTOR_DEPLOY_SCAN_RANGES_BACKGROUND)
     private boolean enableConnectorDeployScanRangesBackground = true;
 
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
