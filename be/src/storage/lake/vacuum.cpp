@@ -453,7 +453,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                 DCHECK_LE(version, final_retain_version);
                 RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, datafile_deleter, bundle_file_deleter,
                                                       &prepare_vacuum_file_size, retain_info));
-                if (tablet_retain_info.test_flag()) {
+                if (retain_info.test_flag()) {
                     LOG(INFO) << "current final_retain_version: " << final_retain_version;
                 }
             } else {
@@ -492,7 +492,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                     // The metadata will be retained, but garbage files recorded in it can be deleted.
                     RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, datafile_deleter, bundle_file_deleter,
                                                           total_datafile_size, retain_info));
-                    if (tablet_retain_info.test_flag()) {
+                    if (retain_info.test_flag()) {
                         LOG(INFO) << "current final_retain_version: " << final_retain_version;   
                     }
                 } else {
