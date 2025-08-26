@@ -268,9 +268,9 @@ public:
         return AsyncFileDeleter::finish();
     }
 
-    void print_info() const {
+    void print_info(const std::string& info) const {
         std::stringstream ss;
-        ss << "AsyncBundleFileDeleter info: " << std::endl;
+        ss << info << " AsyncBundleFileDeleter info: " << std::endl;
         for (const auto& [path, count] : _pending_files) {
             ss << path << " " << count << std::endl;
         }
@@ -351,7 +351,9 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
         }
 
         if (retain_info.test_flag()) {
-            bundle_file_deleter->print_info();
+            bundle_file_deleter->print_info("");
+        } else {
+            bundle_file_deleter->print_info("delete_tablets_trigger");
         }
 
         for (const auto& del_file : rowset.del_files()) {
