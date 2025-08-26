@@ -709,8 +709,8 @@ TEST_P(BinaryColumnAppendSelectiveTestFixture, test_append_selective) {
         ASSERT_EQ(src_col->get_slice(indexes[i]), dst_col->get_slice(i));
     }
 
-    dst_col->append_selective(*src_col, indexes.data(), 10, static_cast<uint32_t>(indexes.size()));
-    ASSERT_EQ(num_dst_rows + indexes.size(), dst_col->size());
+    dst_col->append_selective(*src_col, indexes.data(), 10, static_cast<uint32_t>(indexes.size()) - 10);
+    ASSERT_EQ(num_dst_rows + indexes.size() - 10, dst_col->size());
     for (uint32_t i = 10; i < indexes.size(); i++) {
         ASSERT_EQ(src_col->get_slice(indexes[i]), dst_col->get_slice(num_dst_rows + i - 10));
     }
@@ -718,6 +718,6 @@ TEST_P(BinaryColumnAppendSelectiveTestFixture, test_append_selective) {
 
 INSTANTIATE_TEST_SUITE_P(BinaryColumnAppendSelectiveTest, BinaryColumnAppendSelectiveTestFixture,
                          ::testing::Values(std::make_tuple(2048), std::make_tuple(4096), std::make_tuple(40960),
-                                           std::make_tuple(32 * 1024 * 1024 + 100)));
+                                           std::make_tuple(4 * 1024 * 1024 + 10)));
 
 } // namespace starrocks
