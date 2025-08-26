@@ -394,6 +394,9 @@ Status ScalarColumnWriter::init() {
     if (_opts.need_zone_map) {
         _has_index_builder = true;
         _zone_map_index_builder = ZoneMapIndexWriter::create(type_info());
+        if (_opts.zone_map_truncate_string) {
+            _zone_map_index_builder->enable_truncate_string();
+        }
     }
     if (_opts.need_bitmap_index) {
         _has_index_builder = true;

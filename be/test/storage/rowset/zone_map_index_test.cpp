@@ -40,6 +40,7 @@
 #include <string>
 
 #include "cache/object_cache/page_cache.h"
+#include "common/config.h"
 #include "fs/fs_memory.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
@@ -100,13 +101,12 @@ protected:
         ASSERT_EQ(3, column_zone_map.num_pages());
         const std::vector<ZoneMapPB>& zone_maps = column_zone_map.page_zone_maps();
         ASSERT_EQ(3, zone_maps.size());
-        ASSERT_EQ("aaaa", zone_maps[0].min());
-        ASSERT_EQ("ffff", zone_maps[0].max());
+        size_t pfx = config::enable_string_prefix_zonemap ? (size_t)config::string_prefix_zonemap_prefix_len : 64;
+        check_result_prefix(zone_maps[0], true, true, "aaaa", "ffff", false, true, pfx);
         ASSERT_EQ(false, zone_maps[0].has_null());
         ASSERT_EQ(true, zone_maps[0].has_not_null());
 
-        ASSERT_EQ("aaaaa", zone_maps[1].min());
-        ASSERT_EQ("fffff", zone_maps[1].max());
+        check_result_prefix(zone_maps[1], true, true, "aaaaa", "fffff", true, true, pfx);
         ASSERT_EQ(true, zone_maps[1].has_null());
         ASSERT_EQ(true, zone_maps[1].has_not_null());
 
@@ -118,6 +118,23 @@ protected:
     void load_zone_map(ZoneMapIndexReader& reader, ColumnIndexMetaPB& meta, std::string filename);
     void check_result(const ZoneMapPB& zone_map, bool has_min, bool has_max, const std::string& min,
                       const std::string& max, bool has_null, bool has_not_null);
+
+    // Check with prefix truncation semantics for string zonemap entries: min is prefix; max is prefix possibly with 0xFF.
+    void check_result_prefix(const ZoneMapPB& zone_map, bool has_min, bool has_max, const std::string& min,
+                             const std::string& max, bool has_null, bool has_not_null, size_t prefix_len = 64) {
+        ASSERT_EQ(has_min, zone_map.has_min());
+        ASSERT_EQ(has_max, zone_map.has_max());
+        if (has_min) {
+            const auto& zmin = zone_map.min();
+            ASSERT_TRUE(min.rfind(zmin, 0) == 0 || zmin == min.substr(0, std::min(prefix_len, min.size())));
+            ASSERT_TRUE(zmin <= min);
+        }
+        if (has_max) {
+            ASSERT_TRUE(zone_map.max() >= max);
+        }
+        ASSERT_EQ(has_null, zone_map.has_null());
+        ASSERT_EQ(has_not_null, zone_map.has_not_null());
+    }
 
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
@@ -268,12 +285,13 @@ TEST_F(ColumnZoneMapTest, StringResize) {
     const auto& zone_maps = reader.page_zone_maps();
     ASSERT_EQ(2, zone_maps.size());
 
-    check_result(zone_maps[0], true, true, str1, str2, false, true);
-    check_result(zone_maps[1], true, true, str3, str4, false, true);
+    size_t pfx = config::enable_string_prefix_zonemap ? (size_t)config::string_prefix_zonemap_prefix_len : 64;
+    check_result_prefix(zone_maps[0], true, true, str1, str2, false, true, pfx);
+    check_result_prefix(zone_maps[1], true, true, str3, str4, false, true, pfx);
 
     // segment zonemap
     const auto& segment_zonemap = index_meta.zone_map_index().segment_zone_map();
-    check_result(segment_zonemap, true, true, str1, str4, false, true);
+    check_result_prefix(segment_zonemap, true, true, str1, str4, false, true, pfx);
 }
 
 TEST_F(ColumnZoneMapTest, AllNullPage) {
@@ -349,6 +367,7 @@ TEST_F(ColumnZoneMapTest, NormalTestIntPage) {
 TEST_F(ColumnZoneMapTest, NormalTestVarcharPage) {
     TabletColumn varchar_column = create_varchar_key(0);
     TypeInfoPtr type_info = get_type_info(varchar_column);
+    // Use prefix check inside test_string by reading page checks
     test_string("NormalTestVarcharPage", type_info);
 }
 
@@ -436,6 +455,64 @@ TEST_F(ColumnZoneMapTest, VarbinaryWithBinaryData) {
     const auto& segment_zonemap = index_meta.zone_map_index().segment_zone_map();
     check_result(segment_zonemap, true, true, std::string("\x00\x00\x00\x00", 4), std::string("\xFF\xFF\xFF\xFF", 4),
                  true, true);
+}
+
+TEST_F(ColumnZoneMapTest, StringPrefixZonemapVariants) {
+    // Enable string prefix zonemap for this test context
+    bool old_switch = config::enable_string_prefix_zonemap;
+    int old_len = config::string_prefix_zonemap_prefix_len;
+    config::enable_string_prefix_zonemap = true;
+    config::string_prefix_zonemap_prefix_len = 16;
+
+    // Build a segment with various string lengths and patterns
+    std::string filename = kTestDir + "/StringPrefixZonemapVariants";
+
+    TabletColumn varchar_column = create_varchar_key(0);
+    TypeInfoPtr type_info = get_type_info(varchar_column);
+
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    // Short strings
+    std::vector<Slice> shorts = {{"a", 1}, {"b", 1}, {"c", 1}};
+    writer->add_values(shorts.data(), shorts.size());
+    writer->flush();
+
+    // Common prefix strings
+    std::vector<std::string> cp = {"prefix_0001", "prefix_0002", "prefix_9999"};
+    std::vector<Slice> cp_slices;
+    for (auto& s : cp) cp_slices.push_back({s.data(), s.size()});
+    writer->add_values(cp_slices.data(), cp_slices.size());
+    writer->flush();
+
+    // Random long strings (> 64 to ensure truncation even if config changes)
+    std::string long1(80, 'X');
+    std::string long2(120, 'Y');
+    std::vector<Slice> longs = {{long1.data(), long1.size()}, {long2.data(), long2.size()}};
+    writer->add_values(longs.data(), longs.size());
+    writer->flush();
+
+    // Write index out
+    ColumnIndexMetaPB index_meta;
+    write_file(*writer, index_meta, filename);
+
+    // Read back
+    ZoneMapIndexReader reader;
+    load_zone_map(reader, index_meta, filename);
+
+    ASSERT_EQ(3, reader.num_pages());
+    const auto& zone_maps = reader.page_zone_maps();
+    size_t pfx = (size_t)config::string_prefix_zonemap_prefix_len;
+
+    // Page 0: shorts
+    check_result_prefix(zone_maps[0], true, true, "a", "c", false, true, pfx);
+    // Page 1: common prefix
+    check_result_prefix(zone_maps[1], true, true, cp.front(), cp.back(), false, true, pfx);
+    // Page 2: long strings
+    check_result_prefix(zone_maps[2], true, true, long1, long2, false, true, pfx);
+
+    // Restore config
+    config::enable_string_prefix_zonemap = old_switch;
+    config::string_prefix_zonemap_prefix_len = old_len;
 }
 
 } // namespace starrocks

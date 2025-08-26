@@ -73,6 +73,7 @@ struct ColumnWriterOptions {
     // space saving = 1 - compressed_size / uncompressed_size
     double compression_min_space_saving = 0.1;
     bool need_zone_map = false;
+    bool zone_map_truncate_string = false; // truncate string at write time to reduce comparison/metadata overhead.
     bool need_bitmap_index = false;
     bool need_bloom_filter = false;
     bool need_vector_index = false;
