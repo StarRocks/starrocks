@@ -35,6 +35,6 @@ public class AdminSetAutomatedSnapshotOnStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminSetAutomatedSnapshotOnStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminSetAutomatedSnapshotOnStatement(this, context);
     }
 }

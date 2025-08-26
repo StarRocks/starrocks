@@ -26,5 +26,4 @@ public abstract class DdlStmt extends StatementBase {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDDLStatement(this, context);
     }
-
 }

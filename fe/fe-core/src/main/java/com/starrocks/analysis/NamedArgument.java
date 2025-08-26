@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 
 public class NamedArgument extends Expr {
     private final String name;
@@ -50,7 +51,7 @@ public class NamedArgument extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitNamedArgument(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitNamedArgument(this, context);
     }
 
     @Override

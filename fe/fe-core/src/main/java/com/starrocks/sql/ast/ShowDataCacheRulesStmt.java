@@ -23,6 +23,6 @@ public class ShowDataCacheRulesStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowDataCacheRulesStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowDataCacheRulesStatement(this, context);
     }
 }

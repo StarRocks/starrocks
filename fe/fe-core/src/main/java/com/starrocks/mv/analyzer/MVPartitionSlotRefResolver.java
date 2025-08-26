@@ -20,7 +20,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.FieldReference;
@@ -44,12 +44,12 @@ import java.util.List;
  */
 public class MVPartitionSlotRefResolver {
 
-    static class ExprShuttle implements AstVisitor<Expr, Relation> {
+    static class ExprShuttle implements AstVisitorExtendInterface<Expr, Relation> {
 
-        private final AstVisitor<Expr, SlotRef> slotRefResolver;
+        private final AstVisitorExtendInterface<Expr, SlotRef> slotRefResolver;
 
         // Use customized SlotRefResolver
-        public ExprShuttle(AstVisitor<Expr, SlotRef> slotRefResolver) {
+        public ExprShuttle(AstVisitorExtendInterface<Expr, SlotRef> slotRefResolver) {
             this.slotRefResolver = slotRefResolver;
         }
 
@@ -94,7 +94,7 @@ public class MVPartitionSlotRefResolver {
         }
     }
 
-    private static final AstVisitor<Expr, SlotRef> SLOT_REF_RESOLVER = new AstVisitor<Expr, SlotRef>() {
+    private static final AstVisitorExtendInterface<Expr, SlotRef> SLOT_REF_RESOLVER = new AstVisitorExtendInterface<>() {
 
         @Override
         public Expr visit(ParseNode node) {
@@ -213,7 +213,7 @@ public class MVPartitionSlotRefResolver {
         }
     };
 
-    private static final AstVisitor<Expr, Relation> EXPR_SHUTTLE = new ExprShuttle(SLOT_REF_RESOLVER);
+    private static final AstVisitorExtendInterface<Expr, Relation> EXPR_SHUTTLE = new ExprShuttle(SLOT_REF_RESOLVER);
 
     /**
      * Recursive check if the query contains an unsupported window function

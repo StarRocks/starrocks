@@ -1017,6 +1017,6 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws RuntimeException {
-        return visitor.visitCreateRoutineLoadStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateRoutineLoadStatement(this, context);
     }
 }

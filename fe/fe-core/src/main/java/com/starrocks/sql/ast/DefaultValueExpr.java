@@ -42,6 +42,6 @@ public class DefaultValueExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDefaultValueExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDefaultValueExpr(this, context);
     }
 }

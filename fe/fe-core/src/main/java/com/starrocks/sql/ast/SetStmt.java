@@ -36,7 +36,7 @@ public class SetStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSetStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetStatement(this, context);
     }
 }
 

@@ -27,7 +27,7 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
@@ -52,7 +52,7 @@ public class DataCacheStmtAnalyzer {
         new DataCacheStmtAnalyzerVisitor().analyze(stmt, session);
     }
 
-    static class DataCacheStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class DataCacheStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private final DataCacheMgr dataCacheMgr = DataCacheMgr.getInstance();
 
         public void analyze(StatementBase statement, ConnectContext session) {

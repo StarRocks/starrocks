@@ -60,6 +60,6 @@ public class ShowTransactionStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowTransactionStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTransactionStatement(this, context);
     }
 }

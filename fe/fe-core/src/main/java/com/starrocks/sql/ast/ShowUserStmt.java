@@ -35,7 +35,7 @@ public class ShowUserStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowUserStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowUserStatement(this, context);
     }
 }
 

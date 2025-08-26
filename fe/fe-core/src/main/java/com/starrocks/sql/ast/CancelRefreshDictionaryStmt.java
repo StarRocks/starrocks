@@ -32,6 +32,6 @@ public class CancelRefreshDictionaryStmt extends CancelStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelRefreshDictionaryStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelRefreshDictionaryStatement(this, context);
     }
 }

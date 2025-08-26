@@ -56,7 +56,7 @@ public class IsNullPredicateOperator extends PredicateOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitIsNullPredicate(this, context);
+        return  visitor.visitIsNullPredicate(this, context);
     }
 
     @Override

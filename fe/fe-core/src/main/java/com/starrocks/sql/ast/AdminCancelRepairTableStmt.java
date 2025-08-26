@@ -62,6 +62,6 @@ public class AdminCancelRepairTableStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminCancelRepairTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminCancelRepairTableStatement(this, context);
     }
 }

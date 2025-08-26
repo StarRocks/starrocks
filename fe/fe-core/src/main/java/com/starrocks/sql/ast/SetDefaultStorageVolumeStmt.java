@@ -30,7 +30,7 @@ public class SetDefaultStorageVolumeStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSetDefaultStorageVolumeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetDefaultStorageVolumeStatement(this, context);
     }
 
     @Override

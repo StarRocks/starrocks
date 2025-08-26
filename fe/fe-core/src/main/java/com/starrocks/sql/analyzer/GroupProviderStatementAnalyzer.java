@@ -20,7 +20,7 @@ import com.starrocks.authentication.GroupProvider;
 import com.starrocks.authentication.GroupProviderFactory;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
@@ -34,7 +34,7 @@ public class GroupProviderStatementAnalyzer {
         new GroupProviderStatementAnalyzer.GroupProviderStatementAnalyzerVisitor().analyze(statement, context);
     }
 
-    public static class GroupProviderStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class GroupProviderStatementAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         public void analyze(StatementBase statement, ConnectContext context) {
             visit(statement, context);

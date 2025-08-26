@@ -34,7 +34,7 @@ public class ShowProcesslistStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowProcesslistStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowProcesslistStatement(this, context);
     }
 
     public boolean showFull() {

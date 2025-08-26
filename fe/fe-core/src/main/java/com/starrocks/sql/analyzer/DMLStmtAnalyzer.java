@@ -15,7 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -30,7 +30,7 @@ public class DMLStmtAnalyzer {
         new DMLStmtAnalyzer.DMLStmtAnalyzerVisitor().analyze(stmt, context);
     }
 
-    static class DMLStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class DMLStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(DmlStmt dmlStmt, ConnectContext context) {
             dmlStmt.getTableName().normalization(context);
             visit(dmlStmt, context);

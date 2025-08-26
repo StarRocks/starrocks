@@ -27,6 +27,6 @@ public class CleanTabletSchedQClause extends AlterClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCleanTabletSchedQClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCleanTabletSchedQClause(this, context);
     }
 }

@@ -68,7 +68,7 @@ public class ArrayOperator extends ArgsScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitArray(this, context);
+        return  visitor.visitArray(this, context);
     }
 
     @Override

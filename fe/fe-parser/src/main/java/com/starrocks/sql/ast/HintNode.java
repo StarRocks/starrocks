@@ -57,11 +57,6 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
     }
 
     @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitHintNode(this, context);
-    }
-
-    @Override
     public int compareTo(HintNode o) {
         return hintStr.compareTo(o.hintStr);
     }

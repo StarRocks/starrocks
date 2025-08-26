@@ -79,6 +79,6 @@ public class ArrayExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitArrayExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitArrayExpr(this, context);
     }
 }

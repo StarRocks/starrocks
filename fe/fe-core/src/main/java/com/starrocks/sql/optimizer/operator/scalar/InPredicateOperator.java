@@ -90,7 +90,7 @@ public class InPredicateOperator extends PredicateOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitInPredicate(this, context);
+        return  visitor.visitInPredicate(this, context);
     }
 
     @Override

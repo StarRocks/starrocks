@@ -32,7 +32,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
@@ -55,7 +55,7 @@ public class AuthorizationAnalyzer {
         new AuthorizationAnalyzerVisitor().analyze(statement, session);
     }
 
-    public static class AuthorizationAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class AuthorizationAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private AuthorizationMgr authorizationManager = null;
 
         public void analyze(StatementBase statement, ConnectContext session) {

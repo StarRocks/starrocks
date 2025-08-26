@@ -30,6 +30,6 @@ public class AlterStorageVolumeCommentClause extends AlterStorageVolumeClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterStorageVolumeCommentClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterStorageVolumeCommentClause(this, context);
     }
 }

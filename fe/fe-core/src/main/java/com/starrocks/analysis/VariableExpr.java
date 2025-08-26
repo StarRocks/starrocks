@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -87,7 +88,7 @@ public class VariableExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitVariableExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitVariableExpr(this, context);
     }
 
     @Override

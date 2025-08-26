@@ -232,6 +232,6 @@ public class CaseWhenOperator extends CallOperator {
     }
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCaseWhenOperator(this, context);
+        return  visitor.visitCaseWhenOperator(this, context);
     }
 }

@@ -41,6 +41,6 @@ public class CancelRefreshMaterializedViewStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelRefreshMaterializedViewStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelRefreshMaterializedViewStatement(this, context);
     }
 }

@@ -49,6 +49,6 @@ public class FrontendClause extends AlterClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitFrontendClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitFrontendClause(this, context);
     }
 }

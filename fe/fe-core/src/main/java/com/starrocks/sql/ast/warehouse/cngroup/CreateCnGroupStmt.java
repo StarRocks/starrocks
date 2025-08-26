@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.warehouse.cngroup;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -51,7 +52,7 @@ public class CreateCnGroupStmt extends CnGroupStmtBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateCNGroupStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateCNGroupStatement(this, context);
     }
 
     @Override

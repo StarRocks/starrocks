@@ -16,6 +16,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 
 /**
  * Parameter used in prepare-statement, placeholder ? is translated into a Parameter
@@ -53,7 +54,7 @@ public class Parameter extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitParameterExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitParameterExpr(this, context);
     }
 
     @Override

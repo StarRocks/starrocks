@@ -125,7 +125,7 @@ public class LambdaFunctionOperator extends ScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitLambdaFunctionOperator(this, context);
+        return  visitor.visitLambdaFunctionOperator(this, context);
     }
 
     @Override

@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -111,6 +112,6 @@ public class MatchExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
-        return visitor.visitMatchExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitMatchExpr(this, context);
     }
 }

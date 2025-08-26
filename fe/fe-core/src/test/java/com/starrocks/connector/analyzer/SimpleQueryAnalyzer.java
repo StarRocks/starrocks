@@ -37,7 +37,7 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
@@ -72,7 +72,7 @@ public class SimpleQueryAnalyzer {
         new Visitor().process(node);
     }
 
-    private static class Visitor implements AstVisitor<Void, Void> {
+    private static class Visitor implements AstVisitorExtendInterface<Void, Void> {
         public Void process(ParseNode node) {
             return node.accept(this, null);
         }

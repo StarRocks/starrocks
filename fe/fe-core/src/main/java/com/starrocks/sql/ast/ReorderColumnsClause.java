@@ -39,6 +39,6 @@ public class ReorderColumnsClause extends AlterTableColumnClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitReorderColumnsClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitReorderColumnsClause(this, context);
     }
 }

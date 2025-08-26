@@ -70,6 +70,6 @@ public class SubqueryRelation extends QueryRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSubqueryRelation(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSubqueryRelation(this, context);
     }
 }

@@ -130,6 +130,6 @@ public class AnalyzeStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAnalyzeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAnalyzeStatement(this, context);
     }
 }

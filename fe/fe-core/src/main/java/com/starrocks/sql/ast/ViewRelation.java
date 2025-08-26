@@ -71,6 +71,6 @@ public class ViewRelation extends Relation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitView(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitView(this, context);
     }
 }

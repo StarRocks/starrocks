@@ -67,6 +67,6 @@ public class CreateDbStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateDbStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateDbStatement(this, context);
     }
 }

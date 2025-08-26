@@ -54,6 +54,6 @@ public class RollupRenameClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRollupRenameClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitRollupRenameClause(this, context);
     }
 }

@@ -109,6 +109,6 @@ public abstract class QueryRelation extends Relation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitQueryRelation(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitQueryRelation(this, context);
     }
 }

@@ -63,7 +63,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
@@ -207,7 +207,7 @@ public class DDLStmtExecutor {
         }
     }
 
-    public static class StmtExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
+    public static class StmtExecutorVisitor implements AstVisitorExtendInterface<ShowResultSet, ConnectContext> {
         private static final Logger LOG = LogManager.getLogger(StmtExecutorVisitor.class);
         private static final StmtExecutorVisitor INSTANCE = new StmtExecutorVisitor();
 

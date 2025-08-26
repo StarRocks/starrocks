@@ -29,6 +29,6 @@ public class ShowPluginsStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowPluginsStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowPluginsStatement(this, context);
     }
 }

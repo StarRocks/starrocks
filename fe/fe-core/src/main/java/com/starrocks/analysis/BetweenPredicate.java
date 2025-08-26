@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 
@@ -106,6 +107,6 @@ public class BetweenPredicate extends Predicate {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
-        return visitor.visitBetweenPredicate(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitBetweenPredicate(this, context);
     }
 }

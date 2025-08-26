@@ -48,7 +48,7 @@ import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
@@ -312,7 +312,7 @@ public class RedirectStatus {
         return new RedirectStatusVisitor().getRedirectStatus(stmt);
     }
 
-    public static class RedirectStatusVisitor implements AstVisitor<RedirectStatus, Void> {
+    public static class RedirectStatusVisitor implements AstVisitorExtendInterface<RedirectStatus, Void> {
         public RedirectStatus getRedirectStatus(StatementBase stmt) {
             return stmt.accept(this, null);
         }

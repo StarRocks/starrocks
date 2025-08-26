@@ -17,7 +17,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
@@ -31,7 +31,7 @@ public class FileAnalyzer {
         new FileAnalyzer.FileAnalyzerVisitor().visit(statement, context);
     }
 
-    static class FileAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class FileAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         @Override
         public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {

@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.group;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -33,6 +34,6 @@ public class ShowCreateGroupProviderStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCreateGroupProviderStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCreateGroupProviderStatement(this, context);
     }
 }

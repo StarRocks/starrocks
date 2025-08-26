@@ -83,7 +83,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.PartitionMeasure;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -374,7 +374,7 @@ public class AnalyzerUtils {
         return copiedTable;
     }
 
-    private static class DBCollector implements AstVisitor<Void, Void> {
+    private static class DBCollector implements AstVisitorExtendInterface<Void, Void> {
         private final Map<String, Database> dbs;
         private final ConnectContext session;
 

@@ -128,6 +128,6 @@ public abstract class Relation implements ParseNode {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRelation(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitRelation(this, context);
     }
 }

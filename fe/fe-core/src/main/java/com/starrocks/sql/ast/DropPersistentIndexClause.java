@@ -36,6 +36,6 @@ public class DropPersistentIndexClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropPersistentIndexClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropPersistentIndexClause(this, context);
     }
 }

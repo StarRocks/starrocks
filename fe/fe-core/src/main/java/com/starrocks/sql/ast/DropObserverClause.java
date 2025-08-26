@@ -29,6 +29,6 @@ public class DropObserverClause extends FrontendClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropObserverClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropObserverClause(this, context);
     }
 }

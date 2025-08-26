@@ -36,6 +36,6 @@ public class ShowWarningStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowWarningStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowWarningStatement(this, context);
     }
 }

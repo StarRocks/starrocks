@@ -128,7 +128,7 @@ public final class ColumnRefOperator extends ScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitVariableReference(this, context);
+        return  visitor.visitVariableReference(this, context);
     }
 
     public static boolean equals(List<ColumnRefOperator> lhs, List<ColumnRefOperator> rhs) {

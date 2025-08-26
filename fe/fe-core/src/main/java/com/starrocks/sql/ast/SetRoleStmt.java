@@ -47,6 +47,6 @@ public class SetRoleStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSetRoleStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetRoleStatement(this, context);
     }
 }

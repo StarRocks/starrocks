@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.warehouse;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -36,6 +37,6 @@ public class SuspendWarehouseStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSuspendWarehouseStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSuspendWarehouseStatement(this, context);
     }
 }

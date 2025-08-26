@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -39,6 +40,6 @@ public class DropPipeStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropPipeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropPipeStatement(this, context);
     }
 }

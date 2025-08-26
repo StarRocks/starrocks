@@ -144,6 +144,6 @@ public class ShowTableStatusStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowTableStatusStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTableStatusStatement(this, context);
     }
 }

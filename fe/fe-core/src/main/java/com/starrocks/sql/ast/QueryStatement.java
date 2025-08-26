@@ -67,7 +67,7 @@ public class QueryStatement extends StatementBase {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitQueryStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitQueryStatement(this, context);
     }
 
     public int getQueryStartIndex() {

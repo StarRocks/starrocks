@@ -111,6 +111,6 @@ public class AlterTableOperationClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterTableOperationClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterTableOperationClause(this, context);
     }
 }

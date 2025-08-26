@@ -40,6 +40,6 @@ public class ModifyColumnCommentClause extends AlterTableColumnClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitModifyColumnCommentClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitModifyColumnCommentClause(this, context);
     }
 }

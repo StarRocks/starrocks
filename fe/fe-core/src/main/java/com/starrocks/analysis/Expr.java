@@ -56,6 +56,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.common.ErrorType;
@@ -1186,8 +1187,9 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     /**
      * Below function is added by new analyzer
      */
+    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitExpression(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitExpression(this, context);
     }
 
     public void setFn(Function fn) {

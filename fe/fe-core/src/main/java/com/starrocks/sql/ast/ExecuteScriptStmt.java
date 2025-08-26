@@ -63,6 +63,6 @@ public class ExecuteScriptStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitExecuteScriptStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitExecuteScriptStatement(this, context);
     }
 }

@@ -47,6 +47,6 @@ public class DropFieldClause extends AlterTableColumnClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropFieldClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropFieldClause(this, context);
     }
 }

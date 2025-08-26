@@ -72,6 +72,6 @@ public class CreateResourceGroupStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateResourceGroupStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateResourceGroupStatement(this, context);
     }
 }

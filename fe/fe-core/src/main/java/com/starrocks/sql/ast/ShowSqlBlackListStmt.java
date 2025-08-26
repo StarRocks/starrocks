@@ -39,6 +39,6 @@ public class ShowSqlBlackListStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowSqlBlackListStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowSqlBlackListStatement(this, context);
     }
 }

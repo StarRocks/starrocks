@@ -28,6 +28,6 @@ public class ShowComputeNodesStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowComputeNodes(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowComputeNodes(this, context);
     }
 }

@@ -26,7 +26,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowStmt;
 
@@ -36,7 +36,7 @@ public class ShowSnapshotAnalyzer {
         new ShowSnapshotAnalyzerVisitor().analyze(showSnapshotStmt, session);
     }
 
-    public static class ShowSnapshotAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class ShowSnapshotAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

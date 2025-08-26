@@ -29,7 +29,7 @@ public class ExceptRelation extends SetOperationRelation {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitExcept(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitExcept(this, context);
     }
 }
 

@@ -41,6 +41,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
@@ -240,7 +241,7 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitLiteral(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitLiteral(this, context);
     }
 
     @Override
