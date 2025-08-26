@@ -15,7 +15,7 @@
 
 package com.starrocks.load;
 
-import com.starrocks.qe.OriginStatement;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 public class RoutineLoadDescTest {
     @Test
     public void testToSql() throws Exception {
-        RoutineLoadDesc originLoad = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement("CREATE ROUTINE LOAD job ON tbl " +
+        RoutineLoadDesc originLoad = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo("CREATE ROUTINE LOAD job ON tbl " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c`=1), " +

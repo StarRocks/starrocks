@@ -24,7 +24,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.thrift.TExprOpcode;
 
 import java.util.HashMap;

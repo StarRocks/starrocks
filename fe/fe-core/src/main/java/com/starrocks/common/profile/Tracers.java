@@ -87,13 +87,14 @@ public class Tracers {
     /**
      * Init tracer with context and mode.
      * @param context connect context
-     * @param mode tracer mode
+     * @param modeStr tracer mode
      * @param moduleStr tracer module
      */
-    public static void init(ConnectContext context, Mode mode, String moduleStr) {
+    public static void init(ConnectContext context, String modeStr, String moduleStr) {
         boolean enableProfile =
                 context.getSessionVariable().isEnableProfile() || context.getSessionVariable().isEnableBigQueryProfile();
         boolean checkMV = context.getSessionVariable().isEnableMaterializedViewRewriteOrError();
+        Mode mode = getTraceMode(modeStr);
         Module module = getTraceModule(moduleStr);
         init(mode, module, enableProfile, checkMV);
     }
@@ -157,6 +158,17 @@ public class Tracers {
 
     public static void close() {
         THREAD_LOCAL.remove();
+    }
+
+    private static Mode getTraceMode(String str) {
+        try {
+            if (str != null) {
+                return Mode.valueOf(str.toUpperCase());
+            }
+        } catch (Exception e) {
+            return Mode.NONE;
+        }
+        return Mode.NONE;
     }
 
     private static Module getTraceModule(String str) {

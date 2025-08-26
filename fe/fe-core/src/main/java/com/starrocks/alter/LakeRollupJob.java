@@ -40,12 +40,13 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.Utils;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -108,7 +109,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     @SerializedName(value = "rollupShortKeyColumnCount")
     protected short rollupShortKeyColumnCount;
     @SerializedName(value = "origStmt")
-    protected OriginStatement origStmt;
+    protected OriginStatementInfo origStmt;
 
     @SerializedName(value = "viewDefineSql")
     protected String viewDefineSql;
@@ -137,7 +138,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         this.rollupSchemaHash = rollupSchemaHash;
         this.rollupKeysType = rollupKeysType;
         this.rollupShortKeyColumnCount = rollupShortKeyColumnCount;
-        this.origStmt = origStmt;
+        if (origStmt != null) {
+            this.origStmt = new OriginStatementInfo(origStmt.getOrigStmt(), origStmt.getIdx());
+        }
         this.viewDefineSql = viewDefineSql;
         this.isColocateMVIndex = isColocateMVIndex;
     }

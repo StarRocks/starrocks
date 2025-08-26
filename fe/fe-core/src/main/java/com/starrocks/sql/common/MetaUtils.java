@@ -32,8 +32,8 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.external.starrocks.TableMetaSyncer;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -122,7 +122,7 @@ public class MetaUtils {
         return table;
     }
 
-    public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) {
+    public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatementInfo originStmt) {
         CreateMaterializedViewStmt stmt;
 
         try {
