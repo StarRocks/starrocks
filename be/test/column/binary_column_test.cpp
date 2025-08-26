@@ -710,7 +710,7 @@ TEST_P(BinaryColumnAppendSelectiveTestFixture, test_append_selective) {
     }
 
     dst_col->append_selective(*src_col, indexes.data(), 10, static_cast<uint32_t>(indexes.size()) - 10);
-    ASSERT_EQ(num_dst_rows + indexes.size(), dst_col->size());
+    ASSERT_EQ(num_dst_rows + indexes.size() - 10, dst_col->size());
     for (uint32_t i = 10; i < indexes.size(); i++) {
         ASSERT_EQ(src_col->get_slice(indexes[i]), dst_col->get_slice(num_dst_rows + i - 10));
     }
