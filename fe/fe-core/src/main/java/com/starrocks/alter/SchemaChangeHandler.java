@@ -45,7 +45,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.AggregateType;
@@ -1932,7 +1931,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 DropColumnClause dropColumnClause = (DropColumnClause) alterClause;
                 // check relative mvs with the modified column
                 Set<String> modifiedColumns = Set.of(dropColumnClause.getColName());
-                checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
+                AlterMVJobExecutor.checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
 
                 // drop column and drop indexes on this column
                 fastSchemaEvolution &=
@@ -1943,7 +1942,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
                 // check relative mvs with the modified column
                 Set<String> modifiedColumns = Set.of(modifyColumnClause.getColumn().getName());
-                checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
+                AlterMVJobExecutor.checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
 
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
@@ -1961,7 +1960,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
                 AddFieldClause addFieldClause = (AddFieldClause) alterClause;
                 modifyFieldColumns = Set.of(addFieldClause.getColName());
-                checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
+                AlterMVJobExecutor.checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
                 int id = colUniqueIdSupplier.getAsInt();
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
@@ -1975,7 +1974,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
                 DropFieldClause dropFieldClause = (DropFieldClause) alterClause;
                 modifyFieldColumns = Set.of(dropFieldClause.getColName());
-                checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
+                AlterMVJobExecutor.checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
                 processDropField((DropFieldClause) alterClause, olapTable, indexSchemaMap, newIndexes);
             } else if (alterClause instanceof ReorderColumnsClause) {
                 // reorder column
@@ -2030,68 +2029,6 @@ public class SchemaChangeHandler extends AlterHandler {
             return null;
         } else {
             return createFastSchemaEvolutionJobInSharedDataMode(schemaChangeData);
-        }
-    }
-
-    /**
-     * Check related synchronous materialized views before modified columns, throw exceptions
-     * if modified columns affect the related rollup/synchronous mvs.
-     */
-    public void checkModifiedColumWithMaterializedViews(OlapTable olapTable,
-                                                        Set<String> modifiedColumns) throws DdlException {
-        if (modifiedColumns == null || modifiedColumns.isEmpty()) {
-            return;
-        }
-
-        // If there is synchronized materialized view referring the column, throw exception.
-        if (olapTable.getIndexNameToId().size() > 1) {
-            Map<Long, MaterializedIndexMeta> metaMap = olapTable.getIndexIdToMeta();
-            for (Map.Entry<Long, MaterializedIndexMeta> entry : metaMap.entrySet()) {
-                Long id = entry.getKey();
-                if (id == olapTable.getBaseIndexId()) {
-                    continue;
-                }
-                MaterializedIndexMeta meta = entry.getValue();
-                List<Column> schema = meta.getSchema();
-                // ignore agg_keys type because it's like duplicated without agg functions
-                boolean hasAggregateFunction = olapTable.getKeysType() != KeysType.AGG_KEYS &&
-                        schema.stream().anyMatch(x -> x.isAggregated());
-                if (hasAggregateFunction) {
-                    for (Column rollupCol : schema) {
-                        if (modifiedColumns.contains(rollupCol.getName())) {
-                            throw new DdlException(String.format("Can not drop/modify the column %s, " +
-                                            "because the column is used in the related rollup %s, " +
-                                            "please drop the rollup index first.",
-                                    rollupCol.getName(), olapTable.getIndexNameById(meta.getIndexId())));
-                        }
-                        if (rollupCol.getRefColumns() != null) {
-                            for (SlotRef refColumn : rollupCol.getRefColumns()) {
-                                if (modifiedColumns.contains(refColumn.getColumnName())) {
-                                    throw new DdlException(String.format("Can not drop/modify the column %s, " +
-                                                    "because the column is used in the related rollup %s " +
-                                                    "with the define expr:%s, please drop the rollup index first.",
-                                            rollupCol.getName(), olapTable.getIndexNameById(meta.getIndexId()),
-                                            rollupCol.getDefineExpr().toSql()));
-                                }
-                            }
-                        }
-                    }
-                }
-                if (meta.getWhereClause() != null) {
-                    Expr whereExpr = meta.getWhereClause();
-                    List<SlotRef> whereSlots = new ArrayList<>();
-                    whereExpr.collect(SlotRef.class, whereSlots);
-                    for (SlotRef refColumn : whereSlots) {
-                        if (modifiedColumns.contains(refColumn.getColumnName())) {
-                            throw new DdlException(String.format("Can not drop/modify the column %s, " +
-                                            "because the column is used in the related rollup %s " +
-                                            "with the where expr:%s, please drop the rollup index first.",
-                                    refColumn.getColumn().getName(), olapTable.getIndexNameById(meta.getIndexId()),
-                                    meta.getWhereClause().toSql()));
-                        }
-                    }
-                }
-            }
         }
     }
 
