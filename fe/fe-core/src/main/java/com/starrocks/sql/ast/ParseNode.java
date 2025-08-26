@@ -12,34 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.List;
-
-public class ValueList implements ParseNode {
-    private final List<Expr> row;
-
-    private final NodePosition pos;
-
-    public ValueList(List<Expr> row) {
-        this(row, NodePosition.ZERO);
+public interface ParseNode {
+    /**
+     * @return SQL syntax corresponding to this node.
+     */
+    default String toSql() {
+        throw new RuntimeException("New AST not implement toSql function");
     }
 
-    public ValueList(List<Expr> row, NodePosition pos) {
-        this.pos = pos;
-        this.row = row;
-    }
+    NodePosition getPos();
 
-    public List<Expr> getRow() {
-        return row;
-    }
-
-    @Override
-    public NodePosition getPos() {
-        return pos;
+    default <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        throw new RuntimeException("Not implement accept function");
     }
 }

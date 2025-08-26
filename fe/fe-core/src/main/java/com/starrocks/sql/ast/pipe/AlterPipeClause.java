@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.ast.pipe;
 
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 public abstract class AlterPipeClause implements ParseNode {

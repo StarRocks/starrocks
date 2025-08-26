@@ -15,7 +15,6 @@ package com.starrocks.sql.common;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AstVisitor;
@@ -30,6 +29,7 @@ import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;

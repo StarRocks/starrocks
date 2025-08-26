@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.parser.NodePosition;
 

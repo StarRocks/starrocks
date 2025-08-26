@@ -14,7 +14,7 @@
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.util.Box;
 

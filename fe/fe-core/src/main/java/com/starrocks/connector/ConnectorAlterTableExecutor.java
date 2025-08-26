@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -22,6 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ParseNode;
 
 import java.util.ArrayList;
 import java.util.List;
