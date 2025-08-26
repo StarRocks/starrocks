@@ -17,18 +17,18 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.UserAuthenticationInfo;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
+import com.starrocks.sql.ast.UserRef;
 
 import java.util.Arrays;
 
 public class UserAuthOptionAnalyzer {
-    public static UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption) {
+    public static UserAuthenticationInfo analyzeAuthOption(UserRef user, UserAuthOption userAuthOption) {
         try {
             String authPluginUsing;
             if (userAuthOption == null || userAuthOption.getAuthPlugin() == null) {
@@ -47,7 +47,7 @@ public class UserAuthOptionAnalyzer {
             UserAuthenticationInfo info = new UserAuthenticationInfo();
             info.setAuthPlugin(authPluginUsing);
             if (authPluginUsing.equalsIgnoreCase(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString())) {
-                validatePassword(userIdentity, userAuthOption);
+                validatePassword(user, userAuthOption);
 
                 byte[] passwordScrambled = MysqlPassword.EMPTY_PASSWORD;
                 if (userAuthOption != null) {
@@ -60,7 +60,7 @@ public class UserAuthOptionAnalyzer {
                 info.setAuthString(userAuthOption == null ? null : userAuthOption.getAuthString());
             }
 
-            info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
+            info.setOrigUserHost(user.getUser(), user.getHost());
 
             return info;
         } catch (AuthenticationException e) {
@@ -82,7 +82,7 @@ public class UserAuthOptionAnalyzer {
         }
     }
 
-    private static void validatePassword(UserIdentity userIdentity, UserAuthOption userAuthOption)
+    private static void validatePassword(UserRef userIdentity, UserAuthOption userAuthOption)
             throws AuthenticationException {
         SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
         PasswordPolicy passwordPolicy = securityPolicyMgr.getGlobalPasswordPolicy();

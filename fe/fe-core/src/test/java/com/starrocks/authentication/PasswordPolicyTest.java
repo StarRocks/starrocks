@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.UserAuthOption;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mock;
@@ -352,7 +353,7 @@ public class PasswordPolicyTest {
         List<SetListItem> vars = Lists.newArrayList();
         UserAuthOption userAuthOption =
                 new UserAuthOption(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name(), "!Ab345678", true, NodePosition.ZERO);
-        vars.add(new SetPassVar(new UserIdentity("u1", "%"), userAuthOption, NodePosition.ZERO));
+        vars.add(new SetPassVar(new UserRef("u1", "%"), userAuthOption, NodePosition.ZERO));
         SetStmt setStmt = new SetStmt(vars);
         com.starrocks.sql.analyzer.Analyzer.analyze(setStmt, context);
         SetExecutor executor = new SetExecutor(context, setStmt);

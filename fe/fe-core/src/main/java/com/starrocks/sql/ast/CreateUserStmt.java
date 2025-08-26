@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -40,14 +39,14 @@ public class CreateUserStmt extends BaseCreateAlterUserStmt {
     protected SetRoleType setRoleType;
     protected List<String> defaultRoles;
 
-    public CreateUserStmt(UserIdentity userIdentity, boolean ifNotExists,
+    public CreateUserStmt(UserRef user, boolean ifNotExists,
                           UserAuthOption authOption,
                           UserPasswordOption passwordOption,
                           UserLockOption lockOption,
                           List<String> defaultRoles,
                           Map<String, String> properties,
                           NodePosition pos) {
-        super(userIdentity, authOption, passwordOption, lockOption, properties, pos);
+        super(user, authOption, passwordOption, lockOption, properties, pos);
         this.ifNotExists = ifNotExists;
         this.setRoleType = SetRoleType.ROLE;
         this.defaultRoles = defaultRoles;

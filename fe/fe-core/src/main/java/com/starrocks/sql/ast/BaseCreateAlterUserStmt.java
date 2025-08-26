@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.authentication.UserAuthenticationInfo;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -23,7 +22,7 @@ import java.util.Map;
 
 // CreateUserStmt and AlterUserStmt share the same parameter and check logic
 public abstract class BaseCreateAlterUserStmt extends DdlStmt {
-    protected UserIdentity userIdentity;
+    protected UserRef user;
     protected UserAuthOption authOption;
     protected UserPasswordOption passwordOption;
     protected UserLockOption lockOption;
@@ -33,7 +32,7 @@ public abstract class BaseCreateAlterUserStmt extends DdlStmt {
 
     private final Map<String, String> properties;
 
-    public BaseCreateAlterUserStmt(UserIdentity userIdentity,
+    public BaseCreateAlterUserStmt(UserRef user,
                                    UserAuthOption authOption,
                                    UserPasswordOption passwordOption,
                                    UserLockOption lockOption,
@@ -41,15 +40,15 @@ public abstract class BaseCreateAlterUserStmt extends DdlStmt {
                                    NodePosition pos) {
         super(pos);
 
-        this.userIdentity = userIdentity;
+        this.user = user;
         this.authOption = authOption;
         this.passwordOption = passwordOption;
         this.lockOption = lockOption;
         this.properties = properties;
     }
 
-    public UserIdentity getUserIdentity() {
-        return userIdentity;
+    public UserRef getUser() {
+        return user;
     }
 
     public UserAuthOption getAuthOption() {

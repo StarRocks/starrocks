@@ -22,6 +22,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
@@ -143,6 +144,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
@@ -548,8 +550,10 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+                UserRef user = stmt.getUser();
+                UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
                 context.getGlobalStateMgr().getAuthenticationMgr().alterUser(
-                        stmt.getUserIdentity(),
+                        userIdentity,
                         stmt.getAuthenticationInfo(),
                         stmt.getPasswordOption(),
                         stmt.getLockOption(),
@@ -1363,7 +1367,7 @@ public class DDLStmtExecutor {
                                                                  ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 ClusterSnapshotMgrEPack clusterSnapshotMgrEPack =
-                            (ClusterSnapshotMgrEPack) context.getGlobalStateMgr().getClusterSnapshotMgr();
+                        (ClusterSnapshotMgrEPack) context.getGlobalStateMgr().getClusterSnapshotMgr();
                 clusterSnapshotMgrEPack.createClusterSnapshot(stmt);
             });
             return null;
@@ -1374,7 +1378,7 @@ public class DDLStmtExecutor {
                                                                ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 ClusterSnapshotMgrEPack clusterSnapshotMgrEPack =
-                            (ClusterSnapshotMgrEPack) context.getGlobalStateMgr().getClusterSnapshotMgr();
+                        (ClusterSnapshotMgrEPack) context.getGlobalStateMgr().getClusterSnapshotMgr();
                 clusterSnapshotMgrEPack.dropClusterSnapshot(stmt);
             });
             return null;

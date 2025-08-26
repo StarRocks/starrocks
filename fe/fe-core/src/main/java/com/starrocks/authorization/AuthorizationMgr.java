@@ -57,6 +57,7 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -459,12 +460,14 @@ public class AuthorizationMgr {
                         stmt.isWithGrantOption(),
                         stmt.getRole());
             } else {
+                UserRef user = stmt.getUser();
+                UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
                 grantToUser(
                         stmt.getObjectType(),
                         stmt.getPrivilegeTypes(),
                         stmt.getObjectList(),
                         stmt.isWithGrantOption(),
-                        stmt.getUserIdentity());
+                        userIdentity);
             }
         } catch (PrivilegeException e) {
             throw new DdlException("failed to grant: " + e.getMessage(), e);
@@ -479,6 +482,7 @@ public class AuthorizationMgr {
             UserIdentity userIdentity) throws PrivilegeException {
         userWriteLock();
         try {
+
             UserPrivilegeCollectionV2 collection = getUserPrivilegeCollectionUnlocked(userIdentity);
             collection.grant(type, privilegeTypes, objects, isGrant);
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPrivilege(
@@ -525,7 +529,7 @@ public class AuthorizationMgr {
                         stmt.getObjectType(),
                         stmt.getPrivilegeTypes(),
                         stmt.getObjectList(),
-                        stmt.getUserIdentity());
+                        stmt.getUser());
             }
         } catch (PrivilegeException e) {
             throw new DdlException(e.getMessage());
@@ -536,9 +540,10 @@ public class AuthorizationMgr {
             ObjectType objectType,
             List<PrivilegeType> privilegeTypes,
             List<PEntryObject> objects,
-            UserIdentity userIdentity) throws PrivilegeException {
+            UserRef user) throws PrivilegeException {
         userWriteLock();
         try {
+            UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
             UserPrivilegeCollectionV2 collection = getUserPrivilegeCollectionUnlocked(userIdentity);
             collection.revoke(objectType, privilegeTypes, objects);
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPrivilege(
@@ -574,7 +579,7 @@ public class AuthorizationMgr {
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         try {
             switch (stmt.getGrantType()) {
-                case USER -> grantRoleToUser(stmt.getGranteeRole(), stmt.getUserIdentity());
+                case USER -> grantRoleToUser(stmt.getGranteeRole(), stmt.getUser());
                 case GROUP -> grantRoleToGroup(stmt.getGranteeRole(), stmt.getRoleOrGroup());
                 case ROLE -> grantRoleToRole(stmt.getGranteeRole(), stmt.getRoleOrGroup());
             }
@@ -583,10 +588,12 @@ public class AuthorizationMgr {
         }
     }
 
-    protected void grantRoleToUser(List<String> parentRoleName, UserIdentity user) throws PrivilegeException {
+    protected void grantRoleToUser(List<String> parentRoleName, UserRef user) throws PrivilegeException {
         userWriteLock();
         try {
-            UserPrivilegeCollectionV2 userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(user);
+            UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+
+            UserPrivilegeCollectionV2 userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
 
             roleReadLock();
             try {
@@ -605,10 +612,10 @@ public class AuthorizationMgr {
                     try {
                         Set<Long> result = getAllPredecessorRoleIdsUnlocked(userPrivilegeCollection);
                         if (result.size() > Config.privilege_max_total_roles_per_user) {
-                            LOG.warn("too many predecessor roles {} for user {}", result, user);
+                            LOG.warn("too many predecessor roles {} for user {}", result, userIdentity);
                             throw new PrivilegeException(String.format(
                                     "%s has total %d predecessor roles > %d!",
-                                    user, result.size(), Config.privilege_max_total_roles_per_user));
+                                    userIdentity, result.size(), Config.privilege_max_total_roles_per_user));
                         }
                         verifyDone = true;
                     } finally {
@@ -622,8 +629,8 @@ public class AuthorizationMgr {
             }
 
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPrivilege(
-                    user, userPrivilegeCollection, provider.getPluginId(), provider.getPluginVersion());
-            invalidateUserInCache(user);
+                    userIdentity, userPrivilegeCollection, provider.getPluginId(), provider.getPluginVersion());
+            invalidateUserInCache(userIdentity);
             LOG.info("grant role {} to user {}", Joiner.on(", ").join(parentRoleName), user);
         } finally {
             userWriteUnlock();
@@ -744,7 +751,7 @@ public class AuthorizationMgr {
     public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
         try {
             switch (stmt.getGrantType()) {
-                case USER -> revokeRoleFromUser(stmt.getGranteeRole(), stmt.getUserIdentity());
+                case USER -> revokeRoleFromUser(stmt.getGranteeRole(), stmt.getUser());
                 case GROUP -> revokeRoleFromGroup(stmt.getGranteeRole(), stmt.getRoleOrGroup());
                 case ROLE -> revokeRoleFromRole(stmt.getGranteeRole(), stmt.getRoleOrGroup());
             }
@@ -753,10 +760,12 @@ public class AuthorizationMgr {
         }
     }
 
-    protected void revokeRoleFromUser(List<String> roleNameList, UserIdentity user) throws PrivilegeException {
+    protected void revokeRoleFromUser(List<String> roleNameList, UserRef user) throws PrivilegeException {
         userWriteLock();
         try {
-            UserPrivilegeCollectionV2 collection = getUserPrivilegeCollectionUnlocked(user);
+            UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+
+            UserPrivilegeCollectionV2 collection = getUserPrivilegeCollectionUnlocked(userIdentity);
             roleReadLock();
             try {
                 for (String roleName : roleNameList) {
@@ -772,9 +781,9 @@ public class AuthorizationMgr {
                 roleReadUnlock();
             }
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPrivilege(
-                    user, collection, provider.getPluginId(), provider.getPluginVersion());
-            invalidateUserInCache(user);
-            LOG.info("revoke role {} from user {}", roleNameList.toString(), user);
+                    userIdentity, collection, provider.getPluginId(), provider.getPluginVersion());
+            invalidateUserInCache(userIdentity);
+            LOG.info("revoke role {} from user {}", roleNameList.toString(), userIdentity);
         } finally {
             userWriteUnlock();
         }
@@ -1305,7 +1314,9 @@ public class AuthorizationMgr {
 
                 if (!parentRoleNameList.isEmpty()) {
                     return Lists.newArrayList(userIdentity.toString(), null,
-                            AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList, userIdentity, NodePosition.ZERO)));
+                            AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList,
+                                    new UserRef(userIdentity.getUser(), userIdentity.getHost(), userIdentity.isDomain()),
+                                    NodePosition.ZERO)));
                 }
                 return null;
             } finally {

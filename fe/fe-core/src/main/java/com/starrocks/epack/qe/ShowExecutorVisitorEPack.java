@@ -65,6 +65,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
@@ -341,10 +342,11 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
         } else {
             UserAuthenticationInfo userAuthenticationInfo;
             UserIdentity userIdentity;
-            if (statement.getUserIdent() == null) {
+            if (statement.getUser() == null) {
                 userIdentity = context.getCurrentUserIdentity();
             } else {
-                userIdentity = statement.getUserIdent();
+                UserRef user = statement.getUser();
+                userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
             }
             userAuthenticationInfo = authenticationManager
                     .getUserAuthenticationInfoByUserIdentity(userIdentity);
