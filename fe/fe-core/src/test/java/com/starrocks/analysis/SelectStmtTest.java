@@ -698,6 +698,10 @@ public class SelectStmtTest {
                 "FROM db1.t_with_pk " +
                 "GROUP BY 1";
 
+        // SELECT CASE WHEN (`db1`.`t_with_pk`.`value` = 1) THEN 'A' ELSE 'B' END AS `flag`, count(DISTINCT `db1`
+        // .`t_with_pk`.`user_id`) AS `count(DISTINCT user_id)`
+        //FROM `db1`.`t_with_pk`
+        //GROUP BY 1
         String plan = starRocksAssert.query(sql).explainQuery();
 
         Assertions.assertTrue(plan.contains("2:AGGREGATE (update serialize)\n" +

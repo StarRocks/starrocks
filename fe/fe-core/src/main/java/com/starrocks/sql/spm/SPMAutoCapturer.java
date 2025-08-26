@@ -120,6 +120,7 @@ public class SPMAutoCapturer extends FrontendDaemon {
                 if (tables.size() < 2) {
                     continue;
                 }
+
                 if (!tables.keySet().stream()
                         .allMatch(t -> checkPattern.matcher(t.getDb() + "." + t.getTbl()).find())) {
                     continue;
