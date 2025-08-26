@@ -9,7 +9,7 @@ namespace starrocks {
 
 struct MemoryUsage {
     MemoryUsage(int64_t init, int64_t used, int64_t committed, int64_t max)
-        : init(init), used(used), committed(committed), max(max) {};
+        : init(init), used(used), committed(committed), max(max) {}
 
     int64_t init;
     int64_t used;
@@ -19,7 +19,7 @@ struct MemoryUsage {
 
 struct MemoryPool {
     MemoryPool(std::string name, MemoryUsage usage, MemoryUsage peak_usage)
-        : name(std::move(name)), usage(usage), peak_usage(peak_usage) {};
+        : name(std::move(name)), usage(usage), peak_usage(peak_usage) {}
 
     std::string name;
     MemoryUsage usage;
@@ -55,7 +55,7 @@ public:
     METRIC_DEFINE_INT_GAUGE(jvm_perm_committed_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jvm_perm_max_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jvm_perm_peak_used_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(jvm_perm_peak_max_bytes, MetricUnit::BYTES);  
+    METRIC_DEFINE_INT_GAUGE(jvm_perm_peak_max_bytes, MetricUnit::BYTES);
 
     Status init();
     void install(MetricRegistry*);

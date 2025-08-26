@@ -36,7 +36,7 @@ Status JVMMetrics::init() {
     _get_memory_mxbean = env->GetStaticMethodID(management_factory_cls, "getMemoryMXBean", "()Ljava/lang/management/MemoryMXBean;");
     DCHECK(_get_memory_mxbean != nullptr);
     jobject memory_mxbean_obj = env->CallStaticObjectMethod(management_factory_cls, _get_memory_mxbean);
-    CHECK_JNI_EXCEPTION(env, "get memory mxbean failed");
+    CHECK_JNI_EXCEPTION(env, "get memory mxbean failed")
     _memory_mxbean_obj = JavaGlobalRef(env->NewGlobalRef(memory_mxbean_obj));
     LOCAL_REF_GUARD_ENV(env, memory_mxbean_obj);
 
@@ -74,10 +74,11 @@ Status JVMMetrics::init() {
 }
 
 void JVMMetrics::install(MetricRegistry* registry) {
-    if (!registry->register_hook("jvm_metrics", [this] { 
-            if (!update().ok()) {
-                LOG(WARNING) << "update jvm metrics failed: " << update().to_string();
-            }; 
+    if (!registry->register_hook("jvm_metrics", [this] {
+            auto status = update();
+            if (!status.ok()) {
+                LOG(WARNING) << "update jvm metrics failed: " << status.to_string();
+            }
         })) {
         return;
     }
@@ -112,7 +113,7 @@ void JVMMetrics::install(MetricRegistry* registry) {
     REGISTER_JVM_METRIC(perm_peak_max);
 
 #undef REGISTER_JVM_METRIC
-};
+}
 
 Status JVMMetrics::update(){
     ASSIGN_OR_RETURN(auto heap_memory_usage, get_heap_memory_usage());
@@ -157,14 +158,14 @@ StatusOr<MemoryUsage> JVMMetrics::get_heap_memory_usage() {
     JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
 
     jobject memory_usage = env->CallObjectMethod(_memory_mxbean_obj.handle(), _get_heap_memory_usage);
-    CHECK_JNI_EXCEPTION(env, "get heap memory usage failed");
+    CHECK_JNI_EXCEPTION(env, "get heap memory usage failed")
     LOCAL_REF_GUARD_ENV(env, memory_usage);
 
     jlong init = env->CallLongMethod(memory_usage, _get_init);
     jlong used = env->CallLongMethod(memory_usage, _get_used);
     jlong committed = env->CallLongMethod(memory_usage, _get_committed);
     jlong max = env->CallLongMethod(memory_usage, _get_max);
-    CHECK_JNI_EXCEPTION(env, "get heap memory usage details failed");
+    CHECK_JNI_EXCEPTION(env, "get heap memory usage details failed")
 
     return MemoryUsage(init, used, committed, max);
 }
@@ -180,7 +181,7 @@ StatusOr<MemoryUsage> JVMMetrics::get_non_heap_memory_usage() {
     jlong used = env->CallLongMethod(memory_usage, _get_used);
     jlong committed = env->CallLongMethod(memory_usage, _get_committed);
     jlong max = env->CallLongMethod(memory_usage, _get_max);
-    CHECK_JNI_EXCEPTION(env, "get non heap memory usage details failed");
+    CHECK_JNI_EXCEPTION(env, "get non heap memory usage details failed")
 
     return MemoryUsage(init, used, committed, max);
 }
@@ -189,7 +190,7 @@ StatusOr<std::vector<MemoryPool>> JVMMetrics::get_memory_pools() {
     JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
 
     jobject memory_pools = env->CallStaticObjectMethod(_management_factory_cls->clazz(), _get_memory_pool_mxbeans);
-    CHECK_JNI_EXCEPTION(env, "get memory pool mxbeans failed");
+    CHECK_JNI_EXCEPTION(env, "get memory pool mxbeans failed")
     LOCAL_REF_GUARD_ENV(env, memory_pools);
 
     JavaListStub list_stub(memory_pools);
@@ -197,31 +198,31 @@ StatusOr<std::vector<MemoryPool>> JVMMetrics::get_memory_pools() {
 
     std::vector<MemoryPool> pools;
     pools.reserve(size);
-    for (int i = 0; i < size; i ++) {
+    for (int i = 0; i < size; i++) {
         ASSIGN_OR_RETURN(auto memory_pool, list_stub.get(i));
         LOCAL_REF_GUARD_ENV(env, memory_pool);
 
         jstring name = (jstring)env->CallObjectMethod(memory_pool, _get_name);
-        CHECK_JNI_EXCEPTION(env, "get memory pool name failed");
+        CHECK_JNI_EXCEPTION(env, "get memory pool name failed")
         LOCAL_REF_GUARD_ENV(env, name);
         std::string name_str = JVMFunctionHelper::getInstance().to_cxx_string(name);
 
         jobject usage = env->CallObjectMethod(memory_pool, _get_usage);
-        CHECK_JNI_EXCEPTION(env, "get memory pool usage failed");
+        CHECK_JNI_EXCEPTION(env, "get memory pool usage failed")
         LOCAL_REF_GUARD_ENV(env, usage);
         jlong init = env->CallLongMethod(usage, _get_init);
         jlong used = env->CallLongMethod(usage, _get_used);
         jlong committed = env->CallLongMethod(usage, _get_committed);
         jlong max = env->CallLongMethod(usage, _get_max);
-        CHECK_JNI_EXCEPTION(env, "get memory pool usage details failed");
+        CHECK_JNI_EXCEPTION(env, "get memory pool usage details failed")
         MemoryUsage usage_obj(init, used, committed, max);
 
         jobject peak_usage = env->CallObjectMethod(memory_pool, _get_peak_usage);
-        CHECK_JNI_EXCEPTION(env, "get memory pool peak usage failed");
+        CHECK_JNI_EXCEPTION(env, "get memory pool peak usage failed")
         LOCAL_REF_GUARD_ENV(env, peak_usage);
         used = env->CallLongMethod(peak_usage, _get_used);
         max = env->CallLongMethod(peak_usage, _get_max);
-        CHECK_JNI_EXCEPTION(env, "get memory pool peak usage details failed");
+        CHECK_JNI_EXCEPTION(env, "get memory pool peak usage details failed")
         MemoryUsage peak_usage_obj(0, used, 0, max);
 
         pools.emplace_back(std::move(name_str), usage_obj, peak_usage_obj);
