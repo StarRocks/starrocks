@@ -87,7 +87,6 @@ import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -301,7 +300,7 @@ public class ConnectProcessor {
         }
 
         try {
-            String digest = SqlDigestBuilder.build(queryStmt);
+            String digest = AstToSQLBuilder.toDigest(queryStmt);
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();
             md.update(digest.getBytes());
