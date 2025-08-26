@@ -79,8 +79,7 @@ public class StreamLoadMetaAction extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException,
             AccessDeniedException {
-        boolean enableBatchWrite = "true".equalsIgnoreCase(
-                request.getRequest().headers().get(StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE));
+        boolean enableBatchWrite = StreamLoadHttpHeader.isEnabledBatchWrite(request);
         if (enableBatchWrite && redirectToLeader(request, response)) {
             return;
         }

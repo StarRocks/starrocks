@@ -13,6 +13,9 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.common.util.Util;
+import com.starrocks.http.BaseRequest;
+
 import java.util.Arrays;
 import java.util.List;
 
@@ -74,4 +77,12 @@ public class StreamLoadHttpHeader {
             HTTP_LOG_REJECTED_RECORD_NUM, HTTP_COMPRESSION, HTTP_WAREHOUSE, HTTP_ENABLE_BATCH_WRITE,
             HTTP_BATCH_WRITE_ASYNC, HTTP_BATCH_WRITE_INTERVAL_MS, HTTP_BATCH_WRITE_PARALLEL
     );
+
+    public static boolean isEnabledBatchWrite(BaseRequest request) {
+        if (request == null) {
+            return false;
+        }
+        String val = request.getRequest().headers().get(StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE);
+        return Util.stringToBool(val);
+    }
 }
