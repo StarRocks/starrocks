@@ -902,6 +902,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
     public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
     public static final String ENABLE_CONNECTOR_ASYNC_LIST_PARTITIONS = "enable_connector_async_list_partitions";
+    public static final String ENABLE_CONNECTOR_DEPLOY_SCAN_RANGES_BACKGROUND =
+            "enable_connector_deploy_scan_ranges_background";
     public static final String ENABLE_PLAN_ANALYZER = "enable_plan_analyzer";
 
     public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
@@ -1263,7 +1265,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_JSON_V2_DICT_OPT)
     private boolean cboJSONV2DictOpt = true;
-
 
     /*
      * the parallel exec instance num for one Fragment in one BE
@@ -2659,6 +2660,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES)
     private boolean enableConnectorIncrementalScanRanges = true;
+
+    @VarAttr(name = ENABLE_CONNECTOR_DEPLOY_SCAN_RANGES_BACKGROUND)
+    private boolean enableConnectorDeployScanRangesBackground = true;
 
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
     private int connectorIncrementalScanRangeSize = 500;
@@ -5079,6 +5083,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableConnectorIncrementalScanRanges;
     }
 
+    public boolean isEnableConnectorDeployScanRangesBackground() {
+        return enableConnectorDeployScanRangesBackground;
+    }
+
     public boolean isEnableConnectorAsyncListPartitions() {
         return enableConnectorAsyncListPartitions;
     }
@@ -5254,7 +5262,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableJSONV2Rewrite(boolean enableJSONV2Rewrite) {
         this.cboJSONV2Rewrite = enableJSONV2Rewrite;
     }
-  
+
     public boolean isEnableDropTableCheckMvDependency() {
         return enableDropTableCheckMvDependency;
     }
@@ -5463,9 +5471,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
         return root.toString();
     }
-
-
-
 
     private void readFromJson(DataInput in) throws IOException {
         String json = Text.readString(in);
