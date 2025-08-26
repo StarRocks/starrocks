@@ -109,7 +109,7 @@ public abstract class Coordinator {
 
     public void execWithQueryDeployExecutor(ConnectContext context) throws Exception {
         ScheduleOption option = new ScheduleOption();
-        option.useQueryDeployExecutor = context.getSessionVariable().isEnableConnectorIncrementalScanRangesBackground();
+        option.useQueryDeployExecutor = context.getSessionVariable().isEnableConnectorDeployScanRangesBackground();
         startScheduling(option);
     }
 
