@@ -73,6 +73,7 @@ import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.OptimizerOptions;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -1193,11 +1194,17 @@ public class MvUtils {
         // add a LogicalTreeAnchorOperator to replace the tree easier
         OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
         doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression);
+
+        // check if there is any view scan operator in the tree
         List<Operator> viewScanOperators = Lists.newArrayList();
         MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
         if (!viewScanOperators.isEmpty()) {
+            OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
+                    "After replacing logical view scan operator but found view scan operator in the tree, "
+                            + "so cannot rewrite the query expression: " + queryExpression);
             return null;
         }
+
         OptExpression newQuery = anchorExpr.inputAt(0);
         deriveLogicalProperty(newQuery);
         return newQuery;
@@ -1209,29 +1216,48 @@ public class MvUtils {
         LogicalOperator op = queryExpression.getOp().cast();
         if (op instanceof LogicalViewScanOperator) {
             LogicalViewScanOperator viewScanOperator = op.cast();
-            OptExpression viewPlan = viewScanOperator.getOriginalPlanEvaluator();
+            OptExpression inlineViewPlan = viewScanOperator.getOriginalPlanEvaluator();
             if (viewScanOperator.getPredicate() != null) {
-                // If viewScanOperator contains predicate, we need to rewrite them,
-                // otherwise predicate will be lost.
-                Map<ColumnRefOperator, ScalarOperator> reverseColumnRefMap =
-                        viewScanOperator.getProjection().getColumnRefMap().entrySet().stream()
-                                .collect(Collectors.toMap(e -> (ColumnRefOperator) e.getValue(), e -> e.getKey()));
-                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(reverseColumnRefMap);
-                Operator.Builder builder = OperatorBuilderFactory.build(viewPlan.getOp());
-                builder.withOperator(viewPlan.getOp());
-                // rewrite predicate
-                builder.setPredicate(rewriter.rewrite(viewScanOperator.getPredicate()));
-                // rewrite projection
-                Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = viewScanOperator.getProjection().getColumnRefMap()
+                // original map records inlined view's column ref to non-inlined view's column ref mapping,
+                // now we need to rewrite non-inlined view's column ref to inlined view's column ref,
+                // so we need to reverse the mapping.
+                Map<ColumnRefOperator, ScalarOperator> originalColumnRefToInlinedColumnRefMap =
+                        Maps.newHashMap(viewScanOperator.getOriginalColumnRefToInlinedColumnRefMap());
+                // add new added column ref mapping
+                if (viewScanOperator.getProjection() != null) {
+                    viewScanOperator.getProjection().getColumnRefMap()
+                            .entrySet()
+                            .stream()
+                            .forEach(e -> originalColumnRefToInlinedColumnRefMap.put(e.getKey(), e.getValue()));
+                }
+                Map<ColumnRefOperator, ScalarOperator> reverseColumnRefMap = originalColumnRefToInlinedColumnRefMap
                         .entrySet()
                         .stream()
-                        .map(e -> Maps.immutableEntry(e.getKey(), rewriter.rewrite(e.getValue())))
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-                builder.setProjection(new Projection(newColumnRefMap));
-                Operator newViewPlanOp = builder.build();
-                parent.setChild(index, OptExpression.create(newViewPlanOp, viewPlan.getInputs()));
+                        .collect(Collectors.toMap(e -> (ColumnRefOperator) e.getValue(), e -> e.getKey()));
+
+                // If viewScanOperator contains predicate, we need to rewrite them, otherwise predicate will be lost.
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(reverseColumnRefMap);
+                Operator.Builder builder = OperatorBuilderFactory.build(inlineViewPlan.getOp());
+                builder.withOperator(inlineViewPlan.getOp());
+                if (viewScanOperator.getPredicate() != null) {
+                    // rewrite predicate
+                    ScalarOperator rewrittenPredicate = rewriter.rewrite(viewScanOperator.getPredicate());
+                    builder.setPredicate(rewrittenPredicate);
+                }
+                // rewrite projection
+                if (viewScanOperator.getPredicate() != null) {
+                    Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = viewScanOperator
+                            .getProjection().getColumnRefMap()
+                            .entrySet()
+                            .stream()
+                            .map(e -> Maps.immutableEntry(e.getKey(), rewriter.rewrite(e.getValue())))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                    builder.setProjection(new Projection(newColumnRefMap));
+                }
+                Operator newInlineViewPlanOp = builder.build();
+                parent.setChild(index, OptExpression.create(newInlineViewPlanOp, inlineViewPlan.getInputs()));
             } else {
-                parent.setChild(index, viewPlan);
+                parent.setChild(index, inlineViewPlan);
             }
             return;
         }

@@ -452,6 +452,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_JOIN_RUNTIME_BITSET_FILTER = "enable_join_runtime_bitset_filter";
 
     public static final String ENABLE_HASH_JOIN_RANGE_DIRECT_MAPPING_OPT = "enable_hash_join_range_direct_mapping_opt";
+    public static final String ENABLE_HASH_JOIN_LINEAR_CHAINED_OPT = "enable_hash_join_linear_chained_opt";
 
     public static final String ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF =
             "enable_pipeline_level_multi_partitioned_rf";
@@ -704,6 +705,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_VIEW_BASED_MV_REWRITE = "enable_view_based_mv_rewrite";
 
     public static final String ENABLE_CBO_VIEW_BASED_MV_REWRITE = "enable_cbo_view_based_mv_rewrite";
+    public static final String ENABLE_CBO_BASED_MV_REWRITE = "enable_cbo_based_mv_rewrite";
 
     public static final String ENABLE_SPM_REWRITE = "enable_spm_rewrite";
     public static final String SPM_REWRITE_TIMEOUT_MS = "spm_rewrite_timeout_ms";
@@ -1632,6 +1634,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_HASH_JOIN_RANGE_DIRECT_MAPPING_OPT)
     private boolean enableHashJoinRangeDirectMappingOpt = true;
 
+    @VarAttr(name = ENABLE_HASH_JOIN_LINEAR_CHAINED_OPT)
+    private boolean enableHashJoinLinearChainedOpt = true;
+
     @VarAttr(name = ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF)
     private boolean enablePipelineLevelMultiPartitionedRf = false;
 
@@ -2312,6 +2317,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_CBO_VIEW_BASED_MV_REWRITE)
     private boolean enableCBOViewBasedMvRewrite = false;
+
+    // Whether enable mv rewrite in CBO phase, true by default which means will try best to use mv
+    // to rewrite in RBO and CBO phase.
+    @VarAttr(name = ENABLE_CBO_BASED_MV_REWRITE)
+    private boolean enableCBOBasedMVRewrite = true;
 
     @VarAttr(name = ENABLE_SPM_REWRITE)
     private boolean enableSPMRewrite = false;
@@ -4458,6 +4468,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableCBOViewBasedMvRewrite;
     }
 
+    public boolean isEnableCBOBasedMVRewrite() {
+        return enableCBOBasedMVRewrite;
+    }
+
+    public void setEnableCboBasedMvRewrite(boolean enableCBOBasedMVRewrite) {
+        this.enableCBOBasedMVRewrite = enableCBOBasedMVRewrite;
+    }
+
     public int getCboMaterializedViewRewriteRuleOutputLimit() {
         return cboMaterializedViewRewriteRuleOutputLimit;
     }
@@ -5401,6 +5419,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setColumn_view_concat_rows_limit(columnViewConcatRowsLimit);
         tResult.setColumn_view_concat_bytes_limit(columnViewConcatRowsLimit);
         tResult.setEnable_hash_join_range_direct_mapping_opt(enableHashJoinRangeDirectMappingOpt);
+        tResult.setEnable_hash_join_linear_chained_opt(enableHashJoinLinearChainedOpt);
 
         return tResult;
     }
