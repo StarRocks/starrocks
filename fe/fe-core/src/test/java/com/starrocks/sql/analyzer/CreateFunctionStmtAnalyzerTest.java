@@ -15,11 +15,11 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UDFInternalClassLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateFunctionStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;

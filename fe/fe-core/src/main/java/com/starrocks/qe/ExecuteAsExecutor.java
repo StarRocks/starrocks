@@ -17,8 +17,8 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.sql.ast.ExecuteAsStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

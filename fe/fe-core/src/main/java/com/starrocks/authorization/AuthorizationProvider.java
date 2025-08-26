@@ -14,7 +14,7 @@
 
 package com.starrocks.authorization;
 
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.catalog.UserIdentity;
 
 import java.util.List;
 import java.util.Set;

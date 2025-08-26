@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -27,7 +28,6 @@ import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;

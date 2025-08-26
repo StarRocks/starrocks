@@ -14,13 +14,13 @@
 package com.starrocks.epack.authentication;
 
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserLockOption;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

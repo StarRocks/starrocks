@@ -16,6 +16,7 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.http.ActionController;
@@ -24,7 +25,6 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 

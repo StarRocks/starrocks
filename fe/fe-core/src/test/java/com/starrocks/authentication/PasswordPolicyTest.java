@@ -15,6 +15,7 @@
 package com.starrocks.authentication;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.io.Writable;
@@ -43,7 +44,6 @@ import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mock;

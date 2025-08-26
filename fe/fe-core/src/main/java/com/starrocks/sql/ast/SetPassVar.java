@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 
 public class SetPassVar extends SetListItem {

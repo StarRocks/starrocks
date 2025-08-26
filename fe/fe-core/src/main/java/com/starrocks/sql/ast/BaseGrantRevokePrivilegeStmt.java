@@ -19,6 +19,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
 

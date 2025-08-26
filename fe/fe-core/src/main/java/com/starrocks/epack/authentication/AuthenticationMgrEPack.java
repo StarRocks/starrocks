@@ -5,9 +5,9 @@ package com.starrocks.epack.authentication;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.Set;
 

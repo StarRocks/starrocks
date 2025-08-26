@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.epack.authorization.ObjectTypeEPack;
 import com.starrocks.epack.authorization.PrivilegeTypeEPack;
@@ -30,7 +31,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;

@@ -14,9 +14,9 @@
 
 package com.starrocks.http;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.http.HttpAuthManager.SessionValue;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

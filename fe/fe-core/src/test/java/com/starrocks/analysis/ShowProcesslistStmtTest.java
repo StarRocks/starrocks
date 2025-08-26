@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
@@ -26,7 +27,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.ShowProcesslistStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TConnectionInfo;
 import com.starrocks.thrift.TListConnectionResponse;

@@ -14,6 +14,7 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
@@ -22,7 +23,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUserSecurityPolicyRequest;

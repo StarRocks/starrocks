@@ -14,6 +14,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.epack.warehouse.LocalWarehouse;
@@ -24,7 +25,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;

@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
@@ -32,7 +33,6 @@ import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;

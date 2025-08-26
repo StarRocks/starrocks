@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.sql.parser.NodePosition;
 

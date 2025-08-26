@@ -17,13 +17,13 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.Arrays;
 

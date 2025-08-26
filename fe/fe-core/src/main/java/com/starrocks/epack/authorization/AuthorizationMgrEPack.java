@@ -11,11 +11,11 @@ import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.RolePrivilegeCollectionV2;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.IOException;
 import java.util.ArrayList;

@@ -59,7 +59,6 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.Backend;
