@@ -355,8 +355,18 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                                 // sort tablets
                                 Queue<MetaObject> tabletQueue =
+<<<<<<< HEAD
                                             new PriorityQueue<>(Math.max(index.getTablets().size(), 1), COMPARATOR);
                                 tabletQueue.addAll(index.getTablets());
+=======
+                                        new PriorityQueue<>(Math.max(index.getTablets().size(), 1), COMPARATOR);
+                                long startCheckTime = System.currentTimeMillis();
+                                long cooldownedTimeMs = startCheckTime - Config.consistency_check_cooldown_time_second * 1000;
+                                List<Tablet> cooldownedTablets = index.getTablets().stream()
+                                        .filter(t -> t.getLastCheckTime() < cooldownedTimeMs)
+                                        .toList();
+                                tabletQueue.addAll(cooldownedTablets);
+>>>>>>> 012c64ee3b ([BugFix] Fix too many disk io when check consistency (#61745))
 
                                 while ((chosenOne = tabletQueue.poll()) != null) {
                                     LocalTablet tablet = (LocalTablet) chosenOne;
