@@ -57,6 +57,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
@@ -99,7 +100,9 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
+import com.starrocks.load.loadv2.IVMInsertLoadTxnCallback;
 import com.starrocks.load.loadv2.InsertLoadJob;
+import com.starrocks.load.loadv2.InsertLoadTxnCallback;
 import com.starrocks.load.loadv2.LoadErrorUtils;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
@@ -2632,6 +2635,8 @@ public class StmtExecutor {
             InsertLoadJob loadJob = null;
             if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
                     targetTable.isBlackHoleTable())) {
+                InsertLoadTxnCallback insertLoadTxnCallback =
+                        IVMInsertLoadTxnCallback.of(context, database.getId(), targetTable);
                 // insert, update and delete job
                 loadJob = context.getGlobalStateMgr().getLoadMgr().registerInsertLoadJob(
                         label,
@@ -2645,7 +2650,8 @@ public class StmtExecutor {
                         new LoadMgr.EstimateStats(estimateScanRows, estimateFileNum, estimateScanFileSize),
                         getExecTimeout(),
                         context.getCurrentWarehouseId(),
-                        coord);
+                        coord,
+                        insertLoadTxnCallback);
                 loadJob.setJobProperties(stmt.getProperties());
                 jobId = loadJob.getId();
                 if (txnState != null) {

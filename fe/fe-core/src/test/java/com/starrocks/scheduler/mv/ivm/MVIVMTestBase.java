@@ -15,8 +15,9 @@
 package com.starrocks.scheduler.mv.ivm;
 
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
+import com.starrocks.load.loadv2.IVMInsertLoadTxnCallback;
 import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.mv.MVVersionManager;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
@@ -38,7 +39,11 @@ public abstract class MVIVMTestBase extends MVTestBase {
         TaskRun taskRun = buildMVTaskRun(mv, "test");
         ExecPlan execPlan = getMVRefreshExecPlan(taskRun);
         // update version map
-        MVVersionManager.afterTxnCommitted(mv);
+        MvId mvId = mv.getMvId();
+        IVMInsertLoadTxnCallback callback =
+                new IVMInsertLoadTxnCallback(mvId.getDbId(), mv.getId());
+        callback.beforeCommitted(null);
+        callback.afterCommitted(null, true);
         return execPlan;
     }
 

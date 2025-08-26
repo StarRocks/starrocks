@@ -41,7 +41,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
@@ -51,7 +50,6 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.qe.scheduler.Coordinator;
-import com.starrocks.scheduler.mv.MVVersionManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TReportExecStatusParams;
@@ -79,6 +77,7 @@ public class InsertLoadJob extends LoadJob {
     private long estimateScanRow = 0;
     private TLoadJobType loadType;
     private Coordinator coordinator;
+    private InsertLoadTxnCallback txnCallback;
 
     // only for log replay
     public InsertLoadJob() {
@@ -86,8 +85,10 @@ public class InsertLoadJob extends LoadJob {
         this.jobType = EtlJobType.INSERT;
     }
 
-    public InsertLoadJob(String label, long dbId, long tableId, long txnId, String loadId, String user, long createTimestamp,
-                         long timeout, long warehouseId, Coordinator coordinator) {
+    public InsertLoadJob(String label, long dbId, long tableId, long txnId,
+                         String loadId, String user, long createTimestamp,
+                         long timeout, long warehouseId, Coordinator coordinator,
+                         InsertLoadTxnCallback insertLoadTxnCallback) {
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
@@ -101,6 +102,7 @@ public class InsertLoadJob extends LoadJob {
         this.loadIds.add(loadId);
         this.transactionId = txnId;
         this.user = user;
+        this.txnCallback = insertLoadTxnCallback;
     }
 
     // only used for test
@@ -258,6 +260,9 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public void beforeCommitted(TransactionState txnState) throws TransactionException {
+        if (txnCallback != null) {
+            txnCallback.beforeCommitted(txnState);
+        }
     }
 
     @Override
@@ -266,18 +271,8 @@ public class InsertLoadJob extends LoadJob {
             return;
         }
         loadCommittedTimestamp = System.currentTimeMillis();
-
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (database == null) {
-            throw new MetaNotFoundException("Database " + dbId + "has been deleted");
-        }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
-        if (table == null) {
-            throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
-        }
-        if (table.isMaterializedView()) {
-            MaterializedView mv = (MaterializedView) table;
-            MVVersionManager.afterTxnCommitted(mv);
+        if (txnCallback != null) {
+            txnCallback.afterCommitted(txnState, txnOperated);
         }
     }
 

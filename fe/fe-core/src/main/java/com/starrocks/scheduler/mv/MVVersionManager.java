@@ -19,8 +19,6 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.StarRocksException;
-import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.scheduler.MvTaskRunContext;
@@ -269,23 +267,5 @@ public class MVVersionManager {
                         "last refresh time: {}, version meta changed",
                 mv.getName(), maxChangedTableRefreshTime);
         GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
-    }
-
-    public static void afterTxnCommitted(MaterializedView mv) throws StarRocksException {
-        final MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
-        MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-        Map<BaseTableInfo, TvrVersionRange> tempBaseTableInfoTvrVersionRangeMap =
-                asyncRefreshContext.getTempBaseTableInfoTvrDeltaMap();
-        if (tempBaseTableInfoTvrVersionRangeMap == null) {
-            LOG.warn("Materialized view {} has no temp base table info tvr version range map, " +
-                            "skip update version range", mv.getName());
-            return;
-        }
-        LOG.info("Materialized view {} has been committed, " +
-                        "update the base table info tvr version range: {}", mv.getName(),
-                tempBaseTableInfoTvrVersionRangeMap);
-        // update the base table info's tvr version range
-        asyncRefreshContext.replaceWithTempBaseTableInfoTvrDeltaMap();
-        updateEditLogAfterVersionMetaChanged(mv, refreshScheme.getLastRefreshTime());
     }
 }
