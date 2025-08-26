@@ -43,6 +43,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
@@ -451,7 +452,7 @@ public class AnalyticExpr extends Expr {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAnalyticExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAnalyticExpr(this, context);
     }
 
     @Override

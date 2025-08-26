@@ -60,7 +60,7 @@ public class ShowResourceGroupUsageStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowResourceGroupUsageStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowResourceGroupUsageStatement(this, context);
     }
 
     public String getGroupName() {

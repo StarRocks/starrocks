@@ -144,6 +144,6 @@ public class DropPartitionClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropPartitionClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropPartitionClause(this, context);
     }
 }

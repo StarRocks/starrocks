@@ -60,7 +60,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.ArrayExpr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
@@ -136,7 +136,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
 import static java.util.stream.Collectors.toList;
 
-public class AST2StringVisitor implements AstVisitor<String, Void> {
+public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void> {
     // use options:
     //   addFunctionDbName;
     //   withBackquote;

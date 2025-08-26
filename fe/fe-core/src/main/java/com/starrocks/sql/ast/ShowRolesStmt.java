@@ -29,7 +29,7 @@ public class ShowRolesStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowRolesStatement(this, context);
     }
 
 }

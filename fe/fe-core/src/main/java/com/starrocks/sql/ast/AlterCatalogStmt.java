@@ -37,6 +37,6 @@ public class AlterCatalogStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterCatalogStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterCatalogStatement(this, context);
     }
 }

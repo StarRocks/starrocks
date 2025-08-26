@@ -42,6 +42,6 @@ public class ModifyFrontendAddressClause extends FrontendClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitModifyFrontendHostClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitModifyFrontendHostClause(this, context);
     }
 }

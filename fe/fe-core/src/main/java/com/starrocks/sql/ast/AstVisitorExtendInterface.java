@@ -94,7 +94,7 @@ import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 
-public interface AstVisitor<R, C> {
+public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     default R visit(ParseNode node) {
         return visit(node, null);
     }

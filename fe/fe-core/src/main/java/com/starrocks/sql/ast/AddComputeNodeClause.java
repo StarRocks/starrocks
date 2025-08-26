@@ -38,6 +38,6 @@ public class AddComputeNodeClause extends ComputeNodeClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAddComputeNodeClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddComputeNodeClause(this, context);
     }
 }

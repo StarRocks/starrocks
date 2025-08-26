@@ -145,6 +145,6 @@ public class ShowLoadStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowLoadStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowLoadStatement(this, context);
     }
 }

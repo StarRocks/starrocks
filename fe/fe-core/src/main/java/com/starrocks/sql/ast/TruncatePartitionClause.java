@@ -37,7 +37,7 @@ public class TruncatePartitionClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitTruncatePartitionClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitTruncatePartitionClause(this, context);
     }
 
 

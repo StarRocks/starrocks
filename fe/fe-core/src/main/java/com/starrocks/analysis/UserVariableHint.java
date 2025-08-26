@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.parser.NodePosition;
@@ -48,7 +49,7 @@ public class UserVariableHint extends HintNode {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitUserVariableHint(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitUserVariableHint(this, context);
     }
 
 }

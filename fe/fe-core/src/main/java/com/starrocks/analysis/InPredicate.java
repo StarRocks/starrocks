@@ -38,6 +38,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -179,6 +180,6 @@ public class InPredicate extends Predicate {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
-        return visitor.visitInPredicate(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitInPredicate(this, context);
     }
 }

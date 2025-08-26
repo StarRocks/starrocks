@@ -69,7 +69,7 @@ import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
@@ -113,7 +113,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
-public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
+public class AlterJobExecutor implements AstVisitorExtendInterface<Void, ConnectContext> {
     protected static final Logger LOG = LogManager.getLogger(AlterJobExecutor.class);
     protected TableName tableName;
     protected Database db;

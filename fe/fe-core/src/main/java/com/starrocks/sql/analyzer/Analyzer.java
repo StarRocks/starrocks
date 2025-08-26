@@ -41,7 +41,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
@@ -192,7 +192,7 @@ public class Analyzer {
         GlobalStateMgr.getCurrentState().getAnalyzer().analyzerVisitor.visit(statement, context);
     }
 
-    public static class AnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class AnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private static final Analyzer.AnalyzerVisitor INSTANCE = new Analyzer.AnalyzerVisitor();
 
         public static Analyzer.AnalyzerVisitor getInstance() {
