@@ -158,6 +158,11 @@ public class EditLog {
                     globalStateMgr.setNextId(id + 1);
                     break;
                 }
+                case OperationType.OP_SAVE_NEXTID_V2: {
+                    NextIdLog nextIdLog = (NextIdLog) journal.data();
+                    globalStateMgr.setNextId(nextIdLog.getId() + 1);
+                    break;
+                }
                 case OperationType.OP_SAVE_TRANSACTION_ID_V2: {
                     TransactionIdInfo idInfo = (TransactionIdInfo) journal.data();
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
@@ -195,6 +200,11 @@ public class EditLog {
                 case OperationType.OP_ERASE_DB: {
                     Text dbId = (Text) journal.data();
                     globalStateMgr.getLocalMetastore().replayEraseDatabase(Long.parseLong(dbId.toString()));
+                    break;
+                }
+                case OperationType.OP_ERASE_DB_V2: {
+                    EraseDbLog eraseDbLog = (EraseDbLog) journal.data();
+                    globalStateMgr.getLocalMetastore().replayEraseDatabase(eraseDbLog.getDbId());
                     break;
                 }
                 case OperationType.OP_RECOVER_DB_V2: {
@@ -302,6 +312,11 @@ public class EditLog {
                 case OperationType.OP_ERASE_PARTITION: {
                     Text partitionId = (Text) journal.data();
                     globalStateMgr.getLocalMetastore().replayErasePartition(Long.parseLong(partitionId.toString()));
+                    break;
+                }
+                case OperationType.OP_ERASE_PARTITION_V2: {
+                    ErasePartitionLog erasePartitionLog = (ErasePartitionLog) journal.data();
+                    globalStateMgr.getLocalMetastore().replayErasePartition(erasePartitionLog.getPartitionId());
                     break;
                 }
                 case OperationType.OP_RECOVER_TABLE_V2: {
@@ -520,6 +535,11 @@ public class EditLog {
                     globalStateMgr.getBrokerMgr().replayDropAllBroker(param);
                     break;
                 }
+                case OperationType.OP_DROP_ALL_BROKER_V2: {
+                    DropBrokerLog dropBrokerLog = (DropBrokerLog) journal.data();
+                    globalStateMgr.getBrokerMgr().replayDropAllBroker(dropBrokerLog.getBrokerName());
+                    break;
+                }
                 case OperationType.OP_UPSERT_TRANSACTION_STATE_V2: {
                     final TransactionState state = (TransactionState) journal.data();
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().replayUpsertTransactionState(state);
@@ -540,6 +560,11 @@ public class EditLog {
                 case OperationType.OP_DROP_REPOSITORY: {
                     String repoName = ((Text) journal.data()).toString();
                     globalStateMgr.getBackupHandler().getRepoMgr().removeRepo(repoName, true);
+                    break;
+                }
+                case OperationType.OP_DROP_REPOSITORY_V2: {
+                    DropRepositoryLog dropRepositoryLog = (DropRepositoryLog) journal.data();
+                    globalStateMgr.getBackupHandler().getRepoMgr().removeRepo(dropRepositoryLog.getRepositoryName(), true);
                     break;
                 }
                 case OperationType.OP_TRUNCATE_TABLE: {
@@ -1383,7 +1408,7 @@ public class EditLog {
     }
 
     public void logSaveNextId(long nextId) {
-        logEdit(OperationType.OP_SAVE_NEXTID, new Text(Long.toString(nextId)));
+        logJsonObject(OperationType.OP_SAVE_NEXTID_V2, new NextIdLog(nextId));
     }
 
     public void logSaveTransactionId(long transactionId) {
@@ -1409,7 +1434,7 @@ public class EditLog {
     }
 
     public void logEraseDb(long dbId) {
-        logEdit(OperationType.OP_ERASE_DB, new Text(Long.toString(dbId)));
+        logJsonObject(OperationType.OP_ERASE_DB_V2, new EraseDbLog(dbId));
     }
 
     public void logRecoverDb(RecoverInfo info) {
@@ -1473,7 +1498,7 @@ public class EditLog {
     }
 
     public void logErasePartition(long partitionId) {
-        logEdit(OperationType.OP_ERASE_PARTITION, new Text(Long.toString(partitionId)));
+        logJsonObject(OperationType.OP_ERASE_PARTITION_V2, new ErasePartitionLog(partitionId));
     }
 
     public void logRecoverPartition(RecoverInfo info) {
@@ -1630,7 +1655,7 @@ public class EditLog {
     }
 
     public void logDropAllBroker(String brokerName) {
-        logEdit(OperationType.OP_DROP_ALL_BROKER, new Text(brokerName));
+        logJsonObject(OperationType.OP_DROP_ALL_BROKER_V2, new DropBrokerLog(brokerName));
     }
 
     public void logExportCreate(ExportJob job) {
@@ -1663,7 +1688,7 @@ public class EditLog {
     }
 
     public void logDropRepository(String repoName) {
-        logEdit(OperationType.OP_DROP_REPOSITORY, new Text(repoName));
+        logJsonObject(OperationType.OP_DROP_REPOSITORY_V2, new DropRepositoryLog(repoName));
     }
 
     public void logRestoreJob(RestoreJob job) {
@@ -1767,7 +1792,12 @@ public class EditLog {
     }
 
     public JournalTask logAlterJobNoWait(AlterJobV2 alterJob) {
-        return submitLog(OperationType.OP_ALTER_JOB_V2, alterJob, -1);
+        return submitLog(OperationType.OP_ALTER_JOB_V2, new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, GsonUtils.GSON.toJson(alterJob));
+            }
+        }, -1);
     }
 
     public void logBatchAlterJob(BatchAlterJobPersistInfo batchAlterJobV2) {
