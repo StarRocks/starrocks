@@ -574,8 +574,7 @@ public class CreateTableAnalyzer {
                         partitionDesc instanceof SingleItemListPartitionDesc ||
                         partitionDesc instanceof SingleRangePartitionDesc) {
                     try {
-                        PartitionDescAnalyzer.analyze(partitionDesc);
-                        partitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
+                        PartitionDescAnalyzer.analyze(partitionDesc, stmt.getColumnDefs(), stmt.getProperties());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
@@ -591,8 +590,7 @@ public class CreateTableAnalyzer {
                 } else if (partitionDesc instanceof ExpressionPartitionDesc) {
                     ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
                     try {
-                        PartitionDescAnalyzer.analyze(partitionDesc);
-                        expressionPartitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
+                        PartitionDescAnalyzer.analyze(expressionPartitionDesc, stmt.getColumnDefs(), stmt.getProperties());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }

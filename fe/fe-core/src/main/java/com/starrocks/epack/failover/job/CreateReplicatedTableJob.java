@@ -25,6 +25,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -249,7 +250,7 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         List<ColumnDef> columnDefs = table.getBaseSchema().stream().map(column -> column.toColumnDef(table))
                 .collect(Collectors.toList());
         try {
-            expressionPartitionDesc.analyze(columnDefs, Collections.emptyMap());
+            PartitionDescAnalyzer.analyzeExpressionPartitionDesc(expressionPartitionDesc, columnDefs, Collections.emptyMap());
         } catch (Exception e) {
             throw new RuntimeException("Failed to analyze expression partition desc, ", e);
         }
@@ -268,7 +269,7 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         List<ColumnDef> columnDefs = table.getBaseSchema().stream().map(column -> column.toColumnDef(table))
                 .collect(Collectors.toList());
         try {
-            expressionPartitionDesc.analyze(columnDefs, Collections.emptyMap());
+            PartitionDescAnalyzer.analyzeExpressionPartitionDesc(expressionPartitionDesc, columnDefs, Collections.emptyMap());
         } catch (Exception e) {
             throw new RuntimeException("Failed to analyze expression partition desc, ", e);
         }

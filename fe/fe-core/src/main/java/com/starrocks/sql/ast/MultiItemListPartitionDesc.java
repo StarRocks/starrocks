@@ -20,7 +20,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.lake.DataCacheInfo;
-import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TTabletType;
 
@@ -79,20 +78,8 @@ public class MultiItemListPartitionDesc extends SinglePartitionDesc {
         return multiPartitionValues;
     }
 
-    public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
-        FeNameFormat.checkPartitionName(getPartitionName());
-        analyzeValues(columnDefList.size());
-        analyzeProperties(tableProperties, null);
+    public void setColumnDefList(List<ColumnDef> columnDefList) {
         this.columnDefList = columnDefList;
-    }
-
-    private void analyzeValues(int partitionColSize) throws AnalysisException {
-        for (List<String> values : this.multiValues) {
-            if (values.size() != partitionColSize) {
-                throw new AnalysisException(
-                        "(" + String.join(",", values) + ") size should be equal to partition column size ");
-            }
-        }
     }
 
     @Override

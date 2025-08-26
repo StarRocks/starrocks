@@ -15,17 +15,15 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.lake.DataCacheInfo;
-import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TTabletType;
 
 import java.util.Map;
 
 public class SingleRangePartitionDesc extends SinglePartitionDesc {
-    private PartitionKeyDesc partitionKeyDesc;
+    private final PartitionKeyDesc partitionKeyDesc;
 
     public SingleRangePartitionDesc(boolean ifNotExists, String partName, Short replicationNum,
                                     DataProperty dataProperty, TTabletType tabletType, Long versionInfo, boolean isInMemory,
@@ -47,17 +45,6 @@ public class SingleRangePartitionDesc extends SinglePartitionDesc {
 
     public PartitionKeyDesc getPartitionKeyDesc() {
         return partitionKeyDesc;
-    }
-
-    public void analyze(int partColNum, Map<String, String> tableProperties) throws AnalysisException {
-        FeNameFormat.checkPartitionName(getPartitionName());
-        partitionKeyDesc.analyze(partColNum);
-
-        if (partColNum == 1) {
-            analyzeProperties(tableProperties, partitionKeyDesc);
-        } else {
-            analyzeProperties(tableProperties, null);
-        }
     }
 
     @Override
