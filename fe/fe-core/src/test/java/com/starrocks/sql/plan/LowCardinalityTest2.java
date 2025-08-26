@@ -1242,7 +1242,9 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     "  |  aggregate: approx_count_distinct[([11: S_ADDRESS, INT, false]); args: INT; " +
                     "result: VARBINARY; args nullable: false; result nullable: false]\n" +
                     "  |  group by: [12: upper, INT, true]\n" +
-                    "  |  cardinality: 1");
+                    "  |  group by min-max stats:\n" +
+                    "  |  - 0:1\n" +
+                    "  |  cardinality: 1\n");
             assertContains(plan, "Global Dict Exprs:\n" +
                     "    12: DictDefine(11: S_ADDRESS, [upper(<place-holder>)])");
             // TODO add a case: Decode node before Sort Node
