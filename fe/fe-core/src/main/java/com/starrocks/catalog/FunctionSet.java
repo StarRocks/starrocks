@@ -100,6 +100,7 @@ public class FunctionSet {
     public static final String TIMESTAMPADD = "timestampadd";
     public static final String TIMESTAMPDIFF = "timestampdiff";
     public static final String TO_DATE = "to_date";
+    public static final String TO_DATETIME = "to_datetime";
     public static final String DATE = "date";
     public static final String LAST_DAY = "last_day";
     public static final String MAKEDATE = "makedate";
