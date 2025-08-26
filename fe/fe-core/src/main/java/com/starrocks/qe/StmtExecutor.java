@@ -182,6 +182,7 @@ import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
@@ -552,7 +553,6 @@ public class StmtExecutor {
     private ExecPlan generateExecPlan() throws Exception {
         ExecPlan execPlan = null;
         try (Timer ignored = Tracers.watchScope("Total")) {
-            redirectStatus = RedirectStatus.getRedirectStatus(parsedStmt);
             if (!isForwardToLeader()) {
                 if (context.shouldDumpQuery()) {
                     if (context.getDumpInfo() == null) {
@@ -668,8 +668,16 @@ public class StmtExecutor {
                 context.setExplainLevel(null);
             }
 
-            // for explain query(not explain analyze), we can trace even if optimizer fails and execPlan is null
-            if (parsedStmt.isExplainTrace()) {
+            redirectStatus = RedirectStatus.getRedirectStatus(parsedStmt);
+            // for explain query, we can trace even if optimizer fails and execPlan is null
+            // for refresh materialized view, use handleDdlStmt instead.
+            if (parsedStmt.isExplainTrace() && !(parsedStmt instanceof RefreshMaterializedViewStatement)) {
+                if (isForwardToLeader()) {
+                    context.setIsForward(true);
+                    forwardToLeader();
+                    return;
+                }
+
                 ExecPlan execPlan = null;
                 try {
                     execPlan = generateExecPlan();
