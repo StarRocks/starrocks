@@ -54,7 +54,6 @@ public class PruneSubfieldRule extends TransformationRule {
             .add(FunctionSet.JSON_QUERY)
             .add(FunctionSet.JSON_EXISTS)
             .add(FunctionSet.JSON_LENGTH)
-            .add(FunctionSet.JSON_REMOVE)
             .build();
 
     public static final List<String> PRUNE_FUNCTIONS = ImmutableList.<String>builder()
