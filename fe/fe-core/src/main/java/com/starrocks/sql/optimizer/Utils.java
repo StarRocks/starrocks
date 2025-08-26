@@ -197,11 +197,13 @@ public class Utils {
         return list;
     }
 
+    /**
+     * Extract all operators satisfied the predicate
+     */
     public static <E extends Operator> void extractOperator(OptExpression root, List<E> list,
                                                             Predicate<Operator> lambda) {
         if (lambda.test(root.getOp())) {
             list.add((E) root.getOp());
-            return;
         }
 
         List<OptExpression> inputs = root.getInputs();
@@ -210,11 +212,13 @@ public class Utils {
         }
     }
 
+    /**
+     * Extract all operators satisfied the predicate
+     */
     private static <E extends Operator> void extractOperator(GroupExpression root, List<E> list,
                                                              Predicate<Operator> lambda) {
         if (lambda.test(root.getOp())) {
             list.add((E) root.getOp());
-            return;
         }
 
         List<Group> groups = root.getInputs();

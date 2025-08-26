@@ -308,6 +308,11 @@ public class JsonPathRewriteTest extends PlanTestBase {
                 Arguments.of(
                         "select case when get_json_string(c2, 'f13') = 'x' then 1 else 0 end from extend_predicate2",
                         "3 <-> DictDecode(5: c2.f13, [if(<place-holder> = 'x', 1, 0)])"
+                ),
+                // 15. JSON with MinMaxStats optimization
+                Arguments.of(
+                        "select get_json_string(c2, 'f1') k1, count(*) from extend_predicate2 group by k1",
+                        "group by min-max stats"
                 )
 
         );

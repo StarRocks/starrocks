@@ -179,6 +179,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         this.groupByMinMaxStats = groupByMinMaxStats;
     }
 
+    @Override
     public void disablePhysicalPropertyOptimize() {
         setUseSortAgg(false);
         setUsePerBucketOptimize(false);
