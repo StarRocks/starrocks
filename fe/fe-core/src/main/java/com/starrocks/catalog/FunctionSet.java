@@ -43,11 +43,15 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
+<<<<<<< HEAD
 import com.starrocks.catalog.combinator.AggStateCombinator;
+=======
+>>>>>>> a5528963b0 ([Enhancement] Rewrite MIN(f(col)) to f(MIN(col)) for Monotonic Functions (#62225))
 import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
+import com.starrocks.catalog.combinator.StateFunctionCombinator;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -100,6 +104,7 @@ public class FunctionSet {
     public static final String TIMESTAMPADD = "timestampadd";
     public static final String TIMESTAMPDIFF = "timestampdiff";
     public static final String TO_DATE = "to_date";
+    public static final String TO_DATETIME = "to_datetime";
     public static final String DATE = "date";
     public static final String LAST_DAY = "last_day";
     public static final String MAKEDATE = "makedate";
