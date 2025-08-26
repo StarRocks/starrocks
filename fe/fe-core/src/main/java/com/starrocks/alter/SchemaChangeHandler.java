@@ -2053,25 +2053,28 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
                 MaterializedIndexMeta meta = entry.getValue();
                 List<Column> schema = meta.getSchema();
+                String indexName = olapTable.getIndexNameById(id);
                 // ignore agg_keys type because it's like duplicated without agg functions
                 boolean hasAggregateFunction = olapTable.getKeysType() != KeysType.AGG_KEYS &&
                         schema.stream().anyMatch(x -> x.isAggregated());
                 if (hasAggregateFunction) {
                     for (Column rollupCol : schema) {
-                        if (modifiedColumns.contains(rollupCol.getName())) {
+                        String colName = rollupCol.getName();
+                        if (modifiedColumns.contains(colName)) {
                             throw new DdlException(String.format("Can not drop/modify the column %s, " +
                                             "because the column is used in the related rollup %s, " +
-                                            "please drop the rollup index first.",
-                                    rollupCol.getName(), olapTable.getIndexNameById(meta.getIndexId())));
+                                            "please drop the rollup index first.", colName, indexName));
                         }
                         if (rollupCol.getRefColumns() != null) {
                             for (SlotRef refColumn : rollupCol.getRefColumns()) {
-                                if (modifiedColumns.contains(refColumn.getColumnName())) {
+                                String refColName = refColumn.getColumnName();
+                                if (modifiedColumns.contains(refColName)) {
+                                    String defineExprSql = rollupCol.getDefineExpr() == null ? "" :
+                                            rollupCol.getDefineExpr().toSql();
                                     throw new DdlException(String.format("Can not drop/modify the column %s, " +
                                                     "because the column is used in the related rollup %s " +
                                                     "with the define expr:%s, please drop the rollup index first.",
-                                            rollupCol.getName(), olapTable.getIndexNameById(meta.getIndexId()),
-                                            rollupCol.getDefineExpr().toSql()));
+                                            refColName, indexName, defineExprSql));
                                 }
                             }
                         }
@@ -2082,12 +2085,13 @@ public class SchemaChangeHandler extends AlterHandler {
                     List<SlotRef> whereSlots = new ArrayList<>();
                     whereExpr.collect(SlotRef.class, whereSlots);
                     for (SlotRef refColumn : whereSlots) {
-                        if (modifiedColumns.contains(refColumn.getColumnName())) {
+                        String colName = refColumn.getColumnName();
+                        if (modifiedColumns.contains(colName)) {
+                            String whereExprSql = whereExpr.toSql();
                             throw new DdlException(String.format("Can not drop/modify the column %s, " +
                                             "because the column is used in the related rollup %s " +
                                             "with the where expr:%s, please drop the rollup index first.",
-                                    refColumn.getColumn().getName(), olapTable.getIndexNameById(meta.getIndexId()),
-                                    meta.getWhereClause().toSql()));
+                                    colName, indexName, whereExprSql));
                         }
                     }
                 }
