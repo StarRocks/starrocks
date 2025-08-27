@@ -141,7 +141,7 @@ public:
                 .format = formats::PARQUET,
                 .file_statistics =
                         {
-                                .record_count = num_rows,
+                                .record_count = static_cast<int64_t>(num_rows),
                         },
                 .location = "path/to/directory/data.parquet",
         };
