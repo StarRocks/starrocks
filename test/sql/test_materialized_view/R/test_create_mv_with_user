@@ -31,7 +31,6 @@ GRANT SELECT, DROP, ALTER, REFRESH ON ALL MATERIALIZED VIEWS IN DATABASE test_cr
     TO USER mv_creator@'${ip[1]}';
 -- result:
 -- !result
-    
 GRANT IMPERSONATE ON USER root TO mv_creator@'${ip[1]}';
 -- result:
 -- !result
@@ -44,7 +43,7 @@ create table t1(c1 int, c2 int);
 insert into t1 values(1,1);
 -- result:
 -- !result
-create materialized view mv1 refresh async as select * from t1;
+create materialized view mv1 REFRESH MANUAL as select * from t1;
 -- result:
 -- !result
 refresh materialized view mv1;
@@ -62,5 +61,173 @@ execute as root with no revert;
 -- result:
 -- !result
 drop user mv_creator@'${ip[1]}';
+-- result:
+-- !result
+DROP USER IF EXISTS mv_multi_role_user@'${ip[1]}';
+-- result:
+-- !result
+DROP ROLE IF EXISTS role_with_refresh;
+-- result:
+-- !result
+DROP ROLE IF EXISTS role_without_refresh;
+-- result:
+-- !result
+CREATE ROLE role_with_refresh;
+-- result:
+-- !result
+GRANT SELECT, DROP, ALTER, REFRESH ON ALL MATERIALIZED VIEWS IN DATABASE test_create_mv_with_user TO ROLE role_with_refresh;
+-- result:
+-- !result
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN DATABASE test_create_mv_with_user TO ROLE role_with_refresh;
+-- result:
+-- !result
+GRANT CREATE TABLE, CREATE MATERIALIZED VIEW ON DATABASE test_create_mv_with_user TO ROLE role_with_refresh;
+-- result:
+-- !result
+CREATE ROLE role_without_refresh;
+-- result:
+-- !result
+GRANT SELECT, DROP, ALTER ON ALL MATERIALIZED VIEWS IN DATABASE test_create_mv_with_user TO ROLE role_without_refresh;
+-- result:
+-- !result
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN DATABASE test_create_mv_with_user TO ROLE role_without_refresh;
+-- result:
+-- !result
+GRANT CREATE TABLE, CREATE MATERIALIZED VIEW ON DATABASE test_create_mv_with_user TO ROLE role_without_refresh;
+-- result:
+-- !result
+CREATE USER mv_multi_role_user@'${ip[1]}';
+-- result:
+-- !result
+GRANT role_with_refresh, role_without_refresh TO USER mv_multi_role_user@'${ip[1]}';
+-- result:
+-- !result
+GRANT IMPERSONATE ON USER root TO mv_multi_role_user@'${ip[1]}';
+-- result:
+-- !result
+GRANT CREATE TABLE, CREATE MATERIALIZED VIEW ON DATABASE test_create_mv_with_user TO USER mv_multi_role_user@'${ip[1]}';
+-- result:
+-- !result
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN DATABASE test_create_mv_with_user TO USER mv_multi_role_user@'${ip[1]}';
+-- result:
+-- !result
+SET DEFAULT ROLE NONE TO mv_multi_role_user@'${ip[1]}';
+-- result:
+-- !result
+EXECUTE AS mv_multi_role_user@'${ip[1]}' with no revert;
+-- result:
+-- !result
+SET ROLE role_with_refresh;
+-- result:
+-- !result
+SELECT current_role();
+-- result:
+role_with_refresh
+-- !result
+CREATE TABLE test_mv_table(id int, name varchar(20), value int);
+-- result:
+-- !result
+INSERT INTO test_mv_table VALUES (1, 'test1', 100), (2, 'test2', 200);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv_async REFRESH MANUAL AS 
+SELECT id, name, SUM(value) as total_value 
+FROM test_mv_table 
+GROUP BY id, name;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv_async WITH SYNC MODE;
+EXECUTE AS root with no revert;
+-- result:
+-- !result
+DROP MATERIALIZED VIEW test_mv_async;
+-- result:
+-- !result
+DROP TABLE test_mv_table;
+-- result:
+-- !result
+SET DEFAULT ROLE role_with_refresh TO mv_multi_role_user@'${ip[1]}';
+-- result:
+-- !result
+EXECUTE AS mv_multi_role_user@'${ip[1]}' with no revert;
+-- result:
+-- !result
+SET ROLE role_with_refresh;
+-- result:
+-- !result
+CREATE TABLE test_mv_table2(id int, name varchar(20), value int);
+-- result:
+-- !result
+INSERT INTO test_mv_table2 VALUES (1, 'test1', 100), (2, 'test2', 200);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv_async2 REFRESH MANUAL AS 
+SELECT id, name, SUM(value) as total_value 
+FROM test_mv_table2 
+GROUP BY id, name;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv_async2 WITH SYNC MODE;
+SELECT * FROM test_mv_async2 ORDER BY id;
+-- result:
+1	test1	100
+2	test2	200
+-- !result
+EXECUTE AS root with no revert;
+-- result:
+-- !result
+DROP MATERIALIZED VIEW test_mv_async2;
+-- result:
+-- !result
+DROP TABLE test_mv_table2;
+-- result:
+-- !result
+SET DEFAULT ROLE role_without_refresh TO mv_multi_role_user@'${ip[1]}';
+-- result:
+-- !result
+EXECUTE AS mv_multi_role_user@'${ip[1]}' with no revert;
+-- result:
+-- !result
+SET ROLE role_with_refresh;
+-- result:
+-- !result
+SELECT current_role();
+-- result:
+role_with_refresh
+-- !result
+CREATE TABLE test_mv_table3(id int, name varchar(20), value int);
+-- result:
+-- !result
+INSERT INTO test_mv_table3 VALUES (1, 'test1', 100), (2, 'test2', 200);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv_async3 REFRESH MANUAL AS 
+SELECT id, name, SUM(value) as total_value 
+FROM test_mv_table3 
+GROUP BY id, name;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv_async3 WITH SYNC MODE;
+SELECT * FROM test_mv_async3 ORDER BY id;
+-- result:
+1	test1	100
+2	test2	200
+-- !result
+EXECUTE AS root with no revert;
+-- result:
+-- !result
+DROP MATERIALIZED VIEW test_mv_async3;
+-- result:
+-- !result
+DROP TABLE test_mv_table3;
+-- result:
+-- !result
+DROP ROLE role_with_refresh;
+-- result:
+-- !result
+DROP ROLE role_without_refresh;
+-- result:
+-- !result
+DROP USER mv_multi_role_user@'${ip[1]}';
 -- result:
 -- !result
