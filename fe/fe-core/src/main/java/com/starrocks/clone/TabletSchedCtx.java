@@ -402,6 +402,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.errMsg = errMsg;
     }
 
+    public String getErrMsg() {
+        return errMsg;
+    }
+
     public long getCopySize() {
         return copySize;
     }
@@ -601,7 +605,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
          */
         List<Replica> candidates = getHealthyReplicas();
         if (candidates.isEmpty()) {
-            throw new SchedException(Status.UNRECOVERABLE, "unable to find source replica");
+            throw new SchedException(Status.UNRECOVERABLE,
+                    "unable to find source replica. replicas: " + tablet.getReplicaInfos());
         }
 
         // Shuffle the candidate list first so that we won't always choose the same replica with
@@ -701,7 +706,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         if (chosenReplica == null) {
-            throw new SchedException(Status.UNRECOVERABLE, "unable to choose dest replica(maybe no incomplete replica");
+            throw new SchedException(Status.UNRECOVERABLE,
+                    "unable to choose dest replica(maybe no incomplete replica). replicas: " + tablet.getReplicaInfos());
         }
 
         // check if the dest replica has available slot
