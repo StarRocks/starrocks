@@ -39,6 +39,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.qe.SessionVariableConstants.AggregationStage.AUTO;
 import static com.starrocks.qe.SessionVariableConstants.AggregationStage.TWO_STAGE;
@@ -131,6 +132,23 @@ public abstract class SplitAggregateRule extends TransformationRule {
                 && !FeConstants.runningUnitTest
                 && CollectionUtils.isNotEmpty(operator.getGroupingKeys())
                 && ConnectContext.get().getSessionVariable().isCboEnableSingleNodePreferTwoStageAggregate()) {
+            List<ColumnRefOperator> partitionByColumns = operator.getPartitionByColumns();
+
+            Statistics inputStatistics = input.getGroupExpression().inputAt(0).getStatistics();
+            List<ColumnStatistic> partitionByColumnStatistics = partitionByColumns.stream().
+                    map(inputStatistics::getColumnStatistic).collect(Collectors.toList());
+            if (partitionByColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
+                return true;
+            }
+
+            double aggOutputRow =
+                    StatisticsCalculator.computeGroupByStatistics(partitionByColumns, inputStatistics,
+                            Maps.newHashMap());
+            // if partition by column's ndv is too small, two phase agg may not scale
+            if (aggOutputRow <= LOW_AGGREGATE_EFFECT_COEFFICIENT * 10) {
+                return false;
+            }
+
             return true;
         }
 
