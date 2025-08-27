@@ -548,7 +548,7 @@ public class TabletScheduler extends FrontendDaemon {
         LOG.debug("pending tablets current count: {}\n{}", pendingTablets.size(), sb);
     }
 
-    private boolean checkIfTabletExpired(TabletSchedCtx ctx) {
+    protected boolean checkIfTabletExpired(TabletSchedCtx ctx) {
         return checkIfTabletExpired(ctx, GlobalStateMgr.getCurrentState().getRecycleBin(), System.currentTimeMillis());
     }
 
@@ -647,7 +647,9 @@ public class TabletScheduler extends FrontendDaemon {
                 LOG.warn("got unexpected exception, discard this schedule. tablet: {}",
                         tabletCtx.getTabletId(), e);
                 stat.counterTabletScheduledFailed.incrementAndGet();
-                finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
+                String errMsg = e.getMessage();
+                tabletCtx.setErrMsg(errMsg);
+                finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, errMsg);
                 continue;
             }
 
@@ -1109,7 +1111,8 @@ public class TabletScheduler extends FrontendDaemon {
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
-        throw new SchedException(Status.UNRECOVERABLE, "unable to delete any redundant replicas");
+        throw new SchedException(Status.UNRECOVERABLE, "unable to delete any redundant replicas. replicas: " +
+                tabletCtx.getTablet().getReplicaInfos());
     }
 
     private boolean deleteBackendDropped(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
@@ -1343,7 +1346,8 @@ public class TabletScheduler extends FrontendDaemon {
                 deleteReplicaInternal(tabletCtx, replica, "colocate redundant", forceDropBad);
                 throw new SchedException(Status.FINISHED, "colocate redundant replica is deleted");
             }
-            throw new SchedException(Status.UNRECOVERABLE, "unable to delete any colocate redundant replicas");
+            throw new SchedException(Status.UNRECOVERABLE, "unable to delete any colocate redundant replicas. replicas: " +
+                    tabletCtx.getTablet().getReplicaInfos() + ", backend set: " + backendSet);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
@@ -1853,7 +1857,9 @@ public class TabletScheduler extends FrontendDaemon {
             LOG.warn("got unexpected exception when finish clone task. tablet: {}",
                     tabletCtx.getTabletId(), e);
             stat.counterTabletScheduledDiscard.incrementAndGet();
-            finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
+            String errMsg = e.getMessage();
+            tabletCtx.setErrMsg(errMsg);
+            finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, errMsg);
             return;
         }
 
