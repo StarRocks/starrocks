@@ -76,7 +76,7 @@ insert overwrite mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 select 'new_a', 3, '2
 insert overwrite mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 select 'new_b', 3, '2023-12-02';
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
 True

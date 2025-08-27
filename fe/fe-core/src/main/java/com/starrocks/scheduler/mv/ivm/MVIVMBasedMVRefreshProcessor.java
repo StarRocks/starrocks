@@ -59,6 +59,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -204,16 +205,55 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
         IcebergTable icebergTable = (IcebergTable) snapshotTable;
 
         final TvrTableDelta maxTvrDelta = getMaxBaseTableChangedDelta(baseTableInfo, icebergTable, mvTvrVersionRangeMap);
-        // for sync refresh, we always use the max changed delta
-        ExecuteOption executeOption = mvContext.getExecuteOption();
-        boolean isSyncRefresh = executeOption != null && executeOption.getIsSync();
-        if (isSyncRefresh) {
+        // if no change, return empty
+        if (maxTvrDelta.isEmpty()) {
+            return maxTvrDelta;
+        }
+
+        // check the delta traits between the max delta
+        List<TvrTableDeltaTrait> tableDeltaTraits = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .listTableDeltaTraits(baseTableInfo.getDbName(), icebergTable,
+                        maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot());
+        if (CollectionUtils.isEmpty(tableDeltaTraits)) {
+            logger.warn("No tvr delta traits found for base table: {}, db: {}", baseTableInfo.getTableName(),
+                    baseTableInfo.getDbName());
+            throw new SemanticException("No tvr delta traits found for base table: %s.%s",
+                    baseTableInfo.getDbName(), baseTableInfo.getTableName());
+        }
+        // check whether the last delta trait is equal to the max delta
+        TvrTableDeltaTrait lastTvrDeltaTrait = tableDeltaTraits.get(tableDeltaTraits.size() - 1);
+        TvrTableSnapshot lastTvrDeltaSnapshot = lastTvrDeltaTrait.getTvrDelta().toSnapshot();
+        if (!lastTvrDeltaSnapshot.equals(maxTvrDelta.toSnapshot())) {
+            logger.warn("The last tvr delta snapshot: {} is not equal to the max tvr delta snapshot: {}, " +
+                    "use the max tvr delta instead", lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot());
+            throw new SemanticException("The last tvr delta snapshot: %s is not equal to the max tvr delta snapshot: %s",
+                    lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot());
+        }
+        for (TvrTableDeltaTrait deltaTrait : tableDeltaTraits) {
+            // TODO: We may need to handle the case where the deltaTrait is not append-only.
+            if (!deltaTrait.isAppendOnly()) {
+                throw new SemanticException("TvrTableDeltaTrait is not append-only for base table: %s.%s, delta:%s",
+                        baseTableInfo.getDbName(), baseTableInfo.getTableName(), deltaTrait);
+            }
+        }
+        boolean isIVMRefreshAdaptive = isIVMRefreshAdaptive();
+        if (isIVMRefreshAdaptive) {
+            return getBaseTableChangedDeltaAdaptive(baseTableInfo, tableDeltaTraits, maxTvrDelta);
+        } else {
             logger.info("Base table: {}, db: {}, use the max tvr delta: {} for sync refresh",
                     baseTableInfo.getTableName(), baseTableInfo.getDbName(), maxTvrDelta);
             return maxTvrDelta;
-        } else {
-            return getBaseTableChangedDeltaAdaptive(baseTableInfo, icebergTable, maxTvrDelta);
         }
+    }
+
+    private boolean isIVMRefreshAdaptive() {
+        if (Config.mv_max_rows_per_refresh <= 0) {
+            return false;
+        }
+        // for sync refresh, we always use the max changed delta
+        ExecuteOption executeOption = mvContext.getExecuteOption();
+        boolean isSyncRefresh = executeOption != null && executeOption.getIsSync();
+        return !isSyncRefresh;
     }
 
     private TvrTableDelta getMaxBaseTableChangedDelta(BaseTableInfo baseTableInfo,
@@ -261,32 +301,10 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
 
     // TODO: We may introduce a smarter way to determine which incremental snapshot to refresh later.
     private TvrTableDelta getBaseTableChangedDeltaAdaptive(BaseTableInfo baseTableInfo,
-                                                           IcebergTable icebergTable,
+                                                           List<TvrTableDeltaTrait> tableDeltaTraits,
                                                            TvrTableDelta maxTvrDelta) {
-        if (Config.mv_max_rows_per_refresh <= 0) {
-            return maxTvrDelta;
-        }
-        List<TvrTableDeltaTrait> tableDeltaTraits = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .listTableDeltaTraits(baseTableInfo.getDbName(), icebergTable,
-                        maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot());
-        if (tableDeltaTraits.isEmpty()) {
-            logger.warn("No tvr delta traits found for base table: {}, db: {}", baseTableInfo.getTableName(),
-                    baseTableInfo.getDbName());
-            return maxTvrDelta;
-        }
-
-        // if the result is not ordered by time which means the last snapshot should in in the last of tableDeltaTraits,
-        // use the maxTvrDelta
         TvrTableSnapshot fromSnapshot = maxTvrDelta.fromSnapshot();
         TvrTableSnapshot toSnapshot = maxTvrDelta.toSnapshot();
-        TvrTableDeltaTrait lastTvrDeltaTrait = tableDeltaTraits.get(tableDeltaTraits.size() - 1);
-        TvrTableSnapshot lastTvrDeltaSnapshot = lastTvrDeltaTrait.getTvrDelta().toSnapshot();
-        if (!lastTvrDeltaSnapshot.equals(maxTvrDelta.toSnapshot())) {
-            logger.warn("The last tvr delta snapshot: {} is not equal to the max tvr delta snapshot: {}, " +
-                            "use the max tvr delta instead", lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot());
-            return maxTvrDelta;
-        }
-
         long addedRows = 0;
         for (TvrTableDeltaTrait deltaTrait : tableDeltaTraits) {
             // TODO: We may need to handle the case where the deltaTrait is not append-only.
