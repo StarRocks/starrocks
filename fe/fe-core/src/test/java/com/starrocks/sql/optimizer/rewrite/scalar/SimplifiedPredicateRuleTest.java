@@ -171,14 +171,6 @@ public class SimplifiedPredicateRuleTest {
         assertEquals(1, resultCall2.getChildren().size());
         assertEquals(tsColumn, resultCall2.getChild(0));
 
-        // hour(to_datetime(ts, 3)) should NOT be rewritten
-        CallOperator toDatetimeCallScale3 = new CallOperator(FunctionSet.TO_DATETIME, Type.DATETIME,
-                Lists.newArrayList(tsColumn, ConstantOperator.createInt(3)), null);
-        CallOperator hourCall3 = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
-                Lists.newArrayList(toDatetimeCallScale3), null);
-        ScalarOperator result3 = rule.apply(hourCall3, null);
-        assertEquals(hourCall3, result3);
-
         // hour(to_datetime(ts, 3)) -> hour_from_unixtime(ts/1000)
         CallOperator toDatetimeCallScale3 = new CallOperator(FunctionSet.TO_DATETIME, Type.DATETIME,
                 Lists.newArrayList(tsColumn, ConstantOperator.createInt(3)), null);
