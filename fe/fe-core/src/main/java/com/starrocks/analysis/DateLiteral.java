@@ -41,6 +41,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TDateLiteral;
@@ -500,6 +501,6 @@ public class DateLiteral extends LiteralExpr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitLiteral(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitLiteral(this, context);
     }
 }

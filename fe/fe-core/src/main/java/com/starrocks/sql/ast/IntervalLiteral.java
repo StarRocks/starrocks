@@ -71,6 +71,6 @@ public class IntervalLiteral extends LiteralExpr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitIntervalLiteral(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitIntervalLiteral(this, context);
     }
 }
