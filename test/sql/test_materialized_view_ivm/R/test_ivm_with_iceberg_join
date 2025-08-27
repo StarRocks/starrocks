@@ -134,8 +134,8 @@ SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as c
 -- !result
 SELECT * FROM test_mv1 ORDER BY dt, col11, col21 limit 5;
 -- result:
-2023-12-01	a	a	1	1
 2023-12-01	a	a	2	1
+2023-12-01	a	a	1	1
 2023-12-02			4	4
 2023-12-02		b	4	3
 2023-12-02	b		3	4
@@ -164,8 +164,8 @@ SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as c
 SELECT * FROM test_mv1 ORDER BY dt, col11, col21 limit 5;
 -- result:
 2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	a	2000	1
-2023-12-01	a	a	2	1
 2023-12-01	a	a	1	1
+2023-12-01	a	a	2	1
 2023-12-02			4	4
 2023-12-02		b	4	3
 -- !result
@@ -212,23 +212,23 @@ True
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
-17
+18
 -- !result
 SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt ORDER BY t1.dt, t1.col1, t2.col1 limit 5;
 -- result:
 2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
 2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
 2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	a	2000	1
-2023-12-01	a	1d8cf2a2c0e14fa89d8117792be6eb6f	2	2000
-2023-12-01	a	1d8cf2a2c0e14fa89d8117792be6eb6f	1	2000
 -- !result
 SELECT * FROM test_mv1 ORDER BY dt, col11, col21 limit 5;
 -- result:
 2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
 2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
 2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	a	2000	1
-2023-12-01	a	1d8cf2a2c0e14fa89d8117792be6eb6f	2	2000
-2023-12-01	a	1d8cf2a2c0e14fa89d8117792be6eb6f	1	2000
 -- !result
 DROP MATERIALIZED VIEW test_mv1;
 -- result:
