@@ -90,10 +90,9 @@ public class CatalogUtils {
                 } else {
                     // add more information for user
                     Partition existedPartition = olapTable.getPartition(partitionName);
-                    String errorMsg = String.format("%s, existed partition:%s, current partition:%s", partitionName,
+                    LOG.warn("Duplicate partition name {}, existed partition:{}, current partition:{}", partitionName,
                             existedPartition, partitionDesc);
-                    LOG.warn("Duplicate partition name {}", errorMsg);
-                    ErrorReport.reportDdlException(ErrorCode.ERR_SAME_NAME_PARTITION, errorMsg);
+                    ErrorReport.reportDdlException(ErrorCode.ERR_SAME_NAME_PARTITION, partitionName);
                 }
             }
         }
