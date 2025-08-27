@@ -61,14 +61,13 @@ class POlapTableIndexSchema;
 class TColumn;
 
 struct ExtendedColumnInfo {
-    ExtendedColumnInfo(ColumnAccessPath* access_path, int source_column_index)
-            : access_path(access_path), source_column_index(source_column_index) {
+    ExtendedColumnInfo(ColumnAccessPath* access_path, int32_t source_column_uid)
+            : access_path(access_path), source_column_uid(source_column_uid) {
         DCHECK(access_path != nullptr);
-        DCHECK(source_column_index >= 0);
     }
 
     ColumnAccessPath* access_path = nullptr;
-    int source_column_index = -1;
+    int32_t source_column_uid = -1;
 };
 
 class TabletColumn {
