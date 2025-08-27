@@ -52,6 +52,8 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.PartitionDiffResult;
@@ -63,13 +65,11 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergPartitionUtils.getIcebergTablePartitionPredicateExpr;
 
@@ -336,20 +336,20 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public Set<String> getMVPartitionsToRefreshWithForce() {
+    public PCellSortedSet getMVPartitionsToRefreshWithForce() {
         Map<String, PCell> mvValidListPartitionMapMap = mv.getPartitionCells(Optional.empty());
         filterPartitionsByTTL(mvValidListPartitionMapMap, false);
-        return mvValidListPartitionMapMap.keySet();
+        return PCellSortedSet.of(mvValidListPartitionMapMap);
     }
 
     @Override
-    public Set<String> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
-                                                Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
-                                                MVRefreshParams mvRefreshParams,
-                                                Set<String> mvPotentialPartitionNames) {
+    public PCellSortedSet getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
+                                                   Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
+                                                   MVRefreshParams mvRefreshParams,
+                                                   Set<String> mvPotentialPartitionNames) {
         // list partitioned materialized view
         boolean isAutoRefresh = mvContext.getTaskType().isAutoRefresh();
-        Set<String> mvListPartitionNames = getMVPartitionNamesWithTTL(mv, mvRefreshParams, isAutoRefresh);
+        PCellSortedSet mvListPartitionNames = getMVPartitionNamesWithTTL(mv, mvRefreshParams, isAutoRefresh);
 
         // check non-ref base tables
         if (mvRefreshParams.isForce() || needsRefreshBasedOnNonRefTables(snapshotBaseTables)) {
@@ -363,27 +363,39 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             }
         } else {
             // check the ref base table
-            Set<String> mvToRefreshPartitionNames = getMvPartitionNamesToRefresh(mvListPartitionNames);
+            PCellSortedSet result = getMvPartitionNamesToRefresh(mvListPartitionNames);
             Map<Table, Set<String>> baseChangedPartitionNames =
-                    getBasePartitionNamesByMVPartitionNames(mvToRefreshPartitionNames);
+                    getBasePartitionNamesByMVPartitionNames(result);
             if (baseChangedPartitionNames.isEmpty()) {
                 logger.info("Cannot get associated base table change partitions from mv's refresh partitions {}",
-                        mvToRefreshPartitionNames);
-                return mvToRefreshPartitionNames;
+                        result);
+                return result;
             }
             // because the relation of partitions between materialized view and base partition table is n : m,
             // should calculate the candidate partitions recursively.
             if (isCalcPotentialRefreshPartition()) {
-                logger.info("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
-                        " baseChangedPartitionNames: {}", mvToRefreshPartitionNames, baseChangedPartitionNames);
-                SyncPartitionUtils.calcPotentialRefreshPartition(mvToRefreshPartitionNames, baseChangedPartitionNames,
+                logger.info("Start calcPotentialRefreshPartition, result: {}," +
+                        " baseChangedPartitionNames: {}", result, baseChangedPartitionNames);
+                Set<String> mvToRefreshPartitionNames = result.getPartitionNames();
+                Set<String> tmpMvPotentialPartitionNames = Sets.newHashSet(mvToRefreshPartitionNames);
+                SyncPartitionUtils.calcPotentialRefreshPartition(tmpMvPotentialPartitionNames, baseChangedPartitionNames,
                         mvContext.getRefBaseTableMVIntersectedPartitions(),
                         mvContext.getMvRefBaseTableIntersectedPartitions(),
                         mvPotentialPartitionNames);
-                logger.info("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
-                        " baseChangedPartitionNames: {}", mvToRefreshPartitionNames, baseChangedPartitionNames);
+                Map<String, PCell> mvCellMap = mvContext.getMVToCellMap();
+                Set<String> addedPartitions = Sets.difference(tmpMvPotentialPartitionNames, mvToRefreshPartitionNames);
+                for (String partition : addedPartitions) {
+                    PCell pCell = mvCellMap.get(partition);
+                    if (pCell == null) {
+                        logger.warn("Cannot find mv partition name range cell:{}", partition);
+                        continue;
+                    }
+                    result.add(PCellWithName.of(partition, pCell));
+                }
+                logger.info("Finish calcPotentialRefreshPartition, result: {}," +
+                        " baseChangedPartitionNames: {}", result, baseChangedPartitionNames);
             }
-            return mvToRefreshPartitionNames;
+            return result;
         }
     }
 
@@ -397,9 +409,9 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public Set<String> getMVPartitionNamesWithTTL(MaterializedView mv,
-                                                  MVRefreshParams mvRefreshParams,
-                                                  boolean isAutoRefresh) {
+    public PCellSortedSet getMVPartitionNamesWithTTL(MaterializedView mv,
+                                                     MVRefreshParams mvRefreshParams,
+                                                     boolean isAutoRefresh) {
         // if the user specifies the start and end ranges, only refresh the specified partitions
         boolean isCompleteRefresh = mvRefreshParams.isCompleteRefresh();
         Map<String, PCell> mvListPartitionMap = Maps.newHashMap();
@@ -425,75 +437,52 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
         // filter all valid partitions by partition_retention_condition
         filterPartitionsByTTL(mvListPartitionMap, false);
-        return mvListPartitionMap.keySet();
+        return PCellSortedSet.of(mvListPartitionMap);
     }
 
     @Override
-    public void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh, Set<String> mvPotentialPartitionNames,
+    public void filterPartitionByRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
+                                               Set<String> mvPotentialPartitionNames,
                                                boolean tentative) {
         filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames, tentative,
                 MaterializedView.PartitionRefreshStrategy.STRICT);
     }
 
     @Override
-    public void filterPartitionByAdaptiveRefreshNumber(Set<String> mvPartitionsToRefresh, Set<String> mvPotentialPartitionNames,
+    public void filterPartitionByAdaptiveRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
+                                                       Set<String> mvPotentialPartitionNames,
                                                        boolean tentative) {
         filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames, tentative,
                 MaterializedView.PartitionRefreshStrategy.ADAPTIVE);
     }
 
-    public void filterPartitionByRefreshNumberInternal(Set<String> mvPartitionsToRefresh,
+    public void filterPartitionByRefreshNumberInternal(PCellSortedSet toRefreshPartitions,
                                                        Set<String> mvPotentialPartitionNames,
                                                        boolean tentative,
                                                        MaterializedView.PartitionRefreshStrategy refreshStrategy) {
-        Map<String, PCell> partitionToCells = Maps.newHashMap();
-        Map<String, PListCell> listPartitionMap = mv.getListPartitionItems();
-        for (String partitionName : mvPartitionsToRefresh) {
-            PListCell listCell = listPartitionMap.get(partitionName);
-            if (listCell == null) {
-                logger.warn("Partition {} is not found in materialized view {}", partitionName, mv.getName());
-                continue;
-            }
-            partitionToCells.put(partitionName, listCell);
-        }
 
         // filter by partition ttl
-        filterPartitionsByTTL(partitionToCells, false);
-        if (CollectionUtils.sizeIsEmpty(partitionToCells)) {
+        filterPartitionsByTTL(toRefreshPartitions, false);
+        if (toRefreshPartitions == null || toRefreshPartitions.isEmpty()) {
             return;
         }
-        Map<String, PListCell> toRefreshPartitions = partitionToCells.entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> (PListCell) e.getValue()));
 
-        // TODO: Sort by List Partition's value is weird because there maybe meaningless or un-sortable,
-        // users should take care of `partition_ttl_number` for list partition.
-        LinkedHashMap<String, PListCell> sortedPartition = toRefreshPartitions.entrySet().stream()
-                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue())) // reverse order(max heap)
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
-        Iterator<String> toSelectedPartitionNameIter = sortedPartition.keySet().iterator();
-
-        // dynamically obtain the number of partitions to be refreshed this time
-        int refreshNumber = getRefreshNumberByMode(toSelectedPartitionNameIter, refreshStrategy);
-        Iterator<Map.Entry<String, PListCell>> iter = sortedPartition.entrySet().iterator();
-
-        // iterate refreshNumber times
-        for (int i = 0; i < refreshNumber; i++) {
-            if (iter.hasNext()) {
-                iter.next();
-            }
+        Iterator<PCellWithName> iterator = toRefreshPartitions.iterator();
+        // dynamically get the number of partitions to be refreshed this time
+        int refreshNumber = getRefreshNumberByMode(iterator, refreshStrategy);
+        if (toRefreshPartitions.size() <= refreshNumber) {
+            return;
         }
-        // compute next partition list cells in the next task run
+        // iterate refreshNumber times
         Set<PListCell> nextPartitionValues = Sets.newHashSet();
-        while (iter.hasNext()) {
-            Map.Entry<String, PListCell> entry = iter.next();
-            nextPartitionValues.add(entry.getValue());
-            // remove the partition which is not reserved
-            toRefreshPartitions.remove(entry.getKey());
+        int i = 0;
+        while (iterator.hasNext() && i++ < refreshNumber) {
+            PCellWithName pCell = iterator.next();
+            nextPartitionValues.add((PListCell) pCell.cell());
+            toRefreshPartitions.remove(pCell);
         }
         logger.info("Filter partitions by refresh number, ttl_number:{}, result:{}, remains:{}",
                 refreshNumber, toRefreshPartitions, nextPartitionValues);
-        // do filter input mvPartitionsToRefresh since it's a reference
-        mvPartitionsToRefresh.retainAll(toRefreshPartitions.keySet());
         if (CollectionUtils.isEmpty(nextPartitionValues)) {
             return;
         }
@@ -504,14 +493,15 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
     }
 
-    public int getAdaptivePartitionRefreshNumber(Iterator<String> partitionNameIter) throws MVAdaptiveRefreshException {
+    public int getAdaptivePartitionRefreshNumber(Iterator<PCellWithName> iterator) throws MVAdaptiveRefreshException {
         Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
         MVRefreshPartitionSelector mvRefreshPartitionSelector =
                 new MVRefreshPartitionSelector(Config.mv_max_rows_per_refresh, Config.mv_max_bytes_per_refresh,
                         Config.mv_max_partitions_num_per_refresh, mvContext.getExternalRefBaseTableMVPartitionMap());
         int adaptiveRefreshNumber = 0;
-        while (partitionNameIter.hasNext()) {
-            String partitionName = partitionNameIter.next();
+        while (iterator.hasNext()) {
+            PCellWithName cellWithName = iterator.next();
+            String partitionName = cellWithName.name();
             Map<Table, Set<String>> refPartitionInfos = mvToBaseNameRefs.get(partitionName);
             if (mvRefreshPartitionSelector.canAddPartition(refPartitionInfos)) {
                 mvRefreshPartitionSelector.addPartition(refPartitionInfos);
