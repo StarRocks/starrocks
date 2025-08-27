@@ -906,6 +906,20 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges, size_t scan_parallelism) {
+    // submit async tasks to warmup tablet meta.
+    for (const auto& tablet_scan_range : scan_ranges) {
+        int64_t version = std::stoll(tablet_scan_range.scan_range.internal_scan_range.version);
+        int64_t tablet_id = tablet_scan_range.scan_range.internal_scan_range.tablet_id;
+        auto packaged_func = [tablet_id, version]() {
+            [[maybe_unused]] auto tablet =
+                    ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_metadata(tablet_id, version);
+        };
+        if (auto st = ExecEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
+            !st.ok()) {
+            LOG(WARNING) << "submit_func failed: " << st.code_as_string() << ", tablet_id: " << tablet_id
+                         << ", version: " << version;
+        }
+    }
     int64_t lake_scan_parallelism = 0;
     if (!scan_ranges.empty() && enable_tablet_internal_parallel) {
         ASSIGN_OR_RETURN(_could_split, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
