@@ -217,7 +217,7 @@ public class PredicateColumnsStorage {
 
             VelocityContext context = new VelocityContext();
             ColumnFullId fullId = usage.getColumnFullId();
-            context.put("feId", GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName());
+            context.put("feId", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFid());
             context.put("dbId", fullId.getDbId());
             context.put("tableId", fullId.getTableId());
             context.put("columnId", fullId.getColumnUniqueId());
@@ -241,7 +241,7 @@ public class PredicateColumnsStorage {
      * Restore all states
      */
     public List<ColumnUsage> restore() {
-        String selfName = GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName();
+        String selfName = String.valueOf(GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFid());
 
         VelocityContext context = new VelocityContext();
         context.put("feId", selfName);
@@ -260,7 +260,7 @@ public class PredicateColumnsStorage {
      */
     public void vacuum(LocalDateTime ttlTime) {
         VelocityContext context = new VelocityContext();
-        String selfName = GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName();
+        String selfName = String.valueOf(GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFid());
         context.put("feId", selfName);
         context.put("lastUsed", DateUtils.formatDateTimeUnix(ttlTime));
 
