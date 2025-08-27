@@ -23,10 +23,10 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,14 +43,6 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
     public IVMInsertLoadTxnCallback(long dbId, long tableId) {
         this.dbId = dbId;
         this.tableId = tableId;
-    }
-
-    public static IVMInsertLoadTxnCallback of(ConnectContext context, long dbId, Table targetTable) {
-        if (context.getSessionVariable().isEnableIVMRefresh() && targetTable.isMaterializedView()) {
-            return new IVMInsertLoadTxnCallback(dbId, targetTable.getId());
-        } else {
-            return null;
-        }
     }
 
     @Override
@@ -75,15 +67,17 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
         }
 
         // apply the delta into baseTableInfoTvrDeltaMap
+        Map<BaseTableInfo, TvrVersionRange> mvBaseTableInfoTvrDeltaMap =
+                asyncRefreshContext.getBaseTableInfoTvrVersionRangeMap();
         for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : tempBaseTableInfoTvrDeltaMap.entrySet()) {
             if (entry.getValue().isEmpty()) {
                 continue;
             }
             BaseTableInfo baseTableInfo = entry.getKey();
             TvrVersionRange toCommitVersionRange = entry.getValue();
-            TvrVersionRange committedVersionRange = baseTableInfoTvrDeltaMap.get(baseTableInfo);
+            TvrVersionRange committedVersionRange = mvBaseTableInfoTvrDeltaMap.get(baseTableInfo);
             if (committedVersionRange != null) {
-                // TODO: how to handle the non-ncontinuous version range?
+                // TODO: how to handle the non-continuous version range?
                 // merge the temp delta into baseTableInfoTvrDeltaMap
                 if (!committedVersionRange.to().equals(toCommitVersionRange.from())) {
                     LOG.warn("TvrVersionRange is not continuous, "
@@ -97,18 +91,19 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
 
     @Override
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+        if (CollectionUtils.sizeIsEmpty(this.baseTableInfoTvrDeltaMap)) {
+            LOG.info("Materialized view {} has no base table info tvr version range to update, skip", mv.getName());
+            return;
+        }
+        LOG.info("Materialized view {} has been committed, update the base table info tvr version range: {}",
+                mv.getName(), baseTableInfoTvrDeltaMap);
         final MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
         final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-        LOG.info("Materialized view {} has been committed, " +
-                        "update the base table info tvr version range: {}", mv.getName(),
-                baseTableInfoTvrDeltaMap);
         Map<BaseTableInfo, TvrVersionRange> mvBaseTableInfoTvrDeltaMap =
                 asyncRefreshContext.getBaseTableInfoTvrVersionRangeMap();
 
         // update mv's base table info tvr version range map
-        baseTableInfoTvrDeltaMap.entrySet()
-                .stream()
-                .forEach(e -> mvBaseTableInfoTvrDeltaMap.put(e.getKey(), e.getValue()));
+        mvBaseTableInfoTvrDeltaMap.putAll(baseTableInfoTvrDeltaMap);
         // clear the temp map
         asyncRefreshContext.clearTempBaseTableInfoTvrDeltaMap();
 
