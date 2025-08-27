@@ -157,8 +157,6 @@ public class AuthenticationHandler {
 
         context.setCurrentUserIdentity(authenticationResult.authenticatedUser);
         if (!authenticationResult.authenticatedUser.isEphemeral()) {
-            context.setCurrentRoleIds(authenticationResult.authenticatedUser);
-
             UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
                     .getUserProperty(authenticationResult.authenticatedUser.getUser());
             context.updateByUserProperty(userProperty);
@@ -167,6 +165,8 @@ public class AuthenticationHandler {
 
         Set<String> groups = getGroups(authenticationResult.authenticatedUser, authenticationResult.groupProviderName);
         context.setGroups(groups);
+
+        context.setCurrentRoleIds(context.getCurrentUserIdentity(), groups);
 
         if (authenticationResult.authenticatedGroupList != null && !authenticationResult.authenticatedGroupList.isEmpty()) {
             Set<String> intersection = new HashSet<>(groups);

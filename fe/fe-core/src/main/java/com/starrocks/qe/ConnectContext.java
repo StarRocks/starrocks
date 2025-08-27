@@ -532,6 +532,15 @@ public class ConnectContext {
         this.currentRoleIds = roleIds;
     }
 
+    public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
+        setCurrentRoleIds(userIdentity);
+
+        for (String group : groups) {
+            Set<Long> roleIds = globalStateMgr.getAuthorizationMgr().getRoleIdListByGroup(group);
+            this.currentRoleIds.addAll(roleIds);
+        }
+    }
+
     public void setAuthInfoFromThrift(TAuthInfo authInfo) {
         if (authInfo.isSetCurrent_user_ident()) {
             setAuthInfoFromThrift(authInfo.getCurrent_user_ident());

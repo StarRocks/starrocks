@@ -23,6 +23,7 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.ColumnPrivilege;
+import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
@@ -1451,20 +1452,27 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext context) {
-        UserRef user = statement.getUser();
         try {
-            if (user != null) {
-                UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-                if (!userIdentity.equals(context.getCurrentUserIdentity())) {
+            if (statement.getGrantType() == GrantType.USER) {
+                UserRef userRef = statement.getUser();
+                if (userRef == null) {
+                    return null;
+                }
+                UserIdentity user = new UserIdentity(userRef.getUser(), userRef.getHost(), userRef.isDomain());
+                if (!user.equals(context.getCurrentUserIdentity())) {
                     Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
                 }
-            } else if (statement.getGroupOrRole() != null) {
+            } else if (statement.getGrantType() == GrantType.ROLE) {
                 AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
                 Set<String> roleNames =
                         authorizationManager.getAllPredecessorRoleNamesByUser(context.getCurrentUserIdentity());
                 if (!roleNames.contains(statement.getGroupOrRole())) {
-                    Authorizer.checkSystemAction(context,
-                            PrivilegeType.GRANT);
+                    Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
+                }
+            } else if (statement.getGrantType() == GrantType.GROUP) {
+                Set<String> groups = context.getGroups();
+                if (groups == null || !groups.contains(statement.getGroupOrRole())) {
+                    Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
                 }
             }
         } catch (AccessDeniedException | PrivilegeException e) {

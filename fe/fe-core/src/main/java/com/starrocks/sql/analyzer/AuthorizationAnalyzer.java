@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
@@ -467,7 +468,7 @@ public class AuthorizationAnalyzer {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            if (stmt.getUser() != null) {
+            if (stmt.getGrantType() == GrantType.USER) {
                 AuthenticationAnalyzer.analyzeUser(stmt.getUser());
                 AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
                 if (AuthenticationAnalyzer.needProtectAdminUser(stmt.getUser(), session)) {
@@ -476,8 +477,11 @@ public class AuthorizationAnalyzer {
                 }
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to/from user", true));
-            } else {
+            } else if (stmt.getGrantType() == GrantType.ROLE) {
                 validRoleName(stmt.getRoleOrGroup(), "Can not granted/revoke role to/from role", true);
+                stmt.getGranteeRole().forEach(role ->
+                        validRoleName(role, "Can not granted/revoke role to/from user", true));
+            } else if (stmt.getGrantType() == GrantType.GROUP) {
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to/from user", true));
             }
@@ -486,15 +490,16 @@ public class AuthorizationAnalyzer {
 
         @Override
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
-            if (stmt.getUser() != null) {
+            if (stmt.getGrantType() == GrantType.USER) {
+                if (stmt.getUser() == null) {
+                    UserIdentity userIdentity = session.getCurrentUserIdentity();
+                    UserRef user = new UserRef(userIdentity.getUser(), userIdentity.getHost(), userIdentity.isDomain());
+                    stmt.setUser(user);
+                }
                 AuthenticationAnalyzer.analyzeUser(stmt.getUser());
                 AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
-            } else if (stmt.getGroupOrRole() != null) {
+            } else if (stmt.getGrantType() == GrantType.ROLE) {
                 validRoleName(stmt.getGroupOrRole(), "There is no such grant defined for role " + stmt.getGroupOrRole(), true);
-            } else {
-                UserIdentity userIdentity = session.getCurrentUserIdentity();
-                UserRef user = new UserRef(userIdentity.getUser(), userIdentity.getHost(), userIdentity.isDomain());
-                stmt.setUser(user);
             }
 
             return null;

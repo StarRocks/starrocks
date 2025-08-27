@@ -20,6 +20,7 @@ import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.persist.EditLog;
@@ -33,6 +34,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
@@ -77,8 +79,10 @@ public class GrantRoleToGroupTest {
 
         GrantRoleStmt grantRoleStmt;
         grantRoleStmt = new GrantRoleStmt(List.of("r1", "r2"), "g1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
         authorizationMgrEPack.grantRole(grantRoleStmt);
         grantRoleStmt = new GrantRoleStmt(List.of("r1"), "g2", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
         authorizationMgrEPack.grantRole(grantRoleStmt);
 
         Long r1Id = authorizationMgrEPack.getRoleIdByNameAllowNull("r1");
@@ -96,8 +100,10 @@ public class GrantRoleToGroupTest {
 
         RevokeRoleStmt revokeRoleStmt;
         revokeRoleStmt = new RevokeRoleStmt(List.of("r2"), "g1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
         authorizationMgrEPack.revokeRole(revokeRoleStmt);
         grantRoleStmt = new GrantRoleStmt(List.of("r1"), "g3", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
         authorizationMgrEPack.grantRole(grantRoleStmt);
 
         roleIds = authorizationMgrEPack.getRoleIdListByGroup("g1");
@@ -258,6 +264,7 @@ public class GrantRoleToGroupTest {
         authorizationMgrEPack.revokeRole(revokeRoleStmt);
 
         ShowGrantsStmt stmt = new ShowGrantsStmt("g1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(stmt, ctx);
         ShowResultSet showResultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertEquals("[[g1, null, GRANT 'r1', 'r2' TO EXTERNAL GROUP g1]]", showResultSet.getResultRows().toString());
 
@@ -304,6 +311,7 @@ public class GrantRoleToGroupTest {
         DDLStmtExecutor.execute(stmt, ctx);
 
         GrantRoleStmt grantRoleStmt = new GrantRoleStmt(List.of("r1"), "g1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
         authorizationMgrEPack.grantRole(grantRoleStmt);
 
         String sql = "grant select on table db1.tbl1 to role r1";
@@ -324,5 +332,26 @@ public class GrantRoleToGroupTest {
         ctx.setGroups(Set.of());
         Assert.assertThrows(AccessDeniedException.class,
                 () -> Authorizer.checkTableAction(ctx, "db1", "tbl1", PrivilegeType.SELECT));
+    }
+
+    @Test
+    public void testShowGrantsPrivilege() throws Exception {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        EditLog editLog = spy(new EditLogEPack(null));
+        doNothing().when(editLog).logEdit(anyShort(), any());
+        GlobalStateMgr.getCurrentState().setEditLog(editLog);
+        ConnectContext ctx = new ConnectContext();
+
+        String createUserSql = "create user u1";
+        CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+        ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+
+        ctx.setGroups(Set.of("g1"));
+        ShowGrantsStmt stmt2 = new ShowGrantsStmt("g1", GrantType.GROUP, NodePosition.ZERO);
+        Authorizer.check(stmt2, ctx);
+        ShowGrantsStmt stmt3 = new ShowGrantsStmt("g2", GrantType.GROUP, NodePosition.ZERO);
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkSystemAction(ctx, PrivilegeType.GRANT));
+        Assert.assertThrows(ErrorReportException.class, () -> Authorizer.check(stmt3, ctx));
     }
 }

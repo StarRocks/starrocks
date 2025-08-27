@@ -92,7 +92,7 @@ public class AuthorizationMgr {
     protected Map<UserIdentity, UserPrivilegeCollectionV2> userToPrivilegeCollection;
     protected Map<Long, RolePrivilegeCollectionV2> roleIdToPrivilegeCollection;
 
-    @SerializedName("gr")
+    @SerializedName(value = "gr")
     private Map<String, Set<Long>> groupToRoleList;
 
     private static final int MAX_NUM_CACHED_MERGED_PRIVILEGE_COLLECTION = 1000;
@@ -1955,6 +1955,7 @@ public class AuthorizationMgr {
         pluginVersion = ret.pluginVersion;
         userToPrivilegeCollection = ret.userToPrivilegeCollection;
         roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
+        groupToRoleList = ret.groupToRoleList;
         roleMappingMetaMgr = ret.roleMappingMetaMgr;
 
         // Initialize the Authorizer class in advance during the loading phase
