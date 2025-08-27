@@ -142,18 +142,18 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 // or all input columns are constant but lambda expr depends on other capture columns(e.g. array_map(x->x+k,[1,2,3])),
                 // we should unpack the const column before evaluation
                 size_t elements_num = array_column->get_element_size(0);
-                elements_column = elements_column->clone();
+                auto new_elements_column = elements_column->clone_empty();
                 offsets_column = UInt32Column::create();
                 // replicate N time and ignore null
                 size_t repeat_times = input_elements[i]->size() - null_rows;
-                size_t offset = elements_num;
+                size_t offset = 0;
                 offsets_column->append(0);
-                offsets_column->append(offset);
-                for (size_t i = 1; i < repeat_times; i++) {
-                    elements_column->append(*elements_column, 0, elements_num);
+                for (size_t i = 0; i < repeat_times; i++) {
+                    new_elements_column->append(*elements_column, 0, elements_num);
                     offset += elements_num;
                     offsets_column->append(offset);
                 }
+                elements_column->swap_column(*new_elements_column);
             }
         } else {
             if (result_null_column != nullptr) {
