@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStatus;
@@ -61,6 +62,14 @@ public class SlotManager extends BaseSlotManager {
     @Override
     public void onQueryFinished(LogicalSlot slot, ConnectContext context) {
         // do nothing
+    }
+
+    public String getExecStateByQueryId(String queryId) {
+        return getSlots().stream()
+                .filter(slot -> queryId.equals(DebugUtil.printId(slot.getSlotId())))
+                .map(slot -> slot.getState().toQueryStateString())
+                .findFirst()
+                .orElse("");
     }
 
     private class RequestWorker extends Thread {
