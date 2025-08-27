@@ -2097,6 +2097,42 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：是否为 Zonemap index 开启 Memory Cache。使用 Zonemap index 加速 Scan 时，可以考虑开启。
 - 引入版本：-
 
+##### enable_string_prefix_zonemap
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为字符串（CHAR/VARCHAR）列启用基于前缀的 Zonemap 索引。对于非键列，最小值/最大值会截断到由 `string_prefix_zonemap_prefix_len` 配置的前缀长度。
+- 引入版本：-
+
+##### string_prefix_zonemap_prefix_len
+
+- 默认值：16
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：启用 `enable_string_prefix_zonemap` 时用于字符串 Zonemap 最小值/最大值的前缀长度。
+- 引入版本：-
+
+##### string_zonemap_overlap_threshold
+
+- 默认值：0.8
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：字符串页级 Zonemap 自适应创建的阈值。如果连续页之间的估算重叠比例大于该阈值，将跳过写入该页级 Zonemap。取值范围：[0.0, 1.0]。
+- 引入版本：-
+
+##### string_zonemap_min_pages_for_adaptive_check
+
+- 默认值：16
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：应用自适应检查前所需的非空页的最小数量。
+- 引入版本：-
+
 ##### enable_ordinal_index_memory_page_cache
 
 - 默认值：true
@@ -3241,6 +3277,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：控制 Flat JSON 时，最多提取的子列数量。该参数仅在 `enable_json_flat` 为 `true` 时生效。
 - 引入版本：v3.3.0
+
+##### json_flat_create_zonemap
+
+- 默认值：true
+- 类型：Boolean
+- 单位：
+- 是否动态：是
+- 描述：是否为打平后的 JSON 子列创建 Zonemap。仅当 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：-
 
 ##### enable_compaction_flat_json
 
